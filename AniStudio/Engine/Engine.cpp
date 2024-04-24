@@ -147,10 +147,10 @@ void Engine::Init() {
 	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
 
 	const auto videoViewID = viewManager.CreateView();
-	viewManager.AddView<VideoSequencerView>(videoViewID, VideoSequencerView(mgr));
+	// viewManager.AddView<VideoSequencerView>(videoViewID, VideoSequencerView(mgr));
 	viewManager.AddView<VideoView>(videoViewID, VideoView(mgr));
 	viewManager.GetView<VideoView>(videoViewID).Init();
-	viewManager.GetView<VideoSequencerView>(videoViewID).Init();
+	// viewManager.GetView<VideoSequencerView>(videoViewID).Init();
 
     const auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
