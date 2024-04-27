@@ -1,0 +1,14 @@
+﻿  pch.cpp
+  App.cpp
+D:\projects\AniStudio\AniStudio\App.cpp(7,19): warning C4099: 'ECS::Component': type name first seen using 'class' now seen using 'struct'
+D:\projects\AniStudio\AniStudio\App.cpp(7): message : see declaration of 'ECS::Component'
+  Engine.cpp
+  Events.cpp
+  Timer.cpp
+D:\projects\AniStudio\AniStudio\Timer.cpp(14,29): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+D:\projects\AniStudio\AniStudio\Timer.cpp(15,26): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+  Generating Code...
+LINK : warning LNK4098: defaultlib 'LIBCMT' conflicts with use of other libs; use /NODEFAULTLIB:library
+LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
+glew32s.lib(glew.obj) : warning LNK4099: PDB 'vc120.pdb' was not found with 'glew32s.lib(glew.obj)' or at 'D:\projects\AniStudio\Debug\vc120.pdb'; linking object as if no debug info
+  AniStudio.vcxproj -> D:\projects\AniStudio\Debug\AniStudio.exe
