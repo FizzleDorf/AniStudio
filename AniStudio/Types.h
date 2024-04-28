@@ -3,8 +3,8 @@
 
 namespace ECS {
 
-	class System;
-	class Component;
+	class BaseSystem;
+	struct BaseComponent;
 
 	// Constants
 	const size_t MAX_ENTITY_COUNT = 5000;
@@ -31,7 +31,7 @@ namespace ECS {
 	//attach type id to component class and return it
 	template<typename T>
 	inline static const ComponentTypeID CompType() noexcept {
-		static_assert((std::is_base_of<Component, T>::value && !std::is_same<Component, T>::value), "INVALID COMPONENT TYPE");
+		static_assert((std::is_base_of<BaseComponent, T>::value && !std::is_same<BaseComponent, T>::value), "INVALID COMPONENT TYPE");
 		static const ComponentTypeID typeID = GetRuntimeComponentTypeID();
 		return typeID;
 	}
@@ -39,7 +39,7 @@ namespace ECS {
 	//attach type id to system class and return it
 	template<typename T>
 	inline static const SystemTypeID SystemType() noexcept {
-		static_assert((std::is_base_of<System, T>::value && !std::is_same<System, T>::value), "INVALID COMPONENT TYPE");
+		static_assert((std::is_base_of<BaseSystem, T>::value && !std::is_same<BaseSystem, T>::value), "INVALID COMPONENT TYPE");
 		static const SystemTypeID typeID = GetRuntimeSystemTypeID();
 		return typeID;
 	}

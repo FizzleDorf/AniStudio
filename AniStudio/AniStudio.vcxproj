@@ -21,6 +21,8 @@
   <ItemGroup>
     <ClInclude Include="Ani.h" />
     <ClInclude Include="BaseComponent.h" />
+    <ClInclude Include="BaseSystem.h" />
+    <ClInclude Include="CompList.h" />
     <ClInclude Include="Core.h" />
     <ClInclude Include="ECS.h" />
     <ClInclude Include="Engine.h" />

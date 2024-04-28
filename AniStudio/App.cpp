@@ -4,17 +4,17 @@
 #include "Types.h"
 
 namespace ECS {
-	struct Component {
+	struct BaseComponent {
 	public:
-		virtual ~Component(){}
+		virtual ~BaseComponent(){}
 	};
 }
 
-class TestComp1 : public ECS::Component {
+class TestComp1 : public ECS::BaseComponent {
 
 };
 
-class TestComp2 : public ECS::Component {
+class TestComp2 : public ECS::BaseComponent {
 
 };
 
