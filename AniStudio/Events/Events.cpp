@@ -1,6 +1,5 @@
 #include "pch.h"
-#include "Events.h"
-#include "Engine.h"
+#include "../Core/Ani.h"
 
 namespace ANI {
 
@@ -10,11 +9,11 @@ namespace ANI {
 	Events::Events() {};
 	Events::~Events() {};
 
-	void Events::Poll(){
+	void Events::Poll() {
 		glfwPollEvents();
 	}
 
-	void Events::Init(){
+	void Events::Init() {
 		GLFWwindow& window = Core.Window();
 		glfwSetWindowCloseCallback(&window, WindowCloseCallback);
 	}

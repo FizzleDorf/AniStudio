@@ -8,7 +8,7 @@ namespace ECS {
 		virtual ~BaseComponent() {}
 		inline const EntityID GetID() const { return entityID;}
 	private:
-		friend class Manager; //fren class!
+		friend class EntityManager; //fren class!
 		EntityID entityID;
 	};
 }

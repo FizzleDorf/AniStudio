@@ -10,12 +10,12 @@ namespace ANI {
 
 	}
 
-	void ANI::T_Timer::Tick(){
+	void ANI::T_Timer::Tick() {
 		deltaTime = glfwGetTime() - lastFrame;
 		lastFrame = glfwGetTime();
 	}
 
-	void ANI::T_Timer::Init(){
+	void ANI::T_Timer::Init() {
 
 	}
 }

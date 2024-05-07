@@ -1,20 +1,20 @@
 #include "pch.h"
-#include "Ani.h"
+#include "Core/Ani.h"
 
-#include "Types.h"
+#include "ECS/Base/Types.h"
 
 namespace ECS {
-	struct BaseComponent {
+	struct Component {
 	public:
-		virtual ~BaseComponent(){}
+		virtual ~Component(){}
 	};
 }
 
-class TestComp1 : public ECS::BaseComponent {
+class TestComp1 : public ECS::Component {
 
 };
 
-class TestComp2 : public ECS::BaseComponent {
+class TestComp2 : public ECS::Component {
 
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+//Basic libs
 #include <set>
 #include <map>
 #include <vector>
@@ -12,6 +13,8 @@
 #include <algorithm>
 #include <functional>
 
-#include <GLEW/glew.h>
+//GLEW
+#include <../Libraries/includes/GLEW/glew.h>
 
-#include <GLFW/glfw3.h>
+//GLFW
+#include <../Libraries/includes/GLFW/glfw3.h>
