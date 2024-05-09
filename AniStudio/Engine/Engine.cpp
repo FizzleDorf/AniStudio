@@ -28,6 +28,7 @@ namespace ANI {
 		
 		assert(glewInit() == GLEW_OK && "ERROR : GLEW : Init failed!");
 		glewExperimental = GL_TRUE;
+	
 	}
 
 	Engine::~Engine() {
@@ -44,13 +45,5 @@ namespace ANI {
 
 	void Engine::Quit() {
 		run = false;
-	}
-
-	void Engine::Tick() {
-
-	}
-
-	void Engine::Poll() {
-
 	}
 }

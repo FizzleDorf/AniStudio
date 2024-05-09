@@ -2,38 +2,29 @@
 #include "Core/Ani.h"
 
 #include "ECS/Base/Types.h"
+#include "ECS/Base/EntityManager.h"
 
-namespace ECS {
-	struct Component {
-	public:
-		virtual ~Component(){}
-	};
-}
 
-class TestComp1 : public ECS::Component {
-
-};
-
-class TestComp2 : public ECS::Component {
+class TestComp1 : public ECS::BaseComponent {
 
 };
 
 int main(int argc, char** argv) {
 	
+	ECS::EntityManager mgr;
+	auto id = mgr.AddNewEntity();
 	auto typeID1 = ECS::CompType<TestComp1>();
-	auto typeID2 = ECS::CompType<TestComp1>();
 
-	auto typeID3 = ECS::CompType<TestComp2>();
-
-	std::cout << typeID1 << " " << typeID2 << " " << typeID3 << std::endl;
+	std::cout << id  << " " << typeID1 << std::endl;
 
 	ANI::Core.Init();
 	ANI::Timer.Init();
 	ANI::Event.Init();
+	
 
 	while (ANI::Core.Run()) {
-		ANI::Core.Tick();
-		ANI::Core.Poll();
+		ANI::Timer.Tick();
+		ANI::Event.Poll();
 		ANI::Core.Update();
 	}
 

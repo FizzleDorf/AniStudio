@@ -3,6 +3,7 @@
 //Basic libs
 #include <set>
 #include <map>
+#include <queue>
 #include <vector>
 #include <string>
 #include <memory>
@@ -14,7 +15,7 @@
 #include <functional>
 
 //GLEW
-#include <../Libraries/includes/GLEW/glew.h>
+#include <GLEW/glew.h>
 
 //GLFW
-#include <../Libraries/includes/GLFW/glfw3.h>
+#include <GLFW/glfw3.h>

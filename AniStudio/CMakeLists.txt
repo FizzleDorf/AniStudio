@@ -1,13 +1,12 @@
-﻿# CMakeList.txt : CMake project for CMakeProject1, include source and define
-# project specific logic here.
-#
-cmake_minimum_required (VERSION 3.8)
+﻿# Add source files specific to AniStudio
+add_library(AniStudioLib
+    App.cpp
+    pch.h
+    pch.cpp
+)
 
-# Add source to this project's executable.
-add_executable (AniStudio "App.cpp")
+# Include the directory containing the precompiled header file
+target_include_directories(AniStudioLib PRIVATE "${CMAKE_SOURCE_DIR}")
 
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET AniStudio PROPERTY CXX_STANDARD 20)
-endif()
-
-# TODO: Add tests and install targets if needed.
+# Link the AniStudio library to the main executable
+# target_link_libraries(${PROJECT_NAME} PRIVATE AniStudioLib)
