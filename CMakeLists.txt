@@ -11,7 +11,7 @@ set(PCH_FILE "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.h")
 # Create a sources variable with a link to all cpp files to compile
 set(SOURCES
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/App.cpp
-    #${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.cpp
+    ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.cpp
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Engine/Engine.cpp
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Timer/Timer.cpp
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Events/Events.cpp
