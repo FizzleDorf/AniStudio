@@ -28,6 +28,7 @@ namespace ECS {
 
 		virtual void Start(){}
 		virtual void Update(){}
+		virtual void Render(){}
 		virtual void Destroy(){}
 
 	protected:
