@@ -72,13 +72,23 @@ namespace ECS {
 			//AttachEntityToSystem(entity);
 		}
 
-		template<typename T>
+		/*template<typename T>
 		void GetComponent(const EntityID entity) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			const ComponentTypeID compType = CompType<T>();
-			//entitiesSignatures.at(entity).erase(compType);
-			//return GetCompList<T>()->Get(entity);
+			entitiesSignatures.at(entity).erase(compType);
+			return GetCompList<T>()->Get(entity);
+		}*/
+
+		template<typename T>
+		const bool HasComponent(const EntityID entity) {
+			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+			const EntitySignature signature = entitiesSignatures.at(entity);
+			const ComponentTypeID compType = CompType<T>();
+			return (signature.count(compType) > 0);
 		}
+
+
 
 	private:
 		EntityID entityCount;
