@@ -97,6 +97,13 @@ namespace ECS {
 			componentsArrays[compType] = std::move(std::make_shared<CompList<T>>());
 		}
 
+		template<typename T>
+		std::shared_ptr<CompList<T>> GetCompList() {
+			const ComponentTypeID compType = CompType<T>();
+			if (componentsArrays.count(compType) == 0) { AddCompList<T>(); }
+			return std::static_pointer_cast<CompList<T>>(componentsArrays.at(compType));
+		}
+
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
