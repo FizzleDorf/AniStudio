@@ -88,7 +88,14 @@ namespace ECS {
 			return (signature.count(compType) > 0);
 		}
 
+	private:
 
+		template<typename T>
+		void AddCompList() {
+			const ComponentTypeID compType = CompType<T>();
+			assert(componentsArrays.find(compType) == componentsArrays.end() && "CompList already registered!");
+			componentsArrays[compType] = std::move(std::make_shared<CompList<T>>());
+		}
 
 	private:
 		EntityID entityCount;
