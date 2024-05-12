@@ -35,7 +35,7 @@ namespace ECS {
 
 		void DestroyEntity(const EntityID entity) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			entitySignatures.erase(entity);
+			entitiesSignatures.erase(entity);
 
 			for (auto& array : componentArrays) {
 				array.second->Erase(entity);
@@ -56,11 +56,11 @@ namespace ECS {
 
 			T component(std::forward<Args>(args)...);
 			component.entityID = entity;
-			//GetCompList<T>()->Insert(component);
+			GetCompList<T>()->Insert(component);
 
 			const ComponentTypeID compType = CompType<T>();
 			entitiesSignatures.at(entity).insert(compType);
-			//AttachEntityToSystem(entity);
+			AttachEntityToSystem(entity);
 		}
 
 		template<typename T>
@@ -68,17 +68,17 @@ namespace ECS {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			const ComponentTypeID compType = CompType<T>();
 			entitiesSignatures.at(entity).erase(compType);
-			//GetCompList<T>()->Erase(entity);
-			//AttachEntityToSystem(entity);
+			GetCompList<T>()->Erase(entity);
+			AttachEntityToSystem(entity);
 		}
 
-		/*template<typename T>
+		template<typename T>
 		void GetComponent(const EntityID entity) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			const ComponentTypeID compType = CompType<T>();
 			entitiesSignatures.at(entity).erase(compType);
 			return GetCompList<T>()->Get(entity);
-		}*/
+		}
 
 		template<typename T>
 		const bool HasComponent(const EntityID entity) {
@@ -104,10 +104,22 @@ namespace ECS {
 			return std::static_pointer_cast<CompList<T>>(componentsArrays.at(compType));
 		}
 
+		void AddEntitySignature(const EntityID entity) {
+			assert(entitiesSignatures.find(entity) != entitiesSignatures.end()&& "Signature not found");
+			entitiesSignatures[entity] = std::move(std::make_shared<Signature>());
+		}
+
+		std::shared_ptr<Signature> GetEnitiySignature(const EntityID entity) {
+			assert(entitiesSignatures.find(entity) != entitiesSignatures.end() && "Signature Not Found");
+			return entitiesSignatures.at(entity);
+		}
+
+
+
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
-		std::map<EntityID, EntitySignature> entitySignatures;
+		std::map<EntityID, std::shared_ptr<Signature>> entitiesSignatures;
 		std::map<SystemTypeID,std::unique_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentArrays;
 
