@@ -106,12 +106,30 @@ namespace ECS {
 
 		void AddEntitySignature(const EntityID entity) {
 			assert(entitiesSignatures.find(entity) != entitiesSignatures.end()&& "Signature not found");
-			entitiesSignatures[entity] = std::move(std::make_shared<Signature>());
+			entitiesSignatures[entity] = std::move(std::make_shared<EntitySignature>());
 		}
 
-		std::shared_ptr<Signature> GetEnitiySignature(const EntityID entity) {
+		std::shared_ptr<EntitySignature> GetEnitiySignature(const EntityID entity) {
 			assert(entitiesSignatures.find(entity) != entitiesSignatures.end() && "Signature Not Found");
 			return entitiesSignatures.at(entity);
+		}
+
+		void AddEntityToSystem(const EntityID entity, BaseSystem* system) {
+			if (IsEntityInSystem(entity, system->signature)) {
+				system->entities.insert(entity);
+			}
+			else {
+				system->entities.erase(entity);
+			}
+		}
+
+		bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature) {
+			for (const auto compType : system_signature) {
+				if (GetEnitiySignature(entity)->count(compType) == 0) {
+					return false;
+				}
+			}
+			return true;
 		}
 
 
@@ -119,7 +137,7 @@ namespace ECS {
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
-		std::map<EntityID, std::shared_ptr<Signature>> entitiesSignatures;
+		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::unique_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentArrays;
 
