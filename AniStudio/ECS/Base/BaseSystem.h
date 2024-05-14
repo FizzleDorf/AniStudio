@@ -32,7 +32,7 @@ namespace ECS {
 		virtual void Destroy(){}
 
 	protected:
-		friend class Manager;
+		friend class EntityManager;
 		EntitySignature signature;
 		std::set<EntityID> entities;
 	};
