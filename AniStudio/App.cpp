@@ -13,11 +13,11 @@ int main(int argc, char** argv) {
 	
 	ECS::EntityManager mgr;
 	auto id = mgr.AddNewEntity();
-	auto id1 = mgr.AddNewEntity();
+	
 
-	std::cout << id << " " << id1 << " " << std::endl;
 
-	mgr.DestroyEntity(id1);
+	std::cout << id << " "  << std::endl;
+
 	auto id2 = mgr.AddNewEntity();
 
 	auto typeID1 = ECS::CompType<TestComp1>();

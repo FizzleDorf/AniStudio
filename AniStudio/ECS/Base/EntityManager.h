@@ -37,7 +37,7 @@ namespace ECS {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			entitiesSignatures.erase(entity);
 
-			for (auto& array : componentArrays) {
+			for (auto& array : componentsArrays) {
 				array.second->Erase(entity);
 			}
 
@@ -52,15 +52,13 @@ namespace ECS {
 		template<typename T, typename... Args>
 		void AddComponent(const EntityID entity, Args&&... args) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			assert(entities_signatures[entity].size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
+			assert(GetEnitiySignature(entity)->size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
 
 			T component(std::forward<Args>(args)...);
 			component.entityID = entity;
+			GetEnitiySignature(entity)->insert(CompType<T>());
 			GetCompList<T>()->Insert(component);
-
-			const ComponentTypeID compType = CompType<T>();
-			entitiesSignatures.at(entity).insert(compType);
-			AttachEntityToSystem(entity);
+			UpdateEntityTargetSystem(entity);
 		}
 
 		template<typename T>
@@ -69,7 +67,7 @@ namespace ECS {
 			const ComponentTypeID compType = CompType<T>();
 			entitiesSignatures.at(entity).erase(compType);
 			GetCompList<T>()->Erase(entity);
-			AttachEntityToSystem(entity);
+			UpdateEntityTargetSystem(entity);
 		}
 
 		template<typename T>
@@ -86,6 +84,27 @@ namespace ECS {
 			const EntitySignature signature = entitiesSignatures.at(entity);
 			const ComponentTypeID compType = CompType<T>();
 			return (signature.count(compType) > 0);
+		}
+
+		template<typename T>
+		void RegisterSystem() {
+			const SystemTypeID systemType = SystemType<T>();
+			assert(registeredSystems.count(systemType) == 0 && "System already registered!");
+			auto system = std::make_shared<T>();
+
+			for (EntityID entity = 0; entity < entityCount; entity++) {
+				AddEntityToSystem(entity, system.get());
+			}
+
+			system->Start();
+			registeredSystems[systemType] = std::move(system);
+		}
+
+		template<typename T>
+		void UnregisterSystem() {
+			const SystemTypeID systemType = SystemType<T>();
+			assert(registeredSystems.count(systemType) == 0 && "System already registered!");
+			registeredSystems.erase(systemType);
 		}
 
 	private:
@@ -114,6 +133,12 @@ namespace ECS {
 			return entitiesSignatures.at(entity);
 		}
 
+		void UpdateEntityTargetSystem(const EntityID entity) {
+			for (auto& system : registeredSystems) {
+				AddEntityToSystem(entity, system.second.get());
+			}
+		}
+
 		void AddEntityToSystem(const EntityID entity, BaseSystem* system) {
 			if (IsEntityInSystem(entity, system->signature)) {
 				system->entities.insert(entity);
@@ -132,14 +157,12 @@ namespace ECS {
 			return true;
 		}
 
-
-
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::unique_ptr<BaseSystem>> registeredSystems;
-		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentArrays;
+		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
 
 	};
 }
