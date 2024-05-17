@@ -1,5 +1,5 @@
 #include "pch.h"
-#include "Timer.h"
+#include "Timer.hpp"
 
 namespace ANI {
 	ANI::T_Timer::T_Timer() : deltaTime(0.0f), lastFrame(0.0f) {

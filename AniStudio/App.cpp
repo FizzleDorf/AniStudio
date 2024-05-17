@@ -1,8 +1,8 @@
 #include "pch.h"
-#include "Core/Ani.h"
+#include "Core/Ani.hpp"
 
-#include "ECS/Base/Types.h"
-#include "ECS/Base/EntityManager.h"
+#include "ECS/Base/Types.hpp"
+#include "ECS/Base/EntityManager.hpp"
 
 
 class TestComp1 : public ECS::BaseComponent {

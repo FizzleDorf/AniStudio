@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Types.h"
-#include "CompList.h"
-#include "BaseSystem.h"
-#include "BaseComponent.h"
+#include "Types.hpp"
+#include "CompList.hpp"
+#include "BaseSystem.hpp"
+#include "BaseComponent.hpp"
 
 namespace ECS {
 	class EntityManager {
