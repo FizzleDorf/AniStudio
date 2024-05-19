@@ -27,10 +27,11 @@ namespace ECS {
 		}
 
 		const EntityID AddNewEntity() {
-			const EntityID entityId = availableEntities.front();
+			const EntityID entity = availableEntities.front();
+			AddEntitySignature(entity);
 			availableEntities.pop();
 			entityCount++;
-			return entityId;
+			return entity;
 		}
 
 		void DestroyEntity(const EntityID entity) {
