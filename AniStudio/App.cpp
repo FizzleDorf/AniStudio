@@ -2,26 +2,34 @@
 #include "Core/Ani.hpp"
 #include "ECS/ECS.hpp"
 
-
-class TestSystem1 : public ECS::BaseSystem {
-
-};
-
-class TestSystem2 : public ECS::BaseSystem {
-
-};
-
-class TestSystem3 : public ECS::BaseSystem {
-
-};
-
 class TestComp1 : public ECS::BaseComponent {
-
+	int A = 5;
 };
 
 class TestComp2 : public ECS::BaseComponent {
-
+	int A = 5;
 };
+
+class TestSystem1 : public ECS::BaseSystem {
+	TestSystem1() {
+		AddComponentSignature<TestComp1>();
+	}
+};
+
+class TestSystem2 : public ECS::BaseSystem {
+	TestSystem2() {
+		AddComponentSignature<TestComp2>();
+	}
+};
+
+class TestSystem3 : public ECS::BaseSystem {
+	TestSystem3() {
+		AddComponentSignature<TestComp1>();
+		AddComponentSignature<TestComp2>();
+	}
+};
+
+
 
 
 int main(int argc, char** argv) {
@@ -33,22 +41,18 @@ int main(int argc, char** argv) {
 	mgr.RegisterSystem<TestSystem3>();
 
 	auto entity1 = mgr.AddNewEntity();
-	ECS::EntityID ent(entity1, &mgr);
+	ECS::Entity ent(entity1, &mgr);
 	
-	ent.addComponent()
-
-	auto entity1 = mgr.AddNewEntity();
-	ECS::EntityID ent(entity1, &mgr);
-		
-		
-		
-	std::cout << id << " "  << std::endl;
-
 	ent.AddComponent<TestComp1>();
 
-	auto typeID1 = ECS::CompType<TestComp1>();
-
-	std::cout << id << " " <<  id2 << " " <<  std::endl;
+	auto entity2 = mgr.AddNewEntity();
+	ent.AddComponent<TestComp2>(entity2);
+	
+	auto entity3 = mgr.AddNewEntity();
+	ent.AddComponent<TestComp1>(entity3);
+	ent.AddComponent<TestComp2>(entity3);
+	
+	mgr.Update();
 
 	ANI::Core.Init();
 	ANI::Timer.Init();

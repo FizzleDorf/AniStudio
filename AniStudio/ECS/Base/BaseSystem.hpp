@@ -23,7 +23,7 @@ namespace ECS {
 
 		template<typename T>
 		void AddComponentSignature() {
-			signature.insert(ComponentType<T>());
+			signature.insert(CompType<T>());
 		}
 
 		virtual void Start(){}
