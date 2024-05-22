@@ -3,11 +3,15 @@
 #include "ECS/ECS.hpp"
 
 class TestComp1 : public ECS::BaseComponent {
-	int A = 5;
+public:
+	int A;
+	TestComp1(int a = 5) : A(a) {}
 };
 
 class TestComp2 : public ECS::BaseComponent {
-	int A = 5;
+public:
+	int A;
+	TestComp2(int a = 5) : A(a) {}
 };
 
 class TestSystem1 : public ECS::BaseSystem {
