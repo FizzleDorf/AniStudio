@@ -1,0 +1,6 @@
+[submodule "Submodules/ggml"]
+	path = Submodules/ggml
+	url = https://github.com/ggerganov/ggml.git
+[submodule "Submodules/AniSD.cpp"]
+	path = Submodules/AniSD.cpp
+	url = https://github.com/FizzleDorf/AniSD.cpp.git

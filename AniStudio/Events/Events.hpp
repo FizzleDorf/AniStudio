@@ -3,7 +3,7 @@
 namespace ANI {
 
 	class Events {
-	
+
 	public:
 		~Events();
 		Events(const Events&) = delete;

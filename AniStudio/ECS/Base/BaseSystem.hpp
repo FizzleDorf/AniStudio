@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Types.h"
+#include "Types.hpp"
 
 namespace ECS {
 
@@ -23,15 +23,16 @@ namespace ECS {
 
 		template<typename T>
 		void AddComponentSignature() {
-			signature.insert(ComponentType<T>());
+			signature.insert(CompType<T>());
 		}
 
 		virtual void Start(){}
 		virtual void Update(){}
+		virtual void Render(){}
 		virtual void Destroy(){}
 
 	protected:
-		friend class Manager;
+		friend class EntityManager;
 		EntitySignature signature;
 		std::set<EntityID> entities;
 	};

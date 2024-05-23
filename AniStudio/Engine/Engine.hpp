@@ -2,14 +2,17 @@
 #include "pch.h"
 
 namespace ANI {
+
+	//Startup Resolution
 	const int SCREEN_WIDTH(1200);
 	const int SCREEN_HEIGHT(720);
 
 	class Engine {
 
 	public:
-		Engine();
+		
 		~Engine();
+		Engine(const Engine&) = delete;
 		Engine& operator=(const Engine&) = delete;
 
 
@@ -19,8 +22,6 @@ namespace ANI {
 		}
 
 		void Quit();
-		void Tick();
-		void Poll();
 		void Update();
 		void Init();
 
@@ -28,6 +29,9 @@ namespace ANI {
 		inline GLFWwindow& Window() { return *window; }
 		inline const bool VideoWidth() const { return videoWidth; }
 		inline const bool VideoHeight() const { return videoHeight; }
+
+	private:
+		Engine();
 
 	private:
 		bool run;

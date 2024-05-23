@@ -5,6 +5,7 @@ namespace ECS {
 
 	class BaseSystem;
 	struct BaseComponent;
+	//class BaseComponent;
 
 	// Constants
 	const size_t MAX_ENTITY_COUNT = 5000;

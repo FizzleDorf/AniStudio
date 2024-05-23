@@ -1,5 +1,5 @@
-#include <pch.h>
-#include "Timer.h"
+#include "pch.h"
+#include "Timer.hpp"
 
 namespace ANI {
 	ANI::T_Timer::T_Timer() : deltaTime(0.0f), lastFrame(0.0f) {
@@ -10,12 +10,12 @@ namespace ANI {
 
 	}
 
-	void ANI::T_Timer::Tick(){
+	void ANI::T_Timer::Tick() {
 		deltaTime = glfwGetTime() - lastFrame;
 		lastFrame = glfwGetTime();
 	}
 
-	void ANI::T_Timer::Init(){
+	void ANI::T_Timer::Init() {
 
 	}
 }
