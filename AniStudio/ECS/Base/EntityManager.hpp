@@ -26,6 +26,12 @@ namespace ECS {
 			}
 		}
 
+		void Render() {
+			for (auto& system : registeredSystems) {
+				system.second->Update();
+			}
+		}
+
 		const EntityID AddNewEntity() {
 			const EntityID entity = availableEntities.front();
 			AddEntitySignature(entity);
@@ -161,7 +167,7 @@ namespace ECS {
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
-		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
+		std::map<EntityID, std::unique_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
 
