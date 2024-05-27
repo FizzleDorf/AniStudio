@@ -167,7 +167,7 @@ namespace ECS {
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
-		std::map<EntityID, std::unique_ptr<EntitySignature>> entitiesSignatures;
+		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
 
