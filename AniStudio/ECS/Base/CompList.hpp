@@ -33,11 +33,12 @@ namespace ECS {
 		}
 
 		void Erase(const EntityID entity) override final {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) {return c.GetID() == entity; });
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == entity; });
 			if (comp != data.end()) {
-				data.erase();
+				data.erase(comp);
 			}
 		}
+
 
 		std::vector<T> data;
 	};

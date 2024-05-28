@@ -13,7 +13,7 @@ public:
 	int A;
 	TestComp2(int a = 5) : A(a) {}
 };
-
+/*
 class TestSystem1 : public ECS::BaseSystem {
 	TestSystem1() {
 		AddComponentSignature<TestComp1>();
@@ -29,17 +29,17 @@ class TestSystem2 : public ECS::BaseSystem {
 class TestSystem3 : public ECS::BaseSystem {
 	TestSystem3() {
 		AddComponentSignature<TestComp1>();
-		AddComponentSignature<TestComp2>();
+		AddComponentSignature<TestComp2>();	
 	}
 };
-
+*/
 
 
 
 int main(int argc, char** argv) {
 	
 	ECS::EntityManager mgr;
-
+	/*
 	mgr.RegisterSystem<TestSystem1>();
 	mgr.RegisterSystem<TestSystem2>();
 	mgr.RegisterSystem<TestSystem3>();
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
 	auto entity3 = mgr.AddNewEntity();
 	ent.AddComponent<TestComp1>(entity3);
 	ent.AddComponent<TestComp2>(entity3);
-	
+	*/
 	mgr.Update();
 
 	ANI::Core.Init();
