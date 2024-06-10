@@ -1,10 +1,12 @@
 AniStudio
 
+An ML Toolbox for media and learning in C++ or using the ComfyUI api.
+
 `
 git clone https://github.com/FizzleDorf/AniStudio.git
 `
 
-then build using ytour IDE or using make commands. Submodules aren't implemented yet.
+then build using your IDE or using make commands. Submodules aren't implemented yet.
 
 TODO:
 - convert IMGUI to a hybrid of immediate and retained modes
