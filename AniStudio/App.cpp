@@ -2,44 +2,44 @@
 #include "Core/Ani.hpp"
 #include "ECS/ECS.hpp"
 
-class TestComp1 : public ECS::BaseComponent {
+struct TestComp1 : public ECS::BaseComponent {
 public:
 	int A;
 	TestComp1(int a = 5) : A(a) {}
 };
 
-class TestComp2 : public ECS::BaseComponent {
+struct TestComp2 : public ECS::BaseComponent {
 public:
 	int A;
 	TestComp2(int a = 5) : A(a) {}
 };
-/*
-class TestSystem1 : public ECS::BaseSystem {
+
+struct TestSystem1 : public ECS::BaseSystem {
 	TestSystem1() {
 		AddComponentSignature<TestComp1>();
 	}
 };
 
-class TestSystem2 : public ECS::BaseSystem {
+struct TestSystem2 : public ECS::BaseSystem {
 	TestSystem2() {
 		AddComponentSignature<TestComp2>();
 	}
 };
 
-class TestSystem3 : public ECS::BaseSystem {
+struct TestSystem3 : public ECS::BaseSystem {
 	TestSystem3() {
 		AddComponentSignature<TestComp1>();
 		AddComponentSignature<TestComp2>();	
 	}
 };
-*/
+
 
 
 
 int main(int argc, char** argv) {
 	
 	ECS::EntityManager mgr;
-	/*
+	
 	mgr.RegisterSystem<TestSystem1>();
 	mgr.RegisterSystem<TestSystem2>();
 	mgr.RegisterSystem<TestSystem3>();
@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
 	auto entity3 = mgr.AddNewEntity();
 	ent.AddComponent<TestComp1>(entity3);
 	ent.AddComponent<TestComp2>(entity3);
-	*/
+	
 	mgr.Update();
 
 	ANI::Core.Init();
