@@ -14,22 +14,22 @@ public:
 	TestComp2(int a = 5) : A(a) {}
 };
 
-class TestSystem1 : public ECS::BaseSystem {
+struct TestSystem1 : public ECS::BaseSystem {
 	TestSystem1() {
-		//AddComponentSignature<TestComp1>();
+		AddComponentSignature<TestComp1>();
 	}
 };
 
-class TestSystem2 : public ECS::BaseSystem {
+struct TestSystem2 : public ECS::BaseSystem {
 	TestSystem2() {
-		//AddComponentSignature<TestComp2>();
+		AddComponentSignature<TestComp2>();
 	}
 };
 
-class TestSystem3 : public ECS::BaseSystem {
+struct TestSystem3 : public ECS::BaseSystem {
 	TestSystem3() {
-		//AddComponentSignature<TestComp1>();
-		//AddComponentSignature<TestComp2>();	
+		AddComponentSignature<TestComp1>();
+		AddComponentSignature<TestComp2>();	
 	}
 };
 
@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
 	ent.AddComponent<TestComp1>(entity3);
 	ent.AddComponent<TestComp2>(entity3);
 	
-	mgr.Update();
+	
 
 	ANI::Core.Init();
 	ANI::Timer.Init();
@@ -64,6 +64,7 @@ int main(int argc, char** argv) {
 	
 
 	while (ANI::Core.Run()) {
+		mgr.Update();
 		ANI::Timer.Tick();
 		ANI::Event.Poll();
 		ANI::Core.Update();
