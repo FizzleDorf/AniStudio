@@ -131,7 +131,7 @@ namespace ECS {
 		}
 
 		void AddEntitySignature(const EntityID entity) {
-			assert(entitiesSignatures.find(entity) != entitiesSignatures.end()&& "Signature not found");
+			assert(entitiesSignatures.find(entity) == entitiesSignatures.end() && "Signature not found");
 			entitiesSignatures[entity] = std::move(std::make_shared<EntitySignature>());
 		}
 

@@ -2,34 +2,34 @@
 #include "Core/Ani.hpp"
 #include "ECS/ECS.hpp"
 
-struct TestComp1 : public ECS::BaseComponent {
+class TestComp1 : public ECS::BaseComponent {
 public:
 	int A;
 	TestComp1(int a = 5) : A(a) {}
 };
 
-struct TestComp2 : public ECS::BaseComponent {
+class TestComp2 : public ECS::BaseComponent {
 public:
 	int A;
 	TestComp2(int a = 5) : A(a) {}
 };
 
-struct TestSystem1 : public ECS::BaseSystem {
+class TestSystem1 : public ECS::BaseSystem {
 	TestSystem1() {
-		AddComponentSignature<TestComp1>();
+		//AddComponentSignature<TestComp1>();
 	}
 };
 
-struct TestSystem2 : public ECS::BaseSystem {
+class TestSystem2 : public ECS::BaseSystem {
 	TestSystem2() {
-		AddComponentSignature<TestComp2>();
+		//AddComponentSignature<TestComp2>();
 	}
 };
 
-struct TestSystem3 : public ECS::BaseSystem {
+class TestSystem3 : public ECS::BaseSystem {
 	TestSystem3() {
-		AddComponentSignature<TestComp1>();
-		AddComponentSignature<TestComp2>();	
+		//AddComponentSignature<TestComp1>();
+		//AddComponentSignature<TestComp2>();	
 	}
 };
 
