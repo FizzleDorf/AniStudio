@@ -1,6 +1,6 @@
 AniStudio
 
-An ML Toolbox for media and learning in C++ or using the ComfyUI api.
+An ML Toolbox for realtime media, animations and learning in C++ or using the ComfyUI api.
 
 `
 git clone https://github.com/FizzleDorf/AniStudio.git
