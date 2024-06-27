@@ -32,9 +32,26 @@ struct TestSystem3 : public ECS::BaseSystem {
 		AddComponentSignature<TestComp2>();	
 	}
 };
+/*
+* OS Specific init
 
-
-
+struct OSInit {
+	void Init() {
+#if defined(_WIN32) || defined(_WIN64)
+		// Windows-specific initialization
+		WindowsInit();
+#elif defined(__linux__)
+		// Linux-specific initialization
+		LinuxInit();
+#elif defined(__APPLE__)
+		// macOS-specific initialization
+		MacOSInit();
+#else
+		// Other OS-specific initialization
+		DefaultInit();
+#endif
+	}
+	*/
 
 int main(int argc, char** argv) {
 	
