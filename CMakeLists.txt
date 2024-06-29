@@ -67,5 +67,4 @@ target_link_libraries(${PROJECT_NAME}
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
 
 # Include subdirectory containing additional source files
-add_subdirectory(Submodules/imgui)
-#add_subdirectory(Submodules/imgui/examples/example_glfw_opengl3)
+
