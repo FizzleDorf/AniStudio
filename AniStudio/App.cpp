@@ -54,7 +54,7 @@ struct OSInit {
 	*/
 
 int main(int argc, char** argv) {
-	
+	/*
 	ECS::EntityManager mgr;
 	
 	mgr.RegisterSystem<TestSystem1>();
@@ -72,8 +72,20 @@ int main(int argc, char** argv) {
 	auto entity3 = mgr.AddNewEntity();
 	ent.AddComponent<TestComp1>(entity3);
 	ent.AddComponent<TestComp2>(entity3);
-	
-	
+	*/
+	bool p_open = true;
+	ImGui::Begin("My First Tool", &p_open, ImGuiWindowFlags_MenuBar);
+	if (ImGui::BeginMenuBar())
+	{
+		if (ImGui::BeginMenu("File"))
+		{
+			if (ImGui::MenuItem("Open..", "Ctrl+O")) { /* Do stuff */ }
+			if (ImGui::MenuItem("Save", "Ctrl+S")) { /* Do stuff */ }
+			if (ImGui::MenuItem("Close", "Ctrl+W")) { p_open = false; }
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenuBar();
+	}
 
 	ANI::Core.Init();
 	ANI::Timer.Init();
@@ -81,7 +93,7 @@ int main(int argc, char** argv) {
 	
 
 	while (ANI::Core.Run()) {
-		mgr.Update();
+		//mgr.Update();
 		ANI::Timer.Tick();
 		ANI::Event.Poll();
 		ANI::Core.Update();
