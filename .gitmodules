@@ -7,3 +7,6 @@
 [submodule "Submodules/ggml-nodes"]
 	path = Submodules/ggml-nodes
 	url = https://github.com/thedmd/imgui-node-editor.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git
