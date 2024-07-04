@@ -10,8 +10,8 @@ set(PCH_FILE "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.h")
 
 # Create a sources variable with a link to all cpp files to compile
 set(SOURCES
-    ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/App.cpp
-    ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.cpp
+    "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/App.cpp"
+    "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.cpp"
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Engine/Engine.cpp
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Timer/Timer.cpp
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Events/Events.cpp
@@ -43,6 +43,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Core"
 )
 
+# Add submodules
+#add_subdirectory(external/imgui-node-editor)
+#add_subdirectory(external/imgui)
+
 # Add precompiled header file
 target_precompile_headers(${PROJECT_NAME} PRIVATE "${PCH_FILE}")
 
@@ -53,9 +57,6 @@ target_link_libraries(${PROJECT_NAME}
     ${GLEW_LIBRARY}
 )
 
+
 # Set C++ standard
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
-
-# Include subdirectories containing additional source files or libraries
-add_subdirectory(external/imgui-node-editor)
-add_subdirectory(external/imgui)
