@@ -1,11 +1,11 @@
-AniStudio
+# AniStudio
 
 An ML Toolbox for realtime media, animations and learning in C++ or using the ComfyUI api.
 The purpose of this project is to bring together machine learning tasks from the fields of
 audio, images, text, video and 3D generation in an easy to use UI unlike what is currently 
 being offered AI front-ends.
 
-##Install
+## Install
 
 ```
 git clone https://github.com/FizzleDorf/AniStudio.git
@@ -14,7 +14,7 @@ git submodule add https://github.com/thedmd/imgui-node-editor.git external/imgui
 git submodule update --init --recursive
 ```
 
-##Build
+## Build
 
 ```
 mkdir build && cd build && cmake .. && cmake --build .
