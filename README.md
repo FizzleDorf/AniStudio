@@ -5,9 +5,20 @@ The purpose of this project is to bring together machine learning tasks from the
 audio, images, text, video and 3D generation in an easy to use UI unlike what is currently 
 being offered AI front-ends.
 
-`
+##Install
+
+```
 git clone https://github.com/FizzleDorf/AniStudio.git
-`
+cd AniStudio
+git submodule add https://github.com/thedmd/imgui-node-editor.git external/imgui-node-editor
+git submodule update --init --recursive
+```
+
+##Build
+
+```
+mkdir build && cd build && cmake .. && cmake --build .
+```
 
 then build using your IDE or using make commands. Submodules aren't implemented yet.
 
