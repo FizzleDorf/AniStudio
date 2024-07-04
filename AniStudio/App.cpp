@@ -74,18 +74,18 @@ int main(int argc, char** argv) {
 	ent.AddComponent<TestComp2>(entity3);
 	*/
 	bool p_open = true;
-	ImGui::Begin("My First Tool", &p_open, ImGuiWindowFlags_MenuBar);
-	if (ImGui::BeginMenuBar())
-	{
-		if (ImGui::BeginMenu("File"))
-		{
-			if (ImGui::MenuItem("Open..", "Ctrl+O")) { /* Do stuff */ }
-			if (ImGui::MenuItem("Save", "Ctrl+S")) { /* Do stuff */ }
-			if (ImGui::MenuItem("Close", "Ctrl+W")) { p_open = false; }
-			ImGui::EndMenu();
-		}
-		ImGui::EndMenuBar();
-	}
+	//ImGui::Begin("My First Tool", &p_open, ImGuiWindowFlags_MenuBar);
+	//if (ImGui::BeginMenuBar())
+	//{
+	//	if (ImGui::BeginMenu("File"))
+	//	{
+	//		if (ImGui::MenuItem("Open..", "Ctrl+O")) { /* Do stuff */ }
+	//		if (ImGui::MenuItem("Save", "Ctrl+S")) { /* Do stuff */ }
+	//		if (ImGui::MenuItem("Close", "Ctrl+W")) { p_open = false; }
+	//		ImGui::EndMenu();
+	//	}
+	//	ImGui::EndMenuBar();
+	//}
 
 	ANI::Core.Init();
 	ANI::Timer.Init();
