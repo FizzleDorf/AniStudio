@@ -3,7 +3,7 @@
 project(AniStudio)
 
 # Set the directory containing the libraries
-set(LIBRARY_DIR "${CMAKE_SOURCE_DIR}/Libraries/libs")
+set(LIBRARY_DIR "${CMAKE_SOURCE_DIR}/external/libs")
 
 # Set the full path to pch.h starting from the root directory
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/pch.h")
@@ -17,33 +17,24 @@ set(SOURCES
     ${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Events/Events.cpp
 )
 
-# Find and link GLEW
-find_library(GLEW_LIBRARY
-    NAMES glew32s
-    HINTS ${LIBRARY_DIR}
-)
-if(GLEW_LIBRARY)
-    message(STATUS "Found GLEW: ${GLEW_LIBRARY}")
-else()
-    message(FATAL_ERROR "GLEW library not found")
-endif()
+# Manually specify the path to the GLEW library and include directories
+set(GLEW_LIBRARY "${LIBRARY_DIR}/glew32s.lib")
+set(GLEW_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/includes")
 
-# Find and link GLFW3
-find_library(GLFW3_LIBRARY
-    NAMES glfw3
-    HINTS ${LIBRARY_DIR}
-)
-if(GLFW3_LIBRARY)
-    message(STATUS "Found GLFW3: ${GLFW3_LIBRARY}")
-else()
-    message(FATAL_ERROR "GLFW3 library not found")
-endif()
+# Manually specify the path to the GLFW3 library and include directories
+set(GLFW3_LIBRARY "${LIBRARY_DIR}/glfw3.lib")
+set(GLFW3_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/includes")
 
-# Add source to this project's executable.
+# Add source to this project's executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-    "${CMAKE_SOURCE_DIR}/Libraries/includes"  # Include directory for external libraries
+    "${GLEW_INCLUDE_DIR}"
+    "${GLFW3_INCLUDE_DIR}"
+    "${CMAKE_SOURCE_DIR}/external"  # Include directory for external libraries, source files, and headers
+    "${CMAKE_SOURCE_DIR}/external/src"
+    "${CMAKE_SOURCE_DIR}/external/libs"
+    "${CMAKE_SOURCE_DIR}/external/includes"
     "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}"           # Include directory for project headers
     "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Engine" 
     "${CMAKE_SOURCE_DIR}/${PROJECT_NAME}/Timer" 
@@ -62,9 +53,5 @@ target_link_libraries(${PROJECT_NAME}
     ${GLEW_LIBRARY}
 )
 
-
 # Set C++ standard
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
-
-# Include subdirectory containing additional source files
-
