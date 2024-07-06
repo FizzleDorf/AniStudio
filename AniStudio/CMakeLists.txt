@@ -3,7 +3,7 @@ set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
 
 # Create a sources variable with a link to all cpp files to compile
 set(SOURCES
-    ${CMAKE_SOURCE_DIR}/AniStudio/App.cpp
+    "main.cpp"
     ${CMAKE_SOURCE_DIR}/AniStudio/pch.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/Engine/Engine.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
