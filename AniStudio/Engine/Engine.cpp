@@ -1,7 +1,7 @@
 #include "pch.h"
 #include "Engine.hpp"
 #include "GLEW/glew.h"
-
+#include "imgui/imgui.h"
 namespace ANI {
 
 	Engine::Engine() :run(true), window(NULL), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
@@ -28,7 +28,6 @@ namespace ANI {
 		glfwMakeContextCurrent(window);
 		//assert(glewInit() == GLEW_OK && "ERROR : GLEW : Init failed!");
 		//glewExperimental = GL_TRUE;
-	
 	}
 
 	Engine::~Engine() {

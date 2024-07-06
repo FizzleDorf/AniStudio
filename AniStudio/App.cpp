@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "Core/Ani.hpp"
 #include "ECS/ECS.hpp"
+#include "imgui/imgui.h"
+#include "hello_imgui/src/hello_imgui/hello_imgui.h"
 
 class TestComp1 : public ECS::BaseComponent {
 public:
@@ -86,7 +88,67 @@ int main(int argc, char** argv) {
 	//	}
 	//	ImGui::EndMenuBar();
 	//}
+	auto gui = [&]()
+	{
+		if (ImGui::BeginTabBar("Startup Options"))
+		{
+			if (ImGui::BeginTabItem("ComfyUI Startup Options"))
+			{
+				ImGui::NewLine();
 
+				ImGui::NewLine();
+
+				if (ImGui::BeginTabBar("ComfyUI Startup Options"))
+				{
+					// "General" tab
+					if (ImGui::BeginTabItem("General"))
+					{
+						
+						ImGui::EndTabItem();
+					}
+
+					// "Paths" tab
+					if (ImGui::BeginTabItem("Paths"))
+					{
+						
+					}
+					ImGui::EndTabBar();
+				}
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("SD.CPP Startup Options"))
+			{
+				ImGui::NewLine();
+
+				
+
+				
+
+				ImGui::NewLine();
+
+				if (ImGui::BeginTabBar("SD.CPP Startup Options"))
+				{
+					// "General" tab
+					if (ImGui::BeginTabItem("General"))
+					{
+						//ShowBoolOptionsTable(boolOptions, sizeof(boolOptions) / sizeof(BoolOption),"General Settings Table");
+						ImGui::EndTabItem();
+					}
+
+					// "Paths" tab
+					if (ImGui::BeginTabItem("Paths"))
+					{
+						//ShowFlagPathsTable(inputOptions, sizeof(inputOptions) / sizeof(FlagOption),"PathsTable");
+						ImGui::EndTabItem();
+					}
+					ImGui::EndTabBar();
+				}
+				ImGui::EndTabItem();
+			}
+			ImGui::EndTabBar();
+		}
+		ImGui::NewLine();
+		ImGui::Text("Current FPS: %.1f", HelloImGui::FrameRate());
 	ANI::Core.Init();
 	ANI::Timer.Init();
 	ANI::Event.Init();
