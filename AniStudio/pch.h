@@ -21,10 +21,9 @@
 #include <GLFW/glfw3.h>
 
 //IMGUI
-//#include "imgui/imgui.h"
+#include "imgui/imgui.h"
 //IMGUI (Windows)
-//#include "imgui/backends/imgui_impl_glfw.h"
-//#include "../Submodules/imgui/backends/imgui_impl_win32.h"
+#include "imgui_impl_glfw.h"
 //IMGUI (Linux)
 
 //IMGUI (MacOS)
