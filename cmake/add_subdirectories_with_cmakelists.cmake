@@ -1,0 +1,16 @@
+# Automatically search the 'external' directory for subdirectories containing CMakeLists.txt
+macro(add_subdirectories_with_cmakelists root_dir)
+    file(GLOB children RELATIVE ${root_dir} ${root_dir}/*)
+    foreach(child ${children})
+        if(IS_DIRECTORY ${root_dir}/${child})
+            if(EXISTS ${root_dir}/${child}/CMakeLists.txt)
+                get_filename_component(binary_dir ${CMAKE_BINARY_DIR}/${child} REALPATH)
+                add_subdirectory(${root_dir}/${child} ${binary_dir})
+            else()
+                add_subdirectories_with_cmakelists(${root_dir}/${child})
+            endif()
+        endif()
+    endforeach()
+endmacro()
+
+add_subdirectories_with_cmakelists(${CMAKE_SOURCE_DIR}/external)

@@ -1,28 +1,18 @@
-# Manually specify the path to the GLEW library and include directories
-set(GLEW_LIBRARY "${LIBRARY_DIR}/glew32s.lib")
-set(GLEW_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/includes")
+# Define the directories for GLEW and GLFW headers and libraries
+set(GLFW_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/external/includes/GLFW")
+set(GLFW_LIBRARIES "${CMAKE_SOURCE_DIR}/external/libs/glfw3.lib")
 
-# Manually specify the path to the GLFW3 library and include directories
-set(GLFW3_LIBRARY "${LIBRARY_DIR}/glfw3.lib")
-set(GLFW3_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/includes")
+set(GLEW_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/external/includes/GLEW")
+set(GLEW_LIBRARIES "${CMAKE_SOURCE_DIR}/external/libs/glew32.lib")
 
-# Include directories for external libraries
-target_include_directories(${PROJECT_NAME} PRIVATE
-    "${GLEW_INCLUDE_DIR}"
-    "${GLFW3_INCLUDE_DIR}"
-    "${CMAKE_SOURCE_DIR}/external"  # Include directory for external libraries, source files, and headers
-    "${CMAKE_SOURCE_DIR}/external/src"
-    "${CMAKE_SOURCE_DIR}/external/libs"
-    "${CMAKE_SOURCE_DIR}/external/includes"
-)
+# Optionally, if using Vulkan, set the Vulkan directories
+# set(VULKAN_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/external/includes/Vulkan")
+# set(VULKAN_LIBRARIES "${CMAKE_SOURCE_DIR}/external/libs/vulkan-1.lib")
 
-# Link GLFW3 and GLEW libraries
-target_link_libraries(${PROJECT_NAME} 
-    PRIVATE 
-    ${GLFW3_LIBRARY} 
-    ${GLEW_LIBRARY}
-)
-
-# Add submodules
-# add_subdirectory(${CMAKE_SOURCE_DIR}/external/imgui-node-editor)
-# add_subdirectory(${CMAKE_SOURCE_DIR}/external/imgui)
+# Print out paths for debugging purposes
+message(STATUS "GLFW Include Dir: ${GLFW_INCLUDE_DIRS}")
+message(STATUS "GLFW Libraries: ${GLFW_LIBRARIES}")
+message(STATUS "GLEW Include Dir: ${GLEW_INCLUDE_DIRS}")
+message(STATUS "GLEW Libraries: ${GLEW_LIBRARIES}")
+# message(STATUS "Vulkan Include Dir: ${VULKAN_INCLUDE_DIRS}")
+# message(STATUS "Vulkan Libraries: ${VULKAN_LIBRARIES}")

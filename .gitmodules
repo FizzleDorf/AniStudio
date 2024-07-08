@@ -1,12 +1,6 @@
 [submodule "Submodules/ggml"]
 	path = Submodules/ggml
 	url = https://github.com/ggerganov/ggml.git
-[submodule "Submodules/AniSD.cpp"]
-	path = Submodules/AniSD.cpp
-	url = https://github.com/FizzleDorf/AniSD.cpp.git
-[submodule "Submodules/ggml-nodes"]
-	path = Submodules/ggml-nodes
-	url = https://github.com/thedmd/imgui-node-editor.git
 [submodule "external/imgui"]
 	path = external/imgui
 	url = https://github.com/ocornut/imgui.git
@@ -16,3 +10,6 @@
 [submodule "external/hello_imgui"]
 	path = external/hello_imgui
 	url = https://github.com/pthom/hello_imgui.git
+[submodule "external/vulkan"]
+	path = external/vulkan
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git
