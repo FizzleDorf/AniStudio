@@ -26,8 +26,8 @@ namespace ANI {
 		window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "AniStudio", NULL, NULL);
 		assert(window && "ERROR : GLFW : Failed to create window!");
 		glfwMakeContextCurrent(window);
-		assert(glewInit() == GLEW_OK && "ERROR : GLEW : Init failed!");
-		glewExperimental = GL_TRUE;
+		//assert(glewInit() == GLEW_OK && "ERROR : GLEW : Init failed!");
+		//glewExperimental = GL_TRUE;
 	
 	}
 
