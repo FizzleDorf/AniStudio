@@ -26,6 +26,7 @@ target_include_directories(AniStudio PRIVATE
     "${CMAKE_SOURCE_DIR}/AniStudio/Events" 
     "${CMAKE_SOURCE_DIR}/AniStudio/ECS"
     "${CMAKE_SOURCE_DIR}/AniStudio/Core"
+    "${CMAKE_SOURCE_DIR}/external/imgui"  
 )
 
 # Add precompiled header file

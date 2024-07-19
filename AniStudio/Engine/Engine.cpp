@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "Engine.hpp"
 #include "GLEW/glew.h"
+#include "imgui.h"
 
 namespace ANI {
 
@@ -36,14 +37,15 @@ namespace ANI {
 	}
 
 	void Engine::Init() {
-
+		ImGui::Begin("");
 	}
 
 	void Engine::Update() {
-
+		
 	}
 
 	void Engine::Quit() {
 		run = false;
+		ImGui::End();
 	}
 }
