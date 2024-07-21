@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "Engine.hpp"
 #include "GLEW/glew.h"
+#include <SDL.h>
+//#include <vk_engine/vk_engine.h>
 #include "imgui.h"
 
 namespace ANI {
@@ -29,6 +31,9 @@ namespace ANI {
 		glfwMakeContextCurrent(window);
 		//assert(glewInit() == GLEW_OK && "ERROR : GLEW : Init failed!");
 		//glewExperimental = GL_TRUE;
+
+
+
 	
 	}
 
@@ -37,7 +42,6 @@ namespace ANI {
 	}
 
 	void Engine::Init() {
-		ImGui::Begin("");
 	}
 
 	void Engine::Update() {
@@ -46,6 +50,5 @@ namespace ANI {
 
 	void Engine::Quit() {
 		run = false;
-		ImGui::End();
 	}
 }

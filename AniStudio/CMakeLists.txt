@@ -26,6 +26,7 @@ target_include_directories(AniStudio PRIVATE
     "${CMAKE_SOURCE_DIR}/AniStudio/Events" 
     "${CMAKE_SOURCE_DIR}/AniStudio/ECS"
     "${CMAKE_SOURCE_DIR}/AniStudio/Core"
+    "${CMAKE_SOURCE_DIR}/AniStudio/vk_engine" # Include vk_engine directory
     "${CMAKE_SOURCE_DIR}/external/imgui"  
 )
 
@@ -39,3 +40,5 @@ target_link_libraries(AniStudio
     "${CMAKE_SOURCE_DIR}/external/libs/glfw3.lib"
     "${CMAKE_SOURCE_DIR}/external/libs/glew32s.lib"
 )
+
+add_subdirectory(vk_engine)
