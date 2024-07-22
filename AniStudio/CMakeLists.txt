@@ -1,5 +1,7 @@
 # AniStudio/CMakeLists.txt
 
+project(AniStudio)
+
 # Set the full path to pch.h starting from the root directory
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
 

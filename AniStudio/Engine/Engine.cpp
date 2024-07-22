@@ -1,54 +1,48 @@
+#pragma once
 #include "pch.h"
-#include "Engine.hpp"
-#include "GLEW/glew.h"
-#include <SDL.h>
-//#include <vk_engine/vk_engine.h>
-#include "imgui.h"
+#include "vk_engine.h"
+#include "ECS.hpp" // Assuming you have an ECS framework in place
 
 namespace ANI {
 
-	Engine::Engine() :run(true), window(NULL), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
+    // Startup Resolution
+    const int SCREEN_WIDTH(1200);
+    const int SCREEN_HEIGHT(720);
 
-		glfwInit();
-		//checks if GLFW version is compatible with 3.1 at least otherwise use a later version
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    class Engine {
+    public:
+        ~Engine();
+        Engine(const Engine&) = delete;
+        Engine& operator=(const Engine&) = delete;
 
-		//always creates the window on the primary monitor
-		auto& monitor = *glfwGetVideoMode(glfwGetPrimaryMonitor());
+        static Engine& Ref() {
+            static Engine reference;
+            return reference;
+        }
 
-		glfwWindowHint(GLFW_RED_BITS, monitor.redBits);
-		glfwWindowHint(GLFW_BLUE_BITS, monitor.blueBits);
-		glfwWindowHint(GLFW_GREEN_BITS, monitor.greenBits);
-		glfwWindowHint(GLFW_REFRESH_RATE, monitor.refreshRate);
+        void Quit();
+        void Update();
+        void Init();
 
-		//glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_ANY_PROFILE /*GLFW_OPENGL_CORE_PROFILE*/);
-		glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+        inline const bool Run() const { return run; }
+        inline GLFWwindow& Window() { return *window; }
+        inline const bool VideoWidth() const { return videoWidth; }
+        inline const bool VideoHeight() const { return videoHeight; }
 
-		window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "AniStudio", NULL, NULL);
-		assert(window && "ERROR : GLFW : Failed to create window!");
-		glfwMakeContextCurrent(window);
-		//assert(glewInit() == GLEW_OK && "ERROR : GLEW : Init failed!");
-		//glewExperimental = GL_TRUE;
+    private:
+        Engine();
+        void initializeECS();
+        void initializeVulkan();
 
+    private:
+        bool run;
+        GLFWwindow* window;
+        float videoWidth, videoHeight;
 
+        VulkanEngine vulkanEngine;
+        RenderSystem renderSystem;
+        ECS ecs;
+    };
 
-	
-	}
-
-	Engine::~Engine() {
-		glfwTerminate();
-	}
-
-	void Engine::Init() {
-	}
-
-	void Engine::Update() {
-		
-	}
-
-	void Engine::Quit() {
-		run = false;
-	}
+    static Engine& Core = Engine::Ref();
 }
