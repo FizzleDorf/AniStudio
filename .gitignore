@@ -24,7 +24,7 @@
 *.exe
 *.out
 *.app
-
+\bin
 *.Debug
 \.vs
 \build
