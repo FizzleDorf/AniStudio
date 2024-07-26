@@ -21,7 +21,6 @@ set_property(TARGET vkbootstrap PROPERTY CXX_STANDARD 20)
 
 #both vma and glm and header only libs so we only need the include path
 target_include_directories(vma INTERFACE vma)
-
 target_include_directories(glm INTERFACE glm)
 
 #add_library(sdl2 INTERFACE)
