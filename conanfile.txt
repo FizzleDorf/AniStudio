@@ -1,0 +1,14 @@
+[requires]
+glfw/3.3.4
+glew/2.2.0
+sdl/2.0.14
+opengl/system
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[options]
+glfw/*:shared=True
+glew/*:shared=True
+sdl/*:shared=True
