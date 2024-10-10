@@ -1,2 +1,2 @@
 #include "SDCPPComponents.h"
-#include "ImageComponents/ImageIOComponent.hpp"
+#include "ImageComponents/ImageComponent.hpp"

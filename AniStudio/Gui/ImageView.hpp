@@ -1,8 +1,8 @@
 #pragma once
-
+#include "ECS.h"
 #include "pch.h"
 
-using namespace ECS
+using namespace ECS;
 
 namespace ECS {
     class ImageView {

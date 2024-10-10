@@ -5,13 +5,13 @@
 #include <string>
 
 namespace ECS {
-struct ImageIOComponent : public ECS::BaseComponent {
+struct ImageComponent : public ECS::BaseComponent {
     unsigned char *imageData = nullptr;
     int width = 0;
     int height = 0;
     int channels = 0;
 
-    ~InputImageComponent() {
+    ~ImageComponent() {
         if (imageData) {
             stbi_image_free(imageData);
         }

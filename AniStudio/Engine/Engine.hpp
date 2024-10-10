@@ -1,7 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "Gui/Guis.h"
-#include "ECS.hpp"
+#include "ECS.h"
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
