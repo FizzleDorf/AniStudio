@@ -1,0 +1,105 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 237514639057560,
+      "steps": 20,
+      "cfg": 5,
+      "sampler_name": "euler",
+      "scheduler": "sgm_uniform",
+      "denoise": 1,
+      "model": [
+        "15",
+        0
+      ],
+      "positive": [
+        "26",
+        0
+      ],
+      "negative": [
+        "26",
+        1
+      ],
+      "latent_image": [
+        "26",
+        2
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "15": {
+    "inputs": {
+      "ckpt_name": "stable_zero123.ckpt"
+    },
+    "class_type": "ImageOnlyCheckpointLoader",
+    "_meta": {
+      "title": "Image Only Checkpoint Loader (img2vid model)"
+    }
+  },
+  "23": {
+    "inputs": {
+      "image": "hypernetwork_example_output.png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "25": {
+    "inputs": {
+      "filename_prefix": "3d/ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "26": {
+    "inputs": {
+      "width": 256,
+      "height": 256,
+      "batch_size": 1,
+      "elevation": 10,
+      "azimuth": 142,
+      "clip_vision": [
+        "15",
+        1
+      ],
+      "init_image": [
+        "23",
+        0
+      ],
+      "vae": [
+        "15",
+        2
+      ]
+    },
+    "class_type": "StableZero123_Conditioning",
+    "_meta": {
+      "title": "StableZero123_Conditioning"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+name: "Test Clang Format"
+
+on: [push, workflow_dispatch, pull_request] # Trigger for every push as well as for every pull request. Yes, this will run stuff twice in case we create a PR from inside this repo. I'm open for better solutions, where I do not have to specify each brach individually for the 'push' trigger.
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+    - name: Update package list
+      run: sudo dnf update -y
+    - name: Install dependencies
+      run: sudo dnf install -y openssl-devel cmake git gcc clang ninja-build
+    - name: Install clang-tidy
+      run: sudo dnf install -y clang-tools-extra
+    - name: Checkout
+      uses: actions/checkout@v3
+    - name: Check format
+      uses: RafikFarhad/clang-format-github-action@3.2.0
+      with:
+        sources: "include/**/*.hpp,include/**/*.cpp,cpr/**/*.hpp,cpr/**/*.cpp"
+        style: "file"

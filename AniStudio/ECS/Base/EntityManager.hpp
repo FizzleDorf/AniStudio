@@ -1,9 +1,16 @@
 #pragma once
-
+#include "pch.h"
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"
 #include "BaseComponent.hpp"
+
+enum EntityTypes {
+	GENERAL,
+	NODES,
+	MODELS,
+	WORKFLOWS
+};
 
 namespace ECS {
 	class EntityManager {
@@ -78,17 +85,21 @@ namespace ECS {
 		}
 
 		template<typename T>
-		void GetComponent(const EntityID entity) {
+		T& GetComponent(const EntityID entity) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			const ComponentTypeID compType = CompType<T>();
-			entitiesSignatures.at(entity).erase(compType);
 			return GetCompList<T>()->Get(entity);
 		}
 
 		template<typename T>
 		const bool HasComponent(const EntityID entity) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			const EntitySignature signature = entitiesSignatures.at(entity);
+			// Check if the entity exists in the map
+			auto it = entitiesSignatures.find(entity);
+			if (it == entitiesSignatures.end()) {
+				return false; // Entity signature not found
+			}
+			const EntitySignature& signature = *(it->second);
 			const ComponentTypeID compType = CompType<T>();
 			return (signature.count(compType) > 0);
 		}
@@ -110,9 +121,16 @@ namespace ECS {
 		template<typename T>
 		void UnregisterSystem() {
 			const SystemTypeID systemType = SystemType<T>();
-			assert(registeredSystems.count(systemType) == 0 && "System already registered!");
+			assert(registeredSystems.count(systemType) == 0 && "System already unregistered!");
 			registeredSystems.erase(systemType);
 		}
+
+		// Getters for private variables
+		EntityID GetEntityCount() const { return entityCount; }
+		std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }
+		const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const { return entitiesSignatures; }
+		const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const { return registeredSystems; }
+		const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const { return componentsArrays; }
 
 	private:
 

@@ -1,43 +1,51 @@
 #pragma once
 #include "pch.h"
+#include "Gui/Guis.h"
+#include "ECS.hpp"
+
+#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
+#pragma comment(lib, "legacy_stdio_definitions")
+#endif
+
+//#define APP_USE_UNLIMITED_FRAME_RATE
+#ifdef _DEBUG
+#define APP_USE_VULKAN_DEBUG_REPORT
+#endif
 
 namespace ANI {
 
-	//Startup Resolution
-	const int SCREEN_WIDTH(1200);
-	const int SCREEN_HEIGHT(720);
+    const int SCREEN_WIDTH = 1200;
+    const int SCREEN_HEIGHT = 720;
 
-	class Engine {
+    class Engine {
+    public:
+        Engine(const Engine&) = delete;
+        ~Engine();
 
-	public:
-		
-		~Engine();
-		Engine(const Engine&) = delete;
-		Engine& operator=(const Engine&) = delete;
+        Engine& operator=(const Engine&) = delete;
 
+        static Engine& Ref() {
+            static Engine instance;
+            return instance;
+        }
 
-		static Engine& Ref() {
-			static Engine reference;
-			return reference;
-		}
+        void Init();
+        void Update();
+        void Draw();
+        void Quit();
 
-		void Quit();
-		void Update();
-		void Init();
+        inline const bool Run() const { return run; }
+        inline GLFWwindow& Window() { return *window; }
+        inline const int VideoWidth() const { return videoWidth; }
+        inline const int VideoHeight() const { return videoHeight; }
 
-		inline const bool Run() const { return run; }
-		inline GLFWwindow& Window() { return *window; }
-		inline const bool VideoWidth() const { return videoWidth; }
-		inline const bool VideoHeight() const { return videoHeight; }
+    private:
+        Engine();
+        bool run;
+        GLFWwindow* window;
+        int videoWidth;
+        int videoHeight;
+    };
 
-	private:
-		Engine();
-
-	private:
-		bool run;
-		GLFWwindow* window;
-		float videoWidth, videoHeight;
-	};
-
-	static Engine& Core = Engine::Ref();
+    extern Engine& Core;
 }

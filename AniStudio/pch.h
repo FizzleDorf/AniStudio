@@ -1,6 +1,6 @@
 #pragma once
 
-//Basic libs
+// Basic libs
 #include <set>
 #include <map>
 #include <queue>
@@ -13,18 +13,32 @@
 #include <iostream>
 #include <algorithm>
 #include <functional>
+#include <stdio.h>         
+#include <stdlib.h> 
 
-//GLEW
-#include <GLEW/glew.h>
+// JSON
+#include <nlohmann/json.hpp>
 
-//GLFW
+// Vulkan
+#include <vulkan/vulkan.h>
+
+// GLFW
+#define GLFW_INCLUDE_NONE
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-//IMGUI
-// #include "imgui/imgui.h"
-//IMGUI (Windows)
+// Volk headers
+#ifdef IMGUI_IMPL_VULKAN_USE_VOLK
+#define VOLK_IMPLEMENTATION
+#include <volk.h>
+#endif
 
-//IMGUI (Linux)
-
-//IMGUI (MacOS)
-
+// ImGui
+#include "imgui.h"
+#include "imgui_impl_vulkan.h"
+#include "imgui_impl_glfw.h"
+#include "ImGuiFileDialog.h"
+ 
+//http request headers
+// #include "cpr/cpr.h"
+// #include "curl/curl.h"

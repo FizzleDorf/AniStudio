@@ -1,29 +1,28 @@
 #pragma once
+
 namespace ANI {
-	class T_Timer {
-	
-	public:
-		~T_Timer();
-		T_Timer(const T_Timer&) = delete;
-		T_Timer& operator=(const T_Timer&) = delete;
+    class T_Timer {
 
-		static T_Timer& Ref() {
-			static T_Timer reference;
-			return reference;
-		}
+    public:
+        ~T_Timer();
+        T_Timer(const T_Timer&) = delete;
+        T_Timer& operator=(const T_Timer&) = delete;
 
-		void Tick();
-		void Init();
-		inline float DeltaTime() { return deltaTime; }
+        static T_Timer& Ref() {
+            static T_Timer reference;
+            return reference;
+        }
 
-	private:
-		T_Timer();
+        void Tick();
+        void Init();
+        inline float DeltaTime() { return deltaTime; }
 
-	private:
-		float lastFrame, deltaTime;
-	};
+    private:
+        T_Timer();
 
-	static T_Timer& Timer = T_Timer::Ref();
+    private:
+        float lastFrame, deltaTime;
+    };
+
+    static T_Timer& Timer = T_Timer::Ref();
 }
-
-

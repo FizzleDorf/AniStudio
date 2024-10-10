@@ -1,0 +1,187 @@
+{
+  "4": {
+    "inputs": {
+      "ckpt_name": "cosxl_edit.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "snow at sunset oil painting",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Positive"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "Negative"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "37:8",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "13": {
+    "inputs": {
+      "image": "mountains.png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "37:0": {
+    "inputs": {
+      "sampler_name": "euler"
+    },
+    "class_type": "KSamplerSelect",
+    "_meta": {
+      "title": "KSamplerSelect"
+    }
+  },
+  "37:1": {
+    "inputs": {
+      "noise_seed": 11652752290163
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
+  "37:3": {
+    "inputs": {
+      "scheduler": "normal",
+      "steps": 20,
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "BasicScheduler",
+    "_meta": {
+      "title": "BasicScheduler"
+    }
+  },
+  "37:6": {
+    "inputs": {
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ],
+      "pixels": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "InstructPixToPixConditioning",
+    "_meta": {
+      "title": "InstructPixToPixConditioning"
+    }
+  },
+  "37:7": {
+    "inputs": {
+      "cfg_conds": 5,
+      "cfg_cond2_negative": 1.5,
+      "model": [
+        "4",
+        0
+      ],
+      "cond1": [
+        "37:6",
+        0
+      ],
+      "cond2": [
+        "37:6",
+        1
+      ],
+      "negative": [
+        "7",
+        0
+      ]
+    },
+    "class_type": "DualCFGGuider",
+    "_meta": {
+      "title": "DualCFGGuider"
+    }
+  },
+  "37:8": {
+    "inputs": {
+      "noise": [
+        "37:1",
+        0
+      ],
+      "guider": [
+        "37:7",
+        0
+      ],
+      "sampler": [
+        "37:0",
+        0
+      ],
+      "sigmas": [
+        "37:3",
+        0
+      ],
+      "latent_image": [
+        "37:6",
+        2
+      ]
+    },
+    "class_type": "SamplerCustomAdvanced",
+    "_meta": {
+      "title": "SamplerCustomAdvanced"
+    }
+  }
+}

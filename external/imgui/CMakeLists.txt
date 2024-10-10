@@ -1,13 +1,16 @@
-# external/imgui/CMakeLists.txt
+cmake_minimum_required(VERSION 3.20)
+project(ImGui)
 
-cmake_minimum_required(VERSION 3.8)
-project(imgui)
-
-file(GLOB imgui_sources
-    "*.cpp"
-    "*.h"
+# Add source files for ImGui
+file(GLOB IMGUI_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/backends/*.cpp
 )
 
-add_library(imgui STATIC ${imgui_sources})
+add_library(ImGui STATIC ${IMGUI_SOURCES})
 
-target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+# Include directories for ImGui
+target_include_directories(ImGui PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/backends
+)

@@ -1,0 +1,151 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 509273045161628,
+      "steps": 26,
+      "cfg": 8,
+      "sampler_name": "uni_pc_bh2",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "32",
+        0
+      ],
+      "positive": [
+        "19",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": 768,
+      "height": 768,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "beautiful photograph",
+      "clip": [
+        "32",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "bad hands",
+      "clip": [
+        "32",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "32",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "13": {
+    "inputs": {
+      "clip_vision": [
+        "32",
+        3
+      ],
+      "image": [
+        "34",
+        0
+      ]
+    },
+    "class_type": "CLIPVisionEncode",
+    "_meta": {
+      "title": "CLIP Vision Encode"
+    }
+  },
+  "19": {
+    "inputs": {
+      "strength": 1.0000000000000002,
+      "noise_augmentation": 0.30000000000000016,
+      "conditioning": [
+        "6",
+        0
+      ],
+      "clip_vision_output": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "unCLIPConditioning",
+    "_meta": {
+      "title": "unCLIPConditioning"
+    }
+  },
+  "32": {
+    "inputs": {
+      "ckpt_name": "sd21-unclip-h.ckpt"
+    },
+    "class_type": "unCLIPCheckpointLoader",
+    "_meta": {
+      "title": "unCLIPCheckpointLoader"
+    }
+  },
+  "34": {
+    "inputs": {
+      "image": "mountains.png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  }
+}

@@ -31,12 +31,12 @@ namespace ECS {
 
 		template<typename T>
 		inline void RemoveComponent() {
-			MGR->RemoveComponent<T>(ID);
+			return MGR->RemoveComponent<T>(ID);
 		}
 
 		template<typename T>
 		inline bool HasComponent() {
-			MGR->HasComponent<T>(ID);
+			return MGR->HasComponent<T>(ID);
 		}
 
 		void Destroy() {

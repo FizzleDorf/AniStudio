@@ -1,0 +1,166 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 1023216319780679,
+      "steps": 20,
+      "cfg": 8,
+      "sampler_name": "uni_pc_bh2",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "27",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "v1-5-pruned-emaonly.ckpt"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": 768,
+      "height": 768,
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "text, watermark",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "gligen/testing",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "10": {
+    "inputs": {
+      "gligen_name": "gligen_sd14_textbox_pruned.safetensors"
+    },
+    "class_type": "GLIGENLoader",
+    "_meta": {
+      "title": "GLIGENLoader"
+    }
+  },
+  "21": {
+    "inputs": {
+      "text": "purple galaxy bottle",
+      "width": 192,
+      "height": 304,
+      "x": 176,
+      "y": 272,
+      "conditioning_to": [
+        "24",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ],
+      "gligen_textbox_model": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "GLIGENTextBoxApply",
+    "_meta": {
+      "title": "GLIGENTextBoxApply"
+    }
+  },
+  "24": {
+    "inputs": {
+      "text": "photograph scenery landscape, snow beautiful scenery mountain, glass bottle; purple galaxy bottle; sun",
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "27": {
+    "inputs": {
+      "text": "sun",
+      "width": 144,
+      "height": 144,
+      "x": 416,
+      "y": 16,
+      "conditioning_to": [
+        "21",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ],
+      "gligen_textbox_model": [
+        "10",
+        0
+      ]
+    },
+    "class_type": "GLIGENTextBoxApply",
+    "_meta": {
+      "title": "GLIGENTextBoxApply"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+[requires]
+opencv/4.5.5
+glfw/3.4   
+zlib/1.2.11
+
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[layout]
+cmake_layout

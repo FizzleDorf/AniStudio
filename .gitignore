@@ -20,12 +20,54 @@
 *.mod
 *.smod
 
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
 # Executables
 *.exe
 *.out
 *.app
-\bin
-*.Debug
-\.vs
-\build
-\out
+
+# Visual Studio files
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.vscode
+
+# Build and output directories
+build/
+out/
+.out/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Conan-generated files and directories
+conan.lock
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json
+conan_imports_manifest.txt
+conan_paths.cmake
+conan_toolchain.cmake
+CMakePresets.json
+CMakeUserPresets.json
+conan/build/
+conanbuild.bat
+conanrun.bat
+
+# External libraries
+external/opencv/
+
+# Python virtual environment
+venv/
+
+# Assets
+assets/

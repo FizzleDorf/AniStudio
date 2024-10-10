@@ -1,0 +1,246 @@
+{
+  "3": {
+    "inputs": {
+      "seed": 156680208700286,
+      "steps": 20,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 1,
+      "model": [
+        "23",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "4": {
+    "inputs": {
+      "ckpt_name": "cosxl.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "5": {
+    "inputs": {
+      "width": 1024,
+      "height": 1024,
+      "batch_size": 4
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "Empty Latent Image"
+    }
+  },
+  "6": {
+    "inputs": {
+      "text": "beautiful scenery nature glass bottle with a galaxy inside at sunset",
+      "clip": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "7": {
+    "inputs": {
+      "text": "",
+      "clip": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    }
+  },
+  "8": {
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "9": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "8",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "12": {
+    "inputs": {
+      "ckpt_name": "albedobaseXL_v21.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "13": {
+    "inputs": {
+      "time_embed.": 1,
+      "label_emb.": 1,
+      "input_blocks.0": 1,
+      "input_blocks.1": 1,
+      "input_blocks.2": 1,
+      "input_blocks.3": 1,
+      "input_blocks.4": 1,
+      "input_blocks.5": 1,
+      "input_blocks.6": 1,
+      "input_blocks.7": 1,
+      "input_blocks.8": 1,
+      "middle_block.0": 1,
+      "middle_block.1": 1,
+      "middle_block.2": 1,
+      "output_blocks.0": 0.5,
+      "output_blocks.1": 0.5,
+      "output_blocks.2": 0.5,
+      "output_blocks.3": 0.5,
+      "output_blocks.4": 0.5,
+      "output_blocks.5": 1,
+      "output_blocks.6": 1,
+      "output_blocks.7": 1,
+      "output_blocks.8": 1,
+      "out.": 1,
+      "model1": [
+        "17",
+        0
+      ],
+      "model2": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "ModelMergeSDXL",
+    "_meta": {
+      "title": "ModelMergeSDXL"
+    }
+  },
+  "15": {
+    "inputs": {
+      "multiplier": 1,
+      "model1": [
+        "4",
+        0
+      ],
+      "model2": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "ModelMergeSubtract",
+    "_meta": {
+      "title": "ModelMergeSubtract"
+    }
+  },
+  "16": {
+    "inputs": {
+      "ckpt_name": "sd_xl_1.0.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "17": {
+    "inputs": {
+      "model1": [
+        "15",
+        0
+      ],
+      "model2": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "ModelMergeAdd",
+    "_meta": {
+      "title": "ModelMergeAdd"
+    }
+  },
+  "18": {
+    "inputs": {
+      "multiplier": 1,
+      "clip1": [
+        "4",
+        1
+      ],
+      "clip2": [
+        "16",
+        1
+      ]
+    },
+    "class_type": "CLIPMergeSubtract",
+    "_meta": {
+      "title": "CLIPMergeSubtract"
+    }
+  },
+  "19": {
+    "inputs": {
+      "clip1": [
+        "18",
+        0
+      ],
+      "clip2": [
+        "12",
+        1
+      ]
+    },
+    "class_type": "CLIPMergeAdd",
+    "_meta": {
+      "title": "CLIPMergeAdd"
+    }
+  },
+  "23": {
+    "inputs": {
+      "sampling": "v_prediction",
+      "sigma_max": 120,
+      "sigma_min": 0.002,
+      "model": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingContinuousEDM",
+    "_meta": {
+      "title": "ModelSamplingContinuousEDM"
+    }
+  }
+}
