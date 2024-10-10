@@ -8,3 +8,5 @@
 #include "LoraComponent.hpp"
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
+#include "VaeComponent.hpp"
+#include "EncoderComponent.hpp"
