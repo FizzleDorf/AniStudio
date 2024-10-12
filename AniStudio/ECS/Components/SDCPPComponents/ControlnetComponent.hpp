@@ -8,11 +8,8 @@
 namespace ECS {
 struct ControlnetComponent : public ECS::BaseComponent {
     std::string image_reference; 
-    float strength;              
-    float apply_start;
-    float apply_end;             
-
-    ControlnetComponent(const std::string &imageRef, float str, float start, float end)
-        : image_reference(imageRef), strength(str), apply_start(start), apply_end(end) {}
+    float cnStrength = 1.0f;            
+    float applyStart = 0.0f;
+    float applyEnd = 1.0f;             
 };
 }

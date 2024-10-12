@@ -6,10 +6,7 @@
 
 namespace ECS {
 struct PromptComponent : public ECS::BaseComponent {
-    std::string posPrompt;
-    std::string negPrompt;
-
-    PromptComponent(const std::string &newPosPrompt = "", const std::string &newNegPrompt = "")
-        : posPrompt(newPosPrompt), negPrompt(newNegPrompt) {}
+    std::string posPrompt = "Positive";
+    std::string negPrompt = "Negative";
 };
 }

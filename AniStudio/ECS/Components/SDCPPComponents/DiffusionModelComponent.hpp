@@ -1,16 +1,12 @@
 #pragma once
 
 #include "BaseComponent.hpp"
+#include <string>
 
 namespace ECS {
 struct DiffusionModelComponent : public ECS::BaseComponent {
-    std::string model_path = "path/to/model";
-    std::string model_name = "model.gguf";
-    bool is_loaded = false;
-    *EntityManager mgr = nullptr;
-
-    setECS(EntityManager &newMgr){mgr = newMgr};
-
-
+    std::string ckptPath = "path/to/model";
+    std::string ckptName = "model.gguf";
+    bool isCkptLoaded = false;
 };
 }

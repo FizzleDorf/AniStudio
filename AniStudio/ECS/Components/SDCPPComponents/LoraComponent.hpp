@@ -6,9 +6,8 @@
 
 namespace ECS {
 struct LoraComponent : public ECS::BaseComponent {
-    std::string lora_reference;
-    float strength; 
-    float clipStrength;
-    LoraComponent(const std::string &loraRef = "", float str = 1.0f) : lora_reference(loraRef), strength(str) {}
+    std::string loraPath = "Path/to/model";
+    float loraStrength = 1.0f; 
+    float loraClipStrength = 1.0f;
 };
 } 

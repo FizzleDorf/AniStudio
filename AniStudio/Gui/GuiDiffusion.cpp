@@ -28,8 +28,6 @@ static const int type_method_item_count = sizeof(type_method_items) / sizeof(typ
 char PosBuffer[9999] = "";
 char NegBuffer[9999] = "";
 
-std::string modelName = "Model.safetensors";
-
 void GuiDiffusion::StartGui() { 
 
     t2IEntity = mgr->AddNewEntity();
@@ -37,55 +35,49 @@ void GuiDiffusion::StartGui() {
 
     mgr->AddComponent<CFGComponent>(t2IEntity);
     if (mgr->HasComponent<CFGComponent>(t2IEntity)) {
-        cfg = &mgr->GetComponent<CFGComponent>(t2IEntity).cfg;
-        std::cout << "t2IEntity has CFGComponent with value: " << *cfg << std::endl;
+        cfgComp = &mgr->GetComponent<CFGComponent>(t2IEntity);
+        std::cout << "t2IEntity has CFGComponent with value: " << cfgComp->cfg << std::endl;
     }
     mgr->AddComponent<DiffusionModelComponent>(t2IEntity);
     if (mgr->HasComponent<DiffusionModelComponent>(t2IEntity)) {
-        modelPath = &mgr->GetComponent<DiffusionModelComponent>(t2IEntity).model_path;
-        std::cout << "t2IEntity has DiffusionModelComponent with model path: " << *modelPath
+        ckptComp = &mgr->GetComponent<DiffusionModelComponent>(t2IEntity);
+        std::cout << "t2IEntity has DiffusionModelComponent with model path: " << ckptComp->ckptPath
                   << std::endl;
     }
     mgr->AddComponent<LatentComponent>(t2IEntity);
     if (mgr->HasComponent<LatentComponent>(t2IEntity)) {
-        latentWidth = &mgr->GetComponent<LatentComponent>(t2IEntity).width;
-        latentHeight = &mgr->GetComponent<LatentComponent>(t2IEntity).height;
-        std::cout << "t2IEntity has LatentComponent with Width: " << *latentWidth << ", Height: " << *latentHeight
+        latentComp = &mgr->GetComponent<LatentComponent>(t2IEntity);
+        std::cout << "t2IEntity has LatentComponent with Width: " << latentComp->latentWidth << ", Height: " << latentComp->latentHeight
                   << std::endl;
     }
     mgr->AddComponent<LoraComponent>(t2IEntity);
     if (mgr->HasComponent<LoraComponent>(t2IEntity)) {
-        strength = &mgr->GetComponent<LoraComponent>(t2IEntity).strength;
-        clipStrength = &mgr->GetComponent<LoraComponent>(t2IEntity).clipStrength;
-        loraReference = &mgr->GetComponent<LoraComponent>(t2IEntity).lora_reference;
-        std::cout << "t2IEntity has LoraComponent with Strength: " << *strength << ", Clip Strength: " << *clipStrength
-                  << ", Lora Reference: " << *loraReference << std::endl;
+        loraComp = &mgr->GetComponent<LoraComponent>(t2IEntity);
+        std::cout << "t2IEntity has LoraComponent with Strength: " << loraComp->loraStrength << ", Clip Strength: " << loraComp->loraClipStrength
+                  << ", Lora Reference: " << loraComp->loraPath << std::endl;
     }
     mgr->AddComponent<PromptComponent>(t2IEntity);
     if (mgr->HasComponent<PromptComponent>(t2IEntity)) {
-        posPrompt = &mgr->GetComponent<PromptComponent>(t2IEntity).posPrompt;
-        negPrompt = &mgr->GetComponent<PromptComponent>(t2IEntity).negPrompt;
-        std::cout << "t2IEntity has PromptComponent with Positive Prompt: " << *posPrompt
-                  << ", Negative Prompt: " << *negPrompt << std::endl;
+        promptComp = &mgr->GetComponent<PromptComponent>(t2IEntity);
+        std::cout << "t2IEntity has PromptComponent with Positive Prompt: " << promptComp->posPrompt
+                  << ", Negative Prompt: " << promptComp->negPrompt << std::endl;
     }
     mgr->AddComponent<SamplerComponent>(t2IEntity);
     if (mgr->HasComponent<SamplerComponent>(t2IEntity)) {
-        samplerSteps = &mgr->GetComponent<SamplerComponent>(t2IEntity).steps;
-        scheduler = &mgr->GetComponent<SamplerComponent>(t2IEntity).scheduler;
-        sampler = &mgr->GetComponent<SamplerComponent>(t2IEntity).sampler;
-        denoise = &mgr->GetComponent<SamplerComponent>(t2IEntity).denoise;
-        std::cout << "t2IEntity has SamplerComponent with Steps: " << *samplerSteps << ", Scheduler: " << *scheduler
-                  << ", Sampler: " << *sampler << ", Denoise: " << *denoise << std::endl;
+        samplerComp = &mgr->GetComponent<SamplerComponent>(t2IEntity);
+        std::cout << "t2IEntity has SamplerComponent with Steps: " << samplerComp->steps
+                  << ", Scheduler: " << samplerComp->scheduler << ", Sampler: " << samplerComp->sampler
+                  << ", Denoise: " << samplerComp->denoise << std::endl;
     }
 }
 
-int MIN_Width = 380;
+const int MIN_Width = 380;
 
 void GuiDiffusion::RenderCKPTLoader() {
     ImGui::BeginChild(1, ImVec2(MIN_Width, 300), true);
     ImGui::Text("Checkpoint");
     ImGui::PushItemWidth(200);
-    ImGui::Text("%s", modelName.c_str());
+    ImGui::Text("%s", ckptComp->ckptName.c_str());
     ImGui::PopItemWidth();
     ImGui::SameLine();
     // Open the file dialog when the button is clicked
@@ -98,10 +90,10 @@ void GuiDiffusion::RenderCKPTLoader() {
     if (ImGuiFileDialog::Instance()->Display("LoadFileDialog")) {
         // When a file is selected and "OK" is clicked
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            modelName = ImGuiFileDialog::Instance()->GetFilePathName();
-            *modelPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-            std::cout << "New model's name: " << modelName << std::endl;    // Debug log
-            std::cout << "New model path set: " << *modelPath << std::endl; // Debug log
+            ckptComp->ckptName = ImGuiFileDialog::Instance()->GetFilePathName();
+            ckptComp->ckptPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+            std::cout << "New model's name: " << ckptComp->ckptName << std::endl; // Debug log
+            std::cout << "New model path set: " << ckptComp->ckptPath << std::endl; // Debug log
         }
 
         // Close the dialog
@@ -120,10 +112,10 @@ void GuiDiffusion::RenderLatents() {
     ImGui::BeginChild(2, ImVec2(MIN_Width, 280), true);
     ImGui::Text("Latent Image(s)");
     ImGui::PushItemWidth(200);
-    ImGui::InputInt("Width", latentWidth);
+    ImGui::InputInt("Width", &(latentComp->latentWidth));
     ImGui::PopItemWidth();
     ImGui::PushItemWidth(200);
-    ImGui::InputInt("Height", latentHeight);
+    ImGui::InputInt("Height", &(latentComp->latentHeight));
     ImGui::PopItemWidth();
     ImGui::NewLine();
     ImGui::PushItemWidth(200);
@@ -173,15 +165,15 @@ void GuiDiffusion::RenderSampler() {
     ImGui::NewLine();
 
     ImGui::PushItemWidth(200);
-    ImGui::InputInt("Steps", samplerSteps);
+    ImGui::InputInt("Steps", &(samplerComp->steps));
     ImGui::PopItemWidth();
 
     ImGui::PushItemWidth(200);
-    ImGui::InputFloat("CFG", cfg);
+    ImGui::InputFloat("CFG", &(cfgComp->cfg), 0.5f, 1.0f, "%.3f");
     ImGui::PopItemWidth();
 
     ImGui::PushItemWidth(200);
-    ImGui::InputFloat("Denoise", denoise, 0.01f, 1.0f, "%.3f");
+    ImGui::InputFloat("Denoise", &(samplerComp->denoise), 0.01f, 1.0f, "%.3f");
     ImGui::PopItemWidth();
 
     ImGui::EndChild();
@@ -196,7 +188,7 @@ void GuiDiffusion::RenderPrompts() {
 
     ImGui::PushItemWidth(200);
     if (ImGui::InputTextMultiline("Positive", PosBuffer, IM_ARRAYSIZE(PosBuffer))) {
-        *posPrompt = std::string(PosBuffer);
+        promptComp->posPrompt = std::string(PosBuffer);
     }
     ImGui::PopItemWidth();
 
@@ -204,7 +196,7 @@ void GuiDiffusion::RenderPrompts() {
 
     ImGui::PushItemWidth(200);
     if (ImGui::InputTextMultiline("Negative", NegBuffer, IM_ARRAYSIZE(NegBuffer))) {
-        *negPrompt = std::string(NegBuffer);
+        promptComp->negPrompt = std::string(NegBuffer);
     }
     ImGui::PopItemWidth();
 

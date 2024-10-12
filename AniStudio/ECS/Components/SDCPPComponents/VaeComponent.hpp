@@ -4,6 +4,6 @@
 #include "stable-diffusion.h"
 
 namespace ECS {
-struct VaeComponent : public ECS::VaeComponent {};
+struct VaeComponent : public ECS::BaseComponent {};
 
 }

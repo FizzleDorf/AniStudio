@@ -6,33 +6,18 @@
 using namespace ECS;
 
 class GuiDiffusion {
-public:
-    GuiDiffusion()
-        : cfg(nullptr), modelPath(nullptr), latentWidth(nullptr), latentHeight(nullptr), strength(nullptr),
-          clipStrength(nullptr), loraReference(nullptr), posPrompt(nullptr), negPrompt(nullptr), samplerSteps(nullptr),
-          scheduler(nullptr), sampler(nullptr), denoise(nullptr) {}
-
+public:       
     ~GuiDiffusion() {
-        delete cfg;
-        delete latentWidth;
-        delete latentHeight;
-        delete strength;
-        delete clipStrength;
-        delete denoise;
-        delete samplerSteps;
+        delete cfgComp;
+        delete latentComp;
+        delete samplerComp;
 
-        if (modelPath)
-            delete modelPath;
-        if (loraReference)
-            delete loraReference;
-        if (posPrompt)
-            delete posPrompt;
-        if (negPrompt)
-            delete negPrompt;
-        if (scheduler)
-            delete scheduler;
-        if (sampler)
-            delete sampler;
+        if (ckptComp)
+            delete ckptComp;
+        if (loraComp)
+            delete loraComp;
+        if (promptComp)
+            delete promptComp;
     }
 
     void SetECS(EntityManager *newMgr) { mgr = newMgr; }
@@ -52,19 +37,12 @@ public:
 
 private:
     // Variables to handle the parameters for diffusion
-    float *cfg;
-    std::string *modelPath;
-    int *latentWidth;
-    int *latentHeight;
-    float *strength;
-    float *clipStrength;
-    std::string *loraReference;
-    std::string *posPrompt;
-    std::string *negPrompt;
-    int *samplerSteps;
-    std::string *scheduler;
-    std::string *sampler;
-    float *denoise;
+    CFGComponent *cfgComp = nullptr;
+    DiffusionModelComponent *ckptComp = nullptr;
+    LatentComponent *latentComp = nullptr;
+    LoraComponent *loraComp = nullptr;
+    PromptComponent *promptComp = nullptr;
+    SamplerComponent *samplerComp = nullptr;
 
     // ECS-related variables
     EntityManager *mgr = nullptr;
