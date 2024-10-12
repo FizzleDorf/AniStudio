@@ -27,7 +27,7 @@ public:
     void RenderInputImage();
     void RenderSampler();
     void RenderPrompts();
-    void RenderCommands();
+    void Queue();
     void Render();
 
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
