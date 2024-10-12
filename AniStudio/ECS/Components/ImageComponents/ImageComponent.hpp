@@ -1,7 +1,10 @@
 #pragma once
 
 #include "BaseComponent.hpp"
+#define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 #include <string>
 
 namespace ECS {
@@ -16,7 +19,7 @@ struct ImageComponent : public ECS::BaseComponent {
             stbi_image_free(imageData);
         }
     }
-
+    
     bool loadImageFromPath(const std::string &path) {
         if (imageData) {
             stbi_image_free(imageData);
