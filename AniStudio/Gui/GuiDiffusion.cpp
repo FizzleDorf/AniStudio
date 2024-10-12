@@ -1,6 +1,7 @@
 #include "GuiDiffusion.hpp"
 #include "stable-diffusion.h"
-#include "EntityManager.hpp"
+#include "Systems.h"
+#include "ECS.h"
 
 using namespace ECS;
 
@@ -32,7 +33,7 @@ void GuiDiffusion::StartGui() {
 
     t2IEntity = mgr->AddNewEntity();
     std::cout << "Initialized entity with ID: " << t2IEntity << std::endl;
-
+    
     mgr->AddComponent<CFGComponent>(t2IEntity);
     if (mgr->HasComponent<CFGComponent>(t2IEntity)) {
         cfgComp = &mgr->GetComponent<CFGComponent>(t2IEntity);
@@ -101,8 +102,6 @@ void GuiDiffusion::RenderCKPTLoader() {
     }
     ImGui::NewLine();
     ImGui::PushItemWidth(200);
-    static int item_current41 = 0;
-    const char *items41[] = {"Never", "Gonna", "Give", "You", "Up"};
     ImGui::Combo("SD_Type", &current_type_method, type_method_items, type_method_item_count);
     ImGui::PopItemWidth();
     ImGui::EndChild();
@@ -203,14 +202,11 @@ void GuiDiffusion::RenderPrompts() {
     ImGui::EndChild();
 }
 
-void GuiDiffusion::RenderCommands() {
-
-}
 
 void GuiDiffusion::Render() {
     if (ImGui::Begin("Image Generation")) {
 
-        RenderCommands();
+        Queue();
 
         if (ImGui::CollapsingHeader("Ckpt Loader"))
             RenderCKPTLoader();
@@ -226,3 +222,10 @@ void GuiDiffusion::Render() {
 }
 
 
+void GuiDiffusion::Queue() {
+    if (ImGui::Button("Run Inference")) {
+        // Queue the entity for inference when the button is pressed
+        auto *sdSystem = &(mgr-><SDCPPSystem>());
+        sdSystem->QueueInference(t2IEntity);
+    }
+}
