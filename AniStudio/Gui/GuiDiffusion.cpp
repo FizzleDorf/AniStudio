@@ -2,6 +2,7 @@
 #include "stable-diffusion.h"
 #include "Systems.h"
 #include "ECS.h"
+#include "InferenceQueue.hpp"
 
 using namespace ECS;
 
@@ -84,7 +85,7 @@ void GuiDiffusion::RenderCKPTLoader() {
     // Open the file dialog when the button is clicked
     if(ImGui::Button("...")) {
         IGFD::FileDialogConfig config;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .pth, .gguf", config);
+        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf", config);
     }
 
     // Display the dialog
@@ -224,6 +225,13 @@ void GuiDiffusion::Render() {
 
 void GuiDiffusion::Queue() {
     if (ImGui::Button("Queue Inference")) {
-        //QueueInference(txt2img);
+        InferenceQueue queue;
+        if (queue.IsEmpty()) {
+            queue.Enqueue(t2IEntity);
+            std::cerr << "Entity Queued!" << std::endl;
+        } else {
+            // Log an error message or handle the case where the system is not found
+            std::cerr << "Queue Failed!" << std::endl;
+        }
     }
 }
