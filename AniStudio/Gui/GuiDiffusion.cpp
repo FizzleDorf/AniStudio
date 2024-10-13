@@ -223,9 +223,7 @@ void GuiDiffusion::Render() {
 
 
 void GuiDiffusion::Queue() {
-    if (ImGui::Button("Run Inference")) {
-        // Queue the entity for inference when the button is pressed
-        auto *sdSystem = &(mgr-><SDCPPSystem>());
-        sdSystem->QueueInference(t2IEntity);
+    if (ImGui::Button("Queue Inference")) {
+        //QueueInference(txt2img);
     }
 }
