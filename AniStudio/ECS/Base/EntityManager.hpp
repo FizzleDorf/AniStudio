@@ -4,6 +4,7 @@
 #include "CompList.hpp"
 #include "BaseSystem.hpp"
 #include "BaseComponent.hpp"
+#include "InferenceQueue.hpp"
 
 enum EntityTypes {
 	GENERAL,
@@ -139,7 +140,7 @@ namespace ECS {
 		const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const { return entitiesSignatures; }
 		const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const { return registeredSystems; }
 		const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const { return componentsArrays; }
-
+        InferenceQueue *GetInferenceQueue() { return &inferenceQueue; }
 	private:
 
 		template<typename T>
@@ -190,14 +191,12 @@ namespace ECS {
 			return true;
 		}
 
-		
-
 	private:
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
-
-	};
-}
+        InferenceQueue inferenceQueue;
+    };
+    }

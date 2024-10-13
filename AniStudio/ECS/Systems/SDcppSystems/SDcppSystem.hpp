@@ -23,9 +23,6 @@ public:
         AddComponentSignature<ImageComponent>();
     }
 
-    // Queue for storing entities that need inference
-    InferenceQueue inferenceQueue;
-
     void Inference(EntityManager &mgr, EntityID entityID) {
         // Fetch the necessary components from the entity
         
@@ -118,9 +115,9 @@ public:
     }
 
     void Update(EntityManager &mgr, float dt) {
-        while (!inferenceQueue.IsEmpty()) {
+        while (!mgr.GetInferenceQueue()->IsEmpty()) {
             std::cout << "Inference Request found, starting inference" << std::endl;
-            auto entityIDs = inferenceQueue.DequeueAll();
+            std::vector<EntityID> entityIDs = mgr.GetInferenceQueue()->DequeueAll();
             for (const auto &entityID : entityIDs) {
                 Inference(mgr, entityID);
             }

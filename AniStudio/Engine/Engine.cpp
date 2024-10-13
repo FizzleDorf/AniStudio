@@ -387,10 +387,10 @@ ANI::Engine::~Engine() {
 
 void ANI::Engine::Init() {
     
+    mgr.RegisterSystem<SDCPPSystem>();
+
     diffusionView.SetECS(&mgr);
     diffusionView.StartGui();
-
-    //mgr.RegisterSystem<SDCPPSystem>();
 
     // Initialize GLFW
     if (!glfwInit()) {
