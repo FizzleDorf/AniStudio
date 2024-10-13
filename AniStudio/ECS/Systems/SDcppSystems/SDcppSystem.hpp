@@ -2,7 +2,8 @@
 #include "ECS.h"
 #include "Components.h"
 #include "stable-diffusion.h"
-#include <queue>
+#include "pch.h"
+#include "InferenceQueue.hpp"
 
 using namespace ECS;
 
@@ -23,14 +24,10 @@ public:
     }
 
     // Queue for storing entities that need inference
-    std::queue<EntityID> inferenceQueue;
-
-    // Function to enqueue inference when the button is pressed
-    void QueueInference(EntityID entityID) { inferenceQueue.push(entityID); }
+    InferenceQueue inferenceQueue;
 
     void Inference(EntityManager &mgr, EntityID entityID) {
         // Fetch the necessary components from the entity
-        
         
         const char *t5xxl_path = nullptr;
         const char *clip_l_path = nullptr;
@@ -42,13 +39,11 @@ public:
         const char *embed_dir = nullptr;
         const char *model_path = nullptr;
 
-
         PromptComponent *prompt = nullptr;
         if (mgr.HasComponent<PromptComponent>(entityID)) {
             prompt = &mgr.GetComponent<PromptComponent>(entityID);
         }
         
-
         ImageComponent *output = nullptr;
         if (mgr.HasComponent<ImageComponent>(entityID)) {
             output = &mgr.GetComponent<ImageComponent>(entityID);
@@ -123,10 +118,12 @@ public:
     }
 
     void Update(EntityManager &mgr, float dt) {
-        while (!inferenceQueue.empty()) {
-            EntityID entityID = inferenceQueue.front();
-            inferenceQueue.pop();
-            Inference(mgr, entityID);
+        while (!inferenceQueue.IsEmpty()) {
+            std::cout << "Inference Request found, starting inference" << std::endl;
+            auto entityIDs = inferenceQueue.DequeueAll();
+            for (const auto &entityID : entityIDs) {
+                Inference(mgr, entityID);
+            }
         }
     }
 };
