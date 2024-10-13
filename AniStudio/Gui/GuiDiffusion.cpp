@@ -225,9 +225,8 @@ void GuiDiffusion::Render() {
 
 void GuiDiffusion::Queue() {
     if (ImGui::Button("Queue Inference")) {
-        InferenceQueue queue;
-        if (queue.IsEmpty()) {
-            queue.Enqueue(t2IEntity);
+        if (mgr->GetInferenceQueue()->IsEmpty()) {
+            mgr->GetInferenceQueue()->Enqueue(t2IEntity);
             std::cerr << "Entity Queued!" << std::endl;
         } else {
             // Log an error message or handle the case where the system is not found

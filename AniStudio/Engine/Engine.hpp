@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "Gui/Guis.h"
+#include "InferenceQueue.hpp"
 #include "ECS.h"
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
