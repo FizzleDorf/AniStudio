@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SDCPPComponents.h"
+#include "InferenceQueue.hpp"
 #include "pch.h"
 
 using namespace ECS;
@@ -19,7 +20,6 @@ public:
         if (promptComp)
             delete promptComp;
     }
-
     void SetECS(EntityManager *newMgr) { mgr = newMgr; }
     void StartGui();
     void RenderCKPTLoader();
@@ -27,7 +27,7 @@ public:
     void RenderInputImage();
     void RenderSampler();
     void RenderPrompts();
-    void RenderCommands();
+    void Queue();
     void Render();
 
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {

@@ -1,6 +1,8 @@
 #include "GuiDiffusion.hpp"
 #include "stable-diffusion.h"
-#include "EntityManager.hpp"
+#include "Systems.h"
+#include "ECS.h"
+#include "InferenceQueue.hpp"
 
 using namespace ECS;
 
@@ -32,7 +34,7 @@ void GuiDiffusion::StartGui() {
 
     t2IEntity = mgr->AddNewEntity();
     std::cout << "Initialized entity with ID: " << t2IEntity << std::endl;
-
+    
     mgr->AddComponent<CFGComponent>(t2IEntity);
     if (mgr->HasComponent<CFGComponent>(t2IEntity)) {
         cfgComp = &mgr->GetComponent<CFGComponent>(t2IEntity);
@@ -83,7 +85,7 @@ void GuiDiffusion::RenderCKPTLoader() {
     // Open the file dialog when the button is clicked
     if(ImGui::Button("...")) {
         IGFD::FileDialogConfig config;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .pth, .gguf", config);
+        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf", config);
     }
 
     // Display the dialog
@@ -101,8 +103,6 @@ void GuiDiffusion::RenderCKPTLoader() {
     }
     ImGui::NewLine();
     ImGui::PushItemWidth(200);
-    static int item_current41 = 0;
-    const char *items41[] = {"Never", "Gonna", "Give", "You", "Up"};
     ImGui::Combo("SD_Type", &current_type_method, type_method_items, type_method_item_count);
     ImGui::PopItemWidth();
     ImGui::EndChild();
@@ -203,14 +203,11 @@ void GuiDiffusion::RenderPrompts() {
     ImGui::EndChild();
 }
 
-void GuiDiffusion::RenderCommands() {
-
-}
 
 void GuiDiffusion::Render() {
     if (ImGui::Begin("Image Generation")) {
 
-        RenderCommands();
+        Queue();
 
         if (ImGui::CollapsingHeader("Ckpt Loader"))
             RenderCKPTLoader();
@@ -226,3 +223,14 @@ void GuiDiffusion::Render() {
 }
 
 
+void GuiDiffusion::Queue() {
+    if (ImGui::Button("Queue Inference")) {
+        if (mgr->GetInferenceQueue()->IsEmpty()) {
+            mgr->GetInferenceQueue()->Enqueue(t2IEntity);
+            std::cerr << "Entity Queued!" << std::endl;
+        } else {
+            // Log an error message or handle the case where the system is not found
+            std::cerr << "Queue Failed!" << std::endl;
+        }
+    }
+}

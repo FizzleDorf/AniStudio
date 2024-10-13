@@ -9,4 +9,8 @@
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
 #include "VaeComponent.hpp"
-#include "EncoderComponent.hpp"
+
+//Encoders
+#include "Encoders/ClipGComponent.hpp"
+#include "Encoders/ClipLComponent.hpp"
+#include "Encoders/TXXLComponent.hpp"
