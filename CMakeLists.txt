@@ -70,7 +70,7 @@ set(CMAKE_BUILD_TYPE Release)
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
 add_subdirectory(external/Vulkan-Hpp)
-add_subdirectory(external/stb_image)
+# add_subdirectory(external/stb_image) in ggml repo
 add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)
 add_subdirectory(external/sdcpp)
@@ -157,7 +157,7 @@ immvision_find_opencv()
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ImGui
     ImGui_Nodes
-    stb_image
+    # stb_image
     ImGuiFileDialog 
     ImGuizmo
     Vulkan::Vulkan
