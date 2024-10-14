@@ -1,4 +1,5 @@
 #include "Engine/Engine.hpp"
+#include "stb_image_wrapper.h"
 
 int main(int argc, char* argv[]) {
 
@@ -13,4 +14,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-

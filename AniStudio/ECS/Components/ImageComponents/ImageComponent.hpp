@@ -1,8 +1,7 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "stb_image.h"
-#include "stb_image_write.h"
+#include "stb_image_wrapper.h"
 #include <string>
 
 namespace ECS {
@@ -39,3 +38,4 @@ struct ImageComponent : public ECS::BaseComponent {
     }
 };
 }
+
