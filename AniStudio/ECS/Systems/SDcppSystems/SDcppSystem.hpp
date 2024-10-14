@@ -23,7 +23,7 @@ public:
         AddComponentSignature<ImageComponent>();
     }
 
-    void Inference(EntityManager &mgr, EntityID entityID) {
+    void Inference(EntityManager *mgr, EntityID entityID) {
         // Fetch the necessary components from the entity
         
         const char *t5xxl_path = nullptr;
@@ -37,46 +37,46 @@ public:
         const char *model_path = nullptr;
 
         PromptComponent *prompt = nullptr;
-        if (mgr.HasComponent<PromptComponent>(entityID)) {
-            prompt = &mgr.GetComponent<PromptComponent>(entityID);
+        if (mgr->HasComponent<PromptComponent>(entityID)) {
+            prompt = &mgr->GetComponent<PromptComponent>(entityID);
         }
         
         ImageComponent *output = nullptr;
-        if (mgr.HasComponent<ImageComponent>(entityID)) {
-            output = &mgr.GetComponent<ImageComponent>(entityID);
+        if (mgr->HasComponent<ImageComponent>(entityID)) {
+            output = &mgr->GetComponent<ImageComponent>(entityID);
         }
 
         CLipGComponent *clip_g = nullptr;
-        if (mgr.HasComponent<CLipGComponent>(entityID)) {
-            clip_g = &mgr.GetComponent<CLipGComponent>(entityID);
+        if (mgr->HasComponent<CLipGComponent>(entityID)) {
+            clip_g = &mgr->GetComponent<CLipGComponent>(entityID);
             clip_g_path = clip_g->encoderPath.c_str();
         }
             
         CLipLComponent *clip_l = nullptr;
-        if (mgr.HasComponent<CLipLComponent>(entityID)) {
-            clip_l = &mgr.GetComponent<CLipLComponent>(entityID);
+        if (mgr->HasComponent<CLipLComponent>(entityID)) {
+            clip_l = &mgr->GetComponent<CLipLComponent>(entityID);
             clip_l_path = clip_l->encoderPath.c_str();
         }
             
         TXXLComponent *t5xxl = nullptr;
-        if (mgr.HasComponent<TXXLComponent>(entityID)) {
-            t5xxl = &mgr.GetComponent<TXXLComponent>(entityID);
+        if (mgr->HasComponent<TXXLComponent>(entityID)) {
+            t5xxl = &mgr->GetComponent<TXXLComponent>(entityID);
             t5xxl_path = t5xxl->encoderPath.c_str();
         }
             
         CFGComponent *cfg = nullptr;
-        if (mgr.HasComponent<CFGComponent>(entityID)) {
-            cfg = &mgr.GetComponent<CFGComponent>(entityID);
+        if (mgr->HasComponent<CFGComponent>(entityID)) {
+            cfg = &mgr->GetComponent<CFGComponent>(entityID);
         }
 
         SamplerComponent *sampler = nullptr;
-        if (mgr.HasComponent<SamplerComponent>(entityID)) {
-            sampler = &mgr.GetComponent<SamplerComponent>(entityID);
+        if (mgr->HasComponent<SamplerComponent>(entityID)) {
+            sampler = &mgr->GetComponent<SamplerComponent>(entityID);
         }
 
         DiffusionModelComponent *model = nullptr;
-        if (mgr.HasComponent<DiffusionModelComponent>(entityID)) {
-            model = &mgr.GetComponent<DiffusionModelComponent>(entityID);
+        if (mgr->HasComponent<DiffusionModelComponent>(entityID)) {
+            model = &mgr->GetComponent<DiffusionModelComponent>(entityID);
             model_path = model->ckptPath.c_str();
         }
  
@@ -114,13 +114,6 @@ public:
         free_sd_ctx(sd_ctx);
     }
 
-    void Update(EntityManager &mgr, float dt) {
-        while (!mgr.GetInferenceQueue()->IsEmpty()) {
-            std::cout << "Inference Request found, starting inference" << std::endl;
-            std::vector<EntityID> entityIDs = mgr.GetInferenceQueue()->DequeueAll();
-            for (const auto &entityID : entityIDs) {
-                Inference(mgr, entityID);
-            }
-        }
+    void Update() {
     }
 };
