@@ -1,7 +1,7 @@
 #pragma once
 
 #include "SDCPPComponents.h"
-#include "ImageComponent.h"
+#include "ImageComponent.hpp"
 #include "InferenceQueue.hpp"
 #include "pch.h"
 
