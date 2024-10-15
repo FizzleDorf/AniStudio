@@ -46,6 +46,7 @@ private:
 
     // ECS-related variables
     EntityManager *mgr = nullptr;
+
     EntityID t2IEntity;
     EntityID i2IEntity;
 };

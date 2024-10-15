@@ -3,8 +3,11 @@
 #include "Systems.h"
 #include "ECS.h"
 #include "InferenceQueue.hpp"
+#include "ImageView.hpp"
 
 using namespace ECS;
+ImageComponent test;
+ImageView imageView = ImageView(&test);
 
 static const char *sample_method_items[] = {"Euler a", "Euler",     "Heun",  "Dpm 2",    "Dpmpp 2 a",
                                             "Dpmpp 2m", "Dpm++ 2m v2", "Ipndm", "Ipndm v", "Lcm"};
@@ -29,6 +32,8 @@ static const int type_method_item_count = sizeof(type_method_items) / sizeof(typ
 
 char PosBuffer[9999] = "";
 char NegBuffer[9999] = "";
+
+
 
 void GuiDiffusion::StartGui() { 
 
@@ -220,6 +225,8 @@ void GuiDiffusion::Render() {
             RenderSampler();
     }
     ImGui::End();
+
+    imageView.Render(); // Render the ImageView
 }
 
 

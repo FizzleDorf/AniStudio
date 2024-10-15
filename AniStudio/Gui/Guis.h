@@ -3,3 +3,4 @@
 #include "MenuBar.hpp"
 #include "GuiSettings.hpp"
 #include "GuiDiffusion.hpp"
+#include "ImageView.hpp"
