@@ -224,8 +224,8 @@ void GuiDiffusion::Render() {
 
 
 void GuiDiffusion::Queue() {
-    auto sdcppSystem = mgr->GetSystem<SDCPPSystem>();
-    if (sdcppSystem) {
-        sdcppSystem->Inference(mgr,t2IEntity);
-    }
+    //auto sdcppSystem = mgr->GetSystem<SDCPPSystem>();
+    //if (sdcppSystem) {
+    //    sdcppSystem->Inference(mgr,t2IEntity);
+    //}
 }

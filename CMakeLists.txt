@@ -6,6 +6,8 @@ if(NOT CONAN_TOOLCHAIN_INCLUDED)
     message(FATAL_ERROR "The file conan_toolchain.cmake doesn't exist, you must run install first")
 endif()
 
+set(CMAKE_VERBOSE_MAKEFILE ON)
+
 project(AniStudio CXX)
 
 # Set C++ standard
@@ -39,15 +41,6 @@ else()
     message(FATAL_ERROR "OpenCV not found")
 endif()
 
-#This stupid library keeps breaking Curl so I turned the flag off in the Curl options
-# find_package(ZLIB REQUIRED)
-# # Check if zlib was found
-# if (ZLIB_FOUND)
-#     message(STATUS "Found ZLIB, include: ${ZLIB_INCLUDE_DIRS}, library: ${ZLIB_LIBRARIES}")
-# else()
-#     message(FATAL_ERROR "ZLIB not found")
-# endif()
-
 # Set CURL options
 set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
 set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
@@ -61,11 +54,6 @@ set(CPR_ENABLE_SSL OFF CACHE BOOL "" FORCE)
 set(CPR_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
 
 # Add external libraries
-# add_subdirectory(external/cpr)
-
-# Set build type for external projects
-set(CMAKE_BUILD_TYPE Release)
-
 # Add external libraries
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
