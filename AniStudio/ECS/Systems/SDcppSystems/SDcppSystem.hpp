@@ -1,9 +1,9 @@
 #pragma once
 #include "ECS.h"
 #include "Components.h"
-#include "stable-diffusion.h"
 #include "pch.h"
 #include "InferenceQueue.hpp"
+#include "stable-diffusion.h"
 
 using namespace ECS;
 
@@ -83,28 +83,49 @@ public:
         // Prepare model paths (ensure paths are correctly set)
          // Assuming model_path is std::string
 
-        // Create a context for stable diffusion model
-        sd_ctx_t *sd_ctx = new_sd_ctx(model_path, clip_l_path, t5xxl_path, diffusion_model_path, vae_path,
-                                      nullptr, // taesd_path
-                                      control_net_path, lora_model_dir, embed_dir,
-                                      nullptr,         // stacked_id_embed_dir_c_str
-                                      false,           // vae_decode_only
-                                      false,           // vae_tiling
-                                      false,           // free_params_immediately
-                                      4,               // n_threads
-                                      SD_TYPE_F32,     // wtype
-                                      STD_DEFAULT_RNG, // rng_type
-                                      DEFAULT,         // schedule
-                                      true,            // keep_clip_on_cpu
-                                      true,            // keep_control_net_cpu
-                                      true             // keep_vae_on_cpu
+        // Context for stable diffusion model
+        sd_ctx_t *sd_ctx = new_sd_ctx(
+            model_path, 
+            clip_l_path, 
+            t5xxl_path, 
+            diffusion_model_path, vae_path,                         
+            nullptr,         // taesd_path                         
+            control_net_path, 
+            lora_model_dir, 
+            embed_dir,                       
+            nullptr,         // stacked_id_embed_dir_c_str                       
+            false,           // vae_decode_only                        
+            false,           // vae_tiling                        
+            false,           // free_params_immediately                        
+            4,               // n_threads                        
+            SD_TYPE_F32,     // wtype                       
+            STD_DEFAULT_RNG, // rng_type
+            DEFAULT,         // schedule
+            true,            // keep_clip_on_cpu
+            true,            // keep_control_net_cpu
+            true             // keep_vae_on_cpu
         );
 
-
-
-        // Perform inference with txt2img function
-        sd_image_t *image = txt2img(sd_ctx, prompt->posPrompt.c_str(), nullptr, 0, cfg->cfg, 1.0f, 512, 512,
-                                    EULER, 20, 0, 1, nullptr, 0.0f, 0.0f, true, nullptr);
+        // Txt2img function
+        sd_image_t *image = txt2img(
+            sd_ctx, 
+            prompt->posPrompt.c_str(), 
+            nullptr, 
+            0, 
+            cfg->cfg, 
+            1.0f, 
+            512, 
+            512,
+            EULER, 
+            20, 
+            0, 
+            1, 
+            nullptr, 
+            0.0f, 
+            0.0f, 
+            true, 
+            nullptr
+        );
 
         // Save or set the generated image in ImageComponent
         output->SetImageData(image->data, image->width, image->height, image->channel);

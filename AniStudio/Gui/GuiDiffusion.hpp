@@ -1,9 +1,9 @@
 #pragma once
 
 #include "SDCPPComponents.h"
-#include "ImageComponent.hpp"
 #include "InferenceQueue.hpp"
 #include "pch.h"
+#include "ImageComponent.hpp"
 
 using namespace ECS;
 
