@@ -9,6 +9,10 @@
 - Cross-platform (Windows, Linux, MacOS)
 - Entity Component System for modular development with low technical debt
 
+## Requirements
+- Vulkan Renderer
+- Python
+
 ## Install
 *cloning, installing and building will take a while. speeding up the build process using repo options is in the TODO*
 ```
