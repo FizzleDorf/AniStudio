@@ -3,6 +3,7 @@
 #include "SDCPPComponents.h"
 #include "InferenceQueue.hpp"
 #include "pch.h"
+#include "ImageComponent.hpp"
 
 using namespace ECS;
 

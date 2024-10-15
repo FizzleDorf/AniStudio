@@ -231,13 +231,8 @@ void GuiDiffusion::Render() {
 
 
 void GuiDiffusion::Queue() {
-    if (ImGui::Button("Queue Inference")) {
-        if (mgr->GetInferenceQueue()->IsEmpty()) {
-            mgr->GetInferenceQueue()->Enqueue(t2IEntity);
-            std::cerr << "Entity Queued!" << std::endl;
-        } else {
-            // Log an error message or handle the case where the system is not found
-            std::cerr << "Queue Failed!" << std::endl;
-        }
-    }
+    //auto sdcppSystem = mgr->GetSystem<SDCPPSystem>();
+    //if (sdcppSystem) {
+    //    sdcppSystem->Inference(mgr,t2IEntity);
+    //}
 }
