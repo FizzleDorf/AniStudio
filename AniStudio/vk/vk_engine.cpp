@@ -5,8 +5,9 @@
 #include "vk_images.h"
 #include "vk_loader.h"
 
-#include <SDL.h>
-#include <SDL_vulkan.h>
+//#include <SDL.h>
+//#include <SDL_vulkan.h>
+#include <glfw3.h>
 
 #include <vk_initializers.h>
 #include <vk_types.h>
@@ -34,44 +35,31 @@ VulkanEngine *loadedEngine = nullptr;
 VulkanEngine &VulkanEngine::Get() { return *loadedEngine; }
 
 void VulkanEngine::init() {
-    // only one engine initialization is allowed with the application.
-    assert(loadedEngine == nullptr);
-    loadedEngine = this;
+    if (!glfwInit()) {
+        throw std::runtime_error("Failed to initialize GLFW.");
+    }
 
-    // We initialize SDL and create a window with it.
-    SDL_Init(SDL_INIT_VIDEO);
-
-    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
-
-    _window = SDL_CreateWindow("Vulkan Engine", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, _windowExtent.width,
-                               _windowExtent.height, window_flags);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    _window = glfwCreateWindow(_windowExtent.width, _windowExtent.height, "Vulkan Engine", nullptr, nullptr);
+    if (!_window) {
+        throw std::runtime_error("Failed to create GLFW window.");
+    }
 
     init_vulkan();
-
     init_swapchain();
-
     init_commands();
-
-    init_sync_structures();
-
-    init_descriptors();
-
     init_pipelines();
-
+    init_descriptors();
+    init_sync_structures();
+    init_renderables();
+    init_imgui();
     init_default_data();
 
-    init_renderables();
-
-    init_imgui();
-
-    // everything went fine
-    _isInitialized = true;
-
-    mainCamera.velocity = glm::vec3(0.f);
-    mainCamera.position = glm::vec3(30.f, -00.f, -085.f);
-
-    mainCamera.pitch = 0;
-    mainCamera.yaw = 0;
+    glfwSetFramebufferSizeCallback(_window, [](GLFWwindow *window, int width, int height) {
+        VulkanEngine &engine = VulkanEngine::Get();
+        engine.resize_requested = true;
+        engine._windowExtent = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    });
 }
 
 void VulkanEngine::init_default_data() {
@@ -146,8 +134,6 @@ void VulkanEngine::init_default_data() {
 
 void VulkanEngine::cleanup() {
     if (_isInitialized) {
-
-        // make sure the gpu has stopped doing its things
         vkDeviceWaitIdle(_device);
 
         loadedScenes.clear();
@@ -159,16 +145,14 @@ void VulkanEngine::cleanup() {
         _mainDeletionQueue.flush();
 
         destroy_swapchain();
-
         vkDestroySurfaceKHR(_instance, _surface, nullptr);
-
         vmaDestroyAllocator(_allocator);
-
         vkDestroyDevice(_device, nullptr);
         vkb::destroy_debug_utils_messenger(_instance, _debug_messenger);
         vkDestroyInstance(_instance, nullptr);
 
-        SDL_DestroyWindow(_window);
+        glfwDestroyWindow(_window);
+        glfwTerminate();
     }
 }
 

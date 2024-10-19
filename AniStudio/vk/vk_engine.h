@@ -14,10 +14,12 @@
 
 #include <vk_mem_alloc.h>
 
+#include <GLFW/glfw3.h> // Include GLFW
 #include <camera.h>
 #include <vk_descriptors.h>
 #include <vk_loader.h>
 #include <vk_pipelines.h>
+
 struct MeshAsset;
 namespace fastgltf {
 struct Mesh;
@@ -149,7 +151,7 @@ public:
 
     VkExtent2D _windowExtent{1700, 900};
 
-    struct SDL_Window *_window{nullptr};
+    GLFWwindow *_window{nullptr}; // Replace SDL_Window with GLFWwindow
 
     VkInstance _instance;
     VkDebugUtilsMessengerEXT _debug_messenger;
@@ -220,7 +222,7 @@ public:
     std::vector<ComputeEffect> backgroundEffects;
     int currentBackgroundEffect{0};
 
-    // singleton style getter.multiple engines is not supported
+    // singleton style getter. Multiple engines are not supported
     static VulkanEngine &Get();
 
     // initializes everything in the engine
@@ -243,7 +245,7 @@ public:
 
     void update_scene();
 
-    // upload a mesh into a pair of gpu buffers. If descriptor allocator is not
+    // upload a mesh into a pair of GPU buffers. If descriptor allocator is not
     // null, it will also create a descriptor that points to the vertex buffer
     GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
