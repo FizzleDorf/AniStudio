@@ -385,6 +385,7 @@ ANI::Engine::~Engine() {
     glfwTerminate();
 }
 
+// Initialize the Engine. Runs before main loop
 void ANI::Engine::Init() {
     
     mgr.RegisterSystem<SDCPPSystem>();
@@ -398,6 +399,8 @@ void ANI::Engine::Init() {
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+    // GLFW window for vulkan & imgui implementation
     window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "AniStudio", nullptr, nullptr);
     if (!window) {
         throw std::runtime_error("Failed to create GLFW window");
@@ -480,6 +483,7 @@ void ANI::Engine::Init() {
     //IM_ASSERT(font != nullptr);
 }
 
+// Update the events, data then rendering in that order
 void ANI::Engine::Update() {
     mgr.Update();
 
@@ -546,6 +550,7 @@ void ANI::Engine::Update() {
     glfwSwapBuffers(window);
 }
 
+// Flag a quit event
 void ANI::Engine::Quit() {
     run = false;
 }
