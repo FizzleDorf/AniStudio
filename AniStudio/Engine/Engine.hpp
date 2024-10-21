@@ -1,52 +1,46 @@
 #pragma once
-#include "pch.h"
-#include "Gui/Guis.h"
-#include "InferenceQueue.hpp"
-#include "ECS.h"
 
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
-//#define APP_USE_UNLIMITED_FRAME_RATE
-#ifdef _DEBUG
-#define APP_USE_VULKAN_DEBUG_REPORT
-#endif
+#include "Gui/Guis.h" // Retain the custom Gui classes
+#include "VulkanContext.hpp"
+#include <GLFW/glfw3.h>
 
 namespace ANI {
+class Engine {
+public:
+    Engine();
+    ~Engine();
 
-    const int SCREEN_WIDTH = 1200;
-    const int SCREEN_HEIGHT = 720;
+    Engine &operator=(const Engine &) = delete;
 
-    class Engine {
-    public:
-        Engine(const Engine&) = delete;
-        ~Engine();
+    static Engine &Ref() {
+        static Engine instance;
+        return instance;
+    }
 
-        Engine& operator=(const Engine&) = delete;
+    void Init();
+    void Update();
+    void Render();
+    void Quit() { isRunning = false; }
 
-        static Engine& Ref() {
-            static Engine instance;
-            return instance;
-        }
+    inline const bool Run() const { return isRunning; }
+    inline GLFWwindow &Window() { return *window; }
+    inline const int VideoWidth() const { return videoWidth; }
+    inline const int VideoHeight() const { return videoHeight; }
 
-        void Init();
-        void Update();
-        void Draw();
-        void Quit();
+private:
+    bool isRunning;
+    GLFWwindow *window;
+    VulkanContext vulkanContext;
 
-        inline const bool Run() const { return run; }
-        inline GLFWwindow& Window() { return *window; }
-        inline const int VideoWidth() const { return videoWidth; }
-        inline const int VideoHeight() const { return videoHeight; }
+    // GUI components
+    GuiDiffusion diffusionView;
+    GuiSettings settingsView;
 
-    private:
-        Engine();
-        bool run;
-        GLFWwindow* window;
-        int videoWidth;
-        int videoHeight;
-    };
+    int videoWidth = 1200;
+    int videoHeight = 720;
+};
 
-    extern Engine& Core;
-}
+// Declare the singleton Core engine globally
+extern Engine &Core;
+
+} // namespace ANI

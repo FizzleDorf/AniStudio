@@ -12,7 +12,7 @@ project(AniStudio CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -53,7 +53,6 @@ set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(CPR_ENABLE_SSL OFF CACHE BOOL "" FORCE)
 set(CPR_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
 
-# Add external libraries
 # Add external libraries
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
@@ -97,6 +96,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/external/vkbootstrap
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
+    ${CMAKE_SOURCE_DIR}/external/Vulkan-Headers/include
     # ${CMAKE_SOURCE_DIR}/external/cpr/include
 
     ${glfw3_INCLUDE_DIR}
@@ -129,6 +129,8 @@ add_executable(${PROJECT_NAME}
 
     ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
 
+    ${CMAKE_SOURCE_DIR}/AniStudio/Engine/vulkanContext.cpp
+
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
 )
@@ -153,6 +155,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     # CURL::libcurl
     ${OpenCV_LIBS}
     # ZLIB::ZLIB
+    # glfw
     ${glfw3_LIBRARIES}
     stable-diffusion
 )
+
+target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
