@@ -129,7 +129,7 @@ add_executable(${PROJECT_NAME}
 
     ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
 
-    ${CMAKE_SOURCE_DIR}/AniStudio/Engine/vulkanContext.cpp
+    # ${CMAKE_SOURCE_DIR}/AniStudio/Engine/vulkanContext.cpp
 
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
