@@ -42,16 +42,56 @@ else()
 endif()
 
 # Set CURL options
-set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
-set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
-set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-set(HTTP_ONLY ON CACHE BOOL "" FORCE)
-set(CURL_ZLIB OFF CACHE BOOL "" FORCE) 
+# set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+# set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+# set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+# set(HTTP_ONLY ON CACHE BOOL "" FORCE)
+# set(CURL_ZLIB OFF CACHE BOOL "" FORCE) 
 
 # set cpr options
-set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(CPR_ENABLE_SSL OFF CACHE BOOL "" FORCE)
-set(CPR_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
+# set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+# set(CPR_ENABLE_SSL OFF CACHE BOOL "" FORCE)
+# set(CPR_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
+
+# Define options for stable diffusion
+# general
+option(ANI_CUBLAS                     "sd: cuda backend" ON)
+option(ANI_HIPBLAS                    "sd: rocm backend" OFF)
+option(ANI_METAL                      "sd: metal backend" OFF)
+option(ANI_VULKAN                     "sd: vulkan backend" OFF)
+option(ANI_SYCL                       "sd: sycl backend" OFF)
+option(ANI_FLASH_ATTN                 "sd: use flash attention for x4 less memory usage" ON)
+option(ANI_FAST_SOFTMAX               "sd: x1.5 faster softmax, indeterministic (sometimes, same seed don't generate same image), cuda only" OFF)
+option(ANI_BUILD_SHARED_LIBS          "sd: build shared libs" ON)
+#option(SD_BUILD_SERVER               "sd: build server example"                           ON)
+
+if(ANI_CUBLAS)
+    message("-- Use CUBLAS as backend stable-diffusion")
+    set(SD_CUDA ON)
+endif()
+
+if(ANI_METAL)
+    message("-- Use Metal as backend stable-diffusion")
+    set(SD_METAL ON)
+endif()
+
+if (ANI_VULKAN)
+    message("-- Use Vulkan as backend stable-diffusion")
+    set(SD_VULKAN ON)
+endif ()
+
+if (ANI_HIPBLAS)
+    message("-- Use HIPBLAS as backend stable-diffusion")
+    set(SD_HIPBLAS ON)
+    if(ANI_FAST_SOFTMAX)
+        set(SD_CUDA_FAST_SOFTMAX ON)
+    endif()
+endif ()
+
+if(ANI_FLASH_ATTN)
+    message("-- Use Flash Attention for memory optimization")
+    set(SD_FLASH_ATTN ON)
+endif()
 
 # Add external libraries
 add_subdirectory(external/imgui)
@@ -129,7 +169,7 @@ add_executable(${PROJECT_NAME}
 
     ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
 
-    # ${CMAKE_SOURCE_DIR}/AniStudio/Engine/vulkanContext.cpp
+    ${CMAKE_SOURCE_DIR}/AniStudio/Gui/TestDiffuseView.cpp
 
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
@@ -155,7 +195,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     # CURL::libcurl
     ${OpenCV_LIBS}
     # ZLIB::ZLIB
-    # glfw
     ${glfw3_LIBRARIES}
     stable-diffusion
 )
