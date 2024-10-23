@@ -4,7 +4,7 @@
 #include <string>
 #include "stb_image.h"
 #include "stb_image_write.h"
-
+#define SD_API
 namespace ECS {
 struct ImageComponent : public ECS::BaseComponent {
     unsigned char *imageData = nullptr;

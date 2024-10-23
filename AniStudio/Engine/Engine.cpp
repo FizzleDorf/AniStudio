@@ -1,5 +1,5 @@
 #include "Engine.hpp"
-
+#include "TestDiffuseView.hpp"
 using namespace ECS;
 
 // Data
@@ -24,6 +24,7 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 // Gui Views
 GuiDiffusion diffusionView;
 GuiSettings settingsView;
+
 
 // ECS Manager
 ECS::EntityManager mgr;
@@ -367,9 +368,13 @@ static void FramePresent(ImGui_ImplVulkanH_Window *wd) {
     wd->SemaphoreIndex = (wd->SemaphoreIndex + 1) % wd->SemaphoreCount; // Now we can use the next set of semaphores
 }
 } // namespace ANI
-ANI::Engine::Engine() : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {}
+ANI::Engine::Engine()
+    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT), sd_ctx(nullptr),
+      testDiffuseView(nullptr) {}
 
 ANI::Engine::~Engine() {
+    delete sd_ctx;
+    delete testDiffuseView;
     // Cleanup Vulkan and ImGui
     VkResult err = vkDeviceWaitIdle(g_Device);
     check_vk_result(err);
@@ -385,7 +390,30 @@ ANI::Engine::~Engine() {
 }
 
 void ANI::Engine::Init() {
-
+    sd_ctx = new_sd_ctx("D:\\Stable Diffusion\\models",           // model_path
+                        "",      // clip_l_path
+                        "D:\\Stable Diffusion\\models\\clip\\clip_l.fp16.safetensors",           // t5xxl_path
+                        "D:\\Stable Diffusion\\models\\checkpoints\\autismmixSDXL_autismmixDPO.ckpt", // diffusion_model_path
+                        "D:\\Stable Diffusion\\models\\vae\\sdxl_vae.safetensors",             // vae_path
+                   "",                                                                    // taesd_path
+                   "",                          // control_net_path_c_str
+                   "",                          // lora_model_dir
+                   "",                          // embed_dir_c_str
+                   "",                          // stacked_id_embed_dir_c_str
+                        false,                     // vae_decode_only
+                        false,                     // vae_tiling
+                        true,                      // free_params_immediately
+                        8,                         // n_threads
+                        sd_type_t::SD_TYPE_F16,        // wtype (example enum value)
+                        rng_type_t::STD_DEFAULT_RNG, // rng_type (example enum value)
+                        schedule_t::DEFAULT,         // schedule_t (example enum value)
+                        true,                      // keep_clip_on_cpu
+                        false,                     // keep_control_net_cpu
+                        false                      // keep_vae_on_cpu
+    );
+    std::cout << sd_ctx << std::endl;
+    testDiffuseView = new TestDiffuseView(sd_ctx);
+    testDiffuseView->SetOutputPath("./output_image.png");
     mgr.RegisterSystem<SDCPPSystem>();
 
     diffusionView.SetECS(&mgr);
@@ -520,6 +548,8 @@ void ANI::Engine::Update() {
         // if (viewState.showDrawingCanvas) canvasView.Render();
         if (viewState.showSettingsView)
             settingsView.Render();
+
+        testDiffuseView->Render();
         // if (viewState.show3DView) settingsView.Render();
     }
 

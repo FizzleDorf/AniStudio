@@ -2,7 +2,6 @@
 #include "ECS.h"
 #include "Components.h"
 #include "pch.h"
-#include "InferenceQueue.hpp"
 #include "stable-diffusion.h"
 
 using namespace ECS;
@@ -16,11 +15,11 @@ public:
         AddComponentSignature<SamplerComponent>();
         AddComponentSignature<DiffusionModelComponent>();
         AddComponentSignature<VaeComponent>();
-        AddComponentSignature<EncoderComponent>();
         AddComponentSignature<ControlnetComponent>();
         AddComponentSignature<EsrganComponent>();
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<ImageComponent>();
+        AddComponentSignature<InferenceComponent>();
     }
 
     void Inference(EntityManager *mgr, EntityID entityID) {
@@ -46,7 +45,7 @@ public:
             output = &mgr->GetComponent<ImageComponent>(entityID);
         }
 
-        CLipGComponent *clip_g = nullptr;
+        /*CLipGComponent *clip_g = nullptr;
         if (mgr->HasComponent<CLipGComponent>(entityID)) {
             clip_g = &mgr->GetComponent<CLipGComponent>(entityID);
             clip_g_path = clip_g->encoderPath.c_str();
@@ -62,7 +61,7 @@ public:
         if (mgr->HasComponent<TXXLComponent>(entityID)) {
             t5xxl = &mgr->GetComponent<TXXLComponent>(entityID);
             t5xxl_path = t5xxl->encoderPath.c_str();
-        }
+        }*/
             
         CFGComponent *cfg = nullptr;
         if (mgr->HasComponent<CFGComponent>(entityID)) {
@@ -84,12 +83,12 @@ public:
          // Assuming model_path is std::string
 
         // Context for stable diffusion model
-        sd_ctx_t *sd_ctx = new_sd_ctx(
+        sd_ctx_t *sd_context = new_sd_ctx(
             model_path, 
             clip_l_path, 
             t5xxl_path, 
             diffusion_model_path, vae_path,                         
-            nullptr,         // taesd_path                         
+            "", // taesd_path                         
             control_net_path, 
             lora_model_dir, 
             embed_dir,                       
@@ -108,7 +107,7 @@ public:
 
         // Txt2img function
         sd_image_t *image = txt2img(
-            sd_ctx, 
+            sd_context, 
             prompt->posPrompt.c_str(), 
             nullptr, 
             0, 
@@ -132,7 +131,7 @@ public:
 
         // Free resources
         free(image);
-        free_sd_ctx(sd_ctx);
+        free_sd_ctx(sd_context);
     }
 
     void Update() {

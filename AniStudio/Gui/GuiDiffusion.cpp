@@ -212,8 +212,6 @@ void GuiDiffusion::RenderPrompts() {
 void GuiDiffusion::Render() {
     if (ImGui::Begin("Image Generation")) {
 
-        Queue();
-
         if (ImGui::CollapsingHeader("Ckpt Loader"))
             RenderCKPTLoader();
         if (ImGui::CollapsingHeader("Input Latent"))
@@ -227,12 +225,4 @@ void GuiDiffusion::Render() {
     ImGui::End();
 
     imageView.Render(); // Render the ImageView
-}
-
-
-void GuiDiffusion::Queue() {
-    //auto sdcppSystem = mgr->GetSystem<SDCPPSystem>();
-    //if (sdcppSystem) {
-    //    sdcppSystem->Inference(mgr,t2IEntity);
-    //}
 }

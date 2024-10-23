@@ -4,7 +4,7 @@
 #include <string>
 
 namespace ECS {
-struct CLipLComponent : public ECS::BaseComponent {
+struct T5XXLComponent : public ECS::BaseComponent {
     std::string encoderPath = "path/to/model";
     std::string encoderName = "model.gguf";
     bool isEncoderLoaded = false;

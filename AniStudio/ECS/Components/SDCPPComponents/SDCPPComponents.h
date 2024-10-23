@@ -1,16 +1,26 @@
 #pragma once
 
+// Sampling and Inference
+#include "InferenceComponent.hpp"
 #include "CFGComponent.hpp"
-#include "ControlnetComponent.hpp"
-#include "DiffusionModelComponent.hpp"
-#include "EsrganComponent.hpp"
-#include "LatentComponent.hpp"
-#include "LoraComponent.hpp"
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
-#include "VaeComponent.hpp"
 
-//Encoders
+// Models
+#include "Models/DiffusionModelComponent.hpp"
+#include "Models/EsrganComponent.hpp"
+#include "Models/LoraComponent.hpp"
+#include "Models/ControlnetComponent.hpp"
+
+// Vaes
+#include "Vaes/VaeComponent.hpp"
+#include "Vaes/TaesdComponent.hpp"
+
+// Encoders
 #include "Encoders/ClipGComponent.hpp"
 #include "Encoders/ClipLComponent.hpp"
-#include "Encoders/TXXLComponent.hpp"
+#include "Encoders/T5XXLComponent.hpp"
+
+//Latents
+#include "LatentComponent.hpp"
+#include "LatentUpscaleComponent.hpp"

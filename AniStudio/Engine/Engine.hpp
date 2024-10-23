@@ -1,8 +1,9 @@
 #pragma once
 #include "ECS.h"
 #include "Gui/Guis.h"
-#include "InferenceQueue.hpp"
 #include "pch.h"
+#include "TestDiffuseView.hpp"
+#include <stable-diffusion.h>
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
@@ -46,6 +47,8 @@ private:
     GLFWwindow *window;
     int videoWidth;
     int videoHeight;
+    TestDiffuseView *testDiffuseView; // Pointer to TestDiffusionView
+    sd_ctx_t *sd_ctx;
 };
 
 extern Engine &Core;
