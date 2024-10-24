@@ -9,31 +9,8 @@ using namespace ECS;
 ImageComponent test;
 ImageView imageView = ImageView(&test);
 
-static const char *sample_method_items[] = {"Euler a", "Euler",     "Heun",  "Dpm 2",    "Dpmpp 2 a",
-                                            "Dpmpp 2m", "Dpm++ 2m v2", "Ipndm", "Ipndm v", "Lcm"};
-static const int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
-static int current_sample_method = 1; // Default selected enum value
-
-static const char *scheduler_method_items[] = {"Default", "Discrete", "Karras",   "Exponential",
-                                               "Ays",     "Gits",     "N schedules"};
-static const int scheduler_method_item_count = sizeof(scheduler_method_items) / sizeof(scheduler_method_items[0]);
-static int current_scheduler_method = 0; // Default selected enum value
-
- static const char *type_method_items[] = {
-     "SD_TYPE_F32",   "SD_TYPE_F16",    "SD_TYPE_Q4_0",   "SD_TYPE_Q4_1",   "SD_TYPE_Q5_0",  "SD_TYPE_Q5_1",
-     "SD_TYPE_Q8_0",     "SD_TYPE_Q8_1",     "SD_TYPE_Q2_K",    "SD_TYPE_Q3_K",   "SD_TYPE_Q4_K",    "SD_TYPE_Q5_K",
-    "SD_TYPE_Q6_K",     "SD_TYPE_Q8_K",     "SD_TYPE_IQ2_XXS", "SD_TYPE_IQ2_XS", "SD_TYPE_IQ3_XXS", "SD_TYPE_IQ1_S",
-    "SD_TYPE_IQ4_NL",   "SD_TYPE_IQ3_S",    "SD_TYPE_IQ2_S",   "SD_TYPE_IQ4_XS", "SD_TYPE_I8",      "SD_TYPE_I16",
-     "SD_TYPE_I32",    "SD_TYPE_I64",    "SD_TYPE_F64",     "SD_TYPE_IQ1_M",  "SD_TYPE_BF16",    "SD_TYPE_Q4_0_4_4",
-     "SD_TYPE_Q4_0_4_8", "SD_TYPE_Q4_0_8_8", "SD_TYPE_COUNT",
- };
-static const int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
- static int current_type_method = 0; // Default selected enum value
-
 char PosBuffer[9999] = "";
 char NegBuffer[9999] = "";
-
-
 
 void GuiDiffusion::StartGui() { 
 
@@ -73,7 +50,8 @@ void GuiDiffusion::StartGui() {
     if (mgr->HasComponent<SamplerComponent>(t2IEntity)) {
         samplerComp = &mgr->GetComponent<SamplerComponent>(t2IEntity);
         std::cout << "t2IEntity has SamplerComponent with Steps: " << samplerComp->steps
-                  << ", Scheduler: " << samplerComp->scheduler << ", Sampler: " << samplerComp->sampler
+                  << ", Scheduler: " << samplerComp->scheduler_method_items[samplerComp->current_scheduler_method]
+                  << ", Sampler: " << samplerComp->sample_method_items[samplerComp->current_sample_method]
                   << ", Denoise: " << samplerComp->denoise << std::endl;
     }
 }
@@ -108,7 +86,8 @@ void GuiDiffusion::RenderCKPTLoader() {
     }
     ImGui::NewLine();
     ImGui::PushItemWidth(200);
-    ImGui::Combo("SD_Type", &current_type_method, type_method_items, type_method_item_count);
+    ImGui::Combo("SD Type", &samplerComp->current_type_method, samplerComp->type_method_items,
+                 samplerComp->type_method_item_count);
     ImGui::PopItemWidth();
     ImGui::EndChild();
 }
@@ -117,10 +96,10 @@ void GuiDiffusion::RenderLatents() {
     ImGui::BeginChild(2, ImVec2(MIN_Width, 280), true);
     ImGui::Text("Latent Image(s)");
     ImGui::PushItemWidth(200);
-    ImGui::InputInt("Width", &(latentComp->latentWidth));
+    ImGui::InputInt("Width", &latentComp->latentWidth);
     ImGui::PopItemWidth();
     ImGui::PushItemWidth(200);
-    ImGui::InputInt("Height", &(latentComp->latentHeight));
+    ImGui::InputInt("Height", &latentComp->latentHeight);
     ImGui::PopItemWidth();
     ImGui::NewLine();
     ImGui::PushItemWidth(200);
@@ -158,27 +137,28 @@ void GuiDiffusion::RenderSampler() {
     ImGui::BeginChild(4, ImVec2(MIN_Width, 300), true);
     ImGui::Text("Sampler");
     ImGui::NewLine();
-    
     ImGui::PushItemWidth(200);
-    ImGui::Combo("Sampler", &current_sample_method, sample_method_items, sample_method_item_count);
+    ImGui::Combo("Sampler", &samplerComp->current_sample_method, samplerComp->sample_method_items,
+                 samplerComp->sample_method_item_count);
     ImGui::PopItemWidth();
     
     ImGui::PushItemWidth(200);
-    ImGui::Combo("Scheduler", &current_scheduler_method, scheduler_method_items, scheduler_method_item_count);
+    ImGui::Combo("Scheduler", &samplerComp->current_scheduler_method, samplerComp->scheduler_method_items,
+                 samplerComp->scheduler_method_item_count);
     ImGui::PopItemWidth();
    
     ImGui::NewLine();
 
     ImGui::PushItemWidth(200);
-    ImGui::InputInt("Steps", &(samplerComp->steps));
+    ImGui::InputInt("Steps", &samplerComp->steps);
     ImGui::PopItemWidth();
 
     ImGui::PushItemWidth(200);
-    ImGui::InputFloat("CFG", &(cfgComp->cfg), 0.5f, 1.0f, "%.3f");
+    ImGui::InputFloat("CFG", &cfgComp->cfg, 0.5f, 1.0f, "%.3f");
     ImGui::PopItemWidth();
 
     ImGui::PushItemWidth(200);
-    ImGui::InputFloat("Denoise", &(samplerComp->denoise), 0.01f, 1.0f, "%.3f");
+    ImGui::InputFloat("Denoise", &samplerComp->denoise, 0.01f, 1.0f, "%.3f");
     ImGui::PopItemWidth();
 
     ImGui::EndChild();
