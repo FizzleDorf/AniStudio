@@ -390,11 +390,11 @@ ANI::Engine::~Engine() {
 }
 
 void ANI::Engine::Init() {
-    sd_ctx = new_sd_ctx("D:\\Stable Diffusion\\models",           // model_path
-                        "",      // clip_l_path
-                        "D:\\Stable Diffusion\\models\\clip\\clip_l.fp16.safetensors",           // t5xxl_path
-                        "D:\\Stable Diffusion\\models\\checkpoints\\autismmixSDXL_autismmixDPO.ckpt", // diffusion_model_path
-                        "D:\\Stable Diffusion\\models\\vae\\sdxl_vae.safetensors",             // vae_path
+    sd_ctx = new_sd_ctx("D:/Stable Diffusion/models/checkpoints/autismmixSDXL_autismmixDPO.ckpt",           // model_path
+                        "D:/Stable Diffusion/models/clip/clip_l.fp16.safetensors",      // clip_l_path
+                        "",           // t5xxl_path
+                        "D:/Stable Diffusion/models/checkpoints/autismmixSDXL_autismmixDPO.ckpt", // diffusion_model_path
+                        "D:/Stable Diffusion/models/vae/sdxl_vae.safetensors",             // vae_path
                    "",                                                                    // taesd_path
                    "",                          // control_net_path_c_str
                    "",                          // lora_model_dir
@@ -459,8 +459,8 @@ void ANI::Engine::Init() {
     // io.ConfigViewportsNoTaskBarIcon = true;
 
     // Setup Dear ImGui style
-    // ImGui::StyleColorsDark();
-    ImGui::StyleColorsLight();
+    ImGui::StyleColorsDark();
+    //ImGui::StyleColorsLight();
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular
     // ones.

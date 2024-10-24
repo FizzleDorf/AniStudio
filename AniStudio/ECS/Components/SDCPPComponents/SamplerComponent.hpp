@@ -34,6 +34,6 @@ struct SamplerComponent : public ECS::BaseComponent {
     static constexpr int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
     int current_type_method = sd_type_t::SD_TYPE_F16;
 
-    SamplerComponent(int num_steps = 50, float denoise_value = 1.0f) : steps(num_steps), denoise(denoise_value) {}
+    SamplerComponent(int num_steps = 20, float denoise_value = 1.0f) : steps(num_steps), denoise(denoise_value) {}
 };
 } // namespace ECS

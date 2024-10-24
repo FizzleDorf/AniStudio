@@ -4,7 +4,6 @@
 #include "CompList.hpp"
 #include "BaseSystem.hpp"
 #include "BaseComponent.hpp"
-#include "InferenceQueue.hpp"
 
 enum EntityTypes {
 	GENERAL,
@@ -126,21 +125,12 @@ namespace ECS {
 			registeredSystems.erase(systemType);
 		}
 
-		template <typename T>
-        std::shared_ptr<T> GetSystem() {
-            const SystemTypeID systemType = SystemType<T>();
-            auto it = registeredSystems.find(systemType);
-            assert(it != registeredSystems.end() && "System not registered!");
-            return std::static_pointer_cast<T>(it->second);
-        }
-
 		// Getters for private variables
 		EntityID GetEntityCount() const { return entityCount; }
 		std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }
 		const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const { return entitiesSignatures; }
 		const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const { return registeredSystems; }
 		const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const { return componentsArrays; }
-        InferenceQueue *GetInferenceQueue() { return &inferenceQueue; }
 	private:
 
 		template<typename T>
@@ -197,6 +187,5 @@ namespace ECS {
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
-        InferenceQueue inferenceQueue;
     };
     }
