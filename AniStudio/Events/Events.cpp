@@ -10,7 +10,7 @@ Events::~Events() {}
 
 void Events::Init(GLFWwindow *window) {
     // Set the close callback to the static function that invokes Core.Quit()
-    // glfwSetWindowCloseCallback(window, WindowCloseCallback);
+    glfwSetWindowCloseCallback(window, WindowCloseCallback);
 }
 
 void Events::QueueEvent(const Event &event) { eventQueue.push(event); }

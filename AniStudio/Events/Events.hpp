@@ -34,7 +34,7 @@ private:
     std::queue<Event> eventQueue;
 
     // Static callback function for GLFW window close
-    // static void WindowCloseCallback(GLFWwindow *window) { ANI::Core.Quit(); }
+    static void WindowCloseCallback(GLFWwindow *window) { ANI::Core.Quit(); }
 };
 
 } // namespace ANI

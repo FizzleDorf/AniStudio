@@ -33,6 +33,8 @@ namespace ANI {
 
 Engine &Core = Engine::Ref();
 
+void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
+
 static void glfw_error_callback(int error, const char *description) {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
 }
@@ -429,6 +431,11 @@ void ANI::Engine::Init() {
     if (!window) {
         throw std::runtime_error("Failed to create GLFW window");
     }
+
+    // Make the window's context current
+    glfwMakeContextCurrent(window);
+
+    glfwSetWindowCloseCallback(window, WindowCloseCallback);
 
     ImVector<const char *> extensions;
     uint32_t extensions_count = 0;

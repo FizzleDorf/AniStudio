@@ -51,5 +51,7 @@ private:
     sd_ctx_t *sd_ctx;
 };
 
+void WindowCloseCallback(GLFWwindow *window);
+
 extern Engine &Core;
 } // namespace ANI
