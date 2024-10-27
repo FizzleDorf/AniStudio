@@ -9,18 +9,24 @@ namespace ECS {
 	class EntityManager {
 
 	public:
+        // Delete copy and move constructors and assignment operators
+        EntityManager(const EntityManager &) = delete;
+        EntityManager &operator=(const EntityManager &) = delete;
+        //EntityManager(EntityManager &&) = delete;
+        //EntityManager &operator=(EntityManager &&) = delete;
+
+        // Singleton accessor
+        static EntityManager &Ref() {
+            static EntityManager instance; // Guaranteed to be initialized only once
+            return instance;
+        }
 		
-		EntityManager() : entityCount(0) {
-			for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; entity++) {
-				availableEntities.push(entity);
-			}
-		}
 
 		~EntityManager() {
 
 		}
 
-		void Update() {
+ 		void Update() {
 			for (auto& system : registeredSystems) {
 				system.second->Update();
 			}
@@ -173,6 +179,13 @@ namespace ECS {
 			}
 			return true;
 		}
+
+	private:
+        EntityManager() : entityCount(0) {
+            for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; entity++) {
+                availableEntities.push(entity);
+            }
+        }
 
 	private:
 		EntityID entityCount;

@@ -58,6 +58,12 @@ void GuiDiffusion::StartGui() {
                   << ", Sampler: " << samplerComp->sample_method_items[samplerComp->current_sample_method]
                   << ", Denoise: " << samplerComp->denoise << std::endl;
     }
+    mgr->AddComponent<InferenceComponent>(t2IEntity);
+    if (mgr->HasComponent<InferenceComponent>(t2IEntity)) {
+        inferenceComp = &mgr->GetComponent<InferenceComponent>(t2IEntity);
+        std::cout << "t2IEntity has InferenceComponent with inference set to: " << inferenceComp->shouldInference<< std::endl;
+    }
+    mgr->RegisterSystem<SDCPPSystem>();
 }
 
 const int MIN_Width = 380;

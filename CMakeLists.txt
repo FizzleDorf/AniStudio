@@ -169,7 +169,7 @@ add_executable(${PROJECT_NAME}
 
     ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
 
-    ${CMAKE_SOURCE_DIR}/AniStudio/Gui/TestDiffuseView.cpp
+    # ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/SDCPPSystem/SDCPPSystem.cpp
 
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
