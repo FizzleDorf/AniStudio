@@ -1,5 +1,5 @@
 #include "Engine.hpp"
-#include "TestDiffuseView.hpp"
+
 using namespace ECS;
 
 // Data
@@ -367,12 +367,9 @@ static void FramePresent(ImGui_ImplVulkanH_Window *wd) {
 }
 } // namespace ANI
 ANI::Engine::Engine()
-    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT), sd_ctx(nullptr),
-      testDiffuseView(nullptr) {}
+    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {}
 
 ANI::Engine::~Engine() {
-    delete sd_ctx;
-    delete testDiffuseView;
     // Cleanup Vulkan and ImGui
     VkResult err = vkDeviceWaitIdle(g_Device);
     check_vk_result(err);
@@ -388,30 +385,6 @@ ANI::Engine::~Engine() {
 }
 
 void ANI::Engine::Init() {
-    sd_ctx = new_sd_ctx("D:/Stable Diffusion/models/checkpoints/autismmixSDXL_autismmixDPO.ckpt",           // model_path
-                        "D:/Stable Diffusion/models/clip/clip_l.fp16.safetensors",      // clip_l_path
-                        "",           // t5xxl_path
-                        "D:/Stable Diffusion/models/checkpoints/autismmixSDXL_autismmixDPO.ckpt", // diffusion_model_path
-                        "D:/Stable Diffusion/models/vae/sdxl_vae.safetensors",             // vae_path
-                   "",                                                                    // taesd_path
-                   "",                          // control_net_path_c_str
-                   "",                          // lora_model_dir
-                   "",                          // embed_dir_c_str
-                   "",                          // stacked_id_embed_dir_c_str
-                        false,                     // vae_decode_only
-                        false,                     // vae_tiling
-                        true,                      // free_params_immediately
-                        8,                         // n_threads
-                        sd_type_t::SD_TYPE_F16,        // wtype (example enum value)
-                        rng_type_t::STD_DEFAULT_RNG, // rng_type (example enum value)
-                        schedule_t::DEFAULT,         // schedule_t (example enum value)
-                        true,                      // keep_clip_on_cpu
-                        false,                     // keep_control_net_cpu
-                        false                      // keep_vae_on_cpu
-    );
-    std::cout << sd_ctx << std::endl;
-    testDiffuseView = new TestDiffuseView(sd_ctx);
-    testDiffuseView->SetOutputPath("./output_image.png");
     mgr.RegisterSystem<SDCPPSystem>();
 
     //diffusionView.SetECS(&mgr);
@@ -552,12 +525,8 @@ void ANI::Engine::Update() {
         if (viewState.showSettingsView)
             settingsView.Render();
 
-        testDiffuseView->Render();
         // if (viewState.show3DView) settingsView.Render();
     }
-
-    // More ImGui widgets can be added here
-    // ...
 
     // Rendering
     ImGui::Render();
