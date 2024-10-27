@@ -1,5 +1,5 @@
 #pragma once
-
+#include "../Engine/Engine.hpp"
 #include "SDCPPComponents.h"
 #include "InferenceQueue.hpp"
 #include "pch.h"

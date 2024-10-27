@@ -4,6 +4,7 @@
 #include "ECS.h"
 #include "InferenceQueue.hpp"
 #include "ImageView.hpp"
+#include "../Engine/Engine.hpp"
 
 using namespace ECS;
 ImageComponent test;
@@ -12,7 +13,10 @@ ImageView imageView = ImageView(&test);
 char PosBuffer[9999] = "";
 char NegBuffer[9999] = "";
 
+
+
 void GuiDiffusion::StartGui() { 
+    mgr = ANI::Core.GetManager();
 
     t2IEntity = mgr->AddNewEntity();
     std::cout << "Initialized entity with ID: " << t2IEntity << std::endl;

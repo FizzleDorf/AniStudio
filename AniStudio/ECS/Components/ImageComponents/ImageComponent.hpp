@@ -26,7 +26,7 @@ struct ImageComponent : public ECS::BaseComponent {
         imageData = stbi_load(path.c_str(), &width, &height, &channels, 0);
         return imageData != nullptr;
     }
-
+    
     void SetImageData(unsigned char *data, int imgWidth, int imgHeight, int imgChannels) {
         if (imageData) {
             stbi_image_free(imageData);

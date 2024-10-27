@@ -41,6 +41,8 @@ public:
     inline const int VideoWidth() const { return videoWidth; }
     inline const int VideoHeight() const { return videoHeight; }
 
+    EntityManager *GetManager() { return &mgr; }
+
 private:
     Engine();
     bool run;
@@ -49,6 +51,7 @@ private:
     int videoHeight;
     TestDiffuseView *testDiffuseView; // Pointer to TestDiffusionView
     sd_ctx_t *sd_ctx;
+    ECS::EntityManager mgr;
 };
 
 void WindowCloseCallback(GLFWwindow *window);

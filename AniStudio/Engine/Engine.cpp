@@ -25,10 +25,6 @@ ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 GuiDiffusion diffusionView;
 GuiSettings settingsView;
 
-
-// ECS Manager
-ECS::EntityManager mgr;
-
 namespace ANI {
 
 Engine &Core = Engine::Ref();
@@ -418,7 +414,7 @@ void ANI::Engine::Init() {
     testDiffuseView->SetOutputPath("./output_image.png");
     mgr.RegisterSystem<SDCPPSystem>();
 
-    diffusionView.SetECS(&mgr);
+    //diffusionView.SetECS(&mgr);
     diffusionView.StartGui();
 
     // Initialize GLFW

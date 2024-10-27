@@ -14,6 +14,7 @@ namespace ANI {
 
 class Events {
 public:
+    ~Events();
     Events(const Events &) = delete;
     Events &operator=(const Events &) = delete;
 
@@ -30,7 +31,6 @@ public:
 
 private:
     Events(); // Constructor is private for singleton pattern
-    ~Events();
     std::queue<Event> eventQueue;
 
     // Static callback function for GLFW window close

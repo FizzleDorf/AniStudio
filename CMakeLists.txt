@@ -96,7 +96,7 @@ endif()
 # Add external libraries
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
-add_subdirectory(external/Vulkan-Hpp)
+# add_subdirectory(external/Vulkan-Hpp)
 add_subdirectory(external/stb_image)
 add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)

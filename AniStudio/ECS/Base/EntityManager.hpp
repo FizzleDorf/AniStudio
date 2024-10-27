@@ -5,13 +5,6 @@
 #include "BaseSystem.hpp"
 #include "BaseComponent.hpp"
 
-enum EntityTypes {
-	GENERAL,
-	NODES,
-	MODELS,
-	WORKFLOWS
-};
-
 namespace ECS {
 	class EntityManager {
 
