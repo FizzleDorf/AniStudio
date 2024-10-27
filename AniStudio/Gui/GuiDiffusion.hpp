@@ -44,7 +44,7 @@ private:
     LoraComponent *loraComp = nullptr;
     PromptComponent *promptComp = nullptr;
     SamplerComponent *samplerComp = nullptr;
-
+    InferenceComponent *inferenceComp = nullptr;
     // ECS-related variables
     EntityManager *mgr = nullptr;
 

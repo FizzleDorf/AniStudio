@@ -1,16 +1,10 @@
 #pragma once
-#include "ECS.h"
+#include "Engine.hpp"
 #include "Gui/Guis.h"
-#include "pch.h"
-#include <stable-diffusion.h>
+#include "pch.h" // Ensure this includes necessary definitions
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
-#endif
-
-//#define APP_USE_UNLIMITED_FRAME_RATE
-#ifdef _DEBUG
-#define APP_USE_VULKAN_DEBUG_REPORT
 #endif
 
 namespace ANI {
@@ -34,24 +28,22 @@ public:
     void Update();
     void Draw();
     void Quit();
+    ECS::EntityManager *GetManager() { return &mgr; };
 
-    inline const bool Run() const { return run; }
+    inline bool Run() const { return run; }
     inline GLFWwindow &Window() { return *window; }
-    inline const int VideoWidth() const { return videoWidth; }
-    inline const int VideoHeight() const { return videoHeight; }
-
-    EntityManager *GetManager() { return &mgr; }
-
+    inline int VideoWidth() const { return videoWidth; }
+    inline int VideoHeight() const { return videoHeight; }
 private:
     Engine();
     bool run;
     GLFWwindow *window;
     int videoWidth;
     int videoHeight;
-    ECS::EntityManager mgr;
+    ECS::EntityManager &mgr;
 };
 
 void WindowCloseCallback(GLFWwindow *window);
-
 extern Engine &Core;
+
 } // namespace ANI

@@ -1,5 +1,5 @@
 #include "Engine.hpp"
-
+#include "ECS.h"
 using namespace ECS;
 
 // Data
@@ -367,7 +367,8 @@ static void FramePresent(ImGui_ImplVulkanH_Window *wd) {
 }
 } // namespace ANI
 ANI::Engine::Engine()
-    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {}
+    : mgr(ECS::EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH),
+      videoHeight(SCREEN_HEIGHT) {}
 
 ANI::Engine::~Engine() {
     // Cleanup Vulkan and ImGui
@@ -385,9 +386,9 @@ ANI::Engine::~Engine() {
 }
 
 void ANI::Engine::Init() {
-    mgr.RegisterSystem<SDCPPSystem>();
 
-    //diffusionView.SetECS(&mgr);
+    mgr.RegisterSystem<SDCPPSystem>();
+    
     diffusionView.StartGui();
 
     // Initialize GLFW
