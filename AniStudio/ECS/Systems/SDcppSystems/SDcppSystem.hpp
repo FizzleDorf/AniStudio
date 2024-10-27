@@ -9,8 +9,7 @@ class SDCPPSystem : public BaseSystem {
 public:
     SDCPPSystem() {
         AddComponentSignature<InferenceComponent>();
-        AddComponentSignature<ImageComponent>();
-        mgr = ANI::Core.GetManager();
+        // AddComponentSignature<ImageComponent>();
     }
 
     ~SDCPPSystem() {}
@@ -18,7 +17,7 @@ public:
     void Start() override {}
 
     void Inference(EntityID entityID) {
-        inferenceComp = &mgr->GetComponent<InferenceComponent>(entityID);
+        inferenceComp = &mgr.GetComponent<InferenceComponent>(entityID);
 
         // Prepare model paths (ensure paths are correctly set)
         sd_ctx_t *sd_context = new_sd_ctx(
@@ -50,8 +49,8 @@ public:
     }
 
 private:
-    ImageComponent *output = nullptr;
+    // ImageComponent *output = nullptr;
     InferenceComponent *inferenceComp = nullptr;
-    EntityManager *mgr = nullptr;
+    EntityManager &mgr = ECS::EntityManager::Ref();
 };
 } // namespace ECS

@@ -1,9 +1,6 @@
 #include "GuiDiffusion.hpp"
 #include "stable-diffusion.h"
-#include "Systems.h"
 #include "ECS.h"
-#include "InferenceQueue.hpp"
-#include "ImageView.hpp"
 #include "../Engine/Engine.hpp"
 
 using namespace ECS;
@@ -15,56 +12,55 @@ char NegBuffer[9999] = "";
 
 
 
-void GuiDiffusion::StartGui() { 
-    mgr = ANI::Core.GetManager();
-
-    t2IEntity = mgr->AddNewEntity();
+void GuiDiffusion::StartGui() {
+    t2IEntity = mgr.AddNewEntity();
     std::cout << "Initialized entity with ID: " << t2IEntity << std::endl;
     
-    mgr->AddComponent<CFGComponent>(t2IEntity);
-    if (mgr->HasComponent<CFGComponent>(t2IEntity)) {
-        cfgComp = &mgr->GetComponent<CFGComponent>(t2IEntity);
+    mgr.AddComponent<CFGComponent>(t2IEntity);
+    if (mgr.HasComponent<CFGComponent>(t2IEntity)) {
+        cfgComp = &mgr.GetComponent<CFGComponent>(t2IEntity);
         std::cout << "t2IEntity has CFGComponent with value: " << cfgComp->cfg << std::endl;
     }
-    mgr->AddComponent<DiffusionModelComponent>(t2IEntity);
-    if (mgr->HasComponent<DiffusionModelComponent>(t2IEntity)) {
-        ckptComp = &mgr->GetComponent<DiffusionModelComponent>(t2IEntity);
-        std::cout << "t2IEntity has DiffusionModelComponent with model path: " << ckptComp->ckptPath
+    mgr.AddComponent<DiffusionModelComponent>(t2IEntity);
+    if (mgr.HasComponent<DiffusionModelComponent>(t2IEntity)) {
+        ckptComp = &mgr.GetComponent<DiffusionModelComponent>(t2IEntity);
+        std::cout << "t2IEntity has DiffusionModelComponent with model path: " << ckptComp->ckptPath << std::endl;
+    }
+    mgr.AddComponent<LatentComponent>(t2IEntity);
+    if (mgr.HasComponent<LatentComponent>(t2IEntity)) {
+        latentComp = &mgr.GetComponent<LatentComponent>(t2IEntity);
+        std::cout << "t2IEntity has LatentComponent with Width: " << latentComp->latentWidth
+                  << ", Height: " << latentComp->latentHeight << std::endl;
+    }
+    mgr.AddComponent<LoraComponent>(t2IEntity);
+    if (mgr.HasComponent<LoraComponent>(t2IEntity)) {
+        loraComp = &mgr.GetComponent<LoraComponent>(t2IEntity);
+        std::cout << "t2IEntity has LoraComponent with Strength: " << loraComp->loraStrength
+                  << ", Clip Strength: " << loraComp->loraClipStrength << ", Lora Reference: " << loraComp->loraPath
                   << std::endl;
     }
-    mgr->AddComponent<LatentComponent>(t2IEntity);
-    if (mgr->HasComponent<LatentComponent>(t2IEntity)) {
-        latentComp = &mgr->GetComponent<LatentComponent>(t2IEntity);
-        std::cout << "t2IEntity has LatentComponent with Width: " << latentComp->latentWidth << ", Height: " << latentComp->latentHeight
-                  << std::endl;
-    }
-    mgr->AddComponent<LoraComponent>(t2IEntity);
-    if (mgr->HasComponent<LoraComponent>(t2IEntity)) {
-        loraComp = &mgr->GetComponent<LoraComponent>(t2IEntity);
-        std::cout << "t2IEntity has LoraComponent with Strength: " << loraComp->loraStrength << ", Clip Strength: " << loraComp->loraClipStrength
-                  << ", Lora Reference: " << loraComp->loraPath << std::endl;
-    }
-    mgr->AddComponent<PromptComponent>(t2IEntity);
-    if (mgr->HasComponent<PromptComponent>(t2IEntity)) {
-        promptComp = &mgr->GetComponent<PromptComponent>(t2IEntity);
+    mgr.AddComponent<PromptComponent>(t2IEntity);
+    if (mgr.HasComponent<PromptComponent>(t2IEntity)) {
+        promptComp = &mgr.GetComponent<PromptComponent>(t2IEntity);
         std::cout << "t2IEntity has PromptComponent with Positive Prompt: " << promptComp->posPrompt
                   << ", Negative Prompt: " << promptComp->negPrompt << std::endl;
     }
-    mgr->AddComponent<SamplerComponent>(t2IEntity);
-    if (mgr->HasComponent<SamplerComponent>(t2IEntity)) {
-        samplerComp = &mgr->GetComponent<SamplerComponent>(t2IEntity);
+    mgr.AddComponent<SamplerComponent>(t2IEntity);
+    if (mgr.HasComponent<SamplerComponent>(t2IEntity)) {
+        samplerComp = &mgr.GetComponent<SamplerComponent>(t2IEntity);
         std::cout << "t2IEntity has SamplerComponent with Steps: " << samplerComp->steps
                   << ", Scheduler: " << samplerComp->scheduler_method_items[samplerComp->current_scheduler_method]
                   << ", Sampler: " << samplerComp->sample_method_items[samplerComp->current_sample_method]
                   << ", Denoise: " << samplerComp->denoise << std::endl;
     }
-    mgr->AddComponent<InferenceComponent>(t2IEntity);
-    if (mgr->HasComponent<InferenceComponent>(t2IEntity)) {
-        inferenceComp = &mgr->GetComponent<InferenceComponent>(t2IEntity);
-        std::cout << "t2IEntity has InferenceComponent with inference set to: " << inferenceComp->shouldInference<< std::endl;
+    mgr.AddComponent<InferenceComponent>(t2IEntity);
+    if (mgr.HasComponent<InferenceComponent>(t2IEntity)) {
+        inferenceComp = &mgr.GetComponent<InferenceComponent>(t2IEntity);
+        std::cout << "t2IEntity has InferenceComponent with inference set to: " << inferenceComp->shouldInference
+                  << std::endl;
     }
-    mgr->RegisterSystem<SDCPPSystem>();
 }
+
 
 const int MIN_Width = 380;
 

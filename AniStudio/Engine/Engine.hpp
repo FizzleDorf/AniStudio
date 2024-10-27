@@ -1,6 +1,7 @@
 #pragma once
 #include "Engine.hpp"
 #include "Gui/Guis.h"
+#include "ECS.h"
 #include "pch.h" // Ensure this includes necessary definitions
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
@@ -28,7 +29,6 @@ public:
     void Update();
     void Draw();
     void Quit();
-    ECS::EntityManager *GetManager() { return &mgr; };
 
     inline bool Run() const { return run; }
     inline GLFWwindow &Window() { return *window; }
@@ -40,7 +40,7 @@ private:
     GLFWwindow *window;
     int videoWidth;
     int videoHeight;
-    ECS::EntityManager &mgr;
+    ECS::EntityManager &mgr = ECS::EntityManager::Ref();
 };
 
 void WindowCloseCallback(GLFWwindow *window);

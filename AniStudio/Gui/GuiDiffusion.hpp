@@ -1,9 +1,7 @@
 #pragma once
 #include "../Engine/Engine.hpp"
-#include "SDCPPComponents.h"
-#include "InferenceQueue.hpp"
+#include "ECS.h"
 #include "pch.h"
-#include "ImageComponent.hpp"
 
 using namespace ECS;
 
@@ -21,7 +19,7 @@ public:
         if (promptComp)
             delete promptComp;
     }
-    void SetECS(EntityManager *newMgr) { mgr = newMgr; }
+
     void StartGui();
     void RenderCKPTLoader();
     void RenderLatents();
@@ -46,7 +44,7 @@ private:
     SamplerComponent *samplerComp = nullptr;
     InferenceComponent *inferenceComp = nullptr;
     // ECS-related variables
-    EntityManager *mgr = nullptr;
+    EntityManager &mgr = ECS::EntityManager::Ref();
 
     EntityID t2IEntity;
     EntityID i2IEntity;

@@ -12,8 +12,8 @@ namespace ECS {
         // Delete copy and move constructors and assignment operators
         EntityManager(const EntityManager &) = delete;
         EntityManager &operator=(const EntityManager &) = delete;
-        //EntityManager(EntityManager &&) = delete;
-        //EntityManager &operator=(EntityManager &&) = delete;
+        EntityManager(EntityManager &&) = delete;
+        EntityManager &operator=(EntityManager &&) = delete;
 
         // Singleton accessor
         static EntityManager &Ref() {
