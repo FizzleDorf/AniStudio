@@ -33,6 +33,7 @@ ANI::Engine::~Engine() {
 
 void ANI::Engine::Init() {
 
+
     mgr.RegisterSystem<SDCPPSystem>();
 
     diffusionView.StartGui();
