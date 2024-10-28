@@ -56,6 +56,7 @@ void GuiDiffusion::StartGui() {
     mgr.AddComponent<InferenceComponent>(t2IEntity);
     if (mgr.HasComponent<InferenceComponent>(t2IEntity)) {
         inferenceComp = &mgr.GetComponent<InferenceComponent>(t2IEntity);
+        inferenceComp->shouldInference = true;
         std::cout << "t2IEntity has InferenceComponent with inference set to: " << inferenceComp->shouldInference
                   << std::endl;
     }

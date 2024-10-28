@@ -34,7 +34,7 @@ namespace ECS {
 
 		void Render() {
 			for (auto& system : registeredSystems) {
-				system.second->Update();
+				system.second->Render();
 			}
 		}
 

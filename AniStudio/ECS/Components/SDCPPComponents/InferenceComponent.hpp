@@ -20,7 +20,7 @@ struct Image {
 
 struct InferenceComponent : public ECS::BaseComponent {
 
-    bool shouldInference = true;
+    bool shouldInference = false;
 
     const char *model_path = "D:/Stable Diffusion/models/checkpoints/based66_v30.safetensors";
     const char *txxl_path = "";
