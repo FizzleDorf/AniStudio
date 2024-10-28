@@ -4,6 +4,3 @@
 [submodule "ImStudio"]
 	path = ImStudio
 	url = https://github.com/Raais/ImStudio.git
-[submodule "external/stable-diffusion.cpp"]
-	path = external/stable-diffusion.cpp
-	url = https://github.com/leejet/stable-diffusion.cpp.git
