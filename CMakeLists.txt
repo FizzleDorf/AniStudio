@@ -14,45 +14,6 @@ project(AniStudio CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 
-# Set PCH file
-set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
-
-find_package(Vulkan REQUIRED)
-# Check if Vulkan was found
-if (Vulkan_FOUND)
-    message(STATUS "Found Vulkan, include: ${Vulkan_INCLUDE_DIR}, library: ${Vulkan_LIBRARY}")
-else()
-    message(FATAL_ERROR "Vulkan not found")
-endif()
-
-find_package(glfw3 REQUIRED)
-# Check if glfw was found
-if (glfw3_FOUND)
-    message(STATUS "Found glfw3, include: ${glfw3_INCLUDE_DIR}, library: ${glfw3_LIBRARY}")
-else()
-    message(FATAL_ERROR "glfw3 not found")
-endif()
-
-find_package(OpenCV REQUIRED)
-# Check if opencv was found
-if (OpenCV_FOUND)
-    message(STATUS "Found OpenCV, include: ${OpenCV_INCLUDE_DIRS}, library: ${OpenCV_LIBS}")
-else()
-    message(FATAL_ERROR "OpenCV not found")
-endif()
-
-# Set CURL options
-# set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
-# set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
-# set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
-# set(HTTP_ONLY ON CACHE BOOL "" FORCE)
-# set(CURL_ZLIB OFF CACHE BOOL "" FORCE) 
-
-# set cpr options
-# set(CPR_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-# set(CPR_ENABLE_SSL OFF CACHE BOOL "" FORCE)
-# set(CPR_ENABLE_SANITIZERS OFF CACHE BOOL "" FORCE)
-
 # Define options for stable diffusion
 # general
 option(ANI_CUBLAS                     "sd: cuda backend" ON)
@@ -62,7 +23,7 @@ option(ANI_VULKAN                     "sd: vulkan backend" OFF)
 option(ANI_SYCL                       "sd: sycl backend" OFF)
 option(ANI_FLASH_ATTN                 "sd: use flash attention for x4 less memory usage" ON)
 option(ANI_FAST_SOFTMAX               "sd: x1.5 faster softmax, indeterministic (sometimes, same seed don't generate same image), cuda only" OFF)
-option(ANI_BUILD_SHARED_LIBS          "sd: build shared libs" ON)
+option(ANI_BUILD_SHARED_LIBS          "sd: build shared libs" OFF)
 #option(SD_BUILD_SERVER               "sd: build server example"                           ON)
 
 if(ANI_CUBLAS)
@@ -93,14 +54,41 @@ if(ANI_FLASH_ATTN)
     set(SD_FLASH_ATTN ON)
 endif()
 
+# Set PCH file
+set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
+
+find_package(Vulkan REQUIRED)
+# Check if Vulkan was found
+if (Vulkan_FOUND)
+    message(STATUS "Found Vulkan, include: ${Vulkan_INCLUDE_DIR}, library: ${Vulkan_LIBRARY}")
+else()
+    message(FATAL_ERROR "Vulkan not found")
+endif()
+
+find_package(glfw3 REQUIRED)
+# Check if glfw was found
+if (glfw3_FOUND)
+    message(STATUS "Found glfw3, include: ${glfw3_INCLUDE_DIR}, library: ${glfw3_LIBRARY}")
+else()
+    message(FATAL_ERROR "glfw3 not found")
+endif()
+
+find_package(OpenCV REQUIRED)
+# Check if opencv was found
+if (OpenCV_FOUND)
+    message(STATUS "Found OpenCV, include: ${OpenCV_INCLUDE_DIRS}, library: ${OpenCV_LIBS}")
+else()
+    message(FATAL_ERROR "OpenCV not found")
+endif()
+
 # Add external libraries
+add_subdirectory(external/stable-diffusion.cpp)
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
 # add_subdirectory(external/Vulkan-Hpp)
 add_subdirectory(external/stb_image)
 add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)
-add_subdirectory(external/sdcpp)
 
 # Find GLSL validator
 find_program(GLSL_VALIDATOR glslangValidator HINTS 
@@ -129,6 +117,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/AniStudio/backends
 
     ${CMAKE_SOURCE_DIR}/external/glm
+    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
     ${CMAKE_SOURCE_DIR}/external/imgui
     ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
@@ -136,7 +125,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/external/vkbootstrap
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
-    ${CMAKE_SOURCE_DIR}/external/Vulkan-Headers/include
+    # ${CMAKE_SOURCE_DIR}/external/Vulkan-Headers/include
     # ${CMAKE_SOURCE_DIR}/external/cpr/include
 
     ${glfw3_INCLUDE_DIR}
@@ -168,8 +157,6 @@ add_executable(${PROJECT_NAME}
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_vulkan.cpp
 
     ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
-
-    # ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/SDCPPSystem/SDCPPSystem.cpp
 
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}

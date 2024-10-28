@@ -71,6 +71,7 @@ public:
         sd_ctx_t *sd_context =
             new_sd_ctx("D:/Stable Diffusion/models/checkpoints/based66_v30.safetensors", // model_path
                                       "",                          // clip_l_path
+                                      "",
                                       "",                          // t5xxl_path
                                       "",                          // diffusion_model_path
                                       "",                          // vae_path

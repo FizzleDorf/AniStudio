@@ -1,9 +1,9 @@
-[submodule "external/sdcpp"]
-	path = external/sdcpp
-	url = https://github.com/leejet/stable-diffusion.cpp.git
 [submodule "external/cpr"]
 	path = external/cpr
 	url = https://github.com/libcpr/cpr.git
 [submodule "ImStudio"]
 	path = ImStudio
 	url = https://github.com/Raais/ImStudio.git
+[submodule "external/stable-diffusion.cpp"]
+	path = external/stable-diffusion.cpp
+	url = https://github.com/leejet/stable-diffusion.cpp.git
