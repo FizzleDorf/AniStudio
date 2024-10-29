@@ -14,6 +14,17 @@ project(AniStudio CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 
+# Set options for stable-diffusion
+set(SD_BUILD_EXAMPLES OFF CACHE BOOL "sd: build examples")
+set(SD_CUBLAS OFF CACHE BOOL "sd: cuda backend")
+set(SD_HIPBLAS OFF CACHE BOOL "sd: rocm backend")
+set(SD_METAL OFF CACHE BOOL "sd: metal backend")
+set(SD_VULKAN OFF CACHE BOOL "sd: vulkan backend")
+set(SD_SYCL OFF CACHE BOOL "sd: sycl backend")
+set(SD_FLASH_ATTN OFF CACHE BOOL "sd: use flash attention for x4 less memory usage")
+set(SD_FAST_SOFTMAX OFF CACHE BOOL "sd: x1.5 faster softmax, indeterministic")
+set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "sd: build shared libs")
+
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
 
@@ -42,7 +53,7 @@ else()
 endif()
 
 # Add external libraries
-add_subdirectory(external)
+add_subdirectory(external/stable-diffusion.cpp)
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
 # add_subdirectory(external/Vulkan-Hpp)
@@ -132,6 +143,7 @@ immvision_find_opencv()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    stable-diffusion
     ImGui
     ImGui_Nodes
     stb_image
@@ -143,7 +155,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${OpenCV_LIBS}
     # ZLIB::ZLIB
     ${glfw3_LIBRARIES}
-    stable-diffusion
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
