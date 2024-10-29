@@ -1,16 +1,19 @@
 #pragma once
-#include "Engine/Engine.hpp"
-#include <GLFW/glfw3.h> // Assuming you're using GLFW for window handling
+#include "ECS.h"
+#include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>
+
+namespace ANI {
+
+class Engine; // Forward declaration of Engine
 
 enum class EventType { InferenceRequest };
 
 struct Event {
     EventType type;
+    EntityID entityID;
 };
-
-namespace ANI {
 
 class Events {
 public:
@@ -20,8 +23,8 @@ public:
 
     // Singleton reference
     static Events &Ref() {
-        static Events reference;
-        return reference;
+        static Events instance; // Changed reference to instance for clarity
+        return instance;
     }
 
     void Poll();
@@ -34,7 +37,9 @@ private:
     std::queue<Event> eventQueue;
 
     // Static callback function for GLFW window close
-    static void WindowCloseCallback(GLFWwindow *window) { ANI::Core.Quit(); }
+    static void WindowCloseCallback(GLFWwindow *window) {
+        ANI::Engine::Ref().Quit();
+    }
 };
 
 } // namespace ANI

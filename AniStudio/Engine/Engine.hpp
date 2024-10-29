@@ -1,8 +1,7 @@
 #pragma once
-#include "Engine.hpp"
-#include "Gui/Guis.h"
 #include "ECS.h"
-#include "pch.h" // Ensure this includes necessary definitions
+#include "Gui/Guis.h"
+#include "pch.h"
 
 #if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
 #pragma comment(lib, "legacy_stdio_definitions")
@@ -34,6 +33,7 @@ public:
     inline GLFWwindow &Window() { return *window; }
     inline int VideoWidth() const { return videoWidth; }
     inline int VideoHeight() const { return videoHeight; }
+
 private:
     Engine();
     bool run;

@@ -1,8 +1,9 @@
 #pragma once
-#include "../../../Engine/Engine.hpp"
+
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
+#include "../../../Engine/Engine.hpp"
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -43,32 +44,12 @@ public:
             sd_set_log_callback(LogCallback, nullptr);
             sd_set_progress_callback(ProgressCallback, nullptr);
 
-            inferenceComp = &mgr.GetComponent<InferenceComponent>(entityID);
+            InferenceComponent *inferenceComp = &mgr.GetComponent<InferenceComponent>(entityID);
             if (!inferenceComp) {
                 std::cerr << "Error: InferenceComponent is null for entity ID: " << entityID << std::endl;
                 return;
             }
 
-            // Log parameter values to diagnose potential issues
-            std::cout << "Starting inference" << std::endl;
-            /*std::cout << "  Model path: " << inferenceComp->model_path << std::endl;
-            std::cout << "  CLIP path: " << inferenceComp->clip_l_path << std::endl;
-            std::cout << "  T5XXL path: " << inferenceComp->txxl_path << std::endl;
-            std::cout << "  Diffusion model path: " << inferenceComp->diffusion_model_path << std::endl;
-            std::cout << "  VAE path: " << inferenceComp->vae_path << std::endl;
-            std::cout << "  Control Net path: " << inferenceComp->control_net_path << std::endl;
-            std::cout << "  LORA model dir: " << inferenceComp->lora_model_dir << std::endl;
-            std::cout << "  Embed dir: " << inferenceComp->embed_dir << std::endl;
-            std::cout << "  ID Embed dir: " << inferenceComp->stacked_id_embed_dir_c_str << std::endl;
-            std::cout << "  Threads: " << inferenceComp->n_threads << std::endl;
-            std::cout << "  Width type: " << inferenceComp->wtype << std::endl;
-            std::cout << "  RNG type: " << inferenceComp->rng_type << std::endl;
-            std::cout << "  Schedule: " << inferenceComp->schedule << std::endl;
-            std::cout << "  Keep CLIP on CPU: " << inferenceComp->keep_clip_on_cpu << std::endl;
-            std::cout << "  Keep ControlNet on CPU: " << inferenceComp->keep_control_net_cpu << std::endl;
-            std::cout << "  Keep VAE on CPU: " << inferenceComp->keep_vae_on_cpu << std::endl;*/
-
-            // Continue with the Stable Diffusion context creation and inference process
             sd_ctx_t *sd_context =
                 new_sd_ctx("D:/Stable Diffusion/models/checkpoints/based66_v30.safetensors", // model_path
                            "",                                                               // clip_l_path
@@ -123,26 +104,23 @@ public:
         });
         inferenceThread.detach();
     }
-
+    
     void Update() override {
-        // Get all entities from the EntityManager
-        const auto &entitySignatures = mgr.GetEntitiesSignatures();
-        for (const auto &[entityID, signature] : entitySignatures) {
-            // Check if the entity has an InferenceComponent
-            if (mgr.HasComponent<InferenceComponent>(entityID)) {
-                inferenceComp = &mgr.GetComponent<InferenceComponent>(entityID);
+    if (!inferenceQueue.empty()) {
+        EntityID entityID = inferenceQueue.front();
+        inferenceQueue.pop();
+        std::cout << "Dequeuing entity for inference, ID: " << entityID << std::endl;
+        Inference(entityID);
+    }
+}
 
-                if (inferenceComp->shouldInference) {
-                    Inference(entityID);
-                    inferenceComp->shouldInference = false; // Reset the flag after processing
-                }
-            }
-        }
+    void QueueInference(EntityID entityID) {
+        std::cout << "Entity Queued for inference." << std::endl;
+        inferenceQueue.push(entityID);
     }
 
 private:
-    // Private member variables
-    InferenceComponent *inferenceComp = nullptr;
     EntityManager &mgr = ECS::EntityManager::Ref();
+    std::queue<EntityID> inferenceQueue; // Queue to hold entity IDs for inference
 };
 } // namespace ECS

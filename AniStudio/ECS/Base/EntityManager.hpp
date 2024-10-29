@@ -124,6 +124,16 @@ namespace ECS {
 			registeredSystems.erase(systemType);
 		}
 
+        template <typename T>
+        std::shared_ptr<T> GetSystem() {
+            const SystemTypeID systemType = SystemType<T>();
+            auto it = registeredSystems.find(systemType);
+            if (it != registeredSystems.end()) {
+                return std::static_pointer_cast<T>(it->second);
+            }
+            return nullptr;
+        }
+
 		// Getters for private variables
 		EntityID GetEntityCount() const { return entityCount; }
 		std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }

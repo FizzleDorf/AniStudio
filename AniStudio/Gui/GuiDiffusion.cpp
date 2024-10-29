@@ -2,10 +2,10 @@
 #include "stable-diffusion.h"
 #include "ECS.h"
 #include "../Engine/Engine.hpp"
+#include "../Events/Events.hpp"
 
 using namespace ECS;
-ImageComponent test;
-ImageView imageView = ImageView(&test);
+using namespace ANI;
 
 char PosBuffer[9999] = "";
 char NegBuffer[9999] = "";
@@ -61,7 +61,6 @@ void GuiDiffusion::StartGui() {
                   << std::endl;
     }
 }
-
 
 const int MIN_Width = 380;
 
@@ -198,7 +197,7 @@ void GuiDiffusion::RenderPrompts() {
 
 void GuiDiffusion::Render() {
     if (ImGui::Begin("Image Generation")) {
-
+        Queue();
         if (ImGui::CollapsingHeader("Ckpt Loader"))
             RenderCKPTLoader();
         if (ImGui::CollapsingHeader("Input Latent"))
@@ -210,6 +209,19 @@ void GuiDiffusion::Render() {
             RenderSampler();
     }
     ImGui::End();
+}
 
-    imageView.Render(); // Render the ImageView
+void GuiDiffusion::Queue() {
+    ImGui::BeginChild(5, ImVec2(MIN_Width, 86), true);
+
+    if (ImGui::Button("Queue")) {
+        std::cout << "Event dispatched." << std::endl;
+        Event event;
+        event.entityID = t2IEntity;
+        event.type = EventType::InferenceRequest;
+        ANI::Events::Ref().QueueEvent(event);
+        std::cout << "Event is sent." << std::endl;
+    }
+
+    ImGui::EndChild();
 }

@@ -1,4 +1,5 @@
 #include "Engine.hpp"
+#include "../Events/Events.hpp"
 #include "vk_helper.h"
 using namespace ECS;
 
@@ -12,11 +13,11 @@ Engine &Core = Engine::Ref();
 
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
-ANI::Engine::Engine()
-    : mgr(ECS::EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
+Engine::Engine()
+    : mgr(EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
 }
 
-ANI::Engine::~Engine() {
+Engine::~Engine() {
     // Cleanup Vulkan and ImGui
     VkResult err = vkDeviceWaitIdle(g_Device);
     check_vk_result(err);
@@ -31,8 +32,9 @@ ANI::Engine::~Engine() {
     glfwTerminate();
 }
 
-void ANI::Engine::Init() {
+void Engine::Init() {
 
+    Events::Ref().Init(window);
 
     mgr.RegisterSystem<SDCPPSystem>();
 
@@ -136,11 +138,9 @@ void ANI::Engine::Init() {
     // io.Fonts->GetGlyphRangesJapanese()); IM_ASSERT(font != nullptr);
 }
 
-void ANI::Engine::Update() {
+void Engine::Update() {
+    Events::Ref().Poll();
     mgr.Update();
-
-    // Poll and handle events (inputs, window resize, etc.)
-    glfwPollEvents();
 
     // Resize swap chain if needed
     int fb_width, fb_height;
@@ -204,5 +204,8 @@ void ANI::Engine::Update() {
     glfwSwapBuffers(window);
 }
 
-void ANI::Engine::Quit() { run = false; }
+void Engine::Draw() {}
+
+void Engine::Quit() { run = false; }
+
 } // namespace ANI
