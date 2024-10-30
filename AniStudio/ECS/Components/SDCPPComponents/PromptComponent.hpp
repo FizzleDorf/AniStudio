@@ -8,5 +8,7 @@ namespace ECS {
 struct PromptComponent : public ECS::BaseComponent {
     std::string posPrompt = "Positive";
     std::string negPrompt = "Negative";
+    char PosBuffer[9999] = "";
+    char NegBuffer[9999] = "";
 };
 }

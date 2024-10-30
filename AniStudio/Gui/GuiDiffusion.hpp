@@ -26,8 +26,10 @@ public:
     void RenderInputImage();
     void RenderSampler();
     void RenderPrompts();
-    void Queue();
+    void RenderQueue();
     void Render();
+
+    void HandleQueueEvent();
 
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);
@@ -46,6 +48,6 @@ private:
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
 
-    EntityID t2IEntity;
+    EntityID entity;
     EntityID i2IEntity;
 };
