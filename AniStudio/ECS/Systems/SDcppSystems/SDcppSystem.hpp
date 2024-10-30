@@ -40,6 +40,12 @@ public:
     void Start() override {}
 
     void Inference(EntityID entityID) {
+        if (inferenceRunning.load()) {
+            std::cout << "Inference is already running; skipping this request." << std::endl;
+            return;
+        }
+
+        inferenceRunning.store(true);
         std::thread inferenceThread([this, entityID]() {
             sd_set_log_callback(LogCallback, nullptr);
             sd_set_progress_callback(ProgressCallback, nullptr);
@@ -47,6 +53,7 @@ public:
             InferenceComponent *inferenceComp = &mgr.GetComponent<InferenceComponent>(entityID);
             if (!inferenceComp) {
                 std::cerr << "Error: InferenceComponent is null for entity ID: " << entityID << std::endl;
+                inferenceRunning.store(false);
                 return;
             }
 
@@ -94,6 +101,7 @@ public:
             if (!sd_context) {
                 std::cerr << "Failed to initialize Stable Diffusion context! Please check paths and parameters."
                           << std::endl;
+                inferenceRunning.store(false);
                 return;
             }
 
@@ -101,18 +109,19 @@ public:
 
             // Perform inference as needed...
             free_sd_ctx(sd_context); // Clean up resources
+            inferenceRunning.store(false);
         });
         inferenceThread.detach();
     }
     
     void Update() override {
-    if (!inferenceQueue.empty()) {
-        EntityID entityID = inferenceQueue.front();
-        inferenceQueue.pop();
-        std::cout << "Dequeuing entity for inference, ID: " << entityID << std::endl;
-        Inference(entityID);
+        if (!inferenceRunning.load() && !inferenceQueue.empty()) {
+            EntityID entityID = inferenceQueue.front();
+            inferenceQueue.pop();
+            std::cout << "Dequeuing entity for inference, ID: " << entityID << std::endl;
+            Inference(entityID);
+        }
     }
-}
 
     void QueueInference(EntityID entityID) {
         std::cout << "Entity Queued for inference." << std::endl;
@@ -122,5 +131,6 @@ public:
 private:
     EntityManager &mgr = ECS::EntityManager::Ref();
     std::queue<EntityID> inferenceQueue; // Queue to hold entity IDs for inference
+    std::atomic<bool> inferenceRunning{false}; // Atomic flag to track if inference is running
 };
 } // namespace ECS
