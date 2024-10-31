@@ -45,6 +45,7 @@ private:
     PromptComponent *promptComp = nullptr;
     SamplerComponent *samplerComp = nullptr;
     InferenceComponent *inferenceComp = nullptr;
+    ImageComponent *imageComp = nullptr;
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
 

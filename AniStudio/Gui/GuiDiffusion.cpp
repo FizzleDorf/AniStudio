@@ -51,9 +51,12 @@ void GuiDiffusion::StartGui() {
     mgr.AddComponent<InferenceComponent>(entity);
     if (mgr.HasComponent<InferenceComponent>(entity)) {
         inferenceComp = &mgr.GetComponent<InferenceComponent>(entity);
-        inferenceComp->shouldInference = true;
-        std::cout << "entity has InferenceComponent with inference set to: " << inferenceComp->shouldInference
-                  << std::endl;
+        std::cout << "entity has InferenceComponent" << std::endl;
+    }
+    mgr.AddComponent<ImageComponent>(entity);
+    if (mgr.HasComponent<ImageComponent>(entity)) {
+        imageComp = &mgr.GetComponent<ImageComponent>(entity);
+        std::cout << "entity has ImageComponent" << std::endl;
     }
 }
 

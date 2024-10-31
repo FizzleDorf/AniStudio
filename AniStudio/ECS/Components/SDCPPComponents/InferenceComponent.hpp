@@ -11,13 +11,6 @@ using namespace ECS;
 
 namespace ECS {
 
-struct Image {
-    unsigned char *data;
-    int width;
-    int height;
-    int channel;
-};
-
 struct InferenceComponent : public ECS::BaseComponent {
 
     bool shouldInference = false;
