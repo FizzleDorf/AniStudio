@@ -22,17 +22,17 @@ struct InferenceComponent : public ECS::BaseComponent {
 
     bool shouldInference = false;
 
-    const char *model_path = "D:/Stable Diffusion/models/checkpoints/based66_v30.safetensors";
-    const char *txxl_path = "";
-    const char *clip_l_path = "";
-    const char *clip_g_path = "";
-    const char *diffusion_model_path = "";
-    const char *vae_path = "D:/Stable Diffusion/models/vae/vae-ft-mse-840000-ema-pruned.ckpt";
-    const char *control_net_path = "";
-    const char *lora_model_dir = "";
-    const char *embed_dir = "";
-    const char *taesd_path = "";
-    const char *stacked_id_embed_dir_c_str = "";
+    std::string model_path = "D:/Stable Diffusion/models/checkpoints/based66_v30.safetensors";
+    std::string txxl_path = "";
+    std::string clip_l_path = "";
+    std::string clip_g_path = "";
+    std::string diffusion_model_path = "";
+    std::string vae_path = "D:/Stable Diffusion/models/vae/vae-ft-mse-840000-ema-pruned.ckpt";
+    std::string control_net_path = "";
+    std::string lora_model_dir = "";
+    std::string embed_dir = "";
+    std::string taesd_path = "";
+    std::string stacked_id_embed_dir = "";
 
     std::string outputPath = "./AniStudio.png";
 
