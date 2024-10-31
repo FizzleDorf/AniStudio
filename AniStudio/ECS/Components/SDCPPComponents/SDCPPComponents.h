@@ -7,6 +7,7 @@
 #include "SamplerComponent.hpp"
 
 // Models
+#include "Models/ModelComponent.hpp"
 #include "Models/DiffusionModelComponent.hpp"
 #include "Models/EsrganComponent.hpp"
 #include "Models/LoraComponent.hpp"
