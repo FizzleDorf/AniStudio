@@ -65,11 +65,11 @@ namespace ECS {
 		template<typename T, typename... Args>
 		void AddComponent(const EntityID entity, Args&&... args) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			assert(GetEnitiySignature(entity)->size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
+			assert(GetEntitiySignature(entity)->size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
 
 			T component(std::forward<Args>(args)...);
 			component.entityID = entity;
-			GetEnitiySignature(entity)->insert(CompType<T>());
+			GetEntitiySignature(entity)->insert(CompType<T>());
 			GetCompList<T>()->Insert(component);
 			UpdateEntityTargetSystem(entity);
 		}
@@ -161,7 +161,7 @@ namespace ECS {
 			entitiesSignatures[entity] = std::move(std::make_shared<EntitySignature>());
 		}
 
-		std::shared_ptr<EntitySignature> GetEnitiySignature(const EntityID entity) {
+		std::shared_ptr<EntitySignature> GetEntitiySignature(const EntityID entity) {
 			assert(entitiesSignatures.find(entity) != entitiesSignatures.end() && "Signature Not Found");
 			return entitiesSignatures.at(entity);
 		}
@@ -183,7 +183,7 @@ namespace ECS {
 
 		bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature) {
 			for (const auto compType : system_signature) {
-				if (GetEnitiySignature(entity)->count(compType) == 0) {
+				if (GetEntitiySignature(entity)->count(compType) == 0) {
 					return false;
 				}
 			}
