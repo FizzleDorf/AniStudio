@@ -5,7 +5,7 @@
 
 namespace ECS {
 struct T5XXLComponent : public ECS::BaseComponent {
-    std::string encoderPath = "path/to/model";
+    std::string encoderPath = "";
     std::string encoderName = "model.gguf";
     bool isEncoderLoaded = false;
 };

@@ -5,7 +5,7 @@
 
 namespace ECS {
 struct DiffusionModelComponent : public ECS::BaseComponent {
-    std::string ckptPath = "path/to/model";
+    std::string ckptPath = "";
     std::string ckptName = "model.gguf";
     bool isCkptLoaded = false;
 };

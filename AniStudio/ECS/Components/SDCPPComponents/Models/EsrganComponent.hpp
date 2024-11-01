@@ -5,7 +5,7 @@
 
 namespace ECS {
 struct EsrganComponent : public ECS::BaseComponent {
-    std::string modelPath = "path/to/model";
+    std::string modelPath = "";
     std::string modelName = "model.gguf";
     bool isEsrganLoaded = false;
 };

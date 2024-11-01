@@ -5,7 +5,7 @@
 
 namespace ECS {
 struct CLipLComponent : public ECS::BaseComponent {
-    std::string encoderPath = "path/to/model";
+    std::string encoderPath = "";
     std::string encoderName = "model.gguf";
     bool isEncoderLoaded = false;
 };
