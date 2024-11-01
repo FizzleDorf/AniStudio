@@ -17,6 +17,8 @@
 #include <stdlib.h> 
 #include <future>
 #include <mutex>
+#include <atomic>
+#include <thread>
 
 // JSON
 #include <nlohmann/json.hpp>
