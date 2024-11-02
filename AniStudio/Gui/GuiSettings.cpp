@@ -69,7 +69,7 @@ extern BoolOption boolOptions[] = {
 
 void GuiSettings::Render() {
     if (viewState.showSettingsView) {
-        ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(700, 400), ImGuiCond_FirstUseEver);
         ImGui::Begin("Settings");
 
         if (ImGui::BeginTabBar("Startup Options"))

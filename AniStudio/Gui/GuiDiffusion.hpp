@@ -12,12 +12,18 @@ public:
         delete latentComp;
         delete samplerComp;
 
+        if (modelComp)
+            delete modelComp;
         if (ckptComp)
             delete ckptComp;
-        if (ckptComp)
-            delete modelComp;
         if (loraComp)
             delete loraComp;
+        if (clipLComp)
+            delete clipLComp;
+        if (clipGComp)
+            delete clipGComp;
+        if (t5xxlComp)
+            delete t5xxlComp;  
         if (promptComp)
             delete promptComp;
     }
@@ -41,14 +47,17 @@ public:
 private:
     // Variables to handle the parameters for diffusion
     ModelComponent *modelComp = nullptr;
+    CLipLComponent *clipLComp = nullptr;
+    CLipGComponent *clipGComp = nullptr;
+    T5XXLComponent *t5xxlComp = nullptr;
     DiffusionModelComponent *ckptComp = nullptr;
     LatentComponent *latentComp = nullptr;
     LoraComponent *loraComp = nullptr;
     PromptComponent *promptComp = nullptr;
     SamplerComponent *samplerComp = nullptr;
     CFGComponent *cfgComp = nullptr;
-    InferenceComponent *inferenceComp = nullptr;
     ImageComponent *imageComp = nullptr;
+    
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
 

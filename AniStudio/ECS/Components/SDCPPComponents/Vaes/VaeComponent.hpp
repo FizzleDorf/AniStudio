@@ -1,9 +1,13 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "stable-diffusion.h"
+#include <string>
 
 namespace ECS {
-struct VaeComponent : public ECS::BaseComponent {};
-
-}
+struct VaeComponent : public ECS::BaseComponent {
+    std::string vaePath = "";
+    std::string vaeName = "model.gguf";
+    bool isEncoderLoaded = false;
+    bool isTiled = false;
+};
+} // namespace ECS

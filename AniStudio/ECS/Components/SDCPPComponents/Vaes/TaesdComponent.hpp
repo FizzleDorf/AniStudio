@@ -5,7 +5,7 @@
 
 namespace ECS {
 struct TaesdComponent : public ECS::BaseComponent {
-    std::string taesdPath = "path/to/model";
+    std::string taesdPath = "";
     std::string taesdName = "model.gguf";
     bool isEncoderLoaded = false;
 };

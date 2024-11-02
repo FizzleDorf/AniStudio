@@ -8,62 +8,42 @@ using namespace ECS;
 using namespace ANI;
 
 void GuiDiffusion::StartGui() {
+    
+    // Add a new Entity
     entity = mgr.AddNewEntity();
     std::cout << "Initialized entity with ID: " << entity << std::endl;
 
+    // Add components to the Entity Manager
     mgr.AddComponent<ModelComponent>(entity);
-    if (mgr.HasComponent<ModelComponent>(entity)) {
-        modelComp = &mgr.GetComponent<ModelComponent>(entity);
-        std::cout << "entity has ModelComponent with model path: " << modelComp->modelPath << std::endl;
-    }
-
-    mgr.AddComponent<CFGComponent>(entity);
-    if (mgr.HasComponent<CFGComponent>(entity)) {
-        cfgComp = &mgr.GetComponent<CFGComponent>(entity);
-        std::cout << "entity has CFGComponent with value: " << cfgComp->cfg << std::endl;
-    }
+    mgr.AddComponent<CLipLComponent>(entity);
+    mgr.AddComponent<CLipGComponent>(entity);
+    mgr.AddComponent<T5XXLComponent>(entity);
     mgr.AddComponent<DiffusionModelComponent>(entity);
-    if (mgr.HasComponent<DiffusionModelComponent>(entity)) {
-        ckptComp = &mgr.GetComponent<DiffusionModelComponent>(entity);
-        std::cout << "entity has DiffusionModelComponent with model path: " << ckptComp->ckptPath << std::endl;
-    }
-    mgr.AddComponent<LatentComponent>(entity);
-    if (mgr.HasComponent<LatentComponent>(entity)) {
-        latentComp = &mgr.GetComponent<LatentComponent>(entity);
-        std::cout << "entity has LatentComponent with Width: " << latentComp->latentWidth
-                  << ", Height: " << latentComp->latentHeight << std::endl;
-    }
+    mgr.AddComponent<VaeComponent>(entity);
     mgr.AddComponent<LoraComponent>(entity);
-    if (mgr.HasComponent<LoraComponent>(entity)) {
-        loraComp = &mgr.GetComponent<LoraComponent>(entity);
-        std::cout << "entity has LoraComponent with Strength: " << loraComp->loraStrength
-                  << ", Clip Strength: " << loraComp->loraClipStrength << ", Lora Reference: " << loraComp->loraPath
-                  << std::endl;
-    }
-    mgr.AddComponent<PromptComponent>(entity);
-    if (mgr.HasComponent<PromptComponent>(entity)) {
-        promptComp = &mgr.GetComponent<PromptComponent>(entity);
-        std::cout << "entity has PromptComponent with Positive Prompt: " << promptComp->posPrompt
-                  << ", Negative Prompt: " << promptComp->negPrompt << std::endl;
-    }
-    mgr.AddComponent<SamplerComponent>(entity);
-    if (mgr.HasComponent<SamplerComponent>(entity)) {
-        samplerComp = &mgr.GetComponent<SamplerComponent>(entity);
-        std::cout << "entity has SamplerComponent with Steps: " << samplerComp->steps
-                  << ", Scheduler: " << samplerComp->scheduler_method_items[samplerComp->current_scheduler_method]
-                  << ", Sampler: " << samplerComp->sample_method_items[samplerComp->current_sample_method]
-                  << ", Denoise: " << samplerComp->denoise << std::endl;
-    }
-    mgr.AddComponent<InferenceComponent>(entity);
-    if (mgr.HasComponent<InferenceComponent>(entity)) {
-        inferenceComp = &mgr.GetComponent<InferenceComponent>(entity);
-        std::cout << "entity has InferenceComponent" << std::endl;
-    }
+
+    mgr.AddComponent<LatentComponent>(entity);
     mgr.AddComponent<ImageComponent>(entity);
-    if (mgr.HasComponent<ImageComponent>(entity)) {
-        imageComp = &mgr.GetComponent<ImageComponent>(entity);
-        std::cout << "entity has ImageComponent" << std::endl;
-    }
+
+    mgr.AddComponent<SamplerComponent>(entity);
+    mgr.AddComponent<CFGComponent>(entity);
+    mgr.AddComponent<PromptComponent>(entity);
+
+    // Set the Gui's pointers
+    modelComp = &mgr.GetComponent<ModelComponent>(entity);
+    clipLComp = &mgr.GetComponent<CLipLComponent>(entity);
+    clipGComp = &mgr.GetComponent<CLipGComponent>(entity);
+    t5xxlComp = &mgr.GetComponent<T5XXLComponent>(entity);
+    ckptComp = &mgr.GetComponent<DiffusionModelComponent>(entity);
+    loraComp = &mgr.GetComponent<LoraComponent>(entity);
+
+    latentComp = &mgr.GetComponent<LatentComponent>(entity);
+    imageComp = &mgr.GetComponent<ImageComponent>(entity);
+
+    promptComp = &mgr.GetComponent<PromptComponent>(entity);
+    samplerComp = &mgr.GetComponent<SamplerComponent>(entity);
+    cfgComp = &mgr.GetComponent<CFGComponent>(entity);
+
 }
 
 void GuiDiffusion::RenderCKPTLoader() {
@@ -81,7 +61,7 @@ void GuiDiffusion::RenderCKPTLoader() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             modelComp->modelName = ImGuiFileDialog::Instance()->GetCurrentFileName();
             modelComp->modelPath = ImGuiFileDialog::Instance()->GetFilePathName();
-            std::cout << "New model path set: " << modelComp->modelName << std::endl;
+            std::cout << "New model path set: " << modelComp->modelPath << std::endl;
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -117,14 +97,41 @@ void GuiDiffusion::RenderSampler() {
 void GuiDiffusion::HandleQueueEvent() {
     Event event;
     EntityID tempEntity = mgr.AddNewEntity();
-    if (mgr.HasComponent<ModelComponent>(entity) && mgr.HasComponent<DiffusionModelComponent>(entity)) {
-
+    // TODO: add copy constructors to reduce this mess
+    if (mgr.HasComponent<ModelComponent>(entity) || mgr.HasComponent<ModelComponent>(entity)) {
         mgr.AddComponent<ModelComponent>(tempEntity);
-        mgr.GetComponent<ModelComponent>(tempEntity).modelPath = mgr.GetComponent<ModelComponent>(entity).modelPath;
-
+        mgr.AddComponent<CLipLComponent>(tempEntity);
+        mgr.AddComponent<CLipGComponent>(tempEntity);
+        mgr.AddComponent<T5XXLComponent>(tempEntity);
         mgr.AddComponent<DiffusionModelComponent>(tempEntity);
+        mgr.AddComponent<VaeComponent>(tempEntity);
+        //mgr.AddComponent<LoraComponent>(entity);
+
+        mgr.AddComponent<LatentComponent>(tempEntity);
+        mgr.AddComponent<ImageComponent>(tempEntity);
+
+        mgr.AddComponent<SamplerComponent>(tempEntity);
+        mgr.AddComponent<CFGComponent>(tempEntity);
+        mgr.AddComponent<PromptComponent>(tempEntity);
+
+
+        mgr.GetComponent<ModelComponent>(tempEntity).modelPath = modelComp->modelPath;
+        mgr.GetComponent<CLipLComponent>(tempEntity).encoderPath = clipLComp->encoderPath;
+        mgr.GetComponent<CLipGComponent>(tempEntity).encoderPath = clipGComp->encoderPath;
+        mgr.GetComponent<T5XXLComponent>(tempEntity).encoderPath = mgr.GetComponent<T5XXLComponent>(entity).encoderPath;
         mgr.GetComponent<DiffusionModelComponent>(tempEntity).ckptPath =
             mgr.GetComponent<DiffusionModelComponent>(entity).ckptPath;
+        mgr.GetComponent<VaeComponent>(tempEntity).vaePath = mgr.GetComponent<VaeComponent>(entity).vaePath;
+
+        mgr.GetComponent<SamplerComponent>(tempEntity).current_sample_method =
+            mgr.GetComponent<SamplerComponent>(entity).current_sample_method;
+        mgr.GetComponent<SamplerComponent>(tempEntity).current_scheduler_method =
+            mgr.GetComponent<SamplerComponent>(entity).current_scheduler_method;
+        mgr.GetComponent<SamplerComponent>(tempEntity).current_type_method =
+            mgr.GetComponent<SamplerComponent>(entity).current_type_method;
+        mgr.GetComponent<CFGComponent>(tempEntity).cfg = cfgComp->cfg;
+        mgr.GetComponent<PromptComponent>(tempEntity).posPrompt = mgr.GetComponent<PromptComponent>(entity).negPrompt;
+        
     } else {
         std::cerr << "ModelComponent and DiffusionModelComponent not found; Aborting Queuing Inference!" << std::endl;
         return;
@@ -144,8 +151,6 @@ void GuiDiffusion::RenderQueue() {
 void GuiDiffusion::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
-        ImGui::Text("Dock and arrange each window as needed:");
-
         RenderQueue();
         RenderCKPTLoader();
         RenderLatents();
