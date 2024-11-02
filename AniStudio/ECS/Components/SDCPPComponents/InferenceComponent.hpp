@@ -6,7 +6,7 @@ namespace ECS {
 
 struct InferenceComponent : public ECS::BaseComponent {
     // SD Context Params
-    std::string model_path = "";
+    std::string model_path = "D:/Stable Diffusion/models/checkpoints/based66_v30.safetensors";
     std::string txxl_path = "";
     std::string clip_l_path = "";
     std::string clip_g_path = "";

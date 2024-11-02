@@ -13,14 +13,14 @@ struct SamplerComponent : public ECS::BaseComponent {
     static constexpr const char *sample_method_items[] = {"Euler a",  "Euler",       "Heun",  "Dpm 2",   "Dpmpp 2 a",
                                                           "Dpmpp 2m", "Dpm++ 2m v2", "Ipndm", "Ipndm v", "Lcm"};
     static constexpr int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
-    int current_sample_method = sample_method_t::EULER;
+    sample_method_t current_sample_method = sample_method_t::EULER;
 
     // scheduler
     static constexpr const char *scheduler_method_items[] = {"Default", "Discrete", "Karras",     "Exponential",
                                                              "Ays",     "Gits",     "N schedules"};
     static constexpr int scheduler_method_item_count =
         sizeof(scheduler_method_items) / sizeof(scheduler_method_items[0]);
-    int current_scheduler_method = schedule_t::DEFAULT;
+    schedule_t current_scheduler_method = schedule_t::DEFAULT;
 
     // SD_Types
     static constexpr const char *type_method_items[] = {
@@ -32,7 +32,7 @@ struct SamplerComponent : public ECS::BaseComponent {
         "SD_TYPE_I64",      "SD_TYPE_F64",      "SD_TYPE_IQ1_M", "SD_TYPE_BF16",   "SD_TYPE_Q4_0_4_4",
         "SD_TYPE_Q4_0_4_8", "SD_TYPE_Q4_0_8_8", "SD_TYPE_COUNT"};
     static constexpr int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
-    int current_type_method = sd_type_t::SD_TYPE_F16;
+    sd_type_t current_type_method = sd_type_t::SD_TYPE_F16;
 
     SamplerComponent(int num_steps = 20, float denoise_value = 1.0f) : steps(num_steps), denoise(denoise_value) {}
 };

@@ -11,6 +11,12 @@ void GuiDiffusion::StartGui() {
     entity = mgr.AddNewEntity();
     std::cout << "Initialized entity with ID: " << entity << std::endl;
 
+    mgr.AddComponent<ModelComponent>(entity);
+    if (mgr.HasComponent<ModelComponent>(entity)) {
+        modelComp = &mgr.GetComponent<ModelComponent>(entity);
+        std::cout << "entity has ModelComponent with model path: " << modelComp->modelPath << std::endl;
+    }
+
     mgr.AddComponent<CFGComponent>(entity);
     if (mgr.HasComponent<CFGComponent>(entity)) {
         cfgComp = &mgr.GetComponent<CFGComponent>(entity);
@@ -62,7 +68,7 @@ void GuiDiffusion::StartGui() {
 
 void GuiDiffusion::RenderCKPTLoader() {
     ImGui::Text("Checkpoint:");
-    ImGui::Text("%s", ckptComp->ckptName.c_str());
+    ImGui::Text("%s", modelComp->modelName.c_str());
     ImGui::SameLine();
 
     if (ImGui::Button("...")) {
@@ -73,13 +79,13 @@ void GuiDiffusion::RenderCKPTLoader() {
 
     if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            ckptComp->ckptName = ImGuiFileDialog::Instance()->GetFilePathName();
-            ckptComp->ckptPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-            std::cout << "New model path set: " << ckptComp->ckptPath << std::endl;
+            modelComp->modelName = ImGuiFileDialog::Instance()->GetCurrentFileName();
+            modelComp->modelPath = ImGuiFileDialog::Instance()->GetFilePathName();
+            std::cout << "New model path set: " << modelComp->modelName << std::endl;
         }
         ImGuiFileDialog::Instance()->Close();
     }
-    ImGui::Combo("SD Type", &samplerComp->current_type_method, samplerComp->type_method_items,
+    ImGui::Combo("SD Type", &int(samplerComp->current_type_method), samplerComp->type_method_items,
                  samplerComp->type_method_item_count);
 }
 
@@ -110,7 +116,20 @@ void GuiDiffusion::RenderSampler() {
 
 void GuiDiffusion::HandleQueueEvent() {
     Event event;
-    event.entityID = entity;
+    EntityID tempEntity = mgr.AddNewEntity();
+    if (mgr.HasComponent<ModelComponent>(entity) && mgr.HasComponent<DiffusionModelComponent>(entity)) {
+
+        mgr.AddComponent<ModelComponent>(tempEntity);
+        mgr.GetComponent<ModelComponent>(tempEntity).modelPath = mgr.GetComponent<ModelComponent>(entity).modelPath;
+
+        mgr.AddComponent<DiffusionModelComponent>(tempEntity);
+        mgr.GetComponent<DiffusionModelComponent>(tempEntity).ckptPath =
+            mgr.GetComponent<DiffusionModelComponent>(entity).ckptPath;
+    } else {
+        std::cerr << "ModelComponent and DiffusionModelComponent not found; Aborting Queuing Inference!" << std::endl;
+        return;
+    }
+    event.entityID = tempEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);
 }

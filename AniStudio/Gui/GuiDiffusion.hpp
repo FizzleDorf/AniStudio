@@ -14,6 +14,8 @@ public:
 
         if (ckptComp)
             delete ckptComp;
+        if (ckptComp)
+            delete modelComp;
         if (loraComp)
             delete loraComp;
         if (promptComp)
@@ -38,12 +40,13 @@ public:
 
 private:
     // Variables to handle the parameters for diffusion
-    CFGComponent *cfgComp = nullptr;
+    ModelComponent *modelComp = nullptr;
     DiffusionModelComponent *ckptComp = nullptr;
     LatentComponent *latentComp = nullptr;
     LoraComponent *loraComp = nullptr;
     PromptComponent *promptComp = nullptr;
     SamplerComponent *samplerComp = nullptr;
+    CFGComponent *cfgComp = nullptr;
     InferenceComponent *inferenceComp = nullptr;
     ImageComponent *imageComp = nullptr;
     // ECS-related variables
