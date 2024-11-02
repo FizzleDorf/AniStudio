@@ -7,7 +7,7 @@
 
 namespace ECS {
 struct ControlnetComponent : public ECS::BaseComponent {
-    std::string image_reference; 
+    // std::string image_reference; 
     float cnStrength = 1.0f;            
     float applyStart = 0.0f;
     float applyEnd = 1.0f;             

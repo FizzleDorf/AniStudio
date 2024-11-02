@@ -5,8 +5,9 @@
 
 namespace ECS {
 struct LatentComponent : public ECS::BaseComponent {
-    unsigned char *latentData = nullptr;
-    int latentWidth = 0;
-    int latentHeight = 0;
+    // unsigned char *latentData = nullptr;
+    int latentWidth = 512;
+    int latentHeight = 512;
+    int batchSize = 1;
 };
 }

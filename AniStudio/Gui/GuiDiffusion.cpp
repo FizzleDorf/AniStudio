@@ -97,8 +97,9 @@ void GuiDiffusion::RenderSampler() {
 void GuiDiffusion::HandleQueueEvent() {
     Event event;
     EntityID tempEntity = mgr.AddNewEntity();
+    std::cout << "Initialized entity with ID: " << tempEntity << std::endl;
     // TODO: add copy constructors to reduce this mess
-    if (mgr.HasComponent<ModelComponent>(entity) || mgr.HasComponent<ModelComponent>(entity)) {
+    if (mgr.HasComponent<ModelComponent>(entity)) {
         mgr.AddComponent<ModelComponent>(tempEntity);
         mgr.AddComponent<CLipLComponent>(tempEntity);
         mgr.AddComponent<CLipGComponent>(tempEntity);
@@ -130,8 +131,8 @@ void GuiDiffusion::HandleQueueEvent() {
         mgr.GetComponent<SamplerComponent>(tempEntity).current_type_method =
             mgr.GetComponent<SamplerComponent>(entity).current_type_method;
         mgr.GetComponent<CFGComponent>(tempEntity).cfg = cfgComp->cfg;
-        mgr.GetComponent<PromptComponent>(tempEntity).posPrompt = mgr.GetComponent<PromptComponent>(entity).negPrompt;
-        
+        mgr.GetComponent<PromptComponent>(tempEntity).posPrompt = mgr.GetComponent<PromptComponent>(entity).posPrompt;
+        mgr.GetComponent<PromptComponent>(tempEntity).negPrompt = mgr.GetComponent<PromptComponent>(entity).negPrompt;
     } else {
         std::cerr << "ModelComponent and DiffusionModelComponent not found; Aborting Queuing Inference!" << std::endl;
         return;

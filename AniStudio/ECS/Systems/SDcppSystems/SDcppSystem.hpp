@@ -37,7 +37,7 @@ public:
 
     void Start() override {}
 
-    void Inference(const EntityID &entityID) {
+    void Inference(EntityID entityID) {
         if (inferenceRunning.load()) {
             std::cout << "Inference is already running; skipping this request." << std::endl;
             return;
@@ -48,15 +48,9 @@ public:
         // Launch asynchronous task with std::async
         inferenceFuture = std::async(std::launch::async, [this, entityID]() {
             try {
-                std::cout << mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str() << std::endl;
                 sd_set_log_callback(LogCallback, nullptr);
                 sd_set_progress_callback(ProgressCallback, nullptr);
-//std::string model_path = mgr.GetComponent<ModelComponent>(entityID).modelPath;
-                std::string txxl_path = "";
-                std::string clip_l_path = "";
-                std::string clip_g_path = "";
-                std::string diffusion_model_path = "";
-                std::string vae_path = "";
+
                 std::string control_net_path = "";
                 std::string lora_model_dir = "";
                 std::string embed_dir = "";
@@ -79,13 +73,11 @@ public:
                 int clip_skip = 0;
                 float cfg_scale = 1.0f;
                 float guidance_scale = 1.0f;
-                int width = 512;
-                int height = 768;
                 sample_method_t sample_method = EULER;
                 int sample_steps = 20;
                 int seed = 31337;
                 int batch_count = 1;
-                // void *control_cond = nullptr;
+                const sd_image_t *control_cond = nullptr;
                 float control_strength = 0.0f;
                 float style_strength = 0.0f;
                 bool normalize_input = false;
@@ -93,13 +85,18 @@ public:
 
                 // Initialize Stable Diffusion context
                 sd_ctx_t *sd_context = new_sd_ctx(
-                    mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(), clip_l_path.c_str(),
-                    clip_g_path.c_str(), txxl_path.c_str(), "", vae_path.c_str(),
+                    mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
+                    mgr.GetComponent<CLipLComponent>(entityID).encoderPath.c_str(),
+                    mgr.GetComponent<CLipGComponent>(entityID).encoderPath.c_str(),
+                    mgr.GetComponent<T5XXLComponent>(entityID).encoderPath.c_str(),
+                    mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath.c_str(),
+                    mgr.GetComponent<VaeComponent>(entityID).vaePath.c_str(),
                     taesd_path.c_str(), control_net_path.c_str(),
                     lora_model_dir.c_str(), embed_dir.c_str(),
                     stacked_id_embed_dir.c_str(), vae_decode_only, vae_tiling,
-                    free_params_immediately, n_threads, wtype,
-                    rng_type, schedule, keep_clip_on_cpu,
+                    free_params_immediately, n_threads, wtype, rng_type,
+                    mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method,
+                                                  keep_clip_on_cpu,
                     keep_control_net_cpu, keep_vae_on_cpu);
 
                 if (!sd_context) {
@@ -109,11 +106,16 @@ public:
                 std::cout << "Stable Diffusion context initialized successfully." << std::endl;
 
                 // Perform image generation
-                sd_image_t *image = txt2img(
-                    sd_context, pos_prompt.c_str(), neg_prompt.c_str(),
-                    clip_skip, cfg_scale, guidance_scale, width,
-                    height, sample_method, sample_steps, seed,
-                    batch_count, nullptr, control_strength, style_strength,
+                sd_image_t *image = txt2img(sd_context, 
+                    mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
+                    mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), clip_skip,
+                    mgr.GetComponent<CFGComponent>(entityID).cfg, guidance_scale, mgr.GetComponent<LatentComponent>(entityID).latentWidth,
+                            mgr.GetComponent<LatentComponent>(entityID).latentHeight,
+                    mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
+                    mgr.GetComponent<SamplerComponent>(entityID).steps,
+                                            seed,
+                            mgr.GetComponent<LatentComponent>(entityID).batchSize, control_cond, control_strength,
+                            style_strength,
                     normalize_input, input_id_images_path.c_str());
 
                 if (!image) {
@@ -134,8 +136,8 @@ public:
 
     void Update() override {
         if (!inferenceRunning.load() && !inferenceQueue.empty()) {
+            std::lock_guard<std::mutex> lock(queueMutex);
             std::cout << "num entities: " << mgr.GetEntityCount() << std::endl;
-            std::lock_guard<std::mutex> lock(queueMutex); // Lock while accessing the queue
             EntityID entityID = inferenceQueue.front();
             inferenceQueue.pop();
             std::cout << "Dequeuing entity for inference, ID: " << entityID << std::endl;

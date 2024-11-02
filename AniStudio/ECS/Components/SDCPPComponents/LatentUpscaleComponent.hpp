@@ -2,9 +2,9 @@
 #include "BaseComponent.hpp"
 namespace ECS {
 struct LatentUpscaleComponent : public ECS::BaseComponent {
-    int newLatentWidth = 0;
-    int newLatentHeight = 0;
-    float latentWidthMultiplier = 1.0f;
-    float latentHeightMultiplier = 1.0f;
+    int newLatentWidth = 1024;
+    int newLatentHeight = 1024;
+    float latentWidthMultiplier = 1.5f;
+    float latentHeightMultiplier = 1.5f;
 };
 } // namespace ECS

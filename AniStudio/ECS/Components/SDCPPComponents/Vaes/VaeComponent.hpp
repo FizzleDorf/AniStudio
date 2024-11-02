@@ -6,7 +6,7 @@
 namespace ECS {
 struct VaeComponent : public ECS::BaseComponent {
     std::string vaePath = "";
-    std::string vaeName = "model.gguf";
+    std::string vaeName = "<none>";
     bool isEncoderLoaded = false;
     bool isTiled = false;
 };
