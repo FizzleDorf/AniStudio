@@ -22,8 +22,8 @@ public:
         auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == component.GetID(); });
         if (comp == data.end()) {
             data.push_back(component);
-            std::cout << "Component added! ID: " << component.GetID() << std::endl
-                      << "Type ID: " << CompType<T>() << std::endl;
+            std::cout << "Component added! ID: " << component.GetID() 
+                      << ", Type ID: " << CompType<T>() << std::endl;
         } else {
             std::cout << "Component already Exists! ID: " << component.GetID() << std::endl;
         }

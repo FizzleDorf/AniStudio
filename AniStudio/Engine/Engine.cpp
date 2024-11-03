@@ -15,6 +15,7 @@ void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
 Engine::Engine()
     : mgr(EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
+    mgr.Reset();
 }
 
 Engine::~Engine() {
@@ -33,11 +34,9 @@ Engine::~Engine() {
 }
 
 void Engine::Init() {
-
+    mgr.Reset();
     Events::Ref().Init(window);
-
     mgr.RegisterSystem<SDCPPSystem>();
-
     diffusionView.StartGui();
 
     // Initialize GLFW

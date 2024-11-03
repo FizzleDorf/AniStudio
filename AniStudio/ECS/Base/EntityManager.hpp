@@ -134,6 +134,28 @@ namespace ECS {
             return nullptr;
         }
 
+		void Reset() {
+            // Destroy all entities by clearing their signatures and components
+            for (auto &entitySignaturePair : entitiesSignatures) {
+                DestroyEntity(entitySignaturePair.first);
+            }
+            entitiesSignatures.clear();
+
+            // Clear all registered systems
+            registeredSystems.clear();
+
+            // Clear and reset the entity queue
+            while (!availableEntities.empty()) {
+                availableEntities.pop();
+            }
+            for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; ++entity) {
+                availableEntities.push(entity);
+            }
+
+            // Reset entity count
+            entityCount = 0;
+        }
+
 		// Getters for private variables
 		EntityID GetEntityCount() const { return entityCount; }
 		std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }
@@ -196,6 +218,9 @@ namespace ECS {
                 availableEntities.push(entity);
             }
         }
+
+		
+
 
 	private:
 		EntityID entityCount;

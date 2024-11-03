@@ -6,27 +6,9 @@
 using namespace ECS;
 
 class GuiDiffusion {
-public:       
-    ~GuiDiffusion() {
-        delete cfgComp;
-        delete latentComp;
-        delete samplerComp;
-
-        if (modelComp)
-            delete modelComp;
-        if (ckptComp)
-            delete ckptComp;
-        if (loraComp)
-            delete loraComp;
-        if (clipLComp)
-            delete clipLComp;
-        if (clipGComp)
-            delete clipGComp;
-        if (t5xxlComp)
-            delete t5xxlComp;  
-        if (promptComp)
-            delete promptComp;
-    }
+public:    
+    GuiDiffusion() {}
+    ~GuiDiffusion() {}
 
     void StartGui();
     void RenderCKPTLoader();
@@ -45,24 +27,24 @@ public:
     }
 
 private:
-    std::mutex guiMutex;
-
-    // Variables to handle the parameters for diffusion
-    ModelComponent *modelComp = nullptr;
-    CLipLComponent *clipLComp = nullptr;
-    CLipGComponent *clipGComp = nullptr;
-    T5XXLComponent *t5xxlComp = nullptr;
-    DiffusionModelComponent *ckptComp = nullptr;
-    LatentComponent *latentComp = nullptr;
-    LoraComponent *loraComp = nullptr;
-    PromptComponent *promptComp = nullptr;
-    SamplerComponent *samplerComp = nullptr;
-    CFGComponent *cfgComp = nullptr;
-    ImageComponent *imageComp = nullptr;
-    
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
-
     EntityID entity;
-    EntityID i2IEntity;
+
+    std::mutex guiMutex;
+    std::mutex modelPathMutex; // Mutex for synchronizing access to modelPath
+
+    // Variables to handle the parameters for diffusion
+    ModelComponent modelComp;
+    CLipLComponent clipLComp;
+    CLipGComponent clipGComp;
+    T5XXLComponent t5xxlComp;
+    DiffusionModelComponent ckptComp;
+    LatentComponent latentComp;
+    LoraComponent loraComp;
+    PromptComponent promptComp;
+    SamplerComponent samplerComp;
+    CFGComponent cfgComp;
+    VaeComponent vaeComp;
+    ImageComponent imageComp;
 };
