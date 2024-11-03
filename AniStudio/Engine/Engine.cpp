@@ -37,7 +37,6 @@ void Engine::Init() {
     mgr.Reset();
     Events::Ref().Init(window);
     mgr.RegisterSystem<SDCPPSystem>();
-    diffusionView.StartGui();
 
     // Initialize GLFW
     if (!glfwInit()) {

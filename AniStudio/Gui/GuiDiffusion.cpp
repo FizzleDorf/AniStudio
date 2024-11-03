@@ -7,40 +7,6 @@
 using namespace ECS;
 using namespace ANI;
 
-void GuiDiffusion::StartGui() {
-    // Add a new Entity
-    //entity = mgr.AddNewEntity();
-
-    //std::cout << "Initialized entity with ID: " << entity << std::endl;
-
-    //mgr.AddComponent<ModelComponent>(entity);
-    //mgr.AddComponent<CLipLComponent>(entity);
-    //mgr.AddComponent<CLipGComponent>(entity);
-    //mgr.AddComponent<T5XXLComponent>(entity);
-    //mgr.AddComponent<DiffusionModelComponent>(entity);
-    //mgr.AddComponent<VaeComponent>(entity);
-    //mgr.AddComponent<LoraComponent>(entity);
-    //mgr.AddComponent<LatentComponent>(entity);
-    //mgr.AddComponent<ImageComponent>(entity);
-    //mgr.AddComponent<SamplerComponent>(entity);
-    //mgr.AddComponent<CFGComponent>(entity);
-    //mgr.AddComponent<PromptComponent>(entity);
-
-    //// Get components
-    //modelComp = &mgr.GetComponent<ModelComponent>(entity);
-    //clipLComp = &mgr.GetComponent<CLipLComponent>(entity);
-    //clipGComp = &mgr.GetComponent<CLipGComponent>(entity);
-    //t5xxlComp = &mgr.GetComponent<T5XXLComponent>(entity);
-    //ckptComp = &mgr.GetComponent<DiffusionModelComponent>(entity);
-    //loraComp = &mgr.GetComponent<LoraComponent>(entity);
-    //latentComp = &mgr.GetComponent<LatentComponent>(entity);
-    //imageComp = &mgr.GetComponent<ImageComponent>(entity);
-    //promptComp = &mgr.GetComponent<PromptComponent>(entity);
-    //samplerComp = &mgr.GetComponent<SamplerComponent>(entity);
-    //cfgComp = &mgr.GetComponent<CFGComponent>(entity);
-    //vaeComp = &mgr.GetComponent<VaeComponent>(entity);
-}
-
 void GuiDiffusion::RenderCKPTLoader() {
     ImGui::Text("Checkpoint:");
     ImGui::Text("%s", modelComp.modelName.c_str());

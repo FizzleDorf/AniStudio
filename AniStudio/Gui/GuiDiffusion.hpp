@@ -10,7 +10,6 @@ public:
     GuiDiffusion() {}
     ~GuiDiffusion() {}
 
-    void StartGui();
     void RenderCKPTLoader();
     void RenderLatents();
     void RenderInputImage();
@@ -30,9 +29,6 @@ private:
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
     EntityID entity;
-
-    std::mutex guiMutex;
-    std::mutex modelPathMutex; // Mutex for synchronizing access to modelPath
 
     // Variables to handle the parameters for diffusion
     ModelComponent modelComp;
