@@ -45,6 +45,8 @@ public:
     }
 
 private:
+    std::mutex guiMutex;
+
     // Variables to handle the parameters for diffusion
     ModelComponent *modelComp = nullptr;
     CLipLComponent *clipLComp = nullptr;

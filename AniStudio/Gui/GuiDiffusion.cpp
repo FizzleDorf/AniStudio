@@ -8,43 +8,64 @@ using namespace ECS;
 using namespace ANI;
 
 void GuiDiffusion::StartGui() {
-    
+    std::lock_guard<std::mutex> lock(guiMutex); // Lock the mutex
+
     // Add a new Entity
     entity = mgr.AddNewEntity();
     std::cout << "Initialized entity with ID: " << entity << std::endl;
 
-    // Add components to the Entity Manager
-    mgr.AddComponent<ModelComponent>(entity);
-    mgr.AddComponent<CLipLComponent>(entity);
-    mgr.AddComponent<CLipGComponent>(entity);
-    mgr.AddComponent<T5XXLComponent>(entity);
-    mgr.AddComponent<DiffusionModelComponent>(entity);
-    mgr.AddComponent<VaeComponent>(entity);
-    mgr.AddComponent<LoraComponent>(entity);
+    // Check and add components only if they haven't been added yet
+    if (!mgr.HasComponent<ModelComponent>(entity)) {
+        mgr.AddComponent<ModelComponent>(entity);
+    }
+    if (!mgr.HasComponent<CLipLComponent>(entity)) {
+        mgr.AddComponent<CLipLComponent>(entity);
+    }
+    if (!mgr.HasComponent<CLipGComponent>(entity)) {
+        mgr.AddComponent<CLipGComponent>(entity);
+    }
+    if (!mgr.HasComponent<T5XXLComponent>(entity)) {
+        mgr.AddComponent<T5XXLComponent>(entity);
+    }
+    if (!mgr.HasComponent<DiffusionModelComponent>(entity)) {
+        mgr.AddComponent<DiffusionModelComponent>(entity);
+    }
+    if (!mgr.HasComponent<VaeComponent>(entity)) {
+        mgr.AddComponent<VaeComponent>(entity);
+    }
+    if (!mgr.HasComponent<LoraComponent>(entity)) {
+        mgr.AddComponent<LoraComponent>(entity);
+    }
+    if (!mgr.HasComponent<LatentComponent>(entity)) {
+        mgr.AddComponent<LatentComponent>(entity);
+    }
+    if (!mgr.HasComponent<ImageComponent>(entity)) {
+        mgr.AddComponent<ImageComponent>(entity);
+    }
+    if (!mgr.HasComponent<SamplerComponent>(entity)) {
+        mgr.AddComponent<SamplerComponent>(entity);
+    }
+    if (!mgr.HasComponent<CFGComponent>(entity)) {
+        mgr.AddComponent<CFGComponent>(entity);
+    }
+    if (!mgr.HasComponent<PromptComponent>(entity)) {
+        mgr.AddComponent<PromptComponent>(entity);
+    }
 
-    mgr.AddComponent<LatentComponent>(entity);
-    mgr.AddComponent<ImageComponent>(entity);
-
-    mgr.AddComponent<SamplerComponent>(entity);
-    mgr.AddComponent<CFGComponent>(entity);
-    mgr.AddComponent<PromptComponent>(entity);
-
-    // Set the Gui's pointers
+    // Get components
     modelComp = &mgr.GetComponent<ModelComponent>(entity);
     clipLComp = &mgr.GetComponent<CLipLComponent>(entity);
     clipGComp = &mgr.GetComponent<CLipGComponent>(entity);
     t5xxlComp = &mgr.GetComponent<T5XXLComponent>(entity);
     ckptComp = &mgr.GetComponent<DiffusionModelComponent>(entity);
     loraComp = &mgr.GetComponent<LoraComponent>(entity);
-
     latentComp = &mgr.GetComponent<LatentComponent>(entity);
     imageComp = &mgr.GetComponent<ImageComponent>(entity);
-
     promptComp = &mgr.GetComponent<PromptComponent>(entity);
     samplerComp = &mgr.GetComponent<SamplerComponent>(entity);
     cfgComp = &mgr.GetComponent<CFGComponent>(entity);
-
 }
+
 
 void GuiDiffusion::RenderCKPTLoader() {
     ImGui::Text("Checkpoint:");
@@ -106,7 +127,7 @@ void GuiDiffusion::HandleQueueEvent() {
         mgr.AddComponent<T5XXLComponent>(tempEntity);
         mgr.AddComponent<DiffusionModelComponent>(tempEntity);
         mgr.AddComponent<VaeComponent>(tempEntity);
-        //mgr.AddComponent<LoraComponent>(entity);
+        // mgr.AddComponent<LoraComponent>(entity);
 
         mgr.AddComponent<LatentComponent>(tempEntity);
         mgr.AddComponent<ImageComponent>(tempEntity);
@@ -114,7 +135,6 @@ void GuiDiffusion::HandleQueueEvent() {
         mgr.AddComponent<SamplerComponent>(tempEntity);
         mgr.AddComponent<CFGComponent>(tempEntity);
         mgr.AddComponent<PromptComponent>(tempEntity);
-
 
         mgr.GetComponent<ModelComponent>(tempEntity).modelPath = modelComp->modelPath;
         mgr.GetComponent<CLipLComponent>(tempEntity).encoderPath = clipLComp->encoderPath;

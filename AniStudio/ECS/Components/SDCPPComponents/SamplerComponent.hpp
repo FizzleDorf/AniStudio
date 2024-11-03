@@ -6,8 +6,8 @@
 
 namespace ECS {
 struct SamplerComponent : public ECS::BaseComponent {
-    int steps;
-    float denoise;
+    int steps = 20;
+    float denoise = 1.0;
 
     // sampler
     static constexpr const char *sample_method_items[] = {"Euler a",  "Euler",       "Heun",  "Dpm 2",   "Dpmpp 2 a",
@@ -34,6 +34,5 @@ struct SamplerComponent : public ECS::BaseComponent {
     static constexpr int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
     sd_type_t current_type_method = sd_type_t::SD_TYPE_F16;
 
-    SamplerComponent(int num_steps = 20, float denoise_value = 1.0f) : steps(num_steps), denoise(denoise_value) {}
 };
 } // namespace ECS

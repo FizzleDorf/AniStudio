@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "stable-diffusion.h"
 #include <string>
 
 namespace ECS {

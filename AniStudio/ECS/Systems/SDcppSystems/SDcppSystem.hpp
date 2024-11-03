@@ -91,13 +91,21 @@ public:
                     mgr.GetComponent<T5XXLComponent>(entityID).encoderPath.c_str(),
                     mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath.c_str(),
                     mgr.GetComponent<VaeComponent>(entityID).vaePath.c_str(),
-                    taesd_path.c_str(), control_net_path.c_str(),
-                    lora_model_dir.c_str(), embed_dir.c_str(),
-                    stacked_id_embed_dir.c_str(), vae_decode_only, vae_tiling,
-                    free_params_immediately, n_threads, wtype, rng_type,
+                    taesd_path.c_str(), 
+                    control_net_path.c_str(),
+                    lora_model_dir.c_str(), 
+                    embed_dir.c_str(),
+                    stacked_id_embed_dir.c_str(), 
+                    vae_decode_only, 
+                    vae_tiling,
+                    free_params_immediately, 
+                    n_threads, 
+                    wtype, 
+                    rng_type,
                     mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method,
-                                                  keep_clip_on_cpu,
-                    keep_control_net_cpu, keep_vae_on_cpu);
+                    keep_clip_on_cpu,
+                    keep_control_net_cpu, 
+                    keep_vae_on_cpu);
 
                 if (!sd_context) {
                     throw std::runtime_error(
@@ -108,15 +116,21 @@ public:
                 // Perform image generation
                 sd_image_t *image = txt2img(sd_context, 
                     mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-                    mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), clip_skip,
-                    mgr.GetComponent<CFGComponent>(entityID).cfg, guidance_scale, mgr.GetComponent<LatentComponent>(entityID).latentWidth,
-                            mgr.GetComponent<LatentComponent>(entityID).latentHeight,
+                    mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 
+                    clip_skip,
+                    mgr.GetComponent<CFGComponent>(entityID).cfg, 
+                    guidance_scale, 
+                    mgr.GetComponent<LatentComponent>(entityID).latentWidth,
+                    mgr.GetComponent<LatentComponent>(entityID).latentHeight,
                     mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
                     mgr.GetComponent<SamplerComponent>(entityID).steps,
-                                            seed,
-                            mgr.GetComponent<LatentComponent>(entityID).batchSize, control_cond, control_strength,
-                            style_strength,
-                    normalize_input, input_id_images_path.c_str());
+                    seed,
+                    mgr.GetComponent<LatentComponent>(entityID).batchSize, 
+                    control_cond, 
+                    control_strength,
+                    style_strength,
+                    normalize_input, 
+                    input_id_images_path.c_str());
 
                 if (!image) {
                     throw std::runtime_error("Failed to generate image! Please verify input parameters.");
