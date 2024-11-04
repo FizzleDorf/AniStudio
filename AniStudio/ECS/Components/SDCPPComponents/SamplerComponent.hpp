@@ -41,5 +41,6 @@ struct SamplerComponent : public ECS::BaseComponent {
 
     int seed = 31337;
     int n_threads = 4;
+    bool free_params_immediately = true;
 };
 } // namespace ECS

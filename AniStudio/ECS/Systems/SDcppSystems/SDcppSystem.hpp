@@ -106,10 +106,12 @@ public:
                     throw std::runtime_error("Failed to generate image! Please verify input parameters.");
                 }
                 std::cout << "Image generated successfully." << std::endl;
-
+                mgr.GetComponent<ImageComponent>(entityID).imageData = image->data;
+                mgr.GetComponent<ImageComponent>(entityID).width = image->width;
+                mgr.GetComponent<ImageComponent>(entityID).height = image->height;
+                mgr.GetComponent<ImageComponent>(entityID).channels = image->channel;
                 // Clean up resources
                 free_sd_ctx(sd_context);
-                // Free the image here if necessary, depending on your library's API
 
             } catch (const std::exception &e) {
                 std::cerr << "Exception in async task: " << e.what() << std::endl;
