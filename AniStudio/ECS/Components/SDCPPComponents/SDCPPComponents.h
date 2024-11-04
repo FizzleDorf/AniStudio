@@ -1,7 +1,6 @@
 #pragma once
 
 // Sampling and Inference
-#include "InferenceComponent.hpp"
 #include "CFGComponent.hpp"
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
@@ -12,6 +11,8 @@
 #include "Models/EsrganComponent.hpp"
 #include "Models/LoraComponent.hpp"
 #include "Models/ControlnetComponent.hpp"
+#include "Models/EmbeddingComponent.hpp"
+#include "Models/PhotomakerComponent.hpp"
 
 // Vaes
 #include "Vaes/VaeComponent.hpp"

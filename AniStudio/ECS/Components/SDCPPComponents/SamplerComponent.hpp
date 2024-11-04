@@ -34,5 +34,12 @@ struct SamplerComponent : public ECS::BaseComponent {
     static constexpr int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
     sd_type_t current_type_method = sd_type_t::SD_TYPE_F16;
 
+    // RNG_Type
+    static constexpr const char *type_rng_items[] = {"STD_DEFAULT_RNG", "CUDA_RNG"};
+    static constexpr int type_rng_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
+    rng_type_t current_rng_type = rng_type_t::STD_DEFAULT_RNG;
+
+    int seed = 31337;
+    int n_threads = 4;
 };
 } // namespace ECS

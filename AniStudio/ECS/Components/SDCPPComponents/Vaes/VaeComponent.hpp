@@ -10,5 +10,6 @@ struct VaeComponent : public ECS::BaseComponent {
     bool isEncoderLoaded = false;
     bool isTiled = false;
     bool keep_vae_on_cpu = true;
+    bool vae_decode_only = false;
 };
 } // namespace ECS
