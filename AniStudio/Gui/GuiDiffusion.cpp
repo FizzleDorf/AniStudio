@@ -63,83 +63,85 @@ void GuiDiffusion::RenderSampler() {
 
 void GuiDiffusion::HandleQueueEvent() {
     Event event;
-    EntityID tempEntity = mgr.AddNewEntity();
-    std::cout << "Initialized entity with ID: " << tempEntity << std::endl;
-    mgr.AddComponent<ModelComponent>(tempEntity);
-    mgr.AddComponent<CLipLComponent>(tempEntity);
-    mgr.AddComponent<CLipGComponent>(tempEntity);
-    mgr.AddComponent<T5XXLComponent>(tempEntity);
-    mgr.AddComponent<DiffusionModelComponent>(tempEntity);
-    mgr.AddComponent<VaeComponent>(tempEntity);
-    mgr.AddComponent<LoraComponent>(tempEntity);
-    mgr.AddComponent<LatentComponent>(tempEntity);
-    mgr.AddComponent<ImageComponent>(tempEntity);
-    mgr.AddComponent<SamplerComponent>(tempEntity);
-    mgr.AddComponent<CFGComponent>(tempEntity);
-    mgr.AddComponent<PromptComponent>(tempEntity);
+    EntityID newEntity = mgr.AddNewEntity();
+    std::cout << "Initialized entity with ID: " << newEntity << std::endl;
+    mgr.AddComponent<ModelComponent>(newEntity);
+    mgr.AddComponent<CLipLComponent>(newEntity);
+    mgr.AddComponent<CLipGComponent>(newEntity);
+    mgr.AddComponent<T5XXLComponent>(newEntity);
+    mgr.AddComponent<DiffusionModelComponent>(newEntity);
+    mgr.AddComponent<VaeComponent>(newEntity);
+    mgr.AddComponent<TaesdComponent>(newEntity);
+    mgr.AddComponent<LoraComponent>(newEntity);
+    mgr.AddComponent<LatentComponent>(newEntity);
+    mgr.AddComponent<SamplerComponent>(newEntity);
+    mgr.AddComponent<CFGComponent>(newEntity);
+    mgr.AddComponent<PromptComponent>(newEntity);
+    mgr.AddComponent<EmbeddingComponent>(newEntity);
+    mgr.AddComponent<ImageComponent>(newEntity);
+
     // TODO: add copy constructors to reduce this mess
-    std::cout << "Assigning components to tempEntity: " << tempEntity << std::endl;
+    std::cout << "Assigning components to new Entity: " << newEntity << std::endl;
 
     // ModelComponent
-    mgr.GetComponent<ModelComponent>(tempEntity).modelPath = modelComp.modelPath;
-    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(tempEntity).modelPath << std::endl;
+    mgr.GetComponent<ModelComponent>(newEntity).modelPath = modelComp.modelPath;
+    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << std::endl;
 
     // CLipLComponent
-    mgr.GetComponent<CLipLComponent>(tempEntity).encoderPath = clipLComp.encoderPath;
-    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(tempEntity).encoderPath
+    mgr.GetComponent<CLipLComponent>(newEntity).encoderPath = clipLComp.encoderPath;
+    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath
               << std::endl;
 
     // CLipGComponent
-    mgr.GetComponent<CLipGComponent>(tempEntity).encoderPath = clipGComp.encoderPath;
-    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(tempEntity).encoderPath
+    mgr.GetComponent<CLipGComponent>(newEntity).encoderPath = clipGComp.encoderPath;
+    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).encoderPath
               << std::endl;
 
     // T5XXLComponent
-    mgr.GetComponent<T5XXLComponent>(tempEntity).encoderPath = t5xxlComp.encoderPath;
-    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(tempEntity).encoderPath
+    mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath = t5xxlComp.encoderPath;
+    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath
               << std::endl;
 
     // DiffusionModelComponent
-    mgr.GetComponent<DiffusionModelComponent>(tempEntity).ckptPath = ckptComp.ckptPath;
-    std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(tempEntity).ckptPath
+    mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath = ckptComp.ckptPath;
+    std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath
               << std::endl;
 
     // VaeComponent
-    mgr.GetComponent<VaeComponent>(tempEntity).vaePath = vaeComp.vaePath;
-    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(tempEntity).vaePath << std::endl;
+    mgr.GetComponent<VaeComponent>(newEntity).vaePath = vaeComp.vaePath;
+    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).vaePath << std::endl;
 
     // SamplerComponent
-    mgr.GetComponent<SamplerComponent>(tempEntity).steps = samplerComp.steps;
-    std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(tempEntity).steps << std::endl;
+    mgr.GetComponent<SamplerComponent>(newEntity).steps = samplerComp.steps;
+    std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << std::endl;
 
-    mgr.GetComponent<SamplerComponent>(tempEntity).denoise = samplerComp.denoise;
-    std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(tempEntity).denoise << std::endl;
+    mgr.GetComponent<SamplerComponent>(newEntity).denoise = samplerComp.denoise;
+    std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(newEntity).denoise << std::endl;
 
-    mgr.GetComponent<SamplerComponent>(tempEntity).current_sample_method = samplerComp.current_sample_method;
+    mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method = samplerComp.current_sample_method;
     std::cout << "SamplerComponent.current_sample_method: "
-              << mgr.GetComponent<SamplerComponent>(tempEntity).current_sample_method << std::endl;
+              << mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method << std::endl;
 
-    mgr.GetComponent<SamplerComponent>(tempEntity).current_scheduler_method = samplerComp.current_scheduler_method;
+    mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method = samplerComp.current_scheduler_method;
     std::cout << "SamplerComponent.current_scheduler_method: "
-              << mgr.GetComponent<SamplerComponent>(tempEntity).current_scheduler_method << std::endl;
+              << mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method << std::endl;
 
-    mgr.GetComponent<SamplerComponent>(tempEntity).current_type_method = samplerComp.current_type_method;
+    mgr.GetComponent<SamplerComponent>(newEntity).current_type_method = samplerComp.current_type_method;
     std::cout << "SamplerComponent.current_type_method: "
-              << mgr.GetComponent<SamplerComponent>(tempEntity).current_type_method << std::endl;
+              << mgr.GetComponent<SamplerComponent>(newEntity).current_type_method << std::endl;
 
     // CFGComponent
-    mgr.GetComponent<CFGComponent>(tempEntity).cfg = cfgComp.cfg;
-    std::cout << "CFGComponent.cfg: " << mgr.GetComponent<CFGComponent>(tempEntity).cfg << std::endl;
+    mgr.GetComponent<CFGComponent>(newEntity).cfg = cfgComp.cfg;
+    std::cout << "CFGComponent.cfg: " << mgr.GetComponent<CFGComponent>(newEntity).cfg << std::endl;
 
     // PromptComponent
-    mgr.GetComponent<PromptComponent>(tempEntity).posPrompt = promptComp.posPrompt;
-    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(tempEntity).posPrompt << std::endl;
+    mgr.GetComponent<PromptComponent>(newEntity).posPrompt = promptComp.posPrompt;
+    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << std::endl;
 
-    mgr.GetComponent<PromptComponent>(tempEntity).negPrompt = promptComp.negPrompt;
-    std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(tempEntity).negPrompt << std::endl;
+    mgr.GetComponent<PromptComponent>(newEntity).negPrompt = promptComp.negPrompt;
+    std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).negPrompt << std::endl;
 
-
-    event.entityID = tempEntity;
+    event.entityID = newEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);
 }

@@ -3,6 +3,7 @@
 #include "pch.h"
 #include "stable-diffusion.h"
 #include <future> // Include for std::future and std::async
+#include <filesystem>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -32,22 +33,12 @@ class SDCPPSystem : public BaseSystem {
 public:
     SDCPPSystem() {
         AddComponentSignature<ModelComponent>();
-        AddComponentSignature<CLipLComponent>();
-        AddComponentSignature<CLipGComponent>();
-        AddComponentSignature<T5XXLComponent>();
         AddComponentSignature<DiffusionModelComponent>();
-        AddComponentSignature<VaeComponent>();
-        AddComponentSignature<LoraComponent>();
-        AddComponentSignature<LatentComponent>();
-        AddComponentSignature<ImageComponent>();
-        AddComponentSignature<SamplerComponent>();
-        AddComponentSignature<CFGComponent>();
-        AddComponentSignature<PromptComponent>();
     }
 
     void Start() override {}
 
-    void Inference(EntityID entityID) {
+    void Inference(const EntityID entityID) {
         if (inferenceRunning.load()) {
             std::cout << "Inference is already running; skipping this request." << std::endl;
             return;
@@ -69,19 +60,21 @@ public:
                                mgr.GetComponent<T5XXLComponent>(entityID).encoderPath.c_str(),
                                mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath.c_str(),
                                mgr.GetComponent<VaeComponent>(entityID).vaePath.c_str(),
-                               "", // taesd_path
+                               mgr.GetComponent<TaesdComponent>(entityID).taesdPath.c_str(),
                                "", // control_net_path
                                mgr.GetComponent<LoraComponent>(entityID).loraPath.c_str(),
-                               "",    // embed_dir
+                               mgr.GetComponent<EmbeddingComponent>(entityID).embedPath.c_str(),
                                "",    // stacked_id_embed_dir
-                               false, // vae_decode_only
+                               mgr.GetComponent<VaeComponent>(entityID).vae_decode_only,
                                mgr.GetComponent<VaeComponent>(entityID).isTiled,
-                               true, // free_params_immediately
-                               4,    // n_threads
-                               sd_type_t::SD_TYPE_F16, rng_type_t::STD_DEFAULT_RNG, schedule_t::DEFAULT,
-                               true,  // keep_clip_on_cpu
+                               mgr.GetComponent<SamplerComponent>(entityID).free_params_immediately,
+                               mgr.GetComponent<SamplerComponent>(entityID).n_threads,
+                               mgr.GetComponent<SamplerComponent>(entityID).current_type_method, 
+                               mgr.GetComponent<SamplerComponent>(entityID).current_rng_type, 
+                               mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method,
+                               true , // keep_clip_on_cpu
                                false, // keep_control_net_cpu
-                               false  // keep_vae_on_cpu
+                               mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu
                     );
 
                 if (!sd_context) {
@@ -95,12 +88,12 @@ public:
                                             mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(),
                                             0, // clip_skip
                                             mgr.GetComponent<CFGComponent>(entityID).cfg,
-                                            1.0f, // guidance_scale
+                                            mgr.GetComponent<CFGComponent>(entityID).guidance,
                                             mgr.GetComponent<LatentComponent>(entityID).latentWidth,
                                             mgr.GetComponent<LatentComponent>(entityID).latentHeight,
                                             mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
                                             mgr.GetComponent<SamplerComponent>(entityID).steps,
-                                            31337, // seed
+                                            mgr.GetComponent<SamplerComponent>(entityID).seed,
                                             mgr.GetComponent<LatentComponent>(entityID).batchSize,
                                             nullptr, // control_cond
                                             0.0f,    // control_strength
@@ -121,24 +114,20 @@ public:
             } catch (const std::exception &e) {
                 std::cerr << "Exception in async task: " << e.what() << std::endl;
             }
-            mgr.DestroyEntity(entityID);
             inferenceRunning.store(false);
         });
     }
-
+    //(modelComp.modelPath)
 
     void Update() override {
         if (!inferenceRunning.load() && !inferenceQueue.empty()) {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            std::cout << "num entities: " << mgr.GetEntityCount() << std::endl;
             EntityID entityID = inferenceQueue.front();
             inferenceQueue.pop();
-            std::cout << "Dequeuing entity for inference, ID: " << entityID << std::endl;
-            if (mgr.HasComponent<ModelComponent>(entityID) || mgr.HasComponent<DiffusionModelComponent>(entityID)) {
-                std::cout << mgr.GetComponent<ModelComponent>(entityID).modelPath << entityID << std::endl;
+            if (std::filesystem::exists(mgr.GetComponent<ModelComponent>(entityID).modelPath) ||
+                std::filesystem::exists(mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath)) {
                 Inference(entityID);
             } else {
-                std::cerr << "No model path provided with Entity ID: " << entityID << std::endl;
+                mgr.DestroyEntity(entityID);
             }
         }
 

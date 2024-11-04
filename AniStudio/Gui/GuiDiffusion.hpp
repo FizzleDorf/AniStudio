@@ -42,5 +42,7 @@ private:
     SamplerComponent samplerComp;
     CFGComponent cfgComp;
     VaeComponent vaeComp;
+    TaesdComponent taesdComp;
     ImageComponent imageComp;
+    EmbeddingComponent embedComp;
 };
