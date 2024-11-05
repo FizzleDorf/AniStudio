@@ -2,8 +2,9 @@
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
-#include <future> // Include for std::future and std::async
 #include <filesystem>
+#include <future> // Include for std::future and std::async
+#include <vector>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -28,6 +29,7 @@ static void LogCallback(sd_log_level_t level, const char *text, void *data) {
 static void ProgressCallback(int step, int steps, float time, void *data) {
     std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
 }
+
 namespace ECS {
 class SDCPPSystem : public BaseSystem {
 public:
@@ -53,29 +55,27 @@ public:
                 sd_set_progress_callback(ProgressCallback, nullptr);
 
                 // Using heap allocation for context and image
-                sd_ctx_t *sd_context =
-                    new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
-                               mgr.GetComponent<CLipLComponent>(entityID).encoderPath.c_str(),
-                               mgr.GetComponent<CLipGComponent>(entityID).encoderPath.c_str(),
-                               mgr.GetComponent<T5XXLComponent>(entityID).encoderPath.c_str(),
-                               mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath.c_str(),
-                               mgr.GetComponent<VaeComponent>(entityID).vaePath.c_str(),
-                               mgr.GetComponent<TaesdComponent>(entityID).taesdPath.c_str(),
-                               "", // control_net_path
-                               mgr.GetComponent<LoraComponent>(entityID).loraPath.c_str(),
-                               mgr.GetComponent<EmbeddingComponent>(entityID).embedPath.c_str(),
-                               "",    // stacked_id_embed_dir
-                               mgr.GetComponent<VaeComponent>(entityID).vae_decode_only,
-                               mgr.GetComponent<VaeComponent>(entityID).isTiled,
-                               mgr.GetComponent<SamplerComponent>(entityID).free_params_immediately,
-                               mgr.GetComponent<SamplerComponent>(entityID).n_threads,
-                               mgr.GetComponent<SamplerComponent>(entityID).current_type_method, 
-                               mgr.GetComponent<SamplerComponent>(entityID).current_rng_type, 
-                               mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method,
-                               true , // keep_clip_on_cpu
-                               false, // keep_control_net_cpu
-                               mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu
-                    );
+                sd_ctx_t *sd_context = new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
+                                                  mgr.GetComponent<CLipLComponent>(entityID).encoderPath.c_str(),
+                                                  mgr.GetComponent<CLipGComponent>(entityID).encoderPath.c_str(),
+                                                  mgr.GetComponent<T5XXLComponent>(entityID).encoderPath.c_str(),
+                                                  mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath.c_str(),
+                                                  mgr.GetComponent<VaeComponent>(entityID).vaePath.c_str(),
+                                                  mgr.GetComponent<TaesdComponent>(entityID).taesdPath.c_str(),
+                                                  "", // control_net_path
+                                                  mgr.GetComponent<LoraComponent>(entityID).loraPath.c_str(),
+                                                  mgr.GetComponent<EmbeddingComponent>(entityID).embedPath.c_str(),
+                                                  "", // stacked_id_embed_dir
+                                                  mgr.GetComponent<VaeComponent>(entityID).vae_decode_only,
+                                                  mgr.GetComponent<VaeComponent>(entityID).isTiled,
+                                                  mgr.GetComponent<SamplerComponent>(entityID).free_params_immediately,
+                                                  mgr.GetComponent<SamplerComponent>(entityID).n_threads,
+                                                  mgr.GetComponent<SamplerComponent>(entityID).current_type_method,
+                                                  mgr.GetComponent<SamplerComponent>(entityID).current_rng_type,
+                                                  mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method,
+                                                  true,  // keep_clip_on_cpu
+                                                  false, // keep_control_net_cpu
+                                                  mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu);
 
                 if (!sd_context) {
                     throw std::runtime_error(
@@ -106,10 +106,26 @@ public:
                     throw std::runtime_error("Failed to generate image! Please verify input parameters.");
                 }
                 std::cout << "Image generated successfully." << std::endl;
+
+                // Copy image data to a buffer to ensure it's available for saving
+                int dataSize = image->width * image->height * image->channel;
+                std::vector<unsigned char> imageData(image->data, image->data + dataSize);
+
+                // Store the image properties
                 mgr.GetComponent<ImageComponent>(entityID).imageData = image->data;
                 mgr.GetComponent<ImageComponent>(entityID).width = image->width;
                 mgr.GetComponent<ImageComponent>(entityID).height = image->height;
                 mgr.GetComponent<ImageComponent>(entityID).channels = image->channel;
+
+                // Debug output for verification
+                std::cout << "Saving image with width: " << image->width << ", height: " << image->height
+                          << ", channels: " << image->channel << std::endl;
+
+                // Save image using stb_image
+                int stride = image->width * image->channel;
+                stbi_write_png("./Anistudio.png", image->width, image->height, image->channel, imageData.data(),
+                               stride);
+
                 // Clean up resources
                 free_sd_ctx(sd_context);
 
@@ -119,7 +135,6 @@ public:
             inferenceRunning.store(false);
         });
     }
-    //(modelComp.modelPath)
 
     void Update() override {
         if (!inferenceRunning.load() && !inferenceQueue.empty()) {
