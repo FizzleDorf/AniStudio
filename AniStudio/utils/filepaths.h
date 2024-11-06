@@ -5,29 +5,24 @@
 #include <string>
 
 struct FilePaths {
-    std::string virtualEnvPath;          // Path to the virtual environment
-    std::string comfyuiRootPath;         // Path to the ComfyUI root folder
-    std::string lastOpenProjectPath;     // Path to the last open project folder
-    std::string defaultProjectPath;      // Path to the default project folder
-    std::string defaultModelRootPath;    // Path to the default model root folder
-    std::string assetsFolderPath;        // Path to the assets folder
+    std::string virtualEnvPath = "./venv";
+    std::string comfyuiRootPath = "./comfyui";
+    std::string lastOpenProjectPath = "./projects"; 
+    std::string defaultProjectPath = "./projects"; 
+    std::string defaultModelRootPath = "./models"; 
+    std::string assetsFolderPath = "./assets"; 
 
-    // Constructor for initializing the struct with default paths
-    FilePaths(
-        const std::string& virtualEnv = "",
-        const std::string& comfyuiRoot = "",
-        const std::string& lastOpenProject = "",
-        const std::string& defaultProject = "",
-        const std::string& defaultModelRoot = "",
-        const std::string& assetsFolder = ""
-    )
-        : virtualEnvPath(virtualEnv)
-        , comfyuiRootPath(comfyuiRoot)
-        , lastOpenProjectPath(lastOpenProject)
-        , defaultProjectPath(defaultProject)
-        , defaultModelRootPath(defaultModelRoot)
-        , assetsFolderPath(assetsFolder)
-    {}
+    std::string checkpointDir = "/checkpoints";
+    std::string encoderDir = "/clip";
+    std::string vaeDir = "/vae";
+    std::string unetDir = "/unet";
+    std::string loraDir = "/loras";
+    std::string controlnetDir = "/controlnet";
+    std::string upscaleDir = "/upscale_models";
+
+    void SaveFilepathDefaults(){}
+    void LoadFilePathDefaults(){}
+    void SetByModelRoot() {}
 };
 
 #endif // FILEPATHS_HPP
