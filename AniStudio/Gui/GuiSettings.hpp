@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "ViewState.hpp"
+#include "filepaths.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -32,6 +33,9 @@ private:
     nlohmann::json SerializeOptions();
     void ShowBoolOptionsTable(BoolOption* options, int count, const char* tableTitle);
     void ShowFlagPathsTable(FlagOption* options, int count, const char* tableTitle);
+    void RenderSettingsWindow();
+    
+    FilePaths filePaths;
 };
 
 extern BoolOption boolOptions[];

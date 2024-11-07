@@ -77,7 +77,7 @@ void GuiSettings::Render() {
             // AniStudio Settings
             if (ImGui::BeginTabItem("AniStudio Settings"))
             {
-                // Content for AniStudio Settings
+                RenderSettingsWindow();
                 ImGui::EndTabItem();
             }
 
@@ -160,6 +160,120 @@ void GuiSettings::Render() {
             ImGui::EndTabBar();
         }
         ImGui::End();
+    }
+}
+
+void GuiSettings::RenderSettingsWindow() {
+
+    // General Paths Section
+    if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // Virtual Environment Path
+        static char virtualEnvBuffer[256];
+        strncpy(virtualEnvBuffer, filePaths.virtualEnvPath.c_str(), sizeof(virtualEnvBuffer));
+        if (ImGui::InputText("Virtual Env Path", virtualEnvBuffer, sizeof(virtualEnvBuffer))) {
+            filePaths.virtualEnvPath = std::string(virtualEnvBuffer);
+        }
+
+        // ComfyUI Root Path
+        static char comfyuiRootBuffer[256];
+        strncpy(comfyuiRootBuffer, filePaths.comfyuiRootPath.c_str(), sizeof(comfyuiRootBuffer));
+        if (ImGui::InputText("ComfyUI Root Path", comfyuiRootBuffer, sizeof(comfyuiRootBuffer))) {
+            filePaths.comfyuiRootPath = std::string(comfyuiRootBuffer);
+        }
+
+        // Last Open Project Path
+        static char lastOpenProjectBuffer[256];
+        strncpy(lastOpenProjectBuffer, filePaths.lastOpenProjectPath.c_str(), sizeof(lastOpenProjectBuffer));
+        if (ImGui::InputText("Last Open Project Path", lastOpenProjectBuffer, sizeof(lastOpenProjectBuffer))) {
+            filePaths.lastOpenProjectPath = std::string(lastOpenProjectBuffer);
+        }
+
+        // Default Project Path
+        static char defaultProjectBuffer[256];
+        strncpy(defaultProjectBuffer, filePaths.defaultProjectPath.c_str(), sizeof(defaultProjectBuffer));
+        if (ImGui::InputText("Default Project Path", defaultProjectBuffer, sizeof(defaultProjectBuffer))) {
+            filePaths.defaultProjectPath = std::string(defaultProjectBuffer);
+        }
+
+        // Assets Folder Path
+        static char assetsFolderBuffer[256];
+        strncpy(assetsFolderBuffer, filePaths.assetsFolderPath.c_str(), sizeof(assetsFolderBuffer));
+        if (ImGui::InputText("Assets Folder Path", assetsFolderBuffer, sizeof(assetsFolderBuffer))) {
+            filePaths.assetsFolderPath = std::string(assetsFolderBuffer);
+        }
+    }
+
+    // Model Paths Section
+    if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // Default Model Root Path
+        static char defaultModelRootBuffer[256];
+        strncpy(defaultModelRootBuffer, filePaths.defaultModelRootPath.c_str(), sizeof(defaultModelRootBuffer));
+        if (ImGui::InputText("Default Model Root Path", defaultModelRootBuffer, sizeof(defaultModelRootBuffer))) {
+            filePaths.defaultModelRootPath = std::string(defaultModelRootBuffer);
+        }
+
+        // Checkpoint Directory
+        static char checkpointDirBuffer[256];
+        strncpy(checkpointDirBuffer, filePaths.checkpointDir.c_str(), sizeof(checkpointDirBuffer));
+        if (ImGui::InputText("Checkpoint Directory", checkpointDirBuffer, sizeof(checkpointDirBuffer))) {
+            filePaths.checkpointDir = std::string(checkpointDirBuffer);
+        }
+
+        // Encoder Directory
+        static char encoderDirBuffer[256];
+        strncpy(encoderDirBuffer, filePaths.encoderDir.c_str(), sizeof(encoderDirBuffer));
+        if (ImGui::InputText("Encoder Directory", encoderDirBuffer, sizeof(encoderDirBuffer))) {
+            filePaths.encoderDir = std::string(encoderDirBuffer);
+        }
+
+        // VAE Directory
+        static char vaeDirBuffer[256];
+        strncpy(vaeDirBuffer, filePaths.vaeDir.c_str(), sizeof(vaeDirBuffer));
+        if (ImGui::InputText("VAE Directory", vaeDirBuffer, sizeof(vaeDirBuffer))) {
+            filePaths.vaeDir = std::string(vaeDirBuffer);
+        }
+
+        // UNet Directory
+        static char unetDirBuffer[256];
+        strncpy(unetDirBuffer, filePaths.unetDir.c_str(), sizeof(unetDirBuffer));
+        if (ImGui::InputText("UNet Directory", unetDirBuffer, sizeof(unetDirBuffer))) {
+            filePaths.unetDir = std::string(unetDirBuffer);
+        }
+
+        // LORA Directory
+        static char loraDirBuffer[256];
+        strncpy(loraDirBuffer, filePaths.loraDir.c_str(), sizeof(loraDirBuffer));
+        if (ImGui::InputText("LORA Directory", loraDirBuffer, sizeof(loraDirBuffer))) {
+            filePaths.loraDir = std::string(loraDirBuffer);
+        }
+
+        // ControlNet Directory
+        static char controlnetDirBuffer[256];
+        strncpy(controlnetDirBuffer, filePaths.controlnetDir.c_str(), sizeof(controlnetDirBuffer));
+        if (ImGui::InputText("ControlNet Directory", controlnetDirBuffer, sizeof(controlnetDirBuffer))) {
+            filePaths.controlnetDir = std::string(controlnetDirBuffer);
+        }
+
+        // Upscale Directory
+        static char upscaleDirBuffer[256];
+        strncpy(upscaleDirBuffer, filePaths.upscaleDir.c_str(), sizeof(upscaleDirBuffer));
+        if (ImGui::InputText("Upscale Directory", upscaleDirBuffer, sizeof(upscaleDirBuffer))) {
+            filePaths.upscaleDir = std::string(upscaleDirBuffer);
+        }
+    }
+
+    // Action Buttons
+    ImGui::Separator();
+    if (ImGui::Button("Save Defaults")) {
+        filePaths.SaveFilepathDefaults();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load Defaults")) {
+        filePaths.LoadFilePathDefaults();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset Model Paths")) {
+        filePaths.SetByModelRoot();
     }
 }
 
