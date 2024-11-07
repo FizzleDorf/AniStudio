@@ -4,8 +4,9 @@
 using namespace ECS;
 
 // Gui Views
-GuiDiffusion diffusionView;
 GuiSettings settingsView;
+GuiDiffusion diffusionView(settingsView.GetFilePaths());
+
 
 namespace ANI {
 

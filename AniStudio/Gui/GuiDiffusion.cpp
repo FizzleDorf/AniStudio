@@ -14,6 +14,7 @@ void GuiDiffusion::RenderCKPTLoader() {
 
     if (ImGui::Button("...")) {
         IGFD::FileDialogConfig config;
+        config.path = filePaths.checkpointDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
@@ -136,11 +137,18 @@ void GuiDiffusion::HandleQueueEvent() {
 
     // PromptComponent
     mgr.GetComponent<PromptComponent>(newEntity).posPrompt = promptComp.posPrompt;
-    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << std::endl;
+    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << "\n";
 
     mgr.GetComponent<PromptComponent>(newEntity).negPrompt = promptComp.negPrompt;
-    std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).negPrompt << std::endl;
+    std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).negPrompt << "\n";
 
+    mgr.GetComponent<LatentComponent>(newEntity).latentWidth = latentComp.latentWidth;
+    std::cout << "LatentComponent.latentWidth: " << mgr.GetComponent<LatentComponent>(newEntity).latentWidth << "\n";
+
+    mgr.GetComponent<LatentComponent>(newEntity).latentHeight = latentComp.latentHeight;
+    std::cout << "LatentComponent.latentHeight: " << mgr.GetComponent<LatentComponent>(newEntity).latentHeight << "\n";
+
+    // Set the Event params and send the request
     event.entityID = newEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);

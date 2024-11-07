@@ -7,7 +7,7 @@ using namespace ECS;
 
 class GuiDiffusion {
 public:    
-    GuiDiffusion() {}
+    GuiDiffusion(const FilePaths &paths) : filePaths(paths) {}
     ~GuiDiffusion() {}
 
     void RenderCKPTLoader();
@@ -29,6 +29,9 @@ private:
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
     EntityID entity;
+
+    // saved default filepaths
+    const FilePaths &filePaths;
 
     // Variables to handle the parameters for diffusion
     ModelComponent modelComp;

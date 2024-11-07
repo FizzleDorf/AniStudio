@@ -26,6 +26,8 @@ struct BoolOption {
 class GuiSettings {
 public:
     void Render();
+    const FilePaths &GetFilePaths() const { return filePaths; }
+
 private:
     void InstallVenv(const std::string& venvPath);
     void InstallComfyUI();

@@ -7,12 +7,12 @@
 #include <string>
 
 struct FilePaths {
-    std::string virtualEnvPath = "./venv";
-    std::string comfyuiRootPath = "./comfyui";
-    std::string lastOpenProjectPath = "./projects";
-    std::string defaultProjectPath = "./projects";
-    std::string defaultModelRootPath = "./models";
-    std::string assetsFolderPath = "./assets";
+    std::string virtualEnvPath = "../venv";
+    std::string comfyuiRootPath = "../comfyui";
+    std::string lastOpenProjectPath = "../projects";
+    std::string defaultProjectPath = "../projects";
+    std::string defaultModelRootPath = "../models";
+    std::string assetsFolderPath = "../assets";
 
     // These paths can be set to default model paths
     std::string checkpointDir = "/checkpoints";
