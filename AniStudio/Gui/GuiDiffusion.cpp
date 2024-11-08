@@ -65,8 +65,7 @@ void GuiDiffusion::RenderSampler() {
     ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
     ImGui::Combo("Type Method", &int(samplerComp.current_type_method), type_method_items,
                  type_method_item_count);
-    // ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), SamplerComponent::type_rng_items,
-    // SamplerComponent::type_rng_item_count);
+    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 }
 
 void GuiDiffusion::HandleQueueEvent() {
@@ -96,14 +95,12 @@ void GuiDiffusion::HandleQueueEvent() {
     mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
     mgr.GetComponent<CLipGComponent>(newEntity) = clipGComp;
     mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
-    mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath = ckptComp.ckptPath;
-    mgr.GetComponent<VaeComponent>(newEntity).vaePath = vaeComp.vaePath;
+    mgr.GetComponent<DiffusionModelComponent>(newEntity) = ckptComp;
+    mgr.GetComponent<VaeComponent>(newEntity) = vaeComp;
     mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
     mgr.GetComponent<CFGComponent>(newEntity) = cfgComp;
-    mgr.GetComponent<PromptComponent>(newEntity).posPrompt = promptComp.posPrompt;
-    mgr.GetComponent<PromptComponent>(newEntity).negPrompt = promptComp.negPrompt;
-    mgr.GetComponent<LatentComponent>(newEntity).latentWidth = latentComp.latentWidth;
-    mgr.GetComponent<LatentComponent>(newEntity).latentHeight = latentComp.latentHeight;
+    mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
+    mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
 
     std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
     std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";

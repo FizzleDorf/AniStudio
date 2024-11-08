@@ -17,8 +17,20 @@ struct ModelComponent : public ECS::BaseComponent {
         }
         return *this;
     }
+};
 
-    ModelComponent() = default;
+struct DiffusionModelComponent : public ECS::BaseComponent {
+    std::string ckptPath = "";
+    std::string ckptName = "model.gguf";
+    bool isCkptLoaded = false;
 
+    DiffusionModelComponent &operator=(const DiffusionModelComponent &other) {
+        if (this != &other) {
+            ckptPath = other.ckptPath;
+            ckptName = other.ckptName;
+            isCkptLoaded = other.isCkptLoaded;
+        }
+        return *this;
+    }
 };
 } // namespace ECS

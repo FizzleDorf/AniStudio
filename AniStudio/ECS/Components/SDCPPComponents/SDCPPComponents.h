@@ -5,8 +5,7 @@
 #include "SamplerComponent.hpp"
 
 // Models
-#include "Models/ModelComponent.hpp"
-#include "Models/DiffusionModelComponent.hpp"
+#include "Models/ModelComponents.hpp"
 #include "Models/EsrganComponent.hpp"
 #include "Models/LoraComponent.hpp"
 #include "Models/ControlnetComponent.hpp"
@@ -15,7 +14,6 @@
 
 // Vaes
 #include "Vaes/VaeComponent.hpp"
-#include "Vaes/TaesdComponent.hpp"
 
 // Encoders
 #include "Encoders/EncoderComponents.hpp"
