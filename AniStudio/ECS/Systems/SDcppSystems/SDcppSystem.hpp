@@ -41,6 +41,7 @@ public:
     void Start() override {}
 
     void Inference(const EntityID entityID) {
+        std::lock_guard<std::mutex> lock(inferenceMutex); 
         if (inferenceRunning.load()) {
             std::cout << "Inference is already running; skipping this request." << std::endl;
             return;
@@ -51,6 +52,7 @@ public:
         // Launch asynchronous task with std::async
         inferenceFuture = std::async(std::launch::async, [this, entityID]() {
             try {
+                std::lock_guard<std::mutex> lock(mgrMutex);
                 sd_set_log_callback(LogCallback, nullptr);
                 sd_set_progress_callback(ProgressCallback, nullptr);
 
@@ -137,6 +139,7 @@ public:
     }
 
     void Update() override {
+        std::lock_guard<std::mutex> lock(queueMutex); // Lock while modifying the queue
         if (!inferenceRunning.load() && !inferenceQueue.empty()) {
             EntityID entityID = inferenceQueue.front();
             inferenceQueue.pop();
@@ -155,14 +158,18 @@ public:
     }
 
     void QueueInference(EntityID entityID) {
+        std::lock_guard<std::mutex> lock(queueMutex);
         inferenceQueue.push(entityID);
         std::cout << "Entity Queued for inference." << std::endl;
     }
 
+
 private:
     EntityManager &mgr = ECS::EntityManager::Ref();
     std::queue<EntityID> inferenceQueue;       // Queue to hold entity IDs for inference
-    std::mutex queueMutex;                     // Mutex to protect access to inferenceQueue
+    std::mutex queueMutex;
+    std::mutex inferenceMutex;
+    std::mutex mgrMutex;
     std::atomic<bool> inferenceRunning{false}; // Atomic flag to track if inference is running
     std::future<void> inferenceFuture;         // Future for tracking the async inference task
 };

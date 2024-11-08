@@ -55,16 +55,16 @@ void GuiDiffusion::RenderPrompts() {
 }
 
 void GuiDiffusion::RenderSampler() {
-    ImGui::Combo("Sampler Method", &int(samplerComp.current_sample_method), SamplerComponent::sample_method_items,
-                 SamplerComponent::sample_method_item_count);
+    ImGui::Combo("Sampler Method", &int(samplerComp.current_sample_method), sample_method_items,
+                 sample_method_item_count);
     ImGui::Combo("Scheduler Method", &int(samplerComp.current_scheduler_method),
-                 SamplerComponent::scheduler_method_items, SamplerComponent::scheduler_method_item_count);
+                 scheduler_method_items, scheduler_method_item_count);
     ImGui::InputInt("Seed", &samplerComp.seed);
     ImGui::InputInt("Steps", &samplerComp.steps);
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
     ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
-    ImGui::Combo("Type Method", &int(samplerComp.current_type_method), SamplerComponent::type_method_items,
-                 SamplerComponent::type_method_item_count);
+    ImGui::Combo("Type Method", &int(samplerComp.current_type_method), type_method_items,
+                 type_method_item_count);
     // ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), SamplerComponent::type_rng_items,
     // SamplerComponent::type_rng_item_count);
 }
@@ -98,12 +98,8 @@ void GuiDiffusion::HandleQueueEvent() {
     mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
     mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath = ckptComp.ckptPath;
     mgr.GetComponent<VaeComponent>(newEntity).vaePath = vaeComp.vaePath;
-    mgr.GetComponent<SamplerComponent>(newEntity).steps = samplerComp.steps;
-    mgr.GetComponent<SamplerComponent>(newEntity).denoise = samplerComp.denoise;
-    mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method = samplerComp.current_sample_method;
-    mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method = samplerComp.current_scheduler_method;
-    mgr.GetComponent<SamplerComponent>(newEntity).current_type_method = samplerComp.current_type_method;
-    mgr.GetComponent<CFGComponent>(newEntity).cfg = cfgComp.cfg;
+    mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
+    mgr.GetComponent<CFGComponent>(newEntity) = cfgComp;
     mgr.GetComponent<PromptComponent>(newEntity).posPrompt = promptComp.posPrompt;
     mgr.GetComponent<PromptComponent>(newEntity).negPrompt = promptComp.negPrompt;
     mgr.GetComponent<LatentComponent>(newEntity).latentWidth = latentComp.latentWidth;
