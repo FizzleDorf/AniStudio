@@ -1,7 +1,6 @@
 #pragma once
 
 // Sampling and Inference
-#include "CFGComponent.hpp"
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
 
@@ -19,9 +18,7 @@
 #include "Vaes/TaesdComponent.hpp"
 
 // Encoders
-#include "Encoders/ClipGComponent.hpp"
-#include "Encoders/ClipLComponent.hpp"
-#include "Encoders/T5XXLComponent.hpp"
+#include "Encoders/EncoderComponents.hpp"
 
 //Latents
 #include "LatentComponent.hpp"

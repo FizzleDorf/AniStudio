@@ -23,7 +23,7 @@ void GuiDiffusion::RenderCKPTLoader() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-            ;
+            
             modelComp.modelName = selectedFile;
             modelComp.modelPath = fullPath;
             std::cout << "Selected file: " << modelComp.modelName << std::endl;
@@ -49,7 +49,6 @@ void GuiDiffusion::RenderPrompts() {
     if (ImGui::InputTextMultiline("Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer))) {
         promptComp.posPrompt = promptComp.PosBuffer;
     }
-
     if (ImGui::InputTextMultiline("Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer))) {
         promptComp.negPrompt = promptComp.NegBuffer;
     }
@@ -63,21 +62,19 @@ void GuiDiffusion::RenderSampler() {
     ImGui::InputInt("Seed", &samplerComp.seed);
     ImGui::InputInt("Steps", &samplerComp.steps);
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
-    
-    
     ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
-    
-    ImGui::Combo("Type Method", &int(samplerComp.current_type_method),
-                 SamplerComponent::type_method_items, SamplerComponent::type_method_item_count);
+    ImGui::Combo("Type Method", &int(samplerComp.current_type_method), SamplerComponent::type_method_items,
+                 SamplerComponent::type_method_item_count);
     // ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), SamplerComponent::type_rng_items,
-                 SamplerComponent::type_rng_item_count);
+    // SamplerComponent::type_rng_item_count);
 }
-
 
 void GuiDiffusion::HandleQueueEvent() {
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
+
     std::cout << "Initialized entity with ID: " << newEntity << "\n";
+
     mgr.AddComponent<ModelComponent>(newEntity);
     mgr.AddComponent<CLipLComponent>(newEntity);
     mgr.AddComponent<CLipGComponent>(newEntity);
@@ -93,78 +90,49 @@ void GuiDiffusion::HandleQueueEvent() {
     mgr.AddComponent<EmbeddingComponent>(newEntity);
     mgr.AddComponent<ImageComponent>(newEntity);
 
-    // TODO: add copy constructors to reduce this mess
     std::cout << "Assigning components to new Entity: " << newEntity << "\n";
 
     mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
     mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
+    mgr.GetComponent<CLipGComponent>(newEntity) = clipGComp;
+    mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
+    mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath = ckptComp.ckptPath;
+    mgr.GetComponent<VaeComponent>(newEntity).vaePath = vaeComp.vaePath;
+    mgr.GetComponent<SamplerComponent>(newEntity).steps = samplerComp.steps;
+    mgr.GetComponent<SamplerComponent>(newEntity).denoise = samplerComp.denoise;
+    mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method = samplerComp.current_sample_method;
+    mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method = samplerComp.current_scheduler_method;
+    mgr.GetComponent<SamplerComponent>(newEntity).current_type_method = samplerComp.current_type_method;
+    mgr.GetComponent<CFGComponent>(newEntity).cfg = cfgComp.cfg;
+    mgr.GetComponent<PromptComponent>(newEntity).posPrompt = promptComp.posPrompt;
+    mgr.GetComponent<PromptComponent>(newEntity).negPrompt = promptComp.negPrompt;
+    mgr.GetComponent<LatentComponent>(newEntity).latentWidth = latentComp.latentWidth;
+    mgr.GetComponent<LatentComponent>(newEntity).latentHeight = latentComp.latentHeight;
 
     std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
     std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";
-
-    // CLipGComponent
-    mgr.GetComponent<CLipGComponent>(newEntity).encoderPath = clipGComp.encoderPath;
-    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).encoderPath
-              << std::endl;
-
-    // T5XXLComponent
-    mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath = t5xxlComp.encoderPath;
-    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath
-              << std::endl;
-
-    // DiffusionModelComponent
-    mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath = ckptComp.ckptPath;
+    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).encoderPath << "\n";
+    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath << "\n";
     std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath
-              << std::endl;
-
-    // VaeComponent
-    mgr.GetComponent<VaeComponent>(newEntity).vaePath = vaeComp.vaePath;
-    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).vaePath << std::endl;
-
-    // SamplerComponent
-    mgr.GetComponent<SamplerComponent>(newEntity).steps = samplerComp.steps;
-    std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << std::endl;
-
-    mgr.GetComponent<SamplerComponent>(newEntity).denoise = samplerComp.denoise;
-    std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(newEntity).denoise << std::endl;
-
-    mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method = samplerComp.current_sample_method;
-    std::cout << "SamplerComponent.current_sample_method: "
-              << mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method << std::endl;
-
-    mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method = samplerComp.current_scheduler_method;
-    std::cout << "SamplerComponent.current_scheduler_method: "
-              << mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method << std::endl;
-
-    mgr.GetComponent<SamplerComponent>(newEntity).current_type_method = samplerComp.current_type_method;
-    std::cout << "SamplerComponent.current_type_method: "
-              << mgr.GetComponent<SamplerComponent>(newEntity).current_type_method << std::endl;
-
-    // CFGComponent
-    mgr.GetComponent<CFGComponent>(newEntity).cfg = cfgComp.cfg;
-    std::cout << "CFGComponent.cfg: " << mgr.GetComponent<CFGComponent>(newEntity).cfg << std::endl;
-
-    // PromptComponent
-    mgr.GetComponent<PromptComponent>(newEntity).posPrompt = promptComp.posPrompt;
+              << "\n";
+    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).vaePath << "\n";
+    std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << "\n";
+    std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(newEntity).denoise << "\n";
+    std::cout << "SamplerComponent.current_sample_method: " << mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method << "\n";
+    std::cout << "SamplerComponent.current_scheduler_method: " << mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method << "\n";
+    std::cout << "SamplerComponent.current_type_method: " << mgr.GetComponent<SamplerComponent>(newEntity).current_type_method << "\n";
+    std::cout << "CFGComponent.cfg: " << mgr.GetComponent<CFGComponent>(newEntity).cfg << "\n";
     std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << "\n";
-
-    mgr.GetComponent<PromptComponent>(newEntity).negPrompt = promptComp.negPrompt;
     std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).negPrompt << "\n";
-
-    mgr.GetComponent<LatentComponent>(newEntity).latentWidth = latentComp.latentWidth;
     std::cout << "LatentComponent.latentWidth: " << mgr.GetComponent<LatentComponent>(newEntity).latentWidth << "\n";
-
-    mgr.GetComponent<LatentComponent>(newEntity).latentHeight = latentComp.latentHeight;
     std::cout << "LatentComponent.latentHeight: " << mgr.GetComponent<LatentComponent>(newEntity).latentHeight << "\n";
 
-    // Set the Event params and send the request
     event.entityID = newEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);
 }
 
 void GuiDiffusion::RenderQueue() {
-
     if (ImGui::Button("Queue")) {
         HandleQueueEvent();
     }

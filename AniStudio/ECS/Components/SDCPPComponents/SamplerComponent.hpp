@@ -65,4 +65,19 @@ struct SamplerComponent : public ECS::BaseComponent {
 
     SamplerComponent() = default;
 };
+
+struct CFGComponent : public ECS::BaseComponent {
+    float cfg = 7.0;
+    float guidance = 2.0f;
+
+    CFGComponent &operator=(const CFGComponent &other) {
+        if (this != &other) { // Self-assignment check
+            cfg = other.cfg;
+            guidance = other.guidance;
+        }
+        return *this;
+    }
+
+};
+
 } // namespace ECS
