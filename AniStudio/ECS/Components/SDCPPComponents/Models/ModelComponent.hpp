@@ -18,7 +18,7 @@ struct ModelComponent : public ECS::BaseComponent {
         return *this;
     }
 
-    ModelComponent() = default();
+    ModelComponent() = default;
 
 };
 } // namespace ECS

@@ -155,7 +155,6 @@ public:
     }
 
     void QueueInference(EntityID entityID) {
-        std::lock_guard<std::mutex> lock(queueMutex); // Lock while modifying the queue
         inferenceQueue.push(entityID);
         std::cout << "Entity Queued for inference." << std::endl;
     }
