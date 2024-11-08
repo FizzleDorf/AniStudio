@@ -12,4 +12,10 @@ struct VaeComponent : public ECS::BaseComponent {
     bool keep_vae_on_cpu = true;
     bool vae_decode_only = false;
 };
+
+struct TaesdComponent : public ECS::BaseComponent {
+    std::string taesdPath = "";
+    std::string taesdName = "<none>";
+    bool isEncoderLoaded = false;
+};
 } // namespace ECS

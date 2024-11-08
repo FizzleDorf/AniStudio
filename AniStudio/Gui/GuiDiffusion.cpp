@@ -33,8 +33,7 @@ void GuiDiffusion::RenderCKPTLoader() {
 
         ImGuiFileDialog::Instance()->Close();
     }
-     ImGui::Combo("SD Type", &int(samplerComp.current_type_method), samplerComp.type_method_items,
-                  samplerComp.type_method_item_count);
+    ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
 }
 
 void GuiDiffusion::RenderLatents() {
@@ -57,15 +56,28 @@ void GuiDiffusion::RenderPrompts() {
 }
 
 void GuiDiffusion::RenderSampler() {
-
-    ImGui::SliderInt("Steps", &samplerComp.steps, 1, 100);
-    ImGui::SliderFloat("Denoise", &samplerComp.denoise, 0.0f, 1.0f);
+    ImGui::Combo("Sampler Method", &int(samplerComp.current_sample_method), SamplerComponent::sample_method_items,
+                 SamplerComponent::sample_method_item_count);
+    ImGui::Combo("Scheduler Method", &int(samplerComp.current_scheduler_method),
+                 SamplerComponent::scheduler_method_items, SamplerComponent::scheduler_method_item_count);
+    ImGui::InputInt("Seed", &samplerComp.seed);
+    ImGui::InputInt("Steps", &samplerComp.steps);
+    ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
+    
+    
+    ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
+    
+    ImGui::Combo("Type Method", &int(samplerComp.current_type_method),
+                 SamplerComponent::type_method_items, SamplerComponent::type_method_item_count);
+    // ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), SamplerComponent::type_rng_items,
+                 SamplerComponent::type_rng_item_count);
 }
+
 
 void GuiDiffusion::HandleQueueEvent() {
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
-    std::cout << "Initialized entity with ID: " << newEntity << std::endl;
+    std::cout << "Initialized entity with ID: " << newEntity << "\n";
     mgr.AddComponent<ModelComponent>(newEntity);
     mgr.AddComponent<CLipLComponent>(newEntity);
     mgr.AddComponent<CLipGComponent>(newEntity);
@@ -82,16 +94,13 @@ void GuiDiffusion::HandleQueueEvent() {
     mgr.AddComponent<ImageComponent>(newEntity);
 
     // TODO: add copy constructors to reduce this mess
-    std::cout << "Assigning components to new Entity: " << newEntity << std::endl;
+    std::cout << "Assigning components to new Entity: " << newEntity << "\n";
 
-    // ModelComponent
-    mgr.GetComponent<ModelComponent>(newEntity).modelPath = modelComp.modelPath;
-    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << std::endl;
+    mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
+    mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
 
-    // CLipLComponent
-    mgr.GetComponent<CLipLComponent>(newEntity).encoderPath = clipLComp.encoderPath;
-    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath
-              << std::endl;
+    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
+    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";
 
     // CLipGComponent
     mgr.GetComponent<CLipGComponent>(newEntity).encoderPath = clipGComp.encoderPath;

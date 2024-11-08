@@ -8,6 +8,9 @@ namespace ECS {
 struct SamplerComponent : public ECS::BaseComponent {
     int steps = 20;
     float denoise = 1.0;
+    int seed = 31337;
+    int n_threads = 4;
+    bool free_params_immediately = true;
 
     // sampler
     static constexpr const char *sample_method_items[] = {"Euler a",  "Euler",       "Heun",  "Dpm 2",   "Dpmpp 2 a",
@@ -39,8 +42,27 @@ struct SamplerComponent : public ECS::BaseComponent {
     static constexpr int type_rng_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
     rng_type_t current_rng_type = rng_type_t::STD_DEFAULT_RNG;
 
-    int seed = 31337;
-    int n_threads = 4;
-    bool free_params_immediately = true;
+    SamplerComponent &operator=(const SamplerComponent &other) {
+        if (this != &other) {
+            steps = other.steps;
+            denoise = other.denoise;
+            seed = other.seed;
+            n_threads = other.n_threads;
+            free_params_immediately = other.free_params_immediately;
+            current_sample_method = other.current_sample_method;
+            current_scheduler_method = other.current_scheduler_method;
+            current_type_method = other.current_type_method;
+            current_rng_type = other.current_rng_type;
+        }
+        return *this;
+    }
+
+    SamplerComponent(const SamplerComponent &other)
+        : steps(other.steps), denoise(other.denoise), seed(other.seed), n_threads(other.n_threads),
+          free_params_immediately(other.free_params_immediately), current_sample_method(other.current_sample_method),
+          current_scheduler_method(other.current_scheduler_method), current_type_method(other.current_type_method),
+          current_rng_type(other.current_rng_type) {}
+
+    SamplerComponent() = default;
 };
 } // namespace ECS
