@@ -29,14 +29,14 @@ public:
     const FilePaths &GetFilePaths() const { return filePaths; }
 
 private:
-    void InstallVenv(const std::string& venvPath);
+    void InstallVenv();
     void InstallComfyUI();
     void SaveOptionsToFile(const std::string& filename);
     nlohmann::json SerializeOptions();
     void ShowBoolOptionsTable(BoolOption* options, int count, const char* tableTitle);
     void ShowFlagPathsTable(FlagOption* options, int count, const char* tableTitle);
     void RenderSettingsWindow();
-    
+    void RunComfyUI();
     FilePaths filePaths;
 };
 

@@ -12,6 +12,16 @@ struct ImageComponent : public ECS::BaseComponent {
     int height = 0;
     int channels = 0;
 
+    ImageComponent &operator=(const ImageComponent &other) {
+        if (this != &other) {
+            imageData = other.imageData;
+            width = other.width;
+            height = other.height;
+            channels = other.channels;
+        }
+        return *this;
+    }
+
     ~ImageComponent() {
         if (imageData) {
             stbi_image_free(imageData);
@@ -38,5 +48,8 @@ struct ImageComponent : public ECS::BaseComponent {
         channels = imgChannels;
     }
 };
+
+struct InputImageComponent : public ECS::ImageComponent {};
+struct OutputImageComponent : public ECS::ImageComponent {};
 }
 

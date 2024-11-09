@@ -39,6 +39,7 @@ void GuiDiffusion::RenderCKPTLoader() {
 void GuiDiffusion::RenderLatents() {
     ImGui::InputInt("Width", &latentComp.latentWidth);
     ImGui::InputInt("Height", &latentComp.latentHeight);
+    ImGui::InputInt("Batch Size", &latentComp.batchSize);
 }
 
 void GuiDiffusion::RenderInputImage() {
@@ -55,15 +56,15 @@ void GuiDiffusion::RenderPrompts() {
 }
 
 void GuiDiffusion::RenderSampler() {
-    ImGui::Combo("Sampler Method", &int(samplerComp.current_sample_method), sample_method_items,
+    ImGui::Combo("Sampler", &int(samplerComp.current_sample_method), sample_method_items,
                  sample_method_item_count);
-    ImGui::Combo("Scheduler Method", &int(samplerComp.current_scheduler_method),
+    ImGui::Combo("Scheduler", &int(samplerComp.current_scheduler_method),
                  scheduler_method_items, scheduler_method_item_count);
     ImGui::InputInt("Seed", &samplerComp.seed);
     ImGui::InputInt("Steps", &samplerComp.steps);
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
     ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
-    ImGui::Combo("Type Method", &int(samplerComp.current_type_method), type_method_items,
+    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items,
                  type_method_item_count);
     ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 }
@@ -97,10 +98,13 @@ void GuiDiffusion::HandleQueueEvent() {
     mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
     mgr.GetComponent<DiffusionModelComponent>(newEntity) = ckptComp;
     mgr.GetComponent<VaeComponent>(newEntity) = vaeComp;
+    mgr.GetComponent<TaesdComponent>(newEntity) = taesdComp;
+    mgr.GetComponent<LoraComponent>(newEntity) = loraComp;
+    mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
     mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
     mgr.GetComponent<CFGComponent>(newEntity) = cfgComp;
     mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
-    mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
+    mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
 
     std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
     std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";

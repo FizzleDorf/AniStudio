@@ -1,9 +1,10 @@
 #include "GuiSettings.hpp"
 #include "ImGuiFileDialog.h"
 #include "ImGuiFileDialogConfig.h"
-
+#include <cstring>
 using json = nlohmann::json;
-
+std::string comfyUIPath = "";
+std::string venvPath = "";
 //ComfyUI Path Args
 extern FlagOption inputOptions[] = {
     {"venv_path", "Specify the path to the virtual environment (Default is AniStudio/comfy).", ""},
@@ -84,13 +85,6 @@ void GuiSettings::Render() {
             // ComfyUI Settings
             if (ImGui::BeginTabItem("ComfyUI Settings"))
             {
-                if (ImGui::Button("Install comfy-cli"))
-                {
-                    InstallVenv(inputOptions[0].value);
-                }
-
-                ImGui::SameLine();
-
                 if (ImGui::Button("Install ComfyUI"))
                 {
                     InstallComfyUI();//inputOptions[1].value);
@@ -163,103 +157,64 @@ void GuiSettings::Render() {
     }
 }
 
-void GuiSettings::RenderSettingsWindow() {
+// Helper function for rendering a file path input field
+void RenderPathInput(const char *label, char *buffer, size_t bufferSize, std::string &path) {
+    strncpy(buffer, path.c_str(), bufferSize);
+    if (ImGui::InputText(label, buffer, bufferSize)) {
+        path = std::string(buffer);
+    }
+}
 
+void GuiSettings::RenderSettingsWindow() {
     // General Paths Section
     if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-        // Virtual Environment Path
         static char virtualEnvBuffer[512];
-        strncpy(virtualEnvBuffer, filePaths.virtualEnvPath.c_str(), sizeof(virtualEnvBuffer));
-        if (ImGui::InputText("Virtual Env Path", virtualEnvBuffer, sizeof(virtualEnvBuffer))) {
-            filePaths.virtualEnvPath = std::string(virtualEnvBuffer);
-        }
+        RenderPathInput("Virtual Env Path", virtualEnvBuffer, sizeof(virtualEnvBuffer), filePaths.virtualEnvPath);
 
-        // ComfyUI Root Path
         static char comfyuiRootBuffer[512];
-        strncpy(comfyuiRootBuffer, filePaths.comfyuiRootPath.c_str(), sizeof(comfyuiRootBuffer));
-        if (ImGui::InputText("ComfyUI Root Path", comfyuiRootBuffer, sizeof(comfyuiRootBuffer))) {
-            filePaths.comfyuiRootPath = std::string(comfyuiRootBuffer);
-        }
+        RenderPathInput("ComfyUI Root Path", comfyuiRootBuffer, sizeof(comfyuiRootBuffer), filePaths.comfyuiRootPath);
 
-        // Last Open Project Path
         static char lastOpenProjectBuffer[512];
-        strncpy(lastOpenProjectBuffer, filePaths.lastOpenProjectPath.c_str(), sizeof(lastOpenProjectBuffer));
-        if (ImGui::InputText("Last Open Project Path", lastOpenProjectBuffer, sizeof(lastOpenProjectBuffer))) {
-            filePaths.lastOpenProjectPath = std::string(lastOpenProjectBuffer);
-        }
+        RenderPathInput("Last Open Project Path", lastOpenProjectBuffer, sizeof(lastOpenProjectBuffer),
+                        filePaths.lastOpenProjectPath);
 
-        // Default Project Path
         static char defaultProjectBuffer[512];
-        strncpy(defaultProjectBuffer, filePaths.defaultProjectPath.c_str(), sizeof(defaultProjectBuffer));
-        if (ImGui::InputText("Default Project Path", defaultProjectBuffer, sizeof(defaultProjectBuffer))) {
-            filePaths.defaultProjectPath = std::string(defaultProjectBuffer);
-        }
+        RenderPathInput("Default Project Path", defaultProjectBuffer, sizeof(defaultProjectBuffer),
+                        filePaths.defaultProjectPath);
 
-        // Assets Folder Path
         static char assetsFolderBuffer[512];
-        strncpy(assetsFolderBuffer, filePaths.assetsFolderPath.c_str(), sizeof(assetsFolderBuffer));
-        if (ImGui::InputText("Assets Folder Path", assetsFolderBuffer, sizeof(assetsFolderBuffer))) {
-            filePaths.assetsFolderPath = std::string(assetsFolderBuffer);
-        }
+        RenderPathInput("Assets Folder Path", assetsFolderBuffer, sizeof(assetsFolderBuffer),
+                        filePaths.assetsFolderPath);
     }
 
     // Model Paths Section
     if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-        // Default Model Root Path
         static char defaultModelRootBuffer[512];
-        strncpy(defaultModelRootBuffer, filePaths.defaultModelRootPath.c_str(), sizeof(defaultModelRootBuffer));
-        if (ImGui::InputText("Default Model Root Path", defaultModelRootBuffer, sizeof(defaultModelRootBuffer))) {
-            filePaths.defaultModelRootPath = std::string(defaultModelRootBuffer);
-        }
+        RenderPathInput("Default Model Root Path", defaultModelRootBuffer, sizeof(defaultModelRootBuffer),
+                        filePaths.defaultModelRootPath);
 
-        // Checkpoint Directory
         static char checkpointDirBuffer[512];
-        strncpy(checkpointDirBuffer, filePaths.checkpointDir.c_str(), sizeof(checkpointDirBuffer));
-        if (ImGui::InputText("Checkpoint Directory", checkpointDirBuffer, sizeof(checkpointDirBuffer))) {
-            filePaths.checkpointDir = std::string(checkpointDirBuffer);
-        }
+        RenderPathInput("Checkpoint Directory", checkpointDirBuffer, sizeof(checkpointDirBuffer),
+                        filePaths.checkpointDir);
 
-        // Encoder Directory
         static char encoderDirBuffer[512];
-        strncpy(encoderDirBuffer, filePaths.encoderDir.c_str(), sizeof(encoderDirBuffer));
-        if (ImGui::InputText("Encoder Directory", encoderDirBuffer, sizeof(encoderDirBuffer))) {
-            filePaths.encoderDir = std::string(encoderDirBuffer);
-        }
+        RenderPathInput("Encoder Directory", encoderDirBuffer, sizeof(encoderDirBuffer), filePaths.encoderDir);
 
-        // VAE Directory
         static char vaeDirBuffer[512];
-        strncpy(vaeDirBuffer, filePaths.vaeDir.c_str(), sizeof(vaeDirBuffer));
-        if (ImGui::InputText("VAE Directory", vaeDirBuffer, sizeof(vaeDirBuffer))) {
-            filePaths.vaeDir = std::string(vaeDirBuffer);
-        }
+        RenderPathInput("VAE Directory", vaeDirBuffer, sizeof(vaeDirBuffer), filePaths.vaeDir);
 
-        // UNet Directory
         static char unetDirBuffer[512];
-        strncpy(unetDirBuffer, filePaths.unetDir.c_str(), sizeof(unetDirBuffer));
-        if (ImGui::InputText("UNet Directory", unetDirBuffer, sizeof(unetDirBuffer))) {
-            filePaths.unetDir = std::string(unetDirBuffer);
-        }
+        RenderPathInput("UNet Directory", unetDirBuffer, sizeof(unetDirBuffer), filePaths.unetDir);
 
-        // LORA Directory
         static char loraDirBuffer[512];
-        strncpy(loraDirBuffer, filePaths.loraDir.c_str(), sizeof(loraDirBuffer));
-        if (ImGui::InputText("LORA Directory", loraDirBuffer, sizeof(loraDirBuffer))) {
-            filePaths.loraDir = std::string(loraDirBuffer);
-        }
+        RenderPathInput("LORA Directory", loraDirBuffer, sizeof(loraDirBuffer), filePaths.loraDir);
 
-        // ControlNet Directory
         static char controlnetDirBuffer[512];
-        strncpy(controlnetDirBuffer, filePaths.controlnetDir.c_str(), sizeof(controlnetDirBuffer));
-        if (ImGui::InputText("ControlNet Directory", controlnetDirBuffer, sizeof(controlnetDirBuffer))) {
-            filePaths.controlnetDir = std::string(controlnetDirBuffer);
-        }
+        RenderPathInput("ControlNet Directory", controlnetDirBuffer, sizeof(controlnetDirBuffer),
+                        filePaths.controlnetDir);
 
-        // Upscale Directory
         static char upscaleDirBuffer[512];
-        strncpy(upscaleDirBuffer, filePaths.upscaleDir.c_str(), sizeof(upscaleDirBuffer));
-        if (ImGui::InputText("Upscale Directory", upscaleDirBuffer, sizeof(upscaleDirBuffer))) {
-            filePaths.upscaleDir = std::string(upscaleDirBuffer);
-        }
+        RenderPathInput("Upscale Directory", upscaleDirBuffer, sizeof(upscaleDirBuffer), filePaths.upscaleDir);
     }
 
     // Action Buttons
@@ -277,8 +232,51 @@ void GuiSettings::RenderSettingsWindow() {
     }
 }
 
-void GuiSettings::InstallVenv(const std::string& venvPath)
-{
+void GuiSettings::InstallComfyUI() {
+    // Check if the comfyui directory already exists
+    if (std::filesystem::exists(comfyUIPath)) {
+        std::cout << "ComfyUI directory already exists at " << comfyUIPath << std::endl;
+
+        // Check if the virtual environment already exists
+        if (std::filesystem::exists(venvPath)) {
+            std::cout << "Virtual environment already exists at " << venvPath << std::endl;
+
+            // Activate the virtual environment and install requirements
+            std::string pipExecutable;
+#ifdef _WIN32
+            pipExecutable = venvPath + "\\Scripts\\pip.exe";
+#else
+            pipExecutable = venvPath + "/bin/pip";
+#endif
+            std::string requirementsPath = comfyUIPath + "/requirements.txt";
+            std::string installRequirementsCmd = pipExecutable + " install -r \"" + requirementsPath + "\"";
+            if (std::system(installRequirementsCmd.c_str()) != 0) {
+                std::cerr << "Failed to install requirements for ComfyUI at " << comfyUIPath << std::endl;
+                return;
+            }
+            std::cout << "Requirements successfully installed for ComfyUI at " << comfyUIPath << std::endl;
+        } else {
+            // If the virtual environment does not exist, create it
+            InstallVenv();
+            // Retry installing the requirements
+            InstallComfyUI();
+        }
+    } else {
+        // Clone the ComfyUI repository
+        std::string cloneCmd = "git clone https://github.com/ComfyUI/ComfyUI \"" + comfyUIPath + "\"";
+        if (std::system(cloneCmd.c_str()) != 0) {
+            std::cerr << "Failed to clone ComfyUI to " << comfyUIPath << std::endl;
+            return;
+        }
+        std::cout << "Successfully cloned ComfyUI to " << comfyUIPath << std::endl;
+
+        // Proceed with setting up the virtual environment and installing requirements
+        InstallVenv();
+        InstallComfyUI(); // Re-run to install requirements
+    }
+}
+
+void GuiSettings::InstallVenv() {
     // Check if the virtual environment directory already exists
     if (std::filesystem::exists(venvPath)) {
         std::cerr << "Virtual environment already exists at " << venvPath << std::endl;
@@ -292,35 +290,22 @@ void GuiSettings::InstallVenv(const std::string& venvPath)
         return;
     }
 
-    // Construct paths for the pip executable and other relevant scripts
-    std::string pipExecutable;
-
-#ifdef _WIN32
-    pipExecutable = venvPath + "\\Scripts\\pip.exe";
-#else
-    pipExecutable = venvPath + "/bin/pip";
-#endif
-
-    // Check if comfy-cli is already installed
-    std::string checkComfyCliCmd = pipExecutable + " show comfy-cli";
-    if (std::system(checkComfyCliCmd.c_str()) == 0) {
-        std::cerr << "comfy-cli is already installed in the virtual environment at " << venvPath << std::endl;
-        return;
-    }
-
-    // Command to install comfy-cli within the virtual environment
-    std::string installCmd = pipExecutable + " install comfy-cli";
-    if (std::system(installCmd.c_str()) != 0) {
-        std::cerr << "Failed to install comfy-cli in the virtual environment at " << venvPath << std::endl;
-        return;
-    }
-
-    std::cout << "comfy-cli successfully installed in the virtual environment at " << venvPath << std::endl;
+    std::cout << "Virtual environment successfully created at " << venvPath << std::endl;
 }
 
-void GuiSettings::InstallComfyUI()
-{
-    std::system("comfy install");
+void GuiSettings::RunComfyUI() {
+    // Command to activate the virtual environment and run main.py
+    std::string activateAndRunCmd;
+#ifdef _WIN32
+    activateAndRunCmd = "\"" + venvPath + "\\Scripts\\activate && python \"" + comfyUIPath + "\\main.py\"\"";
+#else
+    activateAndRunCmd = "source \"" + venvPath + "/bin/activate\" && python \"" + comfyUIPath + "/main.py\"";
+#endif
+    if (std::system(activateAndRunCmd.c_str()) != 0) {
+        std::cerr << "Failed to run ComfyUI at " << comfyUIPath << std::endl;
+    } else {
+        std::cout << "Running ComfyUI at " << comfyUIPath << std::endl;
+    }
 }
 
 // Function to display the flag options table with checkboxes and tooltips

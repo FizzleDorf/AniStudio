@@ -13,10 +13,10 @@
 #include "Models/PhotomakerComponent.hpp"
 
 // Vaes
-#include "Vaes/VaeComponent.hpp"
+#include "VaeComponents.hpp"
 
 // Encoders
-#include "Encoders/EncoderComponents.hpp"
+#include "EncoderComponents.hpp"
 
 //Latents
 #include "LatentComponent.hpp"
