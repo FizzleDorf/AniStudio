@@ -7,10 +7,10 @@
 using namespace ECS;
 using namespace ANI;
 
-void GuiDiffusion::RenderCKPTLoader() {
+void GuiDiffusion::RenderModelLoader() {
     ImGui::Text("Checkpoint:");
     ImGui::Text("%s", modelComp.modelName.c_str());
-    ImGui::SameLine();
+    
 
     if (ImGui::Button("...")) {
         IGFD::FileDialogConfig config;
@@ -135,15 +135,156 @@ void GuiDiffusion::RenderQueue() {
     }
 }
 
+void GuiDiffusion::RenderControlnets() {
+    ImGui::Text("Controlnet:");
+    ImGui::SameLine();
+    ImGui::Text("%s", controlComp.controlName.c_str());
+
+    if (ImGui::Button("...")) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.checkpointDir;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                config);
+    }
+
+    if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+            controlComp.controlName = selectedFile;
+            controlComp.controlPath = fullPath;
+            std::cout << "Selected file: " << controlComp.controlName << std::endl;
+            std::cout << "Full path: " << controlComp.controlPath << std::endl;
+            std::cout << "New model path set: " << controlComp.controlPath << std::endl;
+        }
+
+        ImGuiFileDialog::Instance()->Close();
+    }
+    ImGui::InputFloat("Strength", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
+    ImGui::InputFloat("Start", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
+    ImGui::InputFloat("End", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
+    ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
+
+}
+void GuiDiffusion::RenderEmbeddings() {
+    ImGui::Text("Embedding:");
+    ImGui::SameLine();
+    ImGui::Text("%s", embedComp.embedName.c_str());
+
+    if (ImGui::Button("...")) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.checkpointDir;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                config);
+    }
+
+    if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+            embedComp.embedName = selectedFile;
+            embedComp.embedPath = fullPath;
+            std::cout << "Selected file: " << embedComp.embedName << std::endl;
+            std::cout << "Full path: " << embedComp.embedPath << std::endl;
+            std::cout << "New model path set: " << embedComp.embedPath << std::endl;
+        }
+
+        ImGuiFileDialog::Instance()->Close();
+    }
+}
+void GuiDiffusion::RenderDiffusionModelLoader() { 
+    ImGui::Text("Unet: ");
+    ImGui::SameLine();
+    ImGui::Text("%s", ckptComp.ckptName.c_str());
+
+    if (ImGui::Button("...")) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.unetDir;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                config);
+    }
+
+    if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+            ckptComp.ckptName = selectedFile;
+            ckptComp.ckptPath = fullPath;
+            std::cout << "Selected file: " << ckptComp.ckptName << std::endl;
+            std::cout << "Full path: " << ckptComp.ckptPath << std::endl;
+            std::cout << "New model path set: " << ckptComp.ckptPath << std::endl;
+        }
+
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+
+}
+void GuiDiffusion::RenderVaeLoader() {
+    ImGui::Text("Vae: ");
+    ImGui::SameLine();
+    ImGui::Text("%s", vaeComp.vaeName.c_str());
+
+    if (ImGui::Button("...")) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.vaeDir;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                config);
+    }
+
+    if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+            vaeComp.vaeName = selectedFile;
+            vaeComp.vaePath = fullPath;
+            std::cout << "Selected file: " << vaeComp.vaeName << std::endl;
+            std::cout << "Full path: " << vaeComp.vaePath << std::endl;
+            std::cout << "New model path set: " << vaeComp.vaePath << std::endl;
+        }
+
+        ImGuiFileDialog::Instance()->Close();
+    }
+}
+
 void GuiDiffusion::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
-        RenderQueue();
-        RenderCKPTLoader();
-        RenderLatents();
-        RenderInputImage();
-        RenderPrompts();
-        RenderSampler();
+        if (ImGui::BeginTabBar("Image")) {
+            if (ImGui::BeginTabItem("Txt2Img")) {            
+                RenderQueue();
+                RenderModelLoader();
+                RenderDiffusionModelLoader();
+                RenderVaeLoader();
+                RenderLatents();
+                RenderPrompts();
+                RenderSampler();
+                RenderControlnets();
+                RenderEmbeddings();
+                ImGui::EndTabItem();
+            }
+        
+        
+        if (ImGui::BeginTabItem("Img2Img")) {
+                RenderQueue();
+                RenderInputImage();
+                RenderModelLoader();
+                RenderDiffusionModelLoader();
+                RenderVaeLoader();
+                RenderLatents();
+                RenderPrompts();
+                RenderSampler();
+                RenderControlnets();
+                RenderEmbeddings();
+                ImGui::EndTabItem();
+            }
+        }
+        ImGui::EndTabBar();
     }
     ImGui::End();
+      
 }

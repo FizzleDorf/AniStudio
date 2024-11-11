@@ -10,13 +10,18 @@ public:
     GuiDiffusion(const FilePaths &paths) : filePaths(paths) {}
     ~GuiDiffusion() {}
 
-    void RenderCKPTLoader();
+    void RenderModelLoader();
     void RenderLatents();
     void RenderInputImage();
     void RenderSampler();
     void RenderPrompts();
     void RenderQueue();
     void Render();
+
+    void RenderDiffusionModelLoader();
+    void RenderVaeLoader();
+    void RenderControlnets();
+    void RenderEmbeddings();
 
     void HandleQueueEvent();
 
@@ -48,4 +53,5 @@ private:
     TaesdComponent taesdComp;
     ImageComponent imageComp;
     EmbeddingComponent embedComp;
+    ControlnetComponent controlComp;
 };
