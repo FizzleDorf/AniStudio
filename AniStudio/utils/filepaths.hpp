@@ -17,6 +17,9 @@ struct FilePaths {
     // These paths can be set to default model paths
     std::string checkpointDir = "/checkpoints";
     std::string encoderDir = "/clip";
+    std::string clipLPath = "/clip";
+    std::string clipGPath = "/clip";
+    std::string t5xxlPath = "/clip";
     std::string vaeDir = "/vae";
     std::string unetDir = "/unet";
     std::string loraDir = "/loras";
