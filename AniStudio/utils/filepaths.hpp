@@ -20,6 +20,7 @@ struct FilePaths {
     std::string clipLPath = "/clip";
     std::string clipGPath = "/clip";
     std::string t5xxlPath = "/clip";
+    std::string embedDir = "/clip";
     std::string vaeDir = "/vae";
     std::string unetDir = "/unet";
     std::string loraDir = "/loras";

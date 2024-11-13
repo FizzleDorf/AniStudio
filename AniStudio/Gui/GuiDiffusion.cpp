@@ -143,7 +143,7 @@ void GuiDiffusion::RenderControlnets() {
 
     if (ImGui::Button("5b##...")) {
         IGFD::FileDialogConfig config;
-        config.path = filePaths.checkpointDir;
+        config.path = filePaths.controlnetDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
@@ -175,7 +175,7 @@ void GuiDiffusion::RenderEmbeddings() {
 
     if (ImGui::Button("...##v9")) {
         IGFD::FileDialogConfig config;
-        config.path = filePaths.checkpointDir;
+        config.path = filePaths.embedDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
@@ -202,12 +202,38 @@ void GuiDiffusion::RenderDiffusionModelLoader() {
 
     if (ImGui::Button("...##n2")) {
         IGFD::FileDialogConfig config;
-        config.path = filePaths.clipLPath;
+        config.path = filePaths.unetDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadUnetDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadUnetDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+            ckptComp.ckptName = selectedFile;
+            ckptComp.ckptPath = fullPath;
+            std::cout << "Selected file: " << ckptComp.ckptName << std::endl;
+            std::cout << "Full path: " << ckptComp.ckptPath << std::endl;
+            std::cout << "New model path set: " << ckptComp.ckptPath << std::endl;
+        }
+
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+    ImGui::Text("Clip L: ");
+    ImGui::SameLine();
+    ImGui::Text("%s", clipLComp.encoderName.c_str());
+
+    if (ImGui::Button("...##b7")) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.encoderDir;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadClipLDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                config);
+    }
+
+    if (ImGuiFileDialog::Instance()->Display("LoadClipLDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
@@ -222,18 +248,18 @@ void GuiDiffusion::RenderDiffusionModelLoader() {
         ImGuiFileDialog::Instance()->Close();
     }
 
-    ImGui::Text("Clip L: ");
+    ImGui::Text("Clip G: ");
     ImGui::SameLine();
-    ImGui::Text("%s", ckptComp.ckptName.c_str());
+    ImGui::Text("%s", clipGComp.encoderName.c_str());
 
-    if (ImGui::Button("...##b7")) {
+    if (ImGui::Button("...##g7")) {
         IGFD::FileDialogConfig config;
-        config.path = filePaths.clipGPath;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadClipLDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+        config.path = filePaths.encoderDir;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadClipGDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
 
-    if (ImGuiFileDialog::Instance()->Display("LoadClipLDialog", 32, ImVec2(700, 400))) {
+    if (ImGuiFileDialog::Instance()->Display("LoadClipGDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
@@ -248,39 +274,13 @@ void GuiDiffusion::RenderDiffusionModelLoader() {
         ImGuiFileDialog::Instance()->Close();
     }
 
-    ImGui::Text("Clip G: ");
-    ImGui::SameLine();
-    ImGui::Text("%s", ckptComp.ckptName.c_str());
-
-    if (ImGui::Button("...##g7")) {
-        IGFD::FileDialogConfig config;
-        config.path = filePaths.t5xxlPath;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadClipGDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
-                                                config);
-    }
-
-    if (ImGuiFileDialog::Instance()->Display("LoadClipGDialog", 32, ImVec2(700, 400))) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-
-            t5xxlComp.encoderName = selectedFile;
-            t5xxlComp.encoderPath = fullPath;
-            std::cout << "Selected file: " << t5xxlComp.encoderName << std::endl;
-            std::cout << "Full path: " << t5xxlComp.encoderPath << std::endl;
-            std::cout << "New model path set: " << t5xxlComp.encoderPath << std::endl;
-        }
-
-        ImGuiFileDialog::Instance()->Close();
-    }
-
     ImGui::Text("T5XXL: ");
     ImGui::SameLine();
     ImGui::Text("%s", t5xxlComp.encoderName.c_str());
 
     if (ImGui::Button("...##x6")) {
         IGFD::FileDialogConfig config;
-        config.path = filePaths.unetDir;
+        config.path = filePaths.encoderDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadT5XXLDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
