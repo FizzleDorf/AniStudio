@@ -10,8 +10,9 @@
 - Entity Component System for modular development with low technical debt
 
 ## Requirements
-- Vulkan Renderer
+- Vulkan SDK
 - Python
+- CMake
 
 ## Install
 *cloning, installing and building will take a while. speeding up the build process using repo options is in the TODO*
