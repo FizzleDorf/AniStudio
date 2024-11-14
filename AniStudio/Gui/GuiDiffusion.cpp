@@ -62,12 +62,11 @@ void GuiDiffusion::RenderSampler() {
     ImGui::Combo("Scheduler", &int(samplerComp.current_scheduler_method),
                  scheduler_method_items, scheduler_method_item_count);
     ImGui::InputInt("Seed", &samplerComp.seed);
+    ImGui::InputFloat("CFG", &cfgComp.cfg);
+    ImGui::InputFloat("CFG", &cfgComp.guidance);
     ImGui::InputInt("Steps", &samplerComp.steps);
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
-    ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
-    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items,
-                 type_method_item_count);
-    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
+    
 }
 
 void GuiDiffusion::HandleQueueEvent() {
@@ -134,6 +133,10 @@ void GuiDiffusion::RenderQueue() {
     if (ImGui::Button("Queue")) {
         HandleQueueEvent();
     }
+
+    ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
+    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 }
 
 void GuiDiffusion::RenderControlnets() {
@@ -141,7 +144,7 @@ void GuiDiffusion::RenderControlnets() {
     ImGui::SameLine();
     ImGui::Text("%s", controlComp.controlName.c_str());
 
-    if (ImGui::Button("5b##...")) {
+    if (ImGui::Button("...##5b")) {
         IGFD::FileDialogConfig config;
         config.path = filePaths.controlnetDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
@@ -162,11 +165,9 @@ void GuiDiffusion::RenderControlnets() {
 
         ImGuiFileDialog::Instance()->Close();
     }
-    ImGui::InputFloat("Strength", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
-    ImGui::InputFloat("Start", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
-    ImGui::InputFloat("End", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
-    ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
-
+    ImGui::InputFloat("Strength", &controlComp.cnStrength, 0.01f, 0.1f, "%.2f");
+    ImGui::InputFloat("Start", &controlComp.applyStart, 0.01f, 0.1f, "%.2f");
+    ImGui::InputFloat("End", &controlComp.applyEnd, 0.01f, 0.1f, "%.2f");
 }
 void GuiDiffusion::RenderEmbeddings() {
     ImGui::Text("Embedding:");
