@@ -14,61 +14,6 @@ project(AniStudio CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 
-# Set options for stable-diffusion
-option(ANI_CUBLAS                     "sd: cuda backend" OFF)
-option(ANI_HIPBLAS                    "sd: rocm backend" OFF)
-option(ANI_METAL                      "sd: metal backend" OFF)
-option(ANI_VULKAN                     "sd: vulkan backend" OFF)
-option(ANI_SYCL                       "sd: sycl backend" OFF)
-option(ANI_FLASH_ATTN                 "sd: use flash attention for x4 less memory usage" OFF)
-option(ANI_FAST_SOFTMAX               "sd: x1.5 faster softmax, indeterministic (sometimes, same seed don't generate same image), cuda only" OFF)
-option(ANI_BUILD_SHARED_LIBS          "sd: build shared libs" OFF)
-
-if(ANI_CUBLAS)
-    message("-- Use CUBLAS as backend stable-diffusion")
-    set(SD_CUBLAS ON)
-    add_definitions(-ANI_USE_CUBLAS)
-endif()
-
-if(ANI_METAL)
-    message("-- Use Metal as backend stable-diffusion")
-    set(SD_METAL ON)
-    add_definitions(-ANI_USE_METAL)
-endif()
-
-if (ANI_VULKAN)
-    message("-- Use Vulkan as backend stable-diffusion")
-    set(SD_VULKAN ON)
-    add_definitions(-ANI_USE_VULKAN)
-endif ()
-
-if (ANI_HIPBLAS)
-    message("-- Use HIPBLAS as backend stable-diffusion")
-    set(SD_HIPBLAS ON)
-    add_definitions(-ANI_USE_CUBLAS)
-    if(ANI_FAST_SOFTMAX)
-        set(SD_FAST_SOFTMAX ON)
-    endif()
-endif ()
-
-if(ANI_FLASH_ATTN)
-    message("-- Use Flash Attention for memory optimization")
-    set(SD_FLASH_ATTN ON)
-    add_definitions(-ANI_USE_FLASH_ATTENTION)
-endif()
-
-# we can get only one share lib
-if(ANI_BUILD_SHARED_LIBS)
-    message("-- Build shared library")
-    set(SD_BUILD_SHARED_LIBS ON)
-endif()
-
-if(ANI_SYCL)
-    message("-- Use SYCL as backend stable-diffusion")
-    set(SD_SYCL ON)
-    add_definitions(-ANI_USE_SYCL)
-endif()
-
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
 
