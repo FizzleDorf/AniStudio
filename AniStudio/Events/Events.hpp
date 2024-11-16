@@ -8,7 +8,12 @@ namespace ANI {
 
 class Engine; // Forward declaration of Engine
 
-enum class EventType { InferenceRequest };
+enum class EventType { 
+    InferenceRequest,
+    UpscaleRequest,
+    I2IInferenceRequest,
+    T2VInferenceRequest
+};
 
 struct Event {
     EventType type;

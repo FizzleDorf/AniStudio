@@ -69,7 +69,7 @@ void GuiDiffusion::RenderSampler() {
     
 }
 
-void GuiDiffusion::HandleQueueEvent() {
+void GuiDiffusion::HandleT2IEvent() {
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
 
@@ -129,9 +129,20 @@ void GuiDiffusion::HandleQueueEvent() {
     ANI::Events::Ref().QueueEvent(event);
 }
 
+void GuiDiffusion::HandleUpscaleEvent() {
+    Event event;
+    EntityID newEntity = mgr.AddNewEntity();
+
+    std::cout << "Initialized entity with ID: " << newEntity << "\n";
+
+    event.entityID = newEntity;
+    event.type = EventType::InferenceRequest;
+    ANI::Events::Ref().QueueEvent(event);
+}
+
 void GuiDiffusion::RenderQueue() {
     if (ImGui::Button("Queue")) {
-        HandleQueueEvent();
+        HandleT2IEvent();
     }
 
     ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
