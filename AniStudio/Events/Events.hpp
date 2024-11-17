@@ -40,6 +40,7 @@ public:
 private:
     Events(); // Constructor is private for singleton pattern
     std::queue<Event> eventQueue;
+    EntityManager &mgr = ECS::EntityManager::Ref();
 
     // Static callback function for GLFW window close
     static void WindowCloseCallback(GLFWwindow *window) {

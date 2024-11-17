@@ -160,9 +160,9 @@ public:
     void QueueInference(EntityID entityID) {
         std::lock_guard<std::mutex> lock(queueMutex);
         inferenceQueue.push(entityID);
-        std::cout << "Entity Queued for inference." << std::endl;
+        std::cout << "Entity Queued for inference."
+                  << "\n";
     }
-
 
 private:
     EntityManager &mgr = ECS::EntityManager::Ref();

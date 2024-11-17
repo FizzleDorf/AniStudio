@@ -33,7 +33,7 @@ void Events::ProcessEvents() {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << std::endl;
 
             // Access the SDCPPSystem through EntityManager
-            auto sdcppSystem = ECS::EntityManager::Ref().GetSystem<ECS::SDCPPSystem>();
+            auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
                 sdcppSystem->QueueInference(event.entityID);
@@ -42,7 +42,19 @@ void Events::ProcessEvents() {
             }
             break;
         }
+        case EventType::UpscaleRequest: {
+            std::cout << "Handling Upscale event for Entity ID: " << event.entityID << std::endl;
 
+            // Access the SDCPPSystem through EntityManager
+            auto upscaleSystem = mgr.GetSystem<ECS::UpscaleSystem>();
+            if (upscaleSystem) {
+                std::cout << "UpscaleSystem is registered." << std::endl;
+                upscaleSystem->QueueInference(event.entityID);
+            } else {
+                std::cerr << "SDCPPSystem is not registered." << std::endl;
+            }
+            break;
+        }
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
             break;
