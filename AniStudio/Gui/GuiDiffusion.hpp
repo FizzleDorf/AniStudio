@@ -23,7 +23,7 @@ public:
     void RenderControlnets();
     void RenderEmbeddings();
 
-    void HandleQueueEvent();
+    void HandleT2IEvent();
 
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);
