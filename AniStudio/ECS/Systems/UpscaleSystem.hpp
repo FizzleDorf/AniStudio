@@ -72,13 +72,12 @@ public:
                 std::cout << "Upscale context initialized successfully."
                           << "\n";
 
-             /*   sd_image_t *inputImage(
-                    mgr.GetComponent<InputImageComponent>(entityID),
-                    mgr.GetComponent<InputImageComponent>(entityID),
-                    mgr.GetComponent<InputImageComponent>(entityID), 
-                    mgr.GetComponent<InputImageComponent>(entityID)
-                    );*/
-                sd_image_t inputImage; // placeholder
+                sd_image_t inputImage;
+                inputImage.width = mgr.GetComponent<InputImageComponent>(entityID).width;
+                inputImage.height = mgr.GetComponent<InputImageComponent>(entityID).height;
+                inputImage.channel = mgr.GetComponent<InputImageComponent>(entityID).channels;
+                inputImage.data = mgr.GetComponent<InputImageComponent>(entityID).imageData;
+                 
                 // Perform image generation
                 sd_image_t image = upscale(
                     upscale_context, 
