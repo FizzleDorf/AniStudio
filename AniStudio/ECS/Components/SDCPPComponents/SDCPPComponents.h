@@ -5,12 +5,12 @@
 #include "SamplerComponent.hpp"
 
 // Models
-#include "Models/ModelComponents.hpp"
-#include "Models/EsrganComponent.hpp"
-#include "Models/LoraComponent.hpp"
-#include "Models/ControlnetComponent.hpp"
-#include "Models/EmbeddingComponent.hpp"
-#include "Models/PhotomakerComponent.hpp"
+#include "ModelComponents.hpp"
+#include "EsrganComponent.hpp"
+#include "LoraComponent.hpp"
+#include "ControlnetComponent.hpp"
+#include "EmbeddingComponent.hpp"
+#include "PhotomakerComponent.hpp"
 
 // Vaes
 #include "VaeComponents.hpp"
