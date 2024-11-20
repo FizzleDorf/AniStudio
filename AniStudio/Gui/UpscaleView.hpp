@@ -1,0 +1,27 @@
+#pragma once
+#include "../Engine/Engine.hpp"
+#include "ECS.h"
+#include "pch.h"
+
+using namespace ECS;
+
+class UpscaleView {
+public:
+    UpscaleView(const FilePaths &paths) : filePaths(paths) {}
+    ~UpscaleView() {}
+
+    void Render();
+
+private:
+    // ECS-related variables
+    EntityManager &mgr = ECS::EntityManager::Ref();
+    EntityID entity;
+
+    // saved default filepaths
+    const FilePaths &filePaths;
+
+    // Variables to handle the parameters for diffusion
+    EsrganComponent modelComp;
+    InputImageComponent inputImageComp;
+    ImageComponent imageComp;
+};
