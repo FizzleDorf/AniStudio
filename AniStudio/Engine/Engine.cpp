@@ -173,7 +173,7 @@ void Engine::Update() {
         if (viewState.showSettingsView)
             settingsView.Render();
 
-        if (viewState.shoeUpscaleView)
+        if (viewState.showUpscaleView)
             upscaleView.Render();
 
         // if (viewState.show3DView) settingsView.Render();
