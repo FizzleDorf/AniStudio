@@ -20,7 +20,7 @@ private:
     // saved default filepaths
     const FilePaths &filePaths;
 
-    // Variables to handle the parameters for diffusion
+    // Variables to handle the parameters for upscaling
     EsrganComponent modelComp;
     InputImageComponent inputImageComp;
     ImageComponent imageComp;

@@ -5,6 +5,7 @@ struct ViewState {
     bool showDiffusionView = true;
     bool showDrawingCanvas = true;
     bool showSettingsView = true;
+    bool shoeUpscaleView = true;
     bool showImageView = true;
 };
 

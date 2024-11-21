@@ -6,6 +6,7 @@ using namespace ECS;
 // Gui Views
 GuiSettings settingsView;
 GuiDiffusion diffusionView(settingsView.GetFilePaths());
+UpscaleView upscaleView(settingsView.GetFilePaths());
 
 
 namespace ANI {
@@ -171,6 +172,9 @@ void Engine::Update() {
         // if (viewState.showDrawingCanvas) canvasView.Render();
         if (viewState.showSettingsView)
             settingsView.Render();
+
+        if (viewState.shoeUpscaleView)
+            upscaleView.Render();
 
         // if (viewState.show3DView) settingsView.Render();
     }

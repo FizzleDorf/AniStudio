@@ -4,3 +4,4 @@
 #include "GuiSettings.hpp"
 #include "GuiDiffusion.hpp"
 #include "ImageView.hpp"
+#include "UpscaleView.hpp"
