@@ -45,16 +45,16 @@ for selecting different inference backends, you need to use the appropriate flag
 
 #### Stable Diffusion Build Options
 
-| Command Flag                | Description                                                                         | Default | Example Usage             |
-|-----------------------------|-------------------------------------------------------------------------------------|---------|---------------------------|
-| ```-DSD_CUBLAS=ON```           | Enable CUDA backend.                                                               | OFF     | `cmake .. -DANI_CUBLAS=ON`         |
-| ```-DSD_HIPBLAS=ON```          | Enable ROCm (HIPBLAS) backend.                                                     | OFF     | `cmake .. -DANI_HIPBLAS=ON`        |
-| ```-DSD_METAL=ON```            | Enable Metal backend (macOS only).                                                 | OFF     | `cmake .. -DANI_METAL=ON`          |
-| ```-DSD_VULKAN=ON```           | Enable Vulkan backend.                                                             | OFF     | `cmake .. -DANI_VULKAN=ON`         |
-| ```-DSD_SYCL=ON```             | Enable SYCL backend.                                                               | OFF     | `cmake .. -DANI_SYCL=ON`           |
-| ```-DSD_FLASH_ATTN=ON```       | Use Flash Attention for x4 less memory usage.                                       | OFF     | `cmake .. -DANI_FLASH_ATTN=ON`     |
-| ```-DSD_FAST_SOFTMAX=ON```     | Enable faster Softmax (1.5x speedup but indeterministic). CUDA only.                | OFF     | `cmake .. -DANI_FAST_SOFTMAX=ON`   |
-| ```-DSD_BUILD_SHARED_LIBS=ON```| Build shared libraries instead of static libraries.                                 | OFF     | `cmake .. -DANI_BUILD_SHARED_LIBS=ON` |
+| Command Flag             | Description                                                                     |
+|--------------------------|---------------------------------------------------------------------------------|
+| ```-DSD_CUBLAS=ON```      | Enable CUDA backend.                                                            |
+| ```-DSD_HIPBLAS=ON```     | Enable ROCm (HIPBLAS) backend.                                                  |
+| ```-DSD_METAL=ON```       | Enable Metal backend (macOS only).                                              |
+| ```-DSD_VULKAN=ON```      | Enable Vulkan backend.                                                          |
+| ```-DSD_SYCL=ON```        | Enable SYCL backend.                                                            |
+| ```-DSD_FLASH_ATTN=ON```  | Use Flash Attention for x4 less memory usage.                                   |
+| ```-DSD_FAST_SOFTMAX=ON```| Enable faster Softmax (1.5x speedup but indeterministic). CUDA only.            |
+| ```-DSD_BUILD_SHARED_LIBS=ON```| Build shared libraries instead of static libraries.                        |
 
 #### Example
 for launching with a vulkan backend with flash attention, the build commands would look like:
