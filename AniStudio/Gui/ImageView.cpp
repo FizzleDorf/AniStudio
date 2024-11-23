@@ -1,45 +1,75 @@
 #include "ImageView.hpp"
+#include <iostream>
+#include <stb_image_write.h> // For saving images
 #include <stdexcept>
 
-ECS::ImageView::ImageView(ECS::ImageComponent *imageComponent) : imageComponent(imageComponent) {
-    imageComponent->loadImageFromPath("C:\\Users\\julie\\Downloads\\134553466146.png");
-    CreateDescriptorSet(); // Generate Vulkan descriptor set for ImGui
-}
+namespace ECS {
 
-void ECS::ImageView::CreateDescriptorSet() {
-    // This method assumes Vulkan resources such as VkImageView and VkSampler are already created.
-    // The descriptor set should be created using the imageComponent's Vulkan resources (imageView, sampler, etc.).
-    // You would typically populate a `VkDescriptorSet` here.
+ImageView::ImageView() : imageComponent(nullptr), textureID(0) {}
 
-    if (!imageComponent->imageData) {
-        throw std::runtime_error("Image data is missing in ImageComponent!");
-    }
-
-    // Create Vulkan descriptor set for the image (using Vulkan objects from ImageComponent)
-    // -- Placeholder for Vulkan descriptor set creation code --
-    // (Make sure you have VkImageView, VkSampler, and image resources in ImageComponent)
-
-    // Assign descriptorSet based on the created Vulkan descriptor
-    // descriptorSet = ...;
-}
-
-void ECS::ImageView::Render() {
+void ImageView::SetImageComponent(ImageComponent *component) {
+    imageComponent = component;
     if (imageComponent && imageComponent->imageData) {
-        ImGui::Begin("Image Viewer");
-
-        // Display the image using ImGui's Vulkan binding
-        if (descriptorSet != VK_NULL_HANDLE) {
-            // Set the size of the image as per the loaded image
-            ImVec2 imageSize(static_cast<float>(imageComponent->width), static_cast<float>(imageComponent->height));
-
-            // Use ImGui::Image to display the Vulkan image
-            ImGui::Image((void *)(intptr_t)descriptorSet, imageSize);
-        } else {
-            ImGui::Text("Descriptor set is not ready for rendering.");
-        }
-
-        ImGui::End();
-    } else {
-        ImGui::Text("No image loaded to render.");
+        CreateTexture();
     }
 }
+
+void ImageView::Render() {
+    ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
+    if (imageComponent && imageComponent->imageData && textureID) {
+        ImGui::Image(reinterpret_cast<void*>(static_cast<intptr_t>(textureID)),
+                     ImVec2(static_cast<float>(imageComponent->width), static_cast<float>(imageComponent->height)));
+    }
+    ImGui::End();
+}
+
+
+void ImageView::LoadImage(const std::string &filePath) {
+    if (!imageComponent) {
+        throw std::runtime_error("ImageComponent is not set.");
+    }
+    imageComponent->loadImageFromPath(filePath);
+    if (imageComponent->imageData) {
+        CreateTexture();
+    } else {
+        throw std::runtime_error("Failed to load image data.");
+    }
+}
+
+void ImageView::SaveImage(const std::string &filePath) {
+    if (!imageComponent || !imageComponent->imageData) {
+        throw std::runtime_error("No image data to save.");
+    }
+    stbi_write_png(filePath.c_str(), imageComponent->width, imageComponent->height, 4, imageComponent->imageData,
+                   imageComponent->width * 4);
+}
+
+void ImageView::CreateTexture() {
+    if (!imageComponent || !imageComponent->imageData) {
+        throw std::runtime_error("Image data is not loaded.");
+    }
+
+    if (textureID) {
+        glDeleteTextures(1, &textureID);
+    }
+
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageComponent->width, imageComponent->height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 imageComponent->imageData);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+ImageView::~ImageView() {
+    if (textureID) {
+        glDeleteTextures(1, &textureID);
+    }
+}
+
+} // namespace ECS

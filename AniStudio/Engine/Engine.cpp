@@ -83,6 +83,8 @@ void Engine::Update() {
 
     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
+    ShowMenuBar(window);
+
     if (viewState.showDiffusionView)
         diffusionView.Render();
     if (viewState.showSettingsView)
