@@ -17,13 +17,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED On)
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
 
-find_package(Vulkan REQUIRED)
-# Check if Vulkan was found
-if (Vulkan_FOUND)
-    message(STATUS "Found Vulkan, include: ${Vulkan_INCLUDE_DIR}, library: ${Vulkan_LIBRARY}")
-else()
-    message(FATAL_ERROR "Vulkan not found")
-endif()
+# find_package(Vulkan REQUIRED)
+# # Check if Vulkan was found
+# if (Vulkan_FOUND)
+#     message(STATUS "Found Vulkan, include: ${Vulkan_INCLUDE_DIR}, library: ${Vulkan_LIBRARY}")
+# else()
+#     message(FATAL_ERROR "Vulkan not found")
+# endif()
 
 find_package(glfw3 REQUIRED)
 # Check if glfw was found
@@ -57,13 +57,16 @@ find_program(GLSL_VALIDATOR glslangValidator HINTS
     $ENV{VULKAN_SDK}/Bin/ 
     $ENV{VULKAN_SDK}/Bin32/
 )
-
+set(GLEW_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/GL/include")
+set(GLEW_LIBRARY "${CMAKE_SOURCE_DIR}/external/GL/lib/glew32s.lib")
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/AniStudio
     ${CMAKE_SOURCE_DIR}/Engine
     ${CMAKE_SOURCE_DIR}/Events
     ${CMAKE_SOURCE_DIR}/Timer
+
+    ${GLEW_INCLUDE_DIR}
 
     ${CMAKE_SOURCE_DIR}/AniStudio/Gui
     ${CMAKE_SOURCE_DIR}/AniStudio/utils
@@ -77,12 +80,13 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/AniStudio/backends
 
     ${CMAKE_SOURCE_DIR}/external/glm
+    ${GLEW_INCLUDE_DIR}
     ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
     ${CMAKE_SOURCE_DIR}/external/imgui
     ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
-    ${CMAKE_SOURCE_DIR}/external/vma
-    ${CMAKE_SOURCE_DIR}/external/vkbootstrap
+    # ${CMAKE_SOURCE_DIR}/external/vma
+    # ${CMAKE_SOURCE_DIR}/external/vkbootstrap
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
     # ${CMAKE_SOURCE_DIR}/external/Vulkan-Headers/include
@@ -111,11 +115,11 @@ add_executable(${PROJECT_NAME}
     ${CMAKE_SOURCE_DIR}/AniStudio/Events/Events.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
 
-    ${CMAKE_SOURCE_DIR}/external/vkbootstrap/VkBootstrap.cpp
+    # ${CMAKE_SOURCE_DIR}/external/vkbootstrap/VkBootstrap.cpp
 
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_vulkan.cpp
-
+    # ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_vulkan.cpp
+    ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_opengl3.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
 
     ${GUI_SOURCES}
@@ -132,13 +136,14 @@ immvision_find_opencv()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    ${GLEW_LIBRARY}    
     stable-diffusion
     ImGui
     ImGui_Nodes
     stb_image
     ImGuiFileDialog 
     ImGuizmo
-    Vulkan::Vulkan
+    # Vulkan::Vulkan
     # cpr
     # CURL::libcurl
     ${OpenCV_LIBS}

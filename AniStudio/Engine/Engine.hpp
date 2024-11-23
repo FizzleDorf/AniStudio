@@ -1,11 +1,14 @@
-#pragma once
-#include "ECS.h"
-#include "Gui/Guis.h"
-#include "pch.h"
+#ifndef ENGINE_HPP
+#define ENGINE_HPP
 
-#if defined(_MSC_VER) && (_MSC_VER >= 1900) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
-#pragma comment(lib, "legacy_stdio_definitions")
-#endif
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
+
+#include "Guis.h"
+#include "ECS.h"
 
 namespace ANI {
 
@@ -14,36 +17,40 @@ const int SCREEN_HEIGHT = 720;
 
 class Engine {
 public:
-    Engine(const Engine &) = delete;
-    ~Engine();
-
-    Engine &operator=(const Engine &) = delete;
-
     static Engine &Ref() {
         static Engine instance;
         return instance;
     }
+
+    ~Engine();
 
     void Init();
     void Update();
     void Draw();
     void Quit();
 
-    inline bool Run() const { return run; }
-    inline GLFWwindow &Window() { return *window; }
-    inline int VideoWidth() const { return videoWidth; }
-    inline int VideoHeight() const { return videoHeight; }
+    GLFWwindow *Window() const { return window; }
+    bool Run() const { return run; }
 
 private:
     Engine();
+
+    ECS::EntityManager &mgr;
     bool run;
     GLFWwindow *window;
     int videoWidth;
     int videoHeight;
-    ECS::EntityManager &mgr = ECS::EntityManager::Ref();
+
+    struct ViewState {
+        bool showDiffusionView = true;
+        bool showSettingsView = true;
+        bool showUpscaleView = true;
+    } viewState;
 };
 
 void WindowCloseCallback(GLFWwindow *window);
 extern Engine &Core;
 
 } // namespace ANI
+
+#endif // ENGINE_HPP
