@@ -2,6 +2,7 @@
 #define IMAGEVIEW_HPP
 
 #include "ImageComponent.hpp"
+#include "imgui.h"
 #include <GL/glew.h>
 #include <string>
 
@@ -10,7 +11,7 @@ namespace ECS {
 class ImageView {
 public:
     ImageView();
-    void SetImageComponent(ImageComponent *imageComponent);
+    void SetImageComponent(const ImageComponent &imageComponent);
     void Render();
     void LoadImage(const std::string &filePath);
     void SaveImage(const std::string &filePath);
@@ -19,7 +20,7 @@ public:
 private:
     void CreateTexture();
 
-    ImageComponent *imageComponent;
+    ImageComponent imageComponent;
     GLuint textureID;
 };
 
