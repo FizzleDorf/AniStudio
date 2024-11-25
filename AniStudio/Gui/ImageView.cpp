@@ -45,7 +45,7 @@ void ImageView::Render() {
         }
         ImGuiFileDialog::Instance()->Close();
     }
-
+    ImGui::SameLine();
     // Save Image Button
     if (imageComponent.imageData && ImGui::Button("Save Image")) {
         ImGui::OpenPopup("Confirm Save");
@@ -72,6 +72,8 @@ void ImageView::Render() {
 
         ImGui::EndPopup();
     }
+
+    ImGui::SameLine();
 
     // Save As Button
     if (imageComponent.imageData && ImGui::Button("Save Image As")) {

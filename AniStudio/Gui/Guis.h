@@ -5,3 +5,4 @@
 #include "GuiDiffusion.hpp"
 #include "ImageView.hpp"
 #include "UpscaleView.hpp"
+#include "ThreeDView.hpp"
