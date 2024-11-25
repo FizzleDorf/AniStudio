@@ -95,7 +95,6 @@ void Engine::Update() {
         
    threeDView.Render();
 
-
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

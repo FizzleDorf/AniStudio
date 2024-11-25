@@ -45,7 +45,9 @@ void ImageView::Render() {
         }
         ImGuiFileDialog::Instance()->Close();
     }
+
     ImGui::SameLine();
+
     // Save Image Button
     if (imageComponent.imageData && ImGui::Button("Save Image")) {
         ImGui::OpenPopup("Confirm Save");
@@ -55,6 +57,7 @@ void ImageView::Render() {
     if (ImGui::BeginPopupModal("Confirm Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Are you sure you want to overwrite the existing file?");
         ImGui::Separator();
+
 
         if (ImGui::Button("Yes")) {
             try {
