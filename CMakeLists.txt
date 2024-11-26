@@ -17,6 +17,13 @@ project(AniStudio CXX)
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
 
+# Define the shader source directory
+set(SHADER_DIR "${CMAKE_SOURCE_DIR}/Anistudio/shaders")
+
+# Copy the shaders to the build directory
+file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
+
+
 find_package(glfw3 REQUIRED)
 # Check if glfw was found
 if (glfw3_FOUND)
