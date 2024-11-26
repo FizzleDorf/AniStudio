@@ -1,23 +1,29 @@
-#pragma once
+#ifndef IMAGEVIEW_HPP
+#define IMAGEVIEW_HPP
 
 #include "ImageComponent.hpp"
-#include <imgui.h>
-#include <vulkan/vulkan.h>
+#include "imgui.h"
+#include <GL/glew.h>
+#include <string>
 
 namespace ECS {
+
 class ImageView {
 public:
-    ImageView(ECS::ImageComponent *imageComponent);
-
-    void Render(); // Handles the rendering of the image
+    ImageView();
+    void SetImageComponent(const ImageComponent &imageComponent);
+    void Render();
+    void LoadImage(const std::string &filePath);
+    void SaveImage(const std::string &filePath);
+    ~ImageView();
 
 private:
-    ECS::ImageComponent *imageComponent; // Holds the image data (raw image, width, height, etc.)
+    void CreateTexture();
 
-    // The Vulkan objects for rendering the image (VkDescriptorSet for ImGui::Image)
-    VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-
-    // Helper method to create ImGui-compatible Vulkan descriptor
-    void CreateDescriptorSet();
+    ImageComponent imageComponent;
+    GLuint textureID;
 };
+
 } // namespace ECS
+
+#endif

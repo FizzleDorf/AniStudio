@@ -7,6 +7,9 @@
 using namespace ECS;
 using namespace ANI;
 
+ImageView imageView;
+EntityID currentEntity;
+
 void GuiDiffusion::RenderModelLoader() {
     ImGui::Text("Checkpoint:");
     ImGui::Text("%s", modelComp.modelName.c_str());
@@ -63,7 +66,7 @@ void GuiDiffusion::RenderSampler() {
                  scheduler_method_items, scheduler_method_item_count);
     ImGui::InputInt("Seed", &samplerComp.seed);
     ImGui::InputFloat("CFG", &cfgComp.cfg);
-    ImGui::InputFloat("CFG", &cfgComp.guidance);
+    ImGui::InputFloat("Guidance", &cfgComp.guidance);
     ImGui::InputInt("Steps", &samplerComp.steps);
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
     
@@ -72,7 +75,7 @@ void GuiDiffusion::RenderSampler() {
 void GuiDiffusion::HandleT2IEvent() {
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
-
+    currentEntity = newEntity;
     std::cout << "Initialized entity with ID: " << newEntity << "\n";
 
     mgr.AddComponent<ModelComponent>(newEntity);
@@ -127,6 +130,7 @@ void GuiDiffusion::HandleT2IEvent() {
     event.entityID = newEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);
+    imageView.SetImageComponent(mgr.GetComponent<ImageComponent>(newEntity));
 }
 
 void GuiDiffusion::HandleUpscaleEvent() {
@@ -375,5 +379,6 @@ void GuiDiffusion::Render() {
         ImGui::EndTabBar();
     }
     ImGui::End();
+    imageView.Render();
       
 }

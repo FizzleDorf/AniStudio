@@ -1,6 +1,7 @@
 #include "UpscaleView.hpp"
 
 void UpscaleView::Render() {
+    ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     ImGui::Begin("Upscale View");
 
     // Display and allow editing of the model component parameters
