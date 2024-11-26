@@ -6,3 +6,4 @@
 #include "ImageView.hpp"
 #include "UpscaleView.hpp"
 #include "ThreeDView.hpp"
+#include "NodeGraphView.hpp"

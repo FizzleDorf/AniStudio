@@ -7,6 +7,7 @@ GuiSettings settingsView;
 GuiDiffusion diffusionView(settingsView.GetFilePaths());
 UpscaleView upscaleView(settingsView.GetFilePaths());
 ThreeDView threeDView;
+NodeGraphView nodeGraphView;
 
 namespace ANI {
 
@@ -25,13 +26,14 @@ Engine::~Engine() {
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
+    nodeGraphView.Cleanup();
 }
 
 void Engine::Init() {
     mgr.Reset();
     Events::Ref().Init(window);
     mgr.RegisterSystem<SDCPPSystem>();
-
+    nodeGraphView.Initialize();
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -92,9 +94,9 @@ void Engine::Update() {
         settingsView.Render();
     if (viewState.showUpscaleView)
         upscaleView.Render();
-        
-   threeDView.Render();
 
+    threeDView.Render();
+    nodeGraphView.Render();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
