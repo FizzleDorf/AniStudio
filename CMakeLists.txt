@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
+
 # Include Conan-generated cmake files
 include(${CMAKE_SOURCE_DIR}/conan/build/generators/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN_INCLUDED)
 if(NOT CONAN_TOOLCHAIN_INCLUDED)
@@ -9,10 +13,6 @@ endif()
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 project(AniStudio CXX)
-
-# Set C++ standard
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED On)
 
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -40,6 +40,8 @@ if (OpenCV_FOUND)
 else()
     message(FATAL_ERROR "OpenCV not found")
 endif()
+
+find_package(assimp REQUIRED)
 
 # Add external libraries
 add_subdirectory(external/stable-diffusion.cpp)
@@ -132,6 +134,7 @@ immvision_find_opencv()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    assimp::assimp
     stable-diffusion
     ImGui
     ImGui_Nodes

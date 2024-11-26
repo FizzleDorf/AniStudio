@@ -1,8 +1,8 @@
 [requires]
 opencv/4.5.5
-glfw/3.4   
+glfw/3.4
 zlib/1.2.11
-
+assimp/5.4.3
 
 [generators]
 CMakeDeps
