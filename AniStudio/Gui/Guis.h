@@ -7,3 +7,4 @@
 #include "UpscaleView.hpp"
 #include "ThreeDView.hpp"
 #include "NodeGraphView.hpp"
+#include "SequencerView.hpp"
