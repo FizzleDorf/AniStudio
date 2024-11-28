@@ -51,14 +51,14 @@ add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)
 
 # Find GLSL validator
-find_program(GLSL_VALIDATOR glslangValidator HINTS 
-    /usr/bin 
-    /usr/local/bin 
-    $ENV{VULKAN_SDK}/Bin/ 
-    $ENV{VULKAN_SDK}/Bin32/
-)
+# find_program(GLSL_VALIDATOR glslangValidator HINTS 
+#     /usr/bin 
+#     /usr/local/bin 
+#     $ENV{VULKAN_SDK}/Bin/ 
+#     $ENV{VULKAN_SDK}/Bin32/
+# )
 set(GLEW_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/GL/include")
-set(GLEW_LIBRARY "${CMAKE_SOURCE_DIR}/external/GL/lib/glew32s.lib")
+set(GLEW_LIBRARY "${CMAKE_SOURCE_DIR}/external/GL/lib/x64/glew32s.lib")
 # Include directories
 include_directories(
     ${CMAKE_SOURCE_DIR}/AniStudio
