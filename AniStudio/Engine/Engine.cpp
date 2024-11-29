@@ -6,7 +6,7 @@ using namespace ECS;
 GuiSettings settingsView;
 GuiDiffusion diffusionView(settingsView.GetFilePaths());
 UpscaleView upscaleView(settingsView.GetFilePaths());
-ThreeDView threeDView;
+MeshView meshView;
 NodeGraphView nodeGraphView;
 
 namespace ANI {
@@ -94,9 +94,11 @@ void Engine::Update() {
         settingsView.Render();
     if (viewState.showUpscaleView)
         upscaleView.Render();
+    if (viewState.showMeshView)
+        meshView.Render();
+    if (viewState.showNodeGraphView)
+        nodeGraphView.Render();
 
-    threeDView.Render();
-    nodeGraphView.Render();
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 

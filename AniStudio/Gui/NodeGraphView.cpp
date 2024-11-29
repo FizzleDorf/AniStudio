@@ -4,7 +4,6 @@
 namespace ed = ax::NodeEditor;
 
 NodeGraphView::NodeGraphView() {
-    // Constructor could be empty, just used for initialization
 }
 
 NodeGraphView::~NodeGraphView() {
@@ -20,7 +19,6 @@ void NodeGraphView::Initialize() {
 }
 
 void NodeGraphView::Cleanup() {
-    // Destroy the editor context when the view stops
     if (m_Context) {
         ed::DestroyEditor(m_Context);
         m_Context = nullptr;

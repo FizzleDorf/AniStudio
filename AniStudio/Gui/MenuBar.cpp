@@ -26,10 +26,13 @@ void ShowMenuBar(GLFWwindow* window) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-            //ImGui::MenuItem("Diffusion View", NULL, &viewState.showDynamicDiffusionView);
             ImGui::MenuItem("Diffusion View", NULL, &viewState.showDiffusionView);
-            ImGui::MenuItem("Drawing Canvas", NULL, &viewState.showDrawingCanvas);
+            ImGui::MenuItem("Upscale View", NULL, &viewState.showDiffusionView);
+            // ImGui::MenuItem("Drawing Canvas", NULL, &viewState.showDrawingCanvas);
             ImGui::MenuItem("Settings", NULL, &viewState.showSettingsView);
+            ImGui::MenuItem("MeshView", NULL, &viewState.showMeshView);
+            ImGui::MenuItem("NodeGraph", NULL, &viewState.showNodeGraphView);
+            ImGui::MenuItem("Sequencer", NULL, &viewState.showSequencerView);
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();

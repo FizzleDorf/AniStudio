@@ -41,11 +41,6 @@ private:
     int videoWidth;
     int videoHeight;
 
-    struct ViewState {
-        bool showDiffusionView = true;
-        bool showSettingsView = true;
-        bool showUpscaleView = true;
-    } viewState;
 };
 
 void WindowCloseCallback(GLFWwindow *window);

@@ -3,6 +3,7 @@
 
 #include "ImageComponent.hpp"
 #include "imgui.h"
+#include "../backends/imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <string>
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "../Engine/Engine.hpp"
+#include "../backends/imgui_impl_opengl3.h"
 #include "ECS.h"
 #include "pch.h"
 

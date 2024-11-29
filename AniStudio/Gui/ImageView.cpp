@@ -1,5 +1,6 @@
 #include "ImageView.hpp"
 #include "ImGuiFileDialog.h" // For file dialogs
+#include "../backends/imgui_impl_opengl3.h"
 #include <imgui.h>
 #include <iostream>
 #include <stb_image_write.h>
@@ -33,7 +34,7 @@ void ImageView::Render() {
     }
 
     // Handle file dialog for loading images
-    if (ImGuiFileDialog::Instance()->Display("LoadImageDialog")) {
+    if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string selectedPath = ImGuiFileDialog::Instance()->GetFilePathName();
             try {
@@ -133,17 +134,31 @@ void ImageView::CreateTexture() {
         glDeleteTextures(1, &textureID);
     }
 
+    if (!imageComponent.imageData || imageComponent.width <= 0 || imageComponent.height <= 0) {
+        throw std::runtime_error("Invalid image data or dimensions.");
+    }
+
     glGenTextures(1, &textureID);
     glBindTexture(GL_TEXTURE_2D, textureID);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageComponent.width, imageComponent.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    // Set texture data
+    GLenum format = (imageComponent.channels == 4) ? GL_RGBA : GL_RGB;
+    glTexImage2D(GL_TEXTURE_2D, 0, format, imageComponent.width, imageComponent.height, 0, format, GL_UNSIGNED_BYTE,
                  imageComponent.imageData);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glBindTexture(GL_TEXTURE_2D, 0);
+
+    GLenum err;
+    while ((err = glGetError()) != GL_NO_ERROR) {
+        std::cerr << "OpenGL error: " << err << std::endl;
+    }
 }
+
 
 ImageView::~ImageView() {
     if (textureID) {

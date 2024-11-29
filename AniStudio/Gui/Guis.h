@@ -5,6 +5,6 @@
 #include "GuiDiffusion.hpp"
 #include "ImageView.hpp"
 #include "UpscaleView.hpp"
-#include "ThreeDView.hpp"
+#include "MeshView.hpp"
 #include "NodeGraphView.hpp"
 #include "SequencerView.hpp"

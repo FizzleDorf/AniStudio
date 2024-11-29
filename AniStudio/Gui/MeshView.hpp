@@ -2,17 +2,19 @@
 #define THREE_D_VIEW_HPP
 
 #include "ECS.h"
+#include "../backends/imgui_impl_opengl3.h"
 #include <GL/glew.h>
+#include <GLFW/glfw3.h>
 #include <ImGuizmo.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
 #include <memory>
 
-class ThreeDView {
+class MeshView {
 public:
     // Constructor
-    ThreeDView();
+    MeshView();
 
     // Main render function
     void Render();
