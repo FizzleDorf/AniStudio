@@ -60,6 +60,7 @@ namespace ECS {
 
 			entityCount--;
 			availableEntities.push(entity);
+            std::cout << "Removed Entity: " << entity << "\n";
 		}
 
 		template<typename T, typename... Args>
@@ -218,9 +219,6 @@ namespace ECS {
                 availableEntities.push(entity);
             }
         }
-
-		
-
 
 	private:
 		EntityID entityCount;

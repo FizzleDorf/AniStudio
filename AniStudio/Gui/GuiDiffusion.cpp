@@ -13,7 +13,6 @@ EntityID currentEntity;
 void GuiDiffusion::RenderModelLoader() {
     ImGui::Text("Checkpoint:");
     ImGui::Text("%s", modelComp.modelName.c_str());
-    
 
     if (ImGui::Button("...")) {
         IGFD::FileDialogConfig config;
@@ -26,7 +25,7 @@ void GuiDiffusion::RenderModelLoader() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-            
+
             modelComp.modelName = selectedFile;
             modelComp.modelPath = fullPath;
             std::cout << "Selected file: " << modelComp.modelName << std::endl;
@@ -60,19 +59,18 @@ void GuiDiffusion::RenderPrompts() {
 }
 
 void GuiDiffusion::RenderSampler() {
-    ImGui::Combo("Sampler", &int(samplerComp.current_sample_method), sample_method_items,
-                 sample_method_item_count);
-    ImGui::Combo("Scheduler", &int(samplerComp.current_scheduler_method),
-                 scheduler_method_items, scheduler_method_item_count);
+    ImGui::Combo("Sampler", &int(samplerComp.current_sample_method), sample_method_items, sample_method_item_count);
+    ImGui::Combo("Scheduler", &int(samplerComp.current_scheduler_method), scheduler_method_items,
+                 scheduler_method_item_count);
     ImGui::InputInt("Seed", &samplerComp.seed);
     ImGui::InputFloat("CFG", &cfgComp.cfg);
     ImGui::InputFloat("Guidance", &cfgComp.guidance);
     ImGui::InputInt("Steps", &samplerComp.steps);
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
-    
 }
 
 void GuiDiffusion::HandleT2IEvent() {
+    mgr.RegisterSystem<SDCPPSystem>();
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
     currentEntity = newEntity;
@@ -118,9 +116,12 @@ void GuiDiffusion::HandleT2IEvent() {
     std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).vaePath << "\n";
     std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << "\n";
     std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(newEntity).denoise << "\n";
-    std::cout << "SamplerComponent.current_sample_method: " << mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method << "\n";
-    std::cout << "SamplerComponent.current_scheduler_method: " << mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method << "\n";
-    std::cout << "SamplerComponent.current_type_method: " << mgr.GetComponent<SamplerComponent>(newEntity).current_type_method << "\n";
+    std::cout << "SamplerComponent.current_sample_method: "
+              << mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method << "\n";
+    std::cout << "SamplerComponent.current_scheduler_method: "
+              << mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method << "\n";
+    std::cout << "SamplerComponent.current_type_method: "
+              << mgr.GetComponent<SamplerComponent>(newEntity).current_type_method << "\n";
     std::cout << "CFGComponent.cfg: " << mgr.GetComponent<CFGComponent>(newEntity).cfg << "\n";
     std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << "\n";
     std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).negPrompt << "\n";
@@ -130,7 +131,6 @@ void GuiDiffusion::HandleT2IEvent() {
     event.entityID = newEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);
-    imageView.SetImageComponent(mgr.GetComponent<ImageComponent>(newEntity));
 }
 
 void GuiDiffusion::HandleUpscaleEvent() {
@@ -211,7 +211,7 @@ void GuiDiffusion::RenderEmbeddings() {
         ImGuiFileDialog::Instance()->Close();
     }
 }
-void GuiDiffusion::RenderDiffusionModelLoader() { 
+void GuiDiffusion::RenderDiffusionModelLoader() {
     ImGui::Text("Unet: ");
     ImGui::SameLine();
     ImGui::Text("%s", ckptComp.ckptName.c_str());
@@ -348,7 +348,7 @@ void GuiDiffusion::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
         if (ImGui::BeginTabBar("Image")) {
-            if (ImGui::BeginTabItem("Txt2Img")) {            
+            if (ImGui::BeginTabItem("Txt2Img")) {
                 RenderQueue();
                 RenderModelLoader();
                 RenderDiffusionModelLoader();
@@ -360,9 +360,36 @@ void GuiDiffusion::Render() {
                 RenderEmbeddings();
                 ImGui::EndTabItem();
             }
-        
-        
-        if (ImGui::BeginTabItem("Img2Img")) {
+
+            if (ImGui::BeginTabItem("HighResFix")) {
+                RenderQueue();
+                RenderInputImage();
+                RenderModelLoader();
+                RenderDiffusionModelLoader();
+                RenderVaeLoader();
+                RenderLatents();
+                RenderPrompts();
+                RenderSampler();
+                RenderControlnets();
+                RenderEmbeddings();
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Img2Img")) {
+                RenderQueue();
+                RenderInputImage();
+                RenderModelLoader();
+                RenderDiffusionModelLoader();
+                RenderVaeLoader();
+                RenderLatents();
+                RenderPrompts();
+                RenderSampler();
+                RenderControlnets();
+                RenderEmbeddings();
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Upscale")) {
                 RenderQueue();
                 RenderInputImage();
                 RenderModelLoader();
@@ -380,5 +407,4 @@ void GuiDiffusion::Render() {
     }
     ImGui::End();
     imageView.Render();
-      
 }

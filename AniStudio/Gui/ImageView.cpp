@@ -10,22 +10,21 @@ namespace ECS {
 
 ImageView::ImageView() : textureID(0) {}
 
-void ImageView::SetImageComponent(const ImageComponent &component) {
-    imageComponent = component; // Assign the component object
-    CreateTexture();            // Generate the OpenGL texture
-}
-
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
     ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
     // Display image details if loaded
-    if (imageComponent.imageData) {
-        ImGui::Text("File: %s", imageComponent.fileName.c_str());
-        ImGui::Text("Dimensions: %dx%d", imageComponent.width, imageComponent.height);
-        ImGui::Separator();
+    if (entity != NULL) {
+        if (mgr.GetComponent<ImageComponent>(entity).imageData) {
+            imageComponent = mgr.GetComponent<ImageComponent>(entity);
+            ImGui::Text("File: %s", imageComponent.fileName.c_str());
+            ImGui::Text("Dimensions: %dx%d", imageComponent.width, imageComponent.height);
+            ImGui::Separator();
+            if (textureID = 0)
+                CreateTexture();
+        }
     }
-
     // Load Image Button
     if (ImGui::Button("Load Image")) {
         IGFD::FileDialogConfig config;

@@ -4,7 +4,9 @@
 namespace ECS {
 class MeshSystem : public BaseSystem {
 public:
-    MeshSystem() { AddComponentSignature<MeshComponent>(); }
+    MeshSystem() { 
+    AddComponentSignature<MeshComponent>(); 
+    }
 
     void Start() override{};
     void Update() override{};
