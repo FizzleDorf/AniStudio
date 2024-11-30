@@ -105,7 +105,6 @@ add_executable(${PROJECT_NAME}
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_opengl3.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/utils/Fonts.cpp
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
 )
