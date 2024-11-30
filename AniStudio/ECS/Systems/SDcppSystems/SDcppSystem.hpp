@@ -156,7 +156,7 @@ private:
                           mgr.GetComponent<SamplerComponent>(entityID).current_type_method,
                           mgr.GetComponent<SamplerComponent>(entityID).current_rng_type,
                           mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method, true, false,
-                          mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu);
+                          mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu, false);
     }
 
     // Utility method to generate text to image using Stable Diffusion
@@ -170,7 +170,13 @@ private:
                        mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
                        mgr.GetComponent<SamplerComponent>(entityID).steps,
                        mgr.GetComponent<SamplerComponent>(entityID).seed,
-                       mgr.GetComponent<LatentComponent>(entityID).batchSize, nullptr, 0.0f, 0.0f, false, "");
+                       mgr.GetComponent<LatentComponent>(entityID).batchSize, nullptr, 0.0f, 0.0f, false, "",
+                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
+                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
+                       mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
+                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
+                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end
+            );
     }
 
     // Utility to validate component paths

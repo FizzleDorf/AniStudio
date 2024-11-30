@@ -26,6 +26,9 @@ public:
     void HandleT2IEvent();
     void HandleUpscaleEvent();
 
+    void PrepareNewEntity();
+    void CopyNewEntity(const EntityID oldEntity);
+
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);
         buffer[buffer_size - 1] = '\0';
@@ -55,4 +58,5 @@ private:
     ImageComponent imageComp;
     EmbeddingComponent embedComp;
     ControlnetComponent controlComp;
+    LayerSkipComponent layerSkipComp;
 };

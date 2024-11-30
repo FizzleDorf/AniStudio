@@ -18,6 +18,9 @@
 // Encoders
 #include "EncoderComponents.hpp"
 
-//Latents
+// Latents
 #include "LatentComponent.hpp"
 #include "LatentUpscaleComponent.hpp"
+
+// Other
+#include "LayerSkipComponent.hpp"

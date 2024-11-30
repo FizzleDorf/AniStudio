@@ -1,14 +1,14 @@
 #pragma once
 #include "BaseComponent.hpp"
 namespace ECS {
-struct LayerentSkipComponent : public ECS::BaseComponent {
+struct LayerSkipComponent : public ECS::BaseComponent {
     int *skip_layers = 0;
     size_t skip_layers_count = 0;
     float slg_scale = 0.0f;
     float skip_layer_start = 0.0f;
     float skip_layer_end = 1.0f;
 
-    LayerentSkipComponent &operator=(const LayerentSkipComponent &other) {
+    LayerSkipComponent &operator=(const LayerSkipComponent &other) {
         if (this != &other) { // Self-assignment check
             skip_layers = other.skip_layers;
             skip_layers_count = other.skip_layers_count;

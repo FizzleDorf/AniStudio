@@ -89,6 +89,7 @@ void GuiDiffusion::HandleT2IEvent() {
     mgr.AddComponent<CFGComponent>(newEntity);
     mgr.AddComponent<PromptComponent>(newEntity);
     mgr.AddComponent<EmbeddingComponent>(newEntity);
+    mgr.AddComponent<LayerSkipComponent>(newEntity);
     mgr.AddComponent<ImageComponent>(newEntity);
 
     std::cout << "Assigning components to new Entity: " << newEntity << "\n";
@@ -106,6 +107,7 @@ void GuiDiffusion::HandleT2IEvent() {
     mgr.GetComponent<CFGComponent>(newEntity) = cfgComp;
     mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
     mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
+    mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
 
     std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
     std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";
