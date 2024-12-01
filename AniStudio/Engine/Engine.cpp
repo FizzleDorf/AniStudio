@@ -1,5 +1,5 @@
 #include "Engine.hpp"
-#include "../Events/Events.hpp"
+
 using namespace ECS;
 
 // Gui Views
@@ -31,8 +31,6 @@ Engine::~Engine() {
 
 void Engine::Init() {
     mgr.Reset();
-    Events::Ref().Init(window);
-    mgr.RegisterSystem<SDCPPSystem>();
     nodeGraphView.Initialize();
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
@@ -76,10 +74,12 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-void Engine::Update() {
-    Events::Ref().Poll();
+void Engine::Update(const float deltatime) {
+    
     mgr.Update();
+}
 
+void Engine::Draw() {
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -109,8 +109,6 @@ void Engine::Update() {
 
     glfwSwapBuffers(window);
 }
-
-void Engine::Draw() {}
 
 void Engine::Quit() { run = false; }
 

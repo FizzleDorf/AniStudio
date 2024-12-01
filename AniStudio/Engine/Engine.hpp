@@ -25,7 +25,7 @@ public:
     ~Engine();
 
     void Init();
-    void Update();
+    void Update(const float deltatime);
     void Draw();
     void Quit();
 

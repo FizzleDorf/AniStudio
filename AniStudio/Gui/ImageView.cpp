@@ -15,16 +15,12 @@ void ImageView::Render() {
     ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 
     // Display image details if loaded
-    if (entity != NULL) {
-        if (mgr.GetComponent<ImageComponent>(entity).imageData) {
-            imageComponent = mgr.GetComponent<ImageComponent>(entity);
-            ImGui::Text("File: %s", imageComponent.fileName.c_str());
-            ImGui::Text("Dimensions: %dx%d", imageComponent.width, imageComponent.height);
-            ImGui::Separator();
-            if (textureID = 0)
-                CreateTexture();
-        }
+    if (imageComponent.imageData) {
+        ImGui::Text("File: %s", imageComponent.fileName.c_str());
+        ImGui::Text("Dimensions: %dx%d", imageComponent.width, imageComponent.height);
+        ImGui::Separator();
     }
+
     // Load Image Button
     if (ImGui::Button("Load Image")) {
         IGFD::FileDialogConfig config;

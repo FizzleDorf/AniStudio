@@ -6,18 +6,21 @@
 
 namespace ANI {
 
-class Engine; // Forward declaration of Engine
-
 enum class EventType { 
+    // Diffusion
     InferenceRequest,
     UpscaleRequest,
     I2IInferenceRequest,
-    T2VInferenceRequest
+    T2VInferenceRequest,
+
+    // IO Events
+    ImageLoadRequest,
+    ImageSaveRequest
 };
 
 struct Event {
     EventType type;
-    EntityID entityID;
+    ECS::EntityID entityID;
 };
 
 class Events {
@@ -40,11 +43,11 @@ public:
 private:
     Events(); // Constructor is private for singleton pattern
     std::queue<Event> eventQueue;
-    EntityManager &mgr = ECS::EntityManager::Ref();
+    ECS::EntityManager &mgr = ECS::EntityManager::Ref();
 
     // Static callback function for GLFW window close
     static void WindowCloseCallback(GLFWwindow *window) {
-        ANI::Engine::Ref().Quit();
+        Engine::Ref().Quit();
     }
 };
 

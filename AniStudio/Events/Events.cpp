@@ -55,6 +55,26 @@ void Events::ProcessEvents() {
             }
             break;
         }
+        case EventType::ImageLoadRequest: {
+            std::cout << "Handling ImageLoadRequest event for Entity ID: " << event.entityID << std::endl;
+            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            if (imageSystem) {
+                imageSystem->LoadImage(event.entityID);
+            } else {
+                std::cerr << "ImageSystem is not registered." << std::endl;
+            }
+            break;
+        }
+        case EventType::ImageSaveRequest: {
+            std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << std::endl;
+            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            if (imageSystem) {
+                imageSystem->SaveImage(event.entityID);
+            } else {
+                std::cerr << "ImageSystem is not registered." << std::endl;
+            }
+            break;
+        }
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
             break;

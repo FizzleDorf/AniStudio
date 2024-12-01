@@ -37,7 +37,6 @@ void MeshView::UpdateProjection(int width, int height) {
 
 void MeshView::CreateEntityWithMesh() {
     entity = mgr.AddNewEntity();
-    mgr.RegisterSystem<MeshSystem>();
 
     mgr.AddComponent<MeshComponent>(entity);
     mgr.GetComponent<MeshComponent>(entity).vertices = {glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(1.0f, -1.0f, 0.0f),
