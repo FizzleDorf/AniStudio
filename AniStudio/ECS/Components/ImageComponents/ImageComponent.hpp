@@ -5,6 +5,7 @@
 #include "stb_image_write.h"
 #include <filesystem>
 #include <string>
+#include <GL/glew.h>
 
 #define SD_API
 
@@ -16,6 +17,7 @@ struct ImageComponent : public ECS::BaseComponent {
     int width = 0;                      // Image width
     int height = 0;                     // Image height
     int channels = 0;                   // Number of color channels
+    GLuint textureID = 0;
 
     ImageComponent &operator=(const ImageComponent &other) {
         if (this != &other) {

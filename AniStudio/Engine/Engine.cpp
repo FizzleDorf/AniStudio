@@ -74,8 +74,23 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-void Engine::Update(const float deltatime) {
-    
+void Engine::Update(const float deltaT) {
+    if (deltaT > 0) {
+        frameCount++;
+        fpsSum += 1.0 / deltaT;
+
+        if (frameCount >= 60) { // Update every 60 frames
+            int averageFPS = static_cast<int>(fpsSum / frameCount);
+
+            std::ostringstream titleStream;
+            titleStream << "AniStudio - FPS: " << averageFPS;
+
+            glfwSetWindowTitle(window, titleStream.str().c_str());
+
+            frameCount = 0;
+            fpsSum = 0.0;
+        }
+    }
     mgr.Update();
 }
 

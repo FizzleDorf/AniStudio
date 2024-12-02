@@ -15,7 +15,9 @@ enum class EventType {
 
     // IO Events
     ImageLoadRequest,
-    ImageSaveRequest
+    ImageSaveRequest,
+    MeshLoadRequest,
+    MeshSaveRequest
 };
 
 struct Event {

@@ -40,6 +40,8 @@ private:
     GLFWwindow *window;
     int videoWidth;
     int videoHeight;
+    int frameCount = 0;
+    double fpsSum = 0.0;
 
 };
 

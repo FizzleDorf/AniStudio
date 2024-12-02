@@ -67,12 +67,26 @@ void Events::ProcessEvents() {
         }
         case EventType::ImageSaveRequest: {
             std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << std::endl;
-            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-            if (imageSystem) {
-                imageSystem->SaveImage(event.entityID);
+            auto meshSystem = mgr.GetSystem<ECS::MeshSystem>();
+            if (meshSystem) {
+                // meshSystem->SaveMesh(event.entityID);
             } else {
                 std::cerr << "ImageSystem is not registered." << std::endl;
             }
+            break;
+        }
+        case EventType::MeshLoadRequest: {
+            std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << std::endl;
+            auto meshSystem = mgr.GetSystem<ECS::MeshSystem>();
+            if (meshSystem) {
+                // meshSystem->LoadMesh(event.entityID);
+            } else {
+                std::cerr << "ImageSystem is not registered." << std::endl;
+            }
+            break;
+        }
+        case EventType::MeshSaveRequest: {
+            
             break;
         }
         default:
