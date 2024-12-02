@@ -23,7 +23,7 @@ constexpr const char *type_method_items[] = {
     "SD_TYPE_Q6_K",     "SD_TYPE_Q8_K",     "SD_TYPE_IQ2_XXS", "SD_TYPE_IQ2_XS", "SD_TYPE_IQ3_XXS", "SD_TYPE_IQ1_S",
     "SD_TYPE_IQ4_NL",   "SD_TYPE_IQ3_S",    "SD_TYPE_IQ2_S",   "SD_TYPE_IQ4_XS", "SD_TYPE_I8",      "SD_TYPE_I16",
     "SD_TYPE_I32",      "SD_TYPE_I64",      "SD_TYPE_F64",     "SD_TYPE_IQ1_M",  "SD_TYPE_BF16",    "SD_TYPE_Q4_0_4_4",
-    "SD_TYPE_Q4_0_4_8", "SD_TYPE_Q4_0_8_8", "SD_TYPE_TQ1_0",   "SD_TYPE_TQ2_0",  "SD_TYPE_COUNT"};
+    "SD_TYPE_Q4_0_4_8", "SD_TYPE_Q4_0_8_8", "SD_TYPE_TQ1_0",   "SD_TYPE_TQ2_0"};
 
 
 constexpr int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
