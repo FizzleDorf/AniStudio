@@ -1,8 +1,7 @@
 #ifndef CANVAS_VIEW_HPP
 #define CANVAS_VIEW_HPP
 
-#include "BrushComponent.hpp"
-#include "CanvasComponent.hpp"
+#include "ECS.h"
 #include "LayerManager.hpp"
 #include <imgui.h>
 
@@ -13,8 +12,9 @@ public:
     void Render();
 
 private:
-    CanvasComponent canvas;
-    BrushComponent brush;
+    EntityID canvasEntity;
+    CanvasComponent *canvas;
+    BrushComponent *brush;
     LayerManager layerManager;
 
     void RenderCanvas();

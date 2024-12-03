@@ -45,7 +45,6 @@ private:
     ImGuizmo::MODE currentGizmoMode;
 
     // ECS related
-    ECS::EntityManager &mgr = ECS::EntityManager::Ref(); // Using the EntityManager from ECS
     ECS::EntityID entity;                                // Entity for the 3D model
 };
 

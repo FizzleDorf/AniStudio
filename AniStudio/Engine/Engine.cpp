@@ -9,6 +9,7 @@ UpscaleView upscaleView(settingsView.GetFilePaths());
 MeshView meshView;
 NodeGraphView nodeGraphView;
 SequencerView sequencerView;
+CanvasView canvasView(1024,1024);
 
 namespace ANI {
 
@@ -63,6 +64,7 @@ void Engine::Init() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
     ImGui::StyleColorsDark();
     ImGuiStyle &style = ImGui::GetStyle();
@@ -116,6 +118,8 @@ void Engine::Draw() {
         nodeGraphView.Render();
     if (viewState.showSequencerView)
         sequencerView.Render();
+    if (viewState.showDrawingCanvas)
+        canvasView.Render();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

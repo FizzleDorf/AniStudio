@@ -1,14 +1,16 @@
 #ifndef BRUSH_COMPONENT_HPP
 #define BRUSH_COMPONENT_HPP
 
-class BrushComponent {
+#include "BaseComponent.hpp"
+namespace ECS {
+class BrushComponent : public BaseComponent {
 public:
-    float size;
+    float size = 5.0f;
     float color[3];
 
-    BrushComponent() : size(5.0f) {
+    BrushComponent() : {
         color[0] = color[1] = color[2] = 0.0f; // Default black brush
     }
 };
-
+} // namespace ECS
 #endif // BRUSH_COMPONENT_HPP

@@ -13,7 +13,7 @@ MeshView::MeshView()
       cameraProjection(glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f)), objectMatrix(glm::mat4(1.0f)),
       aspectRatio(1.0f) {
     UpdateProjection(1280, 720); // Default aspect ratio
-    CreateEntityWithMesh();      // Create entity with mesh
+    // CreateEntityWithMesh();      // Create entity with mesh
 }
 
 void MeshView::Reset() {
@@ -36,6 +36,7 @@ void MeshView::UpdateProjection(int width, int height) {
 }
 
 void MeshView::CreateEntityWithMesh() {
+    auto &mgr = EntityManager::Ref();
     entity = mgr.AddNewEntity();
 
     mgr.AddComponent<MeshComponent>(entity);
@@ -126,7 +127,7 @@ void MeshView::Render() {
 
     GLuint shaderProgram = CreateShaderProgram("../shaders/basic.vert", "../shaders/basic.frag");
 
-    if (shaderProgram != 0) {
+    /*if (shaderProgram != 0) {
         ECS::MeshComponent &mesh = mgr.GetComponent<ECS::MeshComponent>(entity);
 
         static GLuint VAO = 0, VBO = 0, EBO = 0;
@@ -175,7 +176,7 @@ void MeshView::Render() {
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
-    }
+    }*/
 
     ImGui::End();
 }

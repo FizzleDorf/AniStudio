@@ -8,3 +8,4 @@
 #include "MeshView.hpp"
 #include "NodeGraphView.hpp"
 #include "SequencerView.hpp"
+#include "CanvasView.hpp"
