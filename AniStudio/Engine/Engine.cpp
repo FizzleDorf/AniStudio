@@ -8,6 +8,7 @@ GuiDiffusion diffusionView(settingsView.GetFilePaths());
 UpscaleView upscaleView(settingsView.GetFilePaths());
 MeshView meshView;
 NodeGraphView nodeGraphView;
+SequencerView sequencerView;
 
 namespace ANI {
 
@@ -113,6 +114,8 @@ void Engine::Draw() {
         meshView.Render();
     if (viewState.showNodeGraphView)
         nodeGraphView.Render();
+    if (viewState.showSequencerView)
+        sequencerView.Render();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
