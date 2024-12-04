@@ -3,29 +3,29 @@
 CanvasView::CanvasView(int canvasWidth, int canvasHeight)
     : layerManager(canvasWidth, canvasHeight) {
     
-    auto &mgr = EntityManager::Ref();
-    canvasEntity = mgr.AddNewEntity();
-
-    mgr.AddComponent<CanvasComponent>(canvasEntity);
-    mgr.AddComponent<BrushComponent>(canvasEntity);
-
-    canvas = &mgr.GetComponent<CanvasComponent>(canvasEntity);
-    brush = &mgr.GetComponent<BrushComponent>(canvasEntity);
-
-    canvas->SetHW(canvasWidth, canvasHeight);
-
-    layerManager.AddLayer();
+    // auto &mgr = EntityManager::Ref();
+    // canvasEntity = mgr.AddNewEntity();
+    // 
+    // mgr.AddComponent<CanvasComponent>(canvasEntity);
+    // mgr.AddComponent<BrushComponent>(canvasEntity);
+    // 
+    // canvas = &mgr.GetComponent<CanvasComponent>(canvasEntity);
+    // brush = &mgr.GetComponent<BrushComponent>(canvasEntity);
+    // 
+    // // canvas->SetHW(canvasWidth, canvasHeight);
+    // 
+    // layerManager.AddLayer();
 }
 
 void CanvasView::Render() {
-    RenderCanvas();
+    /*RenderCanvas();*/
     RenderBrushSettings();
     RenderLayerManager();
 }
 
 void CanvasView::RenderCanvas() {
-    canvas->SetBrush(brush->size, brush->color[0], brush->color[1], brush->color[2]);
-    canvas->RenderImGuiCanvas();
+    // canvas->SetBrush(brush->size, brush->color[0], brush->color[1], brush->color[2]);
+    // canvas->RenderImGuiCanvas();
 }
 
 void CanvasView::RenderBrushSettings() {

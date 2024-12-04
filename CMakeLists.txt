@@ -4,6 +4,20 @@ cmake_minimum_required(VERSION 3.20)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 
+# Set the target compiler explicitly for all configurations
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX2") # Adjust for your target architecture
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64") # For 64-bit architecture
+endif()
+
+# Set the target architecture explicitly for all configurations
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+    set(CMAKE_SIZEOF_VOID_P 8) # Ensure 64-bit
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
+    set(CMAKE_SIZEOF_VOID_P 4) # Ensure 32-bit
+endif()
+
 # Include Conan-generated cmake files
 include(${CMAKE_SOURCE_DIR}/conan/build/generators/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN_INCLUDED)
 if(NOT CONAN_TOOLCHAIN_INCLUDED)

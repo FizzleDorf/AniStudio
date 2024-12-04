@@ -25,7 +25,7 @@ public:
         brushColor[2] = b;
     }
 
-    void DrawAt(int x, int y) {
+    /*void DrawAt(int x, int y) {
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
         glPointSize(brushSize);
         glColor3f(brushColor[0], brushColor[1], brushColor[2]);
@@ -50,7 +50,7 @@ public:
     void SetHW(const int newWidth, const int newHeight) {
         width = newWidth;
         height = newHeight;
-    }
+    }*/
 
 private:
     int width, height;

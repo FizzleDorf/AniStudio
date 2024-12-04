@@ -3,12 +3,11 @@
 
 #include "BaseComponent.hpp"
 namespace ECS {
-class BrushComponent : public BaseComponent {
-public:
+struct BrushComponent : public BaseComponent {
     float size = 5.0f;
     float color[3];
 
-    BrushComponent() : {
+    BrushComponent() {
         color[0] = color[1] = color[2] = 0.0f; // Default black brush
     }
 };

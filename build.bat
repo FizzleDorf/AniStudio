@@ -10,7 +10,7 @@ cd build
 
 :: Configure with CMake
 :: cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
-cmake .. -G "Visual Studio 17 2022" -A x64 -DSD_VULKAN=ON -DCMAKE_BUILD_TYPE=Release
+cmake .. -DSD_VULKAN=ON -DCMAKE_BUILD_TYPE=Release
 
 :: Build the project
 cmake --build . --config Release
