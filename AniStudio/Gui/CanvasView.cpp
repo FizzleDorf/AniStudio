@@ -30,8 +30,8 @@ void CanvasView::RenderCanvas() {
 
 void CanvasView::RenderBrushSettings() {
     ImGui::Begin("Brush Settings");
-    ImGui::SliderFloat("Brush Size", &brush->size, 1.0f, 50.0f);
-    ImGui::ColorEdit3("Brush Color", brush->color);
+    // ImGui::SliderFloat("Brush Size", &brush->size, 1.0f, 50.0f);
+    // ImGui::ColorEdit3("Brush Color", brush->color);
     ImGui::End();
 }
 
@@ -40,6 +40,10 @@ void CanvasView::RenderLayerManager() {
     if (ImGui::Button("Add Layer")) {
         layerManager.AddLayer();
     }
+    if (ImGui::Button("Remove Layer")) {
+        // layerManager.RemoveLayer();
+    }
+
     ImGui::Text("Number of Layers: %d", static_cast<int>(layerManager.GetLayerCount()));
     ImGui::End();
 }

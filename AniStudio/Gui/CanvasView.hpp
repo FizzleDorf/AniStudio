@@ -13,8 +13,8 @@ public:
 
 private:
     EntityID canvasEntity;
-    CanvasComponent *canvas;
-    BrushComponent *brush;
+    // CanvasComponent *canvas;
+    // BrushComponent *brush;
     LayerManager layerManager;
 
     void RenderCanvas();

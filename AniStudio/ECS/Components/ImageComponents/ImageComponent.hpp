@@ -27,6 +27,7 @@ struct ImageComponent : public ECS::BaseComponent {
             width = other.width;
             height = other.height;
             channels = other.channels;
+            textureID = other.channels;
         }
         return *this;
     }

@@ -25,7 +25,6 @@ private:
     EntityManager &mgr = ECS::EntityManager::Ref();
     EntityID entity = NULL;
     ImageComponent imageComponent;
-    GLuint textureID;
 };
 
 } // namespace ECS

@@ -8,7 +8,7 @@
 
 namespace ECS {
 
-ImageView::ImageView() : textureID(0) {}
+ImageView::ImageView() {}
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
@@ -98,7 +98,7 @@ void ImageView::Render() {
 
     // Display loaded image
     if (imageComponent.imageData) {
-        ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(textureID)),
+        ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(imageComponent.textureID)),
                      ImVec2(static_cast<float>(imageComponent.width), static_cast<float>(imageComponent.height)));
     } else {
         ImGui::Text("No image loaded.");
@@ -125,16 +125,16 @@ void ImageView::SaveImage(const std::string &filePath) {
 }
 
 void ImageView::CreateTexture() {
-    if (textureID) {
-        glDeleteTextures(1, &textureID);
+    if (imageComponent.textureID) {
+        glDeleteTextures(1, &imageComponent.textureID);
     }
 
     if (!imageComponent.imageData || imageComponent.width <= 0 || imageComponent.height <= 0) {
         throw std::runtime_error("Invalid image data or dimensions.");
     }
 
-    glGenTextures(1, &textureID);
-    glBindTexture(GL_TEXTURE_2D, textureID);
+    glGenTextures(1, &imageComponent.textureID);
+    glBindTexture(GL_TEXTURE_2D, imageComponent.textureID);
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
@@ -156,8 +156,8 @@ void ImageView::CreateTexture() {
 
 
 ImageView::~ImageView() {
-    if (textureID) {
-        glDeleteTextures(1, &textureID);
+    if (imageComponent.textureID) {
+        glDeleteTextures(1, &imageComponent.textureID);
     }
 }
 
