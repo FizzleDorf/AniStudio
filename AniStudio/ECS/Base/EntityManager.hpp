@@ -157,6 +157,25 @@ namespace ECS {
             entityCount = 0;
         }
 
+		std::vector<EntityID> GetAllEntities() const {
+            std::vector<EntityID> entities;
+            for (const auto &pair : entitiesSignatures) {
+                entities.push_back(pair.first);
+            }
+            return entities;
+        }
+
+        std::vector<ComponentTypeID> GetEntityComponents(EntityID entity) const {
+            assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+            auto it = entitiesSignatures.find(entity);
+            if (it != entitiesSignatures.end()) {
+                const EntitySignature &signature = *(it->second);
+                return {signature.begin(), signature.end()};
+            }
+            return {};
+        }
+
+
 		// Getters for private variables
 		EntityID GetEntityCount() const { return entityCount; }
 		std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }
