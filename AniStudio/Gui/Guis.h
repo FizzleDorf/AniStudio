@@ -1,4 +1,5 @@
 //this is just a catch-all header
+#pragma once
 #include "ViewState.hpp"
 #include "MenuBar.hpp"
 #include "SettingsView.hpp"

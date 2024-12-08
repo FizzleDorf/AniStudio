@@ -8,7 +8,7 @@ using namespace ECS;
 
 class UpscaleView {
 public:
-    UpscaleView(const FilePaths &paths) : filePaths(paths) {}
+    UpscaleView(FilePaths &paths) : filePaths(paths) {}
     ~UpscaleView() {}
 
     void Render();
@@ -19,7 +19,7 @@ private:
     EntityID entity;
 
     // saved default filepaths
-    const FilePaths &filePaths;
+    FilePaths &filePaths;
 
     // Variables to handle the parameters for upscaling
     EsrganComponent modelComp;

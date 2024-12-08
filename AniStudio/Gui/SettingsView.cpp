@@ -1,4 +1,4 @@
-#include "GuiSettings.hpp"
+#include "SettingsView.hpp"
 #include "ImGuiFileDialog.h"
 #include "ImGuiFileDialogConfig.h"
 #include <cstring>
@@ -293,7 +293,7 @@ void SettingsView::InstallVenv() {
     std::cout << "Virtual environment successfully created at " << venvPath << std::endl;
 }
 
-void GuiSettings::RunComfyUI() {
+void SettingsView::RunComfyUI() {
     // Command to activate the virtual environment and run main.py
     std::string activateAndRunCmd;
 #ifdef _WIN32
@@ -342,7 +342,7 @@ void SettingsView::ShowBoolOptionsTable(BoolOption *options, int count, const ch
     }
 };
 
-void GuiSSettingsViewettings::ShowFlagPathsTable(FlagOption *options, int count, const char *tableTitle) {
+void SettingsView::ShowFlagPathsTable(FlagOption *options, int count, const char *tableTitle) {
     static int selectedOptionIndex = -1; // Store the index of the currently active dialog
 
     if (ImGui::BeginTable(tableTitle, 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))

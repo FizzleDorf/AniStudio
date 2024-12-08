@@ -2,15 +2,6 @@
 
 using namespace ECS;
 
-// Gui Views
-GuiSettings settingsView;
-GuiDiffusion diffusionView(settingsView.GetFilePaths());
-UpscaleView upscaleView(settingsView.GetFilePaths());
-MeshView meshView;
-NodeGraphView nodeGraphView;
-SequencerView sequencerView;
-CanvasView canvasView(1024,1024);
-
 namespace ANI {
 
 Engine &Core = Engine::Ref();
@@ -18,8 +9,10 @@ Engine &Core = Engine::Ref();
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
 Engine::Engine()
-    : mgr(EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
+    : mgr(EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH),
+      videoHeight(SCREEN_HEIGHT) {
     mgr.Reset();
+    vMgr = std::make_unique<ViewManager>();   
 }
 
 Engine::~Engine() {
@@ -28,12 +21,12 @@ Engine::~Engine() {
     ImGui::DestroyContext();
     glfwDestroyWindow(window);
     glfwTerminate();
-    nodeGraphView.Cleanup();
 }
 
 void Engine::Init() {
     mgr.Reset();
-    nodeGraphView.Initialize();
+    vMgr->Init(mgr);
+
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -95,6 +88,7 @@ void Engine::Update(const float deltaT) {
         }
     }
     mgr.Update();
+    vMgr->Update();
 }
 
 void Engine::Draw() {
@@ -105,21 +99,7 @@ void Engine::Draw() {
     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
     ShowMenuBar(window);
-
-    if (viewState.showDiffusionView)
-        diffusionView.Render();
-    if (viewState.showSettingsView)
-        settingsView.Render();
-    if (viewState.showUpscaleView)
-        upscaleView.Render();
-    if (viewState.showMeshView)
-        meshView.Render();
-    if (viewState.showNodeGraphView)
-        nodeGraphView.Render();
-    if (viewState.showSequencerView)
-        sequencerView.Render();
-    if (viewState.showDrawingCanvas)
-        canvasView.Render();
+    vMgr->Render();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

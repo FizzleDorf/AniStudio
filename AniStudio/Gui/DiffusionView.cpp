@@ -1,4 +1,4 @@
-#include "GuiDiffusion.hpp"
+#include "DiffusionView.hpp"
 #include "../Engine/Engine.hpp"
 #include "../Events/Events.hpp"
 #include "ECS.h"
