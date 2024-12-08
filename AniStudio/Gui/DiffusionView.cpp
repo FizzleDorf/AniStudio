@@ -10,7 +10,7 @@ using namespace ANI;
 ImageView imageView;
 EntityID currentEntity;
 
-void GuiDiffusion::RenderModelLoader() {
+void DiffusionView::RenderModelLoader() {
     ImGui::Text("Checkpoint:");
     ImGui::Text("%s", modelComp.modelName.c_str());
 
@@ -39,17 +39,17 @@ void GuiDiffusion::RenderModelLoader() {
     ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
 }
 
-void GuiDiffusion::RenderLatents() {
+void DiffusionView::RenderLatents() {
     ImGui::InputInt("Width", &latentComp.latentWidth);
     ImGui::InputInt("Height", &latentComp.latentHeight);
     ImGui::InputInt("Batch Size", &latentComp.batchSize);
 }
 
-void GuiDiffusion::RenderInputImage() {
+void DiffusionView::RenderInputImage() {
     ImGui::Text("Image input placeholder"); // Adjust to render the actual image component if needed
 }
 
-void GuiDiffusion::RenderPrompts() {
+void DiffusionView::RenderPrompts() {
     if (ImGui::InputTextMultiline("Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer))) {
         promptComp.posPrompt = promptComp.PosBuffer;
     }
@@ -58,7 +58,7 @@ void GuiDiffusion::RenderPrompts() {
     }
 }
 
-void GuiDiffusion::RenderSampler() {
+void DiffusionView::RenderSampler() {
     ImGui::Combo("Sampler", &int(samplerComp.current_sample_method), sample_method_items, sample_method_item_count);
     ImGui::Combo("Scheduler", &int(samplerComp.current_scheduler_method), scheduler_method_items,
                  scheduler_method_item_count);
@@ -69,7 +69,7 @@ void GuiDiffusion::RenderSampler() {
     ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
 }
 
-void GuiDiffusion::HandleT2IEvent() {
+void DiffusionView::HandleT2IEvent() {
     mgr.RegisterSystem<SDCPPSystem>();
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
@@ -135,7 +135,7 @@ void GuiDiffusion::HandleT2IEvent() {
     ANI::Events::Ref().QueueEvent(event);
 }
 
-void GuiDiffusion::HandleUpscaleEvent() {
+void DiffusionView::HandleUpscaleEvent() {
     Event event;
     EntityID newEntity = mgr.AddNewEntity();
 
@@ -146,7 +146,7 @@ void GuiDiffusion::HandleUpscaleEvent() {
     ANI::Events::Ref().QueueEvent(event);
 }
 
-void GuiDiffusion::RenderQueue() {
+void DiffusionView::RenderQueue() {
     if (ImGui::Button("Queue")) {
         HandleT2IEvent();
     }
@@ -156,7 +156,7 @@ void GuiDiffusion::RenderQueue() {
     ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 }
 
-void GuiDiffusion::RenderControlnets() {
+void DiffusionView::RenderControlnets() {
     ImGui::Text("Controlnet:");
     ImGui::SameLine();
     ImGui::Text("%s", controlComp.controlName.c_str());
@@ -186,7 +186,7 @@ void GuiDiffusion::RenderControlnets() {
     ImGui::InputFloat("Start", &controlComp.applyStart, 0.01f, 0.1f, "%.2f");
     ImGui::InputFloat("End", &controlComp.applyEnd, 0.01f, 0.1f, "%.2f");
 }
-void GuiDiffusion::RenderEmbeddings() {
+void DiffusionView::RenderEmbeddings() {
     ImGui::Text("Embedding:");
     ImGui::SameLine();
     ImGui::Text("%s", embedComp.embedName.c_str());
@@ -213,7 +213,7 @@ void GuiDiffusion::RenderEmbeddings() {
         ImGuiFileDialog::Instance()->Close();
     }
 }
-void GuiDiffusion::RenderDiffusionModelLoader() {
+void DiffusionView::RenderDiffusionModelLoader() {
     ImGui::Text("Unet: ");
     ImGui::SameLine();
     ImGui::Text("%s", ckptComp.ckptName.c_str());
@@ -318,7 +318,7 @@ void GuiDiffusion::RenderDiffusionModelLoader() {
         ImGuiFileDialog::Instance()->Close();
     }
 }
-void GuiDiffusion::RenderVaeLoader() {
+void DiffusionView::RenderVaeLoader() {
     ImGui::Text("Vae: ");
     ImGui::SameLine();
     ImGui::Text("%s", vaeComp.vaeName.c_str());
@@ -346,7 +346,7 @@ void GuiDiffusion::RenderVaeLoader() {
     }
 }
 
-void GuiDiffusion::Render() {
+void DiffusionView::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
         if (ImGui::BeginTabBar("Image")) {

@@ -5,10 +5,10 @@
 
 using namespace ECS;
 
-class GuiDiffusion {
+class DiffusionView {
 public:    
-    GuiDiffusion(const FilePaths &paths) : filePaths(paths) {}
-    ~GuiDiffusion() {}
+    DiffusionView(const FilePaths &paths) : filePaths(paths) {}
+    ~DiffusionView() {}
 
     void RenderModelLoader();
     void RenderLatents();
