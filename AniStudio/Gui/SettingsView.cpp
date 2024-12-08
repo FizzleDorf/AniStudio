@@ -68,7 +68,7 @@ extern BoolOption boolOptions[] = {
     {"--verbose", "Enables more debug prints.", false}
 };
 
-void GuiSettings::Render() {
+void SettingsView::Render() {
     if (viewState.showSettingsView) {
         ImGui::SetNextWindowSize(ImVec2(700, 400), ImGuiCond_FirstUseEver);
         ImGui::Begin("Settings");
@@ -165,7 +165,7 @@ void RenderPathInput(const char *label, char *buffer, size_t bufferSize, std::st
     }
 }
 
-void GuiSettings::RenderSettingsWindow() {
+void SettingsView::RenderSettingsWindow() {
     // General Paths Section
     if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
         static char virtualEnvBuffer[512];
@@ -232,7 +232,7 @@ void GuiSettings::RenderSettingsWindow() {
     }
 }
 
-void GuiSettings::InstallComfyUI() {
+void SettingsView::InstallComfyUI() {
     // Check if the comfyui directory already exists
     if (std::filesystem::exists(comfyUIPath)) {
         std::cout << "ComfyUI directory already exists at " << comfyUIPath << std::endl;
@@ -276,7 +276,7 @@ void GuiSettings::InstallComfyUI() {
     }
 }
 
-void GuiSettings::InstallVenv() {
+void SettingsView::InstallVenv() {
     // Check if the virtual environment directory already exists
     if (std::filesystem::exists(venvPath)) {
         std::cerr << "Virtual environment already exists at " << venvPath << std::endl;
@@ -309,8 +309,7 @@ void GuiSettings::RunComfyUI() {
 }
 
 // Function to display the flag options table with checkboxes and tooltips
-void GuiSettings::ShowBoolOptionsTable(BoolOption* options, int count, const char* tableTitle)
-{
+void SettingsView::ShowBoolOptionsTable(BoolOption *options, int count, const char *tableTitle) {
     int columns = 3; // Number of columns for boolean options
 
     if (ImGui::BeginTable(tableTitle, columns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
@@ -343,8 +342,7 @@ void GuiSettings::ShowBoolOptionsTable(BoolOption* options, int count, const cha
     }
 };
 
-void GuiSettings::ShowFlagPathsTable(FlagOption* options, int count, const char* tableTitle)
-{
+void GuiSSettingsViewettings::ShowFlagPathsTable(FlagOption *options, int count, const char *tableTitle) {
     static int selectedOptionIndex = -1; // Store the index of the currently active dialog
 
     if (ImGui::BeginTable(tableTitle, 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
@@ -401,7 +399,7 @@ void GuiSettings::ShowFlagPathsTable(FlagOption* options, int count, const char*
 }
 
 
-json GuiSettings::SerializeOptions() {
+json SettingsView::SerializeOptions() {
     json j;
     j["flags"] = json::array();
     j["booleans"] = json::array();
@@ -425,7 +423,7 @@ json GuiSettings::SerializeOptions() {
     return j;
 }
 
-void GuiSettings::SaveOptionsToFile(const std::string& filename) {
+void SettingsView::SaveOptionsToFile(const std::string &filename) {
     std::filesystem::path dir = "configs";
     if (!std::filesystem::exists(dir)) {
         std::filesystem::create_directory(dir);

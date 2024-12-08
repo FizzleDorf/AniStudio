@@ -23,7 +23,7 @@ struct BoolOption {
     bool enabled;
 };
 
-class GuiSettings {
+class SettingsView {
 public:
     void Render();
     const FilePaths &GetFilePaths() const { return filePaths; }
