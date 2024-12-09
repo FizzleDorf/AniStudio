@@ -61,9 +61,8 @@ public:
                 upscaler_ctx_t *upscale_context =
                     new_upscaler_ctx(
                     mgr.GetComponent<EsrganComponent>(entityID).modelPath.c_str(),
-                    mgr.GetComponent<SamplerComponent>(entityID).n_threads, 
-                    mgr.GetComponent<SamplerComponent>(entityID).current_type_method
-                );
+                    mgr.GetComponent<SamplerComponent>(entityID).n_threads
+                    );
 
                 if (!upscale_context) {
                     throw std::runtime_error(
