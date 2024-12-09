@@ -1,7 +1,8 @@
 // MenuBar.cpp
-#include "pch.h"
-#include "Engine/Engine.hpp"
+
 #include "MenuBar.hpp"
+#include "pch.h"
+#include "../Events/Events.hpp"
 
 
 void ShowMenuBar(GLFWwindow* window) {
@@ -12,7 +13,9 @@ void ShowMenuBar(GLFWwindow* window) {
             };
             ImGui::MenuItem("Save", "Ctrl+S");
             if(ImGui::MenuItem("Exit", "Ctrl+Q")) {
-                ANI::Core.Quit();
+                ANI::Event event;
+                event.type = ANI::EventType::QuitRequest;
+                ANI::Events::Ref().QueueEvent(event);
             };
             ImGui::EndMenu();
         }

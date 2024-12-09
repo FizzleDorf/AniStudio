@@ -6,7 +6,10 @@
 
 namespace ANI {
 
-enum class EventType { 
+enum class EventType {
+    // Application
+    QuitRequest,
+
     // Diffusion
     InferenceRequest,
     UpscaleRequest,
@@ -49,7 +52,7 @@ private:
 
     // Static callback function for GLFW window close
     static void WindowCloseCallback(GLFWwindow *window) {
-        Engine::Ref().Quit();
+        Core.Quit();
     }
 };
 
