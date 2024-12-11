@@ -112,12 +112,12 @@ void DiffusionView::HandleT2IEvent() {
     mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
 
     std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
-    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";
-    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).encoderPath << "\n";
-    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath << "\n";
+    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).modelPath << "\n";
+    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).modelPath << "\n";
+    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).modelPath << "\n";
     std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(newEntity).modelPath
               << "\n";
-    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).vaePath << "\n";
+    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).modelPath << "\n";
     std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << "\n";
     std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(newEntity).denoise << "\n";
     std::cout << "SamplerComponent.current_sample_method: "
@@ -191,7 +191,7 @@ void DiffusionView::RenderControlnets() {
 void DiffusionView::RenderEmbeddings() {
     ImGui::Text("Embedding:");
     ImGui::SameLine();
-    ImGui::Text("%s", embedComp.embedName.c_str());
+    ImGui::Text("%s", embedComp.modelName.c_str());
 
     if (ImGui::Button("...##v9")) {
         IGFD::FileDialogConfig config;
@@ -205,11 +205,11 @@ void DiffusionView::RenderEmbeddings() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            embedComp.embedName = selectedFile;
-            embedComp.embedPath = fullPath;
-            std::cout << "Selected file: " << embedComp.embedName << std::endl;
-            std::cout << "Full path: " << embedComp.embedPath << std::endl;
-            std::cout << "New model path set: " << embedComp.embedPath << std::endl;
+            embedComp.modelName = selectedFile;
+            embedComp.modelPath = fullPath;
+            std::cout << "Selected file: " << embedComp.modelName << std::endl;
+            std::cout << "Full path: " << embedComp.modelPath << std::endl;
+            std::cout << "New model path set: " << embedComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();
@@ -244,7 +244,7 @@ void DiffusionView::RenderDiffusionModelLoader() {
 
     ImGui::Text("Clip L: ");
     ImGui::SameLine();
-    ImGui::Text("%s", clipLComp.encoderName.c_str());
+    ImGui::Text("%s", clipLComp.modelName.c_str());
 
     if (ImGui::Button("...##b7")) {
         IGFD::FileDialogConfig config;
@@ -258,11 +258,11 @@ void DiffusionView::RenderDiffusionModelLoader() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            clipLComp.encoderName = selectedFile;
-            clipLComp.encoderPath = fullPath;
-            std::cout << "Selected file: " << clipLComp.encoderName << std::endl;
-            std::cout << "Full path: " << clipLComp.encoderPath << std::endl;
-            std::cout << "New model path set: " << clipLComp.encoderPath << std::endl;
+            clipLComp.modelName = selectedFile;
+            clipLComp.modelPath = fullPath;
+            std::cout << "Selected file: " << clipLComp.modelName << std::endl;
+            std::cout << "Full path: " << clipLComp.modelPath << std::endl;
+            std::cout << "New model path set: " << clipLComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();
@@ -270,7 +270,7 @@ void DiffusionView::RenderDiffusionModelLoader() {
 
     ImGui::Text("Clip G: ");
     ImGui::SameLine();
-    ImGui::Text("%s", clipGComp.encoderName.c_str());
+    ImGui::Text("%s", clipGComp.modelName.c_str());
 
     if (ImGui::Button("...##g7")) {
         IGFD::FileDialogConfig config;
@@ -284,11 +284,11 @@ void DiffusionView::RenderDiffusionModelLoader() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            clipGComp.encoderName = selectedFile;
-            clipGComp.encoderPath = fullPath;
-            std::cout << "Selected file: " << clipGComp.encoderName << std::endl;
-            std::cout << "Full path: " << clipGComp.encoderPath << std::endl;
-            std::cout << "New model path set: " << clipGComp.encoderPath << std::endl;
+            clipGComp.modelName = selectedFile;
+            clipGComp.modelPath = fullPath;
+            std::cout << "Selected file: " << clipGComp.modelName << std::endl;
+            std::cout << "Full path: " << clipGComp.modelPath << std::endl;
+            std::cout << "New model path set: " << clipGComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();
@@ -296,7 +296,7 @@ void DiffusionView::RenderDiffusionModelLoader() {
 
     ImGui::Text("T5XXL: ");
     ImGui::SameLine();
-    ImGui::Text("%s", t5xxlComp.encoderName.c_str());
+    ImGui::Text("%s", t5xxlComp.modelName.c_str());
 
     if (ImGui::Button("...##x6")) {
         IGFD::FileDialogConfig config;
@@ -310,11 +310,11 @@ void DiffusionView::RenderDiffusionModelLoader() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            t5xxlComp.encoderName = selectedFile;
-            t5xxlComp.encoderPath = fullPath;
-            std::cout << "Selected file: " << t5xxlComp.encoderName << std::endl;
-            std::cout << "Full path: " << t5xxlComp.encoderPath << std::endl;
-            std::cout << "New model path set: " << t5xxlComp.encoderPath << std::endl;
+            t5xxlComp.modelName = selectedFile;
+            t5xxlComp.modelPath = fullPath;
+            std::cout << "Selected file: " << t5xxlComp.modelName << std::endl;
+            std::cout << "Full path: " << t5xxlComp.modelPath << std::endl;
+            std::cout << "New model path set: " << t5xxlComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();
@@ -323,7 +323,7 @@ void DiffusionView::RenderDiffusionModelLoader() {
 void DiffusionView::RenderVaeLoader() {
     ImGui::Text("Vae: ");
     ImGui::SameLine();
-    ImGui::Text("%s", vaeComp.vaeName.c_str());
+    ImGui::Text("%s", vaeComp.modelName.c_str());
 
     if (ImGui::Button("...##4b")) {
         IGFD::FileDialogConfig config;
@@ -337,11 +337,11 @@ void DiffusionView::RenderVaeLoader() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            vaeComp.vaeName = selectedFile;
-            vaeComp.vaePath = fullPath;
-            std::cout << "Selected file: " << vaeComp.vaeName << std::endl;
-            std::cout << "Full path: " << vaeComp.vaePath << std::endl;
-            std::cout << "New model path set: " << vaeComp.vaePath << std::endl;
+            vaeComp.modelName = selectedFile;
+            vaeComp.modelPath = fullPath;
+            std::cout << "Selected file: " << vaeComp.modelName << std::endl;
+            std::cout << "Full path: " << vaeComp.modelPath << std::endl;
+            std::cout << "New model path set: " << vaeComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();

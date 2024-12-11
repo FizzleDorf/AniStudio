@@ -31,6 +31,7 @@ void Events::ProcessEvents() {
         switch (event.type) {
         case EventType::QuitRequest: {
             Core.Quit();
+            break;
         }
         case EventType::InferenceRequest: {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << std::endl;

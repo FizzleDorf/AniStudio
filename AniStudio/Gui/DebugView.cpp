@@ -42,7 +42,7 @@ void DebugView::RenderEntityPanel() {
 }
 
 void DebugView::RenderSystemPanel() {
-    ImGui::Begin("Systems");
+    ImGui::Begin("Active Systems");
 
     for (const auto &[id, aniSystem] : manager.GetRegisteredSystems()) {
         if (ImGui::TreeNode((std::string("System ") + std::to_string(id)).c_str())) {
