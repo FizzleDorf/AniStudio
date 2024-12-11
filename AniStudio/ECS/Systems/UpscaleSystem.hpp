@@ -57,7 +57,6 @@ public:
                 sd_set_log_callback(LogCallback, nullptr);
                 sd_set_progress_callback(ProgressCallback, nullptr);
 
-                // Using heap allocation for context and image
                 upscaler_ctx_t *upscale_context =
                     new_upscaler_ctx(
                     mgr.GetComponent<EsrganComponent>(entityID).modelPath.c_str(),
@@ -121,8 +120,7 @@ public:
         if (!inferenceRunning.load() && !inferenceQueue.empty()) {
             EntityID entityID = inferenceQueue.front();
             inferenceQueue.pop();
-            if (std::filesystem::exists(mgr.GetComponent<ModelComponent>(entityID).modelPath) ||
-                std::filesystem::exists(mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath)) {
+            if (std::filesystem::exists(mgr.GetComponent<EsrganComponent>(entityID).modelPath)) {
                 Inference(entityID);
             } else {
                 mgr.DestroyEntity(entityID);

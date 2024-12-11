@@ -20,7 +20,7 @@
 
 // Latents
 #include "LatentComponent.hpp"
-#include "LatentUpscaleComponent.hpp"
+#include "LatentTransformComponent.hpp"
 
 // Other
 #include "LayerSkipComponent.hpp"

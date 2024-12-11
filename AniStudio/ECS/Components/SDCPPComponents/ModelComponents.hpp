@@ -1,34 +1,28 @@
 #pragma once
 
-#include "BaseComponent.hpp"
+#include "BaseModelComponent.hpp"
 #include <string>
 
 namespace ECS {
-struct ModelComponent : public ECS::BaseComponent {
-    std::string modelPath = "";
-    std::string modelName = "model.gguf";
-    bool isCkptLoaded = false;
+struct ModelComponent : public ECS::BaseModelComponent {
 
     ModelComponent &operator=(const ModelComponent &other) {
         if (this != &other) {
             modelPath = other.modelPath;
             modelName = other.modelName;
-            isCkptLoaded = other.isCkptLoaded;
+            isModelLoaded = other.isModelLoaded;
         }
         return *this;
     }
 };
 
-struct DiffusionModelComponent : public ECS::BaseComponent {
-    std::string ckptPath = "";
-    std::string ckptName = "model.gguf";
-    bool isCkptLoaded = false;
+struct DiffusionModelComponent : public ECS::BaseModelComponent {
 
     DiffusionModelComponent &operator=(const DiffusionModelComponent &other) {
         if (this != &other) {
-            ckptPath = other.ckptPath;
-            ckptName = other.ckptName;
-            isCkptLoaded = other.isCkptLoaded;
+            modelPath = other.modelPath;
+            modelName = other.modelName;
+            isModelLoaded = other.isModelLoaded;
         }
         return *this;
     }

@@ -83,6 +83,7 @@ void DiffusionView::HandleT2IEvent() {
     mgr.AddComponent<DiffusionModelComponent>(newEntity);
     mgr.AddComponent<VaeComponent>(newEntity);
     mgr.AddComponent<TaesdComponent>(newEntity);
+    mgr.AddComponent<ControlnetComponent>(newEntity);
     mgr.AddComponent<LoraComponent>(newEntity);
     mgr.AddComponent<LatentComponent>(newEntity);
     mgr.AddComponent<SamplerComponent>(newEntity);
@@ -101,6 +102,7 @@ void DiffusionView::HandleT2IEvent() {
     mgr.GetComponent<DiffusionModelComponent>(newEntity) = ckptComp;
     mgr.GetComponent<VaeComponent>(newEntity) = vaeComp;
     mgr.GetComponent<TaesdComponent>(newEntity) = taesdComp;
+    mgr.GetComponent<ControlnetComponent>(newEntity) = controlComp;
     mgr.GetComponent<LoraComponent>(newEntity) = loraComp;
     mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
     mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
@@ -113,7 +115,7 @@ void DiffusionView::HandleT2IEvent() {
     std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).encoderPath << "\n";
     std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).encoderPath << "\n";
     std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).encoderPath << "\n";
-    std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(newEntity).ckptPath
+    std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(newEntity).modelPath
               << "\n";
     std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).vaePath << "\n";
     std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << "\n";
@@ -159,7 +161,7 @@ void DiffusionView::RenderQueue() {
 void DiffusionView::RenderControlnets() {
     ImGui::Text("Controlnet:");
     ImGui::SameLine();
-    ImGui::Text("%s", controlComp.controlName.c_str());
+    ImGui::Text("%s", controlComp.modelName.c_str());
 
     if (ImGui::Button("...##5b")) {
         IGFD::FileDialogConfig config;
@@ -173,11 +175,11 @@ void DiffusionView::RenderControlnets() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            controlComp.controlName = selectedFile;
-            controlComp.controlPath = fullPath;
-            std::cout << "Selected file: " << controlComp.controlName << std::endl;
-            std::cout << "Full path: " << controlComp.controlPath << std::endl;
-            std::cout << "New model path set: " << controlComp.controlPath << std::endl;
+            controlComp.modelName = selectedFile;
+            controlComp.modelPath = fullPath;
+            std::cout << "Selected file: " << controlComp.modelName << std::endl;
+            std::cout << "Full path: " << controlComp.modelPath << std::endl;
+            std::cout << "New model path set: " << controlComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();
@@ -216,7 +218,7 @@ void DiffusionView::RenderEmbeddings() {
 void DiffusionView::RenderDiffusionModelLoader() {
     ImGui::Text("Unet: ");
     ImGui::SameLine();
-    ImGui::Text("%s", ckptComp.ckptName.c_str());
+    ImGui::Text("%s", ckptComp.modelName.c_str());
 
     if (ImGui::Button("...##n2")) {
         IGFD::FileDialogConfig config;
@@ -230,11 +232,11 @@ void DiffusionView::RenderDiffusionModelLoader() {
             std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
             std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
 
-            ckptComp.ckptName = selectedFile;
-            ckptComp.ckptPath = fullPath;
-            std::cout << "Selected file: " << ckptComp.ckptName << std::endl;
-            std::cout << "Full path: " << ckptComp.ckptPath << std::endl;
-            std::cout << "New model path set: " << ckptComp.ckptPath << std::endl;
+            ckptComp.modelName = selectedFile;
+            ckptComp.modelPath = fullPath;
+            std::cout << "Selected file: " << ckptComp.modelName << std::endl;
+            std::cout << "Full path: " << ckptComp.modelPath << std::endl;
+            std::cout << "New model path set: " << ckptComp.modelPath << std::endl;
         }
 
         ImGuiFileDialog::Instance()->Close();

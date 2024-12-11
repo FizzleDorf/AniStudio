@@ -1,7 +1,7 @@
 #pragma once
 #include "BaseComponent.hpp"
 namespace ECS {
-struct LatentUpscaleComponent : public ECS::BaseComponent {
+struct LatentTransformComponent : public ECS::BaseComponent {
     int newLatentWidth = 1024;
     int newLatentHeight = 1024;
     float latentWidthMultiplier = 1.5f;

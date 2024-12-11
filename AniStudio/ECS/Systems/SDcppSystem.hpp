@@ -144,9 +144,10 @@ private:
                           mgr.GetComponent<CLipLComponent>(entityID).encoderPath.c_str(),
                           mgr.GetComponent<CLipGComponent>(entityID).encoderPath.c_str(),
                           mgr.GetComponent<T5XXLComponent>(entityID).encoderPath.c_str(),
-                          mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath.c_str(),
+                          mgr.GetComponent<DiffusionModelComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<VaeComponent>(entityID).vaePath.c_str(),
-                          mgr.GetComponent<TaesdComponent>(entityID).taesdPath.c_str(), "",
+                          mgr.GetComponent<TaesdComponent>(entityID).taesdPath.c_str(), 
+                          mgr.GetComponent<ControlnetComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<LoraComponent>(entityID).loraPath.c_str(),
                           mgr.GetComponent<EmbeddingComponent>(entityID).embedPath.c_str(), "",
                           mgr.GetComponent<VaeComponent>(entityID).vae_decode_only,
@@ -182,7 +183,7 @@ private:
     // Utility to validate component paths
     bool ArePathsValid(const EntityID entityID) {
         return std::filesystem::exists(mgr.GetComponent<ModelComponent>(entityID).modelPath) ||
-               std::filesystem::exists(mgr.GetComponent<DiffusionModelComponent>(entityID).ckptPath);
+               std::filesystem::exists(mgr.GetComponent<DiffusionModelComponent>(entityID).modelPath);
     }
 };
 
