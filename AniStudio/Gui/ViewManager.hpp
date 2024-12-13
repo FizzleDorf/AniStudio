@@ -27,7 +27,7 @@ class ViewManager {
     private:
         FilePaths filePaths;
         EntityManager *mgr;    
-        std::unique_ptr<CanvasView> canvasView = nullptr;
+        // std::unique_ptr<CanvasView> canvasView = nullptr;
         std::unique_ptr<DebugView> debugView = nullptr;
         std::unique_ptr<DiffusionView> diffusionView = nullptr;
         std::unique_ptr<MeshView> meshView = nullptr;

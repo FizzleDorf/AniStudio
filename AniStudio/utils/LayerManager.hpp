@@ -6,15 +6,18 @@
 
 class LayerManager {
 public:
-    LayerManager(int canvasWidth, int canvasHeight);
+    LayerManager();
     ~LayerManager();
 
     void AddLayer();
     GLuint GetLayerTexture(int index) const;
     size_t GetLayerCount() const;
 
+    void SetCanvasSize(int newWidth, int newHeight);
+
 private:
-    int width, height;
+    int width = 0; 
+    int height = 0;
     std::vector<GLuint> layers;
 
     void InitLayer(GLuint &texture);

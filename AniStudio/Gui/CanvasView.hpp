@@ -3,23 +3,38 @@
 
 #include "ECS.h"
 #include "LayerManager.hpp"
+#include <glm/glm.hpp>
 #include <imgui.h>
+#include <vector>
 
 class CanvasView {
 public:
-    CanvasView(int canvasWidth, int canvasHeight);
+    CanvasView(ECS::EntityManager &ecsManager);
 
-    void Render();
+    void Render(); // Render the entire canvas and UI
+    void Update(); // Update logic (e.g., brush strokes)
 
 private:
-    EntityID canvasEntity;
-    // CanvasComponent *canvas;
-    // BrushComponent *brush;
+    // ECS and Layer Manager references
+    ECS::EntityManager &ecsManager;
     LayerManager layerManager;
 
-    void RenderCanvas();
-    void RenderBrushSettings();
-    void RenderLayerManager();
+    // Canvas properties
+    GLuint canvasFBO;     // Framebuffer Object
+    GLuint canvasTexture; // Canvas texture
+    glm::vec2 canvasSize; // Size of the canvas
+
+    // Brush properties
+    struct Brush {
+        glm::vec4 color; // RGBA
+        float size;      // Brush size
+    } brush;
+
+    // Private methods
+    void RenderCanvas();        // Render the drawing canvas
+    void RenderBrushSettings(); // UI for brush settings
+    void RenderLayerManager();  // UI for layer manager
+    void InitializeCanvas();    // Initialize the framebuffer and texture
 };
 
 #endif // CANVAS_VIEW_HPP

@@ -1,49 +1,94 @@
 #include "CanvasView.hpp"
+#include <GL/glew.h>
+#include <iostream>
 
-CanvasView::CanvasView(int canvasWidth, int canvasHeight)
-    : layerManager(canvasWidth, canvasHeight) {
-    
-    // auto &mgr = EntityManager::Ref();
-    // canvasEntity = mgr.AddNewEntity();
-    // 
-    // mgr.AddComponent<CanvasComponent>(canvasEntity);
-    // mgr.AddComponent<BrushComponent>(canvasEntity);
-    // 
-    // canvas = &mgr.GetComponent<CanvasComponent>(canvasEntity);
-    // brush = &mgr.GetComponent<BrushComponent>(canvasEntity);
-    // 
-    // // canvas->SetHW(canvasWidth, canvasHeight);
-    // 
-    // layerManager.AddLayer();
+// Constructor
+CanvasView::CanvasView(ECS::EntityManager &ecsManager)
+    : ecsManager(ecsManager), canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5.0f}) {
+    layerManager.SetCanvasSize(canvasSize.x, canvasSize.y);
+    InitializeCanvas();
 }
 
+// Initialize the canvas framebuffer and texture
+void CanvasView::InitializeCanvas() {
+    glGenFramebuffers(1, &canvasFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, canvasFBO);
+
+    glGenTextures(1, &canvasTexture);
+    glBindTexture(GL_TEXTURE_2D, canvasTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasSize.x, canvasSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, canvasTexture, 0);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "Error: Canvas framebuffer is not complete!" << std::endl;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+// Main render method
 void CanvasView::Render() {
-    /*RenderCanvas();*/
+    RenderCanvas();
     RenderBrushSettings();
     RenderLayerManager();
 }
 
+// Render the drawing canvas
 void CanvasView::RenderCanvas() {
-    // canvas->SetBrush(brush->size, brush->color[0], brush->color[1], brush->color[2]);
-    // canvas->RenderImGuiCanvas();
-}
+    ImGui::Begin("Canvas");
 
-void CanvasView::RenderBrushSettings() {
-    ImGui::Begin("Brush Settings");
-    // ImGui::SliderFloat("Brush Size", &brush->size, 1.0f, 50.0f);
-    // ImGui::ColorEdit3("Brush Color", brush->color);
+    // Render the framebuffer as a texture
+    ImGui::Image((void *)(intptr_t)canvasTexture, ImVec2(canvasSize.x, canvasSize.y));
+
     ImGui::End();
 }
 
+// UI for brush settings
+void CanvasView::RenderBrushSettings() {
+    ImGui::Begin("Brush Settings");
+    ImGui::ColorEdit4("Brush Color", &brush.color.r);
+    ImGui::SliderFloat("Brush Size", &brush.size, 1.0f, 50.0f);
+    ImGui::End();
+}
+
+// UI for layer manager
 void CanvasView::RenderLayerManager() {
     ImGui::Begin("Layers");
+
     if (ImGui::Button("Add Layer")) {
         layerManager.AddLayer();
     }
+    ImGui::SameLine();
     if (ImGui::Button("Remove Layer")) {
         // layerManager.RemoveLayer();
     }
 
     ImGui::Text("Number of Layers: %d", static_cast<int>(layerManager.GetLayerCount()));
+
     ImGui::End();
+}
+
+// Update method (for brush strokes)
+void CanvasView::Update() {
+    // Handle input and update entities
+    double mouseX, mouseY;
+    glfwGetCursorPos(glfwGetCurrentContext(), &mouseX, &mouseY);
+
+    if (glfwGetMouseButton(glfwGetCurrentContext(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        // Add a brush stroke to the canvas
+        auto entity = ecsManager.AddNewEntity();
+        ecsManager.AddComponent<TransformComponent>(entity);
+        
+        // {mouseX, mouseY}, 0.0f, { 1.0f, 1.0f }
+        
+        ecsManager.AddComponent <ColorComponent>(entity);
+
+        // {brush.color}
+
+        ecsManager.AddComponent<DrawableComponent>(entity);
+
+        // {{glm::vec2(mouseX, mouseY)}, true}
+    }
 }

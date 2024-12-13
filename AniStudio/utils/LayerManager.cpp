@@ -1,6 +1,7 @@
 #include "LayerManager.hpp"
 
-LayerManager::LayerManager(int canvasWidth, int canvasHeight) : width(canvasWidth), height(canvasHeight) {}
+
+LayerManager::LayerManager() {}
 
 LayerManager::~LayerManager() {
     for (GLuint texture : layers) {
@@ -25,4 +26,9 @@ void LayerManager::InitLayer(GLuint &texture) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void LayerManager::SetCanvasSize(int newWidth, int newHeight) {
+    width = newWidth;
+    height = newHeight;
 }
