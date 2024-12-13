@@ -2,7 +2,7 @@
 
 void ViewManager::Init(EntityManager &manager) {
     mgr = &manager;
-    // canvasView = std::make_unique<CanvasView>(*mgr);
+    canvasView = std::make_unique<CanvasView>(*mgr);
     debugView = std::make_unique<DebugView>(*mgr);
     diffusionView = std::make_unique<DiffusionView>(filePaths);
     meshView = std::make_unique<MeshView>();
@@ -26,11 +26,11 @@ void ViewManager::Render() {
     if (viewState.showSequencerView)
         sequencerView->Render();
     if (viewState.showDrawingCanvas)
-        // canvasView->Render();
+        canvasView->Render();
     if (viewState.showDebugView)
         debugView->Render();
 }
 
 void ViewManager::Update() { 
-    // canvasView->Update(); 
+    canvasView->Update(); 
 }

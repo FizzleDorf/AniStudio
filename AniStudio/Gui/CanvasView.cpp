@@ -6,7 +6,7 @@
 CanvasView::CanvasView(ECS::EntityManager &ecsManager)
     : ecsManager(ecsManager), canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5.0f}) {
     layerManager.SetCanvasSize(canvasSize.x, canvasSize.y);
-    InitializeCanvas();
+    // InitializeCanvas();
 }
 
 // Initialize the canvas framebuffer and texture
@@ -30,7 +30,7 @@ void CanvasView::InitializeCanvas() {
 
 // Main render method
 void CanvasView::Render() {
-    RenderCanvas();
+    // RenderCanvas();
     RenderBrushSettings();
     RenderLayerManager();
 }
