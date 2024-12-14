@@ -72,23 +72,5 @@ void CanvasView::RenderLayerManager() {
 
 // Update method (for brush strokes)
 void CanvasView::Update() {
-    // Handle input and update entities
-    double mouseX, mouseY;
-    glfwGetCursorPos(glfwGetCurrentContext(), &mouseX, &mouseY);
-
-    if (glfwGetMouseButton(glfwGetCurrentContext(), GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-        // Add a brush stroke to the canvas
-        auto entity = ecsManager.AddNewEntity();
-        ecsManager.AddComponent<TransformComponent>(entity);
-        
-        // {mouseX, mouseY}, 0.0f, { 1.0f, 1.0f }
-        
-        ecsManager.AddComponent <ColorComponent>(entity);
-
-        // {brush.color}
-
-        ecsManager.AddComponent<DrawableComponent>(entity);
-
-        // {{glm::vec2(mouseX, mouseY)}, true}
-    }
+    
 }
