@@ -30,7 +30,7 @@ void CanvasView::InitializeCanvas() {
 
 // Main render method
 void CanvasView::Render() {
-    // RenderCanvas();
+    RenderCanvas();
     RenderBrushSettings();
     RenderLayerManager();
 }

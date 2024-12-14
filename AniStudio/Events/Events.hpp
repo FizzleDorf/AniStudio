@@ -9,6 +9,8 @@ namespace ANI {
 enum class EventType {
     // Application
     QuitRequest,
+    NewProject,
+    OpenProject,
 
     // Diffusion
     InferenceRequest,
