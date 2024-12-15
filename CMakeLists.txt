@@ -129,10 +129,10 @@ add_executable(${PROJECT_NAME}
 set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
 
 # Setup OpenCV
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-set(IMMVISION_FETCH_OPENCV ON)
-include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/find_opencv.cmake)
-immvision_find_opencv()
+# list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+# set(IMMVISION_FETCH_OPENCV ON)
+# include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/find_opencv.cmake)
+# immvision_find_opencv()
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
