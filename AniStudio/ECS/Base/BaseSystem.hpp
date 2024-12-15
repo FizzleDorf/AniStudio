@@ -29,10 +29,13 @@ namespace ECS {
 		virtual void Render(){}
 		virtual void Destroy(){}
 
+		std::string GetSystemName() { return sysName; }
+
 	protected:
 		friend class EntityManager;
 		EntitySignature signature;
 		std::set<EntityID> entities;
         ECS::EntityManager *mgr = nullptr;
+        std::string sysName = "System_Component";
 	};
 }

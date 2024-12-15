@@ -25,7 +25,6 @@ class ViewManager {
         void Render();
 
     private:
-        FilePaths filePaths;
         EntityManager *mgr;    
         std::unique_ptr<CanvasView> canvasView = nullptr;
         std::unique_ptr<DebugView> debugView = nullptr;

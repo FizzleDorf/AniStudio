@@ -4,8 +4,7 @@
 #include "pch.h"
 #include "../Events/Events.hpp"
 
-
-void ShowMenuBar(GLFWwindow* window) {
+void ShowMenuBar(GLFWwindow *window) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
             if (ImGui::MenuItem("New")) {

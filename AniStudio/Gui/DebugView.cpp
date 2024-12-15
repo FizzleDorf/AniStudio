@@ -29,11 +29,13 @@ void DebugView::RenderEntityPanel() {
             selectedEntity = entity;
             entityIndex = static_cast<int>(i);
         }
-
+        
         if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
             auto components = manager.GetEntityComponents(entity);
             for (auto compType : components) {
                 ImGui::Text("Component ID: %u", compType);
+                ImGui::SameLine();
+                ImGui::Text("Component Name: %u", compType);
             }
             ImGui::TreePop();
         }
@@ -45,11 +47,10 @@ void DebugView::RenderSystemPanel() {
     ImGui::Begin("Active Systems");
 
     for (const auto &[id, aniSystem] : manager.GetRegisteredSystems()) {
-        if (ImGui::TreeNode((std::string("System ") + std::to_string(id)).c_str())) {
-            // bool enabled = aniSystem;
-            // if (ImGui::Checkbox("Enabled", &enabled)) {
-            //     aniSystem->enabled = enabled;
-            // }
+        if (ImGui::TreeNode(
+                (std::string("System ") + std::to_string(id) + " " + aniSystem->GetSystemName()).c_str()))
+             {
+            
             ImGui::TreePop();
         }
     }

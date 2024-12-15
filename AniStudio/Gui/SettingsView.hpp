@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui.h"
+#include "ECS.h"
 #include "ViewState.hpp"
 #include "filepaths.hpp"
 #include <nlohmann/json.hpp>
@@ -26,7 +27,7 @@ struct BoolOption {
 class SettingsView {
 public:
     void Render();
-    const FilePaths &GetFilePaths() const { return filePaths; }
+    
 
 private:
     void InstallVenv();
@@ -37,7 +38,7 @@ private:
     void ShowFlagPathsTable(FlagOption* options, int count, const char* tableTitle);
     void RenderSettingsWindow();
     void RunComfyUI();
-    FilePaths filePaths;
+    
 };
 
 extern BoolOption boolOptions[];

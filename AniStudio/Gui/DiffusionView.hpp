@@ -1,5 +1,4 @@
 #pragma once
-#include "../Engine/Engine.hpp"
 #include "ECS.h"
 #include "pch.h"
 
@@ -7,7 +6,7 @@ using namespace ECS;
 
 class DiffusionView {
 public:    
-    DiffusionView(const FilePaths &paths) : filePaths(paths) {}
+    DiffusionView() {}
     ~DiffusionView() {}
 
     void RenderModelLoader();
@@ -38,9 +37,6 @@ private:
     // ECS-related variables
     EntityManager &mgr = ECS::EntityManager::Ref();
     EntityID entity;
-
-    // saved default filepaths
-    const FilePaths &filePaths;
 
     // Variables to handle the parameters for diffusion
     ModelComponent modelComp;

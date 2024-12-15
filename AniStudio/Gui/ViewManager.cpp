@@ -4,11 +4,11 @@ void ViewManager::Init(EntityManager &manager) {
     mgr = &manager;
     canvasView = std::make_unique<CanvasView>(*mgr);
     debugView = std::make_unique<DebugView>(*mgr);
-    diffusionView = std::make_unique<DiffusionView>(filePaths);
+    diffusionView = std::make_unique<DiffusionView>();
     meshView = std::make_unique<MeshView>();
     sequencerView = std::make_unique<SequencerView>();
     settingsView = std::make_unique<SettingsView>();
-    upscaleView = std::make_unique<UpscaleView>(filePaths);
+    upscaleView = std::make_unique<UpscaleView>();
     nodeGraphView = std::make_unique<NodeGraphView>();
 }
 
