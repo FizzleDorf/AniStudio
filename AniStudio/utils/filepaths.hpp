@@ -105,4 +105,6 @@ struct FilePaths {
     }
 };
 
+extern FilePaths filePaths;
+
 #endif // FILEPATHS_HPP
