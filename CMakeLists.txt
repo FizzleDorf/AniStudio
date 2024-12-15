@@ -109,6 +109,8 @@ file(GLOB GUI_SOURCES AniStudio/Gui/*.cpp)
 
 file(GLOB SYSTEM_SOURCES AniStudio/ECS/Systems/*.cpp)
 
+file(GLOB UTILS_SOURCES AniStudio/ECS/utils/*.cpp)
+
 # Add main executable
 add_executable(${PROJECT_NAME}
     ${CMAKE_SOURCE_DIR}/AniStudio/main.cpp
@@ -119,9 +121,9 @@ add_executable(${PROJECT_NAME}
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_opengl3.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/utils/LayerManager.cpp
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
+    ${UTILS_SOURCES}
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
