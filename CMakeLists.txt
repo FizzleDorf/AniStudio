@@ -109,7 +109,7 @@ file(GLOB GUI_SOURCES AniStudio/Gui/*.cpp)
 
 file(GLOB SYSTEM_SOURCES AniStudio/ECS/Systems/*.cpp)
 
-file(GLOB UTILS_SOURCES AniStudio/ECS/utils/*.cpp)
+file(GLOB UTILS_SOURCES AniStudio/utils/*.cpp)
 
 # Add main executable
 add_executable(${PROJECT_NAME}
