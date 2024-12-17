@@ -102,7 +102,7 @@ public:
     }
 
     // Update called in the Engine Update Loop
-    void Update() override {
+    void Update(const float deltaT) override {
         std::lock_guard<std::mutex> lock(queueMutex);
 
         // Process inference queue

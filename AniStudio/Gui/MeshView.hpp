@@ -1,7 +1,7 @@
 #ifndef THREE_D_VIEW_HPP
 #define THREE_D_VIEW_HPP
 
-#include "ECS.h"
+#include "BaseView.hpp"
 #include "../backends/imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -11,7 +11,7 @@
 #include <imgui.h>
 #include <memory>
 
-class MeshView {
+class MeshView : public BaseView {
 public:
     // Constructor
     MeshView();

@@ -86,8 +86,8 @@ void Engine::Update(const float deltaT) {
             fpsSum = 0.0;
         }
     }
-    mgr.Update();
-    vMgr->Update();
+    mgr.Update(deltaT);
+    vMgr->Update(deltaT);
 }
 
 void Engine::Draw() {

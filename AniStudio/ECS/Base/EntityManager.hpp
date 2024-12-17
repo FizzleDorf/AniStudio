@@ -19,9 +19,9 @@ namespace ECS {
 
 		}
 
- 		void Update() {
+ 		void Update(const float deltaT) {
 			for (auto& system : registeredSystems) {
-				system.second->Update();
+                system.second->Update(deltaT);
 			}
 		}
 

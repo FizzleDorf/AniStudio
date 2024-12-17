@@ -11,7 +11,7 @@ class CanvasView : public BaseView {
 public:
     CanvasView();
     void Render(); // Render the entire canvas and UI
-    void Update(); // Update logic (e.g., brush strokes)
+    void Update(const float deltaT) override; // Update logic (e.g., brush strokes)
 
 private:
     // ECS and Layer Manager references

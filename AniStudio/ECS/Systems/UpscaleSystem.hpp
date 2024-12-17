@@ -114,7 +114,7 @@ public:
         });
     }
 
-    void Update() override {
+    void Update(const float deltaT) override {
         std::lock_guard<std::mutex> lock(queueMutex); // Lock while modifying the queue
         if (!inferenceRunning.load() && !inferenceQueue.empty()) {
             EntityID entityID = inferenceQueue.front();

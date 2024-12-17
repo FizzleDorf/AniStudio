@@ -23,7 +23,7 @@ namespace ECS {
 		}
 
 		virtual void Start(){}
-		virtual void Update(){}
+        virtual void Update(const float deltaT) {}
 		virtual void Render(){}
 		virtual void Destroy(){}
 

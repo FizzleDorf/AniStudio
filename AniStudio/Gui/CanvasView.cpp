@@ -71,6 +71,6 @@ void CanvasView::RenderLayerManager() {
 }
 
 // Update method (for brush strokes)
-void CanvasView::Update() {
+void CanvasView::Update(const float deltaT) {
     
 }

@@ -30,6 +30,6 @@ void ViewManager::Render() {
         debugView->Render();
 }
 
-void ViewManager::Update() { 
-    canvasView->Update(); 
+void ViewManager::Update(const float deltaT) { 
+    canvasView->Update(deltaT); 
 }

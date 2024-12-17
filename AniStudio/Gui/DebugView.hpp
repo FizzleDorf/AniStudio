@@ -1,10 +1,11 @@
 #pragma once
+#include "BaseView.hpp"
 #include <ECS.h>
 #include <imgui.h>
 
 using namespace ECS;
 
-class DebugView {
+class DebugView : public BaseView {
 public:
     DebugView(){}
     void Init();

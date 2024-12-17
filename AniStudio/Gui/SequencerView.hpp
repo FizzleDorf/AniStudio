@@ -1,7 +1,7 @@
 #ifndef SEQUENCER_VIEW_HPP
 #define SEQUENCER_VIEW_HPP
 
-#include <ECS.h>
+#include "BaseView.hpp"
 #include <ImSequencer.h>
 #include <imgui.h>
 #include <string>
@@ -15,7 +15,7 @@ struct Track {
     bool expanded;
 };
 
-class SequencerView : public ImSequencer::SequenceInterface {
+class SequencerView : public ImSequencer::SequenceInterface, public BaseView {
 public:
     SequencerView();
 

@@ -21,7 +21,7 @@ class ViewManager {
         ViewManager() {}
         ~ViewManager() {}
         void Init();
-        void Update();
+        void Update(const float deltaT);
         void Render();
 
     private:  
@@ -33,6 +33,4 @@ class ViewManager {
         std::unique_ptr<SettingsView> settingsView = nullptr;
         std::unique_ptr<UpscaleView> upscaleView = nullptr;
         std::unique_ptr<NodeGraphView> nodeGraphView = nullptr;
-
-
 };

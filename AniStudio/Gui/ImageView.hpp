@@ -1,16 +1,16 @@
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 
+#include "BaseView.hpp"
 #include "ImageComponent.hpp"
 #include "imgui.h"
-#include "ECS.h"
 #include "../backends/imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <string>
 
 namespace ECS {
 
-class ImageView {
+class ImageView : public BaseView {
 public:
     ImageView();
     void SetCurrentEntity(const EntityID newEntity) { entity = newEntity; }

@@ -1,10 +1,10 @@
 #pragma once
-#include "ECS.h"
+#include "BaseView.hpp"
 #include "pch.h"
 
 using namespace ECS;
 
-class DiffusionView {
+class DiffusionView : public BaseView {
 public:    
     DiffusionView() {}
     ~DiffusionView() {}

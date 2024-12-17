@@ -1,12 +1,8 @@
 #pragma once
 #include "ECS.h"
 #include "../Events/Events.hpp"
-namespace ANI {
-class Events;
-}
-namespace ECS {
-class EntityManager;
-}
+#include <imgui.h>
+
 class BaseView {
 public:
     explicit BaseView() = default;
