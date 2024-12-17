@@ -9,8 +9,6 @@ namespace ECS {
 		BaseSystem() = default;
 		virtual ~BaseSystem() = default;
         
-		void SetEntityManager(ECS::EntityManager &entityManager) { this->mgr = &entityManager; }
-
 		void RemoveEntity(const EntityID entity) { entities.erase(entity); }
 
 		void AddEntity(const EntityID entity) { entities.insert(entity); }
@@ -35,7 +33,6 @@ namespace ECS {
 		friend class EntityManager;
 		EntitySignature signature;
 		std::set<EntityID> entities;
-        ECS::EntityManager *mgr = nullptr;
         std::string sysName = "System_Component";
 	};
 }

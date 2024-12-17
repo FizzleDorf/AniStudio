@@ -2,6 +2,7 @@
 
 #include "MenuBar.hpp"
 #include "pch.h"
+#include "ViewState.hpp"
 #include "../Events/Events.hpp"
 
 void ShowMenuBar(GLFWwindow *window) {

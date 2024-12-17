@@ -5,7 +5,7 @@ void DebugView::Init() {
 }
 
 void DebugView::RefreshEntities() {
-    entities = manager.GetAllEntities();
+    entities = mgr.GetAllEntities();
     entityIndex = entities.empty() ? -1 : static_cast<int>(entities.size()) - 1;
 }
 
@@ -31,7 +31,7 @@ void DebugView::RenderEntityPanel() {
         }
         
         if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
-            auto components = manager.GetEntityComponents(entity);
+            auto components = mgr.GetEntityComponents(entity);
             for (auto compType : components) {
                 ImGui::Text("Component ID: %u", compType);
                 ImGui::SameLine();
@@ -46,7 +46,7 @@ void DebugView::RenderEntityPanel() {
 void DebugView::RenderSystemPanel() {
     ImGui::Begin("Active Systems");
 
-    for (const auto &[id, aniSystem] : manager.GetRegisteredSystems()) {
+    for (const auto &[id, aniSystem] : mgr.GetRegisteredSystems()) {
         if (ImGui::TreeNode(
                 (std::string("System ") + std::to_string(id) + " " + aniSystem->GetSystemName()).c_str()))
              {

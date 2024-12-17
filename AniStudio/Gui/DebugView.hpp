@@ -6,7 +6,7 @@ using namespace ECS;
 
 class DebugView {
 public:
-    DebugView(EntityManager &mgr) : manager(mgr) {}
+    DebugView(){}
     void Init();
     void Render();
     void RenderEntityPanel();
@@ -15,7 +15,6 @@ public:
     void RenderComponentEditor();
 
 private:
-    EntityManager &manager;
     std::vector<EntityID> entities;
     EntityID selectedEntity = -1;
     int entityIndex = 0;

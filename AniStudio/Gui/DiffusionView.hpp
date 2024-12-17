@@ -35,7 +35,6 @@ public:
 
 private:
     // ECS-related variables
-    EntityManager &mgr = ECS::EntityManager::Ref();
     EntityID entity;
 
     // Variables to handle the parameters for diffusion

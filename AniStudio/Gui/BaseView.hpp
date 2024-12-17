@@ -1,17 +1,18 @@
 #pragma once
 #include "ECS.h"
-
+#include "../Events/Events.hpp"
+namespace ANI {
+class Events;
+}
+namespace ECS {
+class EntityManager;
+}
 class BaseView {
 public:
-    explicit BaseView(ECS::EntityManager &entityManager) : mgr(entityManager) {}
+    explicit BaseView() = default;
     virtual ~BaseView() = default;
 
     virtual void Update(float deltaTime) {}
     virtual void Render() = 0;
     virtual void HandleInput(int key, int action) {}
-
-    ECS::EntityManager &GetEntityManager() { return mgr; }
-
-protected:
-    ECS::EntityManager &mgr;
 };

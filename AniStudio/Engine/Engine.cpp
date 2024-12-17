@@ -9,9 +9,8 @@ Engine &Core = Engine::Ref();
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
 Engine::Engine()
-    : mgr(EntityManager::Ref()), run(true), window(nullptr), videoWidth(SCREEN_WIDTH),
+    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH),
       videoHeight(SCREEN_HEIGHT) {
-    mgr.Reset();
     vMgr = std::make_unique<ViewManager>();   
 }
 
@@ -25,7 +24,7 @@ Engine::~Engine() {
 
 void Engine::Init() {
     mgr.Reset();
-    vMgr->Init(mgr);
+    vMgr->Init();
 
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");

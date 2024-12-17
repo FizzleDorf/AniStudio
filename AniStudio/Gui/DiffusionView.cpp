@@ -1,5 +1,5 @@
 #include "DiffusionView.hpp"
-#include "../Engine/Engine.hpp"
+#include "ImageView.hpp"
 #include "../Events/Events.hpp"
 #include "ECS.h"
 #include "stable-diffusion.h"

@@ -1,7 +1,7 @@
 #ifndef IMAGESYSTEM_HPP
 #define IMAGESYSTEM_HPP
 
-#include "../../ECS/Base/BaseSystem.hpp"
+#include "BaseSystem.hpp"
 #include "ImageComponent.hpp"
 #include "EntityManager.hpp"
 #include <GL/glew.h>
@@ -17,8 +17,8 @@ public:
     ImageSystem() = default;
     ~ImageSystem() {
         for (const auto &entityID : images) {
-            if (EntityManager::Ref().HasComponent<ImageComponent>(entityID)) {
-                auto &imageComp = EntityManager::Ref().GetComponent<ImageComponent>(entityID);
+            if (mgr.HasComponent<ImageComponent>(entityID)) {
+                auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
                 DeleteTexture(imageComp.textureID);
             }
         }
@@ -28,8 +28,8 @@ public:
 
     // Recieved a new image from generation or canvas
     void NewImage(const EntityID entityID) {
-        if (EntityManager::Ref().HasComponent<ImageComponent>(entityID)) {
-            auto &imageComp = EntityManager::Ref().GetComponent<ImageComponent>(entityID);
+        if (mgr.HasComponent<ImageComponent>(entityID)) {
+            auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
             GLuint textureID = LoadTextureFromFile(imageComp.filePath);
             if (textureID != 0) {
                 imageComp.textureID = textureID;
@@ -45,8 +45,8 @@ public:
 
     // Find the ImageComponent and load its image based on the file path
     void LoadImage(const EntityID entityID) {  
-        if (EntityManager::Ref().HasComponent<ImageComponent>(entityID)) {
-            auto &imageComp = EntityManager::Ref().GetComponent<ImageComponent>(entityID);
+        if (mgr.HasComponent<ImageComponent>(entityID)) {
+            auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
             GLuint textureID = LoadTextureFromFile(imageComp.filePath);
             if (textureID != 0) {
                 imageComp.textureID = textureID;
@@ -61,8 +61,8 @@ public:
     }
     // Find the ImageComponent and save the current image based on the file path + extension
     void SaveImage(const EntityID entityID) {
-        if (EntityManager::Ref().HasComponent<ImageComponent>(entityID)) {
-            auto &imageComp = EntityManager::Ref().GetComponent<ImageComponent>(entityID);
+        if (mgr.HasComponent<ImageComponent>(entityID)) {
+            auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
 
             // Get texture details
             GLuint textureID = imageComp.textureID;

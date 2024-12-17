@@ -1,5 +1,6 @@
 #pragma once
 #include "ECS.h"
+#include "FilePaths.hpp"
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>
@@ -50,12 +51,9 @@ public:
 private:
     Events(); // Constructor is private for singleton pattern
     std::queue<Event> eventQueue;
-    ECS::EntityManager &mgr = ECS::EntityManager::Ref();
 
     // Static callback function for GLFW window close
-    static void WindowCloseCallback(GLFWwindow *window) {
-        Core.Quit();
-    }
+    // static void WindowCloseCallback(GLFWwindow *window) { Engine::Ref().Quit();}
 };
 
 } // namespace ANI

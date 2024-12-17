@@ -38,7 +38,6 @@ private:
     void ShowFlagPathsTable(FlagOption* options, int count, const char* tableTitle);
     void RenderSettingsWindow();
     void RunComfyUI();
-    
 };
 
 extern BoolOption boolOptions[];

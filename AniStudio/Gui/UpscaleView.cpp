@@ -1,4 +1,5 @@
 #include "UpscaleView.hpp"
+#include "filepaths.hpp"
 
 void UpscaleView::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);

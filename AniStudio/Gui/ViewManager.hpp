@@ -20,12 +20,11 @@ class ViewManager {
     public:
         ViewManager() {}
         ~ViewManager() {}
-        void Init(EntityManager &manager);
+        void Init();
         void Update();
         void Render();
 
-    private:
-        EntityManager *mgr;    
+    private:  
         std::unique_ptr<CanvasView> canvasView = nullptr;
         std::unique_ptr<DebugView> debugView = nullptr;
         std::unique_ptr<DiffusionView> diffusionView = nullptr;

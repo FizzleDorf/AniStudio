@@ -118,6 +118,7 @@ add_executable(${PROJECT_NAME}
     ${CMAKE_SOURCE_DIR}/AniStudio/Engine/Engine.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/Events/Events.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base/EntityManager.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_opengl3.cpp

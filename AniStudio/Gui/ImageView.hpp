@@ -22,7 +22,6 @@ public:
 private:
     void CreateTexture();
 
-    EntityManager &mgr = ECS::EntityManager::Ref();
     EntityID entity = NULL;
     ImageComponent imageComponent;
 };

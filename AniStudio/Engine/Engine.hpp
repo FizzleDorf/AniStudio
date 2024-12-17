@@ -37,7 +37,6 @@ public:
 private:
     Engine();
     
-    ECS::EntityManager &mgr;
     std::unique_ptr<ViewManager> vMgr = nullptr;
     bool run;
     GLFWwindow *window;

@@ -1,4 +1,3 @@
-#include "../../../Engine/Engine.hpp"
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
@@ -141,7 +140,6 @@ public:
     }
 
 private:
-    EntityManager &mgr = ECS::EntityManager::Ref();
     std::queue<EntityID> inferenceQueue; // Queue to hold entity IDs for inference
     std::mutex queueMutex;
     std::mutex inferenceMutex;

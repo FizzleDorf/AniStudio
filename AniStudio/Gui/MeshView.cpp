@@ -36,7 +36,6 @@ void MeshView::UpdateProjection(int width, int height) {
 }
 
 void MeshView::CreateEntityWithMesh() {
-    auto &mgr = EntityManager::Ref();
     entity = mgr.AddNewEntity();
 
     mgr.AddComponent<MeshComponent>(entity);

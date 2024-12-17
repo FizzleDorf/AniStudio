@@ -1,9 +1,8 @@
 #include "ViewManager.hpp"
 
-void ViewManager::Init(EntityManager &manager) {
-    mgr = &manager;
-    canvasView = std::make_unique<CanvasView>(*mgr);
-    debugView = std::make_unique<DebugView>(*mgr);
+void ViewManager::Init() {
+    canvasView = std::make_unique<CanvasView>();
+    debugView = std::make_unique<DebugView>();
     diffusionView = std::make_unique<DiffusionView>();
     meshView = std::make_unique<MeshView>();
     sequencerView = std::make_unique<SequencerView>();
