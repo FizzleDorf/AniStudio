@@ -113,7 +113,8 @@ public:
             if (ArePathsValid(entityID)) {
                 Inference(entityID);
             } else {
-                std::cerr << "Invalid paths for entity " << entityID << std::endl;
+                std::cerr << "Invalid paths for entity " << entityID << '\n';
+                mgr.DestroyEntity(entityID);
             }
         }
         // Handle completed inference task
