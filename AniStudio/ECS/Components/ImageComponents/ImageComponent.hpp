@@ -20,16 +20,14 @@ struct ImageComponent : public BaseComponent {
             stbi_image_free(imageData);
         }
     }
-
+    
     ImageComponent &operator=(const ImageComponent &other) {
         if (this != &other) { // Self-assignment check
             fileName = other.fileName;
             filePath = other.filePath;
-            imageData = other.imageData;
             width = other.width;
             height = other.height;
             channels = other.channels;
-            textureID = other.textureID;
         }
         return *this;
     }

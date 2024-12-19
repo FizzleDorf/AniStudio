@@ -17,14 +17,7 @@ namespace ECS {
 class ImageSystem : public BaseSystem {
 public:
     ImageSystem() = default;
-    ~ImageSystem() {
-        for (const auto &entityID : images) {
-            if (mgr.HasComponent<ImageComponent>(entityID)) {
-                auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-                DeleteTexture(imageComp.textureID);
-            }
-        }
-    }
+    ~ImageSystem() = default;
 
     void Start() override {}
 
@@ -128,8 +121,6 @@ public:
     }
 
 private:
-    std::vector<EntityID> images;
-    EntityID entity;
     enum class FileType { PNG, JPG, BMP, TGA, HDR, Unsupported };
     
     FileType GetFileType(const std::string &extension) {

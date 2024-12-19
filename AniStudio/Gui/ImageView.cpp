@@ -1,20 +1,22 @@
 #include "ImageView.hpp"
-#include "ImGuiFileDialog.h" // For file dialogs
-#include "../backends/imgui_impl_opengl3.h"
-#include <imgui.h>
 #include <iostream>
-#include <stb_image.h>
-#include <stb_image_write.h>
-#include <stdexcept>
 
 namespace ECS {
 
-ImageView::ImageView() {}
+ImageView::ImageView() : imgIndex(0) {
+    // Initialize the EntityManager and add a system or components if necessary
+    // Assuming that ImageComponent and EntityManager exist
+    mgr.RegisterSystem<ImageSystem>();
+    EntityID entity = mgr.AddNewEntity();
+    mgr.AddComponent<ImageComponent>(entity);
+    imageComponent = mgr.GetComponent<ImageComponent>(entity);
+    images.push_back(entity);
+}
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
     ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-    
+
     // Display image details if loaded
     if (imageComponent.imageData) {
         ImGui::Text("File: %s", imageComponent.fileName.c_str());
@@ -25,7 +27,7 @@ void ImageView::Render() {
     // Load Image Button
     if (ImGui::Button("Load Image")) {
         IGFD::FileDialogConfig config;
-        config.path = ".";
+        config.path = "."; // Starting directory for file dialog
         ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image", ".png,.jpg,.jpeg,.bmp,.tga", config);
     }
 
@@ -35,8 +37,7 @@ void ImageView::Render() {
             imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
             imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
             try {
-                LoadImage();
-                std::cout << "Image loaded: " << imageComponent.filePath << std::endl;
+                LoadImage(); // Load the selected image
             } catch (const std::exception &e) {
                 std::cerr << "Error loading image: " << e.what() << std::endl;
             }
@@ -51,36 +52,11 @@ void ImageView::Render() {
         ImGui::OpenPopup("Confirm Save");
     }
 
-    // Confirmation popup for saving
-    if (ImGui::BeginPopupModal("Confirm Save", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Are you sure you want to overwrite the existing file?");
-        ImGui::Separator();
-
-
-        if (ImGui::Button("Yes")) {
-            try {
-                SaveImage(imageComponent.filePath);
-                std::cout << "Image saved: " << imageComponent.filePath << std::endl;
-            } catch (const std::exception &e) {
-                std::cerr << "Error saving image: " << e.what() << std::endl;
-            }
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("No")) {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-
-    ImGui::SameLine();
-
-    // Save As Button
+    // Save Image As Button
     if (imageComponent.imageData && ImGui::Button("Save Image As")) {
         IGFD::FileDialogConfig config;
-        config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As", "., .png,.jpg,.jpeg,.bmp,.tga",
+        config.path = "."; // Default directory for save as dialog
+        ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As", ".png,.jpg,.jpeg,.bmp,.tga",
                                                 config);
     }
 
@@ -89,7 +65,7 @@ void ImageView::Render() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
             try {
-                SaveImage(savePath);
+                SaveImage(savePath); // Save the current image to the new file path
                 std::cout << "Image saved as: " << savePath << std::endl;
             } catch (const std::exception &e) {
                 std::cerr << "Error saving image as: " << e.what() << std::endl;
@@ -98,7 +74,24 @@ void ImageView::Render() {
         ImGuiFileDialog::Instance()->Close();
     }
 
-    // Display loaded image
+    // Image navigation input
+    if (ImGui::InputInt("Current Image", &imgIndex)) {
+        imgIndex = std::clamp(imgIndex, 0, static_cast<int>(images.size() - 1)); // Ensure the index is valid
+
+        CleanUpCurrentImage(); // Cleanup before switching
+
+        // Fetch the new image component
+        if (mgr.HasComponent<ImageComponent>(images[imgIndex])) {
+            imageComponent = mgr.GetComponent<ImageComponent>(images[imgIndex]);
+            if (imageComponent.imageData) {
+                CreateTexture(); // Create texture for the new image
+            } else {
+                std::cerr << "Warning: Image data for the selected component is null." << std::endl;
+            }
+        }
+    }
+
+    // Display the loaded image
     if (imageComponent.imageData) {
         ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(imageComponent.textureID)),
                      ImVec2(static_cast<float>(imageComponent.width), static_cast<float>(imageComponent.height)));
@@ -109,37 +102,39 @@ void ImageView::Render() {
     ImGui::End();
 }
 
-
-void ImageView::SelectImage() {
-
-
-}
-
 void ImageView::LoadImage() {
-    mgr.RegisterSystem<ImageSystem>();
-    entity = mgr.AddNewEntity();
-    mgr.AddComponent<ImageComponent>(entity); 
-    mgr.GetComponent<ImageComponent>(entity) = imageComponent;
-    ANI::Events::Ref().QueueEvent({ANI::EventType::ImageLoadRequest, entity});
+    // Free any existing image data and textures
+    CleanUpCurrentImage();
+
+    // Load the new image using stb_image
+    imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width, &imageComponent.height, &imageComponent.channels, 0);
+    if (!imageComponent.imageData) {
+        throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
+    }
+
+    // Create texture after loading the image
+    CreateTexture();
+
+    // Add a new entity for this image and save it
+    EntityID newEntity = mgr.AddNewEntity();
+    images.push_back(newEntity);
+    mgr.AddComponent<ImageComponent>(newEntity);
+    mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
 }
 
 void ImageView::SaveImage(const std::string &filePath) {
-    if (entity == NULL) {
-        std::cerr << "No entity selected to save image!" << std::endl;
-        return;
+    if (imageComponent.imageData) {
+        // Save the image using stb_image_write or your preferred method
+        if (!stbi_write_png(filePath.c_str(), imageComponent.width, imageComponent.height, imageComponent.channels,
+                            imageComponent.imageData, 0)) {
+            throw std::runtime_error("Failed to save image to: " + filePath);
+        }
     }
-
-    // Update the ImageComponent with the save file path
-    imageComponent.filePath = filePath;
-
-    // Queue an ImageSaveRequest event
-    ANI::Events::Ref().QueueEvent({ANI::EventType::ImageSaveRequest, entity});
 }
-
 
 void ImageView::CreateTexture() {
     if (imageComponent.textureID) {
-        glDeleteTextures(1, &imageComponent.textureID);
+        glDeleteTextures(1, &imageComponent.textureID); // Delete the old texture
     }
 
     if (!imageComponent.imageData || imageComponent.width <= 0 || imageComponent.height <= 0) {
@@ -148,17 +143,11 @@ void ImageView::CreateTexture() {
 
     glGenTextures(1, &imageComponent.textureID);
     glBindTexture(GL_TEXTURE_2D, imageComponent.textureID);
-
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-    // Set texture data
     GLenum format = (imageComponent.channels == 4) ? GL_RGBA : GL_RGB;
     glTexImage2D(GL_TEXTURE_2D, 0, format, imageComponent.width, imageComponent.height, 0, format, GL_UNSIGNED_BYTE,
                  imageComponent.imageData);
-
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
     glBindTexture(GL_TEXTURE_2D, 0);
 
     GLenum err;
@@ -167,11 +156,20 @@ void ImageView::CreateTexture() {
     }
 }
 
-
-ImageView::~ImageView() {
+void ImageView::CleanUpCurrentImage() {
+    // Free the image data and delete the texture for the currently loaded image
+    if (imageComponent.imageData) {
+        stbi_image_free(imageComponent.imageData);
+        imageComponent.imageData = nullptr;
+    }
     if (imageComponent.textureID) {
         glDeleteTextures(1, &imageComponent.textureID);
+        imageComponent.textureID = 0;
     }
+}
+
+ImageView::~ImageView() {
+    CleanUpCurrentImage(); // Cleanup any allocated resources
 }
 
 } // namespace ECS

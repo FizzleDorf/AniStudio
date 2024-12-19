@@ -10,7 +10,6 @@ namespace ECS {
 class ImageView : public BaseView {
 public:
     ImageView();
-    void SetCurrentEntity(const EntityID newEntity) { entity = newEntity; }
     void Render();
     void LoadImage();
     void SaveImage(const std::string &filePath);
@@ -18,9 +17,10 @@ public:
 
 private:
     void CreateTexture();
-    void SelectImage();
+    void CleanUpCurrentImage();
 
-    EntityID entity = NULL;
+    int imgIndex = 0;
+    std::vector<EntityID> images;
     ImageComponent imageComponent;
 };
 
