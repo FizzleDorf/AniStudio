@@ -32,9 +32,8 @@ public:
     void NewImage(const EntityID entityID) {
         if (mgr.HasComponent<ImageComponent>(entityID)) {
             auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-            GLuint textureID = LoadTextureFromFile(imageComp.filePath);
-            if (textureID != 0) {
-                imageComp.textureID = textureID;
+            LoadTextureFromFile(entityID);
+            if (imageComp.textureID != 0) {
                 std::cout << "Image loaded for Entity ID " << entityID << "." << std::endl;
             } else {
                 std::cerr << "Failed to load image for Entity ID " << entityID << "." << std::endl;
@@ -49,9 +48,8 @@ public:
     void LoadImage(const EntityID entityID) {  
         if (mgr.HasComponent<ImageComponent>(entityID)) {
             auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-            GLuint textureID = LoadTextureFromFile(imageComp.filePath);
-            if (textureID != 0) {
-                imageComp.textureID = textureID;
+            LoadTextureFromFile(entityID);
+            if (imageComp.textureID != 0) {
                 std::cout << "Image loaded for Entity ID " << entityID << "." << std::endl;
             } else {
                 std::cerr << "Failed to load image for Entity ID " << entityID << "." << std::endl;
@@ -65,17 +63,14 @@ public:
     void SaveImage(const EntityID entityID) {
         if (mgr.HasComponent<ImageComponent>(entityID)) {
             auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-
-            // Get texture details
-            GLuint textureID = imageComp.textureID;
-            if (textureID == 0) {
+            if (imageComp.textureID == 0) {
                 std::cerr << "No valid texture to save for Entity ID " << entityID << "." << std::endl;
                 return;
             }
 
             // Get the texture size
             GLint width, height;
-            glBindTexture(GL_TEXTURE_2D, textureID);
+            glBindTexture(GL_TEXTURE_2D, imageComp.textureID);
             glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
             glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
 
@@ -159,22 +154,22 @@ private:
         return ""; // No extension found
     }
 
-    GLuint LoadTextureFromFile(const std::string &filePath) {
-        int width, height, channels;
-        unsigned char *data = stbi_load(filePath.c_str(), &width, &height, &channels, 4);
-        if (!data) {
-            std::cerr << "Failed to load image from file: " << filePath << std::endl;
-            return 0;
+    void LoadTextureFromFile(const EntityID entity) {
+        auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
+        imageComp.imageData =
+            stbi_load(imageComp.filePath.c_str(), &imageComp.width, &imageComp.height, &imageComp.channels, 4);
+        if (!imageComp.imageData) {
+            std::cerr << "Failed to load image from file: " << imageComp.filePath << std::endl;
+            return;
         }
 
-        GLuint textureID;
-        glGenTextures(1, &textureID);
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glGenTextures(1, &imageComp.textureID);
+        glBindTexture(GL_TEXTURE_2D, imageComp.textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageComp.width, imageComp.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     imageComp.imageData);
         glGenerateMipmap(GL_TEXTURE_2D);
 
-        stbi_image_free(data);
-        return textureID;
+        /*return imageComp.textureID;*/
     }
 
     void DeleteTexture(GLuint textureID) { glDeleteTextures(1, &textureID); } 

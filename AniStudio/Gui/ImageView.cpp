@@ -14,7 +14,7 @@ ImageView::ImageView() {}
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
     ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
+    
     // Display image details if loaded
     if (imageComponent.imageData) {
         ImGui::Text("File: %s", imageComponent.fileName.c_str());
@@ -32,10 +32,11 @@ void ImageView::Render() {
     // Handle file dialog for loading images
     if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedPath = ImGuiFileDialog::Instance()->GetFilePathName();
+            imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+            imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
             try {
-                LoadImage(selectedPath);
-                std::cout << "Image loaded: " << selectedPath << std::endl;
+                LoadImage();
+                std::cout << "Image loaded: " << imageComponent.filePath << std::endl;
             } catch (const std::exception &e) {
                 std::cerr << "Error loading image: " << e.what() << std::endl;
             }
@@ -114,16 +115,11 @@ void ImageView::SelectImage() {
 
 }
 
-void ImageView::LoadImage(const std::string &filePath) {
-    mgr.RegisterSystem<SDCPPSystem>();
+void ImageView::LoadImage() {
+    mgr.RegisterSystem<ImageSystem>();
     entity = mgr.AddNewEntity();
-    mgr.AddComponent<ImageComponent>(entity);
-
-    // Update the ImageComponent with the new file path
-    stbi_image_free(imageComponent.imageData);  
-    imageComponent.filePath = filePath;
-
-    // Queue an ImageLoadRequest event
+    mgr.AddComponent<ImageComponent>(entity); 
+    mgr.GetComponent<ImageComponent>(entity) = imageComponent;
     ANI::Events::Ref().QueueEvent({ANI::EventType::ImageLoadRequest, entity});
 }
 

@@ -12,7 +12,7 @@ public:
     ImageView();
     void SetCurrentEntity(const EntityID newEntity) { entity = newEntity; }
     void Render();
-    void LoadImage(const std::string &filePath);
+    void LoadImage();
     void SaveImage(const std::string &filePath);
     ~ImageView();
 
