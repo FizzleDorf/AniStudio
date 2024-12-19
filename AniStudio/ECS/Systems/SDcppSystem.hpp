@@ -1,9 +1,12 @@
+#include"../../Events/Events.hpp"
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
 #include <filesystem>
 #include <future>
 #include <vector>
+#include <stb_image.h>
+#include <stb_image_write.h>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {

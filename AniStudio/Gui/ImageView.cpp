@@ -3,6 +3,7 @@
 #include "../backends/imgui_impl_opengl3.h"
 #include <imgui.h>
 #include <iostream>
+#include <stb_image.h>
 #include <stb_image_write.h>
 #include <stdexcept>
 
@@ -78,7 +79,7 @@ void ImageView::Render() {
     if (imageComponent.imageData && ImGui::Button("Save Image As")) {
         IGFD::FileDialogConfig config;
         config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As", ".png,.jpg,.jpeg,.bmp,.tga",
+        ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As", "., .png,.jpg,.jpeg,.bmp,.tga",
                                                 config);
     }
 
@@ -107,22 +108,38 @@ void ImageView::Render() {
     ImGui::End();
 }
 
+
+void ImageView::SelectImage() {
+
+
+}
+
 void ImageView::LoadImage(const std::string &filePath) {
+    mgr.RegisterSystem<SDCPPSystem>();
+    entity = mgr.AddNewEntity();
+    mgr.AddComponent<ImageComponent>(entity);
+
+    // Update the ImageComponent with the new file path
+    stbi_image_free(imageComponent.imageData);  
     imageComponent.filePath = filePath;
-    if (imageComponent.loadImageFromPath()) {
-        CreateTexture();
-    } else {
-        throw std::runtime_error("Failed to load image data.");
-    }
+
+    // Queue an ImageLoadRequest event
+    ANI::Events::Ref().QueueEvent({ANI::EventType::ImageLoadRequest, entity});
 }
 
 void ImageView::SaveImage(const std::string &filePath) {
-    if (imageComponent.saveImage(filePath)) {
-        std::cout << "Image successfully saved to: " << filePath << std::endl;
-    } else {
-        throw std::runtime_error("Failed to save image.");
+    if (entity == NULL) {
+        std::cerr << "No entity selected to save image!" << std::endl;
+        return;
     }
+
+    // Update the ImageComponent with the save file path
+    imageComponent.filePath = filePath;
+
+    // Queue an ImageSaveRequest event
+    ANI::Events::Ref().QueueEvent({ANI::EventType::ImageSaveRequest, entity});
 }
+
 
 void ImageView::CreateTexture() {
     if (imageComponent.textureID) {

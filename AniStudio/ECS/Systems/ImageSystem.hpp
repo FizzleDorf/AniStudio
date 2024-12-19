@@ -4,9 +4,11 @@
 #include "BaseSystem.hpp"
 #include "ImageComponent.hpp"
 #include "EntityManager.hpp"
+#include "../../Events/Events.hpp"
 #include <GL/glew.h>
 #include <iostream>
 #include <stb_image.h>
+#include <stb_image_write.h>
 #include <string>
 #include <unordered_map>
 
@@ -132,7 +134,7 @@ public:
 
 private:
     std::vector<EntityID> images;
-
+    EntityID entity;
     enum class FileType { PNG, JPG, BMP, TGA, HDR, Unsupported };
     
     FileType GetFileType(const std::string &extension) {

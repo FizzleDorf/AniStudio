@@ -23,21 +23,20 @@ void Events::Poll() {
     ProcessEvents();
 }
 
+// Handle events based on its EventType
 void Events::ProcessEvents() {
     while (!eventQueue.empty()) {
         Event event = eventQueue.front();
         eventQueue.pop();
 
-        // Handle event based on its type
         switch (event.type) {
         case EventType::QuitRequest: {
             Core.Quit();
             break;
         }
         case EventType::InferenceRequest: {
-            std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << std::endl;
+            std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
 
-            // Access the SDCPPSystem through EntityManager
             auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
@@ -48,9 +47,8 @@ void Events::ProcessEvents() {
             break;
         }
         case EventType::UpscaleRequest: {
-            std::cout << "Handling Upscale event for Entity ID: " << event.entityID << std::endl;
+            std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
 
-            // Access the SDCPPSystem through EntityManager
             auto upscaleSystem = mgr.GetSystem<ECS::UpscaleSystem>();
             if (upscaleSystem) {
                 std::cout << "UpscaleSystem is registered." << std::endl;
@@ -60,28 +58,18 @@ void Events::ProcessEvents() {
             }
             break;
         }
-        case EventType::ImageLoadRequest: {
-            std::cout << "Handling ImageLoadRequest event for Entity ID: " << event.entityID << std::endl;
+        case EventType::ImageLoadRequest:{
             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-            if (imageSystem) {
-                imageSystem->LoadImage(event.entityID);
-            } else {
-                std::cerr << "ImageSystem is not registered." << std::endl;
-            }
+            imageSystem->LoadImage(event.entityID);
             break;
         }
         case EventType::ImageSaveRequest: {
-            std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << std::endl;
-            auto meshSystem = mgr.GetSystem<ECS::MeshSystem>();
-            if (meshSystem) {
-                // meshSystem->SaveMesh(event.entityID);
-            } else {
-                std::cerr << "ImageSystem is not registered." << std::endl;
-            }
+            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            imageSystem->SaveImage(event.entityID);
             break;
         }
         case EventType::MeshLoadRequest: {
-            std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << std::endl;
+            std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << '\n';
             auto meshSystem = mgr.GetSystem<ECS::MeshSystem>();
             if (meshSystem) {
                 // meshSystem->LoadMesh(event.entityID);

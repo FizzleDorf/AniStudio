@@ -3,10 +3,10 @@
 #include "BaseComponent.hpp"
 #include <GL/glew.h>
 #include <string>
+#include <stb_image.h>
 
 namespace ECS {
 struct ImageComponent : public BaseComponent {
-    compName = "Image Component";
     std::string fileName = "image.png"; // Default file name
     std::string filePath = "";          // Full path to the image
     unsigned char *imageData = nullptr; // Pointer to image data

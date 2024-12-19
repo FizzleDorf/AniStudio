@@ -3,10 +3,7 @@
 
 #include "BaseView.hpp"
 #include "ImageComponent.hpp"
-#include "imgui.h"
-#include "../backends/imgui_impl_opengl3.h"
-#include <GL/glew.h>
-#include <string>
+#include <pch.h>
 
 namespace ECS {
 
@@ -21,6 +18,7 @@ public:
 
 private:
     void CreateTexture();
+    void SelectImage();
 
     EntityID entity = NULL;
     ImageComponent imageComponent;
