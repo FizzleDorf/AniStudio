@@ -3,9 +3,7 @@
 
 namespace ECS {
 
-ImageView::ImageView() : imgIndex(0) {
-    mgr.RegisterSystem<ImageSystem>();
-}
+ImageView::ImageView() : imgIndex(0) { mgr.RegisterSystem<ImageSystem>(); }
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
@@ -74,27 +72,26 @@ void ImageView::Render() {
 
 void ImageView::RenderSelector() {
     if (ImGui::InputInt("Current Image", &imgIndex)) {
-        if (images.empty()) {
+        if (loadedMedia.GetImages().empty()) {
             imgIndex = 0;
             return;
         }
-        int size = images.size();       
+        int size = loadedMedia.GetImages().size();
         if (size == 1) {
             imgIndex = 0;
         } else {
             imgIndex = imgIndex % size;
         }
-        if (mgr.HasComponent<ImageComponent>(images[imgIndex])) {
-            imageComponent = mgr.GetComponent<ImageComponent>(images[imgIndex]);
-            CleanUpCurrentImage();
+        imageComponent = loadedMedia.GetImage(imgIndex);
+        CleanUpCurrentImage();
 
-            imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width, &imageComponent.height, &imageComponent.channels, 0);
-            if (!imageComponent.imageData) {
-                throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
-            }
-
-            CreateTexture();
+        imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width,
+                                             &imageComponent.height, &imageComponent.channels, 0);
+        if (!imageComponent.imageData) {
+            throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
         }
+
+        CreateTexture();
     }
 }
 
@@ -106,10 +103,10 @@ void ImageView::LoadImage() {
     }
     CreateTexture();
     EntityID newEntity = mgr.AddNewEntity();
-    images.push_back(newEntity);
     mgr.AddComponent<ImageComponent>(newEntity);
     mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
-    imgIndex = static_cast<int>(images.size() - 1);
+    loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
+    imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
 }
 
 void ImageView::SaveImage(const std::string &filePath) {
@@ -133,7 +130,8 @@ void ImageView::CreateTexture() {
     glGenTextures(1, &imageComponent.textureID);
     glBindTexture(GL_TEXTURE_2D, imageComponent.textureID);
     GLenum format = (imageComponent.channels == 4) ? GL_RGBA : GL_RGB;
-    glTexImage2D(GL_TEXTURE_2D, 0, format, imageComponent.width, imageComponent.height, 0, format, GL_UNSIGNED_BYTE, imageComponent.imageData);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, imageComponent.width, imageComponent.height, 0, format, GL_UNSIGNED_BYTE,
+                 imageComponent.imageData);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -155,8 +153,6 @@ void ImageView::CleanUpCurrentImage() {
     }
 }
 
-ImageView::~ImageView() {
-    CleanUpCurrentImage();
-}
+ImageView::~ImageView() { CleanUpCurrentImage(); }
 
 } // namespace ECS

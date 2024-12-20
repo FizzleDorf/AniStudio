@@ -3,6 +3,7 @@
 
 #include "BaseView.hpp"
 #include "ImageComponent.hpp"
+#include "LoadedHeaps.hpp"
 #include <pch.h>
 
 namespace ECS {
@@ -21,7 +22,6 @@ private:
     void RenderSelector();
 
     int imgIndex = 0;
-    std::vector<EntityID> images;
     ImageComponent imageComponent;
 };
 

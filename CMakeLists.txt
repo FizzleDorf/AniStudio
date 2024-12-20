@@ -88,6 +88,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/backends
     ${CMAKE_SOURCE_DIR}/external/glm
     ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
