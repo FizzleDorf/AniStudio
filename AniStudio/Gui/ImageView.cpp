@@ -1,9 +1,16 @@
 #include "ImageView.hpp"
+#include <GL/glew.h>
+#include <ImGuiFileDialog.h>
+#include <imgui.h>
 #include <iostream>
+#include <stb_image.h>
+#include <stb_image_write.h>
+#include <stdexcept>
+#include <vector>
 
 namespace ECS {
 
-ImageView::ImageView() : imgIndex(0) { mgr.RegisterSystem<ImageSystem>(); }
+ImageView::ImageView() : imgIndex(0), showHistory(false) { mgr.RegisterSystem<ImageSystem>(); }
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
@@ -14,7 +21,9 @@ void ImageView::Render() {
         ImGui::Text("Dimensions: %dx%d", imageComponent.width, imageComponent.height);
         ImGui::Separator();
     }
+
     RenderSelector();
+
     if (ImGui::Button("Load Image")) {
         IGFD::FileDialogConfig config;
         config.path = ".";
@@ -25,11 +34,7 @@ void ImageView::Render() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
             imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            try {
-                LoadImage();
-            } catch (const std::exception &e) {
-                std::cerr << "Error loading image: " << e.what() << std::endl;
-            }
+            LoadImage();
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -37,7 +42,7 @@ void ImageView::Render() {
     ImGui::SameLine();
 
     if (imageComponent.imageData && ImGui::Button("Save Image")) {
-        ImGui::OpenPopup("Confirm Save");
+        SaveImage(imageComponent.filePath);
     }
 
     if (imageComponent.imageData && ImGui::Button("Save Image As")) {
@@ -50,12 +55,7 @@ void ImageView::Render() {
     if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog")) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
-            try {
-                SaveImage(savePath);
-                std::cout << "Image saved as: " << savePath << std::endl;
-            } catch (const std::exception &e) {
-                std::cerr << "Error saving image as: " << e.what() << std::endl;
-            }
+            SaveImage(savePath);
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -67,41 +67,47 @@ void ImageView::Render() {
         ImGui::Text("No image loaded.");
     }
 
+    RenderHistory();
     ImGui::End();
 }
 
 void ImageView::RenderSelector() {
     if (ImGui::InputInt("Current Image", &imgIndex)) {
-        if (loadedMedia.GetImages().empty()) {
+        if (loadedMedia.GetImages().empty() || imgIndex < 0) {
             imgIndex = 0;
             return;
         }
         int size = loadedMedia.GetImages().size();
-        if (size == 1) {
+        if (size <= 1) {
             imgIndex = 0;
         } else {
-            imgIndex = imgIndex % size;
-        }
+            imgIndex = (imgIndex % size + size) % size;
+        } 
         imageComponent = loadedMedia.GetImage(imgIndex);
         CleanUpCurrentImage();
+        CreateCurrentTexture();     
+    }
+}
 
-        imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width,
-                                             &imageComponent.height, &imageComponent.channels, 0);
-        if (!imageComponent.imageData) {
-            throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
+void ImageView::RenderHistory() {
+    if (ImGui::Checkbox("Show History", &showHistory) && showHistory) {
+         
+    }
+    if (!loadedMedia.GetImages().empty() && showHistory) {
+        const auto &images = loadedMedia.GetImages();
+        for (size_t i = 0; i < images.size(); ++i) {
+            const auto &image = images[i];
+            ImGui::Text("Image %zu: %s", i, image.fileName.c_str());
+            ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)),
+                         ImVec2(static_cast<float>(image.width / 4), static_cast<float>(image.height / 4)));
         }
-
-        CreateTexture();
     }
 }
 
 void ImageView::LoadImage() {
     CleanUpCurrentImage();
-    imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width, &imageComponent.height, &imageComponent.channels, 0);
-    if (!imageComponent.imageData) {
-        throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
-    }
-    CreateTexture();
+    CreateCurrentTexture();
+
     EntityID newEntity = mgr.AddNewEntity();
     mgr.AddComponent<ImageComponent>(newEntity);
     mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
@@ -112,21 +118,44 @@ void ImageView::LoadImage() {
 void ImageView::SaveImage(const std::string &filePath) {
     if (imageComponent.imageData) {
         if (!stbi_write_png(filePath.c_str(), imageComponent.width, imageComponent.height, imageComponent.channels,
-                            imageComponent.imageData, 0)) {
+                            imageComponent.imageData, imageComponent.width * imageComponent.channels)) {
             throw std::runtime_error("Failed to save image to: " + filePath);
         }
     }
 }
 
-void ImageView::CreateTexture() {
-    if (imageComponent.textureID) {
-        glDeleteTextures(1, &imageComponent.textureID);
+void ImageView::CreateTexture(int index) {
+    ImageComponent &image = loadedMedia.GetImage(index);
+
+    if (image.imageData) {
+        stbi_image_free(image.imageData);
+        image.imageData = nullptr;
     }
 
-    if (!imageComponent.imageData || imageComponent.width <= 0 || imageComponent.height <= 0) {
-        throw std::runtime_error("Invalid image data or dimensions.");
+    if (image.textureID) {
+        glDeleteTextures(1, &image.textureID);
+        image.textureID = 0;
     }
 
+    image.imageData = stbi_load(image.filePath.c_str(), &image.width, &image.height, &image.channels, 0);
+    if (!image.imageData) {
+        throw std::runtime_error("Failed to load image: " + image.filePath);
+    }
+    glGenTextures(1, &image.textureID);
+    glBindTexture(GL_TEXTURE_2D, image.textureID);
+    GLenum format = (image.channels == 4) ? GL_RGBA : GL_RGB;
+    glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height, 0, format, GL_UNSIGNED_BYTE, image.imageData);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void ImageView::CreateCurrentTexture() {
+    imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width, &imageComponent.height,
+                                         &imageComponent.channels, 0);
+    if (!imageComponent.imageData) {
+        throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
+    }
     glGenTextures(1, &imageComponent.textureID);
     glBindTexture(GL_TEXTURE_2D, imageComponent.textureID);
     GLenum format = (imageComponent.channels == 4) ? GL_RGBA : GL_RGB;
@@ -135,11 +164,6 @@ void ImageView::CreateTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glBindTexture(GL_TEXTURE_2D, 0);
-
-    GLenum err;
-    while ((err = glGetError()) != GL_NO_ERROR) {
-        std::cerr << "OpenGL error: " << err << std::endl;
-    }
 }
 
 void ImageView::CleanUpCurrentImage() {

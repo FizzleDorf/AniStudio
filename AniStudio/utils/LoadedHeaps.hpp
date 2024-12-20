@@ -34,13 +34,13 @@ public:
     }
 
     // Retrieves a const reference to an image by index
-    const ImageComponent &GetImage(size_t index) const {
+    ImageComponent &GetImage(size_t index) {
         if (index >= loadedImages.size()) {
             throw std::out_of_range("Image index out of range");
         }
         return loadedImages[index];
     }
-    const VideoComponent &GetVideo(size_t index) const {
+    VideoComponent &GetVideo(size_t index) {
         if (index >= loadedVideos.size()) {
             throw std::out_of_range("Video index out of range");
         }

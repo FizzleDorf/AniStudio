@@ -17,11 +17,17 @@ public:
     ~ImageView();
 
 private:
-    void CreateTexture();
+    void CreateTexture(const int index);
+    void CreateCurrentTexture();
+
+    void CleanUpImage(const int index);
     void CleanUpCurrentImage();
+
     void RenderSelector();
+    void RenderHistory();
 
     int imgIndex = 0;
+    bool showHistory = false;
     ImageComponent imageComponent;
 };
 
