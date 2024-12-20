@@ -78,7 +78,7 @@ void ImageView::RenderSelector() {
             return;
         }
         int size = loadedMedia.GetImages().size();
-        if (size <= 1) {
+        if (size == 1) {
             imgIndex = 0;
         } else {
             imgIndex = (imgIndex % size + size) % size;
@@ -97,6 +97,10 @@ void ImageView::RenderHistory() {
         const auto &images = loadedMedia.GetImages();
         for (size_t i = 0; i < images.size(); ++i) {
             const auto &image = images[i];
+
+            if (image.textureID == 0) {
+                CreateTexture(i);
+            }
             ImGui::Text("Image %zu: %s", i, image.fileName.c_str());
             ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)),
                          ImVec2(static_cast<float>(image.width / 4), static_cast<float>(image.height / 4)));
@@ -124,7 +128,7 @@ void ImageView::SaveImage(const std::string &filePath) {
     }
 }
 
-void ImageView::CreateTexture(int index) {
+void ImageView::CreateTexture(const int index) {
     ImageComponent &image = loadedMedia.GetImage(index);
 
     if (image.imageData) {
