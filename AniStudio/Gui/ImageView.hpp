@@ -18,6 +18,7 @@ public:
 private:
     void CreateTexture();
     void CleanUpCurrentImage();
+    void RenderSelector();
 
     int imgIndex = 0;
     std::vector<EntityID> images;
