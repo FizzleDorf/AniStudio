@@ -73,14 +73,17 @@ void ImageView::Render() {
 
 void ImageView::RenderSelector() {
     if (ImGui::InputInt("Current Image", &imgIndex)) {
-        if (loadedMedia.GetImages().empty() || imgIndex < 0) {
+        if (loadedMedia.GetImages().empty()) {
             imgIndex = 0;
             return;
         }
-        int size = loadedMedia.GetImages().size();
+        const int size = loadedMedia.GetImages().size();
         if (size == 1) {
             imgIndex = 0;
         } else {
+            if (imgIndex < 0) {
+                imgIndex = size - 1;
+            }
             imgIndex = (imgIndex % size + size) % size;
         } 
         imageComponent = loadedMedia.GetImage(imgIndex);
