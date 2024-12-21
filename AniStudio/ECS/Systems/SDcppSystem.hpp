@@ -1,4 +1,5 @@
-#include"../../Events/Events.hpp"
+#include "../../Events/Events.hpp"
+#include "LoadedHeaps.hpp"
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
@@ -46,8 +47,7 @@ public:
     void SaveImage(const unsigned char *imageData, int width, int height, int channels) {
         // Construct the filename with a zero-padded counter
         std::stringstream filename;
-        filename << "./AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
-
+        filename << "AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
         // Save the image using stbi_write_png
         if (!stbi_write_png(filename.str().c_str(), width, height, channels, imageData, width * channels)) {
             std::cerr << "Failed to save image: " << filename.str() << "\n";
@@ -88,9 +88,13 @@ public:
                     throw std::runtime_error("Failed to generate image!");
                 }
 
-                // Save image to file
-                SaveImage(image->data, image->width, image->height, image->channel);
+                if (!mgr.HasComponent<ImageComponent>(entityID)) {
+                    mgr.AddComponent<ImageComponent>(entityID);
+                }
 
+                SaveImage(image->data, image->width, image->height, image->channel);
+                
+                
                 // Clean up
                 delete image;
                 free_sd_ctx(sd_context);

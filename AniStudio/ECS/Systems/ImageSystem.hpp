@@ -4,7 +4,6 @@
 #include "BaseSystem.hpp"
 #include "ImageComponent.hpp"
 #include "EntityManager.hpp"
-#include "../../Events/Events.hpp"
 #include <GL/glew.h>
 #include <iostream>
 #include <stb_image.h>
