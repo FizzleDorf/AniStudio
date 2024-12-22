@@ -10,7 +10,7 @@
 
 namespace ECS {
 
-ImageView::ImageView() : imgIndex(0), showHistory(false) { mgr.RegisterSystem<ImageSystem>(); }
+ImageView::ImageView() : imgIndex(0), showHistory(false) {}
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
@@ -118,11 +118,19 @@ void ImageView::LoadImage() {
     EntityID newEntity = mgr.AddNewEntity();
     mgr.AddComponent<ImageComponent>(newEntity);
     mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
+    ANI::Event event;
+    event.entityID = newEntity;
+    event.type = ANI::EventType::LoadImage;
     loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
+    // ANI::Events::Ref().QueueEvent(event);
     imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
 }
 
 void ImageView::SaveImage(const std::string &filePath) {
+    ANI::Event event;
+    // event.entityID = newEntity;
+    // event.type = ANI::EventType::SaveImage;
+    // ANI::Events::Ref().QueueEvent(event);
     if (imageComponent.imageData) {
         if (!stbi_write_png(filePath.c_str(), imageComponent.width, imageComponent.height, imageComponent.channels,
                             imageComponent.imageData, imageComponent.width * imageComponent.channels)) {

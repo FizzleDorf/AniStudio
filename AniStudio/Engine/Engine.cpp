@@ -24,6 +24,7 @@ Engine::~Engine() {
 
 void Engine::Init() {
     mgr.Reset();
+    mgr.RegisterSystem<ImageSystem>();
     vMgr->Init();
 
     if (!glfwInit()) {

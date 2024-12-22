@@ -10,7 +10,7 @@ namespace ANI {
 
 enum class EventType {
     // Application
-    QuitRequest,
+    Quit,
     NewProject,
     OpenProject,
 
@@ -21,10 +21,12 @@ enum class EventType {
     T2VInferenceRequest,
 
     // IO Events
-    ImageLoadRequest,
-    ImageSaveRequest,
-    MeshLoadRequest,
-    MeshSaveRequest
+    LoadImage,
+    SaveImage,
+    LoadVideo,
+    SaveVideo,
+    LoadMesh,
+    SaveMesh
 };
 
 struct Event {

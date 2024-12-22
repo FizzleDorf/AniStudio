@@ -22,7 +22,7 @@ void ShowMenuBar(GLFWwindow *window) {
             ImGui::MenuItem("Save");
             if(ImGui::MenuItem("Exit")) {
                 ANI::Event event;
-                event.type = ANI::EventType::QuitRequest;
+                event.type = ANI::EventType::Quit;
                 ANI::Events::Ref().QueueEvent(event);
             };
             ImGui::EndMenu();

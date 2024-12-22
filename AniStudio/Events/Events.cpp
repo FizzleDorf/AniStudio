@@ -30,7 +30,7 @@ void Events::ProcessEvents() {
         eventQueue.pop();
 
         switch (event.type) {
-        case EventType::QuitRequest: {
+        case EventType::Quit: {
             Core.Quit();
             break;
         }
@@ -58,17 +58,22 @@ void Events::ProcessEvents() {
             }
             break;
         }
-        case EventType::ImageLoadRequest:{
+        case EventType::SaveImage: {
             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-            // imageSystem->LoadImage(event.entityID);
+            imageSystem->SaveImage(event.entityID);
             break;
         }
-        case EventType::ImageSaveRequest: {
+        case EventType::LoadImage:{
+            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            imageSystem->AddImage(event.entityID);
+            break;
+        }
+        case EventType::SaveMesh: {
             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
             // imageSystem->SaveImage(event.entityID);
             break;
         }
-        case EventType::MeshLoadRequest: {
+        case EventType::LoadMesh: {
             std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << '\n';
             auto meshSystem = mgr.GetSystem<ECS::MeshSystem>();
             if (meshSystem) {
@@ -76,10 +81,6 @@ void Events::ProcessEvents() {
             } else {
                 std::cerr << "ImageSystem is not registered." << std::endl;
             }
-            break;
-        }
-        case EventType::MeshSaveRequest: {
-            
             break;
         }
         default:

@@ -1,12 +1,12 @@
 #include "ECS.h"
+#include "ImageSystem.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
-#include "ImageSystem.hpp"
 #include <filesystem>
 #include <future>
-#include <vector>
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <vector>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -43,18 +43,18 @@ public:
 
     void Start() override {}
 
-    //void SaveImage(const unsigned char *imageData, int width, int height, int channels) {
-    //    // Construct the filename with a zero-padded counter
-    //    std::stringstream filename;
-    //    filename << "AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
-    //    // Save the image using stbi_write_png
-    //    if (!stbi_write_png(filename.str().c_str(), width, height, channels, imageData, width * channels)) {
-    //        std::cerr << "Failed to save image: " << filename.str() << "\n";
-    //    } else {
-    //        std::cout << "Image saved successfully: " << filename.str() << "\n";
-    //    }
-    //    mgr.GetSystem<ImageSystem>().;
-    //}
+    // void SaveImage(const unsigned char *imageData, int width, int height, int channels) {
+    //     // Construct the filename with a zero-padded counter
+    //     std::stringstream filename;
+    //     filename << "AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
+    //     // Save the image using stbi_write_png
+    //     if (!stbi_write_png(filename.str().c_str(), width, height, channels, imageData, width * channels)) {
+    //         std::cerr << "Failed to save image: " << filename.str() << "\n";
+    //     } else {
+    //         std::cout << "Image saved successfully: " << filename.str() << "\n";
+    //     }
+    //     mgr.GetSystem<ImageSystem>().;
+    // }
 
     void Inference(const EntityID entityID) {
         std::lock_guard<std::mutex> lock(inferenceMutex);
@@ -96,8 +96,7 @@ public:
                 std::stringstream newPath;
                 newPath << "./AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
                 // Save the image using stbi_write_png
-                if (!stbi_write_png(newPath.str().c_str(), image->width, image->height, image->channel, image->data,
-                                    image->width * image->channel)) {
+                if (!stbi_write_png(newPath.str().c_str(), image->width, image->height, image->channel, image->data, image->width * image->channel)) {
                     std::cerr << "Failed to save image: " << newPath.str() << "\n";
                 } else {
                     std::cout << "Image saved successfully: " << newPath.str() << "\n";
@@ -109,9 +108,8 @@ public:
 
                 mgr.GetComponent<ImageComponent>(entityID).fileName = filename;
                 mgr.GetComponent<ImageComponent>(entityID).filePath = fullPath;
+                //mgr.GetSystem<ImageSystem>()->AddImage(entityID);
 
-                mgr.GetSystem<ImageSystem>()->AddImage(entityID);
-                
                 // Clean up
                 delete image;
                 free_sd_ctx(sd_context);
@@ -169,7 +167,7 @@ private:
                           mgr.GetComponent<T5XXLComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<DiffusionModelComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<VaeComponent>(entityID).modelPath.c_str(),
-                          mgr.GetComponent<TaesdComponent>(entityID).modelPath.c_str(), 
+                          mgr.GetComponent<TaesdComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<ControlnetComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<LoraComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<EmbeddingComponent>(entityID).modelPath.c_str(), "",
@@ -187,8 +185,7 @@ private:
     sd_image_t *GenerateImage(sd_ctx_t *context, const EntityID entityID) {
         return txt2img(context, mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
                        mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
-                       mgr.GetComponent<CFGComponent>(entityID).cfg, 
-                       mgr.GetComponent<CFGComponent>(entityID).guidance,
+                       mgr.GetComponent<CFGComponent>(entityID).cfg, mgr.GetComponent<CFGComponent>(entityID).guidance,
                        mgr.GetComponent<LatentComponent>(entityID).latentWidth,
                        mgr.GetComponent<LatentComponent>(entityID).latentHeight,
                        mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
@@ -199,8 +196,7 @@ private:
                        mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
                        mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
                        mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end
-            );
+                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
     }
 
     // Utility to validate component paths
