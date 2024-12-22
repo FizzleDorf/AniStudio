@@ -2,6 +2,7 @@
 #define IMAGESYSTEM_HPP
 
 #include "BaseSystem.hpp"
+#include "LoadedHeaps.hpp"
 #include "ImageComponent.hpp"
 #include "EntityManager.hpp"
 #include <GL/glew.h>
@@ -18,40 +19,10 @@ public:
     ImageSystem() = default;
     ~ImageSystem() = default;
 
-    void Start() override {}
-
-    // Recieved a new image from generation or canvas
-    void NewImage(const EntityID entityID) {
-        if (mgr.HasComponent<ImageComponent>(entityID)) {
-            auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-            LoadTextureFromFile(entityID);
-            if (imageComp.textureID != 0) {
-                std::cout << "Image loaded for Entity ID " << entityID << "." << std::endl;
-            } else {
-                std::cerr << "Failed to load image for Entity ID " << entityID << "." << std::endl;
-            }
-        } else {
-            std::cerr << "Entity ID " << entityID << " has no Image Component" << std::endl;
-            return;
-        }
+    void AddImage(const EntityID entity) {
+        loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(entity));
     }
 
-    // Find the ImageComponent and load its image based on the file path
-    void LoadImage(const EntityID entityID) {  
-        if (mgr.HasComponent<ImageComponent>(entityID)) {
-            auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-            LoadTextureFromFile(entityID);
-            if (imageComp.textureID != 0) {
-                std::cout << "Image loaded for Entity ID " << entityID << "." << std::endl;
-            } else {
-                std::cerr << "Failed to load image for Entity ID " << entityID << "." << std::endl;
-            }
-        } else {
-            std::cerr << "Entity ID " << entityID << " has no Image Component" << std::endl;
-            return;
-        }
-    }
-    // Find the ImageComponent and save the current image based on the file path + extension
     void SaveImage(const EntityID entityID) {
         if (mgr.HasComponent<ImageComponent>(entityID)) {
             auto &imageComp = mgr.GetComponent<ImageComponent>(entityID);
@@ -143,26 +114,6 @@ private:
         }
         return ""; // No extension found
     }
-
-    void LoadTextureFromFile(const EntityID entity) {
-        auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
-        imageComp.imageData =
-            stbi_load(imageComp.filePath.c_str(), &imageComp.width, &imageComp.height, &imageComp.channels, 4);
-        if (!imageComp.imageData) {
-            std::cerr << "Failed to load image from file: " << imageComp.filePath << std::endl;
-            return;
-        }
-
-        glGenTextures(1, &imageComp.textureID);
-        glBindTexture(GL_TEXTURE_2D, imageComp.textureID);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, imageComp.width, imageComp.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     imageComp.imageData);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        /*return imageComp.textureID;*/
-    }
-
-    void DeleteTexture(GLuint textureID) { glDeleteTextures(1, &textureID); } 
 };
 
 } // namespace ECS

@@ -1,8 +1,7 @@
-#include "../../Events/Events.hpp"
-#include "LoadedHeaps.hpp"
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
+#include "ImageSystem.hpp"
 #include <filesystem>
 #include <future>
 #include <vector>
@@ -44,17 +43,18 @@ public:
 
     void Start() override {}
 
-    void SaveImage(const unsigned char *imageData, int width, int height, int channels) {
-        // Construct the filename with a zero-padded counter
-        std::stringstream filename;
-        filename << "AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
-        // Save the image using stbi_write_png
-        if (!stbi_write_png(filename.str().c_str(), width, height, channels, imageData, width * channels)) {
-            std::cerr << "Failed to save image: " << filename.str() << "\n";
-        } else {
-            std::cout << "Image saved successfully: " << filename.str() << "\n";
-        }
-    }
+    //void SaveImage(const unsigned char *imageData, int width, int height, int channels) {
+    //    // Construct the filename with a zero-padded counter
+    //    std::stringstream filename;
+    //    filename << "AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
+    //    // Save the image using stbi_write_png
+    //    if (!stbi_write_png(filename.str().c_str(), width, height, channels, imageData, width * channels)) {
+    //        std::cerr << "Failed to save image: " << filename.str() << "\n";
+    //    } else {
+    //        std::cout << "Image saved successfully: " << filename.str() << "\n";
+    //    }
+    //    mgr.GetSystem<ImageSystem>().;
+    //}
 
     void Inference(const EntityID entityID) {
         std::lock_guard<std::mutex> lock(inferenceMutex);
@@ -92,8 +92,25 @@ public:
                     mgr.AddComponent<ImageComponent>(entityID);
                 }
 
-                SaveImage(image->data, image->width, image->height, image->channel);
-                
+                // SaveImage(image->data, image->width, image->height, image->channel);
+                std::stringstream newPath;
+                newPath << "./AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
+                // Save the image using stbi_write_png
+                if (!stbi_write_png(newPath.str().c_str(), image->width, image->height, image->channel, image->data,
+                                    image->width * image->channel)) {
+                    std::cerr << "Failed to save image: " << newPath.str() << "\n";
+                } else {
+                    std::cout << "Image saved successfully: " << newPath.str() << "\n";
+                }
+                std::string fullPath = newPath.str();
+                size_t lastSlashPos = fullPath.find_last_of("/\\"); // Finds the last slash or backslash
+                std::string filename =
+                    (lastSlashPos == std::string::npos) ? fullPath : fullPath.substr(lastSlashPos + 1);
+
+                mgr.GetComponent<ImageComponent>(entityID).fileName = filename;
+                mgr.GetComponent<ImageComponent>(entityID).filePath = fullPath;
+
+                mgr.GetSystem<ImageSystem>()->AddImage(entityID);
                 
                 // Clean up
                 delete image;

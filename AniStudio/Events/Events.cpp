@@ -60,12 +60,12 @@ void Events::ProcessEvents() {
         }
         case EventType::ImageLoadRequest:{
             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-            imageSystem->LoadImage(event.entityID);
+            // imageSystem->LoadImage(event.entityID);
             break;
         }
         case EventType::ImageSaveRequest: {
             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-            imageSystem->SaveImage(event.entityID);
+            // imageSystem->SaveImage(event.entityID);
             break;
         }
         case EventType::MeshLoadRequest: {
