@@ -100,7 +100,9 @@ void ImageView::RenderHistory() {
         const auto &images = loadedMedia.GetImages();
         for (size_t i = 0; i < images.size(); ++i) {
             const auto &image = images[i];
-
+            if (!image.imageData) {
+                break;
+            }
             if (image.textureID == 0) {
                 CreateTexture(i);
             }

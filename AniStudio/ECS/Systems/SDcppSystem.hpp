@@ -3,10 +3,15 @@
 #include "pch.h"
 #include "stable-diffusion.h"
 #include <filesystem>
-#include <future>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <vector>
+#include <thread>
+#include <mutex>
+#include <queue>
+#include <atomic>
+#include <future>
+#include <condition_variable>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -36,129 +41,139 @@ namespace ECS {
 
 class SDCPPSystem : public BaseSystem {
 public:
-    SDCPPSystem() {
+    SDCPPSystem() : inferenceRunning(false) {
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<InputImageComponent>();
     }
 
-    void Start() override {}
-
-    // void SaveImage(const unsigned char *imageData, int width, int height, int channels) {
-    //     // Construct the filename with a zero-padded counter
-    //     std::stringstream filename;
-    //     filename << "AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
-    //     // Save the image using stbi_write_png
-    //     if (!stbi_write_png(filename.str().c_str(), width, height, channels, imageData, width * channels)) {
-    //         std::cerr << "Failed to save image: " << filename.str() << "\n";
-    //     } else {
-    //         std::cout << "Image saved successfully: " << filename.str() << "\n";
-    //     }
-    //     mgr.GetSystem<ImageSystem>().;
-    // }
-
-    void Inference(const EntityID entityID) {
-        std::lock_guard<std::mutex> lock(inferenceMutex);
-
-        if (inferenceRunning.load()) {
-            std::cout << "Inference is already running; skipping this request."
-                      << "\n";
-            return;
-        }
-
-        std::cout << "Inference started." << std::endl;
-        inferenceRunning.store(true);
-
-        // Launch asynchronous inference task
-        inferenceFuture = std::async(std::launch::async, [this, entityID]() {
-            try {
-                std::lock_guard<std::mutex> mgrLock(mgrMutex);
-
-                // Initialize Stable Diffusion context
-                sd_set_log_callback(LogCallback, nullptr);
-                sd_set_progress_callback(ProgressCallback, nullptr);
-
-                sd_ctx_t *sd_context = InitializeStableDiffusionContext(entityID);
-                if (!sd_context) {
-                    throw std::runtime_error("Failed to initialize Stable Diffusion context!");
-                }
-
-                // Generate image
-                sd_image_t *image = GenerateImage(sd_context, entityID);
-                if (!image) {
-                    throw std::runtime_error("Failed to generate image!");
-                }
-
-                if (!mgr.HasComponent<ImageComponent>(entityID)) {
-                    mgr.AddComponent<ImageComponent>(entityID);
-                }
-
-                // SaveImage(image->data, image->width, image->height, image->channel);
-                std::stringstream newPath;
-                newPath << "./AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
-                // Save the image using stbi_write_png
-                if (!stbi_write_png(newPath.str().c_str(), image->width, image->height, image->channel, image->data, image->width * image->channel)) {
-                    std::cerr << "Failed to save image: " << newPath.str() << "\n";
-                } else {
-                    std::cout << "Image saved successfully: " << newPath.str() << "\n";
-                }
-                std::string fullPath = newPath.str();
-                size_t lastSlashPos = fullPath.find_last_of("/\\"); // Finds the last slash or backslash
-                std::string filename =
-                    (lastSlashPos == std::string::npos) ? fullPath : fullPath.substr(lastSlashPos + 1);
-
-                mgr.GetComponent<ImageComponent>(entityID).fileName = filename;
-                mgr.GetComponent<ImageComponent>(entityID).filePath = fullPath;
-                //mgr.GetSystem<ImageSystem>()->AddImage(entityID);
-
-                // Clean up
-                delete image;
-                free_sd_ctx(sd_context);
-                std::cout << "Inference completed successfully."
-                          << "\n";
-
-            } catch (const std::exception &e) {
-                std::cerr << "Exception during inference: " << e.what() << std::endl;
-            }
-            inferenceRunning.store(false);
-        });
+    ~SDCPPSystem() {
+        // Gracefully stop the worker thread if needed
+        StopWorker();
     }
 
-    // Update called in the Engine Update Loop
-    void Update(const float deltaT) override {
-        std::lock_guard<std::mutex> lock(queueMutex);
-
-        // Process inference queue
-        if (!inferenceRunning.load() && !inferenceQueue.empty()) {
-            EntityID entityID = inferenceQueue.front();
-            inferenceQueue.pop();
-
-            if (ArePathsValid(entityID)) {
-                Inference(entityID);
-            } else {
-                std::cerr << "Invalid paths for entity " << entityID << '\n';
-                mgr.DestroyEntity(entityID);
-            }
-        }
-        // Handle completed inference task
-        if (inferenceFuture.valid() && inferenceFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-            inferenceFuture.get(); // Allow exceptions to propagate
-        }
-    }
-
-    // Queues an Entity to be processed
     void QueueInference(EntityID entityID) {
-        inferenceQueue.push(entityID);
-        std::cout << "Entity queued for inference." << std::endl;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            inferenceQueue.push(entityID);
+        }
+        queueCondition.notify_one(); // Notify the worker thread
+        std::cout << "Entity " << entityID << " queued for inference." << std::endl;
+    }
+
+    void Update(float deltaT) override { 
+        if (!inferenceQueue.empty() && !stopWorker) {
+            StartWorker();
+        }
+        
+    
     }
 
 private:
     std::queue<EntityID> inferenceQueue;
     std::mutex queueMutex;
-    std::mutex inferenceMutex;
-    std::mutex mgrMutex;
-    std::atomic<bool> inferenceRunning{false};
-    std::future<void> inferenceFuture;
+    std::condition_variable queueCondition;
+    std::atomic<bool> inferenceRunning;
+    std::atomic<bool> stopWorker{false};
+    std::thread workerThread;
     int saveCounter = 0;
+
+    void StartWorker() {
+        // Start a dedicated worker thread for inference
+        workerThread = std::thread([this]() {
+            while (!stopWorker) {
+                EntityID entityID;
+
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
+
+                    if (stopWorker)
+                        break; // Exit if stopping
+                    if (inferenceQueue.empty())
+                        continue;
+
+                    entityID = inferenceQueue.front();
+                    inferenceQueue.pop();
+                }
+                if (ArePathsValid(entityID)) {
+                    RunInference(entityID);
+                } else {
+                    mgr.DestroyEntity(entityID);
+                }
+                // Run inference on the dequeued entity
+                
+            }
+        });
+    }
+
+    void StopWorker() {
+        stopWorker = true;
+        queueCondition.notify_all(); // Wake up the worker thread
+        if (workerThread.joinable()) {
+            workerThread.join();
+        }
+    }
+
+    void RunInference(const EntityID entityID) {
+        if (inferenceRunning.exchange(true)) {
+            // Another inference is already running; skip
+            return;
+        }
+
+        std::async(std::launch::async, [this, entityID]() {
+            try {
+                std::cout << "Starting inference for entity " << entityID << "\n";
+
+                sd_set_log_callback(LogCallback, nullptr);
+                sd_set_progress_callback(ProgressCallback, nullptr);
+
+                // Stable Diffusion logic
+                sd_ctx_t *sd_context = InitializeStableDiffusionContext(entityID);
+                if (!sd_context) {
+                    throw std::runtime_error("Failed to initialize Stable Diffusion context!");
+                }
+
+                sd_image_t *image = GenerateImage(sd_context, entityID);
+                if (!image) {
+                    throw std::runtime_error("Failed to generate image!");
+                }
+
+                SaveImage(image->data, image->width, image->height, image->channel, entityID);
+
+                free_sd_ctx(sd_context);
+                std::cout << "Inference completed for entity " << entityID << "\n";
+
+            } catch (const std::exception &e) {
+                std::cerr << "Exception during inference: " << e.what() << std::endl;
+            }
+
+            // Mark inference as done and trigger the next
+            inferenceRunning = false;
+            TriggerNextInference();
+        });
+    }
+
+    void TriggerNextInference() {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        if (!inferenceQueue.empty()) {
+            EntityID nextEntity = inferenceQueue.front();
+            inferenceQueue.pop();
+            RunInference(nextEntity);
+        } else {
+            StopWorker();
+        }
+    }
+
+    void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
+        std::stringstream newPath;
+        newPath << "./AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
+        if (!stbi_write_png(newPath.str().c_str(), width, height, channels, data, width * channels)) {
+            std::cerr << "Failed to save image: " << newPath.str() << "\n";
+        } else {
+            std::cout << "Image saved successfully: " << newPath.str() << "\n";
+        }
+    }
+
     // Utility method to initialize Stable Diffusion text to image context
     sd_ctx_t *InitializeStableDiffusionContext(const EntityID entityID) {
         return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),

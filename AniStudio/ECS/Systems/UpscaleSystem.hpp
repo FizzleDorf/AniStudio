@@ -36,8 +36,6 @@ public:
         AddComponentSignature<EsrganComponent>();
     }
 
-    void Start() override {}
-
     void Inference(const EntityID entityID) {
         std::lock_guard<std::mutex> lock(inferenceMutex);
         if (inferenceRunning.load()) {
