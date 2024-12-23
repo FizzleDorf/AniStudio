@@ -8,10 +8,8 @@ Engine &Core = Engine::Ref();
 
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
-Engine::Engine()
-    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH),
-      videoHeight(SCREEN_HEIGHT) {
-    vMgr = std::make_unique<ViewManager>();   
+Engine::Engine() : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
+    vMgr = std::make_unique<ViewManager>();
 }
 
 Engine::~Engine() {
@@ -71,21 +69,19 @@ void Engine::Init() {
 }
 
 void Engine::Update(const float deltaT) {
-    if (deltaT > 0) {
-        frameCount++;
-        fpsSum += 1.0 / deltaT;
+    timeElapsed += deltaT;
+    frameCount++;
+    if (timeElapsed >= 1.0) {
+        double fps = frameCount / timeElapsed;
 
-        if (frameCount >= 60) { // Update every 60 frames
-            int averageFPS = static_cast<int>(fpsSum / frameCount);
+        // Update the window title
+        std::ostringstream titleStream;
+        titleStream << "AniStudio - FPS: " << static_cast<int>(fps);
+        glfwSetWindowTitle(window, titleStream.str().c_str());
 
-            std::ostringstream titleStream;
-            titleStream << "AniStudio - FPS: " << averageFPS;
-
-            glfwSetWindowTitle(window, titleStream.str().c_str());
-
-            frameCount = 0;
-            fpsSum = 0.0;
-        }
+        // Reset for the next second
+        frameCount = 0;
+        timeElapsed = 0.0;
     }
     mgr.Update(deltaT);
     vMgr->Update(deltaT);
