@@ -5,30 +5,6 @@
 #include <future> // Include for std::future and std::async
 #include <vector>
 
-//static void LogCallback(sd_log_level_t level, const char *text, void *data) {
-//    switch (level) {
-//    case SD_LOG_DEBUG:
-//        std::cout << "[DEBUG]: " << text;
-//        break;
-//    case SD_LOG_INFO:
-//        std::cout << "[INFO]: " << text;
-//        break;
-//    case SD_LOG_WARN:
-//        std::cout << "[WARNING]: " << text;
-//        break;
-//    case SD_LOG_ERROR:
-//        std::cerr << "[ERROR]: " << text;
-//        break;
-//    default:
-//        std::cerr << "[UNKNOWN LOG LEVEL]: " << text;
-//        break;
-//    }
-//}
-//
-//static void ProgressCallback(int step, int steps, float time, void *data) {
-//    std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
-//}
-
 namespace ECS {
 class UpscaleSystem : public BaseSystem {
 public:
@@ -76,7 +52,7 @@ public:
                 // Perform image generation
                 sd_image_t image = upscale(
                     upscale_context, 
-                    inputImage, // needs a sd_image
+                    inputImage,
                     4
                 );
 

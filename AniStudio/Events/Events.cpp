@@ -58,6 +58,18 @@ void Events::ProcessEvents() {
             }
             break;
         }
+        case EventType::Interrupt: {
+            std::cout << "Handling Interrupt event for SDCPPSystem" << '\n';
+
+            auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                std::cout << "SDCPPSystem is registered." << std::endl;
+                sdcppSystem->StopWorker();
+            } else {
+                std::cerr << "SDCPPSystem is not registered." << std::endl;
+            }
+            break;
+        }
         case EventType::SaveImage: {
             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
             imageSystem->SaveImage(event.entityID);

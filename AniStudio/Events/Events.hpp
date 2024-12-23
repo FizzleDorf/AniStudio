@@ -19,6 +19,7 @@ enum class EventType {
     UpscaleRequest,
     I2IInferenceRequest,
     T2VInferenceRequest,
+    Interrupt,
 
     // IO Events
     LoadImage,
