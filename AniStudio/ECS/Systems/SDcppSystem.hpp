@@ -160,26 +160,10 @@ private:
     void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
         ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(entityID);
 
-        // Use the directory and filename separately to construct the full path
-        std::filesystem::path directoryPath = imageComp.filePath; // Assuming filePath is the directory
-        std::filesystem::path fullPath = directoryPath / imageComp.fileName;
-
-        // Ensure the directory exists
-        try {
-            if (!std::filesystem::exists(directoryPath)) {
-                std::filesystem::create_directories(directoryPath);
-                std::cout << "Directory created: " << directoryPath << '\n';
-            }
-        } catch (const std::filesystem::filesystem_error &e) {
-            std::cerr << "Error creating directory: " << e.what() << '\n';
-            return;
-        }
-
-        // Save the image using the full path
-        if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
-            std::cerr << "Failed to save image: " << fullPath << std::endl;
+        if (!stbi_write_png(imageComp.filePath.c_str(), width, height, channels, data, width * channels)) {
+            std::cerr << "Failed to save image: " << imageComp.filePath << std::endl;
         } else {
-            std::cout << "Image saved successfully: " << fullPath << std::endl;
+            std::cout << "Image saved successfully: " << imageComp.filePath << std::endl;
         }
     }
 

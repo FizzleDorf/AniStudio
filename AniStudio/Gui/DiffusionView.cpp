@@ -92,6 +92,9 @@ void DiffusionView::RenderFilePath() {
             // Update the ImageComponent
             imageComp.fileName = newFileName;
 
+            std::filesystem::path directoryPath = imageComp.filePath;
+            std::filesystem::path fullPath = directoryPath / imageComp.fileName;
+            imageComp.filePath = fullPath.string();
             std::cout << "ImageComponent updated:" << '\n';
             std::cout << "  FileName: " << imageComp.fileName << '\n';
             std::cout << "  FilePath: " << imageComp.filePath << '\n';
