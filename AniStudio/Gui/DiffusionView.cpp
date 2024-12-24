@@ -40,9 +40,11 @@ void DiffusionView::RenderModelLoader() {
     ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
 }
 
+static char fileName[256] = "AniStudio";  // Buffer for file name
+static char outputDir[256] = ""; // Buffer for output directory
+
 void DiffusionView::RenderFilePath() {
-    static char fileName[256] = "";  // Buffer for file name
-    static char outputDir[256] = ""; // Buffer for output directory
+    
 
     // Editable input for the file name
     if (ImGui::InputText("Filename", fileName, IM_ARRAYSIZE(fileName))) {
@@ -76,7 +78,6 @@ void DiffusionView::RenderFilePath() {
     // Update ImageComponent properties if filename or filepath changes
     if (isFilenameChanged) {
         std::string newFileName(fileName);
-        std::string outputDirectory(outputDir);
 
         // Ensure the file name has a .png extension
         if (!newFileName.empty()) {
@@ -88,13 +89,10 @@ void DiffusionView::RenderFilePath() {
         }
 
         // Construct the full file path if both directory and filename are valid
-        if (!outputDirectory.empty() && !newFileName.empty()) {
+        if (!newFileName.empty()) {
             // Update the ImageComponent
             imageComp.fileName = newFileName;
 
-            std::filesystem::path directoryPath = imageComp.filePath;
-            std::filesystem::path fullPath = directoryPath / imageComp.fileName;
-            imageComp.filePath = fullPath.string();
             std::cout << "ImageComponent updated:" << '\n';
             std::cout << "  FileName: " << imageComp.fileName << '\n';
             std::cout << "  FilePath: " << imageComp.filePath << '\n';
@@ -176,6 +174,7 @@ void DiffusionView::HandleT2IEvent() {
     mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
     mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
     mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
+    mgr.GetComponent<ImageComponent>(newEntity) = imageComp;
 
     std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
     std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).modelPath << "\n";
