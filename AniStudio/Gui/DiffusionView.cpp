@@ -3,6 +3,7 @@
 #include "../Events/Events.hpp"
 #include "ECS.h"
 #include "stable-diffusion.h"
+#include <filesystem>
 
 using namespace ECS;
 using namespace ANI;
@@ -40,17 +41,18 @@ void DiffusionView::RenderModelLoader() {
 }
 
 void DiffusionView::RenderFilePath() {
-    static char fileName[256] = "";  // Buffer to hold the file name
-    static char outputDir[256] = ""; // Buffer to hold the output directory
+    static char fileName[256] = "";  // Buffer for file name
+    static char outputDir[256] = ""; // Buffer for output directory
 
     // Editable input for the file name
     if (ImGui::InputText("Filename", fileName, IM_ARRAYSIZE(fileName))) {
         isFilenameChanged = true;
     }
 
+    ImGui::Text("Output Directory: %s", outputDir);
     ImGui::SameLine();
 
-    // Button to open the file dialog for choosing the output directory
+    // Button to open the file dialog
     if (ImGui::Button("Choose Directory")) {
         IGFD::FileDialogConfig config;
         config.path = filePaths.defaultProjectPath; // Set the initial directory
@@ -60,21 +62,15 @@ void DiffusionView::RenderFilePath() {
     // Handle the file dialog display and selection
     if (ImGuiFileDialog::Instance()->Display("LoadDirDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            // Update the output directory from the selected path
             std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
-            strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
-            outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Ensure null termination
-
-            filePaths.checkpointDir = selectedDir; // Update the stored directory
-            isFilenameChanged = true;              // Trigger file path update
+            if (!selectedDir.empty()) {
+                strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
+                outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Null termination
+                filePaths.defaultProjectPath = selectedDir;    // Update global directory
+                isFilenameChanged = true;                      // Trigger file path update
+            }
         }
         ImGuiFileDialog::Instance()->Close();
-    }
-
-    // Editable display of the output directory
-    if (ImGui::InputText("Output Directory", outputDir, IM_ARRAYSIZE(outputDir))) {
-        filePaths.checkpointDir = outputDir; // Update the directory in filePaths
-        isFilenameChanged = true;            // Trigger file path update
     }
 
     // Update ImageComponent properties if filename or filepath changes
@@ -98,16 +94,17 @@ void DiffusionView::RenderFilePath() {
             imageComp.fileName = newFileName;
             imageComp.filePath = fullPath.string();
 
-            std::cout << "ImageComponent updated:" << std::endl;
-            std::cout << "  FileName: " << imageComp.fileName << std::endl;
-            std::cout << "  FilePath: " << imageComp.filePath << std::endl;
+            std::cout << "ImageComponent updated:" << '\n';
+            std::cout << "  FileName: " << imageComp.fileName << '\n';
+            std::cout << "  FilePath: " << imageComp.filePath << '\n';
         } else {
-            std::cerr << "Invalid directory or filename!" << std::endl;
+            std::cerr << "Invalid directory or filename!" << '\n';
         }
 
         isFilenameChanged = false; // Reset the flag
     }
 }
+
 
 void DiffusionView::RenderLatents() {
     ImGui::InputInt("Width", &latentComp.latentWidth);

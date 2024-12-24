@@ -158,11 +158,12 @@ private:
 
     void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
         ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-        if (!stbi_write_png(imageComp.filePath.c_str(), width, height, channels, data,
+        std::string fullPath = imageComp.filePath + imageComp.fileName;
+        if (!stbi_write_png(fullPath.c_str(), width, height, channels, data,
                             width * channels)) {
-            std::cerr << "Failed to save image: " << imageComp.filePath << std::endl;
+            std::cerr << "Failed to save image: " << fullPath << std::endl;
         } else {
-            std::cout << "Image saved successfully: " << imageComp.filePath << std::endl;
+            std::cout << "Image saved successfully: " << fullPath << std::endl;
         }
     }
 
