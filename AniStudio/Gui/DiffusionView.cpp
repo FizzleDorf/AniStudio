@@ -1,7 +1,7 @@
 #include "DiffusionView.hpp"
-#include "ImageView.hpp"
 #include "../Events/Events.hpp"
 #include "ECS.h"
+#include "ImageView.hpp"
 #include "stable-diffusion.h"
 #include <filesystem>
 
@@ -66,8 +66,8 @@ void DiffusionView::RenderFilePath() {
             if (!selectedDir.empty()) {
                 strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
                 outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Null termination
-                filePaths.defaultProjectPath = selectedDir;    // Update global directory
-                isFilenameChanged = true;                      // Trigger file path update
+                imageComp.filePath = selectedDir;
+                isFilenameChanged = true;
             }
         }
         ImGuiFileDialog::Instance()->Close();
@@ -89,10 +89,8 @@ void DiffusionView::RenderFilePath() {
 
         // Construct the full file path if both directory and filename are valid
         if (!outputDirectory.empty() && !newFileName.empty()) {
-            std::filesystem::path fullPath = std::filesystem::path(outputDirectory) / newFileName;
-
+            // Update the ImageComponent
             imageComp.fileName = newFileName;
-            imageComp.filePath = fullPath.string();
 
             std::cout << "ImageComponent updated:" << '\n';
             std::cout << "  FileName: " << imageComp.fileName << '\n';
@@ -104,7 +102,6 @@ void DiffusionView::RenderFilePath() {
         isFilenameChanged = false; // Reset the flag
     }
 }
-
 
 void DiffusionView::RenderLatents() {
     ImGui::InputInt("Width", &latentComp.latentWidth);

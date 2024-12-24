@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <filesystem>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -158,14 +159,30 @@ private:
 
     void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
         ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(entityID);
-        std::string fullPath = imageComp.filePath + imageComp.fileName;
-        if (!stbi_write_png(fullPath.c_str(), width, height, channels, data,
-                            width * channels)) {
+
+        // Use the directory and filename separately to construct the full path
+        std::filesystem::path directoryPath = imageComp.filePath; // Assuming filePath is the directory
+        std::filesystem::path fullPath = directoryPath / imageComp.fileName;
+
+        // Ensure the directory exists
+        try {
+            if (!std::filesystem::exists(directoryPath)) {
+                std::filesystem::create_directories(directoryPath);
+                std::cout << "Directory created: " << directoryPath << '\n';
+            }
+        } catch (const std::filesystem::filesystem_error &e) {
+            std::cerr << "Error creating directory: " << e.what() << '\n';
+            return;
+        }
+
+        // Save the image using the full path
+        if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
             std::cerr << "Failed to save image: " << fullPath << std::endl;
         } else {
             std::cout << "Image saved successfully: " << fullPath << std::endl;
         }
     }
+
 
     sd_ctx_t *InitializeStableDiffusionContext(const EntityID entityID) {
         return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
