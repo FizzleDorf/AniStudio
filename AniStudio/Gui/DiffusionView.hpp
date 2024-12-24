@@ -15,6 +15,7 @@ public:
     void RenderSampler();
     void RenderPrompts();
     void RenderQueue();
+    void RenderFilePath();
     void Render();
 
     void RenderDiffusionModelLoader();
@@ -34,6 +35,7 @@ public:
     }
 
 private:
+    bool isFilenameChanged = false; 
     // ECS-related variables
     EntityID entity;
 

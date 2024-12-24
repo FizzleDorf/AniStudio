@@ -157,12 +157,12 @@ private:
 
 
     void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
-        std::stringstream newPath;
-        newPath << "./AniStudio_" << std::setw(5) << std::setfill('0') << saveCounter++ << ".png";
-        if (!stbi_write_png(newPath.str().c_str(), width, height, channels, data, width * channels)) {
-            std::cerr << "Failed to save image: " << newPath.str() << std::endl;
+        ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(entityID);
+        if (!stbi_write_png(imageComp.filePath.c_str(), width, height, channels, data,
+                            width * channels)) {
+            std::cerr << "Failed to save image: " << imageComp.filePath << std::endl;
         } else {
-            std::cout << "Image saved successfully: " << newPath.str() << std::endl;
+            std::cout << "Image saved successfully: " << imageComp.filePath << std::endl;
         }
     }
 

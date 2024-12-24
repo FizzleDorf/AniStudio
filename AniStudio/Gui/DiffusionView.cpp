@@ -39,6 +39,76 @@ void DiffusionView::RenderModelLoader() {
     ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
 }
 
+void DiffusionView::RenderFilePath() {
+    static char fileName[256] = "";  // Buffer to hold the file name
+    static char outputDir[256] = ""; // Buffer to hold the output directory
+
+    // Editable input for the file name
+    if (ImGui::InputText("Filename", fileName, IM_ARRAYSIZE(fileName))) {
+        isFilenameChanged = true;
+    }
+
+    ImGui::SameLine();
+
+    // Button to open the file dialog for choosing the output directory
+    if (ImGui::Button("Choose Directory")) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.defaultProjectPath; // Set the initial directory
+        ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
+    }
+
+    // Handle the file dialog display and selection
+    if (ImGuiFileDialog::Instance()->Display("LoadDirDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            // Update the output directory from the selected path
+            std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
+            strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
+            outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Ensure null termination
+
+            filePaths.checkpointDir = selectedDir; // Update the stored directory
+            isFilenameChanged = true;              // Trigger file path update
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+    // Editable display of the output directory
+    if (ImGui::InputText("Output Directory", outputDir, IM_ARRAYSIZE(outputDir))) {
+        filePaths.checkpointDir = outputDir; // Update the directory in filePaths
+        isFilenameChanged = true;            // Trigger file path update
+    }
+
+    // Update ImageComponent properties if filename or filepath changes
+    if (isFilenameChanged) {
+        std::string newFileName(fileName);
+        std::string outputDirectory(outputDir);
+
+        // Ensure the file name has a .png extension
+        if (!newFileName.empty()) {
+            std::filesystem::path filePath(newFileName);
+            if (filePath.extension() != ".png") {
+                filePath.replace_extension(".png");
+                newFileName = filePath.filename().string();
+            }
+        }
+
+        // Construct the full file path if both directory and filename are valid
+        if (!outputDirectory.empty() && !newFileName.empty()) {
+            std::filesystem::path fullPath = std::filesystem::path(outputDirectory) / newFileName;
+
+            imageComp.fileName = newFileName;
+            imageComp.filePath = fullPath.string();
+
+            std::cout << "ImageComponent updated:" << std::endl;
+            std::cout << "  FileName: " << imageComp.fileName << std::endl;
+            std::cout << "  FilePath: " << imageComp.filePath << std::endl;
+        } else {
+            std::cerr << "Invalid directory or filename!" << std::endl;
+        }
+
+        isFilenameChanged = false; // Reset the flag
+    }
+}
+
 void DiffusionView::RenderLatents() {
     ImGui::InputInt("Width", &latentComp.latentWidth);
     ImGui::InputInt("Height", &latentComp.latentHeight);
@@ -94,7 +164,6 @@ void DiffusionView::HandleT2IEvent() {
     mgr.AddComponent<ImageComponent>(newEntity);
 
     std::cout << "Assigning components to new Entity: " << newEntity << "\n";
-
     mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
     mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
     mgr.GetComponent<CLipGComponent>(newEntity) = clipGComp;
@@ -353,6 +422,7 @@ void DiffusionView::Render() {
     if (ImGui::Begin("Image Generation")) {
         if (ImGui::BeginTabBar("Image")) {
             if (ImGui::BeginTabItem("Txt2Img")) {
+                RenderFilePath();
                 RenderQueue();
                 RenderModelLoader();
                 RenderDiffusionModelLoader();
@@ -366,6 +436,7 @@ void DiffusionView::Render() {
             }
 
             if (ImGui::BeginTabItem("HighResFix")) {
+                RenderFilePath();
                 RenderQueue();
                 RenderInputImage();
                 RenderModelLoader();
@@ -380,6 +451,7 @@ void DiffusionView::Render() {
             }
 
             if (ImGui::BeginTabItem("Img2Img")) {
+                RenderFilePath();
                 RenderQueue();
                 RenderInputImage();
                 RenderModelLoader();
@@ -394,6 +466,7 @@ void DiffusionView::Render() {
             }
 
             if (ImGui::BeginTabItem("Upscale")) {
+                RenderFilePath();
                 RenderQueue();
                 RenderInputImage();
                 RenderModelLoader();
