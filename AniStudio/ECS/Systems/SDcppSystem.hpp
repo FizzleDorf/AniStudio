@@ -2,17 +2,17 @@
 #include "ImageSystem.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
+#include <atomic>
+#include <condition_variable>
 #include <filesystem>
-#include <stb_image.h>
-#include <stb_image_write.h>
-#include <filesystem>
-#include <vector>
-#include <thread>
+#include <future>
+#include <iostream>
 #include <mutex>
 #include <queue>
-#include <atomic>
-#include <future>
-#include <condition_variable>
+#include <stb_image.h>
+#include <stb_image_write.h>
+#include <thread>
+#include <vector>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -42,7 +42,7 @@ namespace ECS {
 
 class SDCPPSystem : public BaseSystem {
 public:
-    SDCPPSystem() : inferenceRunning(false), stopWorker(false), workerThreadRunning(false) {
+    SDCPPSystem() : stopWorker(false), workerThreadRunning(false) {
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<InputImageComponent>();
     }
@@ -52,12 +52,11 @@ public:
     void QueueInference(EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push(entityID);
+            inferenceQueue.push(entityID);   
         }
         queueCondition.notify_one();
         std::cout << "Entity " << entityID << " queued for inference." << std::endl;
 
-        // Ensure the worker is only started if not already running
         if (!workerThreadRunning.load()) {
             StartWorker();
         }
@@ -84,47 +83,48 @@ private:
     std::queue<EntityID> inferenceQueue;
     std::mutex queueMutex;
     std::condition_variable queueCondition;
-    std::atomic<bool> inferenceRunning;
     std::atomic<bool> stopWorker;
     std::atomic<bool> workerThreadRunning;
     std::mutex workerMutex;
     std::thread workerThread;
-    int saveCounter = 0;
 
     void StartWorker() {
+        std::lock_guard<std::mutex> lock(workerMutex);
+        if (workerThreadRunning) {
+            return;
+        }
+
+        workerThreadRunning = true;
+
         workerThread = std::thread([this]() {
-            try {
-                while (true) {
-                    EntityID entityID;
-                    {
-                        std::unique_lock<std::mutex> lock(queueMutex);
-                        // Wait for the queue to have work or the stop signal
-                        queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
+            while (true) {
+                EntityID entityID;
+                {
+                    std::unique_lock<std::mutex> lock(queueMutex);
+                    queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
 
-                        if (stopWorker && inferenceQueue.empty()) {
-                            break;
-                        }
-
-                        // Process one entity at a time
-                        entityID = inferenceQueue.front();
-                        inferenceQueue.pop();
+                    if (stopWorker && inferenceQueue.empty()) {
+                        break;
                     }
 
-                    // Only process if no other inference is running
-                    if (!inferenceRunning.exchange(true)) {
-                        RunInference(entityID);
-                        inferenceRunning = false; // Allow next inference after current finishes
-                    }
+                    entityID = inferenceQueue.front();
+                    inferenceQueue.pop();
                 }
-            } catch (const std::exception &e) {
-                std::cerr << "Worker thread exception: " << e.what() << std::endl;
+
+                RunInference(entityID);
+
+                // Notify the condition variable to allow processing the next item
+                queueCondition.notify_one();
             }
-            workerThreadRunning = false; // Reset flag when the thread exits
+
+            {
+                std::lock_guard<std::mutex> lock(workerMutex);
+                workerThreadRunning = false;
+            }
         });
-        workerThread.detach(); // Detach to avoid join issues
     }
 
-    void RunInference(const EntityID entityID) {
+    void RunInference(EntityID entityID) {
         sd_ctx_t *sd_context = nullptr;
         try {
             std::cout << "Starting inference for Entity " << entityID << std::endl;
@@ -151,23 +151,17 @@ private:
         } catch (const std::exception &e) {
             std::cerr << "Exception during inference: " << e.what() << std::endl;
             if (sd_context) {
-                free_sd_ctx(sd_context); // Free context in case of error
+                free_sd_ctx(sd_context);
             }
         }
     }
 
-
     void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
         ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(entityID);
 
-        // Construct the full path by combining directory and filename
         std::filesystem::path directoryPath = imageComp.filePath;
         std::filesystem::path fullPath = directoryPath / imageComp.fileName;
-        std::cout << "Directory Path: " << directoryPath << std::endl;
-        std::cout << "File Name: " << imageComp.fileName << std::endl;
-        std::cout << "Full Path: " << fullPath << std::endl;
 
-        // Ensure the directory exists
         try {
             if (!std::filesystem::exists(directoryPath)) {
                 std::filesystem::create_directories(directoryPath);
@@ -178,7 +172,6 @@ private:
             return;
         }
 
-        // Save the image using the full path
         if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
             std::cerr << "Failed to save image: " << fullPath << std::endl;
         } else {
@@ -186,9 +179,7 @@ private:
         }
     }
 
-
-
-    sd_ctx_t *InitializeStableDiffusionContext(const EntityID entityID) {
+    sd_ctx_t *InitializeStableDiffusionContext(EntityID entityID) {
         return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<CLipLComponent>(entityID).modelPath.c_str(),
                           mgr.GetComponent<CLipGComponent>(entityID).modelPath.c_str(),
@@ -209,7 +200,7 @@ private:
                           mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu, false);
     }
 
-    sd_image_t *GenerateImage(sd_ctx_t *context, const EntityID entityID) {
+    sd_image_t *GenerateImage(sd_ctx_t *context, EntityID entityID) {
         return txt2img(context, mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
                        mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
                        mgr.GetComponent<CFGComponent>(entityID).cfg, mgr.GetComponent<CFGComponent>(entityID).guidance,

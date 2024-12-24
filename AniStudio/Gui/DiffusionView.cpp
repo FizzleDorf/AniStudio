@@ -12,14 +12,25 @@ ImageView imageView;
 EntityID currentEntity;
 
 void DiffusionView::RenderModelLoader() {
-    ImGui::Text("Checkpoint:");
-    ImGui::Text("%s", modelComp.modelName.c_str());
+    if (ImGui::BeginTable("ModelLoaderTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        // Row for "Checkpoint"
+        ImGui::TableNextColumn();
+        ImGui::Text("Checkpoint:");
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", modelComp.modelName.c_str());
 
-    if (ImGui::Button("...")) {
-        IGFD::FileDialogConfig config;
-        config.path = filePaths.checkpointDir;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
-                                                config);
+        // Row for "Load Button"
+        ImGui::TableNextColumn();
+        ImGui::Text("Load Model:");
+        ImGui::TableNextColumn();
+        if (ImGui::Button("...")) {
+            IGFD::FileDialogConfig config;
+            config.path = filePaths.checkpointDir;
+            ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                    config);
+        }
+
+        ImGui::EndTable();
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
@@ -44,21 +55,28 @@ static char fileName[256] = "AniStudio";  // Buffer for file name
 static char outputDir[256] = ""; // Buffer for output directory
 
 void DiffusionView::RenderFilePath() {
-    
+    if (ImGui::BeginTable("FilePathTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        // Row for "Filename"
+        ImGui::TableNextColumn();
+        ImGui::Text("Filename:");
+        ImGui::TableNextColumn();
+        if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
+            isFilenameChanged = true;
+        }
 
-    // Editable input for the file name
-    if (ImGui::InputText("Filename", fileName, IM_ARRAYSIZE(fileName))) {
-        isFilenameChanged = true;
-    }
+        // Row for "Output Directory"
+        ImGui::TableNextColumn();
+        ImGui::Text("Output Directory:");
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", outputDir);
+        ImGui::SameLine();
+        if (ImGui::Button("Choose Directory")) {
+            IGFD::FileDialogConfig config;
+            config.path = filePaths.defaultProjectPath; // Set the initial directory
+            ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
+        }
 
-    ImGui::Text("Output Directory: %s", outputDir);
-    ImGui::SameLine();
-
-    // Button to open the file dialog
-    if (ImGui::Button("Choose Directory")) {
-        IGFD::FileDialogConfig config;
-        config.path = filePaths.defaultProjectPath; // Set the initial directory
-        ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
+        ImGui::EndTable();
     }
 
     // Handle the file dialog display and selection
@@ -88,12 +106,10 @@ void DiffusionView::RenderFilePath() {
             }
         }
 
-        // Construct the full file path if both directory and filename are valid
+        // Update the ImageComponent
         if (!newFileName.empty()) {
-            // Update the ImageComponent
             imageComp.fileName = newFileName;
-
-            std::cout << "ImageComponent updated:" << '\n';
+            std::cout << "ImageComponent updated:\n";
             std::cout << "  FileName: " << imageComp.fileName << '\n';
             std::cout << "  FilePath: " << imageComp.filePath << '\n';
         } else {
@@ -103,6 +119,7 @@ void DiffusionView::RenderFilePath() {
         isFilenameChanged = false; // Reset the flag
     }
 }
+
 
 void DiffusionView::RenderLatents() {
     ImGui::InputInt("Width", &latentComp.latentWidth);
