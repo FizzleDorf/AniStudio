@@ -12,12 +12,15 @@ ImageView imageView;
 EntityID currentEntity;
 
 void DiffusionView::RenderModelLoader() {
-    if (ImGui::BeginTable("ModelLoaderTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+    if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
         // Row for "Checkpoint"
         ImGui::TableNextColumn();
-        ImGui::Text("Checkpoint:");
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", modelComp.modelName.c_str());
+        ImGui::Text("Model");
         ImGui::TableNextColumn();
         if (ImGui::Button("...##j6")) {
             IGFD::FileDialogConfig config;
@@ -25,10 +28,16 @@ void DiffusionView::RenderModelLoader() {
             ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                     config);
         }
+        ImGui::SameLine();
         if (ImGui::Button("R##j6")) {
             modelComp.modelName = "";
             modelComp.modelPath = "";
         }
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", modelComp.modelName.c_str());
+
+        RenderVaeLoader();
+
         ImGui::EndTable();
     }
 
@@ -46,8 +55,6 @@ void DiffusionView::RenderModelLoader() {
 
         ImGuiFileDialog::Instance()->Close();
     }
-
-    ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
 }
 
 static char fileName[256] = "AniStudio"; // Buffer for file name
@@ -55,27 +62,39 @@ static char outputDir[256] = "";         // Buffer for output directory
 
 void DiffusionView::RenderFilePath() {
     if (ImGui::BeginTable("Output", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+        ImGui::TableSetupColumn("Input", ImGuiTableColumnFlags_WidthStretch);
+
         // Row for "Filename"
         ImGui::TableNextColumn();
-        ImGui::Text("FileName:");
+        ImGui::Text("FileName");
         ImGui::TableNextColumn();
         if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
             isFilenameChanged = true;
         }
-
+        ImGui::EndTable();
+    }
+    if (ImGui::BeginTable("Output", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthFixed, 54.0f); // Fixed width for Model
+        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
         // Row for "Output Directory"
         ImGui::TableNextColumn();
-        ImGui::Text("Directory:");
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", outputDir);
+        ImGui::Text("Dir Path");
         ImGui::TableNextColumn();
         if (ImGui::Button("...##w8")) {
             IGFD::FileDialogConfig config;
             config.path = filePaths.defaultProjectPath; // Set the initial directory
             ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
         }
-        if (ImGui::Button("...##w8")) {
+        ImGui::SameLine();
+        if (ImGui::Button("R##w9")) {
+            imageComp.fileName = "";
+            imageComp.filePath = "";
         }
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", outputDir);
+
         ImGui::EndTable();
     }
 
@@ -140,14 +159,42 @@ void DiffusionView::RenderPrompts() {
 }
 
 void DiffusionView::RenderSampler() {
-    ImGui::Combo("Sampler", &int(samplerComp.current_sample_method), sample_method_items, sample_method_item_count);
-    ImGui::Combo("Scheduler", &int(samplerComp.current_scheduler_method), scheduler_method_items,
-                 scheduler_method_item_count);
-    ImGui::InputInt("Seed", &samplerComp.seed);
-    ImGui::InputFloat("CFG", &cfgComp.cfg);
-    ImGui::InputFloat("Guidance", &cfgComp.guidance);
-    ImGui::InputInt("Steps", &samplerComp.steps);
-    ImGui::InputFloat("Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f");
+    if (ImGui::BeginTable("SamplerSettingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        auto addRow = [](const char *label, auto renderInput) {
+            ImGui::TableNextRow();
+
+            // Column 1: Label
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted(label);
+
+            // Column 2: Input Field
+            ImGui::TableSetColumnIndex(1);
+            renderInput();
+        };
+
+        // Add rows for each control
+        addRow("Sampler", [&]() {
+            ImGui::Combo("##Sampler", reinterpret_cast<int *>(&samplerComp.current_sample_method), sample_method_items,
+                         sample_method_item_count);
+        });
+
+        addRow("Scheduler", [&]() {
+            ImGui::Combo("##Scheduler", reinterpret_cast<int *>(&samplerComp.current_scheduler_method),
+                         scheduler_method_items, scheduler_method_item_count);
+        });
+
+        addRow("Seed", [&]() { ImGui::InputInt("##Seed", &samplerComp.seed); });
+        addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &cfgComp.cfg); });
+        addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &cfgComp.guidance); });
+        addRow("Steps", [&]() { ImGui::InputInt("##Steps", &samplerComp.steps); });
+        addRow("Denoise", [&]() { ImGui::InputFloat("##Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f"); });
+
+        ImGui::EndTable();
+    }
 }
 
 void DiffusionView::HandleT2IEvent() {
@@ -235,50 +282,92 @@ void DiffusionView::RenderQueue() {
     }
 
     ImGui::Checkbox("Free Parameters Immediately", &samplerComp.free_params_immediately);
+    ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
     ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+    ImGui::SameLine();
     ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 }
 
 void DiffusionView::RenderControlnets() {
-    ImGui::Text("Controlnet:");
-    ImGui::SameLine();
-    ImGui::Text("%s", controlComp.modelName.c_str());
-
-    if (ImGui::Button("...##5b")) {
-        IGFD::FileDialogConfig config;
-        config.path = filePaths.controlnetDir;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
-                                                config);
-    }
-
-    if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-
-            controlComp.modelName = selectedFile;
-            controlComp.modelPath = fullPath;
-            std::cout << "Selected file: " << controlComp.modelName << std::endl;
-            std::cout << "Full path: " << controlComp.modelPath << std::endl;
-            std::cout << "New model path set: " << controlComp.modelPath << std::endl;
+    if (ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextColumn();
+        ImGui::Text("Controlnet");
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", controlComp.modelName.c_str());
+        ImGui::TableNextColumn();
+        if (ImGui::Button("...##5b")) {
+            IGFD::FileDialogConfig config;
+            config.path = filePaths.controlnetDir;
+            ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                    config);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("R##5c")) {
+            controlComp.modelName = "";
+            controlComp.modelPath = "";
         }
 
-        ImGuiFileDialog::Instance()->Close();
+        if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+                std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                controlComp.modelName = selectedFile;
+                controlComp.modelPath = fullPath;
+                std::cout << "Selected file: " << controlComp.modelName << std::endl;
+                std::cout << "Full path: " << controlComp.modelPath << std::endl;
+                std::cout << "New model path set: " << controlComp.modelPath << std::endl;
+            }
+
+            ImGuiFileDialog::Instance()->Close();
+        }
+        ImGui::EndTable();
     }
-    ImGui::InputFloat("Strength", &controlComp.cnStrength, 0.01f, 0.1f, "%.2f");
-    ImGui::InputFloat("Start", &controlComp.applyStart, 0.01f, 0.1f, "%.2f");
-    ImGui::InputFloat("End", &controlComp.applyEnd, 0.01f, 0.1f, "%.2f");
+    
+    if (ImGui::BeginTable("Control Settings", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Strength");
+        ImGui::TableNextColumn();
+        ImGui::InputFloat("##Strength", &controlComp.cnStrength, 0.01f, 0.1f, "%.2f");
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Start");
+        ImGui::TableNextColumn();
+        ImGui::InputFloat("##Start", &controlComp.applyStart, 0.01f, 0.1f, "%.2f");
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("End");
+        ImGui::TableNextColumn();
+        ImGui::InputFloat("##End", &controlComp.applyEnd, 0.01f, 0.1f, "%.2f");
+        ImGui::EndTable();
+    }
 }
 void DiffusionView::RenderEmbeddings() {
+    if(ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextColumn();
     ImGui::Text("Embedding:");
-    ImGui::SameLine();
+        ImGui::TableNextColumn();
     ImGui::Text("%s", embedComp.modelName.c_str());
-
+        ImGui::TableNextColumn();
     if (ImGui::Button("...##v9")) {
         IGFD::FileDialogConfig config;
         config.path = filePaths.embedDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("...##v0")) {
+        embedComp.modelName = "";
+        embedComp.modelPath = "";
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
@@ -300,19 +389,15 @@ void DiffusionView::RenderEmbeddings() {
 void DiffusionView::RenderDiffusionModelLoader() {
 
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 54.0f); // Fixed width for Model
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 100.0f);        // Stretch to fill remaining space
-        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 40.0f);   // Fixed width for Load
+        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f); // Fixed width for Model
+        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
-        
+
         // Row for Unet
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Unet:");
-
-        ImGui::TableNextColumn();
-        ImGui::TextWrapped("%s", ckptComp.modelName.c_str());
-
         ImGui::TableNextColumn();
         if (ImGui::Button("...##n2")) {
             IGFD::FileDialogConfig config;
@@ -320,6 +405,13 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->OpenDialog("LoadUnetDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
                                                     config);
         }
+        ImGui::SameLine();
+        if (ImGui::Button("R##n3")) {
+            ckptComp.modelName = "";
+            ckptComp.modelPath = "";
+        }
+        ImGui::TableNextColumn();
+        ImGui::TextWrapped("%s", ckptComp.modelName.c_str());
 
         if (ImGuiFileDialog::Instance()->Display("LoadUnetDialog", 32, ImVec2(700, 400))) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -334,21 +426,10 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->Close();
         }
 
-        ImGui::SameLine();
-
-        if (ImGui::Button("...##n3")) {
-            ckptComp.modelName = "";
-            ckptComp.modelPath = "";
-        }
- 
         // Row for Clip L
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Clip L:");
-
-        ImGui::TableNextColumn();
-        ImGui::TextWrapped("%s", clipLComp.modelName.c_str());
-
         ImGui::TableNextColumn();
         if (ImGui::Button("...##b7")) {
             IGFD::FileDialogConfig config;
@@ -356,6 +437,13 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->OpenDialog("LoadClipLDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
                                                     config);
         }
+        ImGui::SameLine();
+        if (ImGui::Button("R##n6")) {
+            clipLComp.modelName = "";
+            clipLComp.modelPath = "";
+        }
+        ImGui::TableNextColumn();
+        ImGui::TextWrapped("%s", clipLComp.modelName.c_str());
 
         if (ImGuiFileDialog::Instance()->Display("LoadClipLDialog", 32, ImVec2(700, 400))) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -370,21 +458,10 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->Close();
         }
 
-        ImGui::SameLine();
-
-        if (ImGui::Button("...##n6")) {
-            clipLComp.modelName = "";
-            clipLComp.modelPath = "";
-        }
-
         // Row for Clip G
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Clip G:");
-
-        ImGui::TableNextColumn();
-        ImGui::TextWrapped("%s", clipGComp.modelName.c_str());
-
         ImGui::TableNextColumn();
         if (ImGui::Button("...##g7")) {
             IGFD::FileDialogConfig config;
@@ -392,6 +469,13 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->OpenDialog("LoadClipGDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
                                                     config);
         }
+        ImGui::SameLine();
+        if (ImGui::Button("R##n5")) {
+            clipGComp.modelName = "";
+            clipGComp.modelPath = "";
+        }
+        ImGui::TableNextColumn();
+        ImGui::TextWrapped("%s", clipGComp.modelName.c_str());
 
         if (ImGuiFileDialog::Instance()->Display("LoadClipGDialog", 32, ImVec2(700, 400))) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -405,21 +489,11 @@ void DiffusionView::RenderDiffusionModelLoader() {
             }
             ImGuiFileDialog::Instance()->Close();
         }
-        ImGui::SameLine();
-
-        if (ImGui::Button("...##n5")) {
-            clipGComp.modelName = "";
-            clipGComp.modelPath = "";
-        }
 
         // Row for T5XXL
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("T5XXL:");
-
-        ImGui::TableNextColumn();
-        ImGui::TextWrapped("%s", t5xxlComp.modelName.c_str());
-
         ImGui::TableNextColumn();
         if (ImGui::Button("...##x6")) {
             IGFD::FileDialogConfig config;
@@ -427,6 +501,13 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->OpenDialog("LoadT5XXLDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
                                                     config);
         }
+        ImGui::SameLine();
+        if (ImGui::Button("R##n4")) {
+            t5xxlComp.modelName = "";
+            t5xxlComp.modelPath = "";
+        }
+        ImGui::TableNextColumn();
+        ImGui::TextWrapped("%s", t5xxlComp.modelName.c_str());
 
         if (ImGuiFileDialog::Instance()->Display("LoadT5XXLDialog", 32, ImVec2(700, 400))) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -440,28 +521,31 @@ void DiffusionView::RenderDiffusionModelLoader() {
             }
             ImGuiFileDialog::Instance()->Close();
         }
-        ImGui::SameLine();
 
-        if (ImGui::Button("...##n4")) {
-            t5xxlComp.modelName = "";
-            t5xxlComp.modelPath = "";
-        }
+        // Row for Vae
+        RenderVaeLoader();
 
         ImGui::EndTable();
     }
 }
 
 void DiffusionView::RenderVaeLoader() {
+    ImGui::TableNextColumn();
     ImGui::Text("Vae: ");
-    ImGui::SameLine();
-    ImGui::Text("%s", vaeComp.modelName.c_str());
-
+    ImGui::TableNextColumn();
     if (ImGui::Button("...##4b")) {
         IGFD::FileDialogConfig config;
         config.path = filePaths.vaeDir;
         ImGuiFileDialog::Instance()->OpenDialog("LoadVaeDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                 config);
     }
+    ImGui::SameLine();
+    if (ImGui::Button("R##f7")) {
+        vaeComp.modelName = "";
+        vaeComp.modelPath = "";
+    }
+    ImGui::TableNextColumn();
+    ImGui::Text("%s", vaeComp.modelName.c_str());
 
     if (ImGuiFileDialog::Instance()->Display("LoadVaeDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -489,11 +573,18 @@ void DiffusionView::Render() {
                 // Output FileName
                 RenderFilePath();
                 // Checkpoint loader
-                RenderModelLoader();
-                // Separated Model loader
-                RenderDiffusionModelLoader();
-                // Vae Loader
-                RenderVaeLoader();
+                if (ImGui::BeginTabBar("Model Loader")) {
+                    if (ImGui::BeginTabItem("Full")) {
+                        RenderModelLoader();
+                        ImGui::EndTabItem();
+                    }
+                    // Separated Model loader
+                    if (ImGui::BeginTabItem("Separate")) {
+                        RenderDiffusionModelLoader();
+                        ImGui::EndTabItem();
+                    }
+                }
+                ImGui::EndTabBar();
                 // Latent Params
                 RenderLatents();
                 // Prompt Inputs
