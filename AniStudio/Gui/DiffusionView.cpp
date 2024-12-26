@@ -349,42 +349,45 @@ void DiffusionView::RenderControlnets() {
     }
 }
 void DiffusionView::RenderEmbeddings() {
-    if(ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+    if (ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextColumn();
-    ImGui::Text("Embedding:");
+        ImGui::Text("Embedding:");
         ImGui::TableNextColumn();
-    ImGui::Text("%s", embedComp.modelName.c_str());
+        ImGui::Text("%s", embedComp.modelName.c_str());
         ImGui::TableNextColumn();
-    if (ImGui::Button("...##v9")) {
-        IGFD::FileDialogConfig config;
-        config.path = filePaths.embedDir;
-        ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
-                                                config);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("...##v0")) {
-        embedComp.modelName = "";
-        embedComp.modelPath = "";
-    }
-
-    if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-
-            embedComp.modelName = selectedFile;
-            embedComp.modelPath = fullPath;
-            std::cout << "Selected file: " << embedComp.modelName << std::endl;
-            std::cout << "Full path: " << embedComp.modelPath << std::endl;
-            std::cout << "New model path set: " << embedComp.modelPath << std::endl;
+        if (ImGui::Button("...##v9")) {
+            IGFD::FileDialogConfig config;
+            config.path = filePaths.embedDir;
+            ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
+                                                    config);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("...##v0")) {
+            embedComp.modelName = "";
+            embedComp.modelPath = "";
         }
 
-        ImGuiFileDialog::Instance()->Close();
+        if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+                std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+                embedComp.modelName = selectedFile;
+                embedComp.modelPath = fullPath;
+                std::cout << "Selected file: " << embedComp.modelName << std::endl;
+                std::cout << "Full path: " << embedComp.modelPath << std::endl;
+                std::cout << "New model path set: " << embedComp.modelPath << std::endl;
+            }
+
+            ImGuiFileDialog::Instance()->Close();
+        }
+        ImGui::EndTable();
     }
 }
+
 
 void DiffusionView::RenderDiffusionModelLoader() {
 
