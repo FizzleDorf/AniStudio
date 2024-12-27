@@ -2,11 +2,28 @@
 :: Activate the virtual environment
 call venv\Scripts\activate.bat
 
-:: Remove build directory if it exists and create a new one
-if exist build rmdir /s /q build
+:: Navigate to the build directory if it exists
+if exist build (
+    cd build
+    
+    :: Delete specific directories if they exist
+    if exist Release rmdir /s /q Release
+    if exist bin rmdir /s /q bin
+    if exist external rmdir /s /q external
+    if exist x64 rmdir /s /q x64
+    
+    :: Delete all files directly in the build directory
+    del /q *
+
+    :: Go back to the parent directory
+    cd ..
+) else (
+    echo "Build directory does not exist."
+)
+
+:: Create build directory if it was deleted or does not exist
 mkdir build
 cd build
-
 
 :: Configure with CMake
 :: cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
