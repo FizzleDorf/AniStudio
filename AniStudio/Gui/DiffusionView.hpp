@@ -14,7 +14,7 @@ public:
     void RenderInputImage();
     void RenderSampler();
     void RenderPrompts();
-    void RenderQueue();
+    void RenderOther();
     void RenderQueueList();
     void RenderFilePath();
     void Render();
@@ -37,6 +37,7 @@ public:
 
 private:
     bool isFilenameChanged = false; 
+    int numQueues = 1;
     // ECS-related variables
     EntityID entity;
 
