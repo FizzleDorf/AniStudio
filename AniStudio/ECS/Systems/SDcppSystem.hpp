@@ -42,17 +42,23 @@ namespace ECS {
 
 class SDCPPSystem : public BaseSystem {
 public:
+    struct QueueItem {
+        EntityID entityID;
+        bool processing;
+    };
+
     SDCPPSystem() : stopWorker(false), workerThreadRunning(false) {
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<InputImageComponent>();
+        StartWorker();
     }
 
     ~SDCPPSystem() { StopWorker(); }
 
-    void QueueInference(EntityID entityID) {
+    void QueueInference(const EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push(entityID);   
+            inferenceQueue.push_back({entityID, false});
         }
         queueCondition.notify_one();
         std::cout << "Entity " << entityID << " queued for inference." << std::endl;
@@ -62,7 +68,31 @@ public:
         }
     }
 
-    void Update(float deltaT) override {}
+    void RemoveFromQueue(const size_t index) {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        if (index < inferenceQueue.size() && !inferenceQueue[index].processing) {
+            inferenceQueue.erase(inferenceQueue.begin() + index);
+        }
+    }
+
+    void MoveInQueue(const size_t fromIndex, const size_t toIndex) {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        if (fromIndex >= inferenceQueue.size() || toIndex >= inferenceQueue.size())
+            return;
+        if (inferenceQueue[fromIndex].processing)
+            return;
+
+        auto item = inferenceQueue[fromIndex];
+        inferenceQueue.erase(inferenceQueue.begin() + fromIndex);
+        inferenceQueue.insert(inferenceQueue.begin() + toIndex, item);
+    }
+
+    std::vector<QueueItem> GetQueueSnapshot() {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        return inferenceQueue;
+    }
+
+    void Update(const float deltaT) override {}
 
     void StopWorker() {
         {
@@ -79,15 +109,6 @@ public:
         workerThreadRunning = false;
     }
 
-private:
-    std::queue<EntityID> inferenceQueue;
-    std::mutex queueMutex;
-    std::condition_variable queueCondition;
-    std::atomic<bool> stopWorker;
-    std::atomic<bool> workerThreadRunning;
-    std::mutex workerMutex;
-    std::thread workerThread;
-
     void StartWorker() {
         std::lock_guard<std::mutex> lock(workerMutex);
         if (workerThreadRunning) {
@@ -95,36 +116,56 @@ private:
         }
 
         workerThreadRunning = true;
-
-        workerThread = std::thread([this]() {
-            while (true) {
-                EntityID entityID;
-                {
-                    std::unique_lock<std::mutex> lock(queueMutex);
-                    queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
-
-                    if (stopWorker && inferenceQueue.empty()) {
-                        break;
-                    }
-
-                    entityID = inferenceQueue.front();
-                    inferenceQueue.pop();
-                }
-
-                RunInference(entityID);
-
-                // Notify the condition variable to allow processing the next item
-                queueCondition.notify_one();
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(workerMutex);
-                workerThreadRunning = false;
-            }
-        });
+        workerThread = std::thread([this]() { WorkerLoop(); });
     }
 
-    void RunInference(EntityID entityID) {
+private:
+    std::vector<QueueItem> inferenceQueue;
+    std::mutex queueMutex;
+    std::condition_variable queueCondition;
+    std::atomic<bool> stopWorker;
+    std::atomic<bool> workerThreadRunning;
+    std::mutex workerMutex;
+    std::thread workerThread;
+
+    
+    void SDCPPSystem::WorkerLoop() {
+        while (workerThreadRunning) {
+            EntityID currentEntityID = 0;
+            {
+                std::unique_lock<std::mutex> lock(queueMutex);
+                queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
+
+                if (stopWorker) {
+                    break;
+                }
+
+                if (!inferenceQueue.empty()) {
+                    inferenceQueue.front().processing = true;
+                    currentEntityID = inferenceQueue.front().entityID;
+                }
+            }
+
+            if (currentEntityID != 0) {
+                try {
+                    RunInference(currentEntityID);
+                } catch (const std::exception &e) {
+                    std::cerr << "Inference error: " << e.what() << std::endl;
+                }
+
+                {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    if (!inferenceQueue.empty()) {
+                        inferenceQueue.erase(inferenceQueue.begin());
+                    }
+                }
+            }
+        }
+
+        workerThreadRunning = false;
+    }
+
+    void RunInference(const EntityID entityID) {
         sd_ctx_t *sd_context = nullptr;
         try {
             std::cout << "Starting inference for Entity " << entityID << std::endl;

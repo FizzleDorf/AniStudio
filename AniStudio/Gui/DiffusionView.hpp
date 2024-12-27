@@ -15,9 +15,10 @@ public:
     void RenderSampler();
     void RenderPrompts();
     void RenderQueue();
+    void RenderQueueList();
     void RenderFilePath();
     void Render();
-
+    
     void RenderDiffusionModelLoader();
     void RenderVaeLoader();
     void RenderControlnets();

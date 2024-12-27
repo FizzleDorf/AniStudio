@@ -198,72 +198,77 @@ void DiffusionView::RenderSampler() {
 }
 
 void DiffusionView::HandleT2IEvent() {
+    std::cout << "Registering SDCPPSystem..." << std::endl;
     mgr.RegisterSystem<SDCPPSystem>();
-    Event event;
+
+    std::cout << "Adding new entity..." << std::endl;
     EntityID newEntity = mgr.AddNewEntity();
+    if (newEntity == 0) {
+        std::cerr << "Failed to create new entity!" << std::endl;
+        return;
+    }
+
     currentEntity = newEntity;
-    std::cout << "Initialized entity with ID: " << newEntity << "\n";
+    std::cout << "Initialized entity with ID: " << newEntity << std::endl;
 
-    mgr.AddComponent<ModelComponent>(newEntity);
-    mgr.AddComponent<CLipLComponent>(newEntity);
-    mgr.AddComponent<CLipGComponent>(newEntity);
-    mgr.AddComponent<T5XXLComponent>(newEntity);
-    mgr.AddComponent<DiffusionModelComponent>(newEntity);
-    mgr.AddComponent<VaeComponent>(newEntity);
-    mgr.AddComponent<TaesdComponent>(newEntity);
-    mgr.AddComponent<ControlnetComponent>(newEntity);
-    mgr.AddComponent<LoraComponent>(newEntity);
-    mgr.AddComponent<LatentComponent>(newEntity);
-    mgr.AddComponent<SamplerComponent>(newEntity);
-    mgr.AddComponent<CFGComponent>(newEntity);
-    mgr.AddComponent<PromptComponent>(newEntity);
-    mgr.AddComponent<EmbeddingComponent>(newEntity);
-    mgr.AddComponent<LayerSkipComponent>(newEntity);
-    mgr.AddComponent<ImageComponent>(newEntity);
+    try {
+        // Add components
+        mgr.AddComponent<ModelComponent>(newEntity);
+        mgr.AddComponent<CLipLComponent>(newEntity);
+        mgr.AddComponent<CLipGComponent>(newEntity);
+        mgr.AddComponent<T5XXLComponent>(newEntity);
+        mgr.AddComponent<DiffusionModelComponent>(newEntity);
+        mgr.AddComponent<VaeComponent>(newEntity);
+        mgr.AddComponent<TaesdComponent>(newEntity);
+        mgr.AddComponent<ControlnetComponent>(newEntity);
+        mgr.AddComponent<LoraComponent>(newEntity);
+        mgr.AddComponent<LatentComponent>(newEntity);
+        mgr.AddComponent<SamplerComponent>(newEntity);
+        mgr.AddComponent<CFGComponent>(newEntity);
+        mgr.AddComponent<PromptComponent>(newEntity);
+        mgr.AddComponent<EmbeddingComponent>(newEntity);
+        mgr.AddComponent<LayerSkipComponent>(newEntity);
+        mgr.AddComponent<ImageComponent>(newEntity);
 
-    std::cout << "Assigning components to new Entity: " << newEntity << "\n";
-    mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
-    mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
-    mgr.GetComponent<CLipGComponent>(newEntity) = clipGComp;
-    mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
-    mgr.GetComponent<DiffusionModelComponent>(newEntity) = ckptComp;
-    mgr.GetComponent<VaeComponent>(newEntity) = vaeComp;
-    mgr.GetComponent<TaesdComponent>(newEntity) = taesdComp;
-    mgr.GetComponent<ControlnetComponent>(newEntity) = controlComp;
-    mgr.GetComponent<LoraComponent>(newEntity) = loraComp;
-    mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
-    mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
-    mgr.GetComponent<CFGComponent>(newEntity) = cfgComp;
-    mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
-    mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
-    mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
-    mgr.GetComponent<ImageComponent>(newEntity) = imageComp;
+        // Assign component data
+        mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
+        mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
+        mgr.GetComponent<CLipGComponent>(newEntity) = clipGComp;
+        mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
+        mgr.GetComponent<DiffusionModelComponent>(newEntity) = ckptComp;
+        mgr.GetComponent<VaeComponent>(newEntity) = vaeComp;
+        mgr.GetComponent<TaesdComponent>(newEntity) = taesdComp;
+        mgr.GetComponent<ControlnetComponent>(newEntity) = controlComp;
+        mgr.GetComponent<LoraComponent>(newEntity) = loraComp;
+        mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
+        mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
+        mgr.GetComponent<CFGComponent>(newEntity) = cfgComp;
+        mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
+        mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
+        mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
+        mgr.GetComponent<ImageComponent>(newEntity) = imageComp;
 
-    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << "\n";
-    std::cout << "CLipLComponent.encoderPath: " << mgr.GetComponent<CLipLComponent>(newEntity).modelPath << "\n";
-    std::cout << "CLipGComponent.encoderPath: " << mgr.GetComponent<CLipGComponent>(newEntity).modelPath << "\n";
-    std::cout << "T5XXLComponent.encoderPath: " << mgr.GetComponent<T5XXLComponent>(newEntity).modelPath << "\n";
-    std::cout << "DiffusionModelComponent.ckptPath: " << mgr.GetComponent<DiffusionModelComponent>(newEntity).modelPath
-              << "\n";
-    std::cout << "VaeComponent.vaePath: " << mgr.GetComponent<VaeComponent>(newEntity).modelPath << "\n";
-    std::cout << "SamplerComponent.steps: " << mgr.GetComponent<SamplerComponent>(newEntity).steps << "\n";
-    std::cout << "SamplerComponent.denoise: " << mgr.GetComponent<SamplerComponent>(newEntity).denoise << "\n";
-    std::cout << "SamplerComponent.current_sample_method: "
-              << mgr.GetComponent<SamplerComponent>(newEntity).current_sample_method << "\n";
-    std::cout << "SamplerComponent.current_scheduler_method: "
-              << mgr.GetComponent<SamplerComponent>(newEntity).current_scheduler_method << "\n";
-    std::cout << "SamplerComponent.current_type_method: "
-              << mgr.GetComponent<SamplerComponent>(newEntity).current_type_method << "\n";
-    std::cout << "CFGComponent.cfg: " << mgr.GetComponent<CFGComponent>(newEntity).cfg << "\n";
-    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << "\n";
-    std::cout << "PromptComponent.negPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).negPrompt << "\n";
-    std::cout << "LatentComponent.latentWidth: " << mgr.GetComponent<LatentComponent>(newEntity).latentWidth << "\n";
-    std::cout << "LatentComponent.latentHeight: " << mgr.GetComponent<LatentComponent>(newEntity).latentHeight << "\n";
+        std::cout << "Components successfully assigned to entity " << newEntity << std::endl;
 
+    } catch (const std::exception &e) {
+        std::cerr << "Error adding components: " << e.what() << std::endl;
+        return;
+    }
+
+    // Log component values for debugging
+    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << std::endl;
+    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << std::endl;
+    std::cout << "LatentComponent.latentWidth: " << mgr.GetComponent<LatentComponent>(newEntity).latentWidth
+              << std::endl;
+
+    // Queue event
+    Event event;
     event.entityID = newEntity;
     event.type = EventType::InferenceRequest;
     ANI::Events::Ref().QueueEvent(event);
+    std::cout << "Inference request queued for entity: " << newEntity << std::endl;
 }
+
 
 void DiffusionView::HandleUpscaleEvent() {
     Event event;
@@ -566,6 +571,73 @@ void DiffusionView::RenderVaeLoader() {
     }
 }
 
+void DiffusionView::RenderQueueList() {
+    if (ImGui::BeginTable("InferenceQueue", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+        ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
+        auto queueItems = sdSystem->GetQueueSnapshot();
+        
+        for (size_t i = 0; i < queueItems.size(); i++) {
+            const auto &item = queueItems[i];
+            auto &prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
+            ImGui::TableNextRow();
+
+            // Status column
+            ImGui::TableNextColumn();
+            if (item.processing) {
+                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
+            } else {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
+            }
+
+            // Prompt column
+            ImGui::TableNextColumn();
+            if (prompt.length() > 50) {
+                ImGui::Text("%s...", prompt.substr(0, 47).c_str());
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s", prompt.c_str());
+                }
+            } else {
+                ImGui::Text("%s", prompt.c_str());
+            }
+
+            // Controls column
+            ImGui::TableNextColumn();
+            if (!item.processing) {
+                if (ImGui::Button(("Remove##" + std::to_string(i)).c_str())) {
+                    sdSystem->RemoveFromQueue(i);
+                }
+            }
+
+            // Move column
+            ImGui::TableNextColumn();
+            if (!item.processing) {
+                if (i > 0) {
+                    if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
+                        sdSystem->MoveInQueue(i, i - 1);
+                    }
+                }
+                if (i < queueItems.size() - 1) {
+                    if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
+                        sdSystem->MoveInQueue(i, i + 1);
+                    }
+                }
+            }
+        }
+
+        ImGui::EndTable();
+    }
+
+    if (ImGui::Button("Queue New")) {
+        HandleT2IEvent();
+    }
+}
+
 void DiffusionView::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
@@ -573,6 +645,7 @@ void DiffusionView::Render() {
             if (ImGui::BeginTabItem("Txt2Img")) {
                 // Queue Controls
                 RenderQueue();
+                RenderQueueList();
                 // Output FileName
                 RenderFilePath();
                 // Checkpoint loader
