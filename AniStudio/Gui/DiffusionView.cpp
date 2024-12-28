@@ -93,7 +93,7 @@ void DiffusionView::RenderFilePath() {
             imageComp.filePath = "";
         }
         ImGui::TableNextColumn();
-        ImGui::Text("%s", outputDir);
+        ImGui::Text("%s", imageComp.filePath.c_str());
 
         ImGui::EndTable();
     }
@@ -356,8 +356,6 @@ void DiffusionView::RenderEmbeddings() {
         ImGui::TableNextColumn();
         ImGui::Text("Embedding:");
         ImGui::TableNextColumn();
-        ImGui::Text("%s", embedComp.modelName.c_str());
-        ImGui::TableNextColumn();
         if (ImGui::Button("...##v9")) {
             IGFD::FileDialogConfig config;
             config.path = filePaths.embedDir;
@@ -369,6 +367,8 @@ void DiffusionView::RenderEmbeddings() {
             embedComp.modelName = "";
             embedComp.modelPath = "";
         }
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", embedComp.modelName.c_str());
 
         if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
