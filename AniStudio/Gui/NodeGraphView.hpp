@@ -23,7 +23,7 @@ public:
 
 private:
     // Editor context to manage the node graph
-    ed::EditorContext *m_Context = nullptr;
+    ed::EditorContext *m_Context;
 };
 
 #endif // NODEGRAPHVIEW_HPP
