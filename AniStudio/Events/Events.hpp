@@ -1,7 +1,7 @@
 #pragma once
 #include "ECS.h"
 #include "FilePaths.hpp"
-#include "LoadedHeaps.hpp"
+#include "LoadedMedia.hpp"
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>

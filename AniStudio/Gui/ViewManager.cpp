@@ -2,6 +2,7 @@
 
 void ViewManager::Init() {
     canvasView = std::make_unique<CanvasView>();
+    canvasView->Init();
     debugView = std::make_unique<DebugView>();
     diffusionView = std::make_unique<DiffusionView>();
     meshView = std::make_unique<MeshView>();
@@ -31,5 +32,6 @@ void ViewManager::Render() {
 }
 
 void ViewManager::Update(const float deltaT) { 
-    canvasView->Update(deltaT); 
+    if (viewState.showDrawingCanvas)
+        canvasView->Update(deltaT);
 }

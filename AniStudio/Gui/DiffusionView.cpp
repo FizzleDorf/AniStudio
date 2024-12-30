@@ -198,8 +198,6 @@ void DiffusionView::RenderSampler() {
 }
 
 void DiffusionView::HandleT2IEvent() {
-    std::cout << "Registering SDCPPSystem..." << std::endl;
-    mgr.RegisterSystem<SDCPPSystem>();
 
     std::cout << "Adding new entity..." << std::endl;
     EntityID newEntity = mgr.AddNewEntity();
@@ -599,56 +597,60 @@ void DiffusionView::RenderQueueList() {
         ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
 
+
         auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
-        auto queueItems = sdSystem->GetQueueSnapshot();
+        if (sdSystem) {
+            auto queueItems = sdSystem->GetQueueSnapshot();
+            for (size_t i = 0; i < queueItems.size(); i++) {
+                const auto &item = queueItems[i];
+                auto &prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
+                ImGui::TableNextRow();
 
-        for (size_t i = 0; i < queueItems.size(); i++) {
-            const auto &item = queueItems[i];
-            auto &prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
-            ImGui::TableNextRow();
-
-            // Status column
-            ImGui::TableNextColumn();
-            if (item.processing) {
-                ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
-            } else {
-                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
-            }
-
-            // Controls column
-            ImGui::TableNextColumn();
-            if (!item.processing) {
-                if (ImGui::Button(("Remove##" + std::to_string(i)).c_str())) {
-                    sdSystem->RemoveFromQueue(i);
+                // Status column
+                ImGui::TableNextColumn();
+                if (item.processing) {
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
+                } else {
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
                 }
-            }
 
-            // Move column
-            ImGui::TableNextColumn();
-            if (!item.processing) {
-                if (i > 0) {
-                    if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
-                        sdSystem->MoveInQueue(i, i - 1);
+                // Controls column
+                ImGui::TableNextColumn();
+                if (!item.processing) {
+                    if (ImGui::Button(("Remove##" + std::to_string(i)).c_str())) {
+                        sdSystem->RemoveFromQueue(i);
                     }
                 }
-                if (i < queueItems.size() - 1) {
-                    if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
-                        sdSystem->MoveInQueue(i, i + 1);
+
+                // Move column
+                ImGui::TableNextColumn();
+                if (!item.processing) {
+                    if (i > 0) {
+                        if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
+                            sdSystem->MoveInQueue(i, i - 1);
+                        }
+                    }
+                    if (i < queueItems.size() - 1) {
+                        if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
+                            sdSystem->MoveInQueue(i, i + 1);
+                        }
                     }
                 }
-            }
 
-            // Prompt column
-            ImGui::TableNextColumn();
-            if (prompt.length() > 50) {
-                ImGui::Text("%s...", prompt.substr(0, 47).c_str());
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s", prompt.c_str());
+                // Prompt column
+                ImGui::TableNextColumn();
+                if (prompt.length() > 50) {
+                    ImGui::Text("%s...", prompt.substr(0, 47).c_str());
+                    if (ImGui::IsItemHovered()) {
+                        ImGui::SetTooltip("%s", prompt.c_str());
+                    }
+                } else {
+                    ImGui::Text("%s", prompt.c_str());
                 }
-            } else {
-                ImGui::Text("%s", prompt.c_str());
             }
+        
         }
+        
 
         ImGui::EndTable();
     }

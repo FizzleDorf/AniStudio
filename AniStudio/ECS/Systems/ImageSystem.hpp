@@ -4,7 +4,7 @@
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
 #include "ImageComponent.hpp"
-#include "LoadedHeaps.hpp"
+#include "LoadedMedia.hpp"
 #include <GL/glew.h>
 #include <iostream>
 #include <stb_image.h>

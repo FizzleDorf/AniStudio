@@ -47,7 +47,7 @@ public:
         bool processing;
     };
 
-    SDCPPSystem() : stopWorker(false), workerThreadRunning(false) {
+    SDCPPSystem() : stopWorker(false), workerThreadRunning(false), inferenceThreadRunning(false) {
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<InputImageComponent>();
         StartWorker();
@@ -125,6 +125,7 @@ private:
     std::condition_variable queueCondition;
     std::atomic<bool> stopWorker;
     std::atomic<bool> workerThreadRunning;
+    std::atomic<bool> inferenceThreadRunning;
     std::mutex workerMutex;
     std::thread workerThread;
 
@@ -166,6 +167,11 @@ private:
     }
 
     void RunInference(const EntityID entityID) {
+        if (inferenceThreadRunning)
+            return;
+
+        inferenceThreadRunning.store(true);
+
         sd_ctx_t *sd_context = nullptr;
         try {
             std::cout << "Starting inference for Entity " << entityID << std::endl;
@@ -176,12 +182,14 @@ private:
             sd_context = InitializeStableDiffusionContext(entityID);
             if (!sd_context) {
                 mgr.DestroyEntity(entityID);
+                inferenceThreadRunning.store(false);
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
             }
 
             sd_image_t *image = GenerateImage(sd_context, entityID);
             if (!image) {
                 mgr.DestroyEntity(entityID);
+                inferenceThreadRunning.store(false);
                 throw std::runtime_error("Failed to generate image!");
             }
 
@@ -189,11 +197,13 @@ private:
 
             free_sd_ctx(sd_context);
             std::cout << "Inference completed for Entity " << entityID << std::endl;
+            inferenceThreadRunning.store(false);
         } catch (const std::exception &e) {
             std::cerr << "Exception during inference: " << e.what() << std::endl;
             if (sd_context) {
                 free_sd_ctx(sd_context);
             }
+            inferenceThreadRunning.store(false);
         }
     }
 

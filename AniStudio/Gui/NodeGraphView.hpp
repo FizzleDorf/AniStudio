@@ -9,20 +9,16 @@ namespace ed = ax::NodeEditor;
 
 class NodeGraphView : public BaseView {
 public:
-    NodeGraphView();  // Constructor to initialize editor context
-    ~NodeGraphView(); // Destructor to clean up resources
+    NodeGraphView();
+    ~NodeGraphView();
 
-    // Initialize the node editor context
     void Initialize();
 
-    // Clean up when the editor is stopped
     void Cleanup();
 
-    // Main render loop for drawing the node editor
     void Render();
 
 private:
-    // Editor context to manage the node graph
     ed::EditorContext *m_Context;
 };
 

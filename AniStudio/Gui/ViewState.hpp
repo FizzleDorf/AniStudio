@@ -9,7 +9,7 @@ struct ViewState {
     bool showImageView = true;
     bool showNodeGraphView = false;
     bool showSequencerView = false;
-    bool showDebugView = true;
+    bool showDebugView = false;
 };
 
 extern ViewState viewState;

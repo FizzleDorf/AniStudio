@@ -3,7 +3,7 @@
 
 #include "BaseView.hpp"
 #include "ImageComponent.hpp"
-#include "LoadedHeaps.hpp"
+#include "LoadedMedia.hpp"
 #include <pch.h>
 
 namespace ECS {
