@@ -15,18 +15,20 @@ struct Point {
 class CanvasView : public BaseView {
 public:
     CanvasView();
-    void Init() { InitializeCanvas(); }
-    void Render();                            // Render the entire canvas and UI
-    void Update(const float deltaT) override; // Update logic (e.g., brush strokes)
+    void Init() {}
+    void Render();
+    void Update(const float deltaT) override;
 
 private:
     // ECS and Layer Manager references
     LayerManager layerManager;
     std::vector<Point> points;
+    
     // Canvas properties
     GLuint canvasFBO;     // Framebuffer Object
     GLuint canvasTexture; // Canvas texture
     glm::vec2 canvasSize; // Size of the canvas
+    ImageComponent currentLayer;
 
     // Brush properties
     struct Brush {
@@ -38,7 +40,7 @@ private:
     glm::vec2 lastMousePos; // Last mouse position
     bool isDrawing = false; // Whether the user is drawing
     int currentLayerIndex;  // Index of the currently active layer
-
+    void InterpolatePoints(const ImVec2 &p0, const ImVec2 &p1, float step, std::vector<ImVec2> &points);
     // Private methods
     void RenderCanvas();        // Render the drawing canvas
     void RenderBrushSettings(); // UI for brush settings

@@ -2,6 +2,11 @@
 #include <GL/glew.h>
 #include <iostream>
 
+template <typename T>
+T lerp(const T &a, const T &b, float t) {
+    return a + t * (b - a);
+}
+
 // Constructor
 CanvasView::CanvasView() : canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5.0f}), currentLayerIndex(0) {
     layerManager.SetCanvasSize(canvasSize.x, canvasSize.y);
@@ -9,23 +14,7 @@ CanvasView::CanvasView() : canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5
 }
 
 // Initialize the canvas framebuffer and texture
-void CanvasView::InitializeCanvas() {
-    /*glGenFramebuffers(1, &canvasFBO);
-    glBindFramebuffer(GL_FRAMEBUFFER, canvasFBO);
-
-    glGenTextures(1, &canvasTexture);
-    glBindTexture(GL_TEXTURE_2D, canvasTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, canvasSize.x, canvasSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, canvasTexture, 0);
-
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "Error: Canvas framebuffer is not complete!" << std::endl;
-    }
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);*/
-}
+void CanvasView::InitializeCanvas() {}
 
 // Main render method
 void CanvasView::Render() {
@@ -36,37 +25,88 @@ void CanvasView::Render() {
 
 // Render the drawing canvas
 void CanvasView::RenderCanvas() {
-    ImGui::Begin("Canvas");
+    // Begin the graph editor
+    ImGui::Begin("Canvas Editor");
 
-    ImVec2 canvas_p0 = ImGui::GetCursorScreenPos(); // Top-left corner of the canvas
-    ImVec2 canvas_sz = ImVec2(canvasSize.x, canvasSize.y); // Fixed canvas size
+    static bool isActive = false;        // Indicates if the graph is active
+    static ImVec2 scrolling(0.0f, 0.0f); // Initial scrolling offset
+    static float zoom = 1.0f;            // Initial zoom level
+    static const float zoomMin = 0.1f;
+    static const float zoomMax = 3.0f;
+
+    // Check if the graph is active
+    isActive = ImGui::IsWindowFocused();
+
+    // Get the available space for the graph
+    ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();                                  // Top-left corner
+    ImVec2 canvas_sz = ImGui::GetContentRegionAvail();                               // Available space
     ImVec2 canvas_p1 = ImVec2(canvas_p0.x + canvas_sz.x, canvas_p0.y + canvas_sz.y); // Bottom-right corner
 
     ImDrawList *draw_list = ImGui::GetWindowDrawList();
 
-    // Draw canvas background
-    draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(50, 50, 50, 255)); // Dark gray background
+    // Draw background and border
+    draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(30, 30, 30, 255)); // Dark gray background
     draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));    // White border
 
-    // Check if the mouse is inside the canvas and draw
-    if (ImGui::IsMouseHoveringRect(canvas_p0, canvas_p1) && ImGui::IsMouseDown(0)) {
-        ImVec2 mouse_pos = ImGui::GetMousePos();
-
-        // Clamp the brush position to the canvas boundaries
-        mouse_pos.x = std::clamp(mouse_pos.x, canvas_p0.x, canvas_p1.x - 1);
-        mouse_pos.y = std::clamp(mouse_pos.y, canvas_p0.y, canvas_p1.y - 1);
-
-        points.push_back({mouse_pos.x, mouse_pos.y, ImVec4(brush.color.r, brush.color.g, brush.color.b, brush.color.a)});
+    // Handle zooming with the mouse wheel
+    ImGuiIO &io = ImGui::GetIO();
+    if (ImGui::IsWindowHovered() && io.MouseWheel != 0.0f) {
+        float zoomDelta = io.MouseWheel * 0.1f;
+        zoom = std::clamp(zoom + zoomDelta, zoomMin, zoomMax);
     }
 
-    // Draw points
+    // Handle panning with mouse drag
+    if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f)) {
+        ImVec2 delta = io.MouseDelta;
+        scrolling.x += delta.x / zoom;
+        scrolling.y += delta.y / zoom;
+    }
+
+    // Transform for zoom and pan
+    ImVec2 graph_origin = ImVec2(canvas_p0.x + scrolling.x * zoom, canvas_p0.y + scrolling.y * zoom);
+
+    // Draw grid lines
+    float grid_step = 50.0f * zoom;
+    for (float x = fmodf(scrolling.x * zoom, grid_step); x < canvas_sz.x; x += grid_step)
+        draw_list->AddLine(ImVec2(canvas_p0.x + x, canvas_p0.y), ImVec2(canvas_p0.x + x, canvas_p1.y),
+                           IM_COL32(200, 200, 200, 40));
+    for (float y = fmodf(scrolling.y * zoom, grid_step); y < canvas_sz.y; y += grid_step)
+        draw_list->AddLine(ImVec2(canvas_p0.x, canvas_p0.y + y), ImVec2(canvas_p1.x, canvas_p0.y + y),
+                           IM_COL32(200, 200, 200, 40));
+
+    // Draw existing paint strokes
+    static std::vector<ImVec2> points;
     for (const auto &point : points) {
-        draw_list->AddCircleFilled(ImVec2(point.x, point.y), brush.size, IM_COL32(point.color.x * 255, point.color.y * 255, point.color.z * 255, point.color.w * 255));
+        ImVec2 transformed_point = ImVec2(graph_origin.x + point.x * zoom, graph_origin.y + point.y * zoom);
+        draw_list->AddCircleFilled(transformed_point, brush.size * zoom,
+            IM_COL32(static_cast<int>(brush.color.r * 255.0f), static_cast<int>(brush.color.g * 255.0f),
+                     static_cast<int>(brush.color.b * 255.0f), static_cast<int>(brush.color.a * 255.0f)));
     }
 
+    // Handle painting with interpolation for smoother strokes
+    if (isActive) {
+        if (ImGui::IsMouseHoveringRect(canvas_p0, canvas_p1) && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            ImVec2 mouse_pos = ImGui::GetMousePos();
+            ImVec2 local_pos = ImVec2((mouse_pos.x - graph_origin.x) / zoom, (mouse_pos.y - graph_origin.y) / zoom);
+
+            // Interpolate points to add smoothness to the stroke
+            if (!points.empty()) {
+                // Get the last point and interpolate to the new one
+                ImVec2 last_point = points.back();
+                InterpolatePoints(last_point, local_pos, brush.size * 0.1f,
+                                  points); // Step size proportional to brush size
+            }
+
+            points.push_back(local_pos); // Add the current point
+        }
+    } else {
+        ImGui::Text("Painting inactive: Pin the graph and ensure it is active.");
+    }
+
+
+    // End the graph editor
     ImGui::End();
 }
-
 
 // UI for brush settings
 void CanvasView::RenderBrushSettings() {
@@ -98,39 +138,18 @@ void CanvasView::RenderLayerManager() {
     ImGui::End();
 }
 
-// Update method (for brush strokes)
-void CanvasView::Update(const float deltaT) {
-    //if (ImGui::IsMouseDown(0)) { // Left mouse button is down
-    //    glm::vec2 mousePos = glm::vec2(ImGui::GetMousePos().x, ImGui::GetMousePos().y) -
-    //                         glm::vec2(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y);
+void CanvasView::Update(const float deltaT) {}
 
-    //    if (mousePos.x < 0 || mousePos.y < 0 || mousePos.x >= canvasSize.x || mousePos.y >= canvasSize.y) {
-    //        std::cerr << "Error: Mouse position out of bounds!" << std::endl;
-    //        return; // Prevent out-of-bounds drawing
-    //    }
+void CanvasView::InterpolatePoints(const ImVec2 &p0, const ImVec2 &p1, float step, std::vector<ImVec2> &points) {
+    float distance = glm::distance(glm::vec2(p0.x, p0.y), glm::vec2(p1.x, p1.y));
+    int numPoints = static_cast<int>(distance / step);
 
-    //    if (!isDrawing) {
-    //        isDrawing = true;
-    //        lastMousePos = mousePos;
-    //    }
-
-    //    // Interpolate points and draw
-    //    float distance = glm::distance(lastMousePos, mousePos);
-    //    if (distance > brush.size / 2.0f) {
-    //        int steps = static_cast<int>(distance / (brush.size / 2.0f));
-    //        glm::vec2 stepVector = (mousePos - lastMousePos) / static_cast<float>(steps);
-
-    //        for (int i = 0; i <= steps; ++i) {
-    //            glm::vec2 interpolatedPoint = lastMousePos + stepVector * static_cast<float>(i);
-    //            // Draw to the current layer
-    //            DrawOnLayer();
-    //        }
-    //    }
-
-    //    lastMousePos = mousePos;
-    //} else {
-    //    isDrawing = false;
-    //}
+    for (int i = 0; i <= numPoints; ++i) {
+        float t = i / float(numPoints);
+        float x = lerp(p0.x, p1.x, t);
+        float y = lerp(p0.y, p1.y, t);
+        points.push_back(ImVec2(x, y));
+    }
 }
 
 // Draw on the current layer
@@ -161,3 +180,4 @@ void CanvasView::DrawOnLayer() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glDisable(GL_BLEND);
 }
+
