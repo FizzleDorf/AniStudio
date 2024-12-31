@@ -129,8 +129,7 @@ private:
     std::mutex workerMutex;
     std::thread workerThread;
 
-    
-    void SDCPPSystem::WorkerLoop() {
+    void WorkerLoop() {
         while (workerThreadRunning) {
             EntityID currentEntityID = 0;
             {
@@ -141,7 +140,7 @@ private:
                     break;
                 }
 
-                if (!inferenceQueue.empty()) {
+                if (!inferenceQueue.empty() && !inferenceQueue.front().processing) {
                     inferenceQueue.front().processing = true;
                     currentEntityID = inferenceQueue.front().entityID;
                 }
@@ -156,6 +155,7 @@ private:
 
                 {
                     std::lock_guard<std::mutex> lock(queueMutex);
+                    // Remove the front item after processing
                     if (!inferenceQueue.empty()) {
                         inferenceQueue.erase(inferenceQueue.begin());
                     }

@@ -8,16 +8,49 @@ T lerp(const T &a, const T &b, float t) {
 }
 
 // Constructor
-CanvasView::CanvasView() : canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5.0f}), currentLayerIndex(0) {
+CanvasView::CanvasView()
+    : canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5.0f}), currentLayerIndex(0), canvas_size(1024.0f, 1024.0f) {
     layerManager.SetCanvasSize(canvasSize.x, canvasSize.y);
-    InitializeCanvas();
 }
 
 // Initialize the canvas framebuffer and texture
 
-void CanvasView::InitializeCanvas() {
+void CanvasView::Init() {
+    // Ensure OpenGL context is active
+    if (!glGetString(GL_VERSION)) {
+        std::cerr << "OpenGL context not active!" << std::endl;
+        return;
+    }
 
+    // Log canvas size
+    std::cout << "Canvas size: " << canvas_size.x << "x" << canvas_size.y << std::endl;
+
+    // Generate framebuffer
+    glGenFramebuffers(1, &canvasFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, canvasFBO);
+
+    // Create texture for the canvas
+    glGenTextures(1, &canvasTexture);
+    glBindTexture(GL_TEXTURE_2D, canvasTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, canvas_size.x, canvas_size.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    // Set texture parameters
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // Attach texture to the framebuffer
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, canvasTexture, 0);
+
+    // Check framebuffer status
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "Framebuffer incomplete: " << glCheckFramebufferStatus(GL_FRAMEBUFFER) << std::endl;
+    }
+
+    // Unbind framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
+
 
 
 // Main render method
@@ -29,17 +62,17 @@ void CanvasView::Render() {
 
 // Render the drawing canvas
 void CanvasView::RenderCanvas() {
-    // Begin the graph editor
-    ImGui::Begin("Canvas Editor");
+    // Begin the graph container
+    ImGui::Begin("Canvas View");
 
-    static bool isActive = false;        // Indicates if the graph is active
+    if (ImGui::Button("Save Canvas")) {
+        SaveCanvasToFile("canvas_output.png");
+    }
+
     static ImVec2 scrolling(0.0f, 0.0f); // Initial scrolling offset
     static float zoom = 1.0f;            // Initial zoom level
     static const float zoomMin = 0.1f;
     static const float zoomMax = 3.0f;
-
-    // Check if the graph is active
-    isActive = ImGui::IsWindowFocused();
 
     // Get the available space for the graph
     ImVec2 canvas_p0 = ImGui::GetCursorScreenPos();                                  // Top-left corner
@@ -51,7 +84,6 @@ void CanvasView::RenderCanvas() {
     // Draw background and border
     draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(30, 30, 30, 255)); // Dark gray background
     draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));    // White border
-    draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(100, 100, 255, 255)); // Debug rectangle
 
     // Handle zooming with the mouse wheel
     ImGuiIO &io = ImGui::GetIO();
@@ -70,7 +102,7 @@ void CanvasView::RenderCanvas() {
     // Transform for zoom and pan
     ImVec2 graph_origin = ImVec2(canvas_p0.x + scrolling.x * zoom, canvas_p0.y + scrolling.y * zoom);
 
-    // Draw grid lines
+    // Draw grid lines (optional)
     float grid_step = 50.0f * zoom;
     for (float x = fmodf(scrolling.x * zoom, grid_step); x < canvas_sz.x; x += grid_step)
         draw_list->AddLine(ImVec2(canvas_p0.x + x, canvas_p0.y), ImVec2(canvas_p0.x + x, canvas_p1.y),
@@ -79,43 +111,39 @@ void CanvasView::RenderCanvas() {
         draw_list->AddLine(ImVec2(canvas_p0.x, canvas_p0.y + y), ImVec2(canvas_p1.x, canvas_p0.y + y),
                            IM_COL32(200, 200, 200, 40));
 
-    // Draw existing paint strokes
-    static std::vector<ImVec2> points;
-    for (const auto &point : points) {
-        ImVec2 transformed_point = ImVec2(graph_origin.x + point.x * zoom, graph_origin.y + point.y * zoom);
-        draw_list->AddCircleFilled(transformed_point, brush.size * zoom,
-            IM_COL32(static_cast<int>(brush.color.r * 255.0f), static_cast<int>(brush.color.g * 255.0f),
-                     static_cast<int>(brush.color.b * 255.0f), static_cast<int>(brush.color.a * 255.0f)));
-    }
+    // Render the canvas at (0, 0) in graph space
+    ImVec2 canvas_pos = graph_origin; // Canvas is always at (0, 0) in graph space
 
-    // Handle painting with interpolation for smoother strokes
-    if (isActive) {
-        if (ImGui::IsMouseHoveringRect(canvas_p0, canvas_p1) && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            ImVec2 mouse_pos = ImGui::GetMousePos();
-            ImVec2 local_pos = ImVec2((mouse_pos.x - graph_origin.x) / zoom, (mouse_pos.y - graph_origin.y) / zoom);
+    // Draw canvas background
+    draw_list->AddRectFilled(canvas_pos,
+                             ImVec2(canvas_pos.x + canvas_size.x * zoom, canvas_pos.y + canvas_size.y * zoom),
+                             IM_COL32(255, 255, 255, 255));
 
-            // Interpolate points to add smoothness to the stroke
-            if (!points.empty()) {
-                // Get the last point and interpolate to the new one
-                ImVec2 last_point = points.back();
-                InterpolatePoints(last_point, local_pos, brush.size * 0.1f,
-                                  points); // Step size proportional to brush size
-            }
+    // Handle painting on the canvas
+    if (ImGui::IsMouseHoveringRect(canvas_pos,
+                                   ImVec2(canvas_pos.x + canvas_size.x * zoom, canvas_pos.y + canvas_size.y * zoom)) &&
+        ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        ImVec2 local_pos = ImVec2((mouse_pos.x - canvas_pos.x) / zoom, (mouse_pos.y - canvas_pos.y) / zoom);
 
-            points.push_back(local_pos); // Add the current point
-        } else {
-            // End the stroke and write it to the texture
-            WriteToTexture(points);
-            points.clear();
-        }
-    }  else {
-        ImGui::Text("Painting inactive");
+        // Draw a circle at the clicked position
+        draw_list->AddCircleFilled(
+            ImVec2(canvas_pos.x + local_pos.x * zoom, canvas_pos.y + local_pos.y * zoom), brush.size * zoom,
+            IM_COL32(brush.color.r * 255, brush.color.g * 255, brush.color.b * 255, brush.color.a * 255));
+    } else if (ImGui::IsMouseHoveringRect(
+                   canvas_pos, ImVec2(canvas_pos.x + canvas_size.x * zoom, canvas_pos.y + canvas_size.y * zoom))) {
+        ImVec2 mouse_pos = ImGui::GetMousePos();
+        ImVec2 local_pos = ImVec2((mouse_pos.x - canvas_pos.x) / zoom, (mouse_pos.y - canvas_pos.y) / zoom);
+
+        draw_list->AddCircle(
+            ImVec2(canvas_pos.x + local_pos.x * zoom, canvas_pos.y + local_pos.y * zoom), brush.size * zoom,
+            IM_COL32(brush.color.r * 255, brush.color.g * 255, brush.color.b * 255, brush.color.a * 255));
     }
 
 
-    // End the graph editor
     ImGui::End();
 }
+
 
 // UI for brush settings
 void CanvasView::RenderBrushSettings() {
@@ -190,37 +218,38 @@ void CanvasView::DrawOnLayer() {
     glDisable(GL_BLEND);
 }
 
-void CanvasView::WriteToTexture(const std::vector<ImVec2> &strokePoints) {
-    if (strokePoints.empty())
-        return; // Avoid crashes due to empty strokes
+void CanvasView::SaveCanvasToFile(const std::string &filename) {
+    // Save the current framebuffer
+    GLint prevFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFramebuffer);
 
+    // Bind the canvas framebuffer
     glBindFramebuffer(GL_FRAMEBUFFER, canvasFBO);
-    glViewport(0, 0, canvasSize.x, canvasSize.y);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // Allocate memory for pixel data
+    const int width = static_cast<int>(canvas_size.x);
+    const int height = static_cast<int>(canvas_size.y);
+    std::vector<unsigned char> pixels(width * height * 4); // RGBA format
 
-    glMatrixMode(GL_PROJECTION);
-    glPushMatrix();
-    glLoadIdentity();
-    glOrtho(0.0f, canvasSize.x, canvasSize.y, 0.0f, -1.0f, 1.0f);
+    // Read pixels from the framebuffer
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glLoadIdentity();
+    // Restore the previous framebuffer
+    glBindFramebuffer(GL_FRAMEBUFFER, prevFramebuffer);
 
-    glColor4f(brush.color.r, brush.color.g, brush.color.b, brush.color.a);
-
-    glBegin(GL_TRIANGLE_FAN);
-    for (const auto &point : strokePoints) {
-        glVertex2f(point.x, point.y);
+    // Flip the image vertically (OpenGL origin is bottom-left, but most images expect top-left)
+    for (int y = 0; y < height / 2; ++y) {
+        int topIndex = y * width * 4;
+        int bottomIndex = (height - 1 - y) * width * 4;
+        for (int x = 0; x < width * 4; ++x) {
+            std::swap(pixels[topIndex + x], pixels[bottomIndex + x]);
+        }
     }
-    glEnd();
 
-    glPopMatrix();
-    glMatrixMode(GL_PROJECTION);
-    glPopMatrix();
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDisable(GL_BLEND);
+    // Save the pixels to a PNG file
+    if (!stbi_write_png(filename.c_str(), width, height, 4, pixels.data(), width * 4)) {
+        std::cerr << "Failed to save canvas to file: " << filename << std::endl;
+    } else {
+        std::cout << "Canvas saved to file: " << filename << std::endl;
+    }
 }

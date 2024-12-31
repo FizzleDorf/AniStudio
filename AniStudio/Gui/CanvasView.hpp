@@ -15,7 +15,7 @@ struct Point {
 class CanvasView : public BaseView {
 public:
     CanvasView();
-    void Init() {}
+    void Init();
     void Render();
     void Update(const float deltaT) override;
 
@@ -23,7 +23,7 @@ private:
     // ECS and Layer Manager references
     LayerManager layerManager;
     std::vector<Point> points;
-    
+    ImVec2 canvas_size;
     // Canvas properties
     GLuint canvasFBO;     // Framebuffer Object
     GLuint canvasTexture; // Canvas texture
@@ -45,10 +45,8 @@ private:
     void RenderCanvas();        // Render the drawing canvas
     void RenderBrushSettings(); // UI for brush settings
     void RenderLayerManager();  // UI for layer manager
-    void InitializeCanvas();    // Initialize the framebuffer and texture
     void DrawOnLayer();         // Draw on the current layer
-    void WriteToTexture(const std::vector<ImVec2> &strokePoints);
-
+    void SaveCanvasToFile(const std::string &filename);
     };
 
 #endif // CANVAS_VIEW_HPP
