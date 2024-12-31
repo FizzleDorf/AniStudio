@@ -21,10 +21,6 @@ Engine::~Engine() {
 }
 
 void Engine::Init() {
-    mgr.Reset();
-    mgr.RegisterSystem<ImageSystem>();
-    vMgr->Init();
-
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -66,6 +62,10 @@ void Engine::Init() {
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+
+    mgr.Reset();
+    mgr.RegisterSystem<ImageSystem>();
+    vMgr->Init();
 }
 
 void Engine::Update(const float deltaT) {
