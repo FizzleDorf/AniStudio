@@ -47,6 +47,8 @@ private:
     void RenderLayerManager();  // UI for layer manager
     void InitializeCanvas();    // Initialize the framebuffer and texture
     void DrawOnLayer();         // Draw on the current layer
-};
+    void WriteToTexture(const std::vector<ImVec2> &strokePoints);
+
+    };
 
 #endif // CANVAS_VIEW_HPP

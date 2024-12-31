@@ -14,7 +14,11 @@ CanvasView::CanvasView() : canvasSize(800.0f, 600.0f), brush({glm::vec4(1.0f), 5
 }
 
 // Initialize the canvas framebuffer and texture
-void CanvasView::InitializeCanvas() {}
+
+void CanvasView::InitializeCanvas() {
+
+}
+
 
 // Main render method
 void CanvasView::Render() {
@@ -47,6 +51,7 @@ void CanvasView::RenderCanvas() {
     // Draw background and border
     draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(30, 30, 30, 255)); // Dark gray background
     draw_list->AddRect(canvas_p0, canvas_p1, IM_COL32(255, 255, 255, 255));    // White border
+    draw_list->AddRectFilled(canvas_p0, canvas_p1, IM_COL32(100, 100, 255, 255)); // Debug rectangle
 
     // Handle zooming with the mouse wheel
     ImGuiIO &io = ImGui::GetIO();
@@ -98,9 +103,13 @@ void CanvasView::RenderCanvas() {
             }
 
             points.push_back(local_pos); // Add the current point
+        } else {
+            // End the stroke and write it to the texture
+            WriteToTexture(points);
+            points.clear();
         }
-    } else {
-        ImGui::Text("Painting inactive: Pin the graph and ensure it is active.");
+    }  else {
+        ImGui::Text("Painting inactive");
     }
 
 
@@ -181,3 +190,37 @@ void CanvasView::DrawOnLayer() {
     glDisable(GL_BLEND);
 }
 
+void CanvasView::WriteToTexture(const std::vector<ImVec2> &strokePoints) {
+    if (strokePoints.empty())
+        return; // Avoid crashes due to empty strokes
+
+    glBindFramebuffer(GL_FRAMEBUFFER, canvasFBO);
+    glViewport(0, 0, canvasSize.x, canvasSize.y);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glMatrixMode(GL_PROJECTION);
+    glPushMatrix();
+    glLoadIdentity();
+    glOrtho(0.0f, canvasSize.x, canvasSize.y, 0.0f, -1.0f, 1.0f);
+
+    glMatrixMode(GL_MODELVIEW);
+    glPushMatrix();
+    glLoadIdentity();
+
+    glColor4f(brush.color.r, brush.color.g, brush.color.b, brush.color.a);
+
+    glBegin(GL_TRIANGLE_FAN);
+    for (const auto &point : strokePoints) {
+        glVertex2f(point.x, point.y);
+    }
+    glEnd();
+
+    glPopMatrix();
+    glMatrixMode(GL_PROJECTION);
+    glPopMatrix();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDisable(GL_BLEND);
+}
