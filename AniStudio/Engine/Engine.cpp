@@ -64,6 +64,7 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
 
     mgr.Reset();
+    mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();
     vMgr->Init();
 }
