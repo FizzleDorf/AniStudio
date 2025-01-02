@@ -1,6 +1,7 @@
 [requires]
 opencv/4.5.5
 glfw/3.4
+glew/2.1.0
 zlib/1.2.11
 assimp/5.4.3
 
