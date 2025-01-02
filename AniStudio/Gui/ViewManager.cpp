@@ -2,7 +2,6 @@
 
 void ViewManager::Init() {
     canvasView = std::make_unique<CanvasView>();
-    
     debugView = std::make_unique<DebugView>();
     diffusionView = std::make_unique<DiffusionView>();
     meshView = std::make_unique<MeshView>();
@@ -10,7 +9,6 @@ void ViewManager::Init() {
     settingsView = std::make_unique<SettingsView>();
     upscaleView = std::make_unique<UpscaleView>();
     nodeGraphView = std::make_unique<NodeGraphView>();
-    canvasView->Init();
 }
 
 void ViewManager::Render() {
@@ -32,7 +30,4 @@ void ViewManager::Render() {
         debugView->Render();
 }
 
-void ViewManager::Update(const float deltaT) { 
-    if (viewState.showDrawingCanvas)
-        canvasView->Update(deltaT);
-}
+void ViewManager::Update(const float deltaT) {}

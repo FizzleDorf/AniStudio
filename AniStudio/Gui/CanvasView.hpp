@@ -1,52 +1,41 @@
-#ifndef CANVAS_VIEW_HPP
-#define CANVAS_VIEW_HPP
-
-#include "BaseView.hpp"
-#include "LayerManager.hpp"
-#include <glm/glm.hpp>
 #include <imgui.h>
+#include <opencv2/opencv.hpp>
 #include <vector>
 
-struct Point {
-    float x, y;
-    ImVec4 color;
-};
-
-class CanvasView : public BaseView {
+class CanvasView {
 public:
     CanvasView();
-    void Init();
+    ~CanvasView();
+
+    // Initialize a white canvas of size 1024x1024
+    void InitializeCanvas(int width = 1024, int height = 1024);
+
+    // Set zoom factor (for zooming in/out)
+    void SetZoom(float zoom);
+
+    // Apply brush stroke on canvas (e.g., at a given position)
+    void ApplyBrushStroke(const ImVec2 &position, float size);
+
+    // Undo the last stroke
+    void Undo();
+
+    // Redo the last undone stroke
+    void Redo();
+
+    // Render the canvas, grid, and brush
     void Render();
-    void Update(const float deltaT) override;
 
 private:
-    // ECS and Layer Manager references
-    LayerManager layerManager;
-    std::vector<Point> points;
-    ImVec2 canvas_size;
-    // Canvas properties
-    GLuint canvasFBO;     // Framebuffer Object
-    GLuint canvasTexture; // Canvas texture
-    glm::vec2 canvasSize; // Size of the canvas
-    ImageComponent currentLayer;
+    cv::Mat currentImage;   // The current canvas image
+    cv::Mat originalImage;  // To store the original canvas for undo/redo
+    float zoom;             // Zoom factor
+    float offsetX, offsetY; // For panning the canvas
 
-    // Brush properties
-    struct Brush {
-        glm::vec4 color; // RGBA
-        float size;      // Brush size
-    } brush;
+    std::vector<cv::Mat> strokeHistory; // History of strokes for undo/redo
+    int currentHistoryIndex;            // Current index in the stroke history
 
-    // State
-    glm::vec2 lastMousePos; // Last mouse position
-    bool isDrawing = false; // Whether the user is drawing
-    int currentLayerIndex;  // Index of the currently active layer
-    void InterpolatePoints(const ImVec2 &p0, const ImVec2 &p1, float step, std::vector<ImVec2> &points);
-    // Private methods
-    void RenderCanvas();        // Render the drawing canvas
-    void RenderBrushSettings(); // UI for brush settings
-    void RenderLayerManager();  // UI for layer manager
-    void DrawOnLayer();         // Draw on the current layer
-    void SaveCanvasToFile(const std::string &filename);
-    };
+    GLuint textureID; // OpenGL texture ID for rendering the canvas
 
-#endif // CANVAS_VIEW_HPP
+    void DrawGrid();      // Draw grid based on zoom factor
+    bool CreateTexture(); // Create OpenGL texture from the current canvas
+};

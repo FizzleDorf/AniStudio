@@ -49,14 +49,6 @@ add_subdirectory(external/stb_image)
 add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)
 
-# Find GLSL validator
-# find_program(GLSL_VALIDATOR glslangValidator HINTS 
-#     /usr/bin 
-#     /usr/local/bin 
-#     $ENV{VULKAN_SDK}/Bin/ 
-#     $ENV{VULKAN_SDK}/Bin32/
-# )
-
 # Include directories
 include_directories(
     ${CONAN_INCLUDE_DIRS}
@@ -97,8 +89,6 @@ add_executable(${PROJECT_NAME}
     AniStudio/Events/Events.cpp
     AniStudio/Timer/Timer.cpp
     AniStudio/ECS/Base/EntityManager.cpp
-    # external/imgui/backends/imgui_impl_glfw.cpp
-    # external/imgui/backends/imgui_impl_opengl3.cpp
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
     ${UTILS_SOURCES}

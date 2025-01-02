@@ -61,26 +61,25 @@ static char fileName[256] = "AniStudio"; // Buffer for file name
 static char outputDir[256] = "";         // Buffer for output directory
 
 void DiffusionView::RenderFilePath() {
-    if (ImGui::BeginTable("Output", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-        ImGui::TableSetupColumn("Input", ImGuiTableColumnFlags_WidthStretch);
-
-        // Row for "Filename"
+    if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
-        ImGui::Text("FileName");
+        ImGui::Text("FileName"); // Row for "Filename"
         ImGui::TableNextColumn();
         if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
             isFilenameChanged = true;
         }
         ImGui::EndTable();
     }
-    if (ImGui::BeginTable("Output", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthFixed, 54.0f); // Fixed width for Model
+    if (ImGui::BeginTable("Output Dir", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f); // Fixed width for Model
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-        // Row for "Output Directory"
+        ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Dir Path");
+        ImGui::Text("Dir Path"); // Row for "Output Directory"
         ImGui::TableNextColumn();
         if (ImGui::Button("...##w8")) {
             IGFD::FileDialogConfig config;
@@ -150,11 +149,25 @@ void DiffusionView::RenderInputImage() {
 }
 
 void DiffusionView::RenderPrompts() {
-    if (ImGui::InputTextMultiline("Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer))) {
-        promptComp.posPrompt = promptComp.PosBuffer;
-    }
-    if (ImGui::InputTextMultiline("Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer))) {
-        promptComp.negPrompt = promptComp.NegBuffer;
+    if (ImGui::BeginTable("SamplerSettingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Positive");
+        ImGui::TableNextColumn();
+        if (ImGui::InputTextMultiline("##Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer))) {
+            promptComp.posPrompt = promptComp.PosBuffer;
+        }
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Negative");
+        ImGui::TableNextColumn();
+        if (ImGui::InputTextMultiline("##Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer))) {
+            promptComp.negPrompt = promptComp.NegBuffer;
+        }
+        ImGui::EndTable();
     }
 }
 
@@ -280,7 +293,6 @@ void DiffusionView::HandleUpscaleEvent() {
 
 void DiffusionView::RenderOther() {
     ImGui::Checkbox("Free Params", &samplerComp.free_params_immediately);
-    ImGui::SameLine();
     ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
     ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
     ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
@@ -291,10 +303,9 @@ void DiffusionView::RenderControlnets() {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("Controlnet");
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", controlComp.modelName.c_str());
         ImGui::TableNextColumn();
         if (ImGui::Button("...##5b")) {
             IGFD::FileDialogConfig config;
@@ -307,6 +318,8 @@ void DiffusionView::RenderControlnets() {
             controlComp.modelName = "";
             controlComp.modelPath = "";
         }
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", controlComp.modelName.c_str());
 
         if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -326,7 +339,7 @@ void DiffusionView::RenderControlnets() {
     }
 
     if (ImGui::BeginTable("Control Settings", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Title", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
@@ -351,6 +364,7 @@ void DiffusionView::RenderEmbeddings() {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("Embedding:");
         ImGui::TableNextColumn();
@@ -361,7 +375,7 @@ void DiffusionView::RenderEmbeddings() {
                                                     config);
         }
         ImGui::SameLine();
-        if (ImGui::Button("...##v0")) {
+        if (ImGui::Button("R##v0")) {
             embedComp.modelName = "";
             embedComp.modelPath = "";
         }
@@ -393,11 +407,9 @@ void DiffusionView::RenderDiffusionModelLoader() {
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
-
-        // Row for Unet
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Unet:");
+        ImGui::Text("Unet:"); // Row for Unet
         ImGui::TableNextColumn();
         if (ImGui::Button("...##n2")) {
             IGFD::FileDialogConfig config;
@@ -426,10 +438,9 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->Close();
         }
 
-        // Row for Clip L
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Clip L:");
+        ImGui::Text("Clip L:"); // Row for Clip L
         ImGui::TableNextColumn();
         if (ImGui::Button("...##b7")) {
             IGFD::FileDialogConfig config;
@@ -458,10 +469,9 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->Close();
         }
 
-        // Row for Clip G
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Clip G:");
+        ImGui::Text("Clip G:"); // Row for Clip G
         ImGui::TableNextColumn();
         if (ImGui::Button("...##g7")) {
             IGFD::FileDialogConfig config;
@@ -490,10 +500,9 @@ void DiffusionView::RenderDiffusionModelLoader() {
             ImGuiFileDialog::Instance()->Close();
         }
 
-        // Row for T5XXL
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("T5XXL:");
+        ImGui::Text("T5XXL:"); // Row for T5XXL
         ImGui::TableNextColumn();
         if (ImGui::Button("...##x6")) {
             IGFD::FileDialogConfig config;
@@ -564,7 +573,7 @@ void DiffusionView::RenderVaeLoader() {
 }
 
 void DiffusionView::RenderQueueList() {
-    if (ImGui::BeginTable("QueueTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+    if (ImGui::BeginTable("QueueTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         if (ImGui::Button("Queue")) {
@@ -572,16 +581,12 @@ void DiffusionView::RenderQueueList() {
                 HandleT2IEvent();
             }
         }
-        ImGui::TableNextColumn();
         if (ImGui::Button("Stop Current")) {
 
         }
-        ImGui::TableNextColumn();
         if (ImGui::Button("Clear")) {
 
         }
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
         if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
             if (numQueues < 1) {
                 numQueues = 1;
@@ -591,9 +596,9 @@ void DiffusionView::RenderQueueList() {
     }
 
     if (ImGui::BeginTable("InferenceQueue", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 30.0f);
-        ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-        ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+        ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+        ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+        ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 42.0f);
         ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
 
@@ -628,6 +633,9 @@ void DiffusionView::RenderQueueList() {
                     if (i > 0) {
                         if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
                             sdSystem->MoveInQueue(i, i - 1);
+                        }
+                        if (i < queueItems.size() - 1) {
+                            ImGui::SameLine();
                         }
                     }
                     if (i < queueItems.size() - 1) {
@@ -708,21 +716,6 @@ void DiffusionView::Render() {
             }
 
             if (ImGui::BeginTabItem("Img2Img")) {
-                RenderFilePath();
-                RenderOther();
-                RenderInputImage();
-                RenderModelLoader();
-                RenderDiffusionModelLoader();
-                RenderVaeLoader();
-                RenderLatents();
-                RenderPrompts();
-                RenderSampler();
-                RenderControlnets();
-                RenderEmbeddings();
-                ImGui::EndTabItem();
-            }
-
-            if (ImGui::BeginTabItem("Upscale")) {
                 RenderFilePath();
                 RenderOther();
                 RenderInputImage();
