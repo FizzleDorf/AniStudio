@@ -2,7 +2,7 @@
 #define THREE_D_VIEW_HPP
 
 #include "BaseView.hpp"
-#include "../backends/imgui_impl_opengl3.h"
+#include "imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <ImGuizmo.h>

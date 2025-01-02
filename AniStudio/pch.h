@@ -26,6 +26,9 @@
 // Vulkan
 #include <vulkan/vulkan.h>
 
+// GLEW first to avoid conflicts with OpenGL macros
+#include <GL/glew.h>
+
 // GLFW
 #define GLFW_INCLUDE_NONE
 #define GLFW_INCLUDE_VULKAN
@@ -39,8 +42,6 @@
 
 // ImGui
 #include "imgui.h"
-#include "imgui_impl_vulkan.h"
-#include "imgui_impl_glfw.h"
 #include "ImGuiFileDialog.h"
  
 //http request headers

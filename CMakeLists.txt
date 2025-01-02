@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Set the target compiler explicitly for all configurations
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -19,14 +20,17 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
 endif()
 
 # Include Conan-generated cmake files
-include(${CMAKE_SOURCE_DIR}/conan/build/generators/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN_INCLUDED)
-if(NOT CONAN_TOOLCHAIN_INCLUDED)
-    message(FATAL_ERROR "The file conan_toolchain.cmake doesn't exist, you must run install first")
-endif()
+include(build/generators/conan_toolchain.cmake)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 project(AniStudio CXX)
+
+find_package(OpenCV)
+find_package(glew)
+find_package(glfw3)
+find_package(assimp)
+find_package(ZLIB)
 
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -37,26 +41,7 @@ set(SHADER_DIR "${CMAKE_SOURCE_DIR}/Anistudio/shaders")
 # Copy the shaders to the build directory
 file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
 
-
-find_package(glfw3 REQUIRED)
-# Check if glfw was found
-if (glfw3_FOUND)
-    message(STATUS "Found glfw3, include: ${glfw3_INCLUDE_DIR}, library: ${glfw3_LIBRARY}")
-else()
-    message(FATAL_ERROR "glfw3 not found")
-endif()
-
-find_package(OpenCV REQUIRED)
-# Check if opencv was found
-if (OpenCV_FOUND)
-    message(STATUS "Found OpenCV, include: ${OpenCV_INCLUDE_DIRS}, library: ${OpenCV_LIBS}")
-else()
-    message(FATAL_ERROR "OpenCV not found")
-endif()
-
-find_package(assimp REQUIRED)
-
-# Add external libraries
+# External libraries
 add_subdirectory(external/stable-diffusion.cpp)
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
@@ -65,89 +50,77 @@ add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)
 
 # Find GLSL validator
-find_program(GLSL_VALIDATOR glslangValidator HINTS 
-    /usr/bin 
-    /usr/local/bin 
-    $ENV{VULKAN_SDK}/Bin/ 
-    $ENV{VULKAN_SDK}/Bin32/
-)
-set(GLEW_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/GL/include")
-set(GLEW_LIBRARY "${CMAKE_SOURCE_DIR}/external/GL/lib/x64/glew32s.lib")
+# find_program(GLSL_VALIDATOR glslangValidator HINTS 
+#     /usr/bin 
+#     /usr/local/bin 
+#     $ENV{VULKAN_SDK}/Bin/ 
+#     $ENV{VULKAN_SDK}/Bin32/
+# )
+
 # Include directories
 include_directories(
-    ${CMAKE_SOURCE_DIR}/AniStudio
-    ${CMAKE_SOURCE_DIR}/Engine
-    ${CMAKE_SOURCE_DIR}/Events
-    ${CMAKE_SOURCE_DIR}/Timer
-    ${GLEW_INCLUDE_DIR}
-    ${CMAKE_SOURCE_DIR}/AniStudio/Gui
-    ${CMAKE_SOURCE_DIR}/AniStudio/utils
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
-    ${CMAKE_SOURCE_DIR}/AniStudio/backends
-    ${CMAKE_SOURCE_DIR}/external/glm
-    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
-    ${CMAKE_SOURCE_DIR}/external/imgui
-    ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
-    ${CMAKE_SOURCE_DIR}/external/nlohmann_json
-    ${CMAKE_SOURCE_DIR}/external/imgui_nodes
-    ${CMAKE_SOURCE_DIR}/external/immvision
-    ${glfw3_INCLUDE_DIR}
-    ${OpenCV_INCLUDE_DIRS}
+    ${CONAN_INCLUDE_DIRS}
+    AniStudio
+    AniStudio/Engine
+    AniStudio/Events
+    AniStudio/Timer
+    AniStudio/Gui
+    AniStudio/utils
+    AniStudio/ECS
+    AniStudio/ECS/Base
+    AniStudio/ECS/Systems
+    AniStudio/ECS/Components
+    AniStudio/ECS/Components/SDCPPComponents
+    AniStudio/ECS/Components/ImageComponents
+    AniStudio/ECS/Components/VideoComponents
+    external/glm
+    external/stable-diffusion.cpp
+    # external/imgui
+    # external/imgui/backends
+    external/imgui_filedialog
+    external/nlohmann_json
+    external/imgui_nodes
+    external/immvision
     ${Vulkan_INCLUDE_DIR}
 )
 
-# Preprocessor definitions
-add_definitions(-DGLEW_STATIC)
-
 # Find all source files
 file(GLOB GUI_SOURCES AniStudio/Gui/*.cpp)
-
 file(GLOB SYSTEM_SOURCES AniStudio/ECS/Systems/*.cpp)
-
 file(GLOB UTILS_SOURCES AniStudio/utils/*.cpp)
 
 # Add main executable
 add_executable(${PROJECT_NAME}
-    ${CMAKE_SOURCE_DIR}/AniStudio/main.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/pch.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/Engine/Engine.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/Events/Events.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base/EntityManager.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_glfw.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/backends/imgui_impl_opengl3.cpp
+    AniStudio/main.cpp
+    AniStudio/pch.cpp
+    AniStudio/Engine/Engine.cpp
+    AniStudio/Events/Events.cpp
+    AniStudio/Timer/Timer.cpp
+    AniStudio/ECS/Base/EntityManager.cpp
+    # external/imgui/backends/imgui_impl_glfw.cpp
+    # external/imgui/backends/imgui_impl_opengl3.cpp
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
     ${UTILS_SOURCES}
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
-
-# Setup OpenCV
-# list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-# set(IMMVISION_FETCH_OPENCV ON)
-# include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/find_opencv.cmake)
-# immvision_find_opencv()
+link_directories(${CONAN_LIB_DIRS})
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
-    assimp::assimp
-    ${GLEW_LIBRARY}    
+    ${CONAN_LIBS}   
     stable-diffusion
     ImGui
     ImGui_Nodes
     stb_image
     ImGuiFileDialog 
     ImGuizmo
-    ${OpenCV_LIBS}
-    ${glfw3_LIBRARIES}
+    opencv::opencv 
+    glfw
+    GLEW::GLEW 
+    assimp::assimp 
+    ZLIB::ZLIB
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
