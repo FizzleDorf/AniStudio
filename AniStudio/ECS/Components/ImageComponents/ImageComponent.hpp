@@ -34,5 +34,4 @@ struct ImageComponent : public BaseComponent {
 };
 
 struct InputImageComponent : public ImageComponent {};
-struct OutputImageComponent : public ImageComponent {};
 } // namespace ECS
