@@ -7,29 +7,46 @@
 #include <string>
 
 struct FilePaths {
-    std::string virtualEnvPath = "../venv";
-    std::string comfyuiRootPath = "../comfyui";
-    std::string lastOpenProjectPath = "../projects";
-    std::string defaultProjectPath = "../projects";
-    std::string defaultModelRootPath = "../models";
-    std::string assetsFolderPath = "../assets";
+    std::string virtualEnvPath = "";
+    std::string comfyuiRootPath = "";
+    std::string lastOpenProjectPath = "";
+    std::string defaultProjectPath = "";
+    std::string defaultModelRootPath = "";
+    std::string assetsFolderPath = "";
 
     // These paths can be set to default model paths
-    std::string checkpointDir = "/checkpoints";
-    std::string encoderDir = "/clip";
-    std::string clipLPath = "/clip";
-    std::string clipGPath = "/clip";
-    std::string t5xxlPath = "/clip";
-    std::string embedDir = "/clip";
-    std::string vaeDir = "/vae";
-    std::string unetDir = "/unet";
-    std::string loraDir = "/loras";
-    std::string controlnetDir = "/controlnet";
-    std::string upscaleDir = "/upscale_models";
+    std::string checkpointDir = "";
+    std::string encoderDir = "";
+    std::string clipLPath = "";
+    std::string clipGPath = "";
+    std::string t5xxlPath = "";
+    std::string embedDir = "";
+    std::string vaeDir = "";
+    std::string unetDir = "";
+    std::string loraDir = "";
+    std::string controlnetDir = "";
+    std::string upscaleDir = "";
+
+    void Init() {
+        LoadFilePathDefaults();
+        if (lastOpenProjectPath.empty()) {
+            std::filesystem::path newProjectPath = "../projects/new_project";
+            std::filesystem::create_directories(newProjectPath);
+            defaultProjectPath = std::filesystem::absolute(newProjectPath).string();
+            SaveFilepathDefaults();
+        }
+        if (defaultModelRootPath.empty()) {
+            std::filesystem::path newModelPath = "../models";
+            std::filesystem::create_directories(newModelPath);
+            defaultModelRootPath = std::filesystem::absolute(newModelPath).string();
+            SetByModelRoot();
+            SaveFilepathDefaults();
+        }
+    }
 
     void SaveFilepathDefaults() {
         // Create the data directory if it does not exist
-        std::filesystem::create_directories("./data/defaults");
+        std::filesystem::create_directories("..\\data\\defaults");
 
         // Create a JSON object to store paths
         nlohmann::json json;
@@ -48,7 +65,7 @@ struct FilePaths {
         json["upscaleDir"] = upscaleDir;
 
         // Write JSON to file
-        std::ofstream file("./data/defaults/paths.json");
+        std::ofstream file("..\\data\\defaults\\paths.json");
         if (file.is_open()) {
             file << json.dump(4); // Pretty print with 4 spaces
             file.close();
@@ -57,7 +74,7 @@ struct FilePaths {
 
     void LoadFilePathDefaults() {
         // Open JSON file
-        std::ifstream file("./data/defaults/paths.json");
+        std::ifstream file("..\\data\\defaults\\paths.json");
         if (file.is_open()) {
             // Parse the JSON file
             nlohmann::json json;
@@ -95,13 +112,33 @@ struct FilePaths {
     }
 
     void SetByModelRoot() {
-        checkpointDir = defaultModelRootPath + "/checkpoints";
-        encoderDir = defaultModelRootPath + "/clip";
-        vaeDir = defaultModelRootPath + "/vae";
-        unetDir = defaultModelRootPath + "/unet";
-        loraDir = defaultModelRootPath + "/loras";
-        controlnetDir = defaultModelRootPath + "/controlnet";
-        upscaleDir = defaultModelRootPath + "/upscale_models";
+        std::filesystem::path newModelPath = defaultModelRootPath + "\\checkpoints";
+        std::filesystem::create_directories(newModelPath);
+        checkpointDir = newModelPath.string();
+
+        newModelPath = defaultModelRootPath + "\\clip";
+        std::filesystem::create_directories(newModelPath);
+        encoderDir = newModelPath.string();
+
+        newModelPath = defaultModelRootPath + "\\vae";
+        std::filesystem::create_directories(newModelPath);
+        vaeDir = newModelPath.string();
+
+        newModelPath = defaultModelRootPath + "\\unet";
+        std::filesystem::create_directories(newModelPath);
+        unetDir = newModelPath.string();
+
+        newModelPath = defaultModelRootPath + "\\loras";
+        std::filesystem::create_directories(newModelPath);
+        loraDir = newModelPath.string();
+
+        newModelPath = defaultModelRootPath + "\\controlnet";
+        std::filesystem::create_directories(newModelPath);
+        controlnetDir = newModelPath.string();
+
+        newModelPath = defaultModelRootPath + "\\upscale_models";
+        std::filesystem::create_directories(newModelPath);
+        upscaleDir = newModelPath.string();
     }
 };
 

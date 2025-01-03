@@ -9,7 +9,7 @@ namespace ECS {
 struct BaseModelComponent : public BaseComponent {
     BaseModelComponent() { compName = "BaseModelComponent"; }
     std::string modelPath = "";
-    std::string modelName = "model.gguf";
+    std::string modelName = "<none>";
     bool isModelLoaded = false;
 
     // Serialize to JSON

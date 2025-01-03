@@ -100,11 +100,12 @@ void ImageView::RenderHistory() {
         const auto &images = loadedMedia.GetImages();
         for (size_t i = 0; i < images.size(); ++i) {
             const auto &image = images[i];
-            if (!image.imageData) {
-                break;
-            }
             if (image.textureID == 0) {
                 CreateTexture(i);
+            }
+            if (!image.imageData) {
+                mgr.DestroyEntity(image.GetID());
+                break;
             }
             ImGui::Text("Image %zu: %s", i, image.fileName.c_str());
             ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)),

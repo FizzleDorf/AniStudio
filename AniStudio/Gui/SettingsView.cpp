@@ -94,7 +94,7 @@ void SettingsView::Render() {
 
                 if (ImGui::Button("Save Configuration"))
                 {
-                    SaveOptionsToFile("comfyui_options.json");
+                    // SaveOptionsToFile("comfyui_options.json");
                 }
 
                 ImGui::NewLine();
@@ -127,7 +127,7 @@ void SettingsView::Render() {
                 ImGui::NewLine();
 
                 if (ImGui::Button("Save Configuration")) {
-                    SaveOptionsToFile("sdcpp_options.json");
+                    filePaths.SaveFilepathDefaults();
                 }
 
                 ImGui::NewLine();
@@ -421,18 +421,4 @@ json SettingsView::SerializeOptions() {
     }
 
     return j;
-}
-
-void SettingsView::SaveOptionsToFile(const std::string &filename) {
-    std::filesystem::path dir = "configs";
-    if (!std::filesystem::exists(dir)) {
-        std::filesystem::create_directory(dir);
-    }
-
-    json j = SerializeOptions();
-    std::ofstream file(dir / filename);
-    if (file.is_open()) {
-        file << j.dump(4);  // Pretty print with 4 spaces
-        file.close();
-    }
 }

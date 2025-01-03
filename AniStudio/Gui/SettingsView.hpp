@@ -32,7 +32,6 @@ public:
 private:
     void InstallVenv();
     void InstallComfyUI();
-    void SaveOptionsToFile(const std::string& filename);
     nlohmann::json SerializeOptions();
     void ShowBoolOptionsTable(BoolOption* options, int count, const char* tableTitle);
     void ShowFlagPathsTable(FlagOption* options, int count, const char* tableTitle);

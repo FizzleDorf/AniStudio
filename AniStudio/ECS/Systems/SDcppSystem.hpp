@@ -225,9 +225,11 @@ private:
 
         if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
             std::cerr << "Failed to save image: " << fullPath << std::endl;
-        } else {
-            std::cout << "Image saved successfully: " << fullPath << std::endl;
+            mgr.DestroyEntity(entityID);
+            return;
         }
+        std::cout << "Image saved successfully: " << fullPath << std::endl;
+        loadedMedia.AddImage(imageComp);
     }
 
     sd_ctx_t *InitializeStableDiffusionContext(EntityID entityID) {

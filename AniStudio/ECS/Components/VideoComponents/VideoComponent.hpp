@@ -7,7 +7,7 @@
 
 namespace ECS {
 struct VideoComponent : public BaseComponent {
-    std::string fileName = "image.png"; // Default file name
+    std::string fileName = "<none>"; // Default file name
     std::string filePath = "";          // Full path to the image
     unsigned char *imageData = nullptr; // Pointer to image data
     int width = 0;                      // Image width
