@@ -8,7 +8,7 @@
 
 namespace ECS {
 struct ImageComponent : public BaseComponent {
-    std::string fileName = "<none>";                     // Default file name
+    std::string fileName = "Anistudio";                     // Default file name
     std::string filePath = filePaths.defaultProjectPath; // Full path to the image
     unsigned char *imageData = nullptr;                  // Pointer to image data
     int width = 0;                                       // Image width

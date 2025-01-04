@@ -1,9 +1,10 @@
 #include "Serialization.hpp"
 #include <filesystem>
+#include <iostream>
 
 namespace ECS {
 
-nlohmann::json SerializeEntityComponents(EntityID entity) {
+nlohmann::json SerializeEntityComponents(const EntityID entity) {
     nlohmann::json componentData;
 
     // Helper lambda to check and serialize a component if it exists
@@ -36,127 +37,95 @@ nlohmann::json SerializeEntityComponents(EntityID entity) {
     return componentData;
 }
 
-bool WriteMetadataToPNG(EntityID entity, const nlohmann::json &metadata) {
+bool WriteMetadataToPNG(const EntityID entity, const nlohmann::json &metadata) {
     const auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
-    if (!std::filesystem::exists(imageComp.filePath)) {
-        std::cerr << "Image file not found: " << imageComp.filePath << std::endl;
-        return false;
-    }
 
-    // Open PNG file for reading
     FILE *fp = fopen(imageComp.filePath.c_str(), "rb");
     if (!fp) {
-        std::cerr << "Failed to open PNG file for reading" << std::endl;
+        std::cerr << "Failed to open PNG for reading: " << imageComp.filePath << std::endl;
         return false;
     }
 
-    // Initialize PNG read structures
-    png_structp pngRead = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!pngRead) {
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    if (!png) {
         fclose(fp);
         return false;
     }
 
-    png_infop infoRead = png_create_info_struct(pngRead);
-    if (!infoRead) {
-        png_destroy_read_struct(&pngRead, NULL, NULL);
+    png_infop info = png_create_info_struct(png);
+    if (!info) {
+        png_destroy_read_struct(&png, nullptr, nullptr);
         fclose(fp);
         return false;
     }
 
-    // Set up error handling
-    if (setjmp(png_jmpbuf(pngRead))) {
-        png_destroy_read_struct(&pngRead, &infoRead, NULL);
+    png_init_io(png, fp);
+    png_read_info(png, info);
+
+    // Create temporary file
+    std::string tempFile = imageComp.filePath + ".tmp";
+    FILE *out = fopen(tempFile.c_str(), "wb");
+    if (!out) {
+        png_destroy_read_struct(&png, &info, nullptr);
         fclose(fp);
         return false;
     }
 
-    png_init_io(pngRead, fp);
-    png_read_info(pngRead, infoRead);
-
-    // Read existing metadata
-    png_textp text_ptr;
-    int num_text;
-    png_get_text(pngRead, infoRead, &text_ptr, &num_text);
-
-    // Create temporary file for writing
-    std::string tempPath = imageComp.filePath + ".tmp";
-    FILE *fpWrite = fopen(tempPath.c_str(), "wb");
-    if (!fpWrite) {
-        png_destroy_read_struct(&pngRead, &infoRead, NULL);
-        fclose(fp);
-        return false;
-    }
-
-    // Initialize PNG write structures
-    png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!pngWrite) {
-        png_destroy_read_struct(&pngRead, &infoRead, NULL);
-        fclose(fp);
-        fclose(fpWrite);
-        return false;
-    }
-
+    png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
     png_infop infoWrite = png_create_info_struct(pngWrite);
-    if (!infoWrite) {
-        png_destroy_write_struct(&pngWrite, NULL);
-        png_destroy_read_struct(&pngRead, &infoRead, NULL);
-        fclose(fp);
-        fclose(fpWrite);
-        return false;
-    }
+    png_init_io(pngWrite, out);
 
-    // Set up error handling for write
-    if (setjmp(png_jmpbuf(pngWrite))) {
-        png_destroy_write_struct(&pngWrite, &infoWrite);
-        png_destroy_read_struct(&pngRead, &infoRead, NULL);
-        fclose(fp);
-        fclose(fpWrite);
-        return false;
-    }
+    // Copy original PNG header
+    png_uint_32 width, height;
+    int bit_depth, color_type;
+    png_get_IHDR(png, info, &width, &height, &bit_depth, &color_type, nullptr, nullptr, nullptr);
+    png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
-    png_init_io(pngWrite, fpWrite);
-
-    // Copy PNG header
-    png_set_IHDR(pngWrite, infoWrite, png_get_image_width(pngRead, infoRead), png_get_image_height(pngRead, infoRead),
-                 png_get_bit_depth(pngRead, infoRead), png_get_color_type(pngRead, infoRead),
-                 png_get_interlace_type(pngRead, infoRead), png_get_compression_type(pngRead, infoRead),
-                 png_get_filter_type(pngRead, infoRead));
-
-    // Add metadata text chunk
+    // Set up EXIF data
     std::string metadataStr = metadata.dump();
-    png_text text[1];
-    text[0].compression = PNG_TEXT_COMPRESSION_zTXt;
-    text[0].key = const_cast<char *>("ani_metadata");
-    text[0].text = const_cast<char *>(metadataStr.c_str());
-    text[0].text_length = metadataStr.length();
-    text[0].itxt_length = 0;
-    text[0].lang = NULL;
-    text[0].lang_key = NULL;
+    png_text texts[2];
 
-    png_set_text(pngWrite, infoWrite, text, 1);
+    // Main parameters chunk
+    texts[0].compression = PNG_TEXT_COMPRESSION_NONE;
+    texts[0].key = const_cast<char *>("parameters");
+    texts[0].text = const_cast<char *>(metadataStr.c_str());
+    texts[0].text_length = metadataStr.length();
+    texts[0].itxt_length = 0;
+    texts[0].lang = nullptr;
+    texts[0].lang_key = nullptr;
+
+    // Software identifier
+    texts[1].compression = PNG_TEXT_COMPRESSION_NONE;
+    texts[1].key = const_cast<char *>("Software");
+    texts[1].text = const_cast<char *>("AniStudio");
+    texts[1].text_length = 9;
+    texts[1].itxt_length = 0;
+    texts[1].lang = nullptr;
+    texts[1].lang_key = nullptr;
+
+    png_set_text(pngWrite, infoWrite, texts, 2);
     png_write_info(pngWrite, infoWrite);
 
     // Copy image data
-    png_bytep row = new png_byte[png_get_rowbytes(pngRead, infoRead)];
-    for (uint32_t y = 0; y < png_get_image_height(pngRead, infoRead); y++) {
-        png_read_row(pngRead, row, NULL);
+    png_bytep row = new png_byte[png_get_rowbytes(png, info)];
+    for (png_uint_32 y = 0; y < height; y++) {
+        png_read_row(png, row, nullptr);
         png_write_row(pngWrite, row);
     }
     delete[] row;
 
-    // Finish writing
     png_write_end(pngWrite, infoWrite);
 
     // Clean up
     png_destroy_write_struct(&pngWrite, &infoWrite);
-    png_destroy_read_struct(&pngRead, &infoRead, NULL);
+    png_destroy_read_struct(&png, &info, nullptr);
+    fclose(out);
     fclose(fp);
-    fclose(fpWrite);
 
-    // Replace original file with new file
+    // Replace original with new file
     std::filesystem::remove(imageComp.filePath);
-    std::filesystem::rename(tempPath, imageComp.filePath);
+    std::filesystem::rename(tempFile, imageComp.filePath);
 
     return true;
 }
@@ -211,7 +180,7 @@ nlohmann::json ReadMetadataFromPNG(const std::string &filepath) {
     return metadata;
 }
 
-void DeserializeEntityComponents(EntityID entity, const nlohmann::json &componentData) {
+void DeserializeEntityComponents(const EntityID entity, const nlohmann::json &componentData) {
     // Helper lambda to deserialize a component if it exists in the JSON
     auto deserializeComponent = [&](auto componentType) {
         using T = decltype(componentType);

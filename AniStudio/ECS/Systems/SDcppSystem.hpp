@@ -48,6 +48,7 @@ public:
     struct QueueItem {
         EntityID entityID;
         bool processing;
+        nlohmann::json metadata;
     };
 
     SDCPPSystem() : stopWorker(false), workerThreadRunning(false), inferenceThreadRunning(false) {
@@ -61,8 +62,9 @@ public:
     void QueueInference(const EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push_back({entityID, false});
+            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID)});
         }
+        std::cout << "metadata: " << '\n' << inferenceQueue.back().metadata << std::endl;
         queueCondition.notify_one();
         std::cout << "Entity " << entityID << " queued for inference." << std::endl;
 
@@ -134,7 +136,7 @@ private:
 
     void WorkerLoop() {
         while (workerThreadRunning) {
-            EntityID currentEntityID = 0;
+            QueueItem currentQueueItem;
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
@@ -145,23 +147,21 @@ private:
 
                 if (!inferenceQueue.empty() && !inferenceQueue.front().processing) {
                     inferenceQueue.front().processing = true;
-                    currentEntityID = inferenceQueue.front().entityID;
+                    currentQueueItem = inferenceQueue.front();
                 }
             }
 
-            if (currentEntityID != 0) {
-                try {
-                    RunInference(currentEntityID);
-                } catch (const std::exception &e) {
-                    std::cerr << "Inference error: " << e.what() << std::endl;
-                }
+            try {
+                RunInference(currentQueueItem);
+            } catch (const std::exception &e) {
+                std::cerr << "Inference error: " << e.what() << std::endl;
+            }
 
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    // Remove the front item after processing
-                    if (!inferenceQueue.empty()) {
-                        inferenceQueue.erase(inferenceQueue.begin());
-                    }
+            {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                // Remove the front item after processing
+                if (!inferenceQueue.empty()) {
+                    inferenceQueue.erase(inferenceQueue.begin());
                 }
             }
         }
@@ -169,7 +169,7 @@ private:
         workerThreadRunning = false;
     }
 
-    void RunInference(const EntityID entityID) {
+    void RunInference(const QueueItem item) {
         if (inferenceThreadRunning)
             return;
 
@@ -177,32 +177,28 @@ private:
 
         sd_ctx_t *sd_context = nullptr;
         try {
-            std::cout << "Starting inference for Entity " << entityID << std::endl;
+            std::cout << "Starting inference for Entity " << item.entityID << std::endl;
 
             sd_set_log_callback(LogCallback, nullptr);
             sd_set_progress_callback(ProgressCallback, nullptr);
 
-            sd_context = InitializeStableDiffusionContext(entityID);
+            sd_context = InitializeStableDiffusionContext(item.entityID);
             if (!sd_context) {
-                mgr.DestroyEntity(entityID);
+                mgr.DestroyEntity(item.entityID);
                 inferenceThreadRunning.store(false);
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
             }
 
-            sd_image_t *image = GenerateImage(sd_context, entityID);
+            sd_image_t *image = GenerateImage(sd_context, item.entityID);
             if (!image) {
-                mgr.DestroyEntity(entityID);
+                mgr.DestroyEntity(item.entityID);
                 inferenceThreadRunning.store(false);
                 throw std::runtime_error("Failed to generate image!");
             }
 
-            SaveImage(image->data, image->width, image->height, image->channel, entityID);
+            SaveImage(image->data, image->width, image->height, image->channel, item);
             free_sd_ctx(sd_context);
-            nlohmann::json metadata = SerializeEntityComponents(entityID);
-            WriteMetadataToPNG(entityID, metadata);
-            std::cout << "Inference completed for Entity " << entityID << std::endl;
-
-            
+            std::cout << "Inference completed for Entity " << item.entityID << std::endl;
 
             inferenceThreadRunning.store(false);
         } catch (const std::exception &e) {
@@ -214,29 +210,50 @@ private:
         }
     }
 
-    void SaveImage(const unsigned char *data, int width, int height, int channels, EntityID entityID) {
-        ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(entityID);
+    void SaveImage(const unsigned char *data, int width, int height, int channels, const QueueItem item) {
+        ImageComponent &imageComp = mgr.GetComponent<ImageComponent>(item.entityID);
 
+        // Create a path for the filename and ensure .png extension
+        std::filesystem::path filename(imageComp.fileName);
+        if (filename.extension() != ".png") {
+            filename.replace_extension(".png");
+            imageComp.fileName = filename.string();
+        }
+
+        // Construct full path by combining directory with filename
         std::filesystem::path directoryPath = imageComp.filePath;
-        std::filesystem::path fullPath = directoryPath / imageComp.fileName;
+        std::filesystem::path fullPath = directoryPath / filename;
 
         try {
             if (!std::filesystem::exists(directoryPath)) {
                 std::filesystem::create_directories(directoryPath);
                 std::cout << "Directory created: " << directoryPath << '\n';
             }
+
+            if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
+                std::cerr << "Failed to save image: " << fullPath << std::endl;
+                mgr.DestroyEntity(item.entityID);
+                return;
+            }
+
+            // Update component with full path including filename
+            imageComp.filePath = fullPath.string();
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+            if (!WriteMetadataToPNG(item.entityID, item.metadata)) {
+                std::cerr << "Failed to write metadata to: " << fullPath << std::endl;
+            } else {
+                std::cout << "Successfully wrote metadata to: " << fullPath << std::endl;
+            }
+
+            std::cout << "Image saved successfully: " << fullPath << std::endl;
+            loadedMedia.AddImage(imageComp);
+
         } catch (const std::filesystem::filesystem_error &e) {
             std::cerr << "Error creating directory: " << e.what() << '\n';
             return;
         }
-
-        if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
-            std::cerr << "Failed to save image: " << fullPath << std::endl;
-            mgr.DestroyEntity(entityID);
-            return;
-        }
-        std::cout << "Image saved successfully: " << fullPath << std::endl;
-        loadedMedia.AddImage(imageComp);
     }
 
     sd_ctx_t *InitializeStableDiffusionContext(EntityID entityID) {
