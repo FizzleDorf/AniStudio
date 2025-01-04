@@ -111,6 +111,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     GLEW::GLEW 
     assimp::assimp 
     ZLIB::ZLIB
+    PNG::PNG
 )
 
 target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
