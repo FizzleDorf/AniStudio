@@ -26,11 +26,12 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 project(AniStudio CXX)
 
-find_package(OpenCV)
-find_package(glew)
-find_package(glfw3)
-find_package(assimp)
-find_package(ZLIB)
+find_package(OpenCV REQUIRED)
+find_package(glew REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(assimp REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(PNG REQUIRED)
 
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -67,8 +68,6 @@ include_directories(
     AniStudio/ECS/Components/VideoComponents
     external/glm
     external/stable-diffusion.cpp
-    # external/imgui
-    # external/imgui/backends
     external/imgui_filedialog
     external/nlohmann_json
     external/imgui_nodes

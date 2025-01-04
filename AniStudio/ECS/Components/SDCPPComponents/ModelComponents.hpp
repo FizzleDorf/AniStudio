@@ -2,6 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include <string>
+#include "filepaths.hpp"
 
 namespace ECS {
 
@@ -12,21 +13,14 @@ struct BaseModelComponent : public BaseComponent {
     std::string modelName = "<none>";
     bool isModelLoaded = false;
 
-    // Serialize to JSON
-    nlohmann::json Serialize() const override {
-        nlohmann::json j = BaseComponent::Serialize();
-        j["modelPath"] = modelPath;
-        j["modelName"] = modelName;
-        return j;
-    }
+    nlohmann::json Serialize() const override { return {{compName, {{"modelName", modelName}}}}; }
 
-    // Deserialize from JSON
     void Deserialize(const nlohmann::json &j) override {
-        BaseComponent::Deserialize(j);
-        if (j.contains("modelPath"))
-            modelPath = j["modelPath"];
-        if (j.contains("controlPath"))
-            modelName = j["modelName"];
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+        }
     }
 };
 
@@ -41,6 +35,15 @@ struct ModelComponent : public BaseModelComponent {
         }
         return *this;
     }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.checkpointDir + "\\" + modelName;
+        }
+    }
 };
 
 // Diffusion Model only (Flux)
@@ -53,6 +56,14 @@ struct DiffusionModelComponent : public BaseModelComponent {
             isModelLoaded = other.isModelLoaded;
         }
         return *this;
+    }
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.unetDir + "\\" + modelName;
+        }
     }
 };
 
@@ -67,6 +78,15 @@ struct CLipGComponent : public BaseModelComponent {
         }
         return *this;
     }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.encoderDir + "\\" + modelName;
+        }
+    }
 };
 
 // Clip L Encoder
@@ -80,6 +100,14 @@ struct CLipLComponent : public BaseModelComponent {
         }
         return *this;
     }
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.encoderDir + "\\" + modelName;
+        }
+    }
 };
 
 // T5 Encoder
@@ -92,6 +120,14 @@ struct T5XXLComponent : public BaseModelComponent {
             isModelLoaded = other.isModelLoaded;
         }
         return *this;
+    }
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.encoderDir + "\\" + modelName;
+        }
     }
 };
 
@@ -113,6 +149,16 @@ struct VaeComponent : public BaseModelComponent {
         }
         return *this;
     }
+    nlohmann::json Serialize() const override { return {{compName, {{"modelName", modelName}}}}; }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.vaeDir + "\\" + modelName;
+        }
+    }
 };
 
 // Fast Vae Model loader
@@ -125,6 +171,16 @@ struct TaesdComponent : public BaseModelComponent {
             isModelLoaded = other.isModelLoaded;
         }
         return *this;
+    }
+    nlohmann::json Serialize() const override { return {{compName, {{"modelName", modelName}}}}; }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.vaeDir + "\\" + modelName;
+        }
     }
 };
 
@@ -143,6 +199,28 @@ struct LoraComponent : public ECS::BaseModelComponent {
             loraStrength = other.loraStrength;
         }
         return *this;
+    }
+    nlohmann::json Serialize() const override {
+        return {
+            {compName, {
+                {"modelName", modelName},
+                {"loraStrength", loraStrength},
+                {"loraClipStrength", loraClipStrength}
+            }}
+        };
+    }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            if (obj.contains("loraStrength"))
+                loraStrength = obj["loraStrength"];
+            if (obj.contains("loraClipStrength"))
+                loraClipStrength = obj["loraClipStrength"];
+            modelPath = filePaths.loraDir + "\\" + modelName;
+        }
     }
 };
 
@@ -166,24 +244,28 @@ struct ControlnetComponent : public ECS::BaseModelComponent {
         return *this;
     }
 
-    // Serialize to JSON
     nlohmann::json Serialize() const override {
-        nlohmann::json j = BaseModelComponent::Serialize();
-        j["cnStrength"] = cnStrength;
-        j["applyStart"] = applyStart;
-        j["applyEnd"] = applyEnd;
-        return j;
+        return {{compName,
+                 {{"modelName", modelName},
+                  {"cnStrength", cnStrength},
+                  {"applyStart", applyStart},
+                  {"applyEnd", applyEnd}}}};
     }
 
     // Deserialize from JSON
     void Deserialize(const nlohmann::json &j) override {
-        BaseModelComponent::Deserialize(j);
-        if (j.contains("cnStrength"))
-            cnStrength = j["cnStrength"];
-        if (j.contains("applyStart"))
-            applyStart = j["applyStart"];
-        if (j.contains("applyEnd"))
-            applyEnd = j["applyEnd"];
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            if (obj.contains("cnStrength"))
+                cnStrength = j["cnStrength"];
+            if (obj.contains("applyStart"))
+                applyStart = j["applyStart"];
+            if (obj.contains("applyEnd"))
+                applyEnd = j["applyEnd"];
+            modelPath = filePaths.controlnetDir + "\\" + modelName;
+        }
     }
 };
 
@@ -201,6 +283,24 @@ struct EsrganComponent : public BaseModelComponent {
         }
         return *this;
     }
+    nlohmann::json Serialize() const override {
+        return {
+            {compName, {
+                {"modelName", modelName},
+                {"scale", scale}
+            }}
+        };
+    }
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            if (obj.contains("scale"))
+                scale = obj["scale"];
+            modelPath = filePaths.upscaleDir + "\\" + modelName;
+        }
+    }
 };
 
 struct EmbeddingComponent : public BaseModelComponent {
@@ -213,6 +313,15 @@ struct EmbeddingComponent : public BaseModelComponent {
         }
         return *this;
     }
+
+    void Deserialize(const nlohmann::json &j) override {
+         if (j.contains(compName)) {
+             const auto &obj = j.at(compName);
+             if (obj.contains("modelName"))
+                 modelName = obj["modelName"];
+             modelPath = filePaths.embedDir + "\\" + modelName;
+         }
+     }
 };
 
 } // namespace ECS

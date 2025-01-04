@@ -88,8 +88,8 @@ void DiffusionView::RenderFilePath() {
         }
         ImGui::SameLine();
         if (ImGui::Button("R##w9")) {
-            imageComp.fileName = "";
-            imageComp.filePath = "";
+            imageComp.fileName = "<none>";
+            imageComp.filePath = "filePaths.defaultProjectPath";
         }
         ImGui::TableNextColumn();
         ImGui::Text("%s", imageComp.filePath.c_str());

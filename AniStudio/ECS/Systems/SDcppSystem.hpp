@@ -1,5 +1,8 @@
+#pragma once
+
 #include "ECS.h"
 #include "ImageSystem.hpp"
+#include "Serialization.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
 #include <atomic>
@@ -194,9 +197,13 @@ private:
             }
 
             SaveImage(image->data, image->width, image->height, image->channel, entityID);
-
             free_sd_ctx(sd_context);
+            nlohmann::json metadata = SerializeEntityComponents(entityID);
+            WriteMetadataToPNG(entityID, metadata);
             std::cout << "Inference completed for Entity " << entityID << std::endl;
+
+            
+
             inferenceThreadRunning.store(false);
         } catch (const std::exception &e) {
             std::cerr << "Exception during inference: " << e.what() << std::endl;
