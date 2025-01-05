@@ -8,6 +8,8 @@
 using namespace ECS;
 using namespace ANI;
 
+namespace GUI {
+
 ImageView imageView;
 EntityID currentEntity;
 
@@ -200,10 +202,10 @@ void DiffusionView::RenderSampler() {
                          scheduler_method_items, scheduler_method_item_count);
         });
 
-        addRow("Seed", [&]() { 
-            ImGui::InputInt("##Seed", &samplerComp.seed); 
+        addRow("Seed", [&]() {
+            ImGui::InputInt("##Seed", &samplerComp.seed);
             renderControlUI<int>(*seedControl);
-            });
+        });
         addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &cfgComp.cfg); });
         addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &cfgComp.guidance); });
         addRow("Steps", [&]() { ImGui::InputInt("##Steps", &samplerComp.steps); });
@@ -586,10 +588,8 @@ void DiffusionView::RenderQueueList() {
             }
         }
         if (ImGui::Button("Stop Current")) {
-
         }
         if (ImGui::Button("Clear")) {
-
         }
         if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
             if (numQueues < 1) {
@@ -605,7 +605,6 @@ void DiffusionView::RenderQueueList() {
         ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 42.0f);
         ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
-
 
         auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
         if (sdSystem) {
@@ -660,9 +659,7 @@ void DiffusionView::RenderQueueList() {
                     ImGui::Text("%s", prompt.c_str());
                 }
             }
-        
         }
-        
 
         ImGui::EndTable();
     }
@@ -739,3 +736,4 @@ void DiffusionView::Render() {
     ImGui::End();
     imageView.Render();
 }
+} // namespace GUI

@@ -1,6 +1,8 @@
 #include "CanvasView.hpp"
 #include "ImageUtils.hpp" // Use the Util class for image handling
 
+namespace GUI {
+
 CanvasView::CanvasView() : zoom(1.0f), offsetX(0.0f), offsetY(0.0f), currentHistoryIndex(0) {
     InitializeCanvas(1024, 1024);
 }
@@ -116,3 +118,4 @@ bool CanvasView::CreateTexture() {
     glBindTexture(GL_TEXTURE_2D, 0);
     return true;
 }
+} // namespace GUI

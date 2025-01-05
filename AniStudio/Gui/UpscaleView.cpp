@@ -1,6 +1,8 @@
 #include "UpscaleView.hpp"
 #include "filepaths.hpp"
 
+namespace GUI {
+
 void UpscaleView::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     ImGui::Begin("Upscale View");
@@ -48,3 +50,4 @@ void UpscaleView::Render() {
 
     ImGui::End();
 }
+} // namespace GUI

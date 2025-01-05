@@ -53,25 +53,26 @@ add_subdirectory(external/ImGuizmo)
 # Include directories
 include_directories(
     ${CONAN_INCLUDE_DIRS}
-    AniStudio
-    AniStudio/Engine
-    AniStudio/Events
-    AniStudio/Timer
-    AniStudio/Gui
-    AniStudio/utils
-    AniStudio/ECS
-    AniStudio/ECS/Base
-    AniStudio/ECS/Systems
-    AniStudio/ECS/Components
-    AniStudio/ECS/Components/SDCPPComponents
-    AniStudio/ECS/Components/ImageComponents
-    AniStudio/ECS/Components/VideoComponents
-    external/glm
-    external/stable-diffusion.cpp
-    external/imgui_filedialog
-    external/nlohmann_json
-    external/imgui_nodes
-    external/immvision
+    ${CMAKE_SOURCE_DIR}/AniStudio
+    ${CMAKE_SOURCE_DIR}/AniStudio/Engine
+    ${CMAKE_SOURCE_DIR}/AniStudio/Events
+    ${CMAKE_SOURCE_DIR}/AniStudio/Timer
+    ${CMAKE_SOURCE_DIR}/AniStudio/GUI
+    ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
+    ${CMAKE_SOURCE_DIR}/AniStudio/utils
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
+    ${CMAKE_SOURCE_DIR}/external/glm
+    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
+    ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
+    ${CMAKE_SOURCE_DIR}/external/nlohmann_json
+    ${CMAKE_SOURCE_DIR}/external/imgui_nodes
+    ${CMAKE_SOURCE_DIR}/external/immvision
     ${Vulkan_INCLUDE_DIR}
 )
 
@@ -88,6 +89,7 @@ add_executable(${PROJECT_NAME}
     AniStudio/Events/Events.cpp
     AniStudio/Timer/Timer.cpp
     AniStudio/ECS/Base/EntityManager.cpp
+    AniStudio/GUI/Base/ViewManager.cpp
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
     ${UTILS_SOURCES}

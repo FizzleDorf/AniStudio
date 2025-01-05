@@ -2,13 +2,40 @@
 #include "ECS.h"
 #include "../Events/Events.hpp"
 #include <imgui.h>
+#include "ViewTypes.hpp"
+#include <nlohmann/json.hpp>
+#include <string>
 
+namespace GUI {
 class BaseView {
 public:
-    explicit BaseView() = default;
-    virtual ~BaseView() = default;
+    std::string viewName = "Base_View";
+    BaseView() : viewID() {}
+    virtual ~BaseView() {}
 
+    inline const ViewID GetID() const { return viewID; }
+
+    // Core functions that views implement
+    virtual void Init() {}
     virtual void Update(float deltaTime) {}
-    virtual void Render() = 0;
+    virtual void Render() {}
     virtual void HandleInput(int key, int action) {}
+
+    // Serialize to JSON
+    virtual nlohmann::json Serialize() const {
+        nlohmann::json j;
+        j["viewName"] = viewName;
+        return j;
+    }
+
+    // Deserialize from JSON
+    virtual void Deserialize(const nlohmann::json &j) {
+        if (j.contains("viewName"))
+            viewName = j["viewName"];
+    }
+
+private:
+    friend class ViewManager;
+    ViewID viewID;
 };
+} // namespace GUI

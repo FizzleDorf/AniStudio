@@ -1,12 +1,13 @@
 #ifndef NODEGRAPHVIEW_HPP
 #define NODEGRAPHVIEW_HPP
 
-#include "BaseView.hpp"
+#include "Base/BaseView.hpp"
 #include <imgui_node_editor.h>
 #include <string>
 
 namespace ed = ax::NodeEditor;
 
+namespace GUI {
 class NodeGraphView : public BaseView {
 public:
     NodeGraphView();
@@ -21,5 +22,6 @@ public:
 private:
     ed::EditorContext *m_Context;
 };
+} // namespace GUI
 
 #endif // NODEGRAPHVIEW_HPP

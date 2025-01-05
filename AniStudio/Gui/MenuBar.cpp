@@ -1,10 +1,9 @@
-// MenuBar.cpp
-
 #include "MenuBar.hpp"
 #include "pch.h"
 #include "ViewState.hpp"
 #include "../Events/Events.hpp"
 
+namespace GUI {
 void ShowMenuBar(GLFWwindow *window) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -13,14 +12,14 @@ void ShowMenuBar(GLFWwindow *window) {
                 event.type = ANI::EventType::NewProject;
                 ANI::Events::Ref().QueueEvent(event);
             };
-            
+
             if (ImGui::MenuItem("Open")) {
                 ANI::Event event;
                 event.type = ANI::EventType::OpenProject;
                 ANI::Events::Ref().QueueEvent(event);
             };
             ImGui::MenuItem("Save");
-            if(ImGui::MenuItem("Exit")) {
+            if (ImGui::MenuItem("Exit")) {
                 ANI::Event event;
                 event.type = ANI::EventType::Quit;
                 ANI::Events::Ref().QueueEvent(event);
@@ -50,3 +49,4 @@ void ShowMenuBar(GLFWwindow *window) {
         ImGui::EndMainMenuBar();
     }
 }
+} // namespace GUI

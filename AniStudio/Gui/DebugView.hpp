@@ -1,13 +1,13 @@
 #pragma once
-#include "BaseView.hpp"
-#include <ECS.h>
-#include <imgui.h>
+#include "Base/BaseView.hpp"
 
 using namespace ECS;
 
+namespace GUI {
+
 class DebugView : public BaseView {
 public:
-    DebugView(){}
+    DebugView() {}
     void Init();
     void Render();
     void RenderEntityPanel();
@@ -22,3 +22,4 @@ private:
 
     void RefreshEntities();
 };
+} // namespace UI

@@ -1,6 +1,7 @@
 #include "Engine.hpp"
 
 using namespace ECS;
+using namespace GUI;
 
 namespace ANI {
 
@@ -8,9 +9,7 @@ Engine &Core = Engine::Ref();
 
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
-Engine::Engine() : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {
-    vMgr = std::make_unique<ViewManager>();
-}
+Engine::Engine() : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {}
 
 Engine::~Engine() {
     ImGui_ImplOpenGL3_Shutdown();
@@ -66,7 +65,7 @@ void Engine::Init() {
     mgr.Reset();
     mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();
-    vMgr->Init();
+    viewMgr.Reset();
 }
 
 void Engine::Update(const float deltaT) {
@@ -85,7 +84,6 @@ void Engine::Update(const float deltaT) {
         timeElapsed = 0.0;
     }
     mgr.Update(deltaT);
-    vMgr->Update(deltaT);
 }
 
 void Engine::Draw() {
@@ -96,7 +94,7 @@ void Engine::Draw() {
     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
     ShowMenuBar(window);
-    vMgr->Render();
+    viewMgr.Render();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

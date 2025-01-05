@@ -1,12 +1,12 @@
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 
-#include "BaseView.hpp"
+#include "Base/BaseView.hpp"
 #include "ImageComponent.hpp"
 #include "LoadedMedia.hpp"
 #include <pch.h>
 
-namespace ECS {
+namespace GUI {
 
 class ImageView : public BaseView {
 public:
