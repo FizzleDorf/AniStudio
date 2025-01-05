@@ -200,7 +200,10 @@ void DiffusionView::RenderSampler() {
                          scheduler_method_items, scheduler_method_item_count);
         });
 
-        addRow("Seed", [&]() { ImGui::InputInt("##Seed", &samplerComp.seed); });
+        addRow("Seed", [&]() { 
+            ImGui::InputInt("##Seed", &samplerComp.seed); 
+            renderControlUI<int>(*seedControl);
+            });
         addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &cfgComp.cfg); });
         addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &cfgComp.guidance); });
         addRow("Steps", [&]() { ImGui::InputInt("##Steps", &samplerComp.steps); });
@@ -579,6 +582,7 @@ void DiffusionView::RenderQueueList() {
         if (ImGui::Button("Queue")) {
             for (int i = 0; i < numQueues; i++) {
                 HandleT2IEvent();
+                seedControl->activate();
             }
         }
         if (ImGui::Button("Stop Current")) {

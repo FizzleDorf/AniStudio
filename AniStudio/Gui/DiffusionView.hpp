@@ -1,13 +1,17 @@
 #pragma once
 #include "BaseView.hpp"
+#include "Control.hpp"
 #include "pch.h"
 
 using namespace ECS;
 
 class DiffusionView : public BaseView {
-public:    
-    DiffusionView() {}
-    ~DiffusionView() {}
+public:
+    DiffusionView() { seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); }
+    ~DiffusionView() {
+        if (seedControl)
+            delete seedControl;
+    }
 
     void RenderModelLoader();
     void RenderLatents();
@@ -18,7 +22,7 @@ public:
     void RenderQueueList();
     void RenderFilePath();
     void Render();
-    
+
     void RenderDiffusionModelLoader();
     void RenderVaeLoader();
     void RenderControlnets();
@@ -36,11 +40,11 @@ public:
     }
 
 private:
-    bool isFilenameChanged = false; 
+    bool isFilenameChanged = false;
     int numQueues = 1;
     // ECS-related variables
     EntityID entity;
-
+    Control<int> *seedControl = nullptr;
     // Variables to handle the parameters for diffusion
     ModelComponent modelComp;
     CLipLComponent clipLComp;
