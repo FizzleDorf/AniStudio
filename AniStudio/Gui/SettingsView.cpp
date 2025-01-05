@@ -2,7 +2,10 @@
 #include "ImGuiFileDialog.h"
 #include "ImGuiFileDialogConfig.h"
 #include <cstring>
+
 using json = nlohmann::json;
+
+namespace GUI {
 std::string comfyUIPath = "";
 std::string venvPath = "";
 //ComfyUI Path Args
@@ -422,3 +425,4 @@ json SettingsView::SerializeOptions() {
 
     return j;
 }
+} // namespace GUI

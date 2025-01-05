@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
+namespace GUI {
 SequencerView::SequencerView() : currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {}
 
 void SequencerView::AddTrack(const std::string &name, ECS::EntityID entity) {
@@ -80,3 +81,4 @@ void SequencerView::Render() {
 
     ImGui::End();
 }
+} // namespace GUI

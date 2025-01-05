@@ -1,7 +1,8 @@
+#include "Base/BaseView.hpp"
 #include <imgui.h>
 #include <opencv2/opencv.hpp>
 #include <vector>
-
+namespace GUI {
 class CanvasView {
 public:
     CanvasView();
@@ -39,3 +40,4 @@ private:
     void DrawGrid();      // Draw grid based on zoom factor
     bool CreateTexture(); // Create OpenGL texture from the current canvas
 };
+} // namespace UI

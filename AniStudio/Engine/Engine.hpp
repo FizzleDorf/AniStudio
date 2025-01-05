@@ -6,8 +6,8 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include "ViewManager.hpp"
-#include "Guis.h"
+#include <Base/ViewManager.hpp>
+#include "GUI.h"
 #include "ECS.h"
 
 class ViewManager;
@@ -37,7 +37,6 @@ public:
 private:
     Engine();
     
-    std::unique_ptr<ViewManager> vMgr = nullptr;
     bool run;
     GLFWwindow *window;
     int videoWidth;

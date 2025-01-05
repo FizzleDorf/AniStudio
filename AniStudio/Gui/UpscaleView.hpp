@@ -1,9 +1,8 @@
 #pragma once
-#include "../backends/imgui_impl_opengl3.h"
-#include "ECS.h"
+#include "Base/BaseView.hpp"
 #include "pch.h"
 
-using namespace ECS;
+namespace GUI {
 
 class UpscaleView {
 public:
@@ -21,3 +20,4 @@ private:
     InputImageComponent inputImageComp;
     ImageComponent imageComp;
 };
+} // namespace GUI

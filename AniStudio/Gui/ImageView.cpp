@@ -8,7 +8,9 @@
 #include <stdexcept>
 #include <vector>
 
-namespace ECS {
+using namespace ECS;
+
+namespace GUI {
 
 ImageView::ImageView() : imgIndex(0), showHistory(false) {}
 

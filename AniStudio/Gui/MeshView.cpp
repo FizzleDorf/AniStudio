@@ -7,6 +7,7 @@
 
 using namespace ECS;
 
+namespace GUI {
 MeshView::MeshView()
     : currentGizmoOperation(ImGuizmo::TRANSLATE), currentGizmoMode(ImGuizmo::WORLD),
       cameraView(glm::lookAt(glm::vec3(10.f, 10.f, 10.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 1.f, 0.f))),
@@ -179,3 +180,4 @@ void MeshView::Render() {
 
     ImGui::End();
 }
+} // namespace GUI

@@ -1,11 +1,13 @@
 #ifndef SEQUENCER_VIEW_HPP
 #define SEQUENCER_VIEW_HPP
 
-#include "BaseView.hpp"
+#include "Base/BaseView.hpp"
 #include <ImSequencer.h>
 #include <imgui.h>
 #include <string>
 #include <vector>
+
+namespace GUI {
 
 struct Track {
     std::string name;
@@ -46,3 +48,4 @@ private:
 };
 
 #endif // SEQUENCER_VIEW_HPP
+}

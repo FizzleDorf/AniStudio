@@ -3,6 +3,8 @@
 
 namespace ed = ax::NodeEditor;
 
+namespace GUI {
+
 NodeGraphView::NodeGraphView() : m_Context(nullptr) { Initialize(); }
 
 NodeGraphView::~NodeGraphView() { Cleanup(); }
@@ -42,3 +44,4 @@ void NodeGraphView::Render() {
 
     ImGui::End();
 }
+} // namespace GUI

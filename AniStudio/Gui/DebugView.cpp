@@ -1,8 +1,8 @@
 #include "DebugView.hpp"
 
-void DebugView::Init() {
-    RefreshEntities();
-}
+namespace GUI {
+
+void DebugView::Init() { RefreshEntities(); }
 
 void DebugView::RefreshEntities() {
     entities = mgr.GetAllEntities();
@@ -29,7 +29,7 @@ void DebugView::RenderEntityPanel() {
             selectedEntity = entity;
             entityIndex = static_cast<int>(i);
         }
-        
+
         if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
             auto components = mgr.GetEntityComponents(entity);
             for (auto compType : components) {
@@ -47,13 +47,12 @@ void DebugView::RenderSystemPanel() {
     ImGui::Begin("Active Systems");
 
     for (const auto &[id, aniSystem] : mgr.GetRegisteredSystems()) {
-        if (ImGui::TreeNode(
-                (std::string("System ") + std::to_string(id) + " " + aniSystem->GetSystemName()).c_str()))
-             {
-            
+        if (ImGui::TreeNode((std::string("System ") + std::to_string(id) + " " + aniSystem->GetSystemName()).c_str())) {
+
             ImGui::TreePop();
         }
     }
 
     ImGui::End();
 }
+} // namespace GUI

@@ -1,11 +1,12 @@
 #ifndef CONTROL_HPP
 #define CONTROL_HPP
-
-#include "imgui.h"
+#include "Base/BaseView.hpp"
 #include <memory>
 #include <random>
 #include <type_traits>
 #include <vector>
+
+namespace GUI {
 
 enum class ControlMode { Fixed = 0, Increment, Decrement, Random };
 
@@ -21,7 +22,8 @@ public:
 template <typename T>
 class Control : public ControlBase {
 public:
-    Control(T &valueRef, ControlMode mode = ControlMode::Fixed, T newStep = 1, T min = 0, T max = std::numeric_limits<int>::max())
+    Control(T &valueRef, ControlMode mode = ControlMode::Fixed, T newStep = 1, T min = 0,
+            T max = std::numeric_limits<int>::max())
         : value(valueRef), mode(mode), step(newStep), randomRange(min, max) {
         lastValue = value;
     }
@@ -68,7 +70,7 @@ public:
             }
             ImGui::EndCombo();
         }
-        
+
         if (ImGui::Button("Last Value##d0")) {
             setLastValue();
         }
@@ -100,5 +102,6 @@ template <typename T>
 void renderControlUI(Control<T> &control) {
     control.renderUI();
 }
+} // namespace UI
 
 #endif // CONTROL_HPP

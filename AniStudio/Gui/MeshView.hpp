@@ -1,7 +1,7 @@
 #ifndef THREE_D_VIEW_HPP
 #define THREE_D_VIEW_HPP
 
-#include "BaseView.hpp"
+#include "Base/BaseView.hpp"
 #include "imgui_impl_opengl3.h"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -11,6 +11,7 @@
 #include <imgui.h>
 #include <memory>
 
+namespace GUI {
 class MeshView : public BaseView {
 public:
     // Constructor
@@ -45,7 +46,8 @@ private:
     ImGuizmo::MODE currentGizmoMode;
 
     // ECS related
-    ECS::EntityID entity;                                // Entity for the 3D model
+    ECS::EntityID entity; // Entity for the 3D model
 };
+} // namespace GUI
 
 #endif // THREE_D_VIEW_HPP

@@ -1,9 +1,11 @@
 #pragma once
-#include "BaseView.hpp"
+#include "Base/BaseView.hpp"
 #include "Control.hpp"
 #include "pch.h"
 
 using namespace ECS;
+
+namespace GUI {
 
 class DiffusionView : public BaseView {
 public:
@@ -63,3 +65,4 @@ private:
     ControlnetComponent controlComp;
     LayerSkipComponent layerSkipComp;
 };
+} // namespace GUI
