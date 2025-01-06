@@ -48,15 +48,16 @@ public:
         }
     }
 
-    /*void RenderViews() override {
+    void RenderViews() override {
         for (auto &view : data) {
             if (view) {
                 view->Render();
             }
         }
-    }*/
+    }
 
-    void RenderViews() override {
+    // For Debugging
+    /*void RenderViews() override {
         std::cout << "ViewList::RenderViews - Starting render, data size: " << data.size() << std::endl;
         for (auto &view : data) {
             if (view) {
@@ -67,7 +68,7 @@ public:
                 std::cout << "ViewList::RenderViews - Null view found in list" << std::endl;
             }
         }
-    }
+    }*/
 
     std::vector<std::shared_ptr<T>> data;
 };
