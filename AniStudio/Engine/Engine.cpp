@@ -63,9 +63,27 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
     filePaths.Init();
     mgr.Reset();
+    viewMgr.Reset();
+
     mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();
-    viewMgr.Reset();
+
+    viewMgr.Init();
+
+    // Create core views
+    ViewID debugViewID = viewMgr.AddNewView();
+    viewMgr.AddView<DebugView>(debugViewID);
+
+    ViewID diffusionViewID = viewMgr.AddNewView();
+    viewMgr.AddView<DiffusionView>(diffusionViewID);
+
+    ViewID imageViewID = viewMgr.AddNewView();
+    viewMgr.AddView<ImageView>(imageViewID);
+
+    // Initialize the views
+    viewMgr.GetView<DebugView>(debugViewID).Init();
+    viewMgr.GetView<DiffusionView>(diffusionViewID).Init();
+    viewMgr.GetView<ImageView>(imageViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {

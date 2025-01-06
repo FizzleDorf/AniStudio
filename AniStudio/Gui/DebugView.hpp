@@ -12,6 +12,7 @@ public:
     void Render();
     void RenderEntityPanel();
     void RenderSystemPanel();
+    
     template <typename T>
     void RenderComponentEditor();
 

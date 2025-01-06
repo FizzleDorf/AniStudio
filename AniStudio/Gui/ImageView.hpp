@@ -11,7 +11,7 @@ namespace GUI {
 class ImageView : public BaseView {
 public:
     ImageView();
-    void Render();
+    void Render() override;
     void LoadImage();
     void SaveImage(const std::string &filePath);
     ~ImageView();

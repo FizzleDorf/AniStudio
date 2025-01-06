@@ -9,12 +9,21 @@ namespace GUI {
 
 class DiffusionView : public BaseView {
 public:
-    DiffusionView() { seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); }
+    DiffusionView() { 
+        viewName = "DiffusionView";
+        seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); 
+    }
     ~DiffusionView() {
         if (seedControl)
             delete seedControl;
     }
 
+    // Overloaded Functions
+    nlohmann::json Serialize() const override;
+    void Deserialize(const nlohmann::json &j) override;
+    void Render() override;
+
+    // Gui Elements
     void RenderModelLoader();
     void RenderLatents();
     void RenderInputImage();
@@ -23,8 +32,6 @@ public:
     void RenderOther();
     void RenderQueueList();
     void RenderFilePath();
-    void Render();
-
     void RenderDiffusionModelLoader();
     void RenderVaeLoader();
     void RenderControlnets();
