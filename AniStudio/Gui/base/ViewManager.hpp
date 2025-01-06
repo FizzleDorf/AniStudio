@@ -17,16 +17,17 @@ public:
     
     void Init() {}
 
-    /*void Render() {
+    void Render() {
         for (const auto &viewList : viewArrays) {
             viewList.second->RenderViews();
         }
-    }*/
+    }
 
-    void Render() {
+    // For Debugging 
+    /*void Render() {
         try {
             std::cout << "ViewManager::Render - Starting render, viewArrays size: " << viewArrays.size() << std::endl;
-            for (const auto &viewList : viewArrays) {
+            for (const auto& viewList : viewArrays) {
                 std::cout << "ViewManager::Render - Attempting to render ViewType: " << viewList.first << std::endl;
                 if (viewList.second) {
                     std::cout << "ViewManager::Render - ViewList exists, calling RenderViews()" << std::endl;
@@ -35,10 +36,10 @@ public:
                     std::cout << "ViewManager::Render - Null viewList found for type: " << viewList.first << std::endl;
                 }
             }
-        } catch (const std::exception &e) {
+        } catch (const std::exception& e) {
             std::cerr << "Error in ViewManager::Render: " << e.what() << std::endl;
         }
-    }
+    }*/
 
     const ViewID AddNewView() {
         const ViewID view = availableViews.front();

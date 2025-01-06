@@ -9,8 +9,6 @@ using namespace ANI;
 
 namespace GUI {
 
-EntityID currentEntity;
-
 void DiffusionView::RenderModelLoader() {
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -202,7 +200,7 @@ void DiffusionView::RenderSampler() {
 
         addRow("Seed", [&]() {
             ImGui::InputInt("##Seed", &samplerComp.seed);
-            renderControlUI<int>(*seedControl);
+            // renderControlUI<int>(*seedControl);
         });
         addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &cfgComp.cfg); });
         addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &cfgComp.guidance); });
@@ -222,7 +220,6 @@ void DiffusionView::HandleT2IEvent() {
         return;
     }
 
-    currentEntity = newEntity;
     std::cout << "Initialized entity with ID: " << newEntity << std::endl;
 
     try {
@@ -582,7 +579,7 @@ void DiffusionView::RenderQueueList() {
         if (ImGui::Button("Queue")) {
             for (int i = 0; i < numQueues; i++) {
                 HandleT2IEvent();
-                seedControl->activate();
+                // seedControl->activate();
             }
         }
         if (ImGui::Button("Stop Current")) {
@@ -695,21 +692,6 @@ void DiffusionView::Render() {
                 // Controlnet Loader and Params
                 RenderControlnets();
                 // Embedding Inputs
-                RenderEmbeddings();
-                ImGui::EndTabItem();
-            }
-
-            if (ImGui::BeginTabItem("HighResFix")) {
-                RenderFilePath();
-                RenderOther();
-                RenderInputImage();
-                RenderModelLoader();
-                RenderDiffusionModelLoader();
-                RenderVaeLoader();
-                RenderLatents();
-                RenderPrompts();
-                RenderSampler();
-                RenderControlnets();
                 RenderEmbeddings();
                 ImGui::EndTabItem();
             }

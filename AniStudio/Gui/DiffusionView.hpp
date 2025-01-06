@@ -11,11 +11,11 @@ class DiffusionView : public BaseView {
 public:
     DiffusionView() { 
         viewName = "DiffusionView";
-        seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); 
+        // seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); 
     }
     ~DiffusionView() {
-        if (seedControl)
-            delete seedControl;
+        // if (seedControl)
+        //     delete seedControl;
     }
 
     // Overloaded Functions
@@ -53,7 +53,7 @@ private:
     int numQueues = 1;
     // ECS-related variables
     EntityID entity;
-    Control<int> *seedControl = nullptr;
+    // Control<int> *seedControl = nullptr;
     // Variables to handle the parameters for diffusion
     ModelComponent modelComp;
     CLipLComponent clipLComp;
