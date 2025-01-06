@@ -1,7 +1,6 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
 #include "ECS.h"
-#include "ImageView.hpp"
 #include "stable-diffusion.h"
 #include <filesystem>
 
@@ -10,7 +9,6 @@ using namespace ANI;
 
 namespace GUI {
 
-ImageView imageView;
 EntityID currentEntity;
 
 void DiffusionView::RenderModelLoader() {
@@ -734,6 +732,59 @@ void DiffusionView::Render() {
         ImGui::EndTabBar();
     }
     ImGui::End();
-    imageView.Render();
 }
+
+nlohmann::json DiffusionView::Serialize() const {
+    nlohmann::json j = BaseView::Serialize();
+    j["modelComp"] = modelComp.Serialize();
+    j["clipLComp"] = clipLComp.Serialize();
+    j["clipGComp"] = clipGComp.Serialize();
+    j["t5xxlComp"] = t5xxlComp.Serialize();
+    j["ckptComp"] = ckptComp.Serialize();
+    j["latentComp"] = latentComp.Serialize();
+    j["loraComp"] = loraComp.Serialize();
+    j["promptComp"] = promptComp.Serialize();
+    j["samplerComp"] = samplerComp.Serialize();
+    j["cfgComp"] = cfgComp.Serialize();
+    j["vaeComp"] = vaeComp.Serialize();
+    j["imageComp"] = imageComp.Serialize();
+    j["embedComp"] = embedComp.Serialize();
+    j["controlComp"] = controlComp.Serialize();
+    j["layerSkipComp"] = layerSkipComp.Serialize();
+}
+
+void DiffusionView::Deserialize(const nlohmann::json &j) {
+    BaseView::Deserialize(j);
+    if (j.contains("modelComp"))
+        modelComp.Deserialize(j["modelComp"]);
+    if (j.contains("clipLComp"))
+        clipLComp.Deserialize(j["clipLComp"]);
+    if (j.contains("clipGComp"))
+        clipGComp.Deserialize(j["clipGComp"]);
+    if (j.contains("t5xxlComp"))
+        t5xxlComp.Deserialize(j["t5xxlComp"]);
+    if (j.contains("ckptComp"))
+        ckptComp.Deserialize(j["ckptComp"]);
+    if (j.contains("latentComp"))
+        latentComp.Deserialize(j["latentComp"]);
+    if (j.contains("loraComp"))
+        loraComp.Deserialize(j["loraComp"]);
+    if (j.contains("promptComp"))
+        promptComp.Deserialize(j["promptComp"]);
+    if (j.contains("samplerComp"))
+        samplerComp.Deserialize(j["samplerComp"]);
+    if (j.contains("cfgComp"))
+        cfgComp.Deserialize(j["cfgComp"]);
+    if (j.contains("vaeComp"))
+        vaeComp.Deserialize(j["vaeComp"]);
+    if (j.contains("imageComp"))
+        imageComp.Deserialize(j["imageComp"]);
+    if (j.contains("embedComp"))
+        embedComp.Deserialize(j["embedComp"]);
+    if (j.contains("controlComp"))
+        controlComp.Deserialize(j["controlComp"]);
+    if (j.contains("layerSkipComp"))
+        layerSkipComp.Deserialize(j["layerSkipComp"]);
+}
+
 } // namespace GUI

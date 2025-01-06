@@ -9,7 +9,7 @@ public:
     IViewList() = default;
     virtual ~IViewList() = default;
     virtual void Erase(const ViewID viewID) {}
-    virtual void RenderViews() const = 0;
+    virtual void RenderViews() = 0;
 };
 
 template <typename T>
@@ -19,24 +19,27 @@ public:
     ~ViewList() = default;
 
     void Insert(const T &view) {
-        auto existingView =
-            std::find_if(data.begin(), data.end(), [&](const T &v) { return v.GetID() == view.GetID(); });
+        auto existingView = std::find_if(data.begin(), data.end(),
+                                         [&](const std::shared_ptr<T> &v) { return v->GetID() == view.GetID(); });
         if (existingView == data.end()) {
-            data.push_back(view);
-            std::cout << "View added! ID: " << view.GetID() << ", Type ID: " << ViewType<T>() << std::endl;
+            auto newView = std::make_shared<T>(view);
+            data.push_back(newView);
+            std::cout << "View added! ID: " << newView->GetID() << ", Type ID: " << ViewType<T>() << std::endl;
         } else {
             std::cout << "View already exists! ID: " << view.GetID() << std::endl;
         }
     }
 
     T &Get(const ViewID viewID) {
-        auto view = std::find_if(data.begin(), data.end(), [&](const T &v) { return v.GetID() == viewID; });
+        auto view =
+            std::find_if(data.begin(), data.end(), [&](const std::shared_ptr<T> &v) { return v->GetID() == viewID; });
         assert(view != data.end() && "View doesn't exist!");
-        return *view;
+        return *(*view);
     }
 
     void Erase(const ViewID viewID) override final {
-        auto view = std::find_if(data.begin(), data.end(), [&](const T &v) { return v.GetID() == viewID; });
+        auto view =
+            std::find_if(data.begin(), data.end(), [&](const std::shared_ptr<T> &v) { return v->GetID() == viewID; });
         if (view != data.end()) {
             data.erase(view);
             std::cout << "View erased! ID: " << viewID << ", Type ID: " << ViewType<T>() << std::endl;
@@ -45,12 +48,27 @@ public:
         }
     }
 
-    void RenderViews() const override {
-        for (const auto &view : data) {
-            view.Render();
+    /*void RenderViews() override {
+        for (auto &view : data) {
+            if (view) {
+                view->Render();
+            }
+        }
+    }*/
+
+    void RenderViews() override {
+        std::cout << "ViewList::RenderViews - Starting render, data size: " << data.size() << std::endl;
+        for (auto &view : data) {
+            if (view) {
+                std::cout << "ViewList::RenderViews - Rendering view ID: " << view->GetID() << std::endl;
+                view->Render();
+                std::cout << "ViewList::RenderViews - Finished rendering view ID: " << view->GetID() << std::endl;
+            } else {
+                std::cout << "ViewList::RenderViews - Null view found in list" << std::endl;
+            }
         }
     }
 
-    std::vector<T> data;
+    std::vector<std::shared_ptr<T>> data;
 };
 } // namespace GUI

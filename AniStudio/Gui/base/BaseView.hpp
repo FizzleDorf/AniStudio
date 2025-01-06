@@ -17,8 +17,7 @@ public:
 
     // Core functions that views implement
     virtual void Init() {}
-    virtual void Update(float deltaTime) {}
-    virtual void Render() {}
+    virtual void Render() = 0;
     virtual void HandleInput(int key, int action) {}
 
     // Serialize to JSON
