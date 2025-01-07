@@ -25,6 +25,7 @@ namespace ECS {
 			}
 		}
 
+		// Delegated to Viewmanager for adding custom user views
 		void Render() {
 			for (auto& system : registeredSystems) {
 				system.second->Render();
@@ -212,7 +213,7 @@ namespace ECS {
             return entity;
         }
 
-		// Plugin support - Runtime component registration
+		// Plugin support for component registration
         using ComponentCreator = std::function<void(EntityID)>;
         using ComponentGetter = std::function<BaseComponent *(EntityID)>;
 
@@ -234,7 +235,6 @@ namespace ECS {
                 });
         }
 
-        // Save/load workflow
         void SaveWorkflow(const std::string &filepath) {
             nlohmann::json workflowJson;
             workflowJson["entities"] = nlohmann::json::array();
