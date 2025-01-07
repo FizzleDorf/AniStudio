@@ -168,6 +168,106 @@ namespace ECS {
             return {};
         }
 
+		nlohmann::json SerializeEntity(const EntityID entity) {
+            nlohmann::json entityJson;
+            entityJson["entityID"] = entity;
+            entityJson["components"] = nlohmann::json::array();
+
+            auto componentTypes = GetEntityComponents(entity);
+            for (const auto &componentId : componentTypes) {
+                if (auto *baseComponent = GetComponentById(entity, componentId)) {
+                    nlohmann::json componentJson;
+                    componentJson["typeId"] = componentId;
+                    componentJson["data"] = baseComponent->Serialize();
+                    entityJson["components"].push_back(componentJson);
+                }
+            }
+
+            return entityJson;
+        }
+
+		EntityID DeserializeEntity(const nlohmann::json &json) {
+            EntityID entity;
+            if (json.contains("entityID")) {
+                entity = json["entityID"];
+            } else {
+                entity = AddNewEntity();
+            }
+
+            if (json.contains("components")) {
+                for (const auto &componentJson : json["components"]) {
+                    ComponentTypeID typeId = componentJson["typeId"];
+                    // Find and invoke the component creator if registered
+                    auto creator = componentCreators.find(typeId);
+                    if (creator != componentCreators.end()) {
+                        creator->second(entity);
+                        // Get the component and deserialize its data
+                        if (auto *component = GetComponentById(entity, typeId)) {
+                            component->Deserialize(componentJson["data"]);
+                        }
+                    }
+                }
+            }
+
+            return entity;
+        }
+
+		// Plugin support - Runtime component registration
+        using ComponentCreator = std::function<void(EntityID)>;
+        using ComponentGetter = std::function<BaseComponent *(EntityID)>;
+
+        void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter) {
+            componentCreators[typeId] = creator;
+            componentGetters[typeId] = getter;
+        }
+
+        template <typename T>
+        void RegisterBuiltInComponent() {
+            ComponentTypeID typeId = CompType<T>();
+            RegisterComponentType(
+                typeId, [this](EntityID entity) { this->AddComponent<T>(entity); },
+                [this](EntityID entity) -> BaseComponent * {
+                    if (this->HasComponent<T>(entity)) {
+                        return &this->GetComponent<T>(entity);
+                    }
+                    return nullptr;
+                });
+        }
+
+        // Save/load workflow
+        void SaveWorkflow(const std::string &filepath) {
+            nlohmann::json workflowJson;
+            workflowJson["entities"] = nlohmann::json::array();
+
+            for (const auto &entity : GetAllEntities()) {
+                workflowJson["entities"].push_back(SerializeEntity(entity));
+            }
+
+            std::ofstream file(filepath);
+            file << workflowJson.dump(4);
+        }
+
+        void LoadWorkflow(const std::string &filepath) {
+            std::ifstream file(filepath);
+            if (!file.is_open()) {
+                return;
+            }
+
+            try {
+                nlohmann::json workflowJson;
+                file >> workflowJson;
+
+                Reset();
+
+                if (workflowJson.contains("entities")) {
+                    for (const auto &entityJson : workflowJson["entities"]) {
+                        DeserializeEntity(entityJson);
+                    }
+                }
+            } catch (const std::exception &e) {
+                std::cerr << "Error loading workflow: " << e.what() << std::endl;
+            }
+        }
 
 		// Getters for private variables
 		EntityID GetEntityCount() const { return entityCount; }
@@ -225,12 +325,23 @@ namespace ECS {
 			return true;
 		}
 
-	private:
+		BaseComponent *GetComponentById(EntityID entity, ComponentTypeID typeId) {
+            auto getter = componentGetters.find(typeId);
+            if (getter != componentGetters.end()) {
+                return getter->second(entity);
+            }
+            return nullptr;
+        }
+
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID,std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
+        std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
+        std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
+        
+
     };
     extern EntityManager mgr;
     }
