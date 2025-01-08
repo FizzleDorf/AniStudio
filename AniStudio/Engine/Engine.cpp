@@ -65,7 +65,7 @@ void Engine::Init() {
     filePaths.Init();
     mgr.Reset();
     viewMgr.Reset();
-    
+
     mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();
 
@@ -80,6 +80,7 @@ void Engine::Init() {
 
     ViewID imageViewID = viewMgr.AddNewView();
     viewMgr.AddView<ImageView>(imageViewID);
+
 
     ViewID pluginViewID = viewMgr.AddNewView();
     viewMgr.AddView<PluginView>(pluginViewID);

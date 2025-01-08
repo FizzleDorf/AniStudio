@@ -18,7 +18,6 @@ public:
 
     void Init() {}
 
-    // Core View Management
     const ViewID AddNewView() {
         const ViewID view = availableViews.front();
         AddViewSignature(view);
@@ -37,11 +36,13 @@ public:
 
         viewCount--;
         availableViews.push(view);
+
     }
 
     template <typename T, typename... Args>
     void AddView(const ViewID view, Args &&...args) {
         assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
+
         T viewComponent(std::forward<Args>(args)...);
         viewComponent.viewID = view;
         GetViewSignature(view)->insert(ViewType<T>());
@@ -73,6 +74,7 @@ public:
         const ViewTypeID viewType = ViewType<T>();
         return (signature.count(viewType) > 0);
     }
+
 
     // View Rendering
     void Render() {
@@ -155,7 +157,6 @@ private:
     std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
     std::unordered_map<std::string, ViewTypeID> registeredViews;
 };
-
 extern ViewManager viewMgr;
 
 } // namespace GUI

@@ -94,6 +94,7 @@ add_executable(${PROJECT_NAME}
     AniStudio/ECS/Base/EntityManager.cpp
     AniStudio/GUI/Base/ViewManager.cpp
     AniStudio/PluginManager.cpp
+
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
     ${UTILS_SOURCES}
