@@ -61,6 +61,7 @@ void Engine::Init() {
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+    
     filePaths.Init();
     mgr.Reset();
     viewMgr.Reset();
@@ -80,10 +81,15 @@ void Engine::Init() {
     ViewID imageViewID = viewMgr.AddNewView();
     viewMgr.AddView<ImageView>(imageViewID);
 
+
+    ViewID pluginViewID = viewMgr.AddNewView();
+    viewMgr.AddView<PluginView>(pluginViewID);
+
     // Initialize the views
     viewMgr.GetView<DebugView>(debugViewID).Init();
     viewMgr.GetView<DiffusionView>(diffusionViewID).Init();
     viewMgr.GetView<ImageView>(imageViewID).Init();
+    viewMgr.GetView<PluginView>(pluginViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {

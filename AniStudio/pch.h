@@ -24,15 +24,15 @@
 #include <nlohmann/json.hpp>
 
 // Vulkan
-#include <vulkan/vulkan.h>
+// #include <vulkan/vulkan.h>
 
 // GLEW first to avoid conflicts with OpenGL macros
-#include <GL/glew.h>
+// #include <GL/glew.h>
 
 // GLFW
-#define GLFW_INCLUDE_NONE
-#define GLFW_INCLUDE_VULKAN
-#include <GLFW/glfw3.h>
+// #define GLFW_INCLUDE_NONE
+// #define GLFW_INCLUDE_VULKAN
+// #include <GLFW/glfw3.h>
 
 // Volk headers
 #ifdef IMGUI_IMPL_VULKAN_USE_VOLK
@@ -42,7 +42,7 @@
 
 // ImGui
 #include "imgui.h"
-#include "ImGuiFileDialog.h"
+// #include "ImGuiFileDialog.h"
  
 //http request headers
 // #include "cpr/cpr.h"

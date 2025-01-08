@@ -42,6 +42,9 @@ set(SHADER_DIR "${CMAKE_SOURCE_DIR}/Anistudio/shaders")
 # Copy the shaders to the build directory
 file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
 
+# Define the shader source directory
+set(PLUGIN_DIR "${CMAKE_SOURCE_DIR}/plugins")
+
 # External libraries
 add_subdirectory(external/stable-diffusion.cpp)
 add_subdirectory(external/imgui)
@@ -90,6 +93,8 @@ add_executable(${PROJECT_NAME}
     AniStudio/Timer/Timer.cpp
     AniStudio/ECS/Base/EntityManager.cpp
     AniStudio/GUI/Base/ViewManager.cpp
+    AniStudio/PluginManager.cpp
+
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
     ${UTILS_SOURCES}
