@@ -1,6 +1,4 @@
 #pragma once
-#include "ECS.h"
-#include "../Events/Events.hpp"
 #include <imgui.h>
 #include "ViewTypes.hpp"
 #include <nlohmann/json.hpp>
