@@ -344,4 +344,4 @@ namespace ECS {
 
     };
     extern EntityManager mgr;
-    }
+}

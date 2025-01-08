@@ -17,3 +17,4 @@
 #include "SequencerView.hpp"
 #include "CanvasView.hpp"
 #include "DebugView.hpp"
+#include "PluginView.hpp"
