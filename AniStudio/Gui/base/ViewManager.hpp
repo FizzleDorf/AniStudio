@@ -5,6 +5,7 @@
 #include "pch.h"
 
 namespace GUI {
+
 class ViewManager {
 public:
     ViewManager() : viewCount(0) {
@@ -14,33 +15,10 @@ public:
     }
 
     ~ViewManager() = default;
-    
+
     void Init() {}
 
-    void Render() {
-        for (const auto &viewList : viewArrays) {
-            viewList.second->RenderViews();
-        }
-    }
-
-    // For Debugging 
-    /*void Render() {
-        try {
-            std::cout << "ViewManager::Render - Starting render, viewArrays size: " << viewArrays.size() << std::endl;
-            for (const auto& viewList : viewArrays) {
-                std::cout << "ViewManager::Render - Attempting to render ViewType: " << viewList.first << std::endl;
-                if (viewList.second) {
-                    std::cout << "ViewManager::Render - ViewList exists, calling RenderViews()" << std::endl;
-                    viewList.second->RenderViews();
-                } else {
-                    std::cout << "ViewManager::Render - Null viewList found for type: " << viewList.first << std::endl;
-                }
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Error in ViewManager::Render: " << e.what() << std::endl;
-        }
-    }*/
-
+    // Core View Management
     const ViewID AddNewView() {
         const ViewID view = availableViews.front();
         AddViewSignature(view);
@@ -59,13 +37,11 @@ public:
 
         viewCount--;
         availableViews.push(view);
-        std::cout << "Removed View: " << view << "\n";
     }
 
     template <typename T, typename... Args>
     void AddView(const ViewID view, Args &&...args) {
         assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
-
         T viewComponent(std::forward<Args>(args)...);
         viewComponent.viewID = view;
         GetViewSignature(view)->insert(ViewType<T>());
@@ -83,7 +59,6 @@ public:
     template <typename T>
     T &GetView(const ViewID view) {
         assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
-        const ViewTypeID viewType = ViewType<T>();
         return GetViewList<T>()->Get(view);
     }
 
@@ -99,6 +74,14 @@ public:
         return (signature.count(viewType) > 0);
     }
 
+    // View Rendering
+    void Render() {
+        for (const auto &viewList : viewArrays) {
+            viewList.second->RenderViews();
+        }
+    }
+
+    // State Management
     void Reset() {
         for (auto &viewSignaturePair : viewSignatures) {
             DestroyView(viewSignaturePair.first);
@@ -121,6 +104,21 @@ public:
             views.push_back(pair.first);
         }
         return views;
+    }
+
+    // View Type Registration
+    template <typename T>
+    void RegisterView(const std::string &name) {
+        registeredViews[name] = ViewType<T>();
+    }
+
+    // Get registered view type by name
+    ViewTypeID GetViewType(const std::string &name) const {
+        auto it = registeredViews.find(name);
+        if (it != registeredViews.end()) {
+            return it->second;
+        }
+        throw std::runtime_error("View type not registered: " + name);
     }
 
 private:
@@ -155,7 +153,9 @@ private:
     std::queue<ViewID> availableViews;
     std::map<ViewID, std::shared_ptr<ViewSignature>> viewSignatures;
     std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
+    std::unordered_map<std::string, ViewTypeID> registeredViews;
 };
 
 extern ViewManager viewMgr;
+
 } // namespace GUI
