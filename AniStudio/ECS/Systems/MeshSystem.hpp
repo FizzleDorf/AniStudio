@@ -1,4 +1,6 @@
-#include "BaseSystem.hpp"
+#pragma once
+
+#include "ECS.h"
 #include "components.h"
 
 namespace ECS {

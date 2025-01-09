@@ -5,6 +5,3 @@
 #include "Base/Types.hpp"
 #include "Base/Entity.hpp"
 
-#include "Systems/Systems.h"
-#include "Components/Components.h"
-

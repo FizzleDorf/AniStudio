@@ -1,13 +1,10 @@
 #pragma once
 
 #include "Base/BaseView.hpp"
-#include "ViewState.hpp"
 #include "filepaths.hpp"
 #include <nlohmann/json.hpp>
-#include <fstream>
-#include <filesystem>
-#include <cstdlib>
-#include <iostream>
+#include "ImGuiFileDialog.h"
+
  namespace GUI {
 // FlagOption struct for ComfyUI Path Args
 struct FlagOption {

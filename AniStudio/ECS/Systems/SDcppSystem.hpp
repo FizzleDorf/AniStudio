@@ -5,17 +5,9 @@
 #include "Serialization.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
-#include <atomic>
 #include <condition_variable>
-#include <filesystem>
-#include <future>
-#include <iostream>
-#include <mutex>
-#include <queue>
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <thread>
-#include <vector>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {

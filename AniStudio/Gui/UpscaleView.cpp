@@ -1,5 +1,4 @@
 #include "UpscaleView.hpp"
-#include "filepaths.hpp"
 
 namespace GUI {
 

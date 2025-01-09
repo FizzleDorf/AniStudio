@@ -1,6 +1,4 @@
 #include "MenuBar.hpp"
-#include "pch.h"
-#include "ViewState.hpp"
 #include "../Events/Events.hpp"
 
 namespace GUI {
@@ -36,14 +34,7 @@ void ShowMenuBar(GLFWwindow *window) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-            ImGui::MenuItem("Debug View", NULL, &viewState.showDebugView);
-            ImGui::MenuItem("Diffusion View", NULL, &viewState.showDiffusionView);
-            ImGui::MenuItem("Upscale View", NULL, &viewState.showDiffusionView);
-            ImGui::MenuItem("Drawing Canvas", NULL, &viewState.showDrawingCanvas);
-            ImGui::MenuItem("Settings", NULL, &viewState.showSettingsView);
-            ImGui::MenuItem("MeshView", NULL, &viewState.showMeshView);
-            ImGui::MenuItem("NodeGraph", NULL, &viewState.showNodeGraphView);
-            ImGui::MenuItem("Sequencer", NULL, &viewState.showSequencerView);
+
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();

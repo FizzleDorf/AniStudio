@@ -1,7 +1,6 @@
 #include "SettingsView.hpp"
 #include "ImGuiFileDialog.h"
 #include "ImGuiFileDialogConfig.h"
-#include <cstring>
 
 using json = nlohmann::json;
 
@@ -72,7 +71,6 @@ extern BoolOption boolOptions[] = {
 };
 
 void SettingsView::Render() {
-    if (viewState.showSettingsView) {
         ImGui::SetNextWindowSize(ImVec2(700, 400), ImGuiCond_FirstUseEver);
         ImGui::Begin("Settings");
 
@@ -157,7 +155,7 @@ void SettingsView::Render() {
             ImGui::EndTabBar();
         }
         ImGui::End();
-    }
+    
 }
 
 // Helper function for rendering a file path input field

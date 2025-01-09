@@ -1,5 +1,4 @@
 #include "NodeGraphView.hpp"
-#include <imgui.h>
 
 namespace ed = ax::NodeEditor;
 

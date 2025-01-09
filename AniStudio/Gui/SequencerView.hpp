@@ -2,10 +2,9 @@
 #define SEQUENCER_VIEW_HPP
 
 #include "Base/BaseView.hpp"
+#include "pch.h"
 #include <ImSequencer.h>
-#include <imgui.h>
-#include <string>
-#include <vector>
+#include "ImGuiFileDialog.h"
 
 namespace GUI {
 

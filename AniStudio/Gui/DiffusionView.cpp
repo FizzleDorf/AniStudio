@@ -1,8 +1,6 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
-#include "ECS.h"
-#include "stable-diffusion.h"
-#include <filesystem>
+
 
 using namespace ECS;
 using namespace ANI;

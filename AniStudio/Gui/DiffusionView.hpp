@@ -1,8 +1,10 @@
 #pragma once
 #include "Base/BaseView.hpp"
-#include "Control.hpp"
 #include "pch.h"
-
+#include <components.h>
+#include <SDcppSystem.hpp>
+#include "ImGuiFileDialog.h"
+#include "stable-diffusion.h"
 using namespace ECS;
 
 namespace GUI {

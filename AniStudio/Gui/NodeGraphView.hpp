@@ -4,6 +4,7 @@
 #include "Base/BaseView.hpp"
 #include <imgui_node_editor.h>
 #include <string>
+#include <imgui.h>
 
 namespace ed = ax::NodeEditor;
 

@@ -8,6 +8,7 @@
 #include <imgui_impl_opengl3.h>
 #include <Base/ViewManager.hpp>
 #include <PluginManager.hpp>
+#include "guis.h"
 
 #include "GUI.h"
 #include "ECS.h"

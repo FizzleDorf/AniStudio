@@ -1,6 +1,10 @@
 #pragma once
 #include "Base/BaseView.hpp"
+#include "filepaths.hpp"
 #include "pch.h"
+#include "ImGuiFileDialog.h"
+#include "components.h"
+#include "systems.h"
 
 namespace GUI {
 

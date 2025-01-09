@@ -1,6 +1,6 @@
 #pragma once
 
-#include "EntityManager.hpp"
+#include "ECS.h"
 #include "ImageComponent.hpp"
 #include "VideoComponent.hpp"
 #include <stdexcept>

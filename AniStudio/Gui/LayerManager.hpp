@@ -1,10 +1,12 @@
 #ifndef LAYERMANAGER_HPP
 #define LAYERMANAGER_HPP
 
-#include "ECS.h"
-#include <GL/glew.h>
-#include <vector>
+#include "pch.h"
+#include <ECS.h>
+#include <components.h>
 
+using namespace ECS;
+namespace GUI {
 class LayerManager {
 public:
     LayerManager();
@@ -28,5 +30,6 @@ private:
     int width = 800;  // Default width
     int height = 600; // Default height
 };
+} // namespace GUI
 
 #endif // LAYERMANAGER_HPP

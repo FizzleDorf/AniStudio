@@ -2,14 +2,12 @@
 #define THREE_D_VIEW_HPP
 
 #include "Base/BaseView.hpp"
-#include "imgui_impl_opengl3.h"
-#include <GL/glew.h>
-#include <GLFW/glfw3.h>
+#include "pch.h"
 #include <ImGuizmo.h>
-#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <imgui.h>
-#include <memory>
+#include <glm/gtc/type_ptr.hpp>
+#include <RenderComponents/MeshComponent.hpp>
+#include <MeshSystem.hpp>
 
 namespace GUI {
 class MeshView : public BaseView {

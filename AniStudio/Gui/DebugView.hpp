@@ -1,5 +1,7 @@
 #pragma once
 #include "Base/BaseView.hpp"
+#include <components.h>
+#include <systems.h>
 
 using namespace ECS;
 

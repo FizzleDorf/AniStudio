@@ -1,9 +1,4 @@
 #include "MeshView.hpp"
-#include <GL/glew.h>
-#include <fstream>
-#include <glm/gtc/type_ptr.hpp>
-#include <iostream>
-#include <sstream>
 
 using namespace ECS;
 

@@ -6,6 +6,7 @@
 #include <queue>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <memory>
 #include <cassert>
 #include <sstream>
@@ -15,10 +16,13 @@
 #include <functional>
 #include <stdio.h>         
 #include <stdlib.h> 
+#include <cstdlib>
 #include <future>
 #include <mutex>
 #include <atomic>
 #include <thread>
+
+#include <filesystem>
 
 // JSON
 #include <nlohmann/json.hpp>
@@ -34,15 +38,18 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+// GLM
+#include <glm/glm.hpp>
+
+
 // Volk headers
-#ifdef IMGUI_IMPL_VULKAN_USE_VOLK
-#define VOLK_IMPLEMENTATION
-#include <volk.h>
-#endif
+// #ifdef IMGUI_IMPL_VULKAN_USE_VOLK
+// #define VOLK_IMPLEMENTATION
+// #include <volk.h>
+// #endif
 
 // ImGui
 #include "imgui.h"
-#include "ImGuiFileDialog.h"
  
 //http request headers
 // #include "cpr/cpr.h"
