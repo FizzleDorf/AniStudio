@@ -53,12 +53,19 @@ add_subdirectory(external/stb_image)
 add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImGuizmo)
 
+# Plugins (if enabled)
+#if(BUILD_PLUGINS)
+    add_subdirectory(plugins)
+#endif()
+
 # Include directories
 include_directories(
     ${CONAN_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/AniStudio
+    ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
     ${CMAKE_SOURCE_DIR}/AniStudio/Engine
     ${CMAKE_SOURCE_DIR}/AniStudio/Events
+    
     ${CMAKE_SOURCE_DIR}/AniStudio/Timer
     ${CMAKE_SOURCE_DIR}/AniStudio/GUI
     ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
@@ -80,7 +87,7 @@ include_directories(
 )
 
 # Find all source files
-file(GLOB GUI_SOURCES AniStudio/Gui/*.cpp)
+file(GLOB GUI_SOURCES AniStudio/GUI/*.cpp)
 file(GLOB SYSTEM_SOURCES AniStudio/ECS/Systems/*.cpp)
 file(GLOB UTILS_SOURCES AniStudio/utils/*.cpp)
 
@@ -93,7 +100,7 @@ add_executable(${PROJECT_NAME}
     AniStudio/Timer/Timer.cpp
     AniStudio/ECS/Base/EntityManager.cpp
     AniStudio/GUI/Base/ViewManager.cpp
-    AniStudio/PluginManager.cpp
+    AniStudio/Plugins/PluginManager.cpp
 
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}

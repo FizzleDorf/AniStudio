@@ -13,6 +13,7 @@ struct FilePaths {
     std::string defaultProjectPath = "";
     std::string defaultModelRootPath = "";
     std::string assetsFolderPath = "";
+    std::string pluginPath = "../plugins";
 
     // These paths can be set to default model paths
     std::string checkpointDir = "";

@@ -2,6 +2,7 @@
 
 using namespace ECS;
 using namespace GUI;
+using namespace Plugin;
 
 namespace ANI {
 
@@ -63,6 +64,7 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
     
     filePaths.Init();
+    pluginMgr.Init();
     mgr.Reset();
     viewMgr.Reset();
 
@@ -80,6 +82,7 @@ void Engine::Init() {
 
     ViewID imageViewID = viewMgr.AddNewView();
     viewMgr.AddView<ImageView>(imageViewID);
+
 
 
     ViewID pluginViewID = viewMgr.AddNewView();

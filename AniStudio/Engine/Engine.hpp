@@ -6,10 +6,9 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <Base/ViewManager.hpp>
-#include <PluginManager.hpp>
-#include "guis.h"
+#include "../Plugins/PluginManager.hpp"
 
+#include "guis.h"
 #include "GUI.h"
 #include "ECS.h"
 
@@ -47,8 +46,6 @@ private:
     double fpsSum = 0.0;
     int frameCount = 0;
     double timeElapsed = 0.0; // To track the elapsed time
-
-    ANI::PluginManager pluginManager;
 };
 
 void WindowCloseCallback(GLFWwindow *window);

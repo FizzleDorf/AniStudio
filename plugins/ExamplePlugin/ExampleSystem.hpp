@@ -1,9 +1,6 @@
 #pragma once
-#include "ECS/Base/BaseSystem.hpp"
-#include "ECS/Base/EntityManager.hpp"
+#include "ECS.h"
 #include "ExampleComponent.hpp"
-
-using namespace ECS;
 
 namespace ExamplePlugin {
 
@@ -13,13 +10,22 @@ public:
         sysName = "ExampleSystem";
         AddComponentSignature<ExampleComponent>();
     }
-    
+
     void Update(const float deltaT) override {
-        for (const auto& entity : entities) {
-            auto& comp = ECS::mgr.GetComponent<ExampleComponent>(entity);
-            comp.value = std::fmod(comp.value + deltaT, 1.0f);
+        for (const auto &entity : entities) {
+            auto &counter = ECS::mgr.GetComponent<ExampleComponent>(entity);
+
+            if (counter.autoIncrement) {
+                counter.timeSinceLastUpdate += deltaT;
+
+                // Check if it's time to update based on the rate
+                if (counter.timeSinceLastUpdate >= (1.0f / counter.updateRate)) {
+                    counter.count++;
+                    counter.timeSinceLastUpdate = 0.0f;
+                }
+            }
         }
     }
 };
 
-} // namespace ExamplePlugin
+} // namespace CounterPlugin
