@@ -36,12 +36,12 @@ public:
         }
     }
 
-    bool LoadPlugin(const std::string &name, ECS::EntityManager &ecs, GUI::ViewManager &gui) {
+    bool LoadPlugin(const std::string &name) {
         auto it = pluginLoaders_.find(name);
         if (it == pluginLoaders_.end()) {
             throw PluginError("Plugin not found: " + name);
         }
-        return LoadPluginWithDependencies(name, ecs, gui);
+        return LoadPluginWithDependencies(name);
     }
 
     bool StartPlugin(const std::string &name) {
@@ -85,12 +85,12 @@ private:
 #endif
     }
 
-    bool LoadPluginWithDependencies(const std::string &name, ECS::EntityManager &ecs, GUI::ViewManager &gui) {
+    bool LoadPluginWithDependencies(const std::string &name) {
         std::set<std::string> loaded;
-        return LoadPluginRecursive(name, ecs, gui, loaded);
+        return LoadPluginRecursive(name, loaded);
     }
 
-    bool LoadPluginRecursive(const std::string &name, ECS::EntityManager &ecs, GUI::ViewManager &gui,
+    bool LoadPluginRecursive(const std::string &name,
                              std::set<std::string> &loaded) {
         // Check for circular dependencies
         if (loaded.find(name) != loaded.end()) {
@@ -106,14 +106,14 @@ private:
         auto *plugin = it->second.Get();
         if (plugin) {
             for (const auto &dep : plugin->GetDependencies()) {
-                if (!LoadPluginRecursive(dep, ecs, gui, loaded)) {
+                if (!LoadPluginRecursive(dep, loaded)) {
                     return false;
                 }
             }
         }
 
         // Load the plugin itself
-        if (!it->second.Load(ecs, gui, appVersion_)) {
+        if (!it->second.Load(appVersion_)) {
             return false;
         }
 

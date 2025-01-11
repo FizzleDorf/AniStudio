@@ -15,7 +15,7 @@ public:
 
         if (ImGui::Button("Create Counter")) {
             auto entity = ECS::mgr.AddNewEntity();
-            // ECS::mgr.AddComponent<ExampleComponent>(entity);
+            ECS::mgr.AddComponent<ExampleComponent>(entity);
         }
 
         ImGui::Separator();

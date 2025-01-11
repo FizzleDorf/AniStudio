@@ -32,7 +32,7 @@ public:
     virtual std::vector<std::string> GetDependencies() const = 0;
 
     // Lifecycle methods
-    virtual bool OnLoad(ECS::EntityManager &ecs, GUI::ViewManager &gui) = 0;
+    virtual bool OnLoad() = 0;
     virtual bool OnStart() = 0;
     virtual void OnStop() = 0;
     virtual void OnUnload() = 0;

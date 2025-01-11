@@ -18,17 +18,14 @@ public:
         return {}; // No dependencies
     }
 
-    bool OnLoad(ECS::EntityManager &ecs, GUI::ViewManager &gui) override {
+    bool OnLoad() override {
         try {
-            // // Register component
-            // ecs.RegisterBuiltInComponent<ExampleComponent>();
-            // 
-            // // Register system
-            // ecs.RegisterSystem<ExampleSystem>();
+            // Register system
+            ECS::mgr.RegisterSystem<ExampleSystem>();
 
             // Create and register view
-            GUI::ViewID viewID = gui.AddNewView();
-            gui.AddView<ExampleView>(viewID);
+            GUI::ViewID viewID = GUI::viewMgr.AddNewView();
+            GUI::viewMgr.AddView<ExampleView>(viewID);
 
             return true;
         } catch (const std::exception &e) {
@@ -36,7 +33,7 @@ public:
             return false;
         }
     }
-
+    
     bool OnStart() override { return true; }
 
     void OnStop() override {}

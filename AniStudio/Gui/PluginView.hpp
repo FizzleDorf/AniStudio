@@ -98,7 +98,7 @@ private:
 
         if (!plugin) {
             if (ImGui::Button(("Load##" + name).c_str())) {
-                pluginMgr.LoadPlugin(name, ECS::mgr, GUI::viewMgr);
+                pluginMgr.LoadPlugin(name);
             }
             return;
         }

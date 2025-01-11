@@ -18,7 +18,7 @@ public:
     explicit PluginLoader(const std::string &path) : path_(path), handle_(nullptr), plugin_(nullptr) {}
     ~PluginLoader() { Unload(); }
 
-    bool Load(ECS::EntityManager &ecs, GUI::ViewManager &gui, const Version &appVersion) {
+    bool Load(const Version &appVersion) {
         if (IsLoaded())
             return false;
 
@@ -32,7 +32,7 @@ public:
         }
 
         plugin_ = createFn_();
-        if (!plugin_ || !plugin_->OnLoad(ecs, gui)) {
+        if (!plugin_ || !plugin_->OnLoad()) {
             Unload();
             return false;
         }

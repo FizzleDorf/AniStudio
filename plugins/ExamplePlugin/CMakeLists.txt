@@ -38,6 +38,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
     ${CMAKE_SOURCE_DIR}/AniStudio/GUI
+    ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
     ${CMAKE_SOURCE_DIR}/AniStudio/utils
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui
