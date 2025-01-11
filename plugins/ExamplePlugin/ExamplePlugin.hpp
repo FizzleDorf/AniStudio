@@ -20,11 +20,11 @@ public:
 
     bool OnLoad(ECS::EntityManager &ecs, GUI::ViewManager &gui) override {
         try {
-            // Register component
-            ecs.RegisterBuiltInComponent<ExampleComponent>();
-
-            // Register system
-            ecs.RegisterSystem<ExampleSystem>();
+            // // Register component
+            // ecs.RegisterBuiltInComponent<ExampleComponent>();
+            // 
+            // // Register system
+            // ecs.RegisterSystem<ExampleSystem>();
 
             // Create and register view
             GUI::ViewID viewID = gui.AddNewView();

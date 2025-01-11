@@ -13,6 +13,7 @@ void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 Engine::Engine() : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT) {}
 
 Engine::~Engine() {
+    ImGui::SaveIniSettingsToDisk("../data/imgui.ini");
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -21,6 +22,9 @@ Engine::~Engine() {
 }
 
 void Engine::Init() {
+    // Load filePaths data
+    filePaths.Init();
+
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -48,10 +52,13 @@ void Engine::Init() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
+
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    
+    
 
     ImGui::StyleColorsDark();
     ImGuiStyle &style = ImGui::GetStyle();
@@ -62,8 +69,7 @@ void Engine::Init() {
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
-    
-    filePaths.Init();
+
     pluginMgr.Init();
     mgr.Reset();
     viewMgr.Reset();
@@ -93,6 +99,22 @@ void Engine::Init() {
     viewMgr.GetView<DiffusionView>(diffusionViewID).Init();
     viewMgr.GetView<ImageView>(imageViewID).Init();
     viewMgr.GetView<PluginView>(pluginViewID).Init();
+
+    const std::string configFile = "../data/imgui.ini";
+
+    std::filesystem::path configPath = std::filesystem::absolute(configFile).parent_path();
+    if (!std::filesystem::exists(configPath)) {
+        try {
+            std::filesystem::create_directories(configPath);
+            std::cout << "Created directory: " << configPath << "\n";
+        } catch (const std::exception &e) {
+            std::cerr << "Failed to create directory: " << e.what() << "\n";
+            return;
+        }
+    }
+    ImGui::LoadIniSettingsFromDisk("../data/imgui.ini");
+    // Set the ImGui ini file path
+    io.IniFilename = NULL; // configFile.c_str();
 }
 
 void Engine::Update(const float deltaT) {
