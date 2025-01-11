@@ -43,6 +43,12 @@ You can also build manually and specify which backend and featured you want to u
 ### Manual Building
 for selecting different inference backends, you need to use the appropriate flags.
 
+### Main Build Options
+| Command Flag             | Description                                                                     |
+|--------------------------|---------------------------------------------------------------------------------|
+| ```-DBUILD_ANISTUDIO=ON```| Configures and builds the main AniStudio Project                               |
+| ```-DSD_CUBLAS=ON```      | Configures and builds all the plugin projects in the root `/plugins` directory |
+
 #### Stable Diffusion Build Options
 
 | Command Flag             | Description                                                                     |
