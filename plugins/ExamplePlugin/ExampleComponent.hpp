@@ -1,29 +1,35 @@
 #pragma once
-#include "ECS/Base/BaseComponent.hpp"
+#include "ECS.h"
+#include "../../external/nlohmann_json/nlohmann/json.hpp"
 
 namespace ExamplePlugin {
 
 struct ExampleComponent : public ECS::BaseComponent {
     ExampleComponent() { compName = "ExampleComponent"; }
 
-    float value = 0.0f;
-    std::string text = "Example Text";
+    int count = 0;
+    float updateRate = 1.0f; // Updates per second
+    bool autoIncrement = false;
+    float timeSinceLastUpdate = 0.0f;
 
-    // Serialization
     nlohmann::json Serialize() const override {
         auto j = BaseComponent::Serialize();
-        j["value"] = value;
-        j["text"] = text;
+        j[compName] = {{"count", count}, {"updateRate", updateRate}, {"autoIncrement", autoIncrement}};
         return j;
     }
 
     void Deserialize(const nlohmann::json &j) override {
         BaseComponent::Deserialize(j);
-        if (j.contains("value"))
-            value = j["value"];
-        if (j.contains("text"))
-            text = j["text"];
+        if (j.contains(compName)) {
+            const auto &data = j[compName];
+            if (data.contains("count"))
+                count = data["count"];
+            if (data.contains("updateRate"))
+                updateRate = data["updateRate"];
+            if (data.contains("autoIncrement"))
+                autoIncrement = data["autoIncrement"];
+        }
     }
 };
 
-} // namespace ExamplePlugin
+} // namespace CounterPlugin

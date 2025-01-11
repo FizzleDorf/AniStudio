@@ -1,5 +1,4 @@
 #include "PluginManager.hpp"
-
-namespace ANI {
+namespace Plugin {
 PluginManager pluginMgr;
 }

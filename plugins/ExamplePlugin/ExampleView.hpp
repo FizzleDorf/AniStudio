@@ -1,40 +1,60 @@
 #pragma once
-#include "GUI/Base/BaseView.hpp"
-#include "ECS/Base/EntityManager.hpp"
+#include "ECS.h"
+#include "GUI.h"
 #include "ExampleComponent.hpp"
 #include <imgui.h>
 
-using namespace GUI;
-
 namespace ExamplePlugin {
 
-class ExampleView : public BaseView {
+class ExampleView : public GUI::BaseView {
 public:
-    void Render() override {
-        ImGui::Begin("Example Plugin View");
+    ExampleView() { viewName = "Example Plugin View"; }
 
-        // Add entity button
-        if (ImGui::Button("Add Entity with ExampleComponent")) {
+    void Render() override {
+        ImGui::Begin(viewName.c_str());
+
+        if (ImGui::Button("Create Counter")) {
             auto entity = ECS::mgr.AddNewEntity();
             ECS::mgr.AddComponent<ExampleComponent>(entity);
         }
 
-        // Display entities with ExampleComponent
+        ImGui::Separator();
+
+        // Display all counter entities
         for (const auto &entity : ECS::mgr.GetAllEntities()) {
             if (ECS::mgr.HasComponent<ExampleComponent>(entity)) {
-                auto &comp = ECS::mgr.GetComponent<ExampleComponent>(entity);
+                auto &counter = ECS::mgr.GetComponent<ExampleComponent>(entity);
 
-                std::string label = "Entity " + std::to_string(entity);
-                if (ImGui::TreeNode(label.c_str())) {
-                    ImGui::SliderFloat("Value", &comp.value, 0.0f, 1.0f);
+                std::string label = "Counter " + std::to_string(entity);
+                if (ImGui::CollapsingHeader(label.c_str())) {
+                    // Display counter value
+                    ImGui::Text("Count: %d", counter.count);
 
-                    static char buffer[256];
-                    strcpy_s(buffer, comp.text.c_str());
-                    if (ImGui::InputText("Text", buffer, sizeof(buffer))) {
-                        comp.text = buffer;
+                    // Manual controls
+                    if (ImGui::Button("Increment")) {
+                        counter.count++;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Decrement")) {
+                        counter.count--;
                     }
 
-                    ImGui::TreePop();
+                    // Auto increment toggle and rate
+                    ImGui::Checkbox("Auto Increment", &counter.autoIncrement);
+                    if (counter.autoIncrement) {
+                        ImGui::SliderFloat("Updates per second", &counter.updateRate, 0.1f, 10.0f);
+                    }
+
+                    // Reset button
+                    if (ImGui::Button("Reset")) {
+                        counter.count = 0;
+                    }
+
+                    // Delete entity button
+                    ImGui::SameLine();
+                    if (ImGui::Button("Delete")) {
+                        ECS::mgr.DestroyEntity(entity);
+                    }
                 }
             }
         }
@@ -43,4 +63,4 @@ public:
     }
 };
 
-} // namespace ExamplePlugin
+} // namespace CounterPlugin

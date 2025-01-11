@@ -21,7 +21,6 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
-
 #include <filesystem>
 
 // JSON
