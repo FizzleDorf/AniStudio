@@ -25,13 +25,9 @@ if exist build (
 mkdir build
 cd build
 
-:: Configure with CMake (only build AniStudio)
-cmake .. -DSD_VULKAN=ON ^
-         -DCMAKE_BUILD_TYPE=Release ^
-         -DCMAKE_TOOLCHAIN_FILE=generators\conan_toolchain.cmake ^
-         -DCMAKE_POLICY_DEFAULT_CMP0091=NEW ^
-         -DBUILD_PLUGINS=OFF ^
-         -DBUILD_ANISTUDIO=ON
+:: Configure with CMake
+:: cmake .. -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+cmake .. -DSD_VULKAN=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=generators\conan_toolchain.cmake -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
 
 :: Build the project
 cmake --build . --config Release
