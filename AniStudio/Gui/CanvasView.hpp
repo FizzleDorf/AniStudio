@@ -1,3 +1,4 @@
+#pragma once
 #include "Base/BaseView.hpp"
 #include <imgui.h>
 #include <opencv2/opencv.hpp>

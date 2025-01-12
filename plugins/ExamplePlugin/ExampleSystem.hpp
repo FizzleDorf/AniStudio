@@ -2,7 +2,7 @@
 #include "ECS.h"
 #include "ExampleComponent.hpp"
 
-namespace ExamplePlugin {
+namespace ECS {
 
 class ExampleSystem : public ECS::BaseSystem {
 public:
@@ -26,4 +26,4 @@ public:
     }
 };
 
-} // namespace ExamplePlugin
+} // namespace ECS

@@ -1,14 +1,16 @@
 #pragma once
-#include "ECS.h"
+
 #include "ExampleComponent.hpp"
+#include "ECS.h"
 #include "GUI.h"
 #include <imgui.h>
 
-namespace ExamplePlugin {
+namespace GUI {
 
-class ExampleView : public GUI::BaseView {
+class ExampleView : public BaseView {
 public:
-    ExampleView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { viewName = "Example Plugin View"; }
+    
+    explicit ExampleView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { viewName = "Example Plugin View"; }
 
     void Render() override {
         ImGui::Begin(viewName.c_str());

@@ -32,7 +32,16 @@ public:
     virtual bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) = 0;
     virtual bool OnStart() = 0;
     virtual void OnStop() = 0;
-    virtual void OnUnload() = 0;
+    virtual void OnUnload() {
+        // Clean up views when plugin is unloaded
+        if (viewManager) {
+            // Get all views associated with this plugin and destroy them
+            auto views = viewManager->GetAllViews();
+            for (const auto &viewId : views) {
+                viewManager->DestroyView(viewId);
+            }
+        }
+    }
     virtual void OnUpdate(float dt) = 0;
 
     virtual bool IsCompatibleWith(const Version &appVersion) const { return GetVersion().IsCompatibleWith(appVersion); }

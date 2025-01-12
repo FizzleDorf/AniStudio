@@ -2,7 +2,7 @@
 #include "ECS.h"
 #include "../Engine/Engine.hpp"
 #include <systems.h>
-#include "FilePaths.hpp"
+#include "filepaths.hpp"
 #include "LoadedMedia.hpp"
 #include <GLFW/glfw3.h>
 #include <functional>

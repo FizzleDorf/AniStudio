@@ -2,13 +2,13 @@
 #include "ECS.h"
 #include "../../external/nlohmann_json/nlohmann/json.hpp"
 
-namespace ExamplePlugin {
+namespace ECS {
 
-struct ExampleComponent : public ECS::BaseComponent {
+struct ExampleComponent : public BaseComponent {
     ExampleComponent() { compName = "ExampleComponent"; }
 
     int count = 0;
-    float updateRate = 1.0f; // Updates per second
+    float updateRate = 1.0f;
     bool autoIncrement = false;
     float timeSinceLastUpdate = 0.0f;
 

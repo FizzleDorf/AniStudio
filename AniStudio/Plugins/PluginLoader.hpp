@@ -21,6 +21,8 @@ public:
     ~PluginLoader() { Unload(); }
 
     bool Load(const Version &appVersion, ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
+        std::cout << "PluginLoader::Load - Got entityMgr=" << entityMgr << ", viewMgr=" << viewMgr << std::endl;
+
         if (IsLoaded()) {
             return false;
         }
@@ -35,7 +37,14 @@ public:
         }
 
         plugin_ = createFn_();
-        if (!plugin_ || !plugin_->OnLoad(entityMgr, viewMgr)) {
+        if (!plugin_) {
+            std::cerr << "Failed to create plugin" << std::endl;
+            Unload();
+            return false;
+        }
+
+        if (!plugin_->OnLoad(entityMgr, viewMgr)) {
+            std::cerr << "Failed to load plugin" << std::endl;
             Unload();
             return false;
         }
@@ -75,7 +84,7 @@ public:
             if (plugin_->GetState() == PluginState::Started) {
                 Stop();
             }
-            plugin_->OnUnload();
+            plugin_->OnUnload(); // This will clean up views
             if (destroyFn_) {
                 destroyFn_(plugin_);
             }

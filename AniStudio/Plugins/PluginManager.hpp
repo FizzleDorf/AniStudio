@@ -5,9 +5,6 @@
 #include <map>
 #include <set>
 #include <stdexcept>
-#include "components.h"
-#include "systems.h"
-#include "stable-diffusion.h"
 
 namespace Plugin {
 

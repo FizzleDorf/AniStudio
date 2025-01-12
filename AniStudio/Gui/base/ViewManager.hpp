@@ -40,13 +40,32 @@ public:
     }
 
     template <typename T>
-    void AddView(const ViewID view, T &component) {
+    void AddView(const ViewID view, T &&component) {
         assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
+
+        // Check if the ViewID is already registered
+        if (HasView<T>(view)) {
+            std::cerr << "View with ID " << view << " already exists! Skipping AddView." << std::endl;
+            return;
+        }
+
         component.viewID = view;
-        GetViewSignature(view)->insert(ViewType<T>());
+
+        auto signature = GetViewSignature(view);
+        assert(signature && "GetViewSignature returned nullptr!");
+        signature->insert(ViewType<T>());
+
         auto &viewList = GetViewList<T>();
-        viewList->Insert(std::move(component)); // Use move to prevent copying
+        assert(viewList && "GetViewList returned nullptr!");
+
+        // Log component before moving
+        std::cout << "Adding view ID: " << component.viewID << ", ViewTypeID: " << ViewType<T>() << std::endl;
+
+        viewList->Insert(std::move(component));
     }
+
+
+
 
     template <typename T>
     void RemoveView(const ViewID view) {
