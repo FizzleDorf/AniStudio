@@ -29,6 +29,7 @@ private:
     // Canvas dimensions
     int width = 800;  // Default width
     int height = 600; // Default height
+    EntityManager &mgr;
 };
 } // namespace GUI
 

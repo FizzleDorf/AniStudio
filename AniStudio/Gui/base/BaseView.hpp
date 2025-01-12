@@ -11,7 +11,7 @@ namespace GUI {
 class BaseView {
 public:
     std::string viewName = "Base_View";
-    BaseView() : viewID() {}
+    BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr) {}
     virtual ~BaseView() {}
 
     inline const ViewID GetID() const { return viewID; }
@@ -37,5 +37,6 @@ public:
 private:
     friend class ViewManager;
     ViewID viewID;
+    ECS::EntityManager &mgr;
 };
 } // namespace GUI

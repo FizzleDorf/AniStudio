@@ -1,18 +1,15 @@
 #ifndef ENGINE_HPP
 #define ENGINE_HPP
 
+#include "Base/ViewManager.hpp"
+#include "ECS.h"
+#include "GUI.h"
+#include "../Plugins/PluginManager.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include "../Plugins/PluginManager.hpp"
-
-#include "guis.h"
-#include "GUI.h"
-#include "ECS.h"
-
-class ViewManager;
 
 namespace ANI {
 
@@ -33,19 +30,28 @@ public:
     void Draw();
     void Quit();
 
+    // Dependency accessors
+    ECS::EntityManager &GetEntityManager() { return entityManager; }
+    GUI::ViewManager &GetViewManager() { return viewManager; }
+    Plugin::PluginManager &GetPluginManager() { return pluginManager; }
     GLFWwindow *Window() const { return window; }
     bool Run() const { return run; }
 
 private:
     Engine();
-    
+
+    // Core dependencies
+    ECS::EntityManager entityManager;
+    GUI::ViewManager viewManager;
+    Plugin::PluginManager pluginManager;
+
     bool run;
     GLFWwindow *window;
     int videoWidth;
     int videoHeight;
-    double fpsSum = 0.0;
-    int frameCount = 0;
-    double timeElapsed = 0.0; // To track the elapsed time
+    double fpsSum;
+    int frameCount;
+    double timeElapsed;
 };
 
 void WindowCloseCallback(GLFWwindow *window);

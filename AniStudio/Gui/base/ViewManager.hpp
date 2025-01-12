@@ -157,6 +157,5 @@ private:
     std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
     std::unordered_map<std::string, ViewTypeID> registeredViews;
 };
-extern ViewManager viewMgr;
 
 } // namespace GUI

@@ -125,6 +125,4 @@ private:
     Version appVersion_;
     std::map<std::string, PluginLoader> pluginLoaders_;
 };
-extern PluginManager pluginMgr;
-
 } // namespace Plugin

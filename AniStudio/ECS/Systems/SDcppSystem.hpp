@@ -43,7 +43,9 @@ public:
         nlohmann::json metadata;
     };
 
-    SDCPPSystem() : stopWorker(false), workerThreadRunning(false), inferenceThreadRunning(false) {
+     SDCPPSystem(EntityManager &entityMgr)
+        : BaseSystem(entityMgr), stopWorker(false), workerThreadRunning(false), inferenceThreadRunning(false) {
+        sysName = "SDCPPSystem";
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<InputImageComponent>();
         StartWorker();

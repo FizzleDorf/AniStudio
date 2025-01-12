@@ -1,5 +1,6 @@
 #pragma once
 #include "ECS.h"
+#include "../Engine/Engine.hpp"
 #include <ImageSystem.hpp>
 #include "FilePaths.hpp"
 #include "LoadedMedia.hpp"

@@ -17,7 +17,7 @@ namespace ECS {
 
 class ImageSystem : public BaseSystem {
 public:
-    ImageSystem() = default;
+    ImageSystem(EntityManager &entityMgr) : BaseSystem(entityMgr) { sysName = "ImageSystem"; }
     ~ImageSystem() = default;
 
     void Update(const float deltaT) {}

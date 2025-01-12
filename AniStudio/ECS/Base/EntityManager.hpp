@@ -340,8 +340,6 @@ namespace ECS {
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
         std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
         std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
-        
 
     };
-    extern EntityManager mgr;
 }

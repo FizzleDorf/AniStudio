@@ -4,7 +4,7 @@
 
 namespace ECS {
 
-nlohmann::json SerializeEntityComponents(const EntityID entity) {
+nlohmann::json SerializeEntityComponents(const EntityID entity, EntityManager &mgr) {
     nlohmann::json componentData;
 
     // Helper lambda to check and serialize a component if it exists
@@ -37,7 +37,7 @@ nlohmann::json SerializeEntityComponents(const EntityID entity) {
     return componentData;
 }
 
-bool WriteMetadataToPNG(const EntityID entity, const nlohmann::json &metadata) {
+bool WriteMetadataToPNG(const EntityID entity, EntityManager &mgr, const nlohmann::json &metadata) {
     const auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
 
     FILE *fp = fopen(imageComp.filePath.c_str(), "rb");
@@ -180,7 +180,7 @@ nlohmann::json ReadMetadataFromPNG(const std::string &filepath) {
     return metadata;
 }
 
-void DeserializeEntityComponents(const EntityID entity, const nlohmann::json &componentData) {
+void DeserializeEntityComponents(const EntityID entity, EntityManager &mgr, const nlohmann::json &componentData) {
     // Helper lambda to deserialize a component if it exists in the JSON
     auto deserializeComponent = [&](auto componentType) {
         using T = decltype(componentType);

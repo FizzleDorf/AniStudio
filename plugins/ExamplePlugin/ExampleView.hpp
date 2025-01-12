@@ -1,29 +1,28 @@
 #pragma once
 #include "ECS.h"
-#include "GUI.h"
 #include "ExampleComponent.hpp"
+#include "GUI.h"
 #include <imgui.h>
 
 namespace ExamplePlugin {
 
 class ExampleView : public GUI::BaseView {
 public:
-    ExampleView() { viewName = "Example Plugin View"; }
+    ExampleView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { viewName = "Example Plugin View"; }
 
     void Render() override {
         ImGui::Begin(viewName.c_str());
 
         if (ImGui::Button("Create Counter")) {
-            auto entity = ECS::mgr.AddNewEntity();
-            ECS::mgr.AddComponent<ExampleComponent>(entity);
+            auto entity = mgr.AddNewEntity();
+            mgr.AddComponent<ExampleComponent>(entity);
         }
 
         ImGui::Separator();
 
-        // Display all counter entities
-        for (const auto &entity : ECS::mgr.GetAllEntities()) {
-            if (ECS::mgr.HasComponent<ExampleComponent>(entity)) {
-                auto &counter = ECS::mgr.GetComponent<ExampleComponent>(entity);
+        for (const auto &entity : mgr.GetAllEntities()) {
+            if (mgr.HasComponent<ExampleComponent>(entity)) {
+                auto &counter = mgr.GetComponent<ExampleComponent>(entity);
 
                 std::string label = "Counter " + std::to_string(entity);
                 if (ImGui::CollapsingHeader(label.c_str())) {
@@ -53,7 +52,7 @@ public:
                     // Delete entity button
                     ImGui::SameLine();
                     if (ImGui::Button("Delete")) {
-                        ECS::mgr.DestroyEntity(entity);
+                        mgr.DestroyEntity(entity);
                     }
                 }
             }
@@ -63,4 +62,4 @@ public:
     }
 };
 
-} // namespace CounterPlugin
+} // namespace ExamplePlugin

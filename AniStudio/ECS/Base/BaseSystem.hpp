@@ -1,38 +1,38 @@
 #pragma once
-
 #include "Types.hpp"
+#include <string>
 
 namespace ECS {
 
-	class BaseSystem {
-	public:
-		BaseSystem() = default;
-		virtual ~BaseSystem() = default;
-        
-		void RemoveEntity(const EntityID entity) { entities.erase(entity); }
+class BaseSystem {
+public:
+    BaseSystem(EntityManager &entityMgr) : mgr(entityMgr), sysName("System_Component") {}
 
-		void AddEntity(const EntityID entity) { entities.insert(entity); }
+    virtual ~BaseSystem() = default;
 
-		const EntitySignature GetSignature() const {
-			return signature;
-		}
+    void RemoveEntity(const EntityID entity) { entities.erase(entity); }
+    void AddEntity(const EntityID entity) { entities.insert(entity); }
 
-		template<typename T>
-		void AddComponentSignature() {
-			signature.insert(CompType<T>());
-		}
+    const EntitySignature GetSignature() const { return signature; }
 
-		virtual void Start(){}
-        virtual void Update(const float deltaT) {}
-		virtual void Render(){}
-		virtual void Destroy(){}
+    template <typename T>
+    void AddComponentSignature() {
+        signature.insert(CompType<T>());
+    }
 
-		std::string GetSystemName() { return sysName; }
+    virtual void Start() {}
+    virtual void Update(const float deltaT) {}
+    virtual void Render() {}
+    virtual void Destroy() {}
 
-	protected:
-		friend class EntityManager;
-		EntitySignature signature;
-		std::set<EntityID> entities;
-        std::string sysName = "System_Component";
-	};
-}
+    std::string GetSystemName() { return sysName; }
+
+protected:
+    friend class EntityManager;
+    EntitySignature signature;
+    std::set<EntityID> entities;
+    std::string sysName;
+    EntityManager &mgr;
+};
+
+} // namespace ECS
