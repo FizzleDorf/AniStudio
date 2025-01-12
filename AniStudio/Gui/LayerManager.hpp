@@ -9,7 +9,7 @@ using namespace ECS;
 namespace GUI {
 class LayerManager {
 public:
-    LayerManager();
+    LayerManager(EntityManager &entityMgr);
 
     ~LayerManager();
 

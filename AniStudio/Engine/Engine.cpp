@@ -1,4 +1,5 @@
 #include "Engine.hpp"
+#include "guis.h"
 
 using namespace ECS;
 using namespace GUI;
@@ -73,32 +74,32 @@ void Engine::Init() {
     pluginManager.Init();
 
     // Register core systems
-    entityManager.RegisterSystem<ECS::SDCPPSystem>(entityManager);
-    entityManager.RegisterSystem<ECS::ImageSystem>(entityManager);
+    entityManager.RegisterSystem<ECS::SDCPPSystem>();
+    entityManager.RegisterSystem<ECS::ImageSystem>();
 
     viewManager.Init();
-
     // Create core views
-    auto debugViewID = viewManager.AddNewView();
-    viewManager.AddView<DebugView>(debugViewID);
+    auto debugViewID = viewManager.CreateView();
+    viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
 
-    auto diffusionViewID = viewManager.AddNewView();
-    viewManager.AddView<GUI::DiffusionView>(diffusionViewID);
+    auto diffusionViewID = viewManager.CreateView();
+    viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
 
-    auto imageViewID = viewManager.AddNewView();
-    viewManager.AddView<GUI::ImageView>(imageViewID);
+    auto imageViewID = viewManager.CreateView();
+    viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
 
-    auto pluginViewID = viewManager.AddNewView();
-    viewManager.AddView<GUI::PluginView>(pluginViewID);
+    auto pluginViewID = viewManager.CreateView();
+    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
     // Initialize views
-    viewManager.GetView<GUI::DebugView>(debugViewID).Init();
-    viewManager.GetView<GUI::DiffusionView>(diffusionViewID).Init();
-    viewManager.GetView<GUI::ImageView>(imageViewID).Init();
-    viewManager.GetView<GUI::PluginView>(pluginViewID).Init();
+    viewManager.GetView<DebugView>(debugViewID).Init();
+    viewManager.GetView<DiffusionView>(diffusionViewID).Init();
+    viewManager.GetView<ImageView>(imageViewID).Init();
+    viewManager.GetView<PluginView>(pluginViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {
+    // fps display
     timeElapsed += deltaT;
     frameCount++;
     if (timeElapsed >= 1.0) {
@@ -109,7 +110,8 @@ void Engine::Update(const float deltaT) {
         frameCount = 0;
         timeElapsed = 0.0;
     }
-
+    
+    // Update managers
     entityManager.Update(deltaT);
     pluginManager.Update(deltaT);
 }
@@ -121,6 +123,7 @@ void Engine::Draw() {
 
     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
+    // Render Views before ImGui's Render
     ShowMenuBar(window);
     viewManager.Render();
 

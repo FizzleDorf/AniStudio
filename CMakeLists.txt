@@ -95,6 +95,7 @@ if(BUILD_ANISTUDIO)
         AniStudio/Engine/Engine.cpp
         AniStudio/Events/Events.cpp
         AniStudio/Timer/Timer.cpp
+
         ${GUI_SOURCES}
         ${SYSTEM_SOURCES}
         ${UTILS_SOURCES}

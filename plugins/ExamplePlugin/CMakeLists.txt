@@ -23,8 +23,6 @@ file(GLOB IMGUI_SOURCES
 
 target_sources(${PROJECT_NAME} PRIVATE 
     ${IMGUI_SOURCES}
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base/EntityManager.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base/ViewManager.cpp
 )
 
 # Include directories
@@ -42,6 +40,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/AniStudio/utils
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui
+    ${CMAKE_SOURCE_DIR}/external/imgui/backends
     ${Vulkan_INCLUDE_DIR}
 
 )

@@ -56,7 +56,7 @@ public:
     void QueueInference(const EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID)});
+            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID, mgr)});
         }
         std::cout << "metadata: " << '\n' << inferenceQueue.back().metadata << std::endl;
         queueCondition.notify_one();
@@ -235,7 +235,7 @@ private:
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            if (!WriteMetadataToPNG(item.entityID, item.metadata)) {
+            if (!WriteMetadataToPNG(item.entityID, item.metadata, mgr)) {
                 std::cerr << "Failed to write metadata to: " << fullPath << std::endl;
             } else {
                 std::cout << "Successfully wrote metadata to: " << fullPath << std::endl;

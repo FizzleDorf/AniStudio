@@ -18,7 +18,9 @@ constexpr int scheduler_method_item_count = sizeof(scheduler_method_items) / siz
 
 // sd_type constants
 constexpr const char *type_method_items[] = {
-    "SD_TYPE_F32",      "SD_TYPE_F16",      "SD_TYPE_Q4_0 (N/A)",    "SD_TYPE_Q4_1 (N/A)",   "SD_TYPE_Q5_0",    "SD_TYPE_Q5_1",
+    "SD_TYPE_F32",     "SD_TYPE_F16",      "SD_TYPE_Q4_0",     "SD_TYPE_Q4_1",     "SD_TYPE_Q4_2 (N/A)",    "SD_TYPE_Q4_3 (N/A)",
+    "SD_TYPE_Q5_0",
+    "SD_TYPE_Q5_1",
     "SD_TYPE_Q8_0",     "SD_TYPE_Q8_1",     "SD_TYPE_Q2_K",    "SD_TYPE_Q3_K",   "SD_TYPE_Q4_K",    "SD_TYPE_Q5_K",
     "SD_TYPE_Q6_K",     "SD_TYPE_Q8_K",     "SD_TYPE_IQ2_XXS", "SD_TYPE_IQ2_XS", "SD_TYPE_IQ3_XXS", "SD_TYPE_IQ1_S",
     "SD_TYPE_IQ4_NL",   "SD_TYPE_IQ3_S",    "SD_TYPE_IQ2_S",   "SD_TYPE_IQ4_XS", "SD_TYPE_I8",      "SD_TYPE_I16",

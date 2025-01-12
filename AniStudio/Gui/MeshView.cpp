@@ -3,8 +3,8 @@
 using namespace ECS;
 
 namespace GUI {
-MeshView::MeshView()
-    : currentGizmoOperation(ImGuizmo::TRANSLATE), currentGizmoMode(ImGuizmo::WORLD),
+MeshView::MeshView(ECS::EntityManager &entityMgr)
+    : BaseView(entityMgr), currentGizmoOperation(ImGuizmo::TRANSLATE), currentGizmoMode(ImGuizmo::WORLD),
       cameraView(glm::lookAt(glm::vec3(10.f, 10.f, 10.f), glm::vec3(0.f, 0.f, 0.f), glm::vec3(0.f, 1.f, 0.f))),
       cameraProjection(glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f)), objectMatrix(glm::mat4(1.0f)),
       aspectRatio(1.0f) {

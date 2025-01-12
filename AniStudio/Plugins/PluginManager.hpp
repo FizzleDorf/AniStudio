@@ -1,10 +1,13 @@
 #pragma once
 #include "PluginLoader.hpp"
+#include <filepaths.hpp>
 #include <filesystem>
 #include <map>
 #include <set>
 #include <stdexcept>
-#include <filepaths.hpp>
+#include "components.h"
+#include "systems.h"
+#include "stable-diffusion.h"
 
 namespace Plugin {
 
@@ -15,12 +18,10 @@ public:
 
 class PluginManager {
 public:
-    PluginManager() {}
+    PluginManager(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr)
+        : entityManager(&entityMgr), viewManager(&viewMgr), appVersion_({1, 0, 0}) {}
 
-    void Init() { 
-        pluginDirectory_ = filePaths.pluginPath; 
-        appVersion_ = {1,0,0};
-    }
+    void Init() { pluginDirectory_ = filePaths.pluginPath; }
 
     void ScanPlugins() {
         try {
@@ -90,11 +91,9 @@ private:
         return LoadPluginRecursive(name, loaded);
     }
 
-    bool LoadPluginRecursive(const std::string &name,
-                             std::set<std::string> &loaded) {
-        // Check for circular dependencies
+    bool LoadPluginRecursive(const std::string &name, std::set<std::string> &loaded) {
         if (loaded.find(name) != loaded.end()) {
-            return true; // Already loaded
+            return true;
         }
 
         auto it = pluginLoaders_.find(name);
@@ -102,7 +101,6 @@ private:
             throw PluginError("Plugin not found: " + name);
         }
 
-        // Load dependencies first
         auto *plugin = it->second.Get();
         if (plugin) {
             for (const auto &dep : plugin->GetDependencies()) {
@@ -112,8 +110,7 @@ private:
             }
         }
 
-        // Load the plugin itself
-        if (!it->second.Load(appVersion_)) {
+        if (!it->second.Load(appVersion_, entityManager, viewManager)) {
             return false;
         }
 
@@ -124,5 +121,8 @@ private:
     std::string pluginDirectory_;
     Version appVersion_;
     std::map<std::string, PluginLoader> pluginLoaders_;
+    ECS::EntityManager *entityManager;
+    GUI::ViewManager *viewManager;
 };
+
 } // namespace Plugin

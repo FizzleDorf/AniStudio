@@ -18,15 +18,14 @@ public:
     ViewList() = default;
     ~ViewList() = default;
 
-    void Insert(const T &view) {
+    template <typename T>
+    void Insert(T &&view) { // Note the && for move semantics
         auto existingView = std::find_if(data.begin(), data.end(),
                                          [&](const std::shared_ptr<T> &v) { return v->GetID() == view.GetID(); });
         if (existingView == data.end()) {
-            auto newView = std::make_shared<T>(view);
-            data.push_back(newView);
+            auto newView = std::make_shared<T>(std::move(view));
+            data.push_back(std::move(newView));
             std::cout << "View added! ID: " << newView->GetID() << ", Type ID: " << ViewType<T>() << std::endl;
-        } else {
-            std::cout << "View already exists! ID: " << view.GetID() << std::endl;
         }
     }
 

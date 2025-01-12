@@ -4,40 +4,41 @@
 
 namespace ECS {
 
-nlohmann::json SerializeEntityComponents(const EntityID entity, EntityManager &mgr) {
+nlohmann::json SerializeEntityComponents(EntityID entity, EntityManager &mgr) {
     nlohmann::json componentData;
 
     // Helper lambda to check and serialize a component if it exists
-    auto serializeComponent = [&](auto componentType) {
+    auto serializeComponent = [&mgr](EntityID entity, auto componentType) {
         using T = decltype(componentType);
         if (mgr.HasComponent<T>(entity)) {
             const auto &comp = mgr.GetComponent<T>(entity);
-            componentData.merge_patch(comp.Serialize());
+            return comp.Serialize();
         }
+        return nlohmann::json{};
     };
 
     // Serialize each component type
-    serializeComponent(ModelComponent{});
-    serializeComponent(CLipLComponent{});
-    serializeComponent(CLipGComponent{});
-    serializeComponent(T5XXLComponent{});
-    serializeComponent(DiffusionModelComponent{});
-    serializeComponent(VaeComponent{});
-    serializeComponent(TaesdComponent{});
-    serializeComponent(ControlnetComponent{});
-    serializeComponent(LoraComponent{});
-    serializeComponent(LatentComponent{});
-    serializeComponent(SamplerComponent{});
-    serializeComponent(CFGComponent{});
-    serializeComponent(PromptComponent{});
-    serializeComponent(EmbeddingComponent{});
-    serializeComponent(LayerSkipComponent{});
-    serializeComponent(ImageComponent{});
+    componentData.merge_patch(serializeComponent(entity, ModelComponent{}));
+    componentData.merge_patch(serializeComponent(entity, CLipLComponent{}));
+    componentData.merge_patch(serializeComponent(entity, CLipGComponent{}));
+    componentData.merge_patch(serializeComponent(entity, T5XXLComponent{}));
+    componentData.merge_patch(serializeComponent(entity, DiffusionModelComponent{}));
+    componentData.merge_patch(serializeComponent(entity, VaeComponent{}));
+    componentData.merge_patch(serializeComponent(entity, TaesdComponent{}));
+    componentData.merge_patch(serializeComponent(entity, ControlnetComponent{}));
+    componentData.merge_patch(serializeComponent(entity, LoraComponent{}));
+    componentData.merge_patch(serializeComponent(entity, LatentComponent{}));
+    componentData.merge_patch(serializeComponent(entity, SamplerComponent{}));
+    componentData.merge_patch(serializeComponent(entity, CFGComponent{}));
+    componentData.merge_patch(serializeComponent(entity, PromptComponent{}));
+    componentData.merge_patch(serializeComponent(entity, EmbeddingComponent{}));
+    componentData.merge_patch(serializeComponent(entity, LayerSkipComponent{}));
+    componentData.merge_patch(serializeComponent(entity, ImageComponent{}));
 
     return componentData;
 }
 
-bool WriteMetadataToPNG(const EntityID entity, EntityManager &mgr, const nlohmann::json &metadata) {
+bool WriteMetadataToPNG(EntityID entity, const nlohmann::json &metadata, EntityManager &mgr) {
     const auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
 
     FILE *fp = fopen(imageComp.filePath.c_str(), "rb");
@@ -82,7 +83,7 @@ bool WriteMetadataToPNG(const EntityID entity, EntityManager &mgr, const nlohman
     png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
-    // Set up EXIF data
+    // Set up metadata text
     std::string metadataStr = metadata.dump();
     png_text texts[2];
 
@@ -123,109 +124,13 @@ bool WriteMetadataToPNG(const EntityID entity, EntityManager &mgr, const nlohman
     fclose(out);
     fclose(fp);
 
-    // Replace original with new file
-    std::filesystem::remove(imageComp.filePath);
-    std::filesystem::rename(tempFile, imageComp.filePath);
+    // Replace original with new file using proper filesystem calls
+    std::filesystem::path originalPath(imageComp.filePath);
+    std::filesystem::path tempPath(tempFile);
+    std::filesystem::remove(originalPath);
+    std::filesystem::rename(tempPath, originalPath);
 
     return true;
-}
-
-nlohmann::json ReadMetadataFromPNG(const std::string &filepath) {
-    FILE *fp = fopen(filepath.c_str(), "rb");
-    if (!fp) {
-        return nlohmann::json();
-    }
-
-    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if (!png) {
-        fclose(fp);
-        return nlohmann::json();
-    }
-
-    png_infop info = png_create_info_struct(png);
-    if (!info) {
-        png_destroy_read_struct(&png, NULL, NULL);
-        fclose(fp);
-        return nlohmann::json();
-    }
-
-    if (setjmp(png_jmpbuf(png))) {
-        png_destroy_read_struct(&png, &info, NULL);
-        fclose(fp);
-        return nlohmann::json();
-    }
-
-    png_init_io(png, fp);
-    png_read_info(png, info);
-
-    png_textp text_ptr;
-    int num_text;
-    png_get_text(png, info, &text_ptr, &num_text);
-
-    nlohmann::json metadata;
-    for (int i = 0; i < num_text; i++) {
-        if (strcmp(text_ptr[i].key, "ani_metadata") == 0) {
-            try {
-                metadata = nlohmann::json::parse(text_ptr[i].text);
-            } catch (const nlohmann::json::exception &e) {
-                std::cerr << "Failed to parse metadata JSON: " << e.what() << std::endl;
-            }
-            break;
-        }
-    }
-
-    png_destroy_read_struct(&png, &info, NULL);
-    fclose(fp);
-
-    return metadata;
-}
-
-void DeserializeEntityComponents(const EntityID entity, EntityManager &mgr, const nlohmann::json &componentData) {
-    // Helper lambda to deserialize a component if it exists in the JSON
-    auto deserializeComponent = [&](auto componentType) {
-        using T = decltype(componentType);
-        T comp;
-        comp.Deserialize(componentData);
-        if (mgr.HasComponent<T>(entity)) {
-            mgr.GetComponent<T>(entity) = comp;
-        } else {
-            mgr.AddComponent<T>(entity, comp);
-        }
-    };
-
-    // Deserialize each component type if present in the JSON
-    if (componentData.contains("ModelComponent"))
-        deserializeComponent(ModelComponent{});
-    if (componentData.contains("CLipLComponent"))
-        deserializeComponent(CLipLComponent{});
-    if (componentData.contains("CLipGComponent"))
-        deserializeComponent(CLipGComponent{});
-    if (componentData.contains("T5XXLComponent"))
-        deserializeComponent(T5XXLComponent{});
-    if (componentData.contains("DiffusionModelComponent"))
-        deserializeComponent(DiffusionModelComponent{});
-    if (componentData.contains("VaeComponent"))
-        deserializeComponent(VaeComponent{});
-    if (componentData.contains("TaesdComponent"))
-        deserializeComponent(TaesdComponent{});
-    if (componentData.contains("ControlnetComponent"))
-        deserializeComponent(ControlnetComponent{});
-    if (componentData.contains("LoraComponent"))
-        deserializeComponent(LoraComponent{});
-    if (componentData.contains("LatentComponent"))
-        deserializeComponent(LatentComponent{});
-    if (componentData.contains("SamplerComponent"))
-        deserializeComponent(SamplerComponent{});
-    if (componentData.contains("CFGComponent"))
-        deserializeComponent(CFGComponent{});
-    if (componentData.contains("PromptComponent"))
-        deserializeComponent(PromptComponent{});
-    if (componentData.contains("EmbeddingComponent"))
-        deserializeComponent(EmbeddingComponent{});
-    if (componentData.contains("LayerSkipComponent"))
-        deserializeComponent(LayerSkipComponent{});
-    if (componentData.contains("ImageComponent"))
-        deserializeComponent(ImageComponent{});
 }
 
 } // namespace ECS

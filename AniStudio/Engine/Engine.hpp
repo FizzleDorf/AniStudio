@@ -43,7 +43,7 @@ private:
     // Core dependencies
     ECS::EntityManager entityManager;
     GUI::ViewManager viewManager;
-    Plugin::PluginManager pluginManager;
+    Plugin::PluginManager pluginManager{entityManager, viewManager};
 
     bool run;
     GLFWwindow *window;

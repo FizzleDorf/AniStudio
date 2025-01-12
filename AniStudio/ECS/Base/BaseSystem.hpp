@@ -1,8 +1,12 @@
 #pragma once
 #include "Types.hpp"
+#include <set>
 #include <string>
 
 namespace ECS {
+
+// Forward declaration
+class EntityManager;
 
 class BaseSystem {
 public:

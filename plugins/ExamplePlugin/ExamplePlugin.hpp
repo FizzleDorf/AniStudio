@@ -14,20 +14,19 @@ public:
 
     std::vector<std::string> GetDependencies() const override { return {}; }
 
-    bool OnLoad(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr) override {
-        try {
-            // Register system with entity manager reference
-            entityMgr.RegisterSystem<ExampleSystem>(entityMgr);
+    bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) override {
+        // Store pointers
+        entityManager = entityMgr;
+        viewManager = viewMgr;
 
-            // Create and register view with both manager references
-            GUI::ViewID viewID = viewMgr.AddNewView();
-            viewMgr.AddView<ExampleView>(viewID, entityMgr);
+        // Register views and systems using the stored pointers
+        auto viewID = viewManager.AddNewView();
+        viewManager->AddView<ExampleView>(viewID, ExampleView(entityManager));
 
-            return true;
-        } catch (const std::exception &e) {
-            std::cerr << "Failed to load Example Plugin: " << e.what() << std::endl;
-            return false;
-        }
+        // Register systems
+        entityManager->RegisterSystem<ExampleSystem>();
+
+        return true;
     }
 
     bool OnStart() override { return true; }

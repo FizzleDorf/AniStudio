@@ -18,7 +18,7 @@ public:
 
     void Init() {}
 
-    const ViewID AddNewView() {
+    const ViewID CreateView() {
         const ViewID view = availableViews.front();
         AddViewSignature(view);
         availableViews.pop();
@@ -39,14 +39,13 @@ public:
 
     }
 
-    template <typename T, typename... Args>
-    void AddView(const ViewID view, Args &&...args) {
+    template <typename T>
+    void AddView(const ViewID view, T &component) {
         assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
-
-        T viewComponent(std::forward<Args>(args)...);
-        viewComponent.viewID = view;
+        component.viewID = view;
         GetViewSignature(view)->insert(ViewType<T>());
-        GetViewList<T>()->Insert(viewComponent);
+        auto &viewList = GetViewList<T>();
+        viewList->Insert(std::move(component)); // Use move to prevent copying
     }
 
     template <typename T>
@@ -110,8 +109,11 @@ public:
 
     // View Type Registration
     template <typename T>
-    void RegisterView(const std::string &name) {
-        registeredViews[name] = ViewType<T>();
+    void RegisterView(const ViewID view, T &component) {
+        assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
+        component.viewID = view;
+        GetViewSignature(view)->insert(ViewType<T>());
+        GetViewList<T>()->Insert(component);
     }
 
     // Get registered view type by name

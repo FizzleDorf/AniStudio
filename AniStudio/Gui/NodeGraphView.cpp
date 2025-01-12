@@ -4,7 +4,7 @@ namespace ed = ax::NodeEditor;
 
 namespace GUI {
 
-NodeGraphView::NodeGraphView() : m_Context(nullptr) { Initialize(); }
+NodeGraphView::NodeGraphView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), m_Context(nullptr) { Initialize(); }
 
 NodeGraphView::~NodeGraphView() { Cleanup(); }
 

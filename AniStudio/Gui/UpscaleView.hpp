@@ -8,9 +8,9 @@
 
 namespace GUI {
 
-class UpscaleView {
+class UpscaleView : public BaseView {
 public:
-    UpscaleView() {}
+    UpscaleView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) {}
     ~UpscaleView() {}
 
     void Render();

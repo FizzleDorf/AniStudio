@@ -1,22 +1,23 @@
+// MeshView.hpp
 #ifndef THREE_D_VIEW_HPP
 #define THREE_D_VIEW_HPP
 
 #include "Base/BaseView.hpp"
 #include "pch.h"
 #include <ImGuizmo.h>
+#include <MeshSystem.hpp>
+#include <RenderComponents/MeshComponent.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <RenderComponents/MeshComponent.hpp>
-#include <MeshSystem.hpp>
 
 namespace GUI {
 class MeshView : public BaseView {
 public:
     // Constructor
-    MeshView();
+    MeshView(ECS::EntityManager &entityMgr);
 
     // Main render function
-    void Render();
+    void Render() override;
 
     // Reset the view and gizmo
     void Reset();

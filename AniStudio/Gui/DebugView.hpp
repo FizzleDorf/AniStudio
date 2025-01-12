@@ -9,7 +9,7 @@ namespace GUI {
 
 class DebugView : public BaseView {
 public:
-    DebugView() {}
+    DebugView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { viewName = "DebugView"; }
     void Init();
     void Render();
     void RenderEntityPanel();

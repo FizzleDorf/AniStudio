@@ -29,7 +29,7 @@ public:
     virtual std::vector<std::string> GetDependencies() const = 0;
 
     // Lifecycle methods - now taking manager references
-    virtual bool OnLoad(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr) = 0;
+    virtual bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) = 0;
     virtual bool OnStart() = 0;
     virtual void OnStop() = 0;
     virtual void OnUnload() = 0;
@@ -42,6 +42,8 @@ public:
 
 protected:
     PluginState state_ = PluginState::Created;
+    ECS::EntityManager *entityManager = nullptr;
+    GUI::ViewManager *viewManager = nullptr;
 };
 
 using CreatePluginFn = IPlugin *(*)();

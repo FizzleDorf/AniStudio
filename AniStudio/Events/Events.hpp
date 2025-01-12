@@ -1,7 +1,7 @@
 #pragma once
 #include "ECS.h"
 #include "../Engine/Engine.hpp"
-#include <ImageSystem.hpp>
+#include <systems.h>
 #include "FilePaths.hpp"
 #include "LoadedMedia.hpp"
 #include <GLFW/glfw3.h>
