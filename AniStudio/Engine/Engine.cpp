@@ -75,27 +75,27 @@ void Engine::Init() {
     pluginManager.Init();
 
     // Register core systems
-    /*entityManager.RegisterSystem<ECS::SDCPPSystem>();
-    entityManager.RegisterSystem<ECS::ImageSystem>();*/
+    entityManager.RegisterSystem<ECS::SDCPPSystem>();
+    entityManager.RegisterSystem<ECS::ImageSystem>();
 
     // Create core views
-    //auto debugViewID = viewManager.CreateView();
-    //viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
+    auto debugViewID = viewManager.CreateView();
+    viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
 
-    //auto diffusionViewID = viewManager.CreateView();
-    //viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
+    auto diffusionViewID = viewManager.CreateView();
+    viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
 
-    //auto imageViewID = viewManager.CreateView();
-    //viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
+    auto imageViewID = viewManager.CreateView();
+    viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
 
-    auto pluginViewID = viewManager.CreateView();
-    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
+    /*auto pluginViewID = viewManager.CreateView();
+    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));*/
 
     //// Initialize views
-    //viewManager.GetView<DebugView>(debugViewID).Init();
-    //viewManager.GetView<DiffusionView>(diffusionViewID).Init();
-    //viewManager.GetView<ImageView>(imageViewID).Init();
-    viewManager.GetView<PluginView>(pluginViewID).Init();
+    viewManager.GetView<DebugView>(debugViewID).Init();
+    viewManager.GetView<DiffusionView>(diffusionViewID).Init();
+    viewManager.GetView<ImageView>(imageViewID).Init();
+    //viewManager.GetView<PluginView>(pluginViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {
