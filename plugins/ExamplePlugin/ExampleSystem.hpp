@@ -2,30 +2,13 @@
 #include "ECS.h"
 #include "ExampleComponent.hpp"
 
-namespace ExamplePlugin {
+namespace ECS {
 
-class ExampleSystem : public ECS::BaseSystem {
+class ANI_API ExampleSystem : public BaseSystem {
 public:
-    ExampleSystem() {
-        sysName = "ExampleSystem";
-        AddComponentSignature<ExampleComponent>();
-    }
-
-    void Update(const float deltaT) override {
-        for (const auto &entity : entities) {
-            auto &counter = ECS::mgr.GetComponent<ExampleComponent>(entity);
-
-            if (counter.autoIncrement) {
-                counter.timeSinceLastUpdate += deltaT;
-
-                // Check if it's time to update based on the rate
-                if (counter.timeSinceLastUpdate >= (1.0f / counter.updateRate)) {
-                    counter.count++;
-                    counter.timeSinceLastUpdate = 0.0f;
-                }
-            }
-        }
-    }
+    ExampleSystem(EntityManager &entityMgr);
+    virtual ~ExampleSystem() override;
+    void Update(const float deltaT) override;
 };
 
-} // namespace CounterPlugin
+} // namespace ECS

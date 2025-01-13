@@ -11,10 +11,19 @@ include(${CMAKE_SOURCE_DIR}/build/generators/conan_toolchain.cmake)
 find_package(Vulkan REQUIRED)
 find_package(glew REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(PNG REQUIRED)
 
 # Create shared library
 add_library(${PROJECT_NAME} SHARED
     ExamplePlugin.cpp
+    ExampleComponent.cpp
+    ExampleSystem.cpp 
+    ExampleView.cpp
+    ${CMAKE_SOURCE_DIR}/AniStudio/TypesImpl.cpp
+)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE 
+    ANI_EXPORTS
 )
 
 file(GLOB IMGUI_SOURCES
@@ -23,17 +32,17 @@ file(GLOB IMGUI_SOURCES
 
 target_sources(${PROJECT_NAME} PRIVATE 
     ${IMGUI_SOURCES}
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base/EntityManager.cpp
-    ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base/ViewManager.cpp
 )
 
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/AniStudio
+    ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
@@ -42,6 +51,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/AniStudio/utils
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui
+    ${CMAKE_SOURCE_DIR}/external/imgui/backends
+    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
     ${Vulkan_INCLUDE_DIR}
 
 )
@@ -51,6 +62,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     GLEW::GLEW
     stb_image
     Vulkan::Vulkan
+    PNG::PNG
 )
 # Set PCH file
 set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")

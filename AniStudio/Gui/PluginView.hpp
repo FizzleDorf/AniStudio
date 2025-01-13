@@ -9,14 +9,17 @@ namespace GUI {
 
 class PluginView : public BaseView {
 public:
-    PluginView() { viewName = "Plugin View"; }
+    PluginView(ECS::EntityManager &entityMgr, Plugin::PluginManager &pluginMgr)
+        : BaseView(entityMgr), pluginManager(pluginMgr) {
+        viewName = "Plugin View";
+    }
 
     void Render() override {
         ImGui::Begin("Plugin Manager");
 
         // Refresh button and configurable directory
         if (ImGui::Button("Refresh Plugins")) {
-            pluginMgr.ScanPlugins();
+            pluginManager.ScanPlugins();
         }
 
         // Plugin list table
@@ -27,7 +30,7 @@ public:
             ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
 
-            const auto &plugins = pluginMgr.GetPlugins();
+            const auto &plugins = pluginManager.GetPlugins();
             for (const auto &[name, loader] : plugins) {
                 ImGui::TableNextRow();
 
@@ -98,7 +101,7 @@ private:
 
         if (!plugin) {
             if (ImGui::Button(("Load##" + name).c_str())) {
-                pluginMgr.LoadPlugin(name);
+                pluginManager.LoadPlugin(name);
             }
             return;
         }
@@ -106,27 +109,27 @@ private:
         switch (plugin->GetState()) {
         case PluginState::Loaded:
             if (ImGui::Button(("Start##" + name).c_str())) {
-                pluginMgr.StartPlugin(name);
+                pluginManager.StartPlugin(name);
             }
             ImGui::SameLine();
             if (ImGui::Button(("Unload##" + name).c_str())) {
-                pluginMgr.UnloadPlugin(name);
+                pluginManager.UnloadPlugin(name);
             }
             break;
 
         case PluginState::Started:
             if (ImGui::Button(("Stop##" + name).c_str())) {
-                pluginMgr.StopPlugin(name);
+                pluginManager.StopPlugin(name);
             }
             break;
 
         case PluginState::Stopped:
             if (ImGui::Button(("Start##" + name).c_str())) {
-                pluginMgr.StartPlugin(name);
+                pluginManager.StartPlugin(name);
             }
             ImGui::SameLine();
             if (ImGui::Button(("Unload##" + name).c_str())) {
-                pluginMgr.UnloadPlugin(name);
+                pluginManager.UnloadPlugin(name);
             }
             break;
 
@@ -180,6 +183,7 @@ private:
 
 private:
     const IPlugin *selectedPlugin = nullptr;
+    Plugin::PluginManager &pluginManager;
 };
 
 } // namespace GUI

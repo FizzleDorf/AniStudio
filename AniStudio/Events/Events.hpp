@@ -1,7 +1,8 @@
 #pragma once
 #include "ECS.h"
-#include <ImageSystem.hpp>
-#include "FilePaths.hpp"
+#include "../Engine/Engine.hpp"
+#include <systems.h>
+#include "filepaths.hpp"
 #include "LoadedMedia.hpp"
 #include <GLFW/glfw3.h>
 #include <functional>

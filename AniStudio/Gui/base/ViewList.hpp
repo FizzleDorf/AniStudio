@@ -18,15 +18,25 @@ public:
     ViewList() = default;
     ~ViewList() = default;
 
-    void Insert(const T &view) {
-        auto existingView = std::find_if(data.begin(), data.end(),
-                                         [&](const std::shared_ptr<T> &v) { return v->GetID() == view.GetID(); });
+    template <typename T>
+    void Insert(T &&view) {
+        // Print ID before any operations
+        std::cout << "Attempting to add view with ID: " << view.GetID() << std::endl;
+
+        // First create the shared_ptr to avoid losing the view if find_if throws
+        auto newView = std::make_shared<T>(std::forward<T>(view));
+
+        // Check for existing view after creating the new one
+        auto existingView =
+            std::find_if(data.begin(), data.end(),
+                         [id = newView->GetID()](const std::shared_ptr<T> &v) { return v && v->GetID() == id; });
+
         if (existingView == data.end()) {
-            auto newView = std::make_shared<T>(view);
             data.push_back(newView);
-            std::cout << "View added! ID: " << newView->GetID() << ", Type ID: " << ViewType<T>() << std::endl;
+            std::cout << "View added! ID: " << newView->GetID() << ", Type ID: " << ViewType<T>()
+                      << ", Total Views: " << data.size() << std::endl;
         } else {
-            std::cout << "View already exists! ID: " << view.GetID() << std::endl;
+            std::cout << "View already exists with ID: " << newView->GetID() << std::endl;
         }
     }
 

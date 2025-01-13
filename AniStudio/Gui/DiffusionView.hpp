@@ -11,7 +11,7 @@ namespace GUI {
 
 class DiffusionView : public BaseView {
 public:
-    DiffusionView() { 
+    DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) { 
         viewName = "DiffusionView";
         // seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); 
     }

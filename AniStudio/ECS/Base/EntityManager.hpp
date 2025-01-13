@@ -98,19 +98,19 @@ namespace ECS {
 			return (signature.count(compType) > 0);
 		}
 
-		template<typename T>
-		void RegisterSystem() {
-			const SystemTypeID systemType = SystemType<T>();
-			assert(registeredSystems.count(systemType) == 0 && "System already registered!");
-			auto system = std::make_shared<T>();
+		template <typename T>
+        void RegisterSystem() {
+            const SystemTypeID systemType = SystemType<T>();
+            assert(registeredSystems.count(systemType) == 0 && "System already registered!");
+            auto system = std::make_shared<T>(*this); // Pass EntityManager reference
 
-			for (EntityID entity = 0; entity < entityCount; entity++) {
-				AddEntityToSystem(entity, system.get());
-			}
+            for (EntityID entity = 0; entity < entityCount; entity++) {
+                AddEntityToSystem(entity, system.get());
+            }
 
-			system->Start();
-			registeredSystems[systemType] = std::move(system);
-		}
+            system->Start();
+            registeredSystems[systemType] = std::move(system);
+        }
 
 		template<typename T>
 		void UnregisterSystem() {
@@ -340,8 +340,6 @@ namespace ECS {
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
         std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
         std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
-        
 
     };
-    extern EntityManager mgr;
 }

@@ -9,7 +9,7 @@ using namespace ECS;
 namespace GUI {
 class LayerManager {
 public:
-    LayerManager();
+    LayerManager(EntityManager &entityMgr);
 
     ~LayerManager();
 
@@ -29,6 +29,7 @@ private:
     // Canvas dimensions
     int width = 800;  // Default width
     int height = 600; // Default height
+    EntityManager &mgr;
 };
 } // namespace GUI
 

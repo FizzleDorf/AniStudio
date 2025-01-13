@@ -6,20 +6,17 @@
 
 namespace Plugin {
 
-// Version info structure with compatibility checking
 struct Version {
     int major;
     int minor;
     int patch;
 
     bool IsCompatibleWith(const Version &other) const { return major == other.major && minor <= other.minor; }
-
     std::string ToString() const {
         return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
     }
 };
 
-// Plugin states for lifecycle management
 enum class PluginState { Created, Loaded, Started, Stopped, Unloaded };
 
 class IPlugin {
@@ -31,29 +28,40 @@ public:
     virtual Version GetVersion() const = 0;
     virtual std::vector<std::string> GetDependencies() const = 0;
 
-    // Lifecycle methods
-    virtual bool OnLoad() = 0;
+    // Lifecycle methods - now taking manager references
+    virtual bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
+        entityManager = entityMgr;
+        viewManager = viewMgr;
+        return true;
+    }
     virtual bool OnStart() = 0;
     virtual void OnStop() = 0;
-    virtual void OnUnload() = 0;
+    virtual void OnUnload() {
+        // Clean up views when plugin is unloaded
+        if (viewManager) {
+            // Get all views associated with this plugin and destroy them
+            auto views = viewManager->GetAllViews();
+            for (const auto &viewId : views) {
+                viewManager->DestroyView(viewId);
+            }
+        }
+    }
     virtual void OnUpdate(float dt) = 0;
 
-    // Version compatibility check
     virtual bool IsCompatibleWith(const Version &appVersion) const { return GetVersion().IsCompatibleWith(appVersion); }
 
-    // State management
     PluginState GetState() const { return state_; }
     void SetState(PluginState state) { state_ = state; }
 
 protected:
     PluginState state_ = PluginState::Created;
+    ECS::EntityManager *entityManager = nullptr;
+    GUI::ViewManager *viewManager = nullptr;
 };
 
-// Function pointer types for plugin creation/destruction
 using CreatePluginFn = IPlugin *(*)();
 using DestroyPluginFn = void (*)(IPlugin *);
 
-// Export macros
 #define PLUGIN_API extern "C"
 #define PLUGIN_CREATE "CreatePlugin"
 #define PLUGIN_DESTROY "DestroyPlugin"

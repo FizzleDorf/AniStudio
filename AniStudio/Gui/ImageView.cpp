@@ -12,8 +12,6 @@ using namespace ECS;
 
 namespace GUI {
 
-ImageView::ImageView() : imgIndex(0), showHistory(false) { viewName = "DiffusionView"; }
-
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
     ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);

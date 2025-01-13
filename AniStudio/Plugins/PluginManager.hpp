@@ -1,10 +1,10 @@
 #pragma once
 #include "PluginLoader.hpp"
+#include <filepaths.hpp>
 #include <filesystem>
 #include <map>
 #include <set>
 #include <stdexcept>
-#include <filepaths.hpp>
 
 namespace Plugin {
 
@@ -15,15 +15,17 @@ public:
 
 class PluginManager {
 public:
-    PluginManager() {}
+    PluginManager(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr)
+        : entityManager(&entityMgr), viewManager(&viewMgr), appVersion_({1, 0, 0}) {}
 
     void Init() { 
         pluginDirectory_ = filePaths.pluginPath; 
-        appVersion_ = {1,0,0};
+        ScanPlugins();
     }
 
     void ScanPlugins() {
         try {
+            std::cout << "Scanning plugin directory: " << pluginDirectory_ << std::endl;
             pluginLoaders_.clear();
             for (const auto &entry : std::filesystem::directory_iterator(pluginDirectory_)) {
                 if (entry.is_regular_file() && IsPluginFile(entry.path().string())) {
@@ -31,6 +33,7 @@ public:
                     pluginLoaders_.emplace(pluginName, PluginLoader(entry.path().string()));
                 }
             }
+            std::cout << "Found " << pluginLoaders_.size() << " plugins" << std::endl;
         } catch (const std::filesystem::filesystem_error &e) {
             throw PluginError("Failed to scan plugins: " + std::string(e.what()));
         }
@@ -90,11 +93,9 @@ private:
         return LoadPluginRecursive(name, loaded);
     }
 
-    bool LoadPluginRecursive(const std::string &name,
-                             std::set<std::string> &loaded) {
-        // Check for circular dependencies
+    bool LoadPluginRecursive(const std::string &name, std::set<std::string> &loaded) {
         if (loaded.find(name) != loaded.end()) {
-            return true; // Already loaded
+            return true;
         }
 
         auto it = pluginLoaders_.find(name);
@@ -102,7 +103,6 @@ private:
             throw PluginError("Plugin not found: " + name);
         }
 
-        // Load dependencies first
         auto *plugin = it->second.Get();
         if (plugin) {
             for (const auto &dep : plugin->GetDependencies()) {
@@ -112,8 +112,7 @@ private:
             }
         }
 
-        // Load the plugin itself
-        if (!it->second.Load(appVersion_)) {
+        if (!it->second.Load(appVersion_, entityManager, viewManager)) {
             return false;
         }
 
@@ -124,7 +123,8 @@ private:
     std::string pluginDirectory_;
     Version appVersion_;
     std::map<std::string, PluginLoader> pluginLoaders_;
+    ECS::EntityManager *entityManager;
+    GUI::ViewManager *viewManager;
 };
-extern PluginManager pluginMgr;
 
 } // namespace Plugin

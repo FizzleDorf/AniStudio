@@ -10,7 +10,9 @@ namespace GUI {
 
 class ImageView : public BaseView {
 public:
-    ImageView();
+    ImageView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), imgIndex(0), showHistory(false) {
+        viewName = "ImageView";
+    }
     void Render() override;
     void LoadImage();
     void SaveImage(const std::string &filePath);

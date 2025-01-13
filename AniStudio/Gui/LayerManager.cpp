@@ -1,7 +1,7 @@
 #include "LayerManager.hpp"
 
 namespace GUI {
-    LayerManager::LayerManager() {}
+LayerManager::LayerManager(EntityManager &entityMgr) : mgr(entityMgr) {}
 
     LayerManager::~LayerManager() {
         for (GLuint texture : layers) {

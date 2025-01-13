@@ -11,7 +11,7 @@ namespace ed = ax::NodeEditor;
 namespace GUI {
 class NodeGraphView : public BaseView {
 public:
-    NodeGraphView();
+    NodeGraphView(ECS::EntityManager &entityMgr);
     ~NodeGraphView();
 
     void Initialize();

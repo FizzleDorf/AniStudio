@@ -3,7 +3,7 @@
 #include <iostream>
 
 namespace GUI {
-SequencerView::SequencerView() : currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {}
+SequencerView::SequencerView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {}
 
 void SequencerView::AddTrack(const std::string &name, ECS::EntityID entity) {
     tracks.push_back({name, entity, 0, 100, false}); // Default start/end frames
