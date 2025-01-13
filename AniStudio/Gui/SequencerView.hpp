@@ -18,7 +18,7 @@ struct Track {
 
 class SequencerView : public ImSequencer::SequenceInterface, public BaseView {
 public:
-    SequencerView();
+    SequencerView(ECS::EntityManager &entityMgr);
 
     // Sequencer control
     void Play();

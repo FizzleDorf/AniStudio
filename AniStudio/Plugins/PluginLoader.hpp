@@ -1,5 +1,6 @@
 #pragma once
 #include "IPlugin.hpp"
+#include <iostream>
 #include <memory>
 #include <string>
 
@@ -16,11 +17,15 @@ namespace Plugin {
 class PluginLoader {
 public:
     explicit PluginLoader(const std::string &path) : path_(path), handle_(nullptr), plugin_(nullptr) {}
+
     ~PluginLoader() { Unload(); }
 
-    bool Load(const Version &appVersion) {
-        if (IsLoaded())
+    bool Load(const Version &appVersion, ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
+        std::cout << "PluginLoader::Load - Got entityMgr=" << entityMgr << ", viewMgr=" << viewMgr << std::endl;
+
+        if (IsLoaded()) {
             return false;
+        }
 
         if (!LoadPluginLibrary()) {
             return false;
@@ -32,7 +37,14 @@ public:
         }
 
         plugin_ = createFn_();
-        if (!plugin_ || !plugin_->OnLoad()) {
+        if (!plugin_) {
+            std::cerr << "Failed to create plugin" << std::endl;
+            Unload();
+            return false;
+        }
+
+        if (!plugin_->OnLoad(entityMgr, viewMgr)) {
+            std::cerr << "Failed to load plugin" << std::endl;
             Unload();
             return false;
         }
@@ -42,11 +54,13 @@ public:
     }
 
     bool Start() {
-        if (!plugin_ || plugin_->GetState() != PluginState::Loaded)
+        if (!plugin_ || plugin_->GetState() != PluginState::Loaded) {
             return false;
+        }
 
-        if (!plugin_->OnStart())
+        if (!plugin_->OnStart()) {
             return false;
+        }
 
         plugin_->SetState(PluginState::Started);
         return true;
@@ -70,15 +84,16 @@ public:
             if (plugin_->GetState() == PluginState::Started) {
                 Stop();
             }
-            plugin_->OnUnload();
-            if (destroyFn_)
+            plugin_->OnUnload(); // This will clean up views
+            if (destroyFn_) {
                 destroyFn_(plugin_);
+            }
             plugin_ = nullptr;
         }
 
         if (handle_) {
 #ifdef _WIN32
-            ::FreeLibrary(handle_);
+            FreeLibrary(handle_);
 #else
             dlclose(handle_);
 #endif
@@ -90,12 +105,13 @@ public:
     }
 
     bool IsLoaded() const { return handle_ != nullptr; }
+
     IPlugin *Get() const { return plugin_; }
 
 private:
     bool LoadPluginLibrary() {
 #ifdef _WIN32
-        handle_ = ::LoadLibraryA(path_.c_str());
+        handle_ = LoadLibraryA(path_.c_str());
         if (!handle_) {
             std::cerr << "Failed to load plugin: " << path_ << " (Error: " << GetLastError() << ")\n";
             return false;
@@ -112,11 +128,11 @@ private:
 
     bool LoadPluginFunctions() {
 #ifdef _WIN32
-        createFn_ = (CreatePluginFn)GetProcAddress(handle_, PLUGIN_CREATE);
-        destroyFn_ = (DestroyPluginFn)GetProcAddress(handle_, PLUGIN_DESTROY);
+        createFn_ = reinterpret_cast<CreatePluginFn>(GetProcAddress(handle_, PLUGIN_CREATE));
+        destroyFn_ = reinterpret_cast<DestroyPluginFn>(GetProcAddress(handle_, PLUGIN_DESTROY));
 #else
-        createFn_ = (CreatePluginFn)dlsym(handle_, PLUGIN_CREATE);
-        destroyFn_ = (DestroyPluginFn)dlsym(handle_, PLUGIN_DESTROY);
+        createFn_ = reinterpret_cast<CreatePluginFn>(dlsym(handle_, PLUGIN_CREATE));
+        destroyFn_ = reinterpret_cast<DestroyPluginFn>(dlsym(handle_, PLUGIN_DESTROY));
 #endif
         return createFn_ && destroyFn_;
     }

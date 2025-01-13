@@ -11,7 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Set the target compiler explicitly for all configurations
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX2") # Adjust for your target architecture
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX2") # Adjust for target architecture
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64") # For 64-bit architecture
 endif()
@@ -92,12 +92,10 @@ if(BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         AniStudio/main.cpp
         AniStudio/pch.cpp
+        AniStudio/TypesImpl.cpp
         AniStudio/Engine/Engine.cpp
         AniStudio/Events/Events.cpp
         AniStudio/Timer/Timer.cpp
-        AniStudio/ECS/Base/EntityManager.cpp
-        AniStudio/GUI/Base/ViewManager.cpp
-        AniStudio/Plugins/PluginManager.cpp
         ${GUI_SOURCES}
         ${SYSTEM_SOURCES}
         ${UTILS_SOURCES}
@@ -124,6 +122,9 @@ if(BUILD_ANISTUDIO)
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
+
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_EXPORTS)
+
 endif()
 
 # Build plugins if enabled
@@ -131,6 +132,7 @@ if(BUILD_PLUGINS)
     # Only include headers needed for plugins
     if(NOT BUILD_ANISTUDIO)
         add_subdirectory(external/stb_image)
+        add_subdirectory(external/stable-diffusion.cpp)
         include_directories(
             ${CMAKE_SOURCE_DIR}/AniStudio
             ${CMAKE_SOURCE_DIR}/AniStudio/ECS

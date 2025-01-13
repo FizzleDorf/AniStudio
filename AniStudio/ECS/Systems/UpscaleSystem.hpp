@@ -1,6 +1,7 @@
 #include "ECS.h"
 #include "pch.h"
 #include "stable-diffusion.h"
+#include "../Components/SDCPPComponents/SDCPPComponents.h"
 #include <filesystem>
 #include <future> // Include for std::future and std::async
 #include <vector>
@@ -8,7 +9,8 @@
 namespace ECS {
 class UpscaleSystem : public BaseSystem {
 public:
-    UpscaleSystem() {
+    UpscaleSystem(EntityManager &entityMgr) : BaseSystem(entityMgr), inferenceRunning(false) {
+        sysName = "UpscaleSystem";
         AddComponentSignature<EsrganComponent>();
     }
 

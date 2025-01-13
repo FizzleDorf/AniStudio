@@ -18,7 +18,7 @@ public:
 
     void Init() {}
 
-    const ViewID AddNewView() {
+    const ViewID CreateView() {
         const ViewID view = availableViews.front();
         AddViewSignature(view);
         availableViews.pop();
@@ -39,15 +39,33 @@ public:
 
     }
 
-    template <typename T, typename... Args>
-    void AddView(const ViewID view, Args &&...args) {
+    template <typename T>
+    void AddView(const ViewID view, T &&component) {
         assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
 
-        T viewComponent(std::forward<Args>(args)...);
-        viewComponent.viewID = view;
-        GetViewSignature(view)->insert(ViewType<T>());
-        GetViewList<T>()->Insert(viewComponent);
+        // Check if the ViewID is already registered
+        if (HasView<T>(view)) {
+            std::cerr << "View with ID " << view << " already exists! Skipping AddView." << std::endl;
+            return;
+        }
+
+        component.viewID = view;
+
+        auto signature = GetViewSignature(view);
+        assert(signature && "GetViewSignature returned nullptr!");
+        signature->insert(ViewType<T>());
+
+        auto &viewList = GetViewList<T>();
+        assert(viewList && "GetViewList returned nullptr!");
+
+        // Log component before moving
+        std::cout << "Adding view ID: " << component.viewID << ", ViewTypeID: " << ViewType<T>() << std::endl;
+
+        viewList->Insert(std::move(component));
     }
+
+
+
 
     template <typename T>
     void RemoveView(const ViewID view) {
@@ -110,8 +128,11 @@ public:
 
     // View Type Registration
     template <typename T>
-    void RegisterView(const std::string &name) {
-        registeredViews[name] = ViewType<T>();
+    void RegisterView(const ViewID view, T &component) {
+        assert(view < MAX_VIEW_COUNT && "ViewID out of range!");
+        component.viewID = view;
+        GetViewSignature(view)->insert(ViewType<T>());
+        GetViewList<T>()->Insert(component);
     }
 
     // Get registered view type by name
@@ -157,6 +178,5 @@ private:
     std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
     std::unordered_map<std::string, ViewTypeID> registeredViews;
 };
-extern ViewManager viewMgr;
 
 } // namespace GUI

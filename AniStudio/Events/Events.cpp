@@ -1,4 +1,3 @@
-#include "../Engine/Engine.hpp"
 #include "Events.hpp"
 #include <iostream>
 
@@ -36,8 +35,8 @@ void Events::ProcessEvents() {
         }
         case EventType::InferenceRequest: {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
-
-            auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+            
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
                 sdcppSystem->QueueInference(event.entityID);
@@ -49,7 +48,7 @@ void Events::ProcessEvents() {
         case EventType::UpscaleRequest: {
             std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
 
-            auto upscaleSystem = mgr.GetSystem<ECS::UpscaleSystem>();
+            auto upscaleSystem = Core.GetEntityManager().GetSystem<ECS::UpscaleSystem>();
             if (upscaleSystem) {
                 std::cout << "UpscaleSystem is registered." << std::endl;
                 upscaleSystem->QueueInference(event.entityID);
@@ -61,7 +60,7 @@ void Events::ProcessEvents() {
         case EventType::Interrupt: {
             std::cout << "Handling Interrupt event for SDCPPSystem" << '\n';
 
-            auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
                 sdcppSystem->StopWorker();
@@ -71,7 +70,7 @@ void Events::ProcessEvents() {
             break;
         }
         case EventType::SaveImage: {
-            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             imageSystem->SaveImage(event.entityID);
             break;
         }
@@ -81,13 +80,13 @@ void Events::ProcessEvents() {
         //     break;
         // }
         case EventType::SaveMesh: {
-            auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             // imageSystem->SaveImage(event.entityID);
             break;
         }
         case EventType::LoadMesh: {
             std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << '\n';
-            auto meshSystem = mgr.GetSystem<ECS::MeshSystem>();
+            auto meshSystem = Core.GetEntityManager().GetSystem<ECS::MeshSystem>();
             if (meshSystem) {
                 // meshSystem->LoadMesh(event.entityID);
             } else {
