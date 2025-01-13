@@ -3,6 +3,7 @@
 #include <set>
 #include <type_traits>
 #include <typeinfo>
+#include "DLLDefines.hpp"
 
 namespace GUI {
 class BaseView;
@@ -16,10 +17,7 @@ using ViewTypeID = size_t;
 using ViewSignature = std::set<ViewTypeID>;
 
 // Global counter for ViewType IDs
-inline static ViewTypeID GetRuntimeViewTypeID() {
-    static ViewTypeID typeIDCounter = 0u;
-    return typeIDCounter++;
-}
+ANI_API ViewTypeID GetRuntimeViewTypeID();
 
 // Attach type ID to view class and return it
 template <typename T>

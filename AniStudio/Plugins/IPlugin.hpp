@@ -29,7 +29,11 @@ public:
     virtual std::vector<std::string> GetDependencies() const = 0;
 
     // Lifecycle methods - now taking manager references
-    virtual bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) = 0;
+    virtual bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
+        entityManager = entityMgr;
+        viewManager = viewMgr;
+        return true;
+    }
     virtual bool OnStart() = 0;
     virtual void OnStop() = 0;
     virtual void OnUnload() {

@@ -1,5 +1,6 @@
 #pragma once
 #include <set>
+#include "DLLDefines.hpp"
 
 namespace ECS {
 
@@ -17,16 +18,10 @@ namespace ECS {
 	using EntitySignature = std::set<ComponentTypeID>;
 
 	//return component runtime type id
-	inline static const ComponentTypeID GetRuntimeComponentTypeID() {
-		static ComponentTypeID typeID = 0u;
-		return typeID++;
-	}
+    ANI_API ComponentTypeID GetRuntimeComponentTypeID();
 
 	//return system runtime type id
-	inline static const SystemTypeID GetRuntimeSystemTypeID() {
-		static SystemTypeID typeID = 0u;
-		return typeID++;
-	}
+    ANI_API SystemTypeID GetRuntimeSystemTypeID();
 
 	//attach type id to component class and return it
 	template<typename T>

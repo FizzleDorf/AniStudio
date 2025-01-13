@@ -92,6 +92,7 @@ if(BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         AniStudio/main.cpp
         AniStudio/pch.cpp
+        AniStudio/TypesImpl.cpp
         AniStudio/Engine/Engine.cpp
         AniStudio/Events/Events.cpp
         AniStudio/Timer/Timer.cpp
@@ -121,6 +122,9 @@ if(BUILD_ANISTUDIO)
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
+
+    target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_EXPORTS)
+
 endif()
 
 # Build plugins if enabled

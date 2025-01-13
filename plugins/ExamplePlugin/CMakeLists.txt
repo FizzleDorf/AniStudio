@@ -13,10 +13,17 @@ find_package(glew REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(PNG REQUIRED)
 
-
 # Create shared library
 add_library(${PROJECT_NAME} SHARED
     ExamplePlugin.cpp
+    ExampleComponent.cpp
+    ExampleSystem.cpp 
+    ExampleView.cpp
+    ${CMAKE_SOURCE_DIR}/AniStudio/TypesImpl.cpp
+)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE 
+    ANI_EXPORTS
 )
 
 file(GLOB IMGUI_SOURCES

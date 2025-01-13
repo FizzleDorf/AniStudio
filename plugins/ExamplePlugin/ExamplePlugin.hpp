@@ -12,17 +12,6 @@ public:
     Version GetVersion() const override { return {1, 0, 0}; }
     std::vector<std::string> GetDependencies() const override { return {}; }
 
-    bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) override {
-        if (!entityMgr || !viewMgr) {
-            return false;
-        }
-
-        // Store manager pointers
-        entityManager = entityMgr;
-        viewManager = viewMgr;
-        return true;
-    }
-
     bool OnStart() override { 
         // Register plugin views to the AniStudio ViewManager
         auto viewID = viewManager->CreateView();
@@ -33,9 +22,20 @@ public:
         
         // Create view instance
         viewManager->AddView<GUI::ExampleView>(viewID, GUI::ExampleView(*entityManager));
+        viewManager->GetView<GUI::ExampleView>(viewID).Init();
 
         return true; 
     }
+
+    bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) override {
+        if (!entityMgr || !viewMgr)
+            return false;
+        entityManager = entityMgr;
+        viewManager = viewMgr;
+        SetState(PluginState::Loaded);
+        return true;
+    }
+
     void OnStop() override {}
     void OnUnload() override {}
     void OnUpdate(float dt) override {}

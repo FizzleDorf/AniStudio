@@ -18,10 +18,14 @@ public:
     PluginManager(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr)
         : entityManager(&entityMgr), viewManager(&viewMgr), appVersion_({1, 0, 0}) {}
 
-    void Init() { pluginDirectory_ = filePaths.pluginPath; }
+    void Init() { 
+        pluginDirectory_ = filePaths.pluginPath; 
+        ScanPlugins();
+    }
 
     void ScanPlugins() {
         try {
+            std::cout << "Scanning plugin directory: " << pluginDirectory_ << std::endl;
             pluginLoaders_.clear();
             for (const auto &entry : std::filesystem::directory_iterator(pluginDirectory_)) {
                 if (entry.is_regular_file() && IsPluginFile(entry.path().string())) {
@@ -29,6 +33,7 @@ public:
                     pluginLoaders_.emplace(pluginName, PluginLoader(entry.path().string()));
                 }
             }
+            std::cout << "Found " << pluginLoaders_.size() << " plugins" << std::endl;
         } catch (const std::filesystem::filesystem_error &e) {
             throw PluginError("Failed to scan plugins: " + std::string(e.what()));
         }

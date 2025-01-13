@@ -1,10 +1,11 @@
 #pragma once
 #include "ECS.h"
 #include "../../external/nlohmann_json/nlohmann/json.hpp"
+#include "DLLDefines.hpp"
 
 namespace ECS {
 
-struct ExampleComponent : public BaseComponent {
+struct ANI_API ExampleComponent : public BaseComponent {
     ExampleComponent() { compName = "ExampleComponent"; }
 
     int count = 0;
