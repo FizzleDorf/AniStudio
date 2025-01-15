@@ -2,6 +2,9 @@
 #include "../Events/Events.hpp"
 
 namespace GUI {
+
+static bool showViewListManager = false;
+
 void ShowMenuBar(GLFWwindow *window) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -34,10 +37,15 @@ void ShowMenuBar(GLFWwindow *window) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-
+            if (ImGui::MenuItem("View List Manager", nullptr, showViewListManager)) {
+                showViewListManager = !showViewListManager;
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
     }
 }
+
+bool ShouldRenderViewListManager() { return showViewListManager; }
+
 } // namespace GUI
