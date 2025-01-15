@@ -123,7 +123,7 @@ if(BUILD_ANISTUDIO)
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
 
-    target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_EXPORTS)
+    # target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_EXPORTS)
 
 endif()
 

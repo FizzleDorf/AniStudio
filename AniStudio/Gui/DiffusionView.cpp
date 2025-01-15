@@ -210,7 +210,6 @@ void DiffusionView::RenderSampler() {
 }
 
 void DiffusionView::HandleT2IEvent() {
-
     std::cout << "Adding new entity..." << std::endl;
     EntityID newEntity = mgr.AddNewEntity();
     if (newEntity == 0) {

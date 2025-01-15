@@ -3,6 +3,7 @@
 
 #include "Base/BaseView.hpp"
 #include "ImageComponent.hpp"
+#include "ImageSystem.hpp"
 #include "LoadedMedia.hpp"
 #include <pch.h>
 
@@ -12,6 +13,7 @@ class ImageView : public BaseView {
 public:
     ImageView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), imgIndex(0), showHistory(false) {
         viewName = "ImageView";
+        entityMgr.RegisterSystem<ECS::ImageSystem>();
     }
     void Render() override;
     void LoadImage();

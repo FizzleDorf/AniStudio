@@ -1,25 +1,23 @@
 #pragma once
-#include <iostream>
-#include <set>
-#include <type_traits>
-#include <typeinfo>
 #include "DLLDefines.hpp"
+#include <set>
 
 namespace GUI {
 class BaseView;
 
-// Constants
 const size_t MAX_VIEW_COUNT = 100;
 
-// Custom Types
 using ViewListID = size_t;
 using ViewTypeID = size_t;
 using ViewSignature = std::set<ViewTypeID>;
 
-// Global counter for ViewType IDs
-ANI_API ViewTypeID GetRuntimeViewTypeID();
+// Non-template function - implemented in TypesImpl.cpp
+static ViewTypeID GetRuntimeViewTypeID() {
+    static ViewTypeID typeID = 0u;
+    return typeID++;
+}
 
-// Attach type ID to view class and return it
+// Template function - must be implemented in header
 template <typename T>
 inline static const ViewTypeID ViewType() noexcept {
     static_assert((std::is_base_of<BaseView, T>::value && !std::is_same<BaseView, T>::value), "INVALID VIEW TYPE");
