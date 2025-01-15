@@ -39,7 +39,7 @@ cd conan
 :: Create default Conan profile
 conan profile detect --force
 
-:: Run Conan in the conan subdirectory
+:: Run Conan install
 conan install . --build=missing -s compiler.cppstd=17
 cd ..
 

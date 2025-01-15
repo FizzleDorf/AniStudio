@@ -8,7 +8,7 @@ class IViewList {
 public:
     IViewList() = default;
     virtual ~IViewList() = default;
-    virtual void Erase(const ViewID viewID) {}
+    virtual void Erase(const ViewListID viewID) {}
     virtual void RenderViews() = 0;
 };
 
@@ -40,14 +40,14 @@ public:
         }
     }
 
-    T &Get(const ViewID viewID) {
+    T &Get(const ViewListID viewID) {
         auto view =
             std::find_if(data.begin(), data.end(), [&](const std::shared_ptr<T> &v) { return v->GetID() == viewID; });
         assert(view != data.end() && "View doesn't exist!");
         return *(*view);
     }
 
-    void Erase(const ViewID viewID) override final {
+    void Erase(const ViewListID viewID) override final {
         auto view =
             std::find_if(data.begin(), data.end(), [&](const std::shared_ptr<T> &v) { return v->GetID() == viewID; });
         if (view != data.end()) {

@@ -1,3 +1,4 @@
+#include "DLLDefines.hpp"
 #include "Types.hpp"
 #include "ViewTypes.hpp"
 

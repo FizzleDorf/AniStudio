@@ -13,7 +13,7 @@ public:
     BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr) {}
     virtual ~BaseView() {}
 
-    inline const ViewID GetID() const { return viewID; }
+    inline const ViewListID GetID() const { return viewID; }
 
     virtual void Init() {}
     virtual void Render() = 0;
@@ -35,6 +35,6 @@ protected:
 
 private:
     friend class ViewManager;
-    ViewID viewID;
+    ViewListID viewID;
 };
 } // namespace GUI
