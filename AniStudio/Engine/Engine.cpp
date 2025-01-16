@@ -89,8 +89,9 @@ void Engine::Init() {
     pluginManager.Init();
 
     // Register core systems
-    entityManager.RegisterSystem<ECS::SDCPPSystem>();
-    entityManager.RegisterSystem<ECS::ImageSystem>();
+    entityManager.RegisterSystem<SDCPPSystem>();
+    entityManager.RegisterSystem<ImageSystem>();
+    // entityManager.RegisterSystem<NodegraphSystem>();
 
     // Create core views
     auto debugViewID = viewManager.CreateView();
@@ -102,18 +103,18 @@ void Engine::Init() {
     auto imageViewID = viewManager.CreateView();
     viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
 
-    // auto nodeGraphViewID = viewManager.CreateView();
-    // viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
+    auto nodeGraphViewID = viewManager.CreateView();
+    viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
 
-    /*auto pluginViewID = viewManager.CreateView();
-    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));*/
+    auto pluginViewID = viewManager.CreateView();
+    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
     //// Initialize views
     viewManager.GetView<DebugView>(debugViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(imageViewID).Init();
-    // viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
-    //viewManager.GetView<PluginView>(pluginViewID).Init();
+    viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
+    viewManager.GetView<PluginView>(pluginViewID).Init();
 
 
 }

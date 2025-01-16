@@ -4,11 +4,11 @@ namespace ed = ax::NodeEditor;
 
 namespace GUI {
 
-NodeGraphView::NodeGraphView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), m_Context(nullptr) { Initialize(); }
+NodeGraphView::NodeGraphView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), m_Context(nullptr) {}
 
 NodeGraphView::~NodeGraphView() { Cleanup(); }
 
-void NodeGraphView::Initialize() {
+void NodeGraphView::Init() {
     ed::Config config;
     config.SettingsFile = nullptr; // Disable settings file
     m_Context = ed::CreateEditor(&config);
