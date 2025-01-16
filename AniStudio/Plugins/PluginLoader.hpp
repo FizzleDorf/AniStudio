@@ -1,8 +1,8 @@
 #pragma once
 #include "IPlugin.hpp"
+#include <filesystem>
 #include <iostream>
 #include <memory>
-#include <string>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -16,41 +16,91 @@ namespace Plugin {
 
 class PluginLoader {
 public:
-    explicit PluginLoader(const std::string &path) : path_(path), handle_(nullptr), plugin_(nullptr) {}
+    explicit PluginLoader(const std::string &path) : path_(path), handle_(nullptr), plugin_(nullptr) {
+        lastWriteTime_ = std::filesystem::last_write_time(path);
+    }
 
     ~PluginLoader() { Unload(); }
 
     bool Load(const Version &appVersion, ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
-        std::cout << "PluginLoader::Load - Got entityMgr=" << entityMgr << ", viewMgr=" << viewMgr << std::endl;
+        std::cout << "Loading plugin: " << path_ << std::endl;
 
-        if (IsLoaded()) {
+        if (IsLoaded())
             return false;
-        }
 
         if (!LoadPluginLibrary()) {
+            std::cerr << "Failed to load plugin library" << std::endl;
             return false;
         }
 
         if (!LoadPluginFunctions()) {
+            std::cerr << "Failed to load plugin functions" << std::endl;
             Unload();
             return false;
         }
 
         plugin_ = createFn_();
-        if (!plugin_) {
-            std::cerr << "Failed to create plugin" << std::endl;
-            Unload();
-            return false;
-        }
-
-        if (!plugin_->OnLoad(entityMgr, viewMgr)) {
-            std::cerr << "Failed to load plugin" << std::endl;
+        if (!plugin_ || !plugin_->OnLoad(entityMgr, viewMgr)) {
+            std::cerr << "Failed to initialize plugin" << std::endl;
             Unload();
             return false;
         }
 
         plugin_->SetState(PluginState::Loaded);
         return true;
+    }
+
+    bool CheckForHotReload(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
+        if (!IsLoaded())
+            return false;
+
+        try {
+            auto currentWriteTime = std::filesystem::last_write_time(path_);
+            if (currentWriteTime == lastWriteTime_)
+                return false;
+
+            std::cout << "Hot reloading plugin: " << path_ << std::endl;
+
+            // Save current plugin state
+            std::unique_ptr<IPluginData> savedState;
+            PluginState currentState = plugin_->GetState();
+
+            if (plugin_) {
+                savedState.reset(plugin_->SaveState());
+                if (currentState == PluginState::Started) {
+                    plugin_->OnStop();
+                }
+            }
+
+            // Unload current plugin
+            Unload();
+
+            // Load new version
+            if (!Load(Version{1, 0, 0}, entityMgr, viewMgr)) {
+                std::cerr << "Failed to reload plugin" << std::endl;
+                return false;
+            }
+
+            // Restore state
+            if (savedState && !plugin_->LoadState(savedState.get())) {
+                std::cerr << "Failed to restore plugin state" << std::endl;
+                return false;
+            }
+
+            // Restart if it was running
+            if (currentState == PluginState::Started) {
+                if (!Start()) {
+                    std::cerr << "Failed to restart plugin after reload" << std::endl;
+                    return false;
+                }
+            }
+
+            lastWriteTime_ = currentWriteTime;
+            return true;
+        } catch (const std::exception &e) {
+            std::cerr << "Error during hot reload: " << e.what() << std::endl;
+            return false;
+        }
     }
 
     bool Start() {
@@ -84,7 +134,7 @@ public:
             if (plugin_->GetState() == PluginState::Started) {
                 Stop();
             }
-            plugin_->OnUnload(); // This will clean up views
+            plugin_->OnUnload();
             if (destroyFn_) {
                 destroyFn_(plugin_);
             }
@@ -105,7 +155,6 @@ public:
     }
 
     bool IsLoaded() const { return handle_ != nullptr; }
-
     IPlugin *Get() const { return plugin_; }
 
 private:
@@ -113,13 +162,13 @@ private:
 #ifdef _WIN32
         handle_ = LoadLibraryA(path_.c_str());
         if (!handle_) {
-            std::cerr << "Failed to load plugin: " << path_ << " (Error: " << GetLastError() << ")\n";
+            std::cerr << "Failed to load plugin: " << path_ << " (Error: " << GetLastError() << ")" << std::endl;
             return false;
         }
 #else
         handle_ = dlopen(path_.c_str(), RTLD_LAZY);
         if (!handle_) {
-            std::cerr << "Failed to load plugin: " << path_ << " (Error: " << dlerror() << ")\n";
+            std::cerr << "Failed to load plugin: " << path_ << " (Error: " << dlerror() << ")" << std::endl;
             return false;
         }
 #endif
@@ -138,6 +187,7 @@ private:
     }
 
     std::string path_;
+    std::filesystem::file_time_type lastWriteTime_;
     LibHandle handle_;
     IPlugin *plugin_;
     CreatePluginFn createFn_ = nullptr;
