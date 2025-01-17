@@ -180,40 +180,76 @@ void ImageView::RenderSelector() {
 }
 
 void ImageView::RenderHistory() {
-    if (ImGui::Checkbox("Show History", &showHistory) && showHistory) {
-        // Toggle history visibility
-    }
+    ImGui::Checkbox("Show History", &showHistory);
 
     if (!loadedMedia.GetImages().empty() && showHistory) {
-        const auto &images = loadedMedia.GetImages();
-        for (size_t i = 0; i < images.size(); ++i) {
-            const auto &image = images[i];
-            if (image.textureID == 0) {
-                CreateTexture(i);
-            }
-            if (!image.imageData) {
-                mgr.DestroyEntity(image.GetID());
-                break;
-            }
-
-            ImGui::Text("Image %zu: %s", i, image.fileName.c_str());
-
-            // Maintain aspect ratio with max size of 128x128
-            float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
-            ImVec2 maxSize(128.0f, 128.0f);
-            ImVec2 imageSize;
-
-            if (aspectRatio > 1.0f) {
-                // Wider image: scale width to max and adjust height
-                imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
-            } else {
-                // Taller image: scale height to max and adjust width
-                imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
-            }
-
-            ImGui::Image(reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize);
-            ImGui::SameLine();
+        // Navigation controls
+        if (ImGui::Button("First")) {
+            imgIndex = 0;
+            imageComponent = loadedMedia.GetImage(imgIndex);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
         }
+        ImGui::SameLine();
+        if (ImGui::Button("Last")) {
+            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+            imageComponent = loadedMedia.GetImage(imgIndex);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
+        }
+        ImGui::SameLine();
+        ImGui::Text("History Size: %zu", loadedMedia.GetImages().size());
+
+        // Create scrollable history panel
+        if (ImGui::BeginChild("HistoryPanel", ImVec2(0, 160), true, ImGuiWindowFlags_HorizontalScrollbar)) {
+            const auto &images = loadedMedia.GetImages();
+
+            for (size_t i = 0; i < images.size(); ++i) {
+                ImGui::BeginGroup();
+                const auto &image = images[i];
+
+                if (image.textureID == 0) {
+                    CreateTexture(i);
+                }
+                if (!image.imageData) {
+                    mgr.DestroyEntity(image.GetID());
+                    ImGui::EndGroup();
+                    break;
+                }
+
+                if (static_cast<int>(i) == imgIndex) {
+                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+                }
+                ImGui::Text("%zu: %s", i, image.fileName.c_str());
+                if (static_cast<int>(i) == imgIndex) {
+                    ImGui::PopStyleColor();
+                }
+
+                // Calculate image dimensions
+                float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
+                ImVec2 maxSize(128.0f, 128.0f);
+                ImVec2 imageSize;
+                if (aspectRatio > 1.0f) {
+                    imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
+                } else {
+                    imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
+                }
+
+                // Make image clickable
+                if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
+                                       reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
+                    imgIndex = static_cast<int>(i);
+                    imageComponent = loadedMedia.GetImage(imgIndex);
+                    CleanUpCurrentImage();
+                    CreateCurrentTexture();
+                }
+
+                ImGui::EndGroup();
+                ImGui::SameLine();
+            }
+            ImGui::NewLine();
+        }
+        ImGui::EndChild();
     }
 }
 
