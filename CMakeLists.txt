@@ -4,6 +4,9 @@ cmake_minimum_required(VERSION 3.20)
 option(BUILD_ANISTUDIO "Build the AniStudio application" ON)
 option(BUILD_PLUGINS "Build AniStudio plugins" ON)
 
+set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
+    file(MAKE_DIRECTORY ${PLUGINS_DIR})
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)

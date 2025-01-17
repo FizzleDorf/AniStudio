@@ -109,13 +109,21 @@ void Engine::Init() {
     auto pluginViewID = viewManager.CreateView();
     viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
+    // auto settingsViewID = viewManager.CreateView();
+    // viewManager.AddView<SettingsView>(settingsViewID, SettingsView(entityManager));
+    
     //// Initialize views
+    /*auto views = viewManager.GetAllViews();
+    for (auto view : views) {
+    
+    
+    }*/
     viewManager.GetView<DebugView>(debugViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(imageViewID).Init();
     viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
     viewManager.GetView<PluginView>(pluginViewID).Init();
-
+    // viewManager.GetView<SettingsView>(settingsViewID).Init();
 
 }
 

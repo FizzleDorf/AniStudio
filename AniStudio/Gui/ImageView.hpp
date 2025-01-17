@@ -26,9 +26,11 @@ private:
 
     void CleanUpImage(const int index);
     void CleanUpCurrentImage();
-
+    void DrawGrid();
     void RenderSelector();
     void RenderHistory();
+
+    void SetZoom(float newZoom);
 
     int imgIndex = 0;
     bool showHistory = false;
