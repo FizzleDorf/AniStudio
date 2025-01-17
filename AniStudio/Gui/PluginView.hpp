@@ -3,8 +3,6 @@
 #include "PluginManager.hpp"
 #include <imgui.h>
 
-using namespace Plugin;
-
 namespace GUI {
 
 class PluginView : public BaseView {
@@ -17,12 +15,10 @@ public:
     void Render() override {
         ImGui::Begin("Plugin Manager");
 
-        // Refresh button and configurable directory
         if (ImGui::Button("Refresh Plugins")) {
             pluginManager.ScanPlugins();
         }
 
-        // Plugin list table
         if (ImGui::BeginTable("Plugins", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
             ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
             ImGui::TableSetupColumn("Version", ImGuiTableColumnFlags_WidthFixed, 100.0f);
@@ -32,6 +28,9 @@ public:
 
             const auto &plugins = pluginManager.GetPlugins();
             for (const auto &[name, loader] : plugins) {
+                if (!loader)
+                    continue;
+
                 ImGui::TableNextRow();
 
                 // Plugin name
@@ -40,7 +39,8 @@ public:
 
                 // Version
                 ImGui::TableNextColumn();
-                if (auto *plugin = loader.Get()) {
+                auto *plugin = loader->Get();
+                if (plugin) {
                     auto version = plugin->GetVersion();
                     ImGui::Text("%d.%d.%d", version.major, version.minor, version.patch);
                 } else {
@@ -49,7 +49,7 @@ public:
 
                 // Status
                 ImGui::TableNextColumn();
-                if (auto *plugin = loader.Get()) {
+                if (plugin) {
                     switch (plugin->GetState()) {
                     case Plugin::PluginState::Created:
                         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Created");
@@ -73,11 +73,7 @@ public:
 
                 // Actions
                 ImGui::TableNextColumn();
-                try {
-                    RenderPluginActions(name, loader);
-                } catch (const PluginError &e) {
-                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
-                }
+                RenderPluginActions(name, plugin);
             }
 
             ImGui::EndTable();
@@ -96,9 +92,7 @@ public:
     }
 
 private:
-    void RenderPluginActions(const std::string &name, const PluginLoader &loader) {
-        auto *plugin = loader.Get();
-
+    void RenderPluginActions(const std::string &name, Plugin::IPlugin *plugin) {
         if (!plugin) {
             if (ImGui::Button(("Load##" + name).c_str())) {
                 pluginManager.LoadPlugin(name);
@@ -107,7 +101,7 @@ private:
         }
 
         switch (plugin->GetState()) {
-        case PluginState::Loaded:
+        case Plugin::PluginState::Loaded:
             if (ImGui::Button(("Start##" + name).c_str())) {
                 pluginManager.StartPlugin(name);
             }
@@ -117,13 +111,13 @@ private:
             }
             break;
 
-        case PluginState::Started:
+        case Plugin::PluginState::Started:
             if (ImGui::Button(("Stop##" + name).c_str())) {
                 pluginManager.StopPlugin(name);
             }
             break;
 
-        case PluginState::Stopped:
+        case Plugin::PluginState::Stopped:
             if (ImGui::Button(("Start##" + name).c_str())) {
                 pluginManager.StartPlugin(name);
             }
@@ -137,14 +131,13 @@ private:
             break;
         }
 
-        // Show plugin details button
         ImGui::SameLine();
         if (ImGui::Button(("Details##" + name).c_str())) {
             selectedPlugin = plugin;
         }
     }
 
-    void RenderPluginDetails(const IPlugin &plugin) {
+    void RenderPluginDetails(const Plugin::IPlugin &plugin) {
         ImGui::Text("Plugin: %s", plugin.GetName());
 
         auto version = plugin.GetVersion();
@@ -164,7 +157,7 @@ private:
         }
     }
 
-    const char *GetPluginStateString(PluginState state) {
+    const char *GetPluginStateString(Plugin::PluginState state) {
         switch (state) {
         case Plugin::PluginState::Created:
             return "Created";
@@ -182,7 +175,7 @@ private:
     }
 
 private:
-    const IPlugin *selectedPlugin = nullptr;
+    const Plugin::IPlugin *selectedPlugin = nullptr;
     Plugin::PluginManager &pluginManager;
 };
 

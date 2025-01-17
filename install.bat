@@ -35,7 +35,6 @@ python -m pip install --upgrade pip
 :: Install Conan
 pip install conan
 
-cd conan
 :: Create default Conan profile
 conan profile detect --force
 

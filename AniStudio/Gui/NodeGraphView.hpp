@@ -14,7 +14,7 @@ public:
     NodeGraphView(ECS::EntityManager &entityMgr);
     ~NodeGraphView();
 
-    void Initialize();
+    void Init() override;
 
     void Cleanup();
 

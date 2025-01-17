@@ -1,48 +1,43 @@
 #pragma once
 #include "PluginLoader.hpp"
-#include <filepaths.hpp>
+#include "filepaths.hpp"
 #include <filesystem>
 #include <map>
-#include <set>
-#include <stdexcept>
+#include <string>
 
 namespace Plugin {
-
-class PluginError : public std::runtime_error {
-public:
-    explicit PluginError(const std::string &msg) : std::runtime_error(msg) {}
-};
 
 class PluginManager {
 public:
     PluginManager(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr)
         : entityManager(&entityMgr), viewManager(&viewMgr), appVersion_({1, 0, 0}) {}
 
-    void Init() { 
-        pluginDirectory_ = filePaths.pluginPath; 
+    void Init() {
+        pluginDirectory_ = filePaths.pluginPath;
         ScanPlugins();
     }
 
     void ScanPlugins() {
         try {
-            std::cout << "Scanning plugin directory: " << pluginDirectory_ << std::endl;
-            pluginLoaders_.clear();
             for (const auto &entry : std::filesystem::directory_iterator(pluginDirectory_)) {
-                if (entry.is_regular_file() && IsPluginFile(entry.path().string())) {
-                    const std::string pluginName = entry.path().filename().string();
-                    pluginLoaders_.emplace(pluginName, PluginLoader(entry.path().string()));
+                if (!IsPluginFile(entry.path().string()))
+                    continue;
+
+                const std::string pluginName = entry.path().filename().string();
+                if (pluginLoaders_.find(pluginName) == pluginLoaders_.end()) {
+                    std::cout << "Found new plugin: " << pluginName << std::endl;
+                    pluginLoaders_[pluginName] = std::make_unique<PluginLoader>(entry.path().string());
                 }
             }
-            std::cout << "Found " << pluginLoaders_.size() << " plugins" << std::endl;
         } catch (const std::filesystem::filesystem_error &e) {
-            throw PluginError("Failed to scan plugins: " + std::string(e.what()));
+            std::cerr << "Failed to scan plugins: " << e.what() << std::endl;
         }
     }
 
     bool LoadPlugin(const std::string &name) {
         auto it = pluginLoaders_.find(name);
         if (it == pluginLoaders_.end()) {
-            throw PluginError("Plugin not found: " + name);
+            return false;
         }
         return LoadPluginWithDependencies(name);
     }
@@ -50,34 +45,36 @@ public:
     bool StartPlugin(const std::string &name) {
         auto it = pluginLoaders_.find(name);
         if (it == pluginLoaders_.end()) {
-            throw PluginError("Plugin not found: " + name);
+            return false;
         }
-        return it->second.Start();
+        return it->second->Start();
     }
 
     void StopPlugin(const std::string &name) {
         auto it = pluginLoaders_.find(name);
         if (it != pluginLoaders_.end()) {
-            it->second.Stop();
+            it->second->Stop();
         }
     }
 
     bool UnloadPlugin(const std::string &name) {
         auto it = pluginLoaders_.find(name);
-        if (it != pluginLoaders_.end() && it->second.IsLoaded()) {
-            it->second.Unload();
-            return true;
+        if (it == pluginLoaders_.end()) {
+            return false;
         }
-        return false;
+        it->second->Unload();
+        return true;
     }
 
     void Update(float dt) {
         for (auto &[name, loader] : pluginLoaders_) {
-            loader.Update(dt);
+            if (loader) {
+                loader->Update(dt);
+            }
         }
     }
 
-    const std::map<std::string, PluginLoader> &GetPlugins() const { return pluginLoaders_; }
+    const std::map<std::string, std::unique_ptr<PluginLoader>> &GetPlugins() const { return pluginLoaders_; }
 
 private:
     bool IsPluginFile(const std::string &path) const {
@@ -100,10 +97,10 @@ private:
 
         auto it = pluginLoaders_.find(name);
         if (it == pluginLoaders_.end()) {
-            throw PluginError("Plugin not found: " + name);
+            return false;
         }
 
-        auto *plugin = it->second.Get();
+        auto *plugin = it->second->Get();
         if (plugin) {
             for (const auto &dep : plugin->GetDependencies()) {
                 if (!LoadPluginRecursive(dep, loaded)) {
@@ -112,7 +109,7 @@ private:
             }
         }
 
-        if (!it->second.Load(appVersion_, entityManager, viewManager)) {
+        if (!it->second->Load(appVersion_, entityManager, viewManager)) {
             return false;
         }
 
@@ -122,7 +119,7 @@ private:
 
     std::string pluginDirectory_;
     Version appVersion_;
-    std::map<std::string, PluginLoader> pluginLoaders_;
+    std::map<std::string, std::unique_ptr<PluginLoader>> pluginLoaders_;
     ECS::EntityManager *entityManager;
     GUI::ViewManager *viewManager;
 };

@@ -19,6 +19,11 @@ struct Version {
 
 enum class PluginState { Created, Loaded, Started, Stopped, Unloaded };
 
+// Interface for plugin data that should persist across reloads
+struct IPluginData {
+    virtual ~IPluginData() = default;
+};
+
 class IPlugin {
 public:
     virtual ~IPlugin() = default;
@@ -28,18 +33,21 @@ public:
     virtual Version GetVersion() const = 0;
     virtual std::vector<std::string> GetDependencies() const = 0;
 
-    // Lifecycle methods - now taking manager references
+    // Hot reload support
+    virtual IPluginData *SaveState() { return nullptr; }        // Return nullptr if no state to save
+    virtual bool LoadState(IPluginData *state) { return true; } // Return false if state restoration failed
+
+    // Lifecycle methods
     virtual bool OnLoad(ECS::EntityManager *entityMgr, GUI::ViewManager *viewMgr) {
         entityManager = entityMgr;
         viewManager = viewMgr;
         return true;
     }
+
     virtual bool OnStart() = 0;
     virtual void OnStop() = 0;
     virtual void OnUnload() {
-        // Clean up views when plugin is unloaded
         if (viewManager) {
-            // Get all views associated with this plugin and destroy them
             auto views = viewManager->GetAllViews();
             for (const auto &viewId : views) {
                 viewManager->DestroyView(viewId);

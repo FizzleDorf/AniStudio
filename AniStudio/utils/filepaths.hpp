@@ -7,6 +7,8 @@
 #include <string>
 
 struct FilePaths {
+    std::string dataPath = "../data/defaults";
+    std::string ImguiStatePath = "../data/defaults/imgui.ini";
     std::string virtualEnvPath = "";
     std::string comfyuiRootPath = "";
     std::string lastOpenProjectPath = "";

@@ -1,11 +1,15 @@
 #include "Engine.hpp"
 #include "guis.h"
+#include <filesystem>
+#include <iostream>
 
 using namespace ECS;
 using namespace GUI;
 using namespace Plugin;
 
 namespace ANI {
+
+static std::string iniFilePath;
 
 Engine &Core = Engine::Ref();
 
@@ -16,6 +20,9 @@ Engine::Engine()
       timeElapsed(0.0) {}
 
 Engine::~Engine() {
+    // std::string relativePath = filePaths.dataPath + "/imgui.ini";
+    // std::string iniFilePath = std::filesystem::absolute(relativePath).string();
+    // ImGui::SaveIniSettingsToDisk(iniFilePath.c_str());
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -24,6 +31,7 @@ Engine::~Engine() {
 }
 
 void Engine::Init() {
+    filePaths.LoadFilePathDefaults();
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -45,13 +53,17 @@ void Engine::Init() {
     if (glewInit() != GLEW_OK) {
         throw std::runtime_error("Failed to initialize GLEW");
     }
-
     glViewport(0, 0, videoWidth, videoHeight);
-
+    
     // Initialize ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+
+    iniFilePath = std::filesystem::absolute(filePaths.ImguiStatePath).string();
+    // ImGui::LoadIniSettingsFromDisk(iniFilePath.c_str());
+
     ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = iniFilePath.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
@@ -66,6 +78,8 @@ void Engine::Init() {
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
+    
+    
 
     // Initialize core systems
     filePaths.Init();
@@ -75,8 +89,9 @@ void Engine::Init() {
     pluginManager.Init();
 
     // Register core systems
-    entityManager.RegisterSystem<ECS::SDCPPSystem>();
-    entityManager.RegisterSystem<ECS::ImageSystem>();
+    entityManager.RegisterSystem<SDCPPSystem>();
+    entityManager.RegisterSystem<ImageSystem>();
+    // entityManager.RegisterSystem<NodegraphSystem>();
 
     // Create core views
     auto debugViewID = viewManager.CreateView();
@@ -88,14 +103,20 @@ void Engine::Init() {
     auto imageViewID = viewManager.CreateView();
     viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
 
-    /*auto pluginViewID = viewManager.CreateView();
-    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));*/
+    auto nodeGraphViewID = viewManager.CreateView();
+    viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
+
+    auto pluginViewID = viewManager.CreateView();
+    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
     //// Initialize views
     viewManager.GetView<DebugView>(debugViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(imageViewID).Init();
-    //viewManager.GetView<PluginView>(pluginViewID).Init();
+    viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
+    viewManager.GetView<PluginView>(pluginViewID).Init();
+
+
 }
 
 void Engine::Update(const float deltaT) {
