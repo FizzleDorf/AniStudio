@@ -20,8 +20,10 @@ struct BoolOption {
     bool enabled;
 };
 
-class SettingsView {
+class SettingsView : public BaseView {
 public:
+    SettingsView(EntityManager &mgr) : BaseView(mgr) {};
+    ~SettingsView();
     void Render();
 
 private:

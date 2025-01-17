@@ -10,8 +10,6 @@
 #include <stb_image_write.h>
 #include <nlohmann/json.hpp>
 #include <png.h>
-#include <filesystem>
-#include <iostream>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -223,11 +221,42 @@ private:
         std::filesystem::path fullPath = directoryPath / filename;
 
         try {
+            // Ensure the directory exists, or create it
             if (!std::filesystem::exists(directoryPath)) {
                 std::filesystem::create_directories(directoryPath);
                 std::cout << "Directory created: " << directoryPath << '\n';
             }
 
+            // Find the highest existing index in the directory
+            int highestIndex = 0;
+            for (const auto &entry : std::filesystem::directory_iterator(directoryPath)) {
+                if (entry.path().extension() == ".png") {
+                    std::string filenameStr = entry.path().stem().string();
+                    size_t lastDashPos = filenameStr.find_last_of('-');
+                    if (lastDashPos != std::string::npos) {
+                        try {
+                            int index = std::stoi(filenameStr.substr(lastDashPos + 1));
+                            if (index > highestIndex) {
+                                highestIndex = index;
+                            }
+                        } catch (const std::invalid_argument &) {
+                            // Skip files that do not have the expected format
+                        }
+                    }
+                }
+            }
+
+            // Increment the index for the new file
+            highestIndex++;
+            std::ostringstream formattedIndex;
+            formattedIndex << std::setw(5) << std::setfill('0') << highestIndex; // Format with leading zeros
+
+            std::string newFilename = filename.stem().string() + "-" + formattedIndex.str() + ".png";
+
+            // Update the full path with the new filename
+            fullPath = directoryPath / newFilename;
+
+            // Write the image to file
             if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
                 std::cerr << "Failed to save image: " << fullPath << std::endl;
                 mgr.DestroyEntity(item.entityID);
@@ -245,7 +274,7 @@ private:
                 std::cout << "Successfully wrote metadata to: " << fullPath << std::endl;
             }
 
-            std::cout << "Image saved successfully: " << fullPath << std::endl;
+            std::cout << "Image saved successfully: \"" << fullPath << "\"" << std::endl;
             loadedMedia.AddImage(imageComp);
 
         } catch (const std::filesystem::filesystem_error &e) {
@@ -253,6 +282,10 @@ private:
             return;
         }
     }
+
+
+
+
 
     sd_ctx_t *InitializeStableDiffusionContext(EntityID entityID) {
         return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),

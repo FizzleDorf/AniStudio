@@ -40,5 +40,6 @@ private:
 
     void DrawGrid();      // Draw grid based on zoom factor
     bool CreateTexture(); // Create OpenGL texture from the current canvas
+
 };
 } // namespace UI
