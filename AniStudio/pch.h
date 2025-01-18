@@ -22,6 +22,7 @@
 #include <atomic>
 #include <thread>
 #include <filesystem>
+#include <condition_variable>
 
 // JSON
 #include <nlohmann/json.hpp>
@@ -53,3 +54,6 @@
 //http request headers
 // #include "cpr/cpr.h"
 // #include "curl/curl.h"
+
+// AniStudio Constants
+#include "Constants.hpp"

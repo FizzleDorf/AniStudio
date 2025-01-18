@@ -5,10 +5,9 @@
 #include "SDCPPComponents.h"
 #include "pch.h"
 #include "stable-diffusion.h"
-#include <condition_variable>
+#include "Constants.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <nlohmann/json.hpp>
 #include <png.h>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
@@ -45,8 +44,13 @@ public:
         nlohmann::json metadata;
     };
 
+    struct ConvertQueueItem {
+        EntityID entityID;
+        bool processing;
+    };
+
      SDCPPSystem(EntityManager &entityMgr)
-        : BaseSystem(entityMgr), stopWorker(false), workerThreadRunning(false), inferenceThreadRunning(false) {
+        : BaseSystem(entityMgr), stopWorker(false), workerThreadRunning(false), taskRunning(false) {
         sysName = "SDCPPSystem";
         AddComponentSignature<LatentComponent>();
         AddComponentSignature<InputImageComponent>();
@@ -63,6 +67,19 @@ public:
         std::cout << "metadata: " << '\n' << inferenceQueue.back().metadata << std::endl;
         queueCondition.notify_one();
         std::cout << "Entity " << entityID << " queued for inference." << std::endl;
+
+        if (!workerThreadRunning.load()) {
+            StartWorker();
+        }
+    }
+
+    void QueueConversion(const EntityID entityID) {
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            convertQueue.push_back({entityID, false});
+        }
+        queueCondition.notify_one();
+        std::cout << "Entity " << entityID << " queued for conversion." << std::endl;
 
         if (!workerThreadRunning.load()) {
             StartWorker();
@@ -122,54 +139,75 @@ public:
 
 private:
     std::vector<QueueItem> inferenceQueue;
+    std::vector<ConvertQueueItem> convertQueue;
     std::mutex queueMutex;
     std::condition_variable queueCondition;
     std::atomic<bool> stopWorker;
     std::atomic<bool> workerThreadRunning;
-    std::atomic<bool> inferenceThreadRunning;
+    std::atomic<bool> taskRunning;
     std::mutex workerMutex;
     std::thread workerThread;
 
     void WorkerLoop() {
         while (workerThreadRunning) {
             QueueItem currentQueueItem;
+            ConvertQueueItem currentConvertQueueItem;
+
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
-                queueCondition.wait(lock, [this]() { return stopWorker || !inferenceQueue.empty(); });
+                // Modified condition to check both queues
+                queueCondition.wait(
+                    lock, [this]() { return stopWorker || !inferenceQueue.empty() || !convertQueue.empty(); });
 
                 if (stopWorker) {
                     break;
                 }
 
-                if (!inferenceQueue.empty() && !inferenceQueue.front().processing) {
+                // Prioritize conversion queue
+                if (!convertQueue.empty() && !convertQueue.front().processing) {
+                    convertQueue.front().processing = true;
+                    currentConvertQueueItem = convertQueue.front();
+                    taskRunning.store(true); // Set task running before releasing lock
+                } else if (!inferenceQueue.empty() && !inferenceQueue.front().processing) {
                     inferenceQueue.front().processing = true;
                     currentQueueItem = inferenceQueue.front();
+                    taskRunning.store(true); // Set task running before releasing lock
                 }
             }
 
             try {
-                RunInference(currentQueueItem);
+                if (currentConvertQueueItem.entityID != 0) { // Check if we have a convert task
+                    ConvertToGGUF(currentConvertQueueItem);
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        if (!convertQueue.empty()) {
+                            convertQueue.erase(convertQueue.begin());
+                        }
+                    }
+                } else if (currentQueueItem.entityID != 0) { // Check if we have an inference task
+                    RunInference(currentQueueItem);
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        if (!inferenceQueue.empty()) {
+                            inferenceQueue.erase(inferenceQueue.begin());
+                        }
+                    }
+                }
             } catch (const std::exception &e) {
-                std::cerr << "Inference error: " << e.what() << std::endl;
+                std::cerr << "Worker error: " << e.what() << std::endl;
             }
 
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                // Remove the front item after processing
-                if (!inferenceQueue.empty()) {
-                    inferenceQueue.erase(inferenceQueue.begin());
-                }
-            }
+            taskRunning.store(false);
         }
 
-        workerThreadRunning = false;
+        workerThreadRunning.store(false);
     }
 
     void RunInference(const QueueItem item) {
-        if (inferenceThreadRunning)
+        if (taskRunning)
             return;
 
-        inferenceThreadRunning.store(true);
+        taskRunning.store(true);
 
         sd_ctx_t *sd_context = nullptr;
         try {
@@ -181,14 +219,14 @@ private:
             sd_context = InitializeStableDiffusionContext(item.entityID);
             if (!sd_context) {
                 mgr.DestroyEntity(item.entityID);
-                inferenceThreadRunning.store(false);
+                taskRunning.store(false);
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
             }
 
             sd_image_t *image = GenerateImage(sd_context, item.entityID);
             if (!image) {
                 mgr.DestroyEntity(item.entityID);
-                inferenceThreadRunning.store(false);
+                taskRunning.store(false);
                 throw std::runtime_error("Failed to generate image!");
             }
 
@@ -196,14 +234,64 @@ private:
             free_sd_ctx(sd_context);
             std::cout << "Inference completed for Entity " << item.entityID << std::endl;
 
-            inferenceThreadRunning.store(false);
+            taskRunning.store(false);
         } catch (const std::exception &e) {
             std::cerr << "Exception during inference: " << e.what() << std::endl;
             if (sd_context) {
                 free_sd_ctx(sd_context);
             }
-            inferenceThreadRunning.store(false);
+            mgr.DestroyEntity(item.entityID);
+            taskRunning.store(false);
         }
+    }
+
+    void ConvertToGGUF(const ConvertQueueItem item) {
+        if (taskRunning)
+            return;
+
+        taskRunning.store(true);
+        std::string inputPath = mgr.GetComponent<ModelComponent>(item.entityID).modelPath;
+        std::string vaePath = mgr.GetComponent<VaeComponent>(item.entityID).modelPath;
+        sd_type_t type = mgr.GetComponent<SamplerComponent>(item.entityID).current_type_method;
+
+        // Validate input path
+        if (inputPath.empty()) {
+            std::cerr << "Input model path is empty" << std::endl;
+            mgr.DestroyEntity(item.entityID);
+            return;
+        }
+
+        // Create output path with type suffix
+        std::filesystem::path inPath(inputPath);
+        std::string outPath = inPath.parent_path().string() + "/" + inPath.stem().string() + "_" +
+                              std::string(type_method_items[type]) + ".gguf";
+
+        try {
+            sd_set_log_callback(LogCallback, nullptr);
+            bool result;
+
+            if (vaePath.empty()) {
+                // Convert without VAE
+                result = convert(inputPath.c_str(), nullptr, outPath.c_str(), type);
+            } else {
+                // Convert with VAE
+                result = convert(inputPath.c_str(), vaePath.c_str(), outPath.c_str(), type);
+            }
+
+            if (!result) {
+                std::cerr << "Failed to convert Model: " << inputPath << std::endl;
+                mgr.DestroyEntity(item.entityID);
+                return;
+            }
+
+            std::cout << "Successfully converted model to: " << outPath << std::endl;
+        } catch (const std::exception &e) {
+            std::cerr << "Exception during conversion: " << e.what() << std::endl;
+            mgr.DestroyEntity(item.entityID);
+        }
+        mgr.DestroyEntity(item.entityID);
+
+        taskRunning.store(false);
     }
 
     void SaveImage(const unsigned char *data, int width, int height, int channels, const QueueItem item) {
@@ -268,7 +356,7 @@ private:
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            if (!WriteMetadataToPNG(item.entityID, item.metadata, mgr)) {
+            if (!WriteMetadataToPNG(item.entityID, item.metadata)) {
                 std::cerr << "Failed to write metadata to: " << fullPath << std::endl;
             } else {
                 std::cout << "Successfully wrote metadata to: " << fullPath << std::endl;
@@ -282,10 +370,6 @@ private:
             return;
         }
     }
-
-
-
-
 
     sd_ctx_t *InitializeStableDiffusionContext(EntityID entityID) {
         return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
@@ -359,7 +443,7 @@ private:
         return componentData;
     }
 
-    bool WriteMetadataToPNG(EntityID entity, const nlohmann::json &metadata, EntityManager &mgr) {
+    bool WriteMetadataToPNG(EntityID entity, const nlohmann::json &metadata) {
         const auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
 
         FILE *fp = fopen(imageComp.filePath.c_str(), "rb");
