@@ -11,6 +11,10 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+using namespace ECS;
+using namespace GUI;
+using namespace Plugin;
+
 namespace ANI {
 
 const int SCREEN_WIDTH = 1200;
@@ -31,9 +35,9 @@ public:
     void Quit();
 
     // Dependency accessors
-    ECS::EntityManager &GetEntityManager() { return entityManager; }
-    GUI::ViewManager &GetViewManager() { return viewManager; }
-    Plugin::PluginManager &GetPluginManager() { return pluginManager; }
+    EntityManager &GetEntityManager() { return entityManager; }
+    ViewManager &GetViewManager() { return viewManager; }
+    PluginManager &GetPluginManager() { return pluginManager; }
     GLFWwindow *Window() const { return window; }
     bool Run() const { return run; }
 
@@ -41,9 +45,9 @@ private:
     Engine();
 
     // Core dependencies
-    ECS::EntityManager entityManager;
-    GUI::ViewManager viewManager;
-    Plugin::PluginManager pluginManager{entityManager, viewManager};
+    EntityManager entityManager;
+    ViewManager viewManager;
+    PluginManager pluginManager{entityManager, viewManager};
 
     bool run;
     GLFWwindow *window;
