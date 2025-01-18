@@ -1,5 +1,6 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
+#include "Constants.hpp"
 
 using namespace ECS;
 using namespace ANI;
