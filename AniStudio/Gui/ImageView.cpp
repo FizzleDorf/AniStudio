@@ -18,7 +18,7 @@ static float offsetX, offsetY = 0;
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin("Image Viewer", nullptr); //, ImGuiWindowFlags_AlwaysAutoResize);
 
     if (imageComponent.imageData) {
         ImGui::Text("File: %s", imageComponent.fileName.c_str());
