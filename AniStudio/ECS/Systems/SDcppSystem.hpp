@@ -1,14 +1,14 @@
 #pragma once
 
+#include "Constants.hpp"
 #include "ECS.h"
 #include "ImageSystem.hpp"
 #include "SDCPPComponents.h"
 #include "pch.h"
 #include "stable-diffusion.h"
-#include "Constants.hpp"
+#include <png.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <png.h>
 
 static void LogCallback(sd_log_level_t level, const char *text, void *data) {
     switch (level) {
@@ -39,17 +39,17 @@ namespace ECS {
 class SDCPPSystem : public BaseSystem {
 public:
     struct QueueItem {
-        EntityID entityID;
-        bool processing;
-        nlohmann::json metadata;
+        EntityID entityID = 0;
+        bool processing = false;
+        nlohmann::json metadata = nlohmann::json();
     };
 
     struct ConvertQueueItem {
-        EntityID entityID;
-        bool processing;
+        EntityID entityID = 0;
+        bool processing = false;
     };
 
-     SDCPPSystem(EntityManager &entityMgr)
+    SDCPPSystem(EntityManager &entityMgr)
         : BaseSystem(entityMgr), stopWorker(false), workerThreadRunning(false), taskRunning(false) {
         sysName = "SDCPPSystem";
         AddComponentSignature<LatentComponent>();
@@ -150,12 +150,10 @@ private:
 
     void WorkerLoop() {
         while (workerThreadRunning) {
-            QueueItem currentQueueItem;
-            ConvertQueueItem currentConvertQueueItem;
 
+            std::cout << "QueueItem temp" << std::endl;
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
-                // Modified condition to check both queues
                 queueCondition.wait(
                     lock, [this]() { return stopWorker || !inferenceQueue.empty() || !convertQueue.empty(); });
 
@@ -164,40 +162,35 @@ private:
                 }
 
                 // Prioritize conversion queue
-                if (!convertQueue.empty() && !convertQueue.front().processing) {
+                if (!convertQueue.empty()) 
                     convertQueue.front().processing = true;
-                    currentConvertQueueItem = convertQueue.front();
-                    taskRunning.store(true); // Set task running before releasing lock
-                } else if (!inferenceQueue.empty() && !inferenceQueue.front().processing) {
+                
+                if (!inferenceQueue.empty())
                     inferenceQueue.front().processing = true;
-                    currentQueueItem = inferenceQueue.front();
-                    taskRunning.store(true); // Set task running before releasing lock
-                }
+
             }
 
             try {
-                if (currentConvertQueueItem.entityID != 0) { // Check if we have a convert task
-                    ConvertToGGUF(currentConvertQueueItem);
+                if (!convertQueue.empty()) { // Check if we have a convert task
+                    ConvertToGGUF(convertQueue.front());
                     {
                         std::lock_guard<std::mutex> lock(queueMutex);
-                        if (!convertQueue.empty()) {
-                            convertQueue.erase(convertQueue.begin());
-                        }
-                    }
-                } else if (currentQueueItem.entityID != 0) { // Check if we have an inference task
-                    RunInference(currentQueueItem);
-                    {
-                        std::lock_guard<std::mutex> lock(queueMutex);
-                        if (!inferenceQueue.empty()) {
-                            inferenceQueue.erase(inferenceQueue.begin());
-                        }
+                        mgr.DestroyEntity(convertQueue.front().entityID);
+                        convertQueue.erase(convertQueue.begin());
                     }
                 }
+
+                if (!inferenceQueue.empty() && convertQueue.empty()) { // Check if we have an inference task
+                    RunInference(inferenceQueue.front());
+                    {
+                        std::lock_guard<std::mutex> lock(queueMutex);
+                        inferenceQueue.erase(inferenceQueue.begin());
+                    }
+                }
+
             } catch (const std::exception &e) {
                 std::cerr << "Worker error: " << e.what() << std::endl;
             }
-
-            taskRunning.store(false);
         }
 
         workerThreadRunning.store(false);
@@ -217,32 +210,28 @@ private:
             sd_set_progress_callback(ProgressCallback, nullptr);
 
             sd_context = InitializeStableDiffusionContext(item.entityID);
-            if (!sd_context) {
-                mgr.DestroyEntity(item.entityID);
-                taskRunning.store(false);
+            if (!sd_context)
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
-            }
 
             sd_image_t *image = GenerateImage(sd_context, item.entityID);
-            if (!image) {
-                mgr.DestroyEntity(item.entityID);
-                taskRunning.store(false);
+            if (!image)
                 throw std::runtime_error("Failed to generate image!");
-            }
 
             SaveImage(image->data, image->width, image->height, image->channel, item);
             free_sd_ctx(sd_context);
             std::cout << "Inference completed for Entity " << item.entityID << std::endl;
 
-            taskRunning.store(false);
         } catch (const std::exception &e) {
             std::cerr << "Exception during inference: " << e.what() << std::endl;
             if (sd_context) {
                 free_sd_ctx(sd_context);
             }
-            mgr.DestroyEntity(item.entityID);
-            taskRunning.store(false);
+            {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                mgr.DestroyEntity(item.entityID);
+            }
         }
+        taskRunning.store(false);
     }
 
     void ConvertToGGUF(const ConvertQueueItem item) {
@@ -257,7 +246,7 @@ private:
         // Validate input path
         if (inputPath.empty()) {
             std::cerr << "Input model path is empty" << std::endl;
-            mgr.DestroyEntity(item.entityID);
+            taskRunning.store(false);
             return;
         }
 
@@ -280,16 +269,13 @@ private:
 
             if (!result) {
                 std::cerr << "Failed to convert Model: " << inputPath << std::endl;
-                mgr.DestroyEntity(item.entityID);
                 return;
             }
 
             std::cout << "Successfully converted model to: " << outPath << std::endl;
         } catch (const std::exception &e) {
             std::cerr << "Exception during conversion: " << e.what() << std::endl;
-            mgr.DestroyEntity(item.entityID);
         }
-        mgr.DestroyEntity(item.entityID);
 
         taskRunning.store(false);
     }
@@ -540,5 +526,3 @@ private:
 };
 
 } // namespace ECS
-
-
