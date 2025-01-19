@@ -8,7 +8,10 @@ namespace GUI {
 
 class ProjectView : public BaseView {
 public:
-    ProjectView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { viewName = "ProjectView"; }
+    ProjectView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { 
+    viewName = "ProjectView"; 
+    mgr.RegisterSystem<ProjectSystem>();
+    }
 
     void Init() override { projectSystem = mgr.GetSystem<ECS::ProjectSystem>(); }
 

@@ -1,8 +1,8 @@
 #pragma once
-#include "ImageComponent.hpp"
 #include "ECS.h"
 #include "Events/Events.hpp"
-#include "FilePaths.hpp"
+#include "FileSystem.hpp"
+#include "ImageComponent.hpp"
 #include "LoadedMedia.hpp"
 #include <filesystem>
 #include <fstream>
@@ -11,22 +11,37 @@
 namespace ECS {
 
 class ProjectSystem : public BaseSystem {
-public:
-    ProjectSystem(EntityManager &entityMgr) : BaseSystem(entityMgr) { sysName = "Project_System"; }
 
-    void Start() override {
+public:
+    ProjectSystem(EntityManager &entityMgr) : BaseSystem(entityMgr) { 
+        sysName = "Project_System"; 
         AddComponentSignature<ImageComponent>();
+        AddComponentSignature<FileComponent>();
     }
+    ~ProjectSystem() {}
+    
+    void Start() override { fileSystem = mgr.GetSystem<FileSystem>();}
 
     bool SaveProject(const std::string &projectPath) {
+        if (!fileSystem)
+            return false;
+
         nlohmann::json projectData;
         projectData["version"] = "1.0.0";
         projectData["entities"] = nlohmann::json::array();
+
+        // Save filesystem configuration
+        fileSystem->SetProjectPaths(projectPath);
+
+        // Save entities
         for (const auto &entity : entities) {
             projectData["entities"].push_back(SerializeEntity(entity));
         }
+
+        // Save loaded media state
         projectData["loadedMedia"] = SerializeLoadedMedia();
-        std::filesystem::create_directories(projectPath);
+
+        // Write project file
         std::string projectFile = projectPath + "/project.json";
         std::ofstream file(projectFile);
         if (!file.is_open()) {
@@ -37,6 +52,9 @@ public:
     }
 
     bool LoadProject(const std::string &projectPath) {
+        if (!fileSystem)
+            return false;
+
         std::string projectFile = projectPath + "/project.json";
         std::ifstream file(projectFile);
         if (!file.is_open()) {
@@ -46,15 +64,22 @@ public:
         try {
             nlohmann::json projectData;
             file >> projectData;
+
+            // Reset current state
             mgr.Reset();
+
+            // Set up filesystem for the project
+            fileSystem->SetProjectPaths(projectPath);
+
+            // Load entities
             for (const auto &entityData : projectData["entities"]) {
                 DeserializeEntity(entityData);
             }
+
+            // Load media state
             if (projectData.contains("loadedMedia")) {
                 DeserializeLoadedMedia(projectData["loadedMedia"]);
             }
-            filePaths.lastOpenProjectPath = projectPath;
-            filePaths.SaveFilepathDefaults();
 
             return true;
         } catch (const std::exception &e) {
@@ -63,27 +88,30 @@ public:
         }
     }
 
-    bool CreateNewProject(const std::string &projectPath) {       
-        if (!std::filesystem::create_directories(projectPath)) {
+    bool CreateNewProject(const std::string &projectPath) {
+        if (!fileSystem)
+            return false;
+
+        try {
+            // Set up project directory structure
+            fileSystem->SetProjectPaths(projectPath);
+
+            // Save initial empty project state
+            return SaveProject(projectPath);
+        } catch (const std::exception &e) {
+            std::cerr << "Error creating project: " << e.what() << std::endl;
             return false;
         }
-
-        // Create subdirectories
-        std::filesystem::create_directories(projectPath + "/images");
-        std::filesystem::create_directories(projectPath + "/cache");
-
-        mgr.Reset();
-
-        return SaveProject(projectPath);
     }
 
 private:
+    std::shared_ptr<FileSystem> fileSystem;
+
     nlohmann::json SerializeEntity(EntityID entity) {
         nlohmann::json entityData;
         entityData["id"] = entity;
         entityData["components"] = nlohmann::json::array();
 
-        // Serialize ImageComponent if present
         if (mgr.HasComponent<ImageComponent>(entity)) {
             auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
             nlohmann::json componentData;
@@ -111,23 +139,18 @@ private:
 
     nlohmann::json SerializeLoadedMedia() {
         nlohmann::json mediaData;
-
-        // Serialize loaded images
         mediaData["images"] = nlohmann::json::array();
         for (const auto &image : loadedMedia.GetImages()) {
             mediaData["images"].push_back(image.Serialize());
         }
-
         return mediaData;
     }
 
     void DeserializeLoadedMedia(const nlohmann::json &mediaData) {
-        // Clear existing loaded media
         while (!loadedMedia.GetImages().empty()) {
             loadedMedia.RemoveImage(0);
         }
 
-        // Load images
         if (mediaData.contains("images")) {
             for (const auto &imageData : mediaData["images"]) {
                 ImageComponent image;
@@ -137,5 +160,4 @@ private:
         }
     }
 };
-
 } // namespace ECS
