@@ -38,7 +38,7 @@ void ImageView::Render() {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
             imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            LoadImage();
+            LoadImageRequest();
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -255,7 +255,7 @@ void ImageView::RenderHistory() {
 
 
 
-void ImageView::LoadImage() {
+void ImageView::LoadImageRequest() {
     CleanUpCurrentImage();
     CreateCurrentTexture();
 
@@ -264,7 +264,7 @@ void ImageView::LoadImage() {
     mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
     ANI::Event event;
     event.entityID = newEntity;
-    event.type = ANI::EventType::LoadImage;
+    event.type = ANI::EventType::LoadImageEvent;
     loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
     // ANI::Events::Ref().QueueEvent(event);
     imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);

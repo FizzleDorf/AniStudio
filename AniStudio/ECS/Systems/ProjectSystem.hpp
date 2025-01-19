@@ -1,5 +1,5 @@
 #pragma once
-#include "Components/ImageComponent.hpp"
+#include "ImageComponent.hpp"
 #include "ECS.h"
 #include "Events/Events.hpp"
 #include "FilePaths.hpp"

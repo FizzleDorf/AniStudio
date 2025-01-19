@@ -16,7 +16,7 @@ public:
         entityMgr.RegisterSystem<ECS::ImageSystem>();
     }
     void Render() override;
-    void LoadImage();
+    void LoadImageRequest();
     void SaveImage(const std::string &filePath);
     ~ImageView();
 

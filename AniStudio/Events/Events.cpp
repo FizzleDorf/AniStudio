@@ -81,16 +81,16 @@ void Events::ProcessEvents() {
             }
             break;
         }
-        case EventType::SaveImageEvent: {
-            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-            imageSystem->SaveImage(event.entityID);
-            break;
-        }
-         case EventType::LoadImageEvent:{
-             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-             // imageSystem->AddImage(event.entityID);
-             break;
-         }
+        // case EventType::SaveImageEvent: {
+        //     auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+        //     imageSystem->SaveImage(event.entityID);
+        //     break;
+        // }
+        // case EventType::LoadImageEvent:{
+        //     auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+        //     // imageSystem->AddImage(event.entityID);
+        //     break;
+        // }
         case EventType::SaveMeshEvent: {
             auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             // imageSystem->SaveImage(event.entityID);
