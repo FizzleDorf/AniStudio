@@ -21,8 +21,9 @@ enum class EventType {
     UpscaleRequest,
     I2IInferenceRequest,
     T2VInferenceRequest,
+    ConvertToGGUF,
     Interrupt,
-
+    
     // IO Events
     LoadImage,
     SaveImage,

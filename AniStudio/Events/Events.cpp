@@ -53,6 +53,18 @@ void Events::ProcessEvents() {
                 std::cout << "UpscaleSystem is registered." << std::endl;
                 upscaleSystem->QueueInference(event.entityID);
             } else {
+                std::cerr << "UpscaleSystem is not registered." << std::endl;
+            }
+            break;
+        }
+        case EventType::ConvertToGGUF: {
+            std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
+
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                std::cout << "SDCPPSystem is registered." << std::endl;
+                sdcppSystem->QueueConversion(event.entityID);
+            } else {
                 std::cerr << "SDCPPSystem is not registered." << std::endl;
             }
             break;

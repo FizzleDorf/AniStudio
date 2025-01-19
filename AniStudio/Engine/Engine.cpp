@@ -8,11 +8,8 @@ using namespace GUI;
 using namespace Plugin;
 
 namespace ANI {
-
-static std::string iniFilePath;
-
-Engine &Core = Engine::Ref();
-
+    static std::string iniFilePath;
+    Engine &Core = Engine::Ref();
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
 Engine::Engine()
@@ -29,6 +26,8 @@ Engine::~Engine() {
     glfwDestroyWindow(window);
     glfwTerminate();
 }
+
+void Engine::Quit() { run = false; }
 
 void Engine::Init() {
     filePaths.LoadFilePathDefaults();
@@ -87,7 +86,9 @@ void Engine::Init() {
     viewManager.Reset();
     viewManager.Init();
     pluginManager.Init();
-
+    
+    const EntityID temp = entityManager.AddNewEntity();
+    entityManager.DestroyEntity(temp);
     // Register core systems
     entityManager.RegisterSystem<SDCPPSystem>();
     entityManager.RegisterSystem<ImageSystem>();
@@ -109,6 +110,9 @@ void Engine::Init() {
     auto pluginViewID = viewManager.CreateView();
     viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
+    auto convertViewID = viewManager.CreateView();
+    viewManager.AddView<ConvertView>(convertViewID, ConvertView(entityManager));
+
     // auto settingsViewID = viewManager.CreateView();
     // viewManager.AddView<SettingsView>(settingsViewID, SettingsView(entityManager));
     
@@ -123,6 +127,7 @@ void Engine::Init() {
     viewManager.GetView<ImageView>(imageViewID).Init();
     viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
     viewManager.GetView<PluginView>(pluginViewID).Init();
+    viewManager.GetView<ConvertView>(convertViewID).Init();
     // viewManager.GetView<SettingsView>(settingsViewID).Init();
 
 }
@@ -166,7 +171,5 @@ void Engine::Draw() {
 
     glfwSwapBuffers(window);
 }
-
-void Engine::Quit() { run = false; }
 
 } // namespace ANI
