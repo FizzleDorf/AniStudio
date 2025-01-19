@@ -81,22 +81,22 @@ void Events::ProcessEvents() {
             }
             break;
         }
-        case EventType::SaveImage: {
+        case EventType::SaveImageEvent: {
             auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             imageSystem->SaveImage(event.entityID);
             break;
         }
-        // case EventType::LoadImage:{
-        //     auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-        //     imageSystem->AddImage(event.entityID);
-        //     break;
-        // }
-        case EventType::SaveMesh: {
+         case EventType::LoadImageEvent:{
+             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+             // imageSystem->AddImage(event.entityID);
+             break;
+         }
+        case EventType::SaveMeshEvent: {
             auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             // imageSystem->SaveImage(event.entityID);
             break;
         }
-        case EventType::LoadMesh: {
+        case EventType::LoadMeshEvent: {
             std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << '\n';
             auto meshSystem = Core.GetEntityManager().GetSystem<ECS::MeshSystem>();
             if (meshSystem) {

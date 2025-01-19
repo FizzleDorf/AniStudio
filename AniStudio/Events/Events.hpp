@@ -25,12 +25,12 @@ enum class EventType {
     Interrupt,
     
     // IO Events
-    LoadImage,
-    SaveImage,
-    LoadVideo,
-    SaveVideo,
-    LoadMesh,
-    SaveMesh
+    LoadImageEvent,
+    SaveImageEvent,
+    LoadVideoEvent,
+    SaveVideoEvent,
+    LoadMeshEvent,
+    SaveMeshEvent
 };
 
 struct Event {
