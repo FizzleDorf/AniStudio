@@ -95,6 +95,7 @@ if(BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         AniStudio/main.cpp
         AniStudio/pch.cpp
+        AniStudio/TypesImpl.cpp
         AniStudio/Engine/Engine.cpp
         AniStudio/Events/Events.cpp
         AniStudio/Timer/Timer.cpp

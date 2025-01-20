@@ -13,13 +13,11 @@ class DiffusionView : public BaseView {
 public:
     DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) { 
         viewName = "DiffusionView";
-        mgr.RegisterSystem<SDCPPSystem>();
         // seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); 
     }
     ~DiffusionView() {
         // if (seedControl)
         //     delete seedControl;
-        mgr.UnregisterSystem<SDCPPSystem>();
     }
 
     // Overloaded Functions

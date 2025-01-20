@@ -8,8 +8,8 @@ using namespace GUI;
 using namespace Plugin;
 
 namespace ANI {
-static std::string iniFilePath;
-Engine &Core = Engine::Ref();
+    static std::string iniFilePath;
+    Engine &Core = Engine::Ref();
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
 Engine::Engine()
@@ -30,121 +30,106 @@ Engine::~Engine() {
 void Engine::Quit() { run = false; }
 
 void Engine::Init() {
-    try {
-        filePaths.LoadFilePathDefaults();
-
-         // Register FileSystem first
-        mgr.RegisterSystem<FileSystem>();
-        auto fs = mgr.GetSystem<FileSystem>();
-        if (!fs) {
-            throw std::runtime_error("Failed to register FileSystem");
-        }
-        std::cout << "FileSystem registered successfully" << std::endl;
-
-        if (!glfwInit()) {
-            throw std::runtime_error("Failed to initialize GLFW");
-        }
-
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-        window = glfwCreateWindow(videoWidth, videoHeight, "AniStudio", nullptr, nullptr);
-        if (!window) {
-            throw std::runtime_error("Failed to create GLFW window");
-        }
-
-        glfwMakeContextCurrent(window);
-        glfwSetWindowCloseCallback(window, WindowCloseCallback);
-        glfwSwapInterval(1); // Enable vsync
-
-        if (glewInit() != GLEW_OK) {
-            throw std::runtime_error("Failed to initialize GLEW");
-        }
-        glViewport(0, 0, videoWidth, videoHeight);
-
-        // Initialize ImGui
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-
-        iniFilePath = std::filesystem::absolute(filePaths.ImguiStatePath).string();
-        // ImGui::LoadIniSettingsFromDisk(iniFilePath.c_str());
-
-        ImGuiIO &io = ImGui::GetIO();
-        io.IniFilename = iniFilePath.c_str();
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-
-        ImGui::StyleColorsDark();
-        ImGuiStyle &style = ImGui::GetStyle();
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-            style.WindowRounding = 0.0f;
-            style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-        }
-
-        ImGui_ImplGlfw_InitForOpenGL(window, true);
-        ImGui_ImplOpenGL3_Init("#version 330");
-
-        // Reset managers first
-        std::cout << "Initializing managers..." << std::endl;
-        mgr.Reset();
-        viewManager.Reset();
-
-        // Register and initialize systems
-        std::cout << "Registering systems..." << std::endl;
-
-       
-
-        // Register other systems after FileSystem is ready
-        mgr.RegisterSystem<ImageSystem>();
-        std::cout << "ImageSystem registered" << std::endl;
-
-        mgr.RegisterSystem<ProjectSystem>();
-        std::cout << "ProjectSystem registered" << std::endl;
-
-        // Initialize plugin manager after core systems
-        std::cout << "Initializing plugin manager..." << std::endl;
-        pluginManager.Init();
-
-        // Initialize view manager
-        std::cout << "Initializing view manager..." << std::endl;
-        viewManager.Init();
-
-        // Create and initialize views with proper error checking
-        std::cout << "Creating views..." << std::endl;
-
-        try {
-            auto debugViewID = viewManager.CreateView();
-            viewManager.AddView<DebugView>(debugViewID, DebugView(mgr));
-
-            auto projectViewID = viewManager.CreateView();
-            viewManager.AddView<ProjectView>(projectViewID, ProjectView(mgr));
-
-            auto diffusionViewID = viewManager.CreateView();
-            viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
-
-            auto imageViewID = viewManager.CreateView();
-            viewManager.AddView<ImageView>(imageViewID, ImageView(mgr));
-
-            // Initialize views
-            std::cout << "Initializing views..." << std::endl;
-            viewManager.GetView<DebugView>(debugViewID).Init();
-            viewManager.GetView<ProjectView>(projectViewID).Init();
-            viewManager.GetView<DiffusionView>(diffusionViewID).Init();
-            viewManager.GetView<ImageView>(imageViewID).Init();
-        } catch (const std::exception &e) {
-            std::cerr << "Error creating views: " << e.what() << std::endl;
-            throw;
-        }
-
-        std::cout << "Engine initialization complete" << std::endl;
-    } catch (const std::exception &e) {
-        std::cerr << "Fatal error during engine initialization: " << e.what() << std::endl;
-        throw;
+    filePaths.LoadFilePathDefaults();
+    if (!glfwInit()) {
+        throw std::runtime_error("Failed to initialize GLFW");
     }
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+
+    window = glfwCreateWindow(videoWidth, videoHeight, "AniStudio", nullptr, nullptr);
+    if (!window) {
+        throw std::runtime_error("Failed to create GLFW window");
+    }
+
+    glfwMakeContextCurrent(window);
+    glfwSetWindowCloseCallback(window, WindowCloseCallback);
+    glfwSwapInterval(1); // Enable vsync
+
+    if (glewInit() != GLEW_OK) {
+        throw std::runtime_error("Failed to initialize GLEW");
+    }
+    glViewport(0, 0, videoWidth, videoHeight);
+    
+    // Initialize ImGui
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    iniFilePath = std::filesystem::absolute(filePaths.ImguiStatePath).string();
+    // ImGui::LoadIniSettingsFromDisk(iniFilePath.c_str());
+
+    ImGuiIO &io = ImGui::GetIO();
+    io.IniFilename = iniFilePath.c_str();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+    ImGui::StyleColorsDark();
+    ImGuiStyle &style = ImGui::GetStyle();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        style.WindowRounding = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
+    
+    
+
+    // Initialize core systems
+    filePaths.Init();
+    entityManager.Reset();
+    viewManager.Reset();
+    viewManager.Init();
+    pluginManager.Init();
+    
+    const EntityID temp = entityManager.AddNewEntity();
+    entityManager.DestroyEntity(temp);
+    // Register core systems
+    entityManager.RegisterSystem<SDCPPSystem>();
+    entityManager.RegisterSystem<ImageSystem>();
+    // entityManager.RegisterSystem<NodegraphSystem>();
+
+    // Create core views
+    auto debugViewID = viewManager.CreateView();
+    viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
+
+    auto diffusionViewID = viewManager.CreateView();
+    viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
+
+    auto imageViewID = viewManager.CreateView();
+    viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
+
+    auto nodeGraphViewID = viewManager.CreateView();
+    viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
+
+    auto pluginViewID = viewManager.CreateView();
+    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
+
+    auto convertViewID = viewManager.CreateView();
+    viewManager.AddView<ConvertView>(convertViewID, ConvertView(entityManager));
+
+    // auto settingsViewID = viewManager.CreateView();
+    // viewManager.AddView<SettingsView>(settingsViewID, SettingsView(entityManager));
+    
+    //// Initialize views
+    /*auto views = viewManager.GetAllViews();
+    for (auto view : views) {
+    
+    
+    }*/
+    viewManager.GetView<DebugView>(debugViewID).Init();
+    viewManager.GetView<DiffusionView>(diffusionViewID).Init();
+    viewManager.GetView<ImageView>(imageViewID).Init();
+    viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
+    viewManager.GetView<PluginView>(pluginViewID).Init();
+    viewManager.GetView<ConvertView>(convertViewID).Init();
+    // viewManager.GetView<SettingsView>(settingsViewID).Init();
+
 }
 
 void Engine::Update(const float deltaT) {
@@ -159,9 +144,9 @@ void Engine::Update(const float deltaT) {
         frameCount = 0;
         timeElapsed = 0.0;
     }
-
+    
     // Update managers
-    mgr.Update(deltaT);
+    entityManager.Update(deltaT);
     pluginManager.Update(deltaT);
 }
 
