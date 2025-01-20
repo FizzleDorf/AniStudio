@@ -12,3 +12,4 @@
 #include "DebugView.hpp"
 #include "PluginView.hpp"
 #include "ConvertView.hpp"
+#include "ProjectView.hpp"

@@ -5,3 +5,5 @@
 #include "UpscaleSystem.hpp"
 #include "MeshSystem.hpp"
 #include "NodegraphSystem.hpp"
+#include "ProjectSystem.hpp"
+#include "FileSystem.hpp"
