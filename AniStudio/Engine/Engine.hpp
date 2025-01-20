@@ -35,7 +35,7 @@ public:
     void Quit();
 
     // Dependency accessors
-    EntityManager &GetEntityManager() { return mgr; }
+    EntityManager &GetEntityManager() { return entityManager; }
     ViewManager &GetViewManager() { return viewManager; }
     PluginManager &GetPluginManager() { return pluginManager; }
     GLFWwindow *Window() const { return window; }
@@ -45,9 +45,9 @@ private:
     Engine();
 
     // Core dependencies
-    EntityManager mgr;
+    EntityManager entityManager;
     ViewManager viewManager;
-    PluginManager pluginManager{mgr, viewManager};
+    PluginManager pluginManager{entityManager, viewManager};
 
     bool run;
     GLFWwindow *window;
