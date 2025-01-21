@@ -161,14 +161,20 @@ void SettingsView::RenderPathRow(const char *label, std::string &path) {
     std::string buttonID = std::string("...##") + label;
     if (ImGui::Button(buttonID.c_str())) {
         IGFD::FileDialogConfig config;
-        config.path = path;
-        ImGuiFileDialog::Instance()->OpenDialog("Choose Path", "Select New Path", nullptr, config);
+        config.path = path.empty() ? "." : path;
+        config.flags = ImGuiFileDialogFlags_Modal;                  // Since these are all directory paths
+        std::string dialogID = std::string("ChoosePath##") + label; // Unique ID for each row
+        ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(), "Select New Path", nullptr, config);
     }
 
     // Handle File Dialog Result
-    if (ImGuiFileDialog::Instance()->Display("Choose Path",32,ImVec2(500,400))) {
+    std::string dialogID = std::string("ChoosePath##") + label;
+    if (ImGuiFileDialog::Instance()->Display(dialogID.c_str(), 32, ImVec2(500, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            path = ImGuiFileDialog::Instance()->GetCurrentPath();
+            std::string selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+            if (!selectedPath.empty()) {
+                path = selectedPath;
+            }
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -178,12 +184,11 @@ void SettingsView::RenderPathRow(const char *label, std::string &path) {
     // Reset Path Button
     std::string resetID = std::string("R##") + label;
     if (ImGui::Button(resetID.c_str())) {
-        path.clear(); // Or reset to a default value if needed
+        path.clear();
     }
 
     // Full Path Column
     ImGui::TableNextColumn();
     ImGui::Text("%s", path.c_str());
 }
-
 } // namespace GUI

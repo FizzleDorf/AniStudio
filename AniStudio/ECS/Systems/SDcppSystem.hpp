@@ -62,7 +62,7 @@ public:
     void QueueInference(const EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID, mgr)});
+            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID)});
         }
         std::cout << "metadata: " << '\n' << inferenceQueue.back().metadata << std::endl;
         queueCondition.notify_one();
@@ -395,7 +395,7 @@ private:
                        mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
     }
 
-    nlohmann::json SerializeEntityComponents(EntityID entity, EntityManager &mgr) {
+    nlohmann::json SerializeEntityComponents(EntityID entity) {
         nlohmann::json componentData;
 
         // Helper lambda to check and serialize a component if it exists
