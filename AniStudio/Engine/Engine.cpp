@@ -89,6 +89,10 @@ void Engine::Init() {
     
     const EntityID temp = entityManager.AddNewEntity();
     entityManager.DestroyEntity(temp);
+    
+    auto tempView = viewManager.CreateView();
+    viewManager.DestroyView(tempView);
+
     // Register core systems
     entityManager.RegisterSystem<SDCPPSystem>();
     entityManager.RegisterSystem<ImageSystem>();

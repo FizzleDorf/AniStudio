@@ -1,5 +1,6 @@
 #include "Events.hpp"
 #include <iostream>
+#include "guis.h"
 
 namespace ANI {
 
@@ -31,6 +32,23 @@ void Events::ProcessEvents() {
         switch (event.type) {
         case EventType::Quit: {
             Core.Quit();
+            break;
+        }
+        case EventType::OpenSettings: {
+            auto &vMgr = Core.GetViewManager();
+            ViewListID settingsID = vMgr.CreateView();
+            vMgr.AddView<SettingsView>(settingsID, SettingsView(Core.GetEntityManager()));
+            vMgr.GetView<SettingsView>(settingsID).Init();
+            break;
+        }
+        case EventType::CloseSettings: {
+            auto &vMgr = Core.GetViewManager();
+            auto views = vMgr.GetAllViews();
+            for (auto view : views) {
+                if (vMgr.HasView<SettingsView>(view)) {
+                    vMgr.DestroyView(view);
+                }
+            }
             break;
         }
         case EventType::InferenceRequest: {
@@ -87,7 +105,7 @@ void Events::ProcessEvents() {
             break;
         }
          case EventType::LoadImageEvent:{
-             auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
              // imageSystem->AddImage(event.entityID);
              break;
          }

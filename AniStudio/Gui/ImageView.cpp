@@ -264,7 +264,7 @@ void ImageView::LoadImage() {
     mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
     ANI::Event event;
     event.entityID = newEntity;
-    event.type = ANI::EventType::LoadImage;
+    event.type = ANI::EventType::LoadImageEvent;
     loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
     // ANI::Events::Ref().QueueEvent(event);
     imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);

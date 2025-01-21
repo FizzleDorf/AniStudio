@@ -27,6 +27,12 @@ void ShowMenuBar(GLFWwindow *window) {
         if (ImGui::BeginMenu("Edit")) {
             ImGui::MenuItem("Undo");
             ImGui::MenuItem("Redo");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Settings")) {
+                ANI::Event event;
+                event.type = ANI::EventType::OpenSettings;
+                ANI::Events::Ref().QueueEvent(event);
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {

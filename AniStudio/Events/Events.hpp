@@ -1,5 +1,6 @@
 #pragma once
 #include "ECS.h"
+#include "GUI.h"
 #include "../Engine/Engine.hpp"
 #include <systems.h>
 #include "filepaths.hpp"
@@ -15,6 +16,8 @@ enum class EventType {
     Quit,
     NewProject,
     OpenProject,
+    OpenSettings,
+    CloseSettings,
 
     // Diffusion
     InferenceRequest,
