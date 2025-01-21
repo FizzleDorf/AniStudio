@@ -1,74 +1,11 @@
 #include "SettingsView.hpp"
 #include "ImGuiFileDialog.h"
 #include "ImGuiFileDialogConfig.h"
+#include "Events/Events.hpp"
 
 using json = nlohmann::json;
 
 namespace GUI {
-std::string comfyUIPath = "";
-std::string venvPath = "";
-//ComfyUI Path Args
-extern FlagOption inputOptions[] = {
-    {"venv_path", "Specify the path to the virtual environment (Default is AniStudio/comfy).", ""},
-    {"ComfyUi_Install_Path", "Specify the path to a ComfyUI install (Default is AniStudio/comfy).", ""},
-    {"--listen [IP]", "Specify the IP address to listen on (default: 127.0.0.1). If --listen is provided without an argument, it defaults to 0.0.0.0. (listens on all)", ""},
-    {"--port PORT", "Set the listen port.", ""},
-    {"--tls-keyfile TLS_KEYFILE", "Path to TLS (SSL) key file. Enables TLS, makes app accessible at https://... requires --tls-certfile to function", ""},
-    {"--tls-certfile TLS_CERTFILE", "Path to TLS (SSL) certificate file. Enables TLS, makes app accessible at https://... requires --tls-keyfile to function", ""},
-    {"--enable-cors-header [ORIGIN]", "Enable CORS (Cross-Origin Resource Sharing) with optional origin or allow all with default '*'.", ""},
-    {"--max-upload-size MAX_UPLOAD_SIZE", "Set the maximum upload size in MB.", ""},
-    {"--extra-model-paths-config PATH [PATH ...]", "Load one or more extra_model_paths.yaml files.", ""},
-    {"--output-directory OUTPUT_DIRECTORY", "Set the ComfyUI output directory.", ""},
-    {"--temp-directory TEMP_DIRECTORY", "Set the ComfyUI temp directory (default is in the ComfyUI directory).", ""},
-    {"--input-directory INPUT_DIRECTORY", "Set the ComfyUI input directory.", ""},
-    {"--cuda-device DEVICE_ID", "Set the id of the cuda device this instance will use.", ""},
-    {"--directml [DIRECTML_DEVICE]", "Use torch-directml.", ""},
-    {"--preview-method [none,auto,latent2rgb,taesd]", "Default preview method for sampler nodes.", ""}
-};
-
-//ComfyUI bool Args
-extern BoolOption boolOptions[] = {
-    {"--auto-launch", "Automatically launch ComfyUI in the default browser.", false},
-    {"--disable-auto-launch", "Disable auto launching the browser.", false},
-    {"--cuda-malloc", "Enable cudaMallocAsync (enabled by default for torch 2.0 and up).", false},
-    {"--disable-cuda-malloc", "Disable cudaMallocAsync.", false},
-    {"--force-fp32", "Force fp32 (If this makes your GPU work better please report it).", false},
-    {"--force-fp16", "Force fp16.", false},
-    {"--bf16-unet", "Run the UNET in bf16. This should only be used for testing stuff.", false},
-    {"--fp16-unet", "Store unet weights in fp16.", false},
-    {"--fp8_e4m3fn-unet", "Store unet weights in fp8_e4m3fn.", false},
-    {"--fp8_e5m2-unet", "Store unet weights in fp8_e5m2.", false},
-    {"--fp16-vae", "Run the VAE in fp16, might cause black images.", false},
-    {"--fp32-vae", "Run the VAE in full precision fp32.", false},
-    {"--bf16-vae", "Run the VAE in bf16.", false},
-    {"--cpu-vae", "Run the VAE on the CPU.", false},
-    {"--fp8_e4m3fn-text-enc", "Store text encoder weights in fp8 (e4m3fn variant).", false},
-    {"--fp8_e5m2-text-enc", "Store text encoder weights in fp8 (e5m2 variant).", false},
-    {"--fp16-text-enc", "Store text encoder weights in fp16.", false},
-    {"--fp32-text-enc", "Store text encoder weights in fp32.", false},
-    {"--force-channels-last", "Force channels last format when inferencing the models.", false},
-    {"--disable-ipex-optimize", "Disables ipex.optimize when loading models with Intel GPUs.", false},
-    {"--use-split-cross-attention", "Use the split cross attention optimization. Ignored when xformers is used.", false},
-    {"--use-quad-cross-attention", "Use the sub-quadratic cross attention optimization . Ignored when xformers is used.", false},
-    {"--use-pytorch-cross-attention", "Use the new pytorch 2.0 cross attention function.", false},
-    {"--disable-xformers", "Disable xformers.", false},
-    {"--force-upcast-attention", "Force enable attention upcasting, please report if it fixes black images.", false},
-    {"--dont-upcast-attention", "Disable all upcasting of attention. Should be unnecessary except for debugging.", false},
-    {"--gpu-only", "Store and run everything (text encoders/CLIP models, etc... on the GPU).", false},
-    {"--highvram", "By default models will be unloaded to CPU memory after being used. This option keeps them in GPU memory.", false},
-    {"--normalvram", "Used to force normal vram use if lowvram gets automatically enabled.", false},
-    {"--lowvram", "Split the unet in parts to use less vram.", false},
-    {"--novram", "When lowvram isn't enough.", false},
-    {"--cpu", "To use the CPU for everything (slow).", false},
-    {"--disable-smart-memory", "Force ComfyUI to aggressively offload to regular ram instead of keeping models in vram when it can.", false},
-    {"--deterministic", "Make pytorch use slower deterministic algorithms when it can. Note that this might not make images deterministic in all cases.", false},
-    {"--dont-print-server", "Don't print server output.", false},
-    {"--quick-test-for-ci", "Quick test for CI.", false},
-    {"--windows-standalone-build", "Windows standalone build: Enable convenient things that most people using the standalone windows build will probably enjoy (like auto opening the page on startup).", false},
-    {"--disable-metadata", "Disable saving prompt metadata in files.", false},
-    {"--multi-user", "Enables per-user storage.", false},
-    {"--verbose", "Enables more debug prints.", false}
-};
 
 void SettingsView::Render() {
         ImGui::SetNextWindowSize(ImVec2(700, 400), ImGuiCond_FirstUseEver);
@@ -79,51 +16,25 @@ void SettingsView::Render() {
             // AniStudio Settings
             if (ImGui::BeginTabItem("AniStudio Settings"))
             {
-                RenderSettingsWindow();
-                ImGui::EndTabItem();
-            }
-
-            // ComfyUI Settings
-            if (ImGui::BeginTabItem("ComfyUI Settings"))
-            {
-                if (ImGui::Button("Install ComfyUI"))
-                {
-                    InstallComfyUI();//inputOptions[1].value);
-                }
-
-                ImGui::SameLine();
-
-                if (ImGui::Button("Save Configuration"))
-                {
-                    // SaveOptionsToFile("comfyui_options.json");
-                }
-
-                ImGui::NewLine();
-
-                if (ImGui::BeginTabBar("ComfyUI Startup Options"))
-                {
-                    // "General" tab
-                    if (ImGui::BeginTabItem("General"))
-                    {
-                        
-
-                        ShowBoolOptionsTable(boolOptions, sizeof(boolOptions) / sizeof(BoolOption), "General Settings Table");
-                        ImGui::EndTabItem();
-                    }
-
+                if (ImGui::BeginTabBar("AniStudio Options")) {
                     // "Paths" tab
-                    if (ImGui::BeginTabItem("Paths"))
-                    {
-                        ShowFlagPathsTable(inputOptions, sizeof(inputOptions) / sizeof(FlagOption), "PathsTable");
+                    if (ImGui::BeginTabItem("Paths")) {
+                        RenderSettingsWindow();
                         ImGui::EndTabItem();
                     }
+
+                    // "General" tab
+                    if (ImGui::BeginTabItem("General")) {
+                        ImGui::EndTabItem();
+                    }
+
                     ImGui::EndTabBar();
                 }
                 ImGui::EndTabItem();
             }
 
             // SDCPP Settings
-            if (ImGui::BeginTabItem("SDCPP Startup Options"))
+            if (ImGui::BeginTabItem("SDCPP Settings"))
             {
                 ImGui::NewLine();
 
@@ -133,19 +44,19 @@ void SettingsView::Render() {
 
                 ImGui::NewLine();
 
-                if (ImGui::BeginTabBar("SDCPP Startup Options"))
+                if (ImGui::BeginTabBar("SDCPP Options"))
                 {
                     // "General" tab
                     if (ImGui::BeginTabItem("General"))
                     {
-                        // Optionally add content here
+                        
                         ImGui::EndTabItem();
                     }
 
                     // "Paths" tab
                     if (ImGui::BeginTabItem("Paths"))
                     {
-                        // Optionally add content here
+                        
                         ImGui::EndTabItem();
                     }
                     ImGui::EndTabBar();
@@ -158,269 +69,121 @@ void SettingsView::Render() {
     
 }
 
-// Helper function for rendering a file path input field
-void RenderPathInput(const char *label, char *buffer, size_t bufferSize, std::string &path) {
-    strncpy(buffer, path.c_str(), bufferSize);
-    if (ImGui::InputText(label, buffer, bufferSize)) {
-        path = std::string(buffer);
-    }
-}
-
 void SettingsView::RenderSettingsWindow() {
+    // Define the table column headers
+
+    static bool showSavePopup = false;
+
     // General Paths Section
     if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-        static char virtualEnvBuffer[512];
-        RenderPathInput("Virtual Env Path", virtualEnvBuffer, sizeof(virtualEnvBuffer), filePaths.virtualEnvPath);
+        if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+            ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
 
-        static char comfyuiRootBuffer[512];
-        RenderPathInput("ComfyUI Root Path", comfyuiRootBuffer, sizeof(comfyuiRootBuffer), filePaths.comfyuiRootPath);
+            RenderPathRow("Last Open Project Path", filePaths.lastOpenProjectPath);
+            RenderPathRow("Default Project Path", filePaths.defaultProjectPath);
+            RenderPathRow("Assets Folder Path", filePaths.assetsFolderPath);
 
-        static char lastOpenProjectBuffer[512];
-        RenderPathInput("Last Open Project Path", lastOpenProjectBuffer, sizeof(lastOpenProjectBuffer),
-                        filePaths.lastOpenProjectPath);
-
-        static char defaultProjectBuffer[512];
-        RenderPathInput("Default Project Path", defaultProjectBuffer, sizeof(defaultProjectBuffer),
-                        filePaths.defaultProjectPath);
-
-        static char assetsFolderBuffer[512];
-        RenderPathInput("Assets Folder Path", assetsFolderBuffer, sizeof(assetsFolderBuffer),
-                        filePaths.assetsFolderPath);
+            ImGui::EndTable();
+        }
     }
-
+    ImGui::Separator();
+    if (ImGui::Button("Reset Model Paths")) {
+        filePaths.SetByModelRoot();
+    }
     // Model Paths Section
     if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-        static char defaultModelRootBuffer[512];
-        RenderPathInput("Default Model Root Path", defaultModelRootBuffer, sizeof(defaultModelRootBuffer),
-                        filePaths.defaultModelRootPath);
+        if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+            ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+            ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+            ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
 
-        static char checkpointDirBuffer[512];
-        RenderPathInput("Checkpoint Directory", checkpointDirBuffer, sizeof(checkpointDirBuffer),
-                        filePaths.checkpointDir);
+            RenderPathRow("Default Model Root Path", filePaths.defaultModelRootPath);
+            RenderPathRow("Checkpoint Directory", filePaths.checkpointDir);
+            RenderPathRow("Encoder Directory", filePaths.encoderDir);
+            RenderPathRow("VAE Directory", filePaths.vaeDir);
+            RenderPathRow("UNet Directory", filePaths.unetDir);
+            RenderPathRow("LORA Directory", filePaths.loraDir);
+            RenderPathRow("ControlNet Directory", filePaths.controlnetDir);
+            RenderPathRow("Upscale Directory", filePaths.upscaleDir);
 
-        static char encoderDirBuffer[512];
-        RenderPathInput("Encoder Directory", encoderDirBuffer, sizeof(encoderDirBuffer), filePaths.encoderDir);
-
-        static char vaeDirBuffer[512];
-        RenderPathInput("VAE Directory", vaeDirBuffer, sizeof(vaeDirBuffer), filePaths.vaeDir);
-
-        static char unetDirBuffer[512];
-        RenderPathInput("UNet Directory", unetDirBuffer, sizeof(unetDirBuffer), filePaths.unetDir);
-
-        static char loraDirBuffer[512];
-        RenderPathInput("LORA Directory", loraDirBuffer, sizeof(loraDirBuffer), filePaths.loraDir);
-
-        static char controlnetDirBuffer[512];
-        RenderPathInput("ControlNet Directory", controlnetDirBuffer, sizeof(controlnetDirBuffer),
-                        filePaths.controlnetDir);
-
-        static char upscaleDirBuffer[512];
-        RenderPathInput("Upscale Directory", upscaleDirBuffer, sizeof(upscaleDirBuffer), filePaths.upscaleDir);
+            ImGui::EndTable();
+        }
     }
 
     // Action Buttons
     ImGui::Separator();
     if (ImGui::Button("Save Defaults")) {
         filePaths.SaveFilepathDefaults();
+        showSavePopup = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("Load Defaults")) {
         filePaths.LoadFilePathDefaults();
     }
     ImGui::SameLine();
-    if (ImGui::Button("Reset Model Paths")) {
-        filePaths.SetByModelRoot();
+    if (ImGui::Button("Close")) {
+        ANI::Event event;
+        event.type = ANI::EventType::CloseSettings;
+        ANI::Events::Ref().QueueEvent(event);
+    }
+
+    // Save Confirmation Popup
+    if (showSavePopup) {
+        ImGui::OpenPopup("Settings Saved");
+    }
+
+    if (ImGui::BeginPopupModal("Settings Saved", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Settings have been successfully saved.");
+        if (ImGui::Button("OK")) {
+            showSavePopup = false;
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            ANI::Event event;
+            event.type = ANI::EventType::CloseSettings;
+            ANI::Events::Ref().QueueEvent(event);
+        }
     }
 }
 
-void SettingsView::InstallComfyUI() {
-    // Check if the comfyui directory already exists
-    if (std::filesystem::exists(comfyUIPath)) {
-        std::cout << "ComfyUI directory already exists at " << comfyUIPath << std::endl;
+void SettingsView::RenderPathRow(const char *label, std::string &path) {
+    ImGui::TableNextRow();
 
-        // Check if the virtual environment already exists
-        if (std::filesystem::exists(venvPath)) {
-            std::cout << "Virtual environment already exists at " << venvPath << std::endl;
+    // Path Name Column
+    ImGui::TableNextColumn();
+    ImGui::TextUnformatted(label);
 
-            // Activate the virtual environment and install requirements
-            std::string pipExecutable;
-#ifdef _WIN32
-            pipExecutable = venvPath + "\\Scripts\\pip.exe";
-#else
-            pipExecutable = venvPath + "/bin/pip";
-#endif
-            std::string requirementsPath = comfyUIPath + "/requirements.txt";
-            std::string installRequirementsCmd = pipExecutable + " install -r \"" + requirementsPath + "\"";
-            if (std::system(installRequirementsCmd.c_str()) != 0) {
-                std::cerr << "Failed to install requirements for ComfyUI at " << comfyUIPath << std::endl;
-                return;
-            }
-            std::cout << "Requirements successfully installed for ComfyUI at " << comfyUIPath << std::endl;
-        } else {
-            // If the virtual environment does not exist, create it
-            InstallVenv();
-            // Retry installing the requirements
-            InstallComfyUI();
-        }
-    } else {
-        // Clone the ComfyUI repository
-        std::string cloneCmd = "git clone https://github.com/ComfyUI/ComfyUI \"" + comfyUIPath + "\"";
-        if (std::system(cloneCmd.c_str()) != 0) {
-            std::cerr << "Failed to clone ComfyUI to " << comfyUIPath << std::endl;
-            return;
-        }
-        std::cout << "Successfully cloned ComfyUI to " << comfyUIPath << std::endl;
-
-        // Proceed with setting up the virtual environment and installing requirements
-        InstallVenv();
-        InstallComfyUI(); // Re-run to install requirements
-    }
-}
-
-void SettingsView::InstallVenv() {
-    // Check if the virtual environment directory already exists
-    if (std::filesystem::exists(venvPath)) {
-        std::cerr << "Virtual environment already exists at " << venvPath << std::endl;
-        return;
+    // Select New Path Button Column
+    ImGui::TableNextColumn();
+    std::string buttonID = std::string("...##") + label;
+    if (ImGui::Button(buttonID.c_str())) {
+        IGFD::FileDialogConfig config;
+        config.path = path;
+        ImGuiFileDialog::Instance()->OpenDialog("Choose Path", "Select New Path", nullptr, config);
     }
 
-    // Command to create a virtual environment
-    std::string createVenvCmd = "python -m venv \"" + venvPath + "\"";
-    if (std::system(createVenvCmd.c_str()) != 0) {
-        std::cerr << "Failed to create virtual environment at " << venvPath << std::endl;
-        return;
-    }
-
-    std::cout << "Virtual environment successfully created at " << venvPath << std::endl;
-}
-
-void SettingsView::RunComfyUI() {
-    // Command to activate the virtual environment and run main.py
-    std::string activateAndRunCmd;
-#ifdef _WIN32
-    activateAndRunCmd = "\"" + venvPath + "\\Scripts\\activate && python \"" + comfyUIPath + "\\main.py\"\"";
-#else
-    activateAndRunCmd = "source \"" + venvPath + "/bin/activate\" && python \"" + comfyUIPath + "/main.py\"";
-#endif
-    if (std::system(activateAndRunCmd.c_str()) != 0) {
-        std::cerr << "Failed to run ComfyUI at " << comfyUIPath << std::endl;
-    } else {
-        std::cout << "Running ComfyUI at " << comfyUIPath << std::endl;
-    }
-}
-
-// Function to display the flag options table with checkboxes and tooltips
-void SettingsView::ShowBoolOptionsTable(BoolOption *options, int count, const char *tableTitle) {
-    int columns = 3; // Number of columns for boolean options
-
-    if (ImGui::BeginTable(tableTitle, columns, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
-    {
-        ImGui::TableSetupColumn("Flag");
-        ImGui::TableSetupColumn("Flag");
-        ImGui::TableSetupColumn("Flag");
-        ImGui::TableHeadersRow();
-
-        int currentColumn = 0;
-        for (int i = 0; i < count; i++)
-        {
-            if (currentColumn == 0)
-                ImGui::TableNextRow();
-
-            ImGui::TableNextColumn();
-            bool* checkboxValue = &options[i].enabled;
-            ImGui::Checkbox(options[i].flag, checkboxValue);
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::TextUnformatted(options[i].description);
-                ImGui::EndTooltip();
-            }
-
-            currentColumn = (currentColumn + 1) % columns;
-        }
-
-        ImGui::EndTable();
-    }
-};
-
-void SettingsView::ShowFlagPathsTable(FlagOption *options, int count, const char *tableTitle) {
-    static int selectedOptionIndex = -1; // Store the index of the currently active dialog
-
-    if (ImGui::BeginTable(tableTitle, 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
-    {
-        // Set column headers
-        ImGui::TableSetupColumn("Flag");
-        ImGui::TableSetupColumn("Path");
-        ImGui::TableHeadersRow();
-
-        // Populate options
-        for (int i = 0; i < count; i++)
-        {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-
-            ImGui::TextUnformatted(options[i].flag); // Display flag name
-
-            ImGui::TableNextColumn();
-
-            // Display a button to open the directory dialog
-            if (ImGui::Button(("...##" + std::to_string(i)).c_str())) {
-                selectedOptionIndex = i; // Track which button was pressed
-                IGFD::FileDialogConfig config;
-                config.path = "../../.."; // Starting path
-                ImGuiFileDialog::Instance()->OpenDialog("ChooseDirDlgKey", "Choose Directory", nullptr, config);
-            }
-
-            ImGui::SameLine();
-
-            // Display the text input for the path
-            ImGui::InputText(("##PathInput" + std::to_string(i)).c_str(), options[i].value, 255);
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                ImGui::TextUnformatted(options[i].description);
-                ImGui::EndTooltip();
-            }
-        }
-
-        ImGui::EndTable();
-    }
-
-    // Handle the directory dialog
-    if (ImGuiFileDialog::Instance()->Display("ChooseDirDlgKey")) {
+    // Handle File Dialog Result
+    if (ImGuiFileDialog::Instance()->Display("Choose Path",32,ImVec2(500,400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-            if (selectedOptionIndex >= 0 && selectedOptionIndex < count) {
-                strncpy(options[selectedOptionIndex].value, selectedPath.c_str(), 255);
-                options[selectedOptionIndex].value[254] = '\0'; // Ensure null termination
-            }
+            path = ImGuiFileDialog::Instance()->GetCurrentPath();
         }
         ImGuiFileDialog::Instance()->Close();
     }
-}
 
+    ImGui::SameLine();
 
-json SettingsView::SerializeOptions() {
-    json j;
-    j["flags"] = json::array();
-    j["booleans"] = json::array();
-
-    for (const auto& opt : inputOptions) {
-        json option;
-        option["flag"] = opt.flag;
-        option["description"] = opt.description;
-        option["value"] = opt.value;
-        j["flags"].push_back(option);
+    // Reset Path Button
+    std::string resetID = std::string("R##") + label;
+    if (ImGui::Button(resetID.c_str())) {
+        path.clear(); // Or reset to a default value if needed
     }
 
-    for (const auto& opt : boolOptions) {
-        json option;
-        option["flag"] = opt.flag;
-        option["description"] = opt.description;
-        option["enabled"] = opt.enabled;
-        j["booleans"].push_back(option);
-    }
-
-    return j;
+    // Full Path Column
+    ImGui::TableNextColumn();
+    ImGui::Text("%s", path.c_str());
 }
+
 } // namespace GUI

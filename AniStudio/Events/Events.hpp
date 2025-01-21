@@ -1,5 +1,6 @@
 #pragma once
 #include "ECS.h"
+#include "GUI.h"
 #include "../Engine/Engine.hpp"
 #include <systems.h>
 #include "filepaths.hpp"
@@ -15,6 +16,8 @@ enum class EventType {
     Quit,
     NewProject,
     OpenProject,
+    OpenSettings,
+    CloseSettings,
 
     // Diffusion
     InferenceRequest,
@@ -25,12 +28,12 @@ enum class EventType {
     Interrupt,
     
     // IO Events
-    LoadImage,
-    SaveImage,
-    LoadVideo,
-    SaveVideo,
-    LoadMesh,
-    SaveMesh
+    LoadImageEvent,
+    SaveImageEvent,
+    LoadVideoEvent,
+    SaveVideoEvent,
+    LoadMeshEvent,
+    SaveMeshEvent
 };
 
 struct Event {

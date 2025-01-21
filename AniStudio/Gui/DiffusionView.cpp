@@ -12,7 +12,7 @@ void DiffusionView::RenderModelLoader() {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
 
         // Row for "Checkpoint"
         ImGui::TableNextColumn();
@@ -60,7 +60,7 @@ void DiffusionView::RenderFilePath() {
     if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("FileName"); // Row for "Filename"
         ImGui::TableNextColumn();
@@ -73,7 +73,7 @@ void DiffusionView::RenderFilePath() {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f); // Fixed width for Model
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("Dir Path"); // Row for "Output Directory"
         ImGui::TableNextColumn();
@@ -135,34 +135,66 @@ void DiffusionView::RenderFilePath() {
 }
 
 void DiffusionView::RenderLatents() {
-    ImGui::InputInt("Width", &latentComp.latentWidth);
-    ImGui::InputInt("Height", &latentComp.latentHeight);
-    ImGui::InputInt("Batch Size", &latentComp.batchSize);
-}
+    
+    if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Width");
+        ImGui::TableNextRow();
+        ImGui::InputInt("##Width", &latentComp.latentWidth,8,8);
+
+        ImGui::TableNextColumn();
+        ImGui::Text("Height");
+        ImGui::InputInt("##Height", &latentComp.latentHeight,8,8);
+        
+        ImGui::TableNextRow();
+
+        ImGui::TableNextColumn();
+        ImGui::Text("Height");
+        ImGui::InputInt("##Batch Size", &latentComp.batchSize);
+
+
+
+        ImGui::EndTable();
+    }
+    }
 
 void DiffusionView::RenderInputImage() {
     ImGui::Text("Image input placeholder"); // Adjust to render the actual image component if needed
 }
 
 void DiffusionView::RenderPrompts() {
-    if (ImGui::BeginTable("SamplerSettingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+    if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
+
+        // Positive Prompt
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Positive");
         ImGui::TableNextColumn();
-        if (ImGui::InputTextMultiline("##Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+        if (ImGui::InputTextMultiline("##Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer),
+                                      ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8))) { // Adjust height
             promptComp.posPrompt = promptComp.PosBuffer;
         }
+        ImGui::PopStyleVar(); // Restore frame padding
+
+        // Negative Prompt
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Negative");
         ImGui::TableNextColumn();
-        if (ImGui::InputTextMultiline("##Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer))) {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+        if (ImGui::InputTextMultiline("##Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer),
+                                      ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8))) { // Adjust height
             promptComp.negPrompt = promptComp.NegBuffer;
         }
+        ImGui::PopStyleVar(); // Restore frame padding
+
         ImGui::EndTable();
     }
 }

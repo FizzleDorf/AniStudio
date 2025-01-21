@@ -15,8 +15,8 @@ public:
     void RenderEntityPanel();
     void RenderSystemPanel();
     
-    template <typename T>
-    void RenderComponentEditor();
+    // template <typename T>
+    // void RenderComponentEditor();
 
 private:
     std::vector<EntityID> entities;

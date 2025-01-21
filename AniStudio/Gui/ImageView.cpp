@@ -18,7 +18,7 @@ static float offsetX, offsetY = 0;
 
 void ImageView::Render() {
     ImGui::SetNextWindowSize(ImVec2(1024, 1024), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Image Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Begin("Image Viewer", nullptr); //, ImGuiWindowFlags_AlwaysAutoResize);
 
     if (imageComponent.imageData) {
         ImGui::Text("File: %s", imageComponent.fileName.c_str());
@@ -264,7 +264,7 @@ void ImageView::LoadImage() {
     mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
     ANI::Event event;
     event.entityID = newEntity;
-    event.type = ANI::EventType::LoadImage;
+    event.type = ANI::EventType::LoadImageEvent;
     loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
     // ANI::Events::Ref().QueueEvent(event);
     imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
