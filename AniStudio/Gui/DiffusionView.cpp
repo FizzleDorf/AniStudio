@@ -142,21 +142,18 @@ void DiffusionView::RenderLatents() {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Width");
-        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
         ImGui::InputInt("##Width", &latentComp.latentWidth,8,8);
-
-        ImGui::TableNextColumn();
-        ImGui::Text("Height");
-        ImGui::InputInt("##Height", &latentComp.latentHeight,8,8);
-        
         ImGui::TableNextRow();
-
         ImGui::TableNextColumn();
         ImGui::Text("Height");
+        ImGui::TableNextColumn();
+        ImGui::InputInt("##Height", &latentComp.latentHeight,8,8);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Height");
+        ImGui::TableNextColumn();
         ImGui::InputInt("##Batch Size", &latentComp.batchSize);
-
-
-
         ImGui::EndTable();
     }
     }
@@ -201,9 +198,9 @@ void DiffusionView::RenderPrompts() {
 
 void DiffusionView::RenderSampler() {
     if (ImGui::BeginTable("SamplerSettingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 64.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
 
         auto addRow = [](const char *label, auto renderInput) {
             ImGui::TableNextRow();
@@ -329,10 +326,10 @@ void DiffusionView::RenderOther() {
 
 void DiffusionView::RenderControlnets() {
     if (ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 64.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("Controlnet");
         ImGui::TableNextColumn();
@@ -370,7 +367,7 @@ void DiffusionView::RenderControlnets() {
     if (ImGui::BeginTable("Control Settings", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("Strength");
         ImGui::TableNextColumn();
@@ -393,7 +390,7 @@ void DiffusionView::RenderEmbeddings() {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
         ImGui::TableNextColumn();
         ImGui::Text("Embedding:");
         ImGui::TableNextColumn();
@@ -435,7 +432,7 @@ void DiffusionView::RenderDiffusionModelLoader() {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f); // Fixed width for Model
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
+        // ImGui::TableHeadersRow();
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Unet:"); // Row for Unet
@@ -625,9 +622,10 @@ void DiffusionView::RenderQueueList() {
             ImGui::EndTable();
         }
 
-        if (ImGui::BeginTable("InferenceQueue", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
             ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-            ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+            ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 48.0f);
             ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 42.0f);
             ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
@@ -638,7 +636,12 @@ void DiffusionView::RenderQueueList() {
                 for (size_t i = 0; i < queueItems.size(); i++) {
                     const auto &item = queueItems[i];
                     auto &prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
+
                     ImGui::TableNextRow();
+
+                    // ID column
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%d", static_cast<int>(item.entityID));
 
                     // Status column
                     ImGui::TableNextColumn();
@@ -686,7 +689,6 @@ void DiffusionView::RenderQueueList() {
                     }
                 }
             }
-
             ImGui::EndTable();
         }
     }
