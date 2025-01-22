@@ -124,6 +124,11 @@ void QueueView::QueueGeneration(int count) {
 
     for (int i = 0; i < count; i++) {
         diffusionView.HandleT2IEvent();
+        ANI::Event event;
+        event.entityID = diffusionView.GetCurrentEntity();
+        event.type = ANI::EventType::InferenceRequest;
+        ANI::Events::Ref().QueueEvent(event);
+        std::cout << "Inference request queued for entity: " << diffusionView.GetCurrentEntity() << std::endl;
     }
 }
 

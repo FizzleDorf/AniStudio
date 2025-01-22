@@ -289,21 +289,10 @@ void DiffusionView::HandleT2IEvent() {
 
     } catch (const std::exception &e) {
         std::cerr << "Error adding components: " << e.what() << std::endl;
+        mgr.DestroyEntity(newEntity);
         return;
     }
-
-    // Log component values for debugging
-    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << std::endl;
-    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << std::endl;
-    std::cout << "LatentComponent.latentWidth: " << mgr.GetComponent<LatentComponent>(newEntity).latentWidth
-              << std::endl;
-
-    // Queue event
-    Event event;
-    event.entityID = newEntity;
-    event.type = EventType::InferenceRequest;
-    ANI::Events::Ref().QueueEvent(event);
-    std::cout << "Inference request queued for entity: " << newEntity << std::endl;
+    entity = newEntity;
 }
 
 void DiffusionView::HandleUpscaleEvent() {

@@ -42,11 +42,13 @@ public:
     void HandleT2IEvent();
     void HandleUpscaleEvent();
 
+    EntityID GetCurrentEntity() { return entity; }
+
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);
         buffer[buffer_size - 1] = '\0';
     }
-
+    
 private:
     bool isFilenameChanged = false;
     int numQueues = 1;
