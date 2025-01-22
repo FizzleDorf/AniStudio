@@ -399,7 +399,7 @@ private:
         nlohmann::json componentData;
 
         // Helper lambda to check and serialize a component if it exists
-        auto serializeComponent = [&mgr](EntityID entity, auto componentType) {
+        auto serializeComponent = [this](EntityID entity, auto componentType) {
             using T = decltype(componentType);
             if (mgr.HasComponent<T>(entity)) {
                 const auto &comp = mgr.GetComponent<T>(entity);
