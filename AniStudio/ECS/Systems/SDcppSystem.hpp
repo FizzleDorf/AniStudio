@@ -41,7 +41,6 @@ public:
     struct QueueItem {
         EntityID entityID = 0;
         bool processing = false;
-        nlohmann::json metadata = nlohmann::json();
     };
 
     struct ConvertQueueItem {
@@ -62,9 +61,9 @@ public:
     void QueueInference(const EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID)});
+            mgr.GetComponent<ImageComponent>(entityID).metadata = SerializeEntityComponents(entityID);
+            inferenceQueue.push_back({entityID, false});
         }
-        std::cout << "metadata: " << '\n' << inferenceQueue.back().metadata << std::endl;
         queueCondition.notify_one();
         std::cout << "Entity " << entityID << " queued for inference." << std::endl;
 
@@ -93,12 +92,15 @@ public:
         }
     }
 
-    void MoveInQueue(const size_t fromIndex, const size_t toIndex) {
+    void MoveInQueue(const size_t fromIndex, size_t toIndex) {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (fromIndex >= inferenceQueue.size() || toIndex >= inferenceQueue.size())
             return;
         if (inferenceQueue[fromIndex].processing)
             return;
+        if (toIndex == 0 && !inferenceQueue.empty() && inferenceQueue[0].processing) {
+            toIndex = 1;
+        }
 
         auto item = inferenceQueue[fromIndex];
         inferenceQueue.erase(inferenceQueue.begin() + fromIndex);
@@ -342,7 +344,7 @@ private:
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            if (!WriteMetadataToPNG(item.entityID, item.metadata)) {
+            if (!WriteMetadataToPNG(item.entityID, imageComp.metadata)) {
                 std::cerr << "Failed to write metadata to: " << fullPath << std::endl;
             } else {
                 std::cout << "Successfully wrote metadata to: " << fullPath << std::endl;

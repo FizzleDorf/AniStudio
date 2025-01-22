@@ -598,109 +598,109 @@ void DiffusionView::RenderVaeLoader() {
     }
 }
 
-void DiffusionView::RenderQueueList() {
-    ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Queue")) {
-        if (ImGui::BeginTable("QueueTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            if (ImGui::Button("Queue")) {
-                for (int i = 0; i < numQueues; i++) {
-                    HandleT2IEvent();
-                    // seedControl->activate();
-                }
-            }
-            if (ImGui::Button("Stop Current")) {
-            }
-            if (ImGui::Button("Clear")) {
-            }
-            if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
-                if (numQueues < 1) {
-                    numQueues = 1;
-                }
-            }
-            ImGui::EndTable();
-        }
-
-        if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-            ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 48.0f);
-            ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-            ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableHeadersRow();
-
-            auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
-            if (sdSystem) {
-                auto queueItems = sdSystem->GetQueueSnapshot();
-                for (size_t i = 0; i < queueItems.size(); i++) {
-                    const auto &item = queueItems[i];
-                    auto &prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
-
-                    ImGui::TableNextRow();
-
-                    // ID column
-                    ImGui::TableNextColumn();
-                    ImGui::Text("%d", static_cast<int>(item.entityID));
-
-                    // Status column
-                    ImGui::TableNextColumn();
-                    if (item.processing) {
-                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
-                    } else {
-                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
-                    }
-
-                    // Controls column
-                    ImGui::TableNextColumn();
-                    if (!item.processing) {
-                        if (ImGui::Button(("Remove##" + std::to_string(i)).c_str())) {
-                            sdSystem->RemoveFromQueue(i);
-                        }
-                    }
-
-                    // Move column
-                    ImGui::TableNextColumn();
-                    if (!item.processing) {
-                        if (i > 0) {
-                            if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
-                                sdSystem->MoveInQueue(i, i - 1);
-                            }
-                            if (i < queueItems.size() - 1) {
-                                ImGui::SameLine();
-                            }
-                        }
-                        if (i < queueItems.size() - 1) {
-                            if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
-                                sdSystem->MoveInQueue(i, i + 1);
-                            }
-                        }
-                    }
-
-                    // Prompt column
-                    ImGui::TableNextColumn();
-                    if (prompt.length() > 50) {
-                        ImGui::Text("%s...", prompt.substr(0, 47).c_str());
-                        if (ImGui::IsItemHovered()) {
-                            ImGui::SetTooltip("%s", prompt.c_str());
-                        }
-                    } else {
-                        ImGui::Text("%s", prompt.c_str());
-                    }
-                }
-            }
-            ImGui::EndTable();
-        }
-    }
-    ImGui::End();
-}
+//void DiffusionView::RenderQueueList() {
+//    ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
+//    if (ImGui::Begin("Queue")) {
+//        if (ImGui::BeginTable("QueueTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
+//            ImGui::TableNextRow();
+//            ImGui::TableNextColumn();
+//            if (ImGui::Button("Queue")) {
+//                for (int i = 0; i < numQueues; i++) {
+//                    HandleT2IEvent();
+//                    // seedControl->activate();
+//                }
+//            }
+//            if (ImGui::Button("Stop Current")) {
+//            }
+//            if (ImGui::Button("Clear")) {
+//            }
+//            if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
+//                if (numQueues < 1) {
+//                    numQueues = 1;
+//                }
+//            }
+//            ImGui::EndTable();
+//        }
+//
+//        if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+//            ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+//            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+//            ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 48.0f);
+//            ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+//            ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
+//            ImGui::TableHeadersRow();
+//
+//            auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
+//            if (sdSystem) {
+//                auto queueItems = sdSystem->GetQueueSnapshot();
+//                for (size_t i = 0; i < queueItems.size(); i++) {
+//                    const auto &item = queueItems[i];
+//                    auto &prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
+//
+//                    ImGui::TableNextRow();
+//
+//                    // ID column
+//                    ImGui::TableNextColumn();
+//                    ImGui::Text("%d", static_cast<int>(item.entityID));
+//
+//                    // Status column
+//                    ImGui::TableNextColumn();
+//                    if (item.processing) {
+//                        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
+//                    } else {
+//                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
+//                    }
+//
+//                    // Controls column
+//                    ImGui::TableNextColumn();
+//                    if (!item.processing) {
+//                        if (ImGui::Button(("Remove##" + std::to_string(i)).c_str())) {
+//                            sdSystem->RemoveFromQueue(i);
+//                        }
+//                    }
+//
+//                    // Move column
+//                    ImGui::TableNextColumn();
+//                    if (!item.processing) {
+//                        if (i > 0) {
+//                            if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
+//                                sdSystem->MoveInQueue(i, i - 1);
+//                            }
+//                            if (i < queueItems.size() - 1) {
+//                                ImGui::SameLine();
+//                            }
+//                        }
+//                        if (i < queueItems.size() - 1) {
+//                            if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
+//                                sdSystem->MoveInQueue(i, i + 1);
+//                            }
+//                        }
+//                    }
+//
+//                    // Prompt column
+//                    ImGui::TableNextColumn();
+//                    if (prompt.length() > 50) {
+//                        ImGui::Text("%s...", prompt.substr(0, 47).c_str());
+//                        if (ImGui::IsItemHovered()) {
+//                            ImGui::SetTooltip("%s", prompt.c_str());
+//                        }
+//                    } else {
+//                        ImGui::Text("%s", prompt.c_str());
+//                    }
+//                }
+//            }
+//            ImGui::EndTable();
+//        }
+//    }
+//    ImGui::End();
+//}
 
 void DiffusionView::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
         
         // Queue Controls (detached from the options)
-        RenderQueueList();
+        // RenderQueueList();
 
         if (ImGui::BeginTabBar("Image")) {
             if (ImGui::BeginTabItem("Txt2Img")) {

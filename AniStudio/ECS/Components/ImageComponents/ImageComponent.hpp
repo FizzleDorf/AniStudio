@@ -5,17 +5,19 @@
 #include <GL/glew.h>
 #include <string>
 #include <stb_image.h>
+#include <nlohmann/json.hpp>
 
 namespace ECS {
 struct ImageComponent : public BaseComponent {
     std::string fileName = "Anistudio";                     // Default file name
-    std::string filePath = filePaths.defaultProjectPath; // Full path to the image
-    unsigned char *imageData = nullptr;                  // Pointer to image data
-    int width = 0;                                       // Image width
-    int height = 0;                                      // Image height
-    int channels = 0;                                    // Number of color channels
-    GLuint textureID = 0;                                // OpenGL texture ID
-
+    std::string filePath = filePaths.defaultProjectPath;    // Full path to the image
+    unsigned char *imageData = nullptr;                     // Pointer to image data
+    int width = 0;                                          // Image width
+    int height = 0;                                         // Image height
+    int channels = 0;                                       // Number of color channels
+    GLuint textureID = 0;                                   // OpenGL texture ID
+    nlohmann::json metadata = nlohmann::json();             // 
+    
     ~ImageComponent() {
         if (imageData) {
             stbi_image_free(imageData);
