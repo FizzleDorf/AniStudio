@@ -1,13 +1,13 @@
 #include "ImageView.hpp"
+#include "pch.h"
 #include <GL/glew.h>
 #include <ImGuiFileDialog.h>
+#include <algorithm>
 #include <imgui.h>
 #include <iostream>
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <algorithm>
 #include <stdexcept>
-#include "pch.h"
 
 using namespace ECS;
 
@@ -172,88 +172,102 @@ void ImageView::RenderSelector() {
                 imgIndex = size - 1;
             }
             imgIndex = (imgIndex % size + size) % size;
-        } 
+        }
         imageComponent = loadedMedia.GetImage(imgIndex);
         CleanUpCurrentImage();
-        CreateCurrentTexture();     
+        CreateCurrentTexture();
     }
 }
 
 void ImageView::RenderHistory() {
-    ImGui::Checkbox("Show History", &showHistory);
+    static float historyZoom = 1.0f;
+    ImGui::SetNextWindowSize(ImVec2(1024, 140), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Image History", nullptr, 0);
 
-    if (!loadedMedia.GetImages().empty() && showHistory) {
-        // Navigation controls
-        if (ImGui::Button("First")) {
-            imgIndex = 0;
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Last")) {
-            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-        ImGui::SameLine();
-        ImGui::Text("History Size: %zu", loadedMedia.GetImages().size());
-
-        // Create scrollable history panel
-        if (ImGui::BeginChild("HistoryPanel", ImVec2(0, 160), true, ImGuiWindowFlags_HorizontalScrollbar)) {
-            const auto &images = loadedMedia.GetImages();
-
-            for (size_t i = 0; i < images.size(); ++i) {
-                ImGui::BeginGroup();
-                const auto &image = images[i];
-
-                if (image.textureID == 0) {
-                    CreateTexture(i);
-                }
-                if (!image.imageData) {
-                    mgr.DestroyEntity(image.GetID());
-                    ImGui::EndGroup();
-                    break;
-                }
-
-                if (static_cast<int>(i) == imgIndex) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
-                }
-                ImGui::Text("%zu: %s", i, image.fileName.c_str());
-                if (static_cast<int>(i) == imgIndex) {
-                    ImGui::PopStyleColor();
-                }
-
-                // Calculate image dimensions
-                float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
-                ImVec2 maxSize(128.0f, 128.0f);
-                ImVec2 imageSize;
-                if (aspectRatio > 1.0f) {
-                    imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
-                } else {
-                    imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
-                }
-
-                // Make image clickable
-                if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
-                                       reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
-                    imgIndex = static_cast<int>(i);
-                    imageComponent = loadedMedia.GetImage(imgIndex);
-                    CleanUpCurrentImage();
-                    CreateCurrentTexture();
-                }
-
-                ImGui::EndGroup();
-                ImGui::SameLine();
-            }
-            ImGui::NewLine();
-        }
-        ImGui::EndChild();
+    // Navigation and controls
+    if (ImGui::Button("First")) {
+        imgIndex = 0;
+        imageComponent = loadedMedia.GetImage(imgIndex);
+        CleanUpCurrentImage();
+        CreateCurrentTexture();
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Last")) {
+        imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        imageComponent = loadedMedia.GetImage(imgIndex);
+        CleanUpCurrentImage();
+        CreateCurrentTexture();
+    }
+    ImGui::SameLine();
+    ImGui::Text("History Size: %zu", loadedMedia.GetImages().size());
+
+    // Zoom slider
+    ImGui::SliderFloat("Zoom", &historyZoom, 0.5f, 1.0f);
+
+    ImGui::BeginChild("HistoryGrid", ImVec2(0, 0), true);
+    const auto &images = loadedMedia.GetImages();
+
+    // Calculate available width and number of columns
+    float availWidth = ImGui::GetContentRegionAvail().x;
+    float baseSize = 128.0f * historyZoom;
+    float minSize = 64.0f;
+    int numColumns = static_cast<int>(availWidth / (baseSize + ImGui::GetStyle().ItemSpacing.x));
+    if (numColumns < 1)
+        numColumns = 1;
+
+    // Start grid layout
+    int column = 0;
+    for (size_t i = 0; i < images.size(); ++i) {
+        const auto &image = images[i];
+
+        if (image.textureID == 0) {
+            CreateTexture(i);
+        }
+        if (!image.imageData) {
+            mgr.DestroyEntity(image.GetID());
+            continue;
+        }
+
+        if (column > 0)
+            ImGui::SameLine();
+
+        ImGui::BeginGroup();
+        if (static_cast<int>(i) == imgIndex) {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+        }
+
+        // Calculate thumbnail size
+        float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
+        float size = baseSize < minSize ? minSize : baseSize;
+        ImVec2 imageSize;
+        if (aspectRatio > 1.0f) {
+            imageSize = ImVec2(size, size / aspectRatio);
+        } else {
+            imageSize = ImVec2(size * aspectRatio, size);
+        }
+
+        ImGui::Text("%zu: %s", i, image.fileName.c_str());
+        if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
+                               reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
+            imgIndex = static_cast<int>(i);
+            imageComponent = loadedMedia.GetImage(imgIndex);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
+        }
+
+        if (static_cast<int>(i) == imgIndex) {
+            ImGui::PopStyleColor();
+        }
+        ImGui::EndGroup();
+
+        if (++column >= numColumns) {
+            column = 0;
+        }
+    }
+
+    ImGui::EndChild();
+    ImGui::End();
 }
-
-
 
 void ImageView::LoadImage() {
     CleanUpCurrentImage();
@@ -338,4 +352,4 @@ void ImageView::CleanUpCurrentImage() {
 
 ImageView::~ImageView() { CleanUpCurrentImage(); }
 
-} // namespace ECS
+} // namespace GUI
