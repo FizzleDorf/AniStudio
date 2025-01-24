@@ -35,6 +35,7 @@ project(AniStudio CXX)
 
 if(BUILD_ANISTUDIO)
     # Required packages for AniStudio
+    find_package(Vulkan REQUIRED)
     find_package(OpenCV REQUIRED)
     find_package(glew REQUIRED)
     find_package(glfw3 REQUIRED)
@@ -122,6 +123,7 @@ if(BUILD_ANISTUDIO)
         assimp::assimp 
         ZLIB::ZLIB
         PNG::PNG
+        Vulkan::Vulkan
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
