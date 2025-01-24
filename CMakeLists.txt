@@ -39,7 +39,6 @@ if(BUILD_ANISTUDIO)
     find_package(OpenCV REQUIRED)
     find_package(glew REQUIRED)
     find_package(glfw3 REQUIRED)
-    find_package(assimp REQUIRED)
     find_package(ZLIB REQUIRED)
     find_package(PNG REQUIRED)
 
@@ -120,7 +119,6 @@ if(BUILD_ANISTUDIO)
         opencv::opencv 
         glfw
         GLEW::GLEW 
-        assimp::assimp 
         ZLIB::ZLIB
         PNG::PNG
         Vulkan::Vulkan

@@ -31,9 +31,7 @@ enum class EventType {
     LoadImageEvent,
     SaveImageEvent,
     LoadVideoEvent,
-    SaveVideoEvent,
-    LoadMeshEvent,
-    SaveMeshEvent
+    SaveVideoEvent
 };
 
 struct Event {

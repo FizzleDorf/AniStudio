@@ -109,21 +109,6 @@ void Events::ProcessEvents() {
              // imageSystem->AddImage(event.entityID);
              break;
          }
-        case EventType::SaveMeshEvent: {
-            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-            // imageSystem->SaveImage(event.entityID);
-            break;
-        }
-        case EventType::LoadMeshEvent: {
-            std::cout << "Handling ImageSaveRequest event for Entity ID: " << event.entityID << '\n';
-            auto meshSystem = Core.GetEntityManager().GetSystem<ECS::MeshSystem>();
-            if (meshSystem) {
-                // meshSystem->LoadMesh(event.entityID);
-            } else {
-                std::cerr << "ImageSystem is not registered." << std::endl;
-            }
-            break;
-        }
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
             break;
