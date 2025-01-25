@@ -15,9 +15,6 @@
 #include "DiffusionView.hpp"
 #include "QueueView.hpp"
 
-// 3D Views
-#include "MeshView.hpp"
-
 // Node Views
 #include "NodeGraphView.hpp"
 
