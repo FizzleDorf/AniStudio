@@ -169,12 +169,22 @@ void ImageView::DrawGrid() {
 void ImageView::RenderSelector() {
 
     if (ImGui::Button("First")) {
-        imgIndex = 0;
+        if (!loadedMedia.GetImages().empty()) {
+            imgIndex = 0;
+            imageComponent = loadedMedia.GetImage(imgIndex);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
+        }
     }
+
     ImGui::SameLine();
     if (ImGui::Button("Last")) {
-        if (!loadedMedia.GetImages().empty())
+        if (!loadedMedia.GetImages().empty()) {
             imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        }
+        imageComponent = loadedMedia.GetImage(imgIndex);
+        CleanUpCurrentImage();
+        CreateCurrentTexture();
     }
 
     if (ImGui::InputInt("Current Image", &imgIndex)) {
