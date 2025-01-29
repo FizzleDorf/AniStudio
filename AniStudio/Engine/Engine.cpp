@@ -1,5 +1,5 @@
 #include "Engine.hpp"
-#include "guis.h"
+#include "AllViews.h"
 #include <filesystem>
 #include <iostream>
 
@@ -101,7 +101,6 @@ void Engine::Init() {
     viewManager.RegisterViewType<SequencerView>("SequencerView");
     viewManager.RegisterViewType<UpscaleView>("UpscaleView");
     viewManager.RegisterViewType<ConvertView>("ConvertView");
-    viewManager.RegisterViewType<CanvasView>("CanvasView");
     
     // viewManager.LoadState();
 
@@ -121,7 +120,7 @@ void Engine::Init() {
     viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
 
     // auto nodeGraphViewID = viewManager.CreateView();
-    viewManager.AddView<NodeGraphView>(diffusionViewID, NodeGraphView(entityManager));
+    // viewManager.AddView<NodeGraphView>(diffusionViewID, NodeGraphView(entityManager));
 
     // auto pluginViewID = viewManager.CreateView();
     // viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
@@ -138,7 +137,7 @@ void Engine::Init() {
     // viewManager.GetView<DebugView>(debugViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
-    viewManager.GetView<NodeGraphView>(diffusionViewID).Init();
+    // viewManager.GetView<NodeGraphView>(diffusionViewID).Init();
     // viewManager.GetView<PluginView>(pluginViewID).Init();
 }
 

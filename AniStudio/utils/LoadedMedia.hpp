@@ -2,7 +2,6 @@
 
 #include "ECS.h"
 #include "ImageComponent.hpp"
-#include "VideoComponent.hpp"
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -16,10 +15,10 @@ public:
         loadedImages.push_back(image);
     }
 
-    void AddVideo(const VideoComponent &video) {
+    /*void AddVideo(const VideoComponent &video) {
         std::lock_guard<std::mutex> lock(mutex);
         loadedVideos.push_back(video);
-    }
+    }*/
 
     void RemoveImage(const size_t index) {
         std::lock_guard<std::mutex> lock(mutex);
@@ -29,13 +28,13 @@ public:
         loadedImages.erase(loadedImages.begin() + index);
     }
 
-    void RemoveVideo(const size_t index) {
+    /*void RemoveVideo(const size_t index) {
         std::lock_guard<std::mutex> lock(mutex);
         if (index >= loadedVideos.size()) {
             throw std::out_of_range("Video index out of range");
         }
         loadedVideos.erase(loadedVideos.begin() + index);
-    }
+    }*/
 
     ImageComponent &GetImage(const size_t index) {
         std::lock_guard<std::mutex> lock(mutex);
@@ -45,20 +44,20 @@ public:
         return loadedImages[index];
     }
 
-    VideoComponent &GetVideo(const size_t index) {
+    /*VideoComponent &GetVideo(const size_t index) {
         std::lock_guard<std::mutex> lock(mutex);
         if (index >= loadedVideos.size()) {
             throw std::out_of_range("Video index out of range");
         }
         return loadedVideos[index];
-    }
+    }*/
 
     std::vector<ImageComponent> &GetImages() { return loadedImages; }
-    std::vector<VideoComponent> &GetVideos() { return loadedVideos; }
+    /*std::vector<VideoComponent> &GetVideos() { return loadedVideos; }*/
 
 private:
     std::vector<ImageComponent> loadedImages;
-    std::vector<VideoComponent> loadedVideos;
+    /*std::vector<VideoComponent> loadedVideos;*/
     std::mutex mutex;
 };
 
