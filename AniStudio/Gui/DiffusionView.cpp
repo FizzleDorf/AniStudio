@@ -8,6 +8,9 @@ using namespace ANI;
 namespace GUI {
 
 void DiffusionView::RenderModelLoader() {
+
+    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -136,6 +139,8 @@ void DiffusionView::RenderFilePath() {
 
 void DiffusionView::RenderLatents() {
     
+    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
+
     if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -229,8 +234,8 @@ void DiffusionView::RenderSampler() {
             ImGui::InputInt("##Seed", &samplerComp.seed);
             // renderControlUI<int>(*seedControl);
         });
-        addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &cfgComp.cfg); });
-        addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &cfgComp.guidance); });
+        addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &cfgComp.cfg, 0.5f, 0.5f, "%.2f"); });
+        addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &cfgComp.guidance, 0.05f, 0.1f, "%.2f"); });
         addRow("Steps", [&]() { ImGui::InputInt("##Steps", &samplerComp.steps); });
         addRow("Denoise", [&]() { ImGui::InputFloat("##Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f"); });
 
@@ -292,12 +297,6 @@ void DiffusionView::HandleT2IEvent() {
         return;
     }
 
-    // Log component values for debugging
-    std::cout << "ModelComponent.modelPath: " << mgr.GetComponent<ModelComponent>(newEntity).modelPath << std::endl;
-    std::cout << "PromptComponent.posPrompt: " << mgr.GetComponent<PromptComponent>(newEntity).posPrompt << std::endl;
-    std::cout << "LatentComponent.latentWidth: " << mgr.GetComponent<LatentComponent>(newEntity).latentWidth
-              << std::endl;
-
     // Queue event
     Event event;
     event.entityID = newEntity;
@@ -320,8 +319,6 @@ void DiffusionView::HandleUpscaleEvent() {
 void DiffusionView::RenderOther() {
     ImGui::Checkbox("Free Params", &samplerComp.free_params_immediately);
     ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
-    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
-    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 }
 
 void DiffusionView::RenderControlnets() {
@@ -428,11 +425,12 @@ void DiffusionView::RenderEmbeddings() {
 
 void DiffusionView::RenderDiffusionModelLoader() {
 
+    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f); // Fixed width for Model
+        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        // ImGui::TableHeadersRow();
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Unet:"); // Row for Unet
@@ -596,6 +594,39 @@ void DiffusionView::RenderVaeLoader() {
 
         ImGuiFileDialog::Instance()->Close();
     }
+
+    ImGui::Separator();
+
+    if (ImGui::BeginTable("ModelLoaderTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f); // Fixed width for Model
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Tiled Vae");
+
+        ImGui::TableNextColumn();
+
+        ImGui::Checkbox("##TileVae", &vaeComp.isTiled);
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Cache Vae");
+        ImGui::TableNextColumn();
+
+        ImGui::Checkbox("##KeepVaeLoaded", &vaeComp.keep_vae_on_cpu);
+
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+
+        ImGui::Text("Vae Decode Only");
+        ImGui::TableNextColumn();
+
+        ImGui::Checkbox("##VaeDecodeOnly", &vaeComp.vae_decode_only);
+
+        ImGui::EndTable();
+    }
 }
 
 void DiffusionView::RenderQueueList() {
@@ -704,47 +735,97 @@ void DiffusionView::Render() {
 
         if (ImGui::BeginTabBar("Image")) {
             if (ImGui::BeginTabItem("Txt2Img")) {
-                RenderOther();
                 // Output FileName
-                RenderFilePath();
-                // Checkpoint loader
-                if (ImGui::BeginTabBar("Model Loader")) {
-                    if (ImGui::BeginTabItem("Full")) {
-                        RenderModelLoader();
-                        ImGui::EndTabItem();
-                    }
-                    // Separated Model loader
-                    if (ImGui::BeginTabItem("Separate")) {
-                        RenderDiffusionModelLoader();
-                        ImGui::EndTabItem();
-                    }
+                if (ImGui::CollapsingHeader("Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderFilePath();
                 }
-                ImGui::EndTabBar();
+                // Checkpoint loader
+                if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    if (ImGui::BeginTabBar("Model Loader")) {
+                        if (ImGui::BeginTabItem("Full")) {
+                            RenderModelLoader();
+                            ImGui::EndTabItem();
+                        }
+                        // Separated Model loader
+                        if (ImGui::BeginTabItem("Separate")) {
+                            RenderDiffusionModelLoader();
+                            ImGui::EndTabItem();
+                        }
+                    }
+                    ImGui::EndTabBar();
+                }
                 // Latent Params
-                RenderLatents();
+                if (ImGui::CollapsingHeader("Latent Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderLatents();
+                }
                 // Prompt Inputs
-                RenderPrompts();
+                if (ImGui::CollapsingHeader("Prompt Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderPrompts();
+                }
                 // Sampler Inputs
-                RenderSampler();
+                if (ImGui::CollapsingHeader("Sampler Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderSampler();
+                }
                 // Controlnet Loader and Params
-                RenderControlnets();
+                if (ImGui::CollapsingHeader("ControlNet")) {
+                    RenderControlnets();
+                }
                 // Embedding Inputs
-                RenderEmbeddings();
+                if (ImGui::CollapsingHeader("Embeddings")) {
+                    RenderEmbeddings();
+                }
+                // Other Settings
+                if (ImGui::CollapsingHeader("Other Settings")) {
+                    RenderOther();
+                }
                 ImGui::EndTabItem();
             }
 
             if (ImGui::BeginTabItem("Img2Img")) {
-                RenderFilePath();
-                RenderOther();
-                RenderInputImage();
-                RenderModelLoader();
-                RenderDiffusionModelLoader();
-                RenderVaeLoader();
-                RenderLatents();
-                RenderPrompts();
-                RenderSampler();
-                RenderControlnets();
-                RenderEmbeddings();
+                
+                // Output FileName
+                if (ImGui::CollapsingHeader("Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderFilePath();
+                }
+                // Checkpoint loader
+                if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    if (ImGui::BeginTabBar("Model Loader")) {
+                        if (ImGui::BeginTabItem("Full")) {
+                            RenderModelLoader();
+                            ImGui::EndTabItem();
+                        }
+                        // Separated Model loader
+                        if (ImGui::BeginTabItem("Separate")) {
+                            RenderDiffusionModelLoader();
+                            ImGui::EndTabItem();
+                        }
+                    }
+                    ImGui::EndTabBar();
+                }
+                // Latent Params
+                if (ImGui::CollapsingHeader("Latent Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderLatents();
+                }
+                // Prompt Inputs
+                if (ImGui::CollapsingHeader("Prompt Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderPrompts();
+                }
+                // Sampler Inputs
+                if (ImGui::CollapsingHeader("Sampler Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    RenderSampler();
+                }
+                // Controlnet Loader and Params
+                if (ImGui::CollapsingHeader("ControlNet")) {
+                    RenderControlnets();
+                }
+                // Embedding Inputs
+                if (ImGui::CollapsingHeader("Embeddings")) {
+                    RenderEmbeddings();
+                }
+                // Other Settings
+                if (ImGui::CollapsingHeader("Other Settings")) {
+                    RenderOther();
+                }
                 ImGui::EndTabItem();
             }
         }
