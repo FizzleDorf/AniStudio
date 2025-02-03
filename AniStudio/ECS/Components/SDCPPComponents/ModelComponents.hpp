@@ -10,23 +10,39 @@ namespace ECS {
     struct BaseModelComponent : public BaseComponent {
         BaseModelComponent() { compName = "BaseModelComponent"; }
         std::string modelPath = "";
-        std::string modelName = "<none>";
+        std::string modelName = "";
         bool isModelLoaded = false;
 
-        nlohmann::json Serialize() const override { return { {compName, {{"modelName", modelName}}} }; }
+        nlohmann::json Serialize() const override {
+            return { {compName, {{"modelName", modelName}}} };
+        }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
+                componentData = j.at(compName);
             }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName"))
+                modelName = componentData["modelName"];
         }
     };
 
     // Packaged Checkpoint loader (sd1.5 and sdxl with vae and encoders)
     struct ModelComponent : public BaseModelComponent {
-        ModelComponent() { compName = "Model"; } // Changed from "ModelComponent" to "Model"
+        ModelComponent() { compName = "Model"; }
         ModelComponent& operator=(const ModelComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -37,18 +53,34 @@ namespace ECS {
         }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.checkpointDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.checkpointDir + "\\" + modelName;
             }
         }
     };
 
     // Diffusion Model only (Flux)
     struct DiffusionModelComponent : public BaseModelComponent {
-        DiffusionModelComponent() { compName = "DiffusionModel"; } // Changed from "DiffusionModelComponent" to "DiffusionModel"
+        DiffusionModelComponent() { compName = "DiffusionModel"; }
         DiffusionModelComponent& operator=(const DiffusionModelComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -58,18 +90,34 @@ namespace ECS {
             return *this;
         }
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.unetDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.unetDir + "\\" + modelName;
             }
         }
     };
 
     // Clip G Encoder
     struct CLipGComponent : public BaseModelComponent {
-        CLipGComponent() { compName = "CLipG"; } // Changed from "CLipGComponent" to "CLipG"
+        CLipGComponent() { compName = "CLipG"; }
         CLipGComponent& operator=(const CLipGComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -80,18 +128,34 @@ namespace ECS {
         }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.encoderDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.encoderDir + "\\" + modelName;
             }
         }
     };
 
     // Clip L Encoder
     struct CLipLComponent : public BaseModelComponent {
-        CLipLComponent() { compName = "CLipL"; } // Changed from "CLipLComponent" to "CLipL"
+        CLipLComponent() { compName = "CLipL"; }
         CLipLComponent& operator=(const CLipLComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -101,18 +165,34 @@ namespace ECS {
             return *this;
         }
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.encoderDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.encoderDir + "\\" + modelName;
             }
         }
     };
 
     // T5 Encoder
     struct T5XXLComponent : public BaseModelComponent {
-        T5XXLComponent() { compName = "T5XXL"; } // Changed from "T5XXLComponent" to "T5XXL"
+        T5XXLComponent() { compName = "T5XXL"; }
         T5XXLComponent& operator=(const T5XXLComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -122,20 +202,36 @@ namespace ECS {
             return *this;
         }
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.encoderDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.encoderDir + "\\" + modelName;
             }
         }
     };
 
     // Vae Loader (Overrides Model Component Vae)
     struct VaeComponent : public BaseModelComponent {
-        VaeComponent() { compName = "Vae"; } // Changed from "VaeComponent" to "Vae"
+        VaeComponent() { compName = "Vae"; }
         bool isTiled = false;
-        bool keep_vae_on_cpu = true;
+        bool keep_vae_on_cpu = false;
         bool vae_decode_only = false;
 
         VaeComponent& operator=(const VaeComponent& other) {
@@ -151,34 +247,52 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            return { {compName,
-                     {{"modelName", modelName},
-                      {"modelPath", modelPath},
-                      {"isTiled", isTiled},
-                      {"keep_vae_on_cpu", keep_vae_on_cpu},
-                      {"vae_decode_only", vae_decode_only}}} };
+            return { {compName, {
+                {"modelName", modelName},
+                {"modelPath", modelPath},
+                {"isTiled", isTiled},
+                {"keep_vae_on_cpu", keep_vae_on_cpu},
+                {"vae_decode_only", vae_decode_only}
+            }} };
         }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                if (obj.contains("modelPath"))
-                    modelPath = obj["modelPath"];
-                if (obj.contains("isTiled"))
-                    isTiled = obj["isTiled"].get<bool>();
-                if (obj.contains("keep_vae_on_cpu"))
-                    keep_vae_on_cpu = obj["keep_vae_on_cpu"].get<bool>();
-                if (obj.contains("vae_decode_only"))
-                    vae_decode_only = obj["vae_decode_only"].get<bool>();
+                componentData = j.at(compName);
             }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName"))
+                modelName = componentData["modelName"];
+            if (componentData.contains("modelPath"))
+                modelPath = componentData["modelPath"];
+            if (componentData.contains("isTiled"))
+                isTiled = componentData["isTiled"].get<bool>();
+            if (componentData.contains("keep_vae_on_cpu"))
+                keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
+            if (componentData.contains("vae_decode_only"))
+                vae_decode_only = componentData["vae_decode_only"].get<bool>();
+
+            if (!modelName.empty() && modelPath.empty())
+                modelPath = filePaths.vaeDir + "\\" + modelName;
         }
     };
 
     // Fast Vae Model loader
     struct TaesdComponent : public BaseModelComponent {
-        TaesdComponent() { compName = "Taesd"; } // Changed from "TaesdComponent" to "Taesd"
+        TaesdComponent() { compName = "Taesd"; }
         TaesdComponent& operator=(const TaesdComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -187,21 +301,39 @@ namespace ECS {
             }
             return *this;
         }
-        nlohmann::json Serialize() const override { return { {compName, {{"modelName", modelName}}} }; }
+        nlohmann::json Serialize() const override {
+            return { {compName, {{"modelName", modelName}}} };
+        }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.vaeDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.vaeDir + "\\" + modelName;
             }
         }
     };
 
     // Low Rank Attention Model loader
     struct LoraComponent : public ECS::BaseModelComponent {
-        LoraComponent() { compName = "Lora"; } // Changed from "LoraComponent" to "Lora"
+        LoraComponent() { compName = "Lora"; }
         float loraStrength = 1.0f;
         float loraClipStrength = 1.0f;
 
@@ -211,32 +343,50 @@ namespace ECS {
                 modelPath = other.modelPath;
                 isModelLoaded = other.isModelLoaded;
                 loraStrength = other.loraStrength;
-                loraClipStrength = other.loraClipStrength; // Fixed duplicate assignment
+                loraClipStrength = other.loraClipStrength;
             }
             return *this;
         }
         nlohmann::json Serialize() const override {
-            return { {compName,
-                     {{"modelName", modelName}, {"loraStrength", loraStrength}, {"loraClipStrength", loraClipStrength}}} };
+            return { {compName, {
+                {"modelName", modelName},
+                {"loraStrength", loraStrength},
+                {"loraClipStrength", loraClipStrength}
+            }} };
         }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                if (obj.contains("loraStrength"))
-                    loraStrength = obj["loraStrength"];
-                if (obj.contains("loraClipStrength"))
-                    loraClipStrength = obj["loraClipStrength"];
-                modelPath = filePaths.loraDir + "\\" + modelName;
+                componentData = j.at(compName);
             }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName"))
+                modelName = componentData["modelName"];
+            if (componentData.contains("loraStrength"))
+                loraStrength = componentData["loraStrength"];
+            if (componentData.contains("loraClipStrength"))
+                loraClipStrength = componentData["loraClipStrength"];
+            if (!modelName.empty())
+                modelPath = filePaths.loraDir + "\\" + modelName;
         }
     };
 
     // Controlnet loader
     struct ControlnetComponent : public ECS::BaseModelComponent {
-        ControlnetComponent() { compName = "Controlnet"; } // Changed from "ControlnetComponent" to "Controlnet"
+        ControlnetComponent() { compName = "Controlnet"; }
         float cnStrength = 1.0f;
         float applyStart = 0.0f;
         float applyEnd = 1.0f;
@@ -255,33 +405,49 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            return { {compName,
-                     {{"modelName", modelName},
-                      {"cnStrength", cnStrength},
-                      {"applyStart", applyStart},
-                      {"applyEnd", applyEnd}}} };
+            return { {compName, {
+                {"modelName", modelName},
+                {"cnStrength", cnStrength},
+                {"applyStart", applyStart},
+                {"applyEnd", applyEnd}
+            }} };
         }
 
         // Deserialize from JSON
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                if (obj.contains("cnStrength"))
-                    cnStrength = obj["cnStrength"];
-                if (obj.contains("applyStart"))
-                    applyStart = obj["applyStart"];
-                if (obj.contains("applyEnd"))
-                    applyEnd = obj["applyEnd"];
-                modelPath = filePaths.controlnetDir + "\\" + modelName;
+                componentData = j.at(compName);
             }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName"))
+                modelName = componentData["modelName"];
+            if (componentData.contains("cnStrength"))
+                cnStrength = componentData["cnStrength"];
+            if (componentData.contains("applyStart"))
+                applyStart = componentData["applyStart"];
+            if (componentData.contains("applyEnd"))
+                applyEnd = componentData["applyEnd"];
+            if (!modelName.empty())
+                modelPath = filePaths.controlnetDir + "\\" + modelName;
         }
     };
 
     // Upscale models
     struct EsrganComponent : public BaseModelComponent {
-        EsrganComponent() { compName = "Esrgan"; } // Changed from "EsrganComponent" to "Esrgan"
+        EsrganComponent() { compName = "Esrgan"; }
         float scale = 1.5;
 
         EsrganComponent& operator=(const EsrganComponent& other) {
@@ -293,21 +459,42 @@ namespace ECS {
             }
             return *this;
         }
-        nlohmann::json Serialize() const override { return { {compName, {{"modelName", modelName}, {"scale", scale}}} }; }
+        nlohmann::json Serialize() const override {
+            return { {compName, {
+                {"modelName", modelName},
+                {"scale", scale}
+            }} };
+        }
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                if (obj.contains("scale"))
-                    scale = obj["scale"];
-                modelPath = filePaths.upscaleDir + "\\" + modelName;
+                componentData = j.at(compName);
             }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName"))
+                modelName = componentData["modelName"];
+            if (componentData.contains("scale"))
+                scale = componentData["scale"];
+            if (!modelName.empty())
+                modelPath = filePaths.upscaleDir + "\\" + modelName;
         }
     };
 
+    //Embedding
     struct EmbeddingComponent : public BaseModelComponent {
-        EmbeddingComponent() { compName = "EmbeddingComponent"; } // Note: This matches the JSON format already
+        EmbeddingComponent() { compName = "EmbeddingComponent"; }
         EmbeddingComponent& operator=(const EmbeddingComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -318,11 +505,27 @@ namespace ECS {
         }
 
         void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
             if (j.contains(compName)) {
-                const auto& obj = j.at(compName);
-                if (obj.contains("modelName"))
-                    modelName = obj["modelName"];
-                modelPath = filePaths.embedDir + "\\" + modelName;
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.embedDir + "\\" + modelName;
             }
         }
     };
