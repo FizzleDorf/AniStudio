@@ -52,7 +52,10 @@ public:
         return loadedVideos[index];
     }*/
 
-    std::vector<ImageComponent> &GetImages() { return loadedImages; }
+    std::vector<ImageComponent> &GetImages() { 
+        std::lock_guard<std::mutex> lock(mutex);
+        return loadedImages; 
+    }
     /*std::vector<VideoComponent> &GetVideos() { return loadedVideos; }*/
 
 private:
