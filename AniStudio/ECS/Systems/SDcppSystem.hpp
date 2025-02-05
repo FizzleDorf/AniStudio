@@ -7,7 +7,6 @@
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
-#include "LoadedMedia.hpp"
 #include <png.h>
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -366,7 +365,7 @@ namespace ECS {
                 std::cout << "Image saved successfully: \"" << fullPath << "\"" << std::endl;
 
                 // Add to loaded media
-                loadedMedia.AddImage(imageComp);
+                mgr.GetSystem<ImageSystem>()->SaveImage(entityID, imageComp.filePath);
 
             }
             catch (const std::filesystem::filesystem_error& e) {
