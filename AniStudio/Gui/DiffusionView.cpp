@@ -37,7 +37,6 @@ void DiffusionView::RenderModelLoader() {
 
         RenderVaeLoader();
 
-        ImGui::EndTable();
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
@@ -557,8 +556,6 @@ void DiffusionView::RenderDiffusionModelLoader() {
 
         // Row for Vae
         RenderVaeLoader();
-
-        ImGui::EndTable();
     }
 }
 
@@ -594,12 +591,19 @@ void DiffusionView::RenderVaeLoader() {
 
         ImGuiFileDialog::Instance()->Close();
     }
+    ImGui::EndTable();
 
+    ImGui::Spacing();
     ImGui::Separator();
+    ImGui::Spacing();
 
-    if (ImGui::BeginTable("ModelLoaderTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f); // Fixed width for Model
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+    RenderVaeOptions();
+}
+
+void DiffusionView::RenderVaeOptions() {
+    if (ImGui::BeginTable("VaeOptionsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 64.0f); // Fixed width for Model
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
         ImGui::TableNextColumn();
 
@@ -612,7 +616,7 @@ void DiffusionView::RenderVaeLoader() {
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
 
-        ImGui::Text("Cache Vae");
+        ImGui::Text("Keep Vae on CPU");
         ImGui::TableNextColumn();
 
         ImGui::Checkbox("##KeepVaeLoaded", &vaeComp.keep_vae_on_cpu);
@@ -628,6 +632,7 @@ void DiffusionView::RenderVaeLoader() {
         ImGui::EndTable();
     }
 }
+
 
 void DiffusionView::RenderQueueList() {
     ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);

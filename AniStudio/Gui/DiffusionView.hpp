@@ -38,7 +38,7 @@ public:
     void RenderVaeLoader();
     void RenderControlnets();
     void RenderEmbeddings();
-
+    void RenderVaeOptions();
     void HandleT2IEvent();
     void HandleUpscaleEvent();
 
