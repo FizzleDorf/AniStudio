@@ -1,4 +1,8 @@
 # Anistudio
+An executable editor for image and video diffusion generation and editing projects written in C/C++ by utilizing [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) backend.
+
+## Purpose
+I created this application to leverage C/C++ for a highly modular and parallelized system capable of loading, inferencing, and training machine learning models, all within a unified UI. Existing UI solutions often rely on external tools for refining or editing, or suffer from performance issues due to JavaScript, TypeScript, or Python limitations—resulting in inconsistent rendering, slow loading, and cache misses. Most local open-source tools also require users to manage Python environments, adding complexity. AniStudio is designed to maintain consistent performance under heavy loads, allowing users to multitask traditional media creation with AI-assisted workflows, all in one seamless application.  
 
 ## Features
 - Entity Component System for modular development with low technical debt
@@ -94,6 +98,3 @@ cd build
 cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
-
-## Purpose
-I made this application because I see a lot of potential for utilizing C/C++ for a highly modular and parellelized process for loading, inferencing and training machine learning models while performing other tasks in a unified UI experience. A lot of current UI offerings require you to use other applications for refining or editing in some way in a convenient manner. Others have too much going on that Javascript/Typescript and python can't keep consistant render updates, slow loading, or cache misses leading to a frustrating experience. Almost all local open source offerings requires the user to learn Python to maintain their virtual environment. AniStudio aims to keep a solid foundation to build a larger application of maintaining high performance under heavy load so the user can multitask traditional media creation while using AI augmentation to speed up tasks in one application.  
