@@ -4,6 +4,7 @@
 #include "filepaths.hpp"
 #include <nlohmann/json.hpp>
 #include "ImGuiFileDialog.h"
+#include "GuiStyleHelpers.hpp"
 
  namespace GUI {
 
@@ -11,8 +12,7 @@ class SettingsView : public BaseView {
 public:
     SettingsView(EntityManager &mgr) : BaseView(mgr) { viewName = "Settings View";}
     ~SettingsView() {}
-    void LoadStyleFromFile(ImGuiStyle &style, const std::string &filename);
-    void SaveStyleToFile(const ImGuiStyle &style, const std::string &filename);
+
     void Render() override;
 
 private:
