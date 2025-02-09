@@ -1,0 +1,12 @@
+[settings]
+arch=x86_64
+build_type=Release
+compiler=msvc
+compiler.runtime=dynamic
+compiler.runtime_type=Release
+compiler.version=193
+os=Windows
+
+[buildenv]
+CC=cl.exe
+CXX=cl.exe

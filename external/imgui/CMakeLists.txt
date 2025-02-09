@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(ImGui)
 
-# Include Conan-generated cmake files
-include(../../build/generators/conan_toolchain.cmake)
-
 find_package(glew)
 find_package(glfw3)
 

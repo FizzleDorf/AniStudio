@@ -27,8 +27,6 @@ cd build
 
 :: Configure with CMake (only build AniStudio)
 cmake .. -DSD_VULKAN=ON ^
-         -DCMAKE_BUILD_TYPE=Release ^
-         -DCMAKE_TOOLCHAIN_FILE=generators\conan_toolchain.cmake ^
          -DCMAKE_POLICY_DEFAULT_CMP0091=NEW ^
          -DBUILD_PLUGINS=OFF ^
          -DBUILD_ANISTUDIO=ON
