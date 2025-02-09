@@ -22,6 +22,8 @@ void Events::Poll() {
     // Process all pending events after polling
     ProcessEvents();
 }
+static size_t debugID = 0;
+static size_t settingsID = 0;
 
 // Handle events based on its EventType
 void Events::ProcessEvents() {
@@ -36,17 +38,36 @@ void Events::ProcessEvents() {
         }
         case EventType::OpenSettings: {
             auto &vMgr = Core.GetViewManager();
-            ViewListID settingsID = vMgr.CreateView();
-            vMgr.AddView<SettingsView>(settingsID, SettingsView(Core.GetEntityManager()));
-            vMgr.GetView<SettingsView>(settingsID).Init();
+            ViewListID id = vMgr.CreateView();
+            vMgr.AddView<SettingsView>(id, SettingsView(Core.GetEntityManager()));
+            vMgr.GetView<SettingsView>(id).Init();
+            settingsID = id;
             break;
         }
         case EventType::CloseSettings: {
             auto &vMgr = Core.GetViewManager();
             auto views = vMgr.GetAllViews();
+
+                if (vMgr.HasView<SettingsView>(settingsID)) {
+                vMgr.DestroyView(settingsID);
+                }
+            
+            break;
+        }
+        case EventType::OpenDebug: {
+            auto &vMgr = Core.GetViewManager();
+            ViewListID id = vMgr.CreateView();
+            vMgr.AddView<DebugView>(id, DebugView(Core.GetEntityManager()));
+            vMgr.GetView<DebugView>(id).Init();
+            debugID = id;
+            break;
+        }
+        case EventType::CloseDebug: {
+            auto &vMgr = Core.GetViewManager();
+            auto views = vMgr.GetAllViews();
             for (auto view : views) {
-                if (vMgr.HasView<SettingsView>(view)) {
-                    vMgr.DestroyView(view);
+                if (vMgr.HasView<DebugView>(debugID)) {
+                    vMgr.DestroyView(debugID);
                 }
             }
             break;
