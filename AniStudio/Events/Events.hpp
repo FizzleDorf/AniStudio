@@ -18,6 +18,8 @@ enum class EventType {
     OpenProject,
     OpenSettings,
     CloseSettings,
+    OpenDebug,
+    CloseDebug,
 
     // Diffusion
     InferenceRequest,

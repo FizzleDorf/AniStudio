@@ -107,11 +107,11 @@ void Engine::Init() {
     auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
 
-    auto imageViewID = viewManager.CreateView();
-    viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
+    // auto imageViewID = viewManager.CreateView();
+    viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
 
-    auto nodeGraphViewID = viewManager.CreateView();
-    viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
+    // auto nodeGraphViewID = viewManager.CreateView();
+    viewManager.AddView<NodeGraphView>(diffusionViewID, NodeGraphView(entityManager));
 
     // auto pluginViewID = viewManager.CreateView();
     // viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
@@ -130,8 +130,8 @@ void Engine::Init() {
     }*/
     // viewManager.GetView<DebugView>(debugViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
-    viewManager.GetView<ImageView>(imageViewID).Init();
-    viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
+    viewManager.GetView<ImageView>(diffusionViewID).Init();
+    viewManager.GetView<NodeGraphView>(diffusionViewID).Init();
     // viewManager.GetView<PluginView>(pluginViewID).Init();
     viewManager.GetView<ConvertView>(convertViewID).Init();
 }
