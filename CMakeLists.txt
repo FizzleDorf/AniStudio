@@ -27,7 +27,11 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
 endif()
 
 # Include Conan-generated cmake files
-include(build/generators/conan_toolchain.cmake)
+set(CONAN_TOOLCHAIN_PATH ${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
+if(NOT EXISTS ${CONAN_TOOLCHAIN_PATH})
+    message(FATAL_ERROR "Conan toolchain not found at ${CONAN_TOOLCHAIN_PATH}. Please run conan install first.")
+endif()
+include(${CONAN_TOOLCHAIN_PATH})
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
