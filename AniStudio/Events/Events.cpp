@@ -76,8 +76,8 @@ void Events::ProcessEvents() {
         case EventType::OpenViews: {
             auto &vMgr = Core.GetViewManager();
             ViewListID id = vMgr.CreateView();
-            vMgr.AddView<ViewManagerView>(id, ViewManagerView(Core.GetEntityManager(), vMgr));
-            vMgr.GetView<ViewManagerView>(id).Init();
+            vMgr.AddView<ViewListManagerView>(id, ViewListManagerView(Core.GetEntityManager(), vMgr));
+            vMgr.GetView<ViewListManagerView>(id).Init();
             viewsID = id;
             break;
         }
@@ -85,7 +85,7 @@ void Events::ProcessEvents() {
             auto &vMgr = Core.GetViewManager();
             auto views = vMgr.GetAllViews();
             for (auto view : views) {
-                if (vMgr.HasView<ViewManagerView>(viewsID)) {
+                if (vMgr.HasView<ViewListManagerView>(viewsID)) {
                     vMgr.DestroyView(viewsID);
                 }
             }

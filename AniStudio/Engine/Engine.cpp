@@ -79,8 +79,6 @@ void Engine::Init() {
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
-    
-    
 
     // Initialize core systems
     filePaths.Init();
@@ -94,6 +92,18 @@ void Engine::Init() {
     
     auto tempView = viewManager.CreateView();
     viewManager.DestroyView(tempView);
+
+    viewManager.RegisterViewType<DiffusionView>("DiffusionView");
+    viewManager.RegisterViewType<ImageView>("ImageView");
+    viewManager.RegisterViewType<DebugView>("DebugView");
+    viewManager.RegisterViewType<SettingsView>("SettingsView");
+    viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
+    viewManager.RegisterViewType<SequencerView>("SequencerView");
+    viewManager.RegisterViewType<UpscaleView>("UpscaleView");
+    viewManager.RegisterViewType<ConvertView>("ConvertView");
+    viewManager.RegisterViewType<CanvasView>("CanvasView");
+    
+    // viewManager.LoadState();
 
     // Register core systems
     entityManager.RegisterSystem<SDCPPSystem>();
