@@ -44,7 +44,12 @@ void ShowMenuBar(GLFWwindow *window) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-            // View management here
+            if (ImGui::MenuItem("View Manager", nullptr, &debugWindowOpen)) {
+                ANI::Event event;
+                event.type = debugWindowOpen ? ANI::EventType::OpenViews : ANI::EventType::CloseViews;
+                ANI::Events::Ref().QueueEvent(event);
+            }
+            ImGui::Separator();
             ImGui::Separator();
             if (ImGui::MenuItem("Debug", nullptr, &debugWindowOpen)) {
                 ANI::Event event;

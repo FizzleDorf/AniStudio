@@ -253,6 +253,8 @@ void DiffusionView::HandleT2IEvent() {
     std::cout << "Initialized entity with ID: " << newEntity << std::endl;
 
     try {
+        loraComp.modelPath = filePaths.loraDir;
+
         // Add components
         mgr.AddComponent<ModelComponent>(newEntity);
         mgr.AddComponent<CLipLComponent>(newEntity);

@@ -1,28 +1,77 @@
 import os
 import subprocess
 import sys
-import shutil
 from pathlib import Path
 
-def find_visual_studio():
-    """Find Visual Studio installation"""
-    possible_programs = [
-        os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
-        os.environ.get("ProgramFiles", r"C:\Program Files"),
+def find_vcvars():
+    """Find vcvars64.bat"""
+    program_files = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    possible_paths = [
+        Path(program_files) / "Microsoft Visual Studio" / "2022" / "Community" / "VC" / "Auxiliary" / "Build" / "vcvars64.bat",
+        Path(program_files) / "Microsoft Visual Studio" / "2022" / "Professional" / "VC" / "Auxiliary" / "Build" / "vcvars64.bat",
+        Path(program_files) / "Microsoft Visual Studio" / "2022" / "Enterprise" / "VC" / "Auxiliary" / "Build" / "vcvars64.bat",
+        Path(program_files) / "Microsoft Visual Studio" / "2022" / "BuildTools" / "VC" / "Auxiliary" / "Build" / "vcvars64.bat",
     ]
     
-    for program_files in possible_programs:
-        base_path = Path(program_files) / "Microsoft Visual Studio"
-        if base_path.exists():
-            for edition in ["Enterprise", "Professional", "Community", "BuildTools"]:
-                vs_path = base_path / "2022" / edition
-                if vs_path.exists():
-                    return vs_path
+    for path in possible_paths:
+        if path.exists():
+            return path
     return None
 
-def create_profile(profile_path):
-    """Create a Visual Studio Release profile"""
-    content = """[settings]
+def run_command(command, cwd=None, use_vcvars=False):
+    """Run a command with optional Visual Studio environment"""
+    print(f"Running: {' '.join(command)}")
+    
+    if use_vcvars:
+        vcvars_path = find_vcvars()
+        if not vcvars_path:
+            print("Error: Could not find vcvars64.bat")
+            return False
+            
+        # Create a batch file to run vcvars and then our command
+        temp_bat = Path("temp_command.bat")
+        bat_content = f'@echo off\ncall "{vcvars_path}"\n{" ".join(command)}\n'
+        
+        with open(temp_bat, "w") as f:
+            f.write(bat_content)
+        
+        try:
+            result = subprocess.run(str(temp_bat), cwd=cwd, check=True, text=True, capture_output=True)
+            print(result.stdout)
+            temp_bat.unlink()  # Clean up
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error: {e}")
+            print(f"Error output: {e.stderr}")
+            temp_bat.unlink()  # Clean up
+            return False
+    else:
+        try:
+            result = subprocess.run(command, cwd=cwd, check=True, text=True, capture_output=True)
+            print(result.stdout)
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error: {e}")
+            print(f"Error output: {e.stderr}")
+            return False
+
+def setup_conan():
+    # Add Conancenter remote
+    run_command(["conan", "remote", "add", "--force", "conancenter", "https://center.conan.io"])
+    
+    # Create default profile with VS environment
+    run_command(["conan", "profile", "detect", "--force"], use_vcvars=True)
+    
+    # Get the detected profile path
+    profiles_path = Path.home() / ".conan2" / "profiles"
+    default_profile = profiles_path / "default"
+    
+    if not default_profile.exists():
+        print("Error: Default profile was not created")
+        return False
+
+    # Create release profile
+    release_settings = """[settings]
 arch=x86_64
 build_type=Release
 compiler=msvc
@@ -31,90 +80,66 @@ compiler.runtime_type=Release
 compiler.version=193
 os=Windows
 
-[buildenv]
-CC=cl.exe
-CXX=cl.exe"""
-    
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(profile_path, 'w') as f:
-        f.write(content)
-    print(f"Created profile at: {profile_path}")
+[options]
+*:shared=False
 
-def run_command(command, cwd=None):
-    """Run a command and print its output"""
-    try:
-        print(f"Running command: {' '.join(command)}")
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            check=True,
-            text=True,
-            capture_output=True,
-            env=os.environ.copy()
-        )
-        print(result.stdout)
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing command: {' '.join(command)}")
-        print(f"Error output: {e.stderr}")
-        return False
+[conf]
+tools.microsoft.msbuild:vs_version=193"""
 
-def setup_project():
-    # Get the project root directory
-    project_root = Path.cwd()
-    build_dir = project_root / "build"
-    
-    # Create build directory if it doesn't exist
+    with open(profiles_path / "msvc_release", "w") as f:
+        f.write(release_settings)
+
+    # Create debug profile
+    debug_settings = """[settings]
+arch=x86_64
+build_type=Debug
+compiler=msvc
+compiler.runtime=dynamic
+compiler.runtime_type=Debug
+compiler.version=193
+os=Windows
+
+[options]
+*:shared=False
+
+[conf]
+tools.microsoft.msbuild:vs_version=193"""
+
+    with open(profiles_path / "msvc_debug", "w") as f:
+        f.write(debug_settings)
+
+    print("\nConan profiles created:")
+    print(f"Release profile: {profiles_path}/msvc_release")
+    print(f"Debug profile: {profiles_path}/msvc_debug")
+
+    # Clean Conan cache to ensure fresh builds
+    run_command(["conan", "cache", "clean", "*"])
+
+    # Create build directory
+    build_dir = Path.cwd() / "build"
     if build_dir.exists():
+        import shutil
         shutil.rmtree(build_dir)
     build_dir.mkdir()
-    
-    # Create temporary profiles in the project directory
-    temp_profiles_dir = project_root / "profiles"
-    temp_profiles_dir.mkdir(exist_ok=True)
-    
-    # Create Release profile
-    profile_path = temp_profiles_dir / "vs2022_release"
-    create_profile(profile_path)
-    
-    # Run conan install for Release
+
+    # Test install with release profile
+    print("\nInstalling dependencies with Release profile...")
     if not run_command([
         "conan", "install", ".",
-        f"--profile={profile_path}",
         "--output-folder=build",
-        "--build=missing",
-        "-s:b", "compiler.runtime=dynamic",
-        "-s:b", "compiler.runtime_type=Release"
-    ], project_root):
-        print("Failed to install dependencies for Release")
+        "--profile=msvc_release",
+        "--build=missing"
+    ], use_vcvars=True):
         return False
 
-    # Generate Visual Studio solution
-    if not run_command([
-        "cmake", "..",
-        "-G", "Visual Studio 17 2022",
-        "-DCMAKE_TOOLCHAIN_FILE=conan/conan_toolchain.cmake",
-        "-DCMAKE_BUILD_TYPE=Release"
-    ], build_dir):
-        print("Failed to generate Visual Studio solution")
-        return False
-    
-    # Clean up temporary profiles
-    shutil.rmtree(temp_profiles_dir)
-    
-    print("\nSetup completed successfully!")
-    print(f"\nYou can now open {build_dir}/AniStudio.sln in Visual Studio")
-    print("Release configuration is ready to use.")
     return True
 
 if __name__ == "__main__":
-    vs_path = find_visual_studio()
-    if vs_path is None:
-        print("Error: Could not find Visual Studio 2022 installation")
+    if setup_conan():
+        print("\nSetup completed successfully!")
+        print("\nYou can now use these profiles with:")
+        print("conan install . --output-folder=build --profile=msvc_release")
+        print("conan install . --output-folder=build --profile=msvc_debug")
+    else:
+        print("\nSetup failed!")
         sys.exit(1)
-    
-    print(f"Using Visual Studio at: {vs_path}")
-    
-    if not setup_project():
-        sys.exit(1)
-    sys.exit(0)

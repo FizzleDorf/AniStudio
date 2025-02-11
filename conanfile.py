@@ -3,8 +3,8 @@ from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
 from conan.tools.files import copy
 import os
 
-class MediaCreationTool(ConanFile):
-    name = "media_creation_tool"
+class AniStudio(ConanFile):
+    name = "AniStudio"
     version = "0.1.0"
     
     # Binary configuration
