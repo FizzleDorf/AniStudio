@@ -2,8 +2,7 @@
 #include "Base/BaseView.hpp"
 #include "Base/ViewManager.hpp"
 #include "imgui.h"
-#include <string>
-#include <vector>
+#include "pch.h"
 
 namespace GUI {
 
@@ -38,6 +37,13 @@ public:
                 selectedViewList = viewLists.size() - 1;
             }
 
+            if (selectedViewList >= 0 && ImGui::Button("Remove Selected")) {
+                viewManager.DestroyView(viewLists[selectedViewList]);
+                RefreshViewLists();
+                if (selectedViewList >= viewLists.size()) {
+                    selectedViewList = viewLists.empty() ? -1 : viewLists.size() - 1;
+                }
+            }
             ImGui::Separator();
 
             for (size_t i = 0; i < viewLists.size(); i++) {
@@ -73,9 +79,27 @@ public:
                     }
 
                     for (size_t i = 0; i < activeViews.size(); i++) {
-                        if (ImGui::Selectable(activeViews[i].c_str(), selectedActiveView == static_cast<int>(i))) {
-                            selectedActiveView = i;
-                            selectedInactiveView = -1;
+                        bool isSelected = selectedActiveViews.count(i) > 0;
+                        if (ImGui::Selectable(activeViews[i].c_str(), isSelected,
+                                              ImGuiSelectableFlags_AllowDoubleClick)) {
+                            if (ImGui::GetIO().KeyShift && lastSelectedActiveView != -1) {
+                                size_t start = std::min(lastSelectedActiveView, i);
+                                size_t end = std::max(lastSelectedActiveView, i);
+                                for (size_t j = start; j <= end; j++) {
+                                    selectedActiveViews.insert(j);
+                                }
+                            } else if (ImGui::GetIO().KeyCtrl) {
+                                if (isSelected) {
+                                    selectedActiveViews.erase(i);
+                                } else {
+                                    selectedActiveViews.insert(i);
+                                }
+                            } else {
+                                selectedActiveViews.clear();
+                                selectedActiveViews.insert(i);
+                            }
+                            lastSelectedActiveView = i;
+                            selectedInactiveViews.clear();
                         }
                     }
                 }
@@ -87,56 +111,59 @@ public:
 
         // Controls between lists
         if (ImGui::BeginChild("Controls", ImVec2(50, 0), false)) {
-            bool canAdd = selectedInactiveView >= 0;
-            bool canRemove = selectedActiveView >= 0;
+            bool canAdd = !selectedInactiveViews.empty();
+            bool canRemove = !selectedActiveViews.empty();
 
             ImGui::SetCursorPosY(ImGui::GetWindowHeight() * 0.4f);
 
-            if (ImGui::Button(">>", ImVec2(30, 25))) {
-                if (canAdd)
-                    AddSelectedView();
-            }
-            if (ImGui::Button(">", ImVec2(30, 25))) {
-                if (canAdd)
-                    AddSelectedView();
-            }
-            if (ImGui::Button("<", ImVec2(30, 25))) {
-                if (canRemove)
-                    RemoveSelectedView();
-            }
+            // Move all views to active
             if (ImGui::Button("<<", ImVec2(30, 25))) {
-                if (canRemove)
-                    RemoveSelectedView();
+                MoveAllToActive();
+            }
+
+            // Move selected views to active
+            if (ImGui::Button("<", ImVec2(30, 25))) {
+                if (canAdd) {
+                    MoveSelectedToActive();
+                }
+            }
+
+            // Move selected views to inactive
+            if (ImGui::Button(">", ImVec2(30, 25))) {
+                if (canRemove) {
+                    MoveSelectedToInactive();
+                }
+            }
+
+            // Move all views to inactive
+            if (ImGui::Button(">>", ImVec2(30, 25))) {
+                MoveAllToInactive();
             }
         }
         ImGui::EndChild();
 
         ImGui::SameLine();
 
-        // Right column: Available views to add
+        // Right column: Available views
         if (ImGui::BeginChild("Available Views", ImVec2(200, 0), true)) {
             ImGui::Text("Available Views");
             ImGui::Separator();
 
-            if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
-                ViewListID currentList = viewLists[selectedViewList];
-                const auto &signatures = viewManager.GetViewSignatures();
-                auto it = signatures.find(currentList);
-
-                if (it != signatures.end()) {
-                    std::vector<std::string> availableViews;
-                    for (const auto &[name, typeId] : viewManager.GetRegisteredViews()) {
-                        if (it->second->count(typeId) == 0) {
-                            availableViews.push_back(name);
+            auto availableViews = GetAvailableViews();
+            for (size_t i = 0; i < availableViews.size(); i++) {
+                bool isSelected = selectedInactiveViews.count(i) > 0;
+                if (ImGui::Selectable(availableViews[i].c_str(), isSelected, ImGuiSelectableFlags_AllowDoubleClick)) {
+                    if (ImGui::GetIO().KeyCtrl) {
+                        if (isSelected) {
+                            selectedInactiveViews.erase(i);
+                        } else {
+                            selectedInactiveViews.insert(i);
                         }
+                    } else {
+                        selectedInactiveViews.clear();
+                        selectedInactiveViews.insert(i);
                     }
-
-                    for (size_t i = 0; i < availableViews.size(); i++) {
-                        if (ImGui::Selectable(availableViews[i].c_str(), selectedInactiveView == static_cast<int>(i))) {
-                            selectedInactiveView = i;
-                            selectedActiveView = -1;
-                        }
-                    }
+                    selectedActiveViews.clear();
                 }
             }
         }
@@ -146,11 +173,10 @@ public:
     }
 
 private:
-    void AddSelectedView() {
-        if (selectedViewList >= 0 && selectedViewList < viewLists.size() && selectedInactiveView >= 0) {
+    std::vector<std::string> GetAvailableViews() {
+        std::vector<std::string> availableViews;
+        if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
             ViewListID currentList = viewLists[selectedViewList];
-
-            std::vector<std::string> availableViews;
             const auto &signatures = viewManager.GetViewSignatures();
             auto it = signatures.find(currentList);
 
@@ -160,22 +186,15 @@ private:
                         availableViews.push_back(name);
                     }
                 }
-
-                if (selectedInactiveView < availableViews.size()) {
-                    std::string viewName = availableViews[selectedInactiveView];
-                    ViewTypeID typeId = viewManager.GetViewType(viewName);
-                    viewManager.AddViewByType(currentList, typeId);
-                    selectedInactiveView = -1;
-                }
             }
         }
+        return availableViews;
     }
 
-    void RemoveSelectedView() {
-        if (selectedViewList >= 0 && selectedViewList < viewLists.size() && selectedActiveView >= 0) {
+    std::vector<std::string> GetActiveViews() {
+        std::vector<std::string> activeViews;
+        if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
             ViewListID currentList = viewLists[selectedViewList];
-
-            std::vector<std::string> activeViews;
             const auto &signatures = viewManager.GetViewSignatures();
             auto it = signatures.find(currentList);
 
@@ -185,23 +204,75 @@ private:
                         activeViews.push_back(name);
                     }
                 }
+            }
+        }
+        return activeViews;
+    }
 
-                if (selectedActiveView < activeViews.size()) {
-                    std::string viewName = activeViews[selectedActiveView];
-                    ViewTypeID typeId = viewManager.GetViewType(viewName);
-                    viewManager.RemoveViewByType(currentList, typeId);
-                    selectedActiveView = -1;
+    void MoveSelectedToActive() {
+        if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
+            auto availableViews = GetAvailableViews();
+            for (size_t index : selectedInactiveViews) {
+                if (index < availableViews.size()) {
+                    ViewTypeID typeId = viewManager.GetViewType(availableViews[index]);
+                    viewManager.AddViewByType(viewLists[selectedViewList], typeId);
                 }
             }
+            selectedInactiveViews.clear();
+            RefreshViewLists(); // Refresh the UI after changes
+        }
+    }
+
+    void MoveSelectedToInactive() {
+        if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
+            auto activeViews = GetActiveViews();
+            for (size_t index : selectedActiveViews) {
+                if (index < activeViews.size()) {
+                    ViewTypeID typeId = viewManager.GetViewType(activeViews[index]);
+                    viewManager.RemoveViewByType(viewLists[selectedViewList], typeId);
+                }
+            }
+            selectedActiveViews.clear();
+            RefreshViewLists(); // Refresh the UI after changes
+        }
+    }
+
+    void MoveAllToActive() {
+        if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
+            auto availableViews = GetAvailableViews();
+            for (const auto &viewName : availableViews) {
+                ViewTypeID typeId = viewManager.GetViewType(viewName);
+                viewManager.AddViewByType(viewLists[selectedViewList], typeId);
+            }
+            selectedInactiveViews.clear();
+            selectedActiveViews.clear();
+            RefreshViewLists(); // Refresh the UI after changes
+        }
+    }
+
+    void MoveAllToInactive() {
+        if (selectedViewList >= 0 && selectedViewList < viewLists.size()) {
+            auto activeViews = GetActiveViews();
+            for (const auto &viewName : activeViews) {
+                ViewTypeID typeId = viewManager.GetViewType(viewName);
+                viewManager.RemoveViewByType(viewLists[selectedViewList], typeId);
+            }
+            selectedInactiveViews.clear();
+            selectedActiveViews.clear();
+            RefreshViewLists(); // Refresh the UI after changes
         }
     }
 
 private:
     ViewManager &viewManager;
     std::vector<ViewListID> viewLists;
-    int selectedViewList;
-    int selectedActiveView;
-    int selectedInactiveView;
+    size_t selectedViewList;
+    size_t selectedActiveView;
+    size_t selectedInactiveView;
+    size_t lastSelectedActiveView = -1;
+    size_t lastSelectedInactiveView = -1;
+    std::unordered_set<size_t> selectedActiveViews;
+    std::unordered_set<size_t> selectedInactiveViews;
 };
 
 } // namespace GUI

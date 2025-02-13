@@ -23,6 +23,7 @@
 #include <thread>
 #include <filesystem>
 #include <condition_variable>
+#include <unordered_set>
 
 // JSON
 #include <nlohmann/json.hpp>
