@@ -3,7 +3,8 @@
 
 namespace GUI {
 
-CanvasView::CanvasView() : zoom(1.0f), offsetX(0.0f), offsetY(0.0f), currentHistoryIndex(0) {
+CanvasView::CanvasView(ECS::EntityManager &manager)
+    : BaseView(manager), zoom(1.0f), offsetX(0.0f), offsetY(0.0f), currentHistoryIndex(0) {
     InitializeCanvas(1024, 1024);
 }
 

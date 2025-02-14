@@ -2,6 +2,9 @@
 #include "../Events/Events.hpp"
 
 namespace GUI {
+static bool settingsWindowOpen = false;
+static bool debugWindowOpen = false;
+
 void ShowMenuBar(GLFWwindow *window) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -24,13 +27,14 @@ void ShowMenuBar(GLFWwindow *window) {
             };
             ImGui::EndMenu();
         }
+        
         if (ImGui::BeginMenu("Edit")) {
             ImGui::MenuItem("Undo");
             ImGui::MenuItem("Redo");
             ImGui::Separator();
-            if (ImGui::MenuItem("Settings")) {
+            if (ImGui::MenuItem("Settings", nullptr, &settingsWindowOpen)) {
                 ANI::Event event;
-                event.type = ANI::EventType::OpenSettings;
+                event.type = settingsWindowOpen ? ANI::EventType::OpenSettings : ANI::EventType::CloseSettings;
                 ANI::Events::Ref().QueueEvent(event);
             }
             ImGui::EndMenu();
@@ -40,7 +44,18 @@ void ShowMenuBar(GLFWwindow *window) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-
+            if (ImGui::MenuItem("View Manager", nullptr, &debugWindowOpen)) {
+                ANI::Event event;
+                event.type = debugWindowOpen ? ANI::EventType::OpenViews : ANI::EventType::CloseViews;
+                ANI::Events::Ref().QueueEvent(event);
+            }
+            ImGui::Separator();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Debug", nullptr, &debugWindowOpen)) {
+                ANI::Event event;
+                event.type = debugWindowOpen ? ANI::EventType::OpenDebug : ANI::EventType::CloseDebug;
+                ANI::Events::Ref().QueueEvent(event);
+            }
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();

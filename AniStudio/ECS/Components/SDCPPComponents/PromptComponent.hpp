@@ -17,6 +17,10 @@ struct PromptComponent : public BaseComponent {
         if (this != &other) {
             posPrompt = other.posPrompt;
             negPrompt = other.negPrompt;
+            strncpy(PosBuffer, posPrompt.c_str(), sizeof(PosBuffer) - 1);
+            strncpy(NegBuffer, negPrompt.c_str(), sizeof(NegBuffer) - 1);
+            PosBuffer[sizeof(PosBuffer) - 1] = '\0'; // Ensure null termination
+            NegBuffer[sizeof(NegBuffer) - 1] = '\0'; // Ensure null termination
         }
         return *this;
     }
@@ -27,22 +31,21 @@ struct PromptComponent : public BaseComponent {
                   {"negPrompt", negPrompt}}}};
     }
 
-    static PromptComponent Deserialize(const nlohmann::json &json) {
+    void Deserialize(const nlohmann::json &json) {
         if (!json.contains("PromptComponent")) {
             throw std::runtime_error("Invalid JSON structure for deserialization");
         }
-
         const auto &componentData = json.at("PromptComponent");
-        PromptComponent component;
-
         if (componentData.contains("posPrompt")) {
-            component.posPrompt = componentData.at("posPrompt").get<std::string>();
+            posPrompt = componentData.at("posPrompt").get<std::string>();
+            strncpy(PosBuffer, posPrompt.c_str(), sizeof(PosBuffer) - 1);
+            PosBuffer[sizeof(PosBuffer) - 1] = '\0'; // Ensure null termination
         }
         if (componentData.contains("negPrompt")) {
-            component.negPrompt = componentData.at("negPrompt").get<std::string>();
+            negPrompt = componentData.at("negPrompt").get<std::string>();
+            strncpy(NegBuffer, negPrompt.c_str(), sizeof(NegBuffer) - 1);
+            NegBuffer[sizeof(NegBuffer) - 1] = '\0'; // Ensure null termination
         }
-
-        return component;
     }
 };
 }

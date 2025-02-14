@@ -41,9 +41,10 @@ public:
     void RenderVaeOptions();
     void HandleT2IEvent();
     void HandleUpscaleEvent();
-
-    void PrepareNewEntity();
-    void CopyNewEntity(const EntityID oldEntity);
+    void SaveMetadataToJson(const std::string &filepath);
+    void LoadMetadataFromJson(const std::string &filepath);
+    void LoadMetadataFromExif(const std::string &imagePath);
+    void RenderMetadataControls();
 
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);

@@ -79,8 +79,6 @@ void Engine::Init() {
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
-    
-    
 
     // Initialize core systems
     filePaths.Init();
@@ -95,26 +93,38 @@ void Engine::Init() {
     auto tempView = viewManager.CreateView();
     viewManager.DestroyView(tempView);
 
+    viewManager.RegisterViewType<DiffusionView>("DiffusionView");
+    viewManager.RegisterViewType<ImageView>("ImageView");
+    viewManager.RegisterViewType<DebugView>("DebugView");
+    viewManager.RegisterViewType<SettingsView>("SettingsView");
+    viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
+    viewManager.RegisterViewType<SequencerView>("SequencerView");
+    viewManager.RegisterViewType<UpscaleView>("UpscaleView");
+    viewManager.RegisterViewType<ConvertView>("ConvertView");
+    viewManager.RegisterViewType<CanvasView>("CanvasView");
+    
+    // viewManager.LoadState();
+
     // Register core systems
     entityManager.RegisterSystem<SDCPPSystem>();
     entityManager.RegisterSystem<ImageSystem>();
     // entityManager.RegisterSystem<NodegraphSystem>();
 
     // Create core views
-    auto debugViewID = viewManager.CreateView();
-    viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
+    // auto debugViewID = viewManager.CreateView();
+    // viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
 
     auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
 
-    auto imageViewID = viewManager.CreateView();
-    viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
+    // auto imageViewID = viewManager.CreateView();
+    viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
 
-    auto nodeGraphViewID = viewManager.CreateView();
-    viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
+    // auto nodeGraphViewID = viewManager.CreateView();
+    viewManager.AddView<NodeGraphView>(diffusionViewID, NodeGraphView(entityManager));
 
-    auto pluginViewID = viewManager.CreateView();
-    viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
+    // auto pluginViewID = viewManager.CreateView();
+    // viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
     auto convertViewID = viewManager.CreateView();
     viewManager.AddView<ConvertView>(convertViewID, ConvertView(entityManager));
@@ -128,14 +138,12 @@ void Engine::Init() {
     
     
     }*/
-    viewManager.GetView<DebugView>(debugViewID).Init();
+    // viewManager.GetView<DebugView>(debugViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
-    viewManager.GetView<ImageView>(imageViewID).Init();
-    viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
-    viewManager.GetView<PluginView>(pluginViewID).Init();
+    viewManager.GetView<ImageView>(diffusionViewID).Init();
+    viewManager.GetView<NodeGraphView>(diffusionViewID).Init();
+    // viewManager.GetView<PluginView>(pluginViewID).Init();
     viewManager.GetView<ConvertView>(convertViewID).Init();
-    // viewManager.GetView<SettingsView>(settingsViewID).Init();
-
 }
 
 void Engine::Update(const float deltaT) {

@@ -1,6 +1,8 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
 #include "Constants.hpp"
+#define NOMINMAX
+#include <exiv2/exiv2.hpp>
 
 using namespace ECS;
 using namespace ANI;
@@ -36,7 +38,6 @@ void DiffusionView::RenderModelLoader() {
         ImGui::Text("%s", modelComp.modelName.c_str());
 
         RenderVaeLoader();
-
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
@@ -137,7 +138,7 @@ void DiffusionView::RenderFilePath() {
 }
 
 void DiffusionView::RenderLatents() {
-    
+
     ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
 
     if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
@@ -147,12 +148,12 @@ void DiffusionView::RenderLatents() {
         ImGui::TableNextColumn();
         ImGui::Text("Width");
         ImGui::TableNextColumn();
-        ImGui::InputInt("##Width", &latentComp.latentWidth,8,8);
+        ImGui::InputInt("##Width", &latentComp.latentWidth, 8, 8);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Height");
         ImGui::TableNextColumn();
-        ImGui::InputInt("##Height", &latentComp.latentHeight,8,8);
+        ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Height");
@@ -160,7 +161,7 @@ void DiffusionView::RenderLatents() {
         ImGui::InputInt("##Batch Size", &latentComp.batchSize);
         ImGui::EndTable();
     }
-    }
+}
 
 void DiffusionView::RenderInputImage() {
     ImGui::Text("Image input placeholder"); // Adjust to render the actual image component if needed
@@ -253,6 +254,8 @@ void DiffusionView::HandleT2IEvent() {
     std::cout << "Initialized entity with ID: " << newEntity << std::endl;
 
     try {
+        loraComp.modelPath = filePaths.loraDir;
+
         // Add components
         mgr.AddComponent<ModelComponent>(newEntity);
         mgr.AddComponent<CLipLComponent>(newEntity);
@@ -633,7 +636,6 @@ void DiffusionView::RenderVaeOptions() {
     }
 }
 
-
 void DiffusionView::RenderQueueList() {
     ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Queue")) {
@@ -732,12 +734,16 @@ void DiffusionView::RenderQueueList() {
 }
 
 void DiffusionView::Render() {
+
+    // Queue Controls (detached from the options)
+    RenderQueueList();
+
     ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Image Generation")) {
-        
-        // Queue Controls (detached from the options)
-        RenderQueueList();
 
+        if (ImGui::CollapsingHeader("Metadata Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            RenderMetadataControls();
+        }
         if (ImGui::BeginTabBar("Image")) {
             if (ImGui::BeginTabItem("Txt2Img")) {
                 // Output FileName
@@ -787,7 +793,7 @@ void DiffusionView::Render() {
             }
 
             if (ImGui::BeginTabItem("Img2Img")) {
-                
+
                 // Output FileName
                 if (ImGui::CollapsingHeader("Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
                     RenderFilePath();
@@ -856,6 +862,7 @@ nlohmann::json DiffusionView::Serialize() const {
     j["embedComp"] = embedComp.Serialize();
     j["controlComp"] = controlComp.Serialize();
     j["layerSkipComp"] = layerSkipComp.Serialize();
+    return j;
 }
 
 void DiffusionView::Deserialize(const nlohmann::json &j) {
@@ -892,4 +899,98 @@ void DiffusionView::Deserialize(const nlohmann::json &j) {
         layerSkipComp.Deserialize(j["layerSkipComp"]);
 }
 
+void DiffusionView::SaveMetadataToJson(const std::string &filepath) {
+    try {
+        nlohmann::json metadata = Serialize();
+        std::ofstream file(filepath);
+        if (file.is_open()) {
+            file << metadata.dump(4);
+            file.close();
+            std::cout << "Metadata saved to: " << filepath << std::endl;
+        } else {
+            std::cerr << "Failed to open file for writing: " << filepath << std::endl;
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "Error saving metadata: " << e.what() << std::endl;
+    }
+}
+
+void DiffusionView::LoadMetadataFromJson(const std::string &filepath) {
+    try {
+        std::ifstream file(filepath);
+        if (file.is_open()) {
+            nlohmann::json metadata;
+            file >> metadata;
+            Deserialize(metadata);
+            file.close();
+            std::cout << "Metadata loaded from: " << filepath << std::endl;
+        } else {
+            std::cerr << "Failed to open file for reading: " << filepath << std::endl;
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "Error loading metadata: " << e.what() << std::endl;
+    }
+}
+
+void DiffusionView::LoadMetadataFromExif(const std::string &imagePath) {
+    try {
+        auto image = Exiv2::ImageFactory::open(imagePath);
+        if (image.get() != nullptr) {
+            image->readMetadata();
+            Exiv2::ExifData &exifData = image->exifData();
+
+            // Look for our metadata in the UserComment tag
+            auto it = exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
+            if (it != exifData.end()) {
+                std::string jsonStr = it->toString();
+                if (!jsonStr.empty()) {
+                    nlohmann::json metadata = nlohmann::json::parse(jsonStr);
+                    Deserialize(metadata);
+                    std::cout << "Metadata loaded from image EXIF: " << imagePath << std::endl;
+                }
+            }
+        }
+    } catch (const std::exception &e) {
+        std::cerr << "Error loading EXIF metadata: " << e.what() << std::endl;
+    }
+}
+
+void DiffusionView::RenderMetadataControls() {
+
+    if (ImGui::Button("Save Metadata", ImVec2(-FLT_MIN, 0))) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.defaultProjectPath;
+        ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Metadata", ".json", config);
+    }
+
+    if (ImGui::Button("Load Metadata", ImVec2(-FLT_MIN, 0))) {
+        IGFD::FileDialogConfig config;
+        config.path = filePaths.defaultProjectPath;
+        ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Metadata", ".json,.png,.jpg,.jpeg", config);
+    }
+
+    // Handle Save Dialog
+    if (ImGuiFileDialog::Instance()->Display("SaveMetadataDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+            SaveMetadataToJson(filepath);
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+
+    // Handle Load Dialog
+    if (ImGuiFileDialog::Instance()->Display("LoadMetadataDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+            std::string extension = std::filesystem::path(filepath).extension().string();
+
+            if (extension == ".json") {
+                LoadMetadataFromJson(filepath);
+            } else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg") {
+                LoadMetadataFromExif(filepath);
+            }
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+}
 } // namespace GUI
