@@ -2,6 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include "stable-diffusion.h"
+#include "Constants.hpp"
 #include <string>
 
 namespace ECS {
@@ -32,6 +33,43 @@ struct SamplerComponent : public ECS::BaseComponent {
         }
         return *this;
     }
+
+    nlohmann::json Serialize() const override {
+        return {{"Base_Component",
+                 {{"seed", seed},
+                  {"steps", steps},
+                  {"denoise", denoise},
+                  {"n_threads", n_threads},
+                  {"free_params_immediately", free_params_immediately},
+                  {"current_sample_method", static_cast<int>(current_sample_method)},
+                  {"current_scheduler_method", static_cast<int>(current_scheduler_method)},
+                  {"current_type_method", static_cast<int>(current_type_method)},
+                  {"current_rng_type", static_cast<int>(current_rng_type)}}}};
+    }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains("Base_Component")) {
+            const auto &obj = j.at("Base_Component");
+            if (obj.contains("seed"))
+                seed = obj["seed"];
+            if (obj.contains("steps"))
+                steps = obj["steps"];
+            if (obj.contains("denoise"))
+                denoise = obj["denoise"];
+            if (obj.contains("n_threads"))
+                n_threads = obj["n_threads"];
+            if (obj.contains("free_params_immediately"))
+                free_params_immediately = obj["free_params_immediately"];
+            if (obj.contains("current_sample_method"))
+                current_sample_method = static_cast<sample_method_t>(obj["current_sample_method"]);
+            if (obj.contains("current_scheduler_method"))
+                current_scheduler_method = static_cast<schedule_t>(obj["current_scheduler_method"]);
+            if (obj.contains("current_type_method"))
+                current_type_method = static_cast<sd_type_t>(obj["current_type_method"]);
+            if (obj.contains("current_rng_type"))
+                current_rng_type = static_cast<rng_type_t>(obj["current_rng_type"]);
+        }
+    }
 };
 
 struct CFGComponent : public ECS::BaseComponent {
@@ -44,6 +82,18 @@ struct CFGComponent : public ECS::BaseComponent {
             guidance = other.guidance;
         }
         return *this;
+    }
+
+    nlohmann::json Serialize() const override { return {{"Base_Component", {{"cfg", cfg}, {"guidance", guidance}}}}; }
+
+    void Deserialize(const nlohmann::json &j) override {
+        if (j.contains("Base_Component")) {
+            const auto &obj = j.at("Base_Component");
+            if (obj.contains("cfg"))
+                cfg = obj["cfg"];
+            if (obj.contains("guidance"))
+                guidance = obj["guidance"];
+        }
     }
 };
 

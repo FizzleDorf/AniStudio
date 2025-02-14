@@ -20,6 +20,8 @@ enum class EventType {
     CloseSettings,
     OpenDebug,
     CloseDebug,
+    OpenViews,
+    CloseViews,
 
     // Diffusion
     InferenceRequest,

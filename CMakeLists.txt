@@ -26,12 +26,62 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
     set(CMAKE_SIZEOF_VOID_P 4) # Ensure 32-bit
 endif()
 
-# Include Conan-generated cmake files
-set(CONAN_TOOLCHAIN_PATH ${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
-if(NOT EXISTS ${CONAN_TOOLCHAIN_PATH})
-    message(FATAL_ERROR "Conan toolchain not found at ${CONAN_TOOLCHAIN_PATH}. Please run conan install first.")
+if (WIN32)
+    add_definitions(-DNOMINMAX)
 endif()
-include(${CONAN_TOOLCHAIN_PATH})
+
+# Get Conan dependencies
+include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
+if(NOT CONAN_TOOLCHAIN)
+    message(STATUS "Conan toolchain not found, installing dependencies...")
+    
+    # First, check if Conan is available
+    execute_process(
+        COMMAND conan --version
+        RESULT_VARIABLE CONAN_CHECK
+        OUTPUT_VARIABLE CONAN_VERSION
+        ERROR_VARIABLE CONAN_ERROR
+    )
+    
+    if(NOT CONAN_CHECK EQUAL 0)
+        message(FATAL_ERROR 
+            "Conan is not available. Please install it with:\n"
+            "pip install conan\n"
+            "Error: ${CONAN_ERROR}"
+        )
+    endif()
+    
+    message(STATUS "Found Conan: ${CONAN_VERSION}")
+    
+    # Run Conan install with detailed output
+    execute_process(
+        COMMAND conan install "${CMAKE_SOURCE_DIR}" 
+                --output-folder="${CMAKE_BINARY_DIR}" 
+                --build=missing
+        RESULT_VARIABLE CONAN_RESULT
+        OUTPUT_VARIABLE CONAN_OUTPUT
+        ERROR_VARIABLE CONAN_ERROR
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+    
+    if(NOT CONAN_RESULT EQUAL 0)
+        message(FATAL_ERROR 
+            "Failed to install Conan dependencies\n"
+            "Output: ${CONAN_OUTPUT}\n"
+            "Error: ${CONAN_ERROR}"
+        )
+    endif()
+    
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake")
+        message(FATAL_ERROR 
+            "Conan install succeeded but toolchain file not found.\n"
+            "Expected: ${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake\n"
+            "Conan output: ${CONAN_OUTPUT}"
+        )
+    endif()
+    
+    include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
+endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
@@ -45,6 +95,7 @@ if(BUILD_ANISTUDIO)
     find_package(glfw3 REQUIRED)
     find_package(ZLIB REQUIRED)
     find_package(PNG REQUIRED)
+    find_package(exiv2 CONFIG REQUIRED)
 
     # Set PCH file
     set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -99,7 +150,6 @@ if(BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         AniStudio/main.cpp
         AniStudio/pch.cpp
-        AniStudio/TypesImpl.cpp
         AniStudio/Engine/Engine.cpp
         AniStudio/Events/Events.cpp
         AniStudio/Timer/Timer.cpp
@@ -126,6 +176,7 @@ if(BUILD_ANISTUDIO)
         ZLIB::ZLIB
         PNG::PNG
         Vulkan::Vulkan
+        exiv2::exiv2
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})

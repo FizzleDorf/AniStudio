@@ -11,3 +11,4 @@
 #include "DebugView.hpp"
 #include "PluginView.hpp"
 #include "ConvertView.hpp"
+#include "ViewListManagerView.hpp"

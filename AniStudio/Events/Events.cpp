@@ -24,6 +24,7 @@ void Events::Poll() {
 }
 static size_t debugID = 0;
 static size_t settingsID = 0;
+static size_t viewsID = 0;
 
 // Handle events based on its EventType
 void Events::ProcessEvents() {
@@ -68,6 +69,24 @@ void Events::ProcessEvents() {
             for (auto view : views) {
                 if (vMgr.HasView<DebugView>(debugID)) {
                     vMgr.DestroyView(debugID);
+                }
+            }
+            break;
+        }
+        case EventType::OpenViews: {
+            auto &vMgr = Core.GetViewManager();
+            ViewListID id = vMgr.CreateView();
+            vMgr.AddView<ViewListManagerView>(id, ViewListManagerView(Core.GetEntityManager(), vMgr));
+            vMgr.GetView<ViewListManagerView>(id).Init();
+            viewsID = id;
+            break;
+        }
+        case EventType::CloseViews: {
+            auto &vMgr = Core.GetViewManager();
+            auto views = vMgr.GetAllViews();
+            for (auto view : views) {
+                if (vMgr.HasView<ViewListManagerView>(viewsID)) {
+                    vMgr.DestroyView(viewsID);
                 }
             }
             break;

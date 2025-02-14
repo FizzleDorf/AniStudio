@@ -3,8 +3,8 @@ from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
 from conan.tools.files import copy
 import os
 
-class MediaCreationTool(ConanFile):
-    name = "media_creation_tool"
+class AniStudio(ConanFile):
+    name = "AniStudio"
     version = "0.1.0"
     
     # Binary configuration
@@ -32,7 +32,8 @@ class MediaCreationTool(ConanFile):
         self.requires("glew/2.1.0")
         self.requires("zlib/1.2.11")
         self.requires("libpng/1.6.44")
-        
+        self.requires("exiv2/0.28.1")
+
         # Platform-specific OpenGL requirements
         if self.settings.os == "Windows":
             self.requires("opengl/system")

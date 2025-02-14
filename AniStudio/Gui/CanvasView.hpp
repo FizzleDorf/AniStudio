@@ -4,9 +4,9 @@
 #include <opencv2/opencv.hpp>
 #include <vector>
 namespace GUI {
-class CanvasView {
+class CanvasView : public BaseView {
 public:
-    CanvasView();
+    CanvasView(ECS::EntityManager &manager);
     ~CanvasView();
 
     // Initialize a white canvas of size 1024x1024

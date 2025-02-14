@@ -1,5 +1,4 @@
 #pragma once
-#include "DLLDefines.hpp"
 #include <set>
 
 namespace ECS {
