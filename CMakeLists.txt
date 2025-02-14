@@ -26,6 +26,10 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
     set(CMAKE_SIZEOF_VOID_P 4) # Ensure 32-bit
 endif()
 
+if (WIN32)
+    add_definitions(-DNOMINMAX)
+endif()
+
 # Get Conan dependencies
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
@@ -91,6 +95,7 @@ if(BUILD_ANISTUDIO)
     find_package(glfw3 REQUIRED)
     find_package(ZLIB REQUIRED)
     find_package(PNG REQUIRED)
+    find_package(exiv2 CONFIG REQUIRED)
 
     # Set PCH file
     set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -171,6 +176,7 @@ if(BUILD_ANISTUDIO)
         ZLIB::ZLIB
         PNG::PNG
         Vulkan::Vulkan
+        exiv2::exiv2
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
