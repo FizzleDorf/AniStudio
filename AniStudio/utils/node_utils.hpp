@@ -9,8 +9,6 @@ namespace Utilities {
 // Layout helpers specifically for node editor
 inline void Spring(float weight = 1.0f) {
     auto &style = ed::GetStyle();
-    ImGui::ItemSize(ImVec2(0, 0));
-    ImGui::SameLine();
     ImGui::Dummy(ImVec2(weight * style.NodePadding.x, 0));
     ImGui::SameLine();
 }
