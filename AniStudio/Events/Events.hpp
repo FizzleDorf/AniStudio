@@ -29,8 +29,13 @@ enum class EventType {
     I2IInferenceRequest,
     T2VInferenceRequest,
     ConvertToGGUF,
-    Interrupt,
     
+    // Queue Controls
+    ClearInferenceQueue,
+    PauseInference,
+    ResumeInference,
+    StopCurrentTask,
+
     // IO Events
     LoadImageEvent,
     SaveImageEvent,
