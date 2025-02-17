@@ -127,15 +127,34 @@ void Events::ProcessEvents() {
             }
             break;
         }
-        case EventType::Interrupt: {
-            std::cout << "Handling Interrupt event for SDCPPSystem" << '\n';
-
+        case EventType::PauseInference: {
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
-                std::cout << "SDCPPSystem is registered." << std::endl;
-                sdcppSystem->StopWorker();
-            } else {
-                std::cerr << "SDCPPSystem is not registered." << std::endl;
+                sdcppSystem->PauseWorker();
+            }
+            break;
+        }
+
+        case EventType::ResumeInference: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                sdcppSystem->ResumeWorker();
+            }
+            break;
+        }
+
+        case EventType::StopCurrentTask: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                sdcppSystem->StopCurrentTask();
+            }
+            break;
+        }
+
+        case EventType::ClearInferenceQueue: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                sdcppSystem->ClearQueue();
             }
             break;
         }

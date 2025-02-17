@@ -28,7 +28,6 @@ static void LogCallback(sd_log_level_t level, const char *text, void *data) {
 }
 static ProgressData progressData;
 static void ProgressCallback(int step, int steps, float time, void *data) {
-    // Cast the data pointer back to DiffusionView*
     progressData.currentStep = step;
     progressData.totalSteps = steps;
     progressData.currentTime = time;
@@ -41,7 +40,7 @@ namespace GUI {
 DiffusionView::DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) {
     viewName = "DiffusionView";
     sd_set_log_callback(LogCallback, nullptr);
-    sd_set_progress_callback(ProgressCallback, nullptr); // Pass 'this' pointer to the callback
+    sd_set_progress_callback(ProgressCallback, nullptr);
 }
 
 void DiffusionView::RenderModelLoader() {
@@ -704,14 +703,33 @@ void DiffusionView::RenderQueueList() {
                     // seedControl->activate();
                 }
             }
-            if (ImGui::Button("Stop Current")) {
-            }
-            if (ImGui::Button("Clear")) {
-            }
             if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
                 if (numQueues < 1) {
                     numQueues = 1;
                 }
+            }
+            if (ImGui::Button("Pause")) {
+                Event event;
+                event.type = EventType::PauseInference;
+                ANI::Events::Ref().QueueEvent(event);
+            }
+
+            if (ImGui::Button("Resume")) {
+                Event event;
+                event.type = EventType::ResumeInference;
+                ANI::Events::Ref().QueueEvent(event);
+            }
+
+            if (ImGui::Button("Stop Current")) {
+                Event event;
+                event.type = EventType::StopCurrentTask;
+                ANI::Events::Ref().QueueEvent(event);
+            }
+
+            if (ImGui::Button("Clear Queue")) {
+                Event event;
+                event.type = EventType::ClearInferenceQueue;
+                ANI::Events::Ref().QueueEvent(event);
             }
             ImGui::EndTable();
         }
