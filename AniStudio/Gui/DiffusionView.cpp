@@ -7,7 +7,42 @@
 using namespace ECS;
 using namespace ANI;
 
+static void LogCallback(sd_log_level_t level, const char *text, void *data) {
+    switch (level) {
+    case SD_LOG_DEBUG:
+        std::cout << "[DEBUG]: " << text;
+        break;
+    case SD_LOG_INFO:
+        std::cout << "[INFO]: " << text;
+        break;
+    case SD_LOG_WARN:
+        std::cout << "[WARNING]: " << text;
+        break;
+    case SD_LOG_ERROR:
+        std::cerr << "[ERROR]: " << text;
+        break;
+    default:
+        std::cerr << "[UNKNOWN LOG LEVEL]: " << text;
+        break;
+    }
+}
+static ProgressData progressData;
+static void ProgressCallback(int step, int steps, float time, void *data) {
+    // Cast the data pointer back to DiffusionView*
+    progressData.currentStep = step;
+    progressData.totalSteps = steps;
+    progressData.currentTime = time;
+    progressData.isProcessing = (steps > 0);
+    std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
+}
+
 namespace GUI {
+
+DiffusionView::DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) {
+    viewName = "DiffusionView";
+    sd_set_log_callback(LogCallback, nullptr);
+    sd_set_progress_callback(ProgressCallback, nullptr); // Pass 'this' pointer to the callback
+}
 
 void DiffusionView::RenderModelLoader() {
 
@@ -637,8 +672,29 @@ void DiffusionView::RenderVaeOptions() {
 }
 
 void DiffusionView::RenderQueueList() {
+
     ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Queue")) {
+
+        // Get current progress values
+        int currentStep = progressData.currentStep;
+        int totalSteps = progressData.totalSteps;
+        float time = progressData.currentTime;
+        bool isProcessing = progressData.isProcessing;
+
+        if (isProcessing && totalSteps > 0) {
+            float progress = static_cast<float>(currentStep) / totalSteps;
+            std::ostringstream ss;
+            ss << "Processing: " << currentStep << "/" << totalSteps << " steps (" << std::fixed << std::setprecision(1)
+               << time << "s)";
+            ImGui::Text("%s", ss.str().c_str());
+            ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0));
+        } else {
+            ImGui::Text("Waiting...");
+            ImGui::ProgressBar(0.0f, ImVec2(-FLT_MIN, 0));
+        }
+        ImGui::Separator();
+
         if (ImGui::BeginTable("QueueTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();

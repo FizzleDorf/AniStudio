@@ -10,30 +10,6 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
-static void LogCallback(sd_log_level_t level, const char *text, void *data) {
-    switch (level) {
-    case SD_LOG_DEBUG:
-        std::cout << "[DEBUG]: " << text;
-        break;
-    case SD_LOG_INFO:
-        std::cout << "[INFO]: " << text;
-        break;
-    case SD_LOG_WARN:
-        std::cout << "[WARNING]: " << text;
-        break;
-    case SD_LOG_ERROR:
-        std::cerr << "[ERROR]: " << text;
-        break;
-    default:
-        std::cerr << "[UNKNOWN LOG LEVEL]: " << text;
-        break;
-    }
-}
-
-static void ProgressCallback(int step, int steps, float time, void *data) {
-    std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
-}
-
 namespace ECS {
 
 class SDCPPSystem : public BaseSystem {
@@ -206,9 +182,6 @@ private:
         try {
             std::cout << "Starting inference for Entity " << item.entityID << std::endl;
 
-            sd_set_log_callback(LogCallback, nullptr);
-            sd_set_progress_callback(ProgressCallback, nullptr);
-
             sd_context = InitializeStableDiffusionContext(item.entityID);
             if (!sd_context)
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
@@ -256,7 +229,6 @@ private:
                               std::string(type_method_items[type]) + ".gguf";
 
         try {
-            sd_set_log_callback(LogCallback, nullptr);
             bool result;
 
             if (vaePath.empty()) {
