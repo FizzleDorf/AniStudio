@@ -694,10 +694,7 @@ void DiffusionView::RenderQueueList() {
         }
         ImGui::Separator();
 
-        if (ImGui::BeginTable("QueueTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            if (ImGui::Button("Queue")) {
+            if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
                 for (int i = 0; i < numQueues; i++) {
                     HandleT2IEvent();
                     // seedControl->activate();
@@ -708,32 +705,30 @@ void DiffusionView::RenderQueueList() {
                     numQueues = 1;
                 }
             }
-            if (ImGui::Button("Pause")) {
+            if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
                 Event event;
                 event.type = EventType::PauseInference;
                 ANI::Events::Ref().QueueEvent(event);
             }
 
-            if (ImGui::Button("Resume")) {
+            if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
                 Event event;
                 event.type = EventType::ResumeInference;
                 ANI::Events::Ref().QueueEvent(event);
             }
 
-            if (ImGui::Button("Stop Current")) {
+            if (ImGui::Button("Stop Current", ImVec2(-FLT_MIN, 0))) {
                 Event event;
                 event.type = EventType::StopCurrentTask;
                 ANI::Events::Ref().QueueEvent(event);
             }
 
-            if (ImGui::Button("Clear Queue")) {
+            if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
                 Event event;
                 event.type = EventType::ClearInferenceQueue;
                 ANI::Events::Ref().QueueEvent(event);
             }
-            ImGui::EndTable();
-        }
-
+            ImGui::Separator();
         if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
             ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
