@@ -49,7 +49,7 @@ public:
     void LoadMetadataFromJson(const std::string &filepath);
     void LoadMetadataFromExif(const std::string &imagePath);
     void RenderMetadataControls();
-
+    void LoadMetadataFromPNG(const std::string &imagePath);
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);
         buffer[buffer_size - 1] = '\0';
