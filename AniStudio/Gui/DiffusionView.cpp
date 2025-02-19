@@ -180,17 +180,17 @@ void DiffusionView::RenderLatents() {
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Width");
-        ImGui::TableNextColumn();
-        ImGui::InputInt("##Width", &latentComp.latentWidth, 8, 8);
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
         ImGui::Text("Height");
         ImGui::TableNextColumn();
         ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Height");
+        ImGui::Text("Width");
+        ImGui::TableNextColumn();
+        ImGui::InputInt("##Width", &latentComp.latentWidth, 8, 8);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Batch");
         ImGui::TableNextColumn();
         ImGui::InputInt("##Batch Size", &latentComp.batchSize);
         ImGui::EndTable();
@@ -1050,6 +1050,8 @@ void DiffusionView::LoadMetadataFromJson(const std::string &filepath) {
 }
 
 void DiffusionView::LoadMetadataFromPNG(const std::string &imagePath) {
+    std::cout << "Attempting to load metadata from: " << imagePath << std::endl;
+
     FILE *fp = fopen(imagePath.c_str(), "rb");
     if (!fp) {
         std::cerr << "Failed to open PNG file: " << imagePath << std::endl;
@@ -1085,47 +1087,13 @@ void DiffusionView::LoadMetadataFromPNG(const std::string &imagePath) {
         for (int i = 0; i < num_text; i++) {
             if (strcmp(text_ptr[i].key, "parameters") == 0) {
                 try {
+                    // Parse metadata and deserialize
                     nlohmann::json metadata = nlohmann::json::parse(text_ptr[i].text);
-
-                    // Extract components from metadata
-                    if (metadata.contains("components")) {
-                        auto &components = metadata["components"];
-
-                        if (components.contains("ModelComponent"))
-                            modelComp.Deserialize(components["ModelComponent"]);
-                        if (components.contains("CLipLComponent"))
-                            clipLComp.Deserialize(components["CLipLComponent"]);
-                        if (components.contains("CLipGComponent"))
-                            clipGComp.Deserialize(components["CLipGComponent"]);
-                        if (components.contains("T5XXLComponent"))
-                            t5xxlComp.Deserialize(components["T5XXLComponent"]);
-                        if (components.contains("DiffusionModelComponent"))
-                            ckptComp.Deserialize(components["DiffusionModelComponent"]);
-                        if (components.contains("LatentComponent"))
-                            latentComp.Deserialize(components["LatentComponent"]);
-                        if (components.contains("LoraComponent"))
-                            loraComp.Deserialize(components["LoraComponent"]);
-                        if (components.contains("PromptComponent"))
-                            promptComp.Deserialize(components["PromptComponent"]);
-                        if (components.contains("SamplerComponent"))
-                            samplerComp.Deserialize(components["SamplerComponent"]);
-                        if (components.contains("CFGComponent"))
-                            cfgComp.Deserialize(components["CFGComponent"]);
-                        if (components.contains("VaeComponent"))
-                            vaeComp.Deserialize(components["VaeComponent"]);
-                        if (components.contains("EmbeddingComponent"))
-                            embedComp.Deserialize(components["EmbeddingComponent"]);
-                        if (components.contains("ControlnetComponent"))
-                            controlComp.Deserialize(components["ControlnetComponent"]);
-                        if (components.contains("LayerSkipComponent"))
-                            layerSkipComp.Deserialize(components["LayerSkipComponent"]);
-                        if (components.contains("ImageComponent"))
-                            imageComp.Deserialize(components["ImageComponent"]);
-
-                        std::cout << "Successfully loaded metadata from PNG" << std::endl;
-                    }
+                    std::cout << "Loading metadata: " << metadata.dump(2) << std::endl;
+                    Deserialize(metadata);
+                    std::cout << "Successfully loaded metadata" << std::endl;
                 } catch (const std::exception &e) {
-                    std::cerr << "Error parsing PNG metadata: " << e.what() << std::endl;
+                    std::cerr << "Error loading metadata: " << e.what() << std::endl;
                 }
                 break;
             }
@@ -1134,29 +1102,6 @@ void DiffusionView::LoadMetadataFromPNG(const std::string &imagePath) {
 
     png_destroy_read_struct(&png, &info, nullptr);
     fclose(fp);
-}
-
-void DiffusionView::LoadMetadataFromExif(const std::string &imagePath) {
-    try {
-        auto image = Exiv2::ImageFactory::open(imagePath);
-        if (image.get() != nullptr) {
-            image->readMetadata();
-            Exiv2::ExifData &exifData = image->exifData();
-
-            // Look for our metadata in the UserComment tag
-            auto it = exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
-            if (it != exifData.end()) {
-                std::string jsonStr = it->toString();
-                if (!jsonStr.empty()) {
-                    nlohmann::json metadata = nlohmann::json::parse(jsonStr);
-                    Deserialize(metadata);
-                    std::cout << "Metadata loaded from image EXIF: " << imagePath << std::endl;
-                }
-            }
-        }
-    } catch (const std::exception &e) {
-        std::cerr << "Error loading EXIF metadata: " << e.what() << std::endl;
-    }
 }
 
 void DiffusionView::RenderMetadataControls() {
@@ -1191,7 +1136,7 @@ void DiffusionView::RenderMetadataControls() {
             if (extension == ".json") {
                 LoadMetadataFromJson(filepath);
             } else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg") {
-                LoadMetadataFromExif(filepath);
+                LoadMetadataFromPNG(filepath);
             }
         }
         ImGuiFileDialog::Instance()->Close();

@@ -557,7 +557,8 @@ private:
 
         // Parameters text chunk
         png_text paramText;
-        paramText.compression = PNG_TEXT_COMPRESSION_zTXt; // Use zlib compression for the metadata
+        paramText.compression = PNG_TEXT_COMPRESSION_NONE;
+        // PNG_TEXT_COMPRESSION_zTXt; Use zlib compression for the metadata
         paramText.key = const_cast<char *>("parameters");
         paramText.text = const_cast<char *>(metadataStr.c_str());
         paramText.text_length = metadataStr.length();
