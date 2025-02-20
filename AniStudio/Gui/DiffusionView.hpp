@@ -7,24 +7,28 @@
 #include "stable-diffusion.h"
 using namespace ECS;
 
+struct ProgressData {
+    std::atomic<int> currentStep{0};
+    std::atomic<int> totalSteps{0};
+    std::atomic<float> currentTime{0.0f};
+    std::atomic<bool> isProcessing{false};
+};
+
 namespace GUI {
 
 class DiffusionView : public BaseView {
 public:
-    DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) { 
-        viewName = "DiffusionView";
-        // seedControl = new Control<int>(samplerComp.seed, ControlMode::Fixed); 
-    }
+    DiffusionView(EntityManager &entityMgr);
     ~DiffusionView() {
         // if (seedControl)
         //     delete seedControl;
     }
-
+    
     // Overloaded Functions
     nlohmann::json Serialize() const override;
     void Deserialize(const nlohmann::json &j) override;
     void Render() override;
-
+    // void ResetProgress();
     // Gui Elements
     void RenderModelLoader();
     void RenderLatents();
@@ -45,7 +49,7 @@ public:
     void LoadMetadataFromJson(const std::string &filepath);
     void LoadMetadataFromExif(const std::string &imagePath);
     void RenderMetadataControls();
-
+    void LoadMetadataFromPNG(const std::string &imagePath);
     void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
         strncpy(buffer, source.c_str(), buffer_size - 1);
         buffer[buffer_size - 1] = '\0';
