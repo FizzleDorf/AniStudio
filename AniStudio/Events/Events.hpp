@@ -16,10 +16,14 @@ enum class EventType {
     Quit,
     NewProject,
     OpenProject,
+
+    // Menu Views
     OpenSettings,
     CloseSettings,
     OpenDebug,
     CloseDebug,
+    OpenConvert, 
+    CloseConvert,
     OpenViews,
     CloseViews,
 

@@ -173,6 +173,14 @@ void ImageView::RenderSelector() {
             }
             imgIndex = (imgIndex % size + size) % size;
         } 
+        ImGui::SameLine();
+        if (ImGui::Button("First")) {
+            imgIndex = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Last")) {
+            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        }
         imageComponent = loadedMedia.GetImage(imgIndex);
         CleanUpCurrentImage();
         CreateCurrentTexture();     
@@ -180,25 +188,8 @@ void ImageView::RenderSelector() {
 }
 
 void ImageView::RenderHistory() {
-    ImGui::Checkbox("Show History", &showHistory);
-
-    if (!loadedMedia.GetImages().empty() && showHistory) {
-        // Navigation controls
-        if (ImGui::Button("First")) {
-            imgIndex = 0;
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Last")) {
-            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-        ImGui::SameLine();
-        ImGui::Text("History Size: %zu", loadedMedia.GetImages().size());
+    ImGui::Begin("History", nullptr);
+    if (!loadedMedia.GetImages().empty()) {
 
         // Create scrollable history panel
         if (ImGui::BeginChild("HistoryPanel", ImVec2(0, 160), true, ImGuiWindowFlags_HorizontalScrollbar)) {
@@ -235,7 +226,6 @@ void ImageView::RenderHistory() {
                     imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
                 }
 
-                // Make image clickable
                 if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
                                        reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
                     imgIndex = static_cast<int>(i);
@@ -251,6 +241,7 @@ void ImageView::RenderHistory() {
         }
         ImGui::EndChild();
     }
+    ImGui::End();
 }
 
 
@@ -260,11 +251,11 @@ void ImageView::LoadImage() {
     CreateCurrentTexture();
 
     EntityID newEntity = mgr.AddNewEntity();
-    mgr.AddComponent<ImageComponent>(newEntity);
-    mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
-    ANI::Event event;
-    event.entityID = newEntity;
-    event.type = ANI::EventType::LoadImageEvent;
+    mgr.AddComponent<ImageComponent>(newEntity) = imageComponent;
+    // mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
+    // ANI::Event event;
+    // event.entityID = newEntity;
+    // event.type = ANI::EventType::LoadImageEvent;
     loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
     // ANI::Events::Ref().QueueEvent(event);
     imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);

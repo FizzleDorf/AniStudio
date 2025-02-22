@@ -58,7 +58,7 @@ namespace ECS {
 		}
 
 		template<typename T, typename... Args>
-		void AddComponent(const EntityID entity, Args&&... args) {
+        T &AddComponent(const EntityID entity, Args &&...args) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			assert(GetEntitiySignature(entity)->size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
 
@@ -67,6 +67,7 @@ namespace ECS {
 			GetEntitiySignature(entity)->insert(CompType<T>());
 			GetCompList<T>()->Insert(component);
 			UpdateEntityTargetSystem(entity);
+            return GetCompList<T>()->Get(entity);
 		}
 
 		template<typename T>
