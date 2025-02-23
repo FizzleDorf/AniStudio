@@ -4,6 +4,8 @@
 namespace GUI {
 static bool settingsWindowOpen = false;
 static bool debugWindowOpen = false;
+static bool viewsWindowOpen = false;
+static bool convertWindowOpen = false;
 
 void ShowMenuBar(GLFWwindow *window) {
     if (ImGui::BeginMainMenuBar()) {
@@ -44,12 +46,17 @@ void ShowMenuBar(GLFWwindow *window) {
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View")) {
-            if (ImGui::MenuItem("View Manager", nullptr, &debugWindowOpen)) {
+            if (ImGui::MenuItem("View Manager", nullptr, &viewsWindowOpen)) {
                 ANI::Event event;
                 event.type = debugWindowOpen ? ANI::EventType::OpenViews : ANI::EventType::CloseViews;
                 ANI::Events::Ref().QueueEvent(event);
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Convert to GGUF", nullptr, &convertWindowOpen)) {
+                ANI::Event event;
+                event.type = debugWindowOpen ? ANI::EventType::OpenConvert : ANI::EventType::CloseConvert;
+                ANI::Events::Ref().QueueEvent(event);
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Debug", nullptr, &debugWindowOpen)) {
                 ANI::Event event;
@@ -61,4 +68,5 @@ void ShowMenuBar(GLFWwindow *window) {
         ImGui::EndMainMenuBar();
     }
 }
+
 } // namespace GUI
