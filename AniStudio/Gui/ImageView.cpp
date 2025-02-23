@@ -28,17 +28,25 @@ void ImageView::Render() {
 
     RenderSelector();
 
-    if (ImGui::Button("Load Image")) {
+    if (ImGui::Button("Load Image(s)")) {
         IGFD::FileDialogConfig config;
         config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image", ".png,.jpg,.jpeg,.bmp,.tga", config);
+        // Enable multiple selection in the config
+        config.countSelectionMax = 0; // 0 means infinite selections
+        ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)", filters, config);
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-            imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            LoadImage();
+            // Get multiple selections
+            std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
+
+            std::vector<std::string> filePaths;
+            for (const auto &[fileName, filePath] : selection) {
+                filePaths.push_back(filePath);
+            }
+
+            LoadImages(filePaths);
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -246,19 +254,29 @@ void ImageView::RenderHistory() {
 
 
 
-void ImageView::LoadImage() {
-    CleanUpCurrentImage();
-    CreateCurrentTexture();
+void ImageView::LoadImages(const std::vector<std::string> &filePaths) {
+    for (const auto &filePath : filePaths) {
+        // Create a new image component for each file
+        ImageComponent newImageComp;
+        newImageComp.filePath = filePath;
+        newImageComp.fileName = std::filesystem::path(filePath).filename().string();
 
-    EntityID newEntity = mgr.AddNewEntity();
-    mgr.AddComponent<ImageComponent>(newEntity) = imageComponent;
-    // mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
-    // ANI::Event event;
-    // event.entityID = newEntity;
-    // event.type = ANI::EventType::LoadImageEvent;
-    loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
-    // ANI::Events::Ref().QueueEvent(event);
-    imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        // Create new entity and add component
+        EntityID newEntity = mgr.AddNewEntity();
+        mgr.AddComponent<ImageComponent>(newEntity);
+        mgr.GetComponent<ImageComponent>(newEntity) = newImageComp;
+
+        // Add to loaded media
+        loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
+
+        // Update current image to the last loaded one
+        if (filePath == filePaths.back()) {
+            imageComponent = newImageComp;
+            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
+        }
+    }
 }
 
 void ImageView::SaveImage(const std::string &filePath) {
