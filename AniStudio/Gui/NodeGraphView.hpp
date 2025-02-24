@@ -1,28 +1,58 @@
-#ifndef NODEGRAPHVIEW_HPP
+﻿#ifndef NODEGRAPHVIEW_HPP
 #define NODEGRAPHVIEW_HPP
 
 #include "Base/BaseView.hpp"
+#include "NodeComponents/NodeComponents.hpp"
+#include "node_utils.hpp"
+#include <glm/glm.hpp>
 #include <imgui_node_editor.h>
-#include <string>
-#include <imgui.h>
+#include <tuple>
 
 namespace ed = ax::NodeEditor;
 
 namespace GUI {
+
 class NodeGraphView : public BaseView {
 public:
     NodeGraphView(ECS::EntityManager &entityMgr);
     ~NodeGraphView();
 
     void Init() override;
-
     void Cleanup();
-
-    void Render();
+    void Render() override;
 
 private:
-    ed::EditorContext *m_Context;
+    void RenderMenuBar();
+    void RenderNodes();
+    void RenderPin(const ECS::Pin &pin, size_t pinIndex, bool isInput);
+    void RenderLinks();
+    void HandleInteractions();
+
+    // Node creation helpers
+    ECS::EntityID CreateMathNode(const ImVec2 &pos);
+    ECS::EntityID CreateStringNode(const ImVec2 &pos);
+    ECS::EntityID CreateFlowNode(const ImVec2 &pos);
+    void CreateExampleNodes();
+    ECS::EntityID CreateInputImageNode(const ImVec2 &pos);
+    ECS::EntityID CreateOutputImageNode(const ImVec2 &pos);
+
+    // Link management
+    void CreateLink(ed::PinId startPinId, ed::PinId endPinId);
+    bool CanCreateLink(ed::PinId startPinId, ed::PinId endPinId);
+    void DeleteLink(ed::LinkId linkId);
+    void HandleDeletion();
+    void DeleteNode(ECS::EntityID nodeId);
+    void CleanupEntities();
+
+    // Pin ID utilities
+    intptr_t GeneratePinId(ECS::EntityID nodeId, size_t pinIdx, bool isInput);
+    std::tuple<ECS::EntityID, size_t, bool> DecodePinId(intptr_t id);
+
+private:
+    ed::EditorContext *m_Editor;
+    bool isInitialized;
 };
+
 } // namespace GUI
 
 #endif // NODEGRAPHVIEW_HPP

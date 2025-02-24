@@ -39,7 +39,7 @@ pip install conan
 conan profile detect --force
 
 :: Run Conan install
-conan install . --build=missing -s compiler.cppstd=17
+conan install . --build=missing -s compiler.cppstd=20
 cd ..
 
 echo Installation completed successfully.
