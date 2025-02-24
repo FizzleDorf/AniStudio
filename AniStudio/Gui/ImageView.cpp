@@ -66,7 +66,7 @@ void ImageView::Render() {
                                                 config);
     }
 
-    if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog", 32, ImVec2(700, 400))) {
+    if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog")) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
             SaveImage(savePath);
@@ -167,25 +167,6 @@ void ImageView::DrawGrid() {
 }
 
 void ImageView::RenderSelector() {
-    if (ImGui::Button("First")) {
-        if (loadedMedia.GetImages().empty())
-            return;
-        imgIndex = 0;
-        imageComponent = loadedMedia.GetImage(imgIndex);
-        CleanUpCurrentImage();
-        CreateCurrentTexture();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Last")) {
-        if (loadedMedia.GetImages().empty()) {
-            imgIndex = 0;
-            return;
-        }
-        imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
-        imageComponent = loadedMedia.GetImage(imgIndex);
-        CleanUpCurrentImage();
-        CreateCurrentTexture();
-    }
     if (ImGui::InputInt("Current Image", &imgIndex)) {
         if (loadedMedia.GetImages().empty()) {
             imgIndex = 0;
@@ -200,7 +181,14 @@ void ImageView::RenderSelector() {
             }
             imgIndex = (imgIndex % size + size) % size;
         }
-        
+        ImGui::SameLine();
+        if (ImGui::Button("First")) {
+            imgIndex = 0;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Last")) {
+            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        }
         imageComponent = loadedMedia.GetImage(imgIndex);
         CleanUpCurrentImage();
         CreateCurrentTexture();
