@@ -16,7 +16,6 @@ public:
         entityMgr.RegisterSystem<ECS::ImageSystem>();
     }
     void Render() override;
-    void LoadImage();
     void SaveImage(const std::string &filePath);
     ~ImageView();
 
@@ -24,17 +23,23 @@ private:
     void CreateTexture(const int index);
     void CreateCurrentTexture();
 
-    void CleanUpImage(const int index);
     void CleanUpCurrentImage();
     void DrawGrid();
     void RenderSelector();
     void RenderHistory();
-
+    void LoadImages(const std::vector<std::string> &filePaths);
     void SetZoom(float newZoom);
 
     int imgIndex = 0;
     bool showHistory = false;
     ImageComponent imageComponent;
+
+    const char *filters = "Image files{.png,.jpg,.jpeg,.bmp,.tga}" 
+                          ".png,.jpg,.jpeg,.bmp,.tga"              
+                          "{.png},PNG"                             
+                          "{.jpg,.jpeg},JPEG"
+                          "{.bmp},BMP"
+                          "{.tga},TGA";
 };
 
 } // namespace ECS

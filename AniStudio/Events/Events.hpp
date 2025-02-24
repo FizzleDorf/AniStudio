@@ -16,10 +16,14 @@ enum class EventType {
     Quit,
     NewProject,
     OpenProject,
+
+    // Menu Views
     OpenSettings,
     CloseSettings,
     OpenDebug,
     CloseDebug,
+    OpenConvert, 
+    CloseConvert,
     OpenViews,
     CloseViews,
 
@@ -29,8 +33,13 @@ enum class EventType {
     I2IInferenceRequest,
     T2VInferenceRequest,
     ConvertToGGUF,
-    Interrupt,
     
+    // Queue Controls
+    ClearInferenceQueue,
+    PauseInference,
+    ResumeInference,
+    StopCurrentTask,
+
     // IO Events
     LoadImageEvent,
     SaveImageEvent,

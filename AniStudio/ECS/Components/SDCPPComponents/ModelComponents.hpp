@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include <string>
 #include "filepaths.hpp"
+#include <string>
 
 namespace ECS {
 
@@ -149,14 +149,29 @@ struct VaeComponent : public BaseModelComponent {
         }
         return *this;
     }
-    nlohmann::json Serialize() const override { return {{compName, {{"modelName", modelName}}}}; }
+
+    nlohmann::json Serialize() const override {
+        return {{compName,
+                 {{"modelName", modelName},
+                  {"modelPath", modelPath},
+                  {"isTiled", isTiled},
+                  {"keep_vae_on_cpu", keep_vae_on_cpu},
+                  {"vae_decode_only", vae_decode_only}}}};
+    }
 
     void Deserialize(const nlohmann::json &j) override {
         if (j.contains(compName)) {
             const auto &obj = j.at(compName);
             if (obj.contains("modelName"))
                 modelName = obj["modelName"];
-            modelPath = filePaths.vaeDir + "\\" + modelName;
+            if (obj.contains("modelPath"))
+                modelPath = obj["modelPath"];
+            if (obj.contains("isTiled"))
+                isTiled = obj["isTiled"].get<bool>();
+            if (obj.contains("keep_vae_on_cpu"))
+                keep_vae_on_cpu = obj["keep_vae_on_cpu"].get<bool>();
+            if (obj.contains("vae_decode_only"))
+                vae_decode_only = obj["vae_decode_only"].get<bool>();
         }
     }
 };
@@ -201,13 +216,8 @@ struct LoraComponent : public ECS::BaseModelComponent {
         return *this;
     }
     nlohmann::json Serialize() const override {
-        return {
-            {compName, {
-                {"modelName", modelName},
-                {"loraStrength", loraStrength},
-                {"loraClipStrength", loraClipStrength}
-            }}
-        };
+        return {{compName,
+                 {{"modelName", modelName}, {"loraStrength", loraStrength}, {"loraClipStrength", loraClipStrength}}}};
     }
 
     void Deserialize(const nlohmann::json &j) override {
@@ -283,14 +293,7 @@ struct EsrganComponent : public BaseModelComponent {
         }
         return *this;
     }
-    nlohmann::json Serialize() const override {
-        return {
-            {compName, {
-                {"modelName", modelName},
-                {"scale", scale}
-            }}
-        };
-    }
+    nlohmann::json Serialize() const override { return {{compName, {{"modelName", modelName}, {"scale", scale}}}}; }
     void Deserialize(const nlohmann::json &j) override {
         if (j.contains(compName)) {
             const auto &obj = j.at(compName);
@@ -315,13 +318,13 @@ struct EmbeddingComponent : public BaseModelComponent {
     }
 
     void Deserialize(const nlohmann::json &j) override {
-         if (j.contains(compName)) {
-             const auto &obj = j.at(compName);
-             if (obj.contains("modelName"))
-                 modelName = obj["modelName"];
-             modelPath = filePaths.embedDir + "\\" + modelName;
-         }
-     }
+        if (j.contains(compName)) {
+            const auto &obj = j.at(compName);
+            if (obj.contains("modelName"))
+                modelName = obj["modelName"];
+            modelPath = filePaths.embedDir + "\\" + modelName;
+        }
+    }
 };
 
 } // namespace ECS

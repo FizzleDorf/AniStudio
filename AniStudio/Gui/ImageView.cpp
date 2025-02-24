@@ -28,17 +28,25 @@ void ImageView::Render() {
 
     RenderSelector();
 
-    if (ImGui::Button("Load Image")) {
+    if (ImGui::Button("Load Image(s)")) {
         IGFD::FileDialogConfig config;
         config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image", ".png,.jpg,.jpeg,.bmp,.tga", config);
+        // Enable multiple selection in the config
+        config.countSelectionMax = 0; // 0 means infinite selections
+        ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)", filters, config);
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-            imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            LoadImage();
+            // Get multiple selections
+            std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
+
+            std::vector<std::string> filePaths;
+            for (const auto &[fileName, filePath] : selection) {
+                filePaths.push_back(filePath);
+            }
+
+            LoadImages(filePaths);
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -172,184 +180,4 @@ void ImageView::RenderSelector() {
                 imgIndex = size - 1;
             }
             imgIndex = (imgIndex % size + size) % size;
-        }
-        imageComponent = loadedMedia.GetImage(imgIndex);
-        CleanUpCurrentImage();
-        CreateCurrentTexture();
-    }
-}
-
-void ImageView::RenderHistory() {
-    static float historyZoom = 1.0f;
-    ImGui::SetNextWindowSize(ImVec2(1024, 140), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Image History", nullptr, 0);
-
-    // Navigation and controls
-    if (ImGui::Button("First")) {
-        imgIndex = 0;
-        imageComponent = loadedMedia.GetImage(imgIndex);
-        CleanUpCurrentImage();
-        CreateCurrentTexture();
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Last")) {
-        imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
-        imageComponent = loadedMedia.GetImage(imgIndex);
-        CleanUpCurrentImage();
-        CreateCurrentTexture();
-    }
-    ImGui::SameLine();
-    ImGui::Text("History Size: %zu", loadedMedia.GetImages().size());
-
-    // Zoom slider
-    ImGui::SliderFloat("Zoom", &historyZoom, 0.5f, 1.0f);
-
-    ImGui::BeginChild("HistoryGrid", ImVec2(0, 0), true);
-    const auto &images = loadedMedia.GetImages();
-
-    // Calculate available width and number of columns
-    float availWidth = ImGui::GetContentRegionAvail().x;
-    float baseSize = 128.0f * historyZoom;
-    float minSize = 64.0f;
-    int numColumns = static_cast<int>(availWidth / (baseSize + ImGui::GetStyle().ItemSpacing.x));
-    if (numColumns < 1)
-        numColumns = 1;
-
-    // Start grid layout
-    int column = 0;
-    for (size_t i = 0; i < images.size(); ++i) {
-        const auto &image = images[i];
-
-        if (image.textureID == 0) {
-            CreateTexture(i);
-        }
-        if (!image.imageData) {
-            mgr.DestroyEntity(image.GetID());
-            continue;
-        }
-
-        if (column > 0)
-            ImGui::SameLine();
-
-        ImGui::BeginGroup();
-        if (static_cast<int>(i) == imgIndex) {
-            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
-        }
-
-        // Calculate thumbnail size
-        float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
-        float size = baseSize < minSize ? minSize : baseSize;
-        ImVec2 imageSize;
-        if (aspectRatio > 1.0f) {
-            imageSize = ImVec2(size, size / aspectRatio);
-        } else {
-            imageSize = ImVec2(size * aspectRatio, size);
-        }
-
-        ImGui::Text("%zu: %s", i, image.fileName.c_str());
-        if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
-                               reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
-            imgIndex = static_cast<int>(i);
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-
-        if (static_cast<int>(i) == imgIndex) {
-            ImGui::PopStyleColor();
-        }
-        ImGui::EndGroup();
-
-        if (++column >= numColumns) {
-            column = 0;
-        }
-    }
-
-    ImGui::EndChild();
-    ImGui::End();
-}
-
-void ImageView::LoadImage() {
-    CleanUpCurrentImage();
-    CreateCurrentTexture();
-
-    EntityID newEntity = mgr.AddNewEntity();
-    mgr.AddComponent<ImageComponent>(newEntity);
-    mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
-    ANI::Event event;
-    event.entityID = newEntity;
-    event.type = ANI::EventType::LoadImageEvent;
-    loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
-    // ANI::Events::Ref().QueueEvent(event);
-    imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
-}
-
-void ImageView::SaveImage(const std::string &filePath) {
-    ANI::Event event;
-    // event.entityID = newEntity;
-    // event.type = ANI::EventType::SaveImage;
-    // ANI::Events::Ref().QueueEvent(event);
-    if (imageComponent.imageData) {
-        if (!stbi_write_png(filePath.c_str(), imageComponent.width, imageComponent.height, imageComponent.channels,
-                            imageComponent.imageData, imageComponent.width * imageComponent.channels)) {
-            throw std::runtime_error("Failed to save image to: " + filePath);
-        }
-    }
-}
-
-void ImageView::CreateTexture(const int index) {
-    ImageComponent &image = loadedMedia.GetImage(index);
-
-    if (image.imageData) {
-        stbi_image_free(image.imageData);
-        image.imageData = nullptr;
-    }
-
-    if (image.textureID) {
-        glDeleteTextures(1, &image.textureID);
-        image.textureID = 0;
-    }
-
-    image.imageData = stbi_load(image.filePath.c_str(), &image.width, &image.height, &image.channels, 0);
-    if (!image.imageData) {
-        throw std::runtime_error("Failed to load image: " + image.filePath);
-    }
-    glGenTextures(1, &image.textureID);
-    glBindTexture(GL_TEXTURE_2D, image.textureID);
-    GLenum format = (image.channels == 4) ? GL_RGBA : GL_RGB;
-    glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height, 0, format, GL_UNSIGNED_BYTE, image.imageData);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-void ImageView::CreateCurrentTexture() {
-    imageComponent.imageData = stbi_load(imageComponent.filePath.c_str(), &imageComponent.width, &imageComponent.height,
-                                         &imageComponent.channels, 0);
-    if (!imageComponent.imageData) {
-        throw std::runtime_error("Failed to load image: " + imageComponent.filePath);
-    }
-    glGenTextures(1, &imageComponent.textureID);
-    glBindTexture(GL_TEXTURE_2D, imageComponent.textureID);
-    GLenum format = (imageComponent.channels == 4) ? GL_RGBA : GL_RGB;
-    glTexImage2D(GL_TEXTURE_2D, 0, format, imageComponent.width, imageComponent.height, 0, format, GL_UNSIGNED_BYTE,
-                 imageComponent.imageData);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-void ImageView::CleanUpCurrentImage() {
-    if (imageComponent.imageData) {
-        stbi_image_free(imageComponent.imageData);
-        imageComponent.imageData = nullptr;
-    }
-    if (imageComponent.textureID) {
-        glDeleteTextures(1, &imageComponent.textureID);
-        imageComponent.textureID = 0;
-    }
-}
-
-ImageView::~ImageView() { CleanUpCurrentImage(); }
-
-} // namespace GUI
+        

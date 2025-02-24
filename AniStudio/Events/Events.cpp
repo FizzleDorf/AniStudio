@@ -1,6 +1,6 @@
 #include "Events.hpp"
-#include <iostream>
 #include "guis.h"
+#include <iostream>
 
 namespace ANI {
 
@@ -49,12 +49,13 @@ void Events::ProcessEvents() {
             auto &vMgr = Core.GetViewManager();
             auto views = vMgr.GetAllViews();
 
-                if (vMgr.HasView<SettingsView>(settingsID)) {
+            if (vMgr.HasView<SettingsView>(settingsID)) {
                 vMgr.DestroyView(settingsID);
-                }
-            
+            }
+
             break;
         }
+
         case EventType::OpenDebug: {
             auto &vMgr = Core.GetViewManager();
             ViewListID id = vMgr.CreateView();
@@ -73,6 +74,26 @@ void Events::ProcessEvents() {
             }
             break;
         }
+
+        case EventType::OpenConvert: {
+            auto &vMgr = Core.GetViewManager();
+            ViewListID id = vMgr.CreateView();
+            vMgr.AddView<ConvertView>(id, ConvertView(Core.GetEntityManager()));
+            vMgr.GetView<ConvertView>(id).Init();
+            viewsID = id;
+            break;
+        }
+        case EventType::CloseConvert: {
+            auto &vMgr = Core.GetViewManager();
+            auto views = vMgr.GetAllViews();
+            for (auto view : views) {
+                if (vMgr.HasView<ConvertView>(viewsID)) {
+                    vMgr.DestroyView(viewsID);
+                }
+            }
+            break;
+        }
+
         case EventType::OpenViews: {
             auto &vMgr = Core.GetViewManager();
             ViewListID id = vMgr.CreateView();
@@ -93,7 +114,7 @@ void Events::ProcessEvents() {
         }
         case EventType::InferenceRequest: {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
-            
+
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
@@ -127,15 +148,34 @@ void Events::ProcessEvents() {
             }
             break;
         }
-        case EventType::Interrupt: {
-            std::cout << "Handling Interrupt event for SDCPPSystem" << '\n';
-
+        case EventType::PauseInference: {
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
-                std::cout << "SDCPPSystem is registered." << std::endl;
-                sdcppSystem->StopWorker();
-            } else {
-                std::cerr << "SDCPPSystem is not registered." << std::endl;
+                sdcppSystem->PauseWorker();
+            }
+            break;
+        }
+
+        case EventType::ResumeInference: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                sdcppSystem->ResumeWorker();
+            }
+            break;
+        }
+
+        case EventType::StopCurrentTask: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                // sdcppSystem->StopCurrentTask();
+            }
+            break;
+        }
+
+        case EventType::ClearInferenceQueue: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                sdcppSystem->ClearQueue();
             }
             break;
         }
@@ -144,11 +184,11 @@ void Events::ProcessEvents() {
             imageSystem->SaveImage(event.entityID);
             break;
         }
-         case EventType::LoadImageEvent:{
+        case EventType::LoadImageEvent: {
             auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-             // imageSystem->AddImage(event.entityID);
-             break;
-         }
+            // imageSystem->AddImage(event.entityID);
+            break;
+        }
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
             break;

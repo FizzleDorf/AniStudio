@@ -1,17 +1,52 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
 #include "Constants.hpp"
-#define NOMINMAX
 #include <exiv2/exiv2.hpp>
 
 using namespace ECS;
 using namespace ANI;
 
+static void LogCallback(sd_log_level_t level, const char *text, void *data) {
+    switch (level) {
+    case SD_LOG_DEBUG:
+        std::cout << "[DEBUG]: " << text;
+        break;
+    case SD_LOG_INFO:
+        std::cout << "[INFO]: " << text;
+        break;
+    case SD_LOG_WARN:
+        std::cout << "[WARNING]: " << text;
+        break;
+    case SD_LOG_ERROR:
+        std::cerr << "[ERROR]: " << text;
+        break;
+    default:
+        std::cerr << "[UNKNOWN LOG LEVEL]: " << text;
+        break;
+    }
+}
+static ProgressData progressData;
+static void ProgressCallback(int step, int steps, float time, void *data) {
+    progressData.currentStep = step;
+    progressData.totalSteps = steps;
+    progressData.currentTime = time;
+    progressData.isProcessing = (steps > 0);
+    std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
+}
+
 namespace GUI {
+
+DiffusionView::DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) {
+    viewName = "DiffusionView";
+    sd_set_log_callback(LogCallback, nullptr);
+    sd_set_progress_callback(ProgressCallback, nullptr);
+}
 
 void DiffusionView::RenderModelLoader() {
 
-    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+    int current_type = static_cast<int>(samplerComp.current_type_method);
+    ImGui::Combo("Quant Type", &current_type, type_method_items, type_method_item_count);
+    samplerComp.current_type_method = static_cast<decltype(samplerComp.current_type_method)>(current_type);
 
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -139,7 +174,9 @@ void DiffusionView::RenderFilePath() {
 
 void DiffusionView::RenderLatents() {
 
-    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
+    int current_rng = static_cast<int>(samplerComp.current_rng_type);
+    ImGui::Combo("RNG Type", &current_rng, type_rng_items, type_rng_item_count);
+    samplerComp.current_rng_type = static_cast<decltype(samplerComp.current_rng_type)>(current_rng);
 
     if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -427,7 +464,9 @@ void DiffusionView::RenderEmbeddings() {
 
 void DiffusionView::RenderDiffusionModelLoader() {
 
-    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+    int current_type_method = static_cast<int>(samplerComp.current_type_method);
+    ImGui::Combo("Quant Type", &current_type_method, type_method_items, type_method_item_count);
+    samplerComp.current_type_method = static_cast<decltype(samplerComp.current_type_method)>(current_type_method);
 
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -637,29 +676,64 @@ void DiffusionView::RenderVaeOptions() {
 }
 
 void DiffusionView::RenderQueueList() {
+
     ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Queue")) {
-        if (ImGui::BeginTable("QueueTable", 1, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn();
-            if (ImGui::Button("Queue")) {
-                for (int i = 0; i < numQueues; i++) {
-                    HandleT2IEvent();
-                    // seedControl->activate();
-                }
+
+        // Get current progress values
+        int currentStep = progressData.currentStep;
+        int totalSteps = progressData.totalSteps;
+        float time = progressData.currentTime;
+        bool isProcessing = progressData.isProcessing;
+
+        if (isProcessing && totalSteps > 0) {
+            float progress = static_cast<float>(currentStep) / totalSteps;
+            std::ostringstream ss;
+            ss << "Processing: " << currentStep << "/" << totalSteps << " steps (" << std::fixed << std::setprecision(1)
+               << time << "s)";
+            ImGui::Text("%s", ss.str().c_str());
+            ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0));
+        } else {
+            ImGui::Text("Waiting...");
+            ImGui::ProgressBar(0.0f, ImVec2(-FLT_MIN, 0));
+        }
+        ImGui::Separator();
+
+        if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
+            for (int i = 0; i < numQueues; i++) {
+                HandleT2IEvent();
+                // seedControl->activate();
             }
-            if (ImGui::Button("Stop Current")) {
+        }
+        if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
+            if (numQueues < 1) {
+                numQueues = 1;
             }
-            if (ImGui::Button("Clear")) {
-            }
-            if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
-                if (numQueues < 1) {
-                    numQueues = 1;
-                }
-            }
-            ImGui::EndTable();
+        }
+        if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::PauseInference;
+            ANI::Events::Ref().QueueEvent(event);
         }
 
+        if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::ResumeInference;
+            ANI::Events::Ref().QueueEvent(event);
+        }
+
+        if (ImGui::Button("Stop Current", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::StopCurrentTask;
+            ANI::Events::Ref().QueueEvent(event);
+        }
+
+        if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::ClearInferenceQueue;
+            ANI::Events::Ref().QueueEvent(event);
+        }
+        ImGui::Separator();
         if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
             ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
@@ -668,7 +742,7 @@ void DiffusionView::RenderQueueList() {
             ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
 
-            auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
+            auto sdSystem = mgr.GetSystem<SDCPPSystem>();
             if (sdSystem) {
                 auto queueItems = sdSystem->GetQueueSnapshot();
                 for (size_t i = 0; i < queueItems.size(); i++) {
@@ -844,7 +918,6 @@ void DiffusionView::Render() {
     }
     ImGui::End();
 }
-
 nlohmann::json DiffusionView::Serialize() const {
     nlohmann::json j = BaseView::Serialize();
     j["modelComp"] = modelComp.Serialize();
@@ -867,36 +940,84 @@ nlohmann::json DiffusionView::Serialize() const {
 
 void DiffusionView::Deserialize(const nlohmann::json &j) {
     BaseView::Deserialize(j);
-    if (j.contains("modelComp"))
-        modelComp.Deserialize(j["modelComp"]);
-    if (j.contains("clipLComp"))
-        clipLComp.Deserialize(j["clipLComp"]);
-    if (j.contains("clipGComp"))
-        clipGComp.Deserialize(j["clipGComp"]);
-    if (j.contains("t5xxlComp"))
-        t5xxlComp.Deserialize(j["t5xxlComp"]);
-    if (j.contains("ckptComp"))
-        ckptComp.Deserialize(j["ckptComp"]);
-    if (j.contains("latentComp"))
-        latentComp.Deserialize(j["latentComp"]);
-    if (j.contains("loraComp"))
-        loraComp.Deserialize(j["loraComp"]);
-    if (j.contains("promptComp"))
-        promptComp.Deserialize(j["promptComp"]);
-    if (j.contains("samplerComp"))
-        samplerComp.Deserialize(j["samplerComp"]);
-    if (j.contains("cfgComp"))
-        cfgComp.Deserialize(j["cfgComp"]);
-    if (j.contains("vaeComp"))
-        vaeComp.Deserialize(j["vaeComp"]);
-    if (j.contains("imageComp"))
-        imageComp.Deserialize(j["imageComp"]);
-    if (j.contains("embedComp"))
-        embedComp.Deserialize(j["embedComp"]);
-    if (j.contains("controlComp"))
-        controlComp.Deserialize(j["controlComp"]);
-    if (j.contains("layerSkipComp"))
-        layerSkipComp.Deserialize(j["layerSkipComp"]);
+
+    // Try new format first (components object)
+    if (j.contains("components")) {
+        auto &components = j["components"];
+        if (components.contains("ModelComponent"))
+            modelComp.Deserialize(components["ModelComponent"]);
+        if (components.contains("CLipLComponent"))
+            clipLComp.Deserialize(components["CLipLComponent"]);
+        if (components.contains("CLipGComponent"))
+            clipGComp.Deserialize(components["CLipGComponent"]);
+        if (components.contains("T5XXLComponent"))
+            t5xxlComp.Deserialize(components["T5XXLComponent"]);
+        if (components.contains("DiffusionModelComponent"))
+            ckptComp.Deserialize(components["DiffusionModelComponent"]);
+        if (components.contains("LatentComponent"))
+            latentComp.Deserialize(components["LatentComponent"]);
+        if (components.contains("LoraComponent"))
+            loraComp.Deserialize(components["LoraComponent"]);
+        if (components.contains("PromptComponent"))
+            promptComp.Deserialize(components["PromptComponent"]);
+        if (components.contains("SamplerComponent"))
+            samplerComp.Deserialize(components["SamplerComponent"]);
+        if (components.contains("CFGComponent"))
+            cfgComp.Deserialize(components["CFGComponent"]);
+        if (components.contains("VaeComponent"))
+            vaeComp.Deserialize(components["VaeComponent"]);
+        if (components.contains("EmbeddingComponent"))
+            embedComp.Deserialize(components["EmbeddingComponent"]);
+        if (components.contains("ControlnetComponent"))
+            controlComp.Deserialize(components["ControlnetComponent"]);
+        if (components.contains("LayerSkipComponent"))
+            layerSkipComp.Deserialize(components["LayerSkipComponent"]);
+        if (components.contains("ImageComponent"))
+            imageComp.Deserialize(components["ImageComponent"]);
+    }
+    // Fall back to old format for backward compatibility
+    else {
+        if (j.contains("modelComp"))
+            modelComp.Deserialize(j["modelComp"]);
+        if (j.contains("clipLComp"))
+            clipLComp.Deserialize(j["clipLComp"]);
+        if (j.contains("clipGComp"))
+            clipGComp.Deserialize(j["clipGComp"]);
+        if (j.contains("t5xxlComp"))
+            t5xxlComp.Deserialize(j["t5xxlComp"]);
+        if (j.contains("ckptComp"))
+            ckptComp.Deserialize(j["ckptComp"]);
+        if (j.contains("latentComp"))
+            latentComp.Deserialize(j["latentComp"]);
+        if (j.contains("loraComp"))
+            loraComp.Deserialize(j["loraComp"]);
+        if (j.contains("promptComp"))
+            promptComp.Deserialize(j["promptComp"]);
+        if (j.contains("samplerComp"))
+            samplerComp.Deserialize(j["samplerComp"]);
+        if (j.contains("cfgComp"))
+            cfgComp.Deserialize(j["cfgComp"]);
+        if (j.contains("vaeComp"))
+            vaeComp.Deserialize(j["vaeComp"]);
+        if (j.contains("imageComp"))
+            imageComp.Deserialize(j["imageComp"]);
+        if (j.contains("embedComp"))
+            embedComp.Deserialize(j["embedComp"]);
+        if (j.contains("controlComp"))
+            controlComp.Deserialize(j["controlComp"]);
+        if (j.contains("layerSkipComp"))
+            layerSkipComp.Deserialize(j["layerSkipComp"]);
+    }
+
+    // Update prompt buffers after deserialization
+    if (!promptComp.posPrompt.empty()) {
+        strncpy(promptComp.PosBuffer, promptComp.posPrompt.c_str(), sizeof(promptComp.PosBuffer) - 1);
+        promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0';
+    }
+    if (!promptComp.negPrompt.empty()) {
+        strncpy(promptComp.NegBuffer, promptComp.negPrompt.c_str(), sizeof(promptComp.NegBuffer) - 1);
+        promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0';
+    }
 }
 
 void DiffusionView::SaveMetadataToJson(const std::string &filepath) {
@@ -932,27 +1053,59 @@ void DiffusionView::LoadMetadataFromJson(const std::string &filepath) {
     }
 }
 
-void DiffusionView::LoadMetadataFromExif(const std::string &imagePath) {
-    try {
-        auto image = Exiv2::ImageFactory::open(imagePath);
-        if (image.get() != nullptr) {
-            image->readMetadata();
-            Exiv2::ExifData &exifData = image->exifData();
+void DiffusionView::LoadMetadataFromPNG(const std::string &imagePath) {
+    std::cout << "Attempting to load metadata from: " << imagePath << std::endl;
 
-            // Look for our metadata in the UserComment tag
-            auto it = exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
-            if (it != exifData.end()) {
-                std::string jsonStr = it->toString();
-                if (!jsonStr.empty()) {
-                    nlohmann::json metadata = nlohmann::json::parse(jsonStr);
+    FILE *fp = fopen(imagePath.c_str(), "rb");
+    if (!fp) {
+        std::cerr << "Failed to open PNG file: " << imagePath << std::endl;
+        return;
+    }
+
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    if (!png) {
+        fclose(fp);
+        return;
+    }
+
+    png_infop info = png_create_info_struct(png);
+    if (!info) {
+        png_destroy_read_struct(&png, nullptr, nullptr);
+        fclose(fp);
+        return;
+    }
+
+    if (setjmp(png_jmpbuf(png))) {
+        png_destroy_read_struct(&png, &info, nullptr);
+        fclose(fp);
+        return;
+    }
+
+    png_init_io(png, fp);
+    png_read_info(png, info);
+
+    // Get text chunks
+    png_textp text_ptr;
+    int num_text;
+    if (png_get_text(png, info, &text_ptr, &num_text) > 0) {
+        for (int i = 0; i < num_text; i++) {
+            if (strcmp(text_ptr[i].key, "parameters") == 0) {
+                try {
+                    // Parse metadata and deserialize
+                    nlohmann::json metadata = nlohmann::json::parse(text_ptr[i].text);
+                    std::cout << "Loading metadata: " << metadata.dump(2) << std::endl;
                     Deserialize(metadata);
-                    std::cout << "Metadata loaded from image EXIF: " << imagePath << std::endl;
+                    std::cout << "Successfully loaded metadata" << std::endl;
+                } catch (const std::exception &e) {
+                    std::cerr << "Error loading metadata: " << e.what() << std::endl;
                 }
+                break;
             }
         }
-    } catch (const std::exception &e) {
-        std::cerr << "Error loading EXIF metadata: " << e.what() << std::endl;
     }
+
+    png_destroy_read_struct(&png, &info, nullptr);
+    fclose(fp);
 }
 
 void DiffusionView::RenderMetadataControls() {
@@ -987,7 +1140,7 @@ void DiffusionView::RenderMetadataControls() {
             if (extension == ".json") {
                 LoadMetadataFromJson(filepath);
             } else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg") {
-                LoadMetadataFromExif(filepath);
+                LoadMetadataFromPNG(filepath);
             }
         }
         ImGuiFileDialog::Instance()->Close();

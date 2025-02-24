@@ -10,30 +10,6 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
-static void LogCallback(sd_log_level_t level, const char *text, void *data) {
-    switch (level) {
-    case SD_LOG_DEBUG:
-        std::cout << "[DEBUG]: " << text;
-        break;
-    case SD_LOG_INFO:
-        std::cout << "[INFO]: " << text;
-        break;
-    case SD_LOG_WARN:
-        std::cout << "[WARNING]: " << text;
-        break;
-    case SD_LOG_ERROR:
-        std::cerr << "[ERROR]: " << text;
-        break;
-    default:
-        std::cerr << "[UNKNOWN LOG LEVEL]: " << text;
-        break;
-    }
-}
-
-static void ProgressCallback(int step, int steps, float time, void *data) {
-    std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
-}
-
 namespace ECS {
 
 class SDCPPSystem : public BaseSystem {
@@ -137,6 +113,31 @@ public:
         workerThread = std::thread([this]() { WorkerLoop(); });
     }
 
+    void ClearQueue() {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        if (!inferenceQueue.empty()) {
+            for (auto i = 0; i < inferenceQueue.size();) {
+                if (!inferenceQueue[i].processing) {
+                    inferenceQueue.erase(inferenceQueue.begin() + i);
+                } else {
+                    ++i;
+                }
+            }
+        }
+    }
+
+    void PauseWorker() { pauseWorker.store(true); }
+
+    void ResumeWorker() {
+        pauseWorker.store(false);
+        queueCondition.notify_all(); // Wake up the worker thread
+    }
+
+    void StopCurrentTask() { stopCurrentTask.store(true); }
+
+    std::atomic<bool> stopCurrentTask{false};
+    std::atomic<bool> pauseWorker{false};
+
 private:
     std::vector<QueueItem> inferenceQueue;
     std::vector<ConvertQueueItem> convertQueue;
@@ -150,8 +151,6 @@ private:
 
     void WorkerLoop() {
         while (workerThreadRunning) {
-
-            std::cout << "QueueItem temp" << std::endl;
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 queueCondition.wait(
@@ -161,17 +160,21 @@ private:
                     break;
                 }
 
+                // Pause the worker if the pause flag is set
+                while (pauseWorker) {
+                    queueCondition.wait(lock);
+                }
+
                 // Prioritize conversion queue
-                if (!convertQueue.empty()) 
+                if (!convertQueue.empty())
                     convertQueue.front().processing = true;
-                
+
                 if (!inferenceQueue.empty())
                     inferenceQueue.front().processing = true;
-
             }
 
             try {
-                if (!convertQueue.empty()) { // Check if we have a convert task
+                if (!convertQueue.empty()) {
                     ConvertToGGUF(convertQueue.front());
                     {
                         std::lock_guard<std::mutex> lock(queueMutex);
@@ -180,14 +183,13 @@ private:
                     }
                 }
 
-                if (!inferenceQueue.empty() && convertQueue.empty()) { // Check if we have an inference task
+                if (!inferenceQueue.empty() && convertQueue.empty()) {
                     RunInference(inferenceQueue.front());
                     {
                         std::lock_guard<std::mutex> lock(queueMutex);
                         inferenceQueue.erase(inferenceQueue.begin());
                     }
                 }
-
             } catch (const std::exception &e) {
                 std::cerr << "Worker error: " << e.what() << std::endl;
             }
@@ -201,21 +203,25 @@ private:
             return;
 
         taskRunning.store(true);
+        stopCurrentTask.store(false); // Reset the stop flag
 
         sd_ctx_t *sd_context = nullptr;
         try {
             std::cout << "Starting inference for Entity " << item.entityID << std::endl;
 
-            sd_set_log_callback(LogCallback, nullptr);
-            sd_set_progress_callback(ProgressCallback, nullptr);
-
             sd_context = InitializeStableDiffusionContext(item.entityID);
             if (!sd_context)
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 
+            // Check the stop flag periodically during inference
             sd_image_t *image = GenerateImage(sd_context, item.entityID);
             if (!image)
                 throw std::runtime_error("Failed to generate image!");
+
+            if (stopCurrentTask) {
+                std::cout << "Inference stopped for Entity " << item.entityID << std::endl;
+                return;
+            }
 
             SaveImage(image->data, image->width, image->height, image->channel, item);
             free_sd_ctx(sd_context);
@@ -256,7 +262,6 @@ private:
                               std::string(type_method_items[type]) + ".gguf";
 
         try {
-            sd_set_log_callback(LogCallback, nullptr);
             bool result;
 
             if (vaePath.empty()) {

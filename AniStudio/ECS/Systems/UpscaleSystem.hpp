@@ -29,8 +29,6 @@ public:
         inferenceFuture = std::async(std::launch::async, [this, entityID]() {
             try {
                 std::lock_guard<std::mutex> lock(mgrMutex);
-                sd_set_log_callback(LogCallback, nullptr);
-                sd_set_progress_callback(ProgressCallback, nullptr);
 
                 upscaler_ctx_t *upscale_context =
                     new_upscaler_ctx(
