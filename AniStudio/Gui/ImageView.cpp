@@ -1,13 +1,13 @@
 #include "ImageView.hpp"
+#include "pch.h"
 #include <GL/glew.h>
 #include <ImGuiFileDialog.h>
+#include <algorithm>
 #include <imgui.h>
 #include <iostream>
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <algorithm>
 #include <stdexcept>
-#include "pch.h"
 
 using namespace ECS;
 
@@ -28,17 +28,25 @@ void ImageView::Render() {
 
     RenderSelector();
 
-    if (ImGui::Button("Load Image")) {
+    if (ImGui::Button("Load Image(s)")) {
         IGFD::FileDialogConfig config;
         config.path = ".";
-        ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image", ".png,.jpg,.jpeg,.bmp,.tga", config);
+        // Enable multiple selection in the config
+        config.countSelectionMax = 0; // 0 means infinite selections
+        ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)", filters, config);
     }
 
     if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
-            imageComponent.filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-            imageComponent.fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            LoadImage();
+            // Get multiple selections
+            std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
+
+            std::vector<std::string> filePaths;
+            for (const auto &[fileName, filePath] : selection) {
+                filePaths.push_back(filePath);
+            }
+
+            LoadImages(filePaths);
         }
         ImGuiFileDialog::Instance()->Close();
     }
@@ -58,7 +66,7 @@ void ImageView::Render() {
                                                 config);
     }
 
-    if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog")) {
+    if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog", 32, ImVec2(700, 400))) {
         if (ImGuiFileDialog::Instance()->IsOk()) {
             std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
             SaveImage(savePath);
@@ -159,6 +167,25 @@ void ImageView::DrawGrid() {
 }
 
 void ImageView::RenderSelector() {
+    if (ImGui::Button("First")) {
+        if (loadedMedia.GetImages().empty())
+            return;
+        imgIndex = 0;
+        imageComponent = loadedMedia.GetImage(imgIndex);
+        CleanUpCurrentImage();
+        CreateCurrentTexture();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Last")) {
+        if (loadedMedia.GetImages().empty()) {
+            imgIndex = 0;
+            return;
+        }
+        imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        imageComponent = loadedMedia.GetImage(imgIndex);
+        CleanUpCurrentImage();
+        CreateCurrentTexture();
+    }
     if (ImGui::InputInt("Current Image", &imgIndex)) {
         if (loadedMedia.GetImages().empty()) {
             imgIndex = 0;
@@ -172,102 +199,90 @@ void ImageView::RenderSelector() {
                 imgIndex = size - 1;
             }
             imgIndex = (imgIndex % size + size) % size;
-        } 
+        }
+        
         imageComponent = loadedMedia.GetImage(imgIndex);
         CleanUpCurrentImage();
-        CreateCurrentTexture();     
+        CreateCurrentTexture();
     }
 }
 
 void ImageView::RenderHistory() {
-    ImGui::Checkbox("Show History", &showHistory);
-
-    if (!loadedMedia.GetImages().empty() && showHistory) {
-        // Navigation controls
-        if (ImGui::Button("First")) {
-            imgIndex = 0;
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Last")) {
-            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
-            imageComponent = loadedMedia.GetImage(imgIndex);
-            CleanUpCurrentImage();
-            CreateCurrentTexture();
-        }
-        ImGui::SameLine();
-        ImGui::Text("History Size: %zu", loadedMedia.GetImages().size());
+    ImGui::Begin("History", nullptr);
+    if (!loadedMedia.GetImages().empty()) {
 
         // Create scrollable history panel
-        if (ImGui::BeginChild("HistoryPanel", ImVec2(0, 160), true, ImGuiWindowFlags_HorizontalScrollbar)) {
-            const auto &images = loadedMedia.GetImages();
+        const auto &images = loadedMedia.GetImages();
 
-            for (size_t i = 0; i < images.size(); ++i) {
-                ImGui::BeginGroup();
-                const auto &image = images[i];
+        for (size_t i = 0; i < images.size(); ++i) {
+            ImGui::BeginGroup();
+            const auto &image = images[i];
 
-                if (image.textureID == 0) {
-                    CreateTexture(i);
-                }
-                if (!image.imageData) {
-                    mgr.DestroyEntity(image.GetID());
-                    ImGui::EndGroup();
-                    break;
-                }
-
-                if (static_cast<int>(i) == imgIndex) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
-                }
-                ImGui::Text("%zu: %s", i, image.fileName.c_str());
-                if (static_cast<int>(i) == imgIndex) {
-                    ImGui::PopStyleColor();
-                }
-
-                // Calculate image dimensions
-                float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
-                ImVec2 maxSize(128.0f, 128.0f);
-                ImVec2 imageSize;
-                if (aspectRatio > 1.0f) {
-                    imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
-                } else {
-                    imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
-                }
-
-                // Make image clickable
-                if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
-                                       reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
-                    imgIndex = static_cast<int>(i);
-                    imageComponent = loadedMedia.GetImage(imgIndex);
-                    CleanUpCurrentImage();
-                    CreateCurrentTexture();
-                }
-
-                ImGui::EndGroup();
-                ImGui::SameLine();
+            if (image.textureID == 0) {
+                CreateTexture(i);
             }
-            ImGui::NewLine();
+            if (!image.imageData) {
+                mgr.DestroyEntity(image.GetID());
+                ImGui::EndGroup();
+                break;
+            }
+
+            if (static_cast<int>(i) == imgIndex) {
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+            }
+            ImGui::Text("%zu: %s", i, image.fileName.c_str());
+            if (static_cast<int>(i) == imgIndex) {
+                ImGui::PopStyleColor();
+            }
+
+            // Calculate image dimensions
+            float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
+            ImVec2 maxSize(128.0f, 128.0f);
+            ImVec2 imageSize;
+            if (aspectRatio > 1.0f) {
+                imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
+            } else {
+                imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
+            }
+
+            if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
+                                   reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
+                imgIndex = static_cast<int>(i);
+                imageComponent = loadedMedia.GetImage(imgIndex);
+                CleanUpCurrentImage();
+                CreateCurrentTexture();
+            }
+
+            ImGui::EndGroup();
         }
-        ImGui::EndChild();
+        ImGui::NewLine();
     }
+    ImGui::End();
 }
 
+void ImageView::LoadImages(const std::vector<std::string> &filePaths) {
+    for (const auto &filePath : filePaths) {
+        // Create a new image component for each file
+        ImageComponent newImageComp;
+        newImageComp.filePath = filePath;
+        newImageComp.fileName = std::filesystem::path(filePath).filename().string();
 
+        // Create new entity and add component
+        EntityID newEntity = mgr.AddNewEntity();
+        mgr.AddComponent<ImageComponent>(newEntity);
+        mgr.GetComponent<ImageComponent>(newEntity) = newImageComp;
 
-void ImageView::LoadImage() {
-    CleanUpCurrentImage();
-    CreateCurrentTexture();
+        // Add to loaded media
+        loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
 
-    EntityID newEntity = mgr.AddNewEntity();
-    mgr.AddComponent<ImageComponent>(newEntity);
-    mgr.GetComponent<ImageComponent>(newEntity) = imageComponent;
-    ANI::Event event;
-    event.entityID = newEntity;
-    event.type = ANI::EventType::LoadImageEvent;
-    loadedMedia.AddImage(mgr.GetComponent<ImageComponent>(newEntity));
-    // ANI::Events::Ref().QueueEvent(event);
-    imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+        // Update current image to the last loaded one
+        if (filePath == filePaths.back()) {
+            imageComponent = newImageComp;
+            imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
+        }
+    }
 }
 
 void ImageView::SaveImage(const std::string &filePath) {
@@ -338,4 +353,4 @@ void ImageView::CleanUpCurrentImage() {
 
 ImageView::~ImageView() { CleanUpCurrentImage(); }
 
-} // namespace ECS
+} // namespace GUI

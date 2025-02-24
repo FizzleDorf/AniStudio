@@ -126,9 +126,6 @@ void Engine::Init() {
     // auto pluginViewID = viewManager.CreateView();
     // viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginManager));
 
-    auto convertViewID = viewManager.CreateView();
-    viewManager.AddView<ConvertView>(convertViewID, ConvertView(entityManager));
-
     // auto settingsViewID = viewManager.CreateView();
     // viewManager.AddView<SettingsView>(settingsViewID, SettingsView(entityManager));
     
@@ -143,7 +140,6 @@ void Engine::Init() {
     viewManager.GetView<ImageView>(diffusionViewID).Init();
     viewManager.GetView<NodeGraphView>(diffusionViewID).Init();
     // viewManager.GetView<PluginView>(pluginViewID).Init();
-    viewManager.GetView<ConvertView>(convertViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {

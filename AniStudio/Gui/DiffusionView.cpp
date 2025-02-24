@@ -180,17 +180,17 @@ void DiffusionView::RenderLatents() {
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Width");
-        ImGui::TableNextColumn();
-        ImGui::InputInt("##Width", &latentComp.latentWidth, 8, 8);
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
         ImGui::Text("Height");
         ImGui::TableNextColumn();
         ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Height");
+        ImGui::Text("Width");
+        ImGui::TableNextColumn();
+        ImGui::InputInt("##Width", &latentComp.latentWidth, 8, 8);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Batch");
         ImGui::TableNextColumn();
         ImGui::InputInt("##Batch Size", &latentComp.batchSize);
         ImGui::EndTable();
@@ -936,36 +936,84 @@ nlohmann::json DiffusionView::Serialize() const {
 
 void DiffusionView::Deserialize(const nlohmann::json &j) {
     BaseView::Deserialize(j);
-    if (j.contains("modelComp"))
-        modelComp.Deserialize(j["modelComp"]);
-    if (j.contains("clipLComp"))
-        clipLComp.Deserialize(j["clipLComp"]);
-    if (j.contains("clipGComp"))
-        clipGComp.Deserialize(j["clipGComp"]);
-    if (j.contains("t5xxlComp"))
-        t5xxlComp.Deserialize(j["t5xxlComp"]);
-    if (j.contains("ckptComp"))
-        ckptComp.Deserialize(j["ckptComp"]);
-    if (j.contains("latentComp"))
-        latentComp.Deserialize(j["latentComp"]);
-    if (j.contains("loraComp"))
-        loraComp.Deserialize(j["loraComp"]);
-    if (j.contains("promptComp"))
-        promptComp.Deserialize(j["promptComp"]);
-    if (j.contains("samplerComp"))
-        samplerComp.Deserialize(j["samplerComp"]);
-    if (j.contains("cfgComp"))
-        cfgComp.Deserialize(j["cfgComp"]);
-    if (j.contains("vaeComp"))
-        vaeComp.Deserialize(j["vaeComp"]);
-    if (j.contains("imageComp"))
-        imageComp.Deserialize(j["imageComp"]);
-    if (j.contains("embedComp"))
-        embedComp.Deserialize(j["embedComp"]);
-    if (j.contains("controlComp"))
-        controlComp.Deserialize(j["controlComp"]);
-    if (j.contains("layerSkipComp"))
-        layerSkipComp.Deserialize(j["layerSkipComp"]);
+
+    // Try new format first (components object)
+    if (j.contains("components")) {
+        auto &components = j["components"];
+        if (components.contains("ModelComponent"))
+            modelComp.Deserialize(components["ModelComponent"]);
+        if (components.contains("CLipLComponent"))
+            clipLComp.Deserialize(components["CLipLComponent"]);
+        if (components.contains("CLipGComponent"))
+            clipGComp.Deserialize(components["CLipGComponent"]);
+        if (components.contains("T5XXLComponent"))
+            t5xxlComp.Deserialize(components["T5XXLComponent"]);
+        if (components.contains("DiffusionModelComponent"))
+            ckptComp.Deserialize(components["DiffusionModelComponent"]);
+        if (components.contains("LatentComponent"))
+            latentComp.Deserialize(components["LatentComponent"]);
+        if (components.contains("LoraComponent"))
+            loraComp.Deserialize(components["LoraComponent"]);
+        if (components.contains("PromptComponent"))
+            promptComp.Deserialize(components["PromptComponent"]);
+        if (components.contains("SamplerComponent"))
+            samplerComp.Deserialize(components["SamplerComponent"]);
+        if (components.contains("CFGComponent"))
+            cfgComp.Deserialize(components["CFGComponent"]);
+        if (components.contains("VaeComponent"))
+            vaeComp.Deserialize(components["VaeComponent"]);
+        if (components.contains("EmbeddingComponent"))
+            embedComp.Deserialize(components["EmbeddingComponent"]);
+        if (components.contains("ControlnetComponent"))
+            controlComp.Deserialize(components["ControlnetComponent"]);
+        if (components.contains("LayerSkipComponent"))
+            layerSkipComp.Deserialize(components["LayerSkipComponent"]);
+        if (components.contains("ImageComponent"))
+            imageComp.Deserialize(components["ImageComponent"]);
+    }
+    // Fall back to old format for backward compatibility
+    else {
+        if (j.contains("modelComp"))
+            modelComp.Deserialize(j["modelComp"]);
+        if (j.contains("clipLComp"))
+            clipLComp.Deserialize(j["clipLComp"]);
+        if (j.contains("clipGComp"))
+            clipGComp.Deserialize(j["clipGComp"]);
+        if (j.contains("t5xxlComp"))
+            t5xxlComp.Deserialize(j["t5xxlComp"]);
+        if (j.contains("ckptComp"))
+            ckptComp.Deserialize(j["ckptComp"]);
+        if (j.contains("latentComp"))
+            latentComp.Deserialize(j["latentComp"]);
+        if (j.contains("loraComp"))
+            loraComp.Deserialize(j["loraComp"]);
+        if (j.contains("promptComp"))
+            promptComp.Deserialize(j["promptComp"]);
+        if (j.contains("samplerComp"))
+            samplerComp.Deserialize(j["samplerComp"]);
+        if (j.contains("cfgComp"))
+            cfgComp.Deserialize(j["cfgComp"]);
+        if (j.contains("vaeComp"))
+            vaeComp.Deserialize(j["vaeComp"]);
+        if (j.contains("imageComp"))
+            imageComp.Deserialize(j["imageComp"]);
+        if (j.contains("embedComp"))
+            embedComp.Deserialize(j["embedComp"]);
+        if (j.contains("controlComp"))
+            controlComp.Deserialize(j["controlComp"]);
+        if (j.contains("layerSkipComp"))
+            layerSkipComp.Deserialize(j["layerSkipComp"]);
+    }
+
+    // Update prompt buffers after deserialization
+    if (!promptComp.posPrompt.empty()) {
+        strncpy(promptComp.PosBuffer, promptComp.posPrompt.c_str(), sizeof(promptComp.PosBuffer) - 1);
+        promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0';
+    }
+    if (!promptComp.negPrompt.empty()) {
+        strncpy(promptComp.NegBuffer, promptComp.negPrompt.c_str(), sizeof(promptComp.NegBuffer) - 1);
+        promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0';
+    }
 }
 
 void DiffusionView::SaveMetadataToJson(const std::string &filepath) {
@@ -1001,27 +1049,59 @@ void DiffusionView::LoadMetadataFromJson(const std::string &filepath) {
     }
 }
 
-void DiffusionView::LoadMetadataFromExif(const std::string &imagePath) {
-    try {
-        auto image = Exiv2::ImageFactory::open(imagePath);
-        if (image.get() != nullptr) {
-            image->readMetadata();
-            Exiv2::ExifData &exifData = image->exifData();
+void DiffusionView::LoadMetadataFromPNG(const std::string &imagePath) {
+    std::cout << "Attempting to load metadata from: " << imagePath << std::endl;
 
-            // Look for our metadata in the UserComment tag
-            auto it = exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
-            if (it != exifData.end()) {
-                std::string jsonStr = it->toString();
-                if (!jsonStr.empty()) {
-                    nlohmann::json metadata = nlohmann::json::parse(jsonStr);
+    FILE *fp = fopen(imagePath.c_str(), "rb");
+    if (!fp) {
+        std::cerr << "Failed to open PNG file: " << imagePath << std::endl;
+        return;
+    }
+
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+    if (!png) {
+        fclose(fp);
+        return;
+    }
+
+    png_infop info = png_create_info_struct(png);
+    if (!info) {
+        png_destroy_read_struct(&png, nullptr, nullptr);
+        fclose(fp);
+        return;
+    }
+
+    if (setjmp(png_jmpbuf(png))) {
+        png_destroy_read_struct(&png, &info, nullptr);
+        fclose(fp);
+        return;
+    }
+
+    png_init_io(png, fp);
+    png_read_info(png, info);
+
+    // Get text chunks
+    png_textp text_ptr;
+    int num_text;
+    if (png_get_text(png, info, &text_ptr, &num_text) > 0) {
+        for (int i = 0; i < num_text; i++) {
+            if (strcmp(text_ptr[i].key, "parameters") == 0) {
+                try {
+                    // Parse metadata and deserialize
+                    nlohmann::json metadata = nlohmann::json::parse(text_ptr[i].text);
+                    std::cout << "Loading metadata: " << metadata.dump(2) << std::endl;
                     Deserialize(metadata);
-                    std::cout << "Metadata loaded from image EXIF: " << imagePath << std::endl;
+                    std::cout << "Successfully loaded metadata" << std::endl;
+                } catch (const std::exception &e) {
+                    std::cerr << "Error loading metadata: " << e.what() << std::endl;
                 }
+                break;
             }
         }
-    } catch (const std::exception &e) {
-        std::cerr << "Error loading EXIF metadata: " << e.what() << std::endl;
     }
+
+    png_destroy_read_struct(&png, &info, nullptr);
+    fclose(fp);
 }
 
 void DiffusionView::RenderMetadataControls() {
@@ -1056,7 +1136,7 @@ void DiffusionView::RenderMetadataControls() {
             if (extension == ".json") {
                 LoadMetadataFromJson(filepath);
             } else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg") {
-                LoadMetadataFromExif(filepath);
+                LoadMetadataFromPNG(filepath);
             }
         }
         ImGuiFileDialog::Instance()->Close();
