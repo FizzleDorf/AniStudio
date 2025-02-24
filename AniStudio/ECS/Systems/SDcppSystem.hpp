@@ -126,14 +126,14 @@ public:
         }
     }
 
-    void SDCPPSystem::PauseWorker() { pauseWorker.store(true); }
+    void PauseWorker() { pauseWorker.store(true); }
 
-    void SDCPPSystem::ResumeWorker() {
+    void ResumeWorker() {
         pauseWorker.store(false);
         queueCondition.notify_all(); // Wake up the worker thread
     }
     
-    void SDCPPSystem::StopCurrentTask() { stopCurrentTask.store(true); }
+    void StopCurrentTask() { stopCurrentTask.store(true); }
 
     std::atomic<bool> stopCurrentTask{false};
     std::atomic<bool> pauseWorker{false};
@@ -149,7 +149,7 @@ private:
     std::mutex workerMutex;
     std::thread workerThread;
 
-    void SDCPPSystem::WorkerLoop() {
+    void WorkerLoop() {
         while (workerThreadRunning) {
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
@@ -198,7 +198,7 @@ private:
         workerThreadRunning.store(false);
     }
 
-    void SDCPPSystem::RunInference(const QueueItem item) {
+    void RunInference(const QueueItem item) {
         if (taskRunning)
             return;
 
