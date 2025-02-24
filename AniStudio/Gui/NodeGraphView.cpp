@@ -1,12 +1,6 @@
 ﻿#include "NodeGraphView.hpp"
 #include <iostream>
 
-using ax::NodeEditor::Utilities::BeginHorizontal;
-using ax::NodeEditor::Utilities::BeginVertical;
-using ax::NodeEditor::Utilities::EndHorizontal;
-using ax::NodeEditor::Utilities::EndVertical;
-using ax::NodeEditor::Utilities::Spring;
-
 namespace GUI {
 
 NodeGraphView::NodeGraphView(ECS::EntityManager &entityMgr)
@@ -75,8 +69,11 @@ void NodeGraphView::Render() {
 void NodeGraphView::RenderMenuBar() {
     if (ImGui::BeginMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("New Node")) {
-                auto node = CreateMathNode(ImGui::GetMousePos());
+            if (ImGui::MenuItem("Input Image Node")) {
+                CreateInputImageNode(ImGui::GetMousePos());
+            }
+            if (ImGui::MenuItem("Output Image Node")) {
+                CreateOutputImageNode(ImGui::GetMousePos());
             }
             ImGui::EndMenu();
         }
@@ -85,7 +82,6 @@ void NodeGraphView::RenderMenuBar() {
 }
 
 void NodeGraphView::RenderNodes() {
-
     auto entities = mgr.GetAllEntities();
     for (auto entity : entities) {
         if (!mgr.HasComponent<ECS::NodeComponent>(entity))
@@ -97,38 +93,38 @@ void NodeGraphView::RenderNodes() {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8, 8));
 
         // Header
-        BeginVertical("header");
+        NodeEditorUtils::BeginVertical("header"); // Use simplified namespace
         {
             ImGui::TextUnformatted(node.name.c_str());
             ImGui::Spacing();
         }
-        EndVertical();
+        NodeEditorUtils::EndVertical(); // Use simplified namespace
 
         // Content
-        BeginHorizontal("content");
+        NodeEditorUtils::BeginHorizontal("content"); // Use simplified namespace
         {
             // Input pins on left
-            BeginVertical("inputs");
+            NodeEditorUtils::BeginVertical("inputs"); // Use simplified namespace
             {
                 for (size_t i = 0; i < node.inputs.size(); i++) {
-                    RenderPin(entity, node.inputs[i], i, true);
+                    RenderPin(node.inputs[i], i, true);
                 }
             }
-            EndVertical();
+            NodeEditorUtils::EndVertical(); // Use simplified namespace
 
             // Spacing between pins
-            Spring(1);
+            NodeEditorUtils::Spring(1); // Use simplified namespace
 
             // Output pins on right
-            BeginVertical("outputs");
+            NodeEditorUtils::BeginVertical("outputs"); // Use simplified namespace
             {
                 for (size_t i = 0; i < node.outputs.size(); i++) {
-                    RenderPin(entity, node.outputs[i], i, false);
+                    RenderPin(node.outputs[i], i, false);
                 }
             }
-            EndVertical();
+            NodeEditorUtils::EndVertical(); // Use simplified namespace
         }
-        EndHorizontal();
+        NodeEditorUtils::EndHorizontal(); // Use simplified namespace
 
         ImGui::PopStyleVar();
         ed::EndNode();
@@ -139,34 +135,45 @@ void NodeGraphView::RenderNodes() {
     }
 }
 
-void NodeGraphView::RenderPin(ECS::EntityID nodeId, const ECS::Pin &pin, size_t pinIdx, bool isInput) {
+void NodeGraphView::RenderPin(const ECS::Pin &pin, size_t pinIndex, bool isInput) {
+    // Set the pin color based on its type
+    ImU32 pinColor = pin.GetColor();
 
-    ed::BeginPin(ed::PinId(GeneratePinId(nodeId, pinIdx, isInput)), isInput ? ed::PinKind::Input : ed::PinKind::Output);
+    // Begin the pin group
+    ax::NodeEditor::BeginPin(pinIndex, isInput ? ax::NodeEditor::PinKind::Input : ax::NodeEditor::PinKind::Output);
 
-    BeginHorizontal(pin.name.c_str());
-
+    // Draw the pin as a circle
+    NodeEditorUtils::BeginHorizontal(pin.name.c_str()); // Use simplified namespace
     if (isInput) {
-        // Socket
-        ImGui::Dummy(ImVec2(8, 8));
-        auto drawList = ImGui::GetWindowDrawList();
-        auto pos = ImGui::GetCursorScreenPos();
-        drawList->AddCircleFilled(ImVec2(pos.x - 4, pos.y + 4), 4.0f, pin.GetColor());
+        // Draw the pin on the left side for inputs
+        ax::NodeEditor::PinPivotAlignment(ImVec2(0.0f, 0.5f));
+        ax::NodeEditor::PinPivotSize(ImVec2(0.0f, 0.0f));
+    } else {
+        // Draw the pin on the right side for outputs
+        ax::NodeEditor::PinPivotAlignment(ImVec2(1.0f, 0.5f));
+        ax::NodeEditor::PinPivotSize(ImVec2(0.0f, 0.0f));
+    }
 
-        Spring(0);
+    // Draw the pin circle
+    ImGui::PushStyleColor(ImGuiCol_Button, pinColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, pinColor);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, pinColor);
+    ImGui::Button("", ImVec2(10, 10)); // Small circle for the pin
+    ImGui::PopStyleColor(3);
+
+    // Draw the pin label
+    if (isInput) {
+        NodeEditorUtils::Spring(0.0f);
         ImGui::TextUnformatted(pin.name.c_str());
     } else {
         ImGui::TextUnformatted(pin.name.c_str());
-        Spring(0);
-
-        // Socket
-        ImGui::Dummy(ImVec2(8, 8));
-        auto drawList = ImGui::GetWindowDrawList();
-        auto pos = ImGui::GetCursorScreenPos();
-        drawList->AddCircleFilled(ImVec2(pos.x - 4, pos.y + 4), 4.0f, pin.GetColor());
+        NodeEditorUtils::Spring(0.0f);
     }
 
-    EndHorizontal();
-    ed::EndPin();
+    NodeEditorUtils::EndHorizontal();
+
+    // End the pin group
+    ax::NodeEditor::EndPin();
 }
 
 void NodeGraphView::RenderLinks() {
@@ -196,41 +203,20 @@ void NodeGraphView::RenderLinks() {
 }
 
 void NodeGraphView::HandleInteractions() {
-    // Keyboard & Mouse navigation is handled by ImGui Node Editor already
-
     // Handle link creation
     if (ed::BeginCreate()) {
         ed::PinId startPinId, endPinId;
         if (ed::QueryNewLink(&startPinId, &endPinId)) {
-            // Handle dragging from start pin
-            if (startPinId && !endPinId) {
-                // We're dragging a new link - show preview
-                // First decode the pin information
-                auto [nodeId, pinIdx, isInput] = DecodePinId(startPinId.Get());
-                if (mgr.HasComponent<ECS::NodeComponent>(nodeId)) {
-                    auto &node = mgr.GetComponent<ECS::NodeComponent>(nodeId);
-                    // Get color from the correct pin array based on input/output
-                    if (isInput && pinIdx < node.inputs.size()) {
-                        ed::Link(ed::LinkId(0), startPinId, endPinId, ImColor(node.inputs[pinIdx].GetColor()), 2.0f);
-                    } else if (!isInput && pinIdx < node.outputs.size()) {
-                        ed::Link(ed::LinkId(0), startPinId, endPinId, ImColor(node.outputs[pinIdx].GetColor()), 2.0f);
-                    }
+            if (startPinId && endPinId && CanCreateLink(startPinId, endPinId)) {
+                if (ed::AcceptNewItem()) {
+                    CreateLink(startPinId, endPinId);
                 }
-            }
-
-            // Link is complete - try to create it
-            if (startPinId && endPinId) {
-                if (CanCreateLink(startPinId, endPinId)) {
-                    if (ed::AcceptNewItem()) {
-                        CreateLink(startPinId, endPinId);
-                    }
-                } else {
-                    ed::RejectNewItem();
-                }
+            } else {
+                ed::RejectNewItem();
             }
         }
+        ed::EndCreate();
     }
-    ed::EndCreate();
 
     // Handle deletion
     if (ed::BeginDelete()) {
@@ -247,8 +233,23 @@ void NodeGraphView::HandleInteractions() {
                 DeleteNode(static_cast<ECS::EntityID>(nodeId.Get()));
             }
         }
+        ed::EndDelete();
     }
-    ed::EndDelete();
+
+    // Handle context menu
+    if (ed::ShowBackgroundContextMenu()) {
+        ImGui::OpenPopup("NodeContextMenu");
+    }
+
+    if (ImGui::BeginPopup("NodeContextMenu")) {
+        if (ImGui::MenuItem("Create Input Image Node")) {
+            CreateInputImageNode(ImGui::GetMousePos());
+        }
+        if (ImGui::MenuItem("Create Output Image Node")) {
+            CreateOutputImageNode(ImGui::GetMousePos());
+        }
+        ImGui::EndPopup();
+    }
 }
 
 bool NodeGraphView::CanCreateLink(ed::PinId startPinId, ed::PinId endPinId) {
@@ -336,58 +337,23 @@ void NodeGraphView::DeleteLink(ed::LinkId linkId) {
     mgr.DestroyEntity(linkEntity);
 }
 
-ECS::EntityID NodeGraphView::CreateMathNode(const ImVec2 &pos) {
-    auto entity = mgr.AddNewEntity();
-    mgr.AddComponent<ECS::NodeComponent>(entity);
-    auto &node = mgr.GetComponent<ECS::NodeComponent>(entity);
+void NodeGraphView::DeleteNode(ECS::EntityID nodeId) {
+    if (!mgr.HasComponent<ECS::NodeComponent>(nodeId))
+        return;
 
-    node.name = "Math Node";
-    node.position = glm::vec2(pos.x, pos.y);
-    node.size = glm::vec2(150.0f, 100.0f);
+    // Find and delete all connected links
+    auto entities = mgr.GetAllEntities();
+    for (auto entity : entities) {
+        if (!mgr.HasComponent<ECS::LinkComponent>(entity))
+            continue;
 
-    node.inputs = {{"Value A", ECS::Pin::Type::Float}, {"Value B", ECS::Pin::Type::Float}};
-    node.outputs = {{"Result", ECS::Pin::Type::Float}};
+        auto &link = mgr.GetComponent<ECS::LinkComponent>(entity);
+        if (link.startNode == nodeId || link.endNode == nodeId) {
+            mgr.DestroyEntity(entity);
+        }
+    }
 
-    ed::SetNodePosition(ed::NodeId(static_cast<intptr_t>(entity)), pos);
-    return entity;
-}
-
-ECS::EntityID NodeGraphView::CreateStringNode(const ImVec2 &pos) {
-    auto entity = mgr.AddNewEntity();
-    mgr.AddComponent<ECS::NodeComponent>(entity);
-    auto &node = mgr.GetComponent<ECS::NodeComponent>(entity);
-
-    node.name = "String Node";
-    node.position = glm::vec2(pos.x, pos.y);
-    node.size = glm::vec2(150.0f, 100.0f);
-
-    node.inputs = {{"Text In", ECS::Pin::Type::String}};
-    node.outputs = {{"Modified", ECS::Pin::Type::String}};
-
-    ed::SetNodePosition(ed::NodeId(static_cast<intptr_t>(entity)), pos);
-    return entity;
-}
-
-ECS::EntityID NodeGraphView::CreateFlowNode(const ImVec2 &pos) {
-    auto entity = mgr.AddNewEntity();
-    mgr.AddComponent<ECS::NodeComponent>(entity);
-    auto &node = mgr.GetComponent<ECS::NodeComponent>(entity);
-
-    node.name = "Flow Control";
-    node.position = glm::vec2(pos.x, pos.y);
-    node.size = glm::vec2(150.0f, 100.0f);
-
-    node.inputs = {{"In", ECS::Pin::Type::Flow}};
-    node.outputs = {{"True", ECS::Pin::Type::Flow}, {"False", ECS::Pin::Type::Flow}};
-
-    ed::SetNodePosition(ed::NodeId(static_cast<intptr_t>(entity)), pos);
-    return entity;
-}
-
-void NodeGraphView::CreateExampleNodes() {
-    CreateMathNode(ImVec2(100, 100));
-    CreateStringNode(ImVec2(400, 100));
-    CreateFlowNode(ImVec2(250, 300));
+    mgr.DestroyEntity(nodeId);
 }
 
 void NodeGraphView::CleanupEntities() {
@@ -411,23 +377,39 @@ intptr_t NodeGraphView::GeneratePinId(ECS::EntityID nodeId, size_t pinIdx, bool 
     return (static_cast<intptr_t>(nodeId) << 16) | (pinIdx << 1) | (isInput ? 1 : 0);
 }
 
-void NodeGraphView::DeleteNode(ECS::EntityID nodeId) {
-    if (!mgr.HasComponent<ECS::NodeComponent>(nodeId))
-        return;
+ECS::EntityID NodeGraphView::CreateInputImageNode(const ImVec2 &pos) {
+    auto entity = mgr.AddNewEntity();
+    mgr.AddComponent<ECS::NodeComponent>(entity);
+    auto &node = mgr.GetComponent<ECS::NodeComponent>(entity);
 
-    // Find and delete all connected links
-    auto entities = mgr.GetAllEntities();
-    for (auto entity : entities) {
-        if (!mgr.HasComponent<ECS::LinkComponent>(entity))
-            continue;
+    node.name = "Input Image Node";
+    node.position = glm::vec2(pos.x, pos.y);
+    node.size = glm::vec2(150.0f, 100.0f);
 
-        auto &link = mgr.GetComponent<ECS::LinkComponent>(entity);
-        if (link.startNode == nodeId || link.endNode == nodeId) {
-            mgr.DestroyEntity(entity);
-        }
-    }
+    // Define input and output pins
+    node.inputs = {};                                  // No inputs for this node
+    node.outputs = {{"Image", ECS::Pin::Type::Image}}; // Output an image
 
-    mgr.DestroyEntity(nodeId);
+    // Set the node position in the editor
+    ed::SetNodePosition(ed::NodeId(static_cast<intptr_t>(entity)), pos);
+    return entity;
 }
 
+ECS::EntityID NodeGraphView::CreateOutputImageNode(const ImVec2 &pos) {
+    auto entity = mgr.AddNewEntity();
+    mgr.AddComponent<ECS::NodeComponent>(entity);
+    auto &node = mgr.GetComponent<ECS::NodeComponent>(entity);
+
+    node.name = "Output Image Node";
+    node.position = glm::vec2(pos.x, pos.y);
+    node.size = glm::vec2(150.0f, 100.0f);
+
+    // Define input and output pins
+    node.inputs = {{"Image", ECS::Pin::Type::Image}}; // Input an image
+    node.outputs = {};                                // No outputs for this node
+
+    // Set the node position in the editor
+    ed::SetNodePosition(ed::NodeId(static_cast<intptr_t>(entity)), pos);
+    return entity;
+}
 } // namespace GUI

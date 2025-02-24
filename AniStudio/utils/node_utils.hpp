@@ -1,14 +1,13 @@
+// node_utils.hpp
 #pragma once
 #include <imgui.h>
 #include <imgui_node_editor.h>
 
-namespace ax {
-namespace NodeEditor {
-namespace Utilities {
+namespace NodeEditorUtils {
 
 // Layout helpers specifically for node editor
 inline void Spring(float weight = 1.0f) {
-    auto &style = ed::GetStyle();
+    auto &style = ax::NodeEditor::GetStyle();
     ImGui::Dummy(ImVec2(weight * style.NodePadding.x, 0));
     ImGui::SameLine();
 }
@@ -33,6 +32,4 @@ inline void EndVertical() {
     ImGui::EndGroup();
 }
 
-} // namespace Utilities
-} // namespace NodeEditor
-} // namespace ax
+} // namespace NodeEditorUtils

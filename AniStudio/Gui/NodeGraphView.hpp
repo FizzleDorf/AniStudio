@@ -2,7 +2,7 @@
 #define NODEGRAPHVIEW_HPP
 
 #include "Base/BaseView.hpp"
-#include "NodeGraphComponents/NodeComponents.hpp"
+#include "NodeComponents/NodeComponents.hpp"
 #include "node_utils.hpp"
 #include <glm/glm.hpp>
 #include <imgui_node_editor.h>
@@ -24,7 +24,7 @@ public:
 private:
     void RenderMenuBar();
     void RenderNodes();
-    void RenderPin(ECS::EntityID nodeId, const ECS::Pin &pin, size_t pinIdx, bool isInput);
+    void RenderPin(const ECS::Pin &pin, size_t pinIndex, bool isInput);
     void RenderLinks();
     void HandleInteractions();
 
@@ -33,6 +33,8 @@ private:
     ECS::EntityID CreateStringNode(const ImVec2 &pos);
     ECS::EntityID CreateFlowNode(const ImVec2 &pos);
     void CreateExampleNodes();
+    ECS::EntityID CreateInputImageNode(const ImVec2 &pos);
+    ECS::EntityID CreateOutputImageNode(const ImVec2 &pos);
 
     // Link management
     void CreateLink(ed::PinId startPinId, ed::PinId endPinId);

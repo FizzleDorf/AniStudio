@@ -3,4 +3,4 @@
 #include "SDCPPSystem.hpp"
 #include "ImageSystem.hpp"
 #include "UpscaleSystem.hpp"
-#include "NodegraphSystem.hpp"
+#include "NodeSystem.hpp"

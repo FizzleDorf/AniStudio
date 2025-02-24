@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <condition_variable>
 #include <unordered_set>
+#include <stdexcept>
 
 // JSON
 #include <nlohmann/json.hpp>

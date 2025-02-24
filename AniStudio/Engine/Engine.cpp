@@ -108,7 +108,7 @@ void Engine::Init() {
     // Register core systems
     entityManager.RegisterSystem<SDCPPSystem>();
     entityManager.RegisterSystem<ImageSystem>();
-    // entityManager.RegisterSystem<NodegraphSystem>();
+    entityManager.RegisterSystem<NodeSystem>();
 
     // Create core views
     // auto debugViewID = viewManager.CreateView();
