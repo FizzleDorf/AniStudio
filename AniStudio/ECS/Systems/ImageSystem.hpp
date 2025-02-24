@@ -1,148 +1,134 @@
-#ifndef IMAGESYSTEM_HPP
-#define IMAGESYSTEM_HPP
-
-#include "BaseSystem.hpp"
-#include "EntityManager.hpp"
-#include "ImageComponent.hpp"
-#include "LoadedMedia.hpp"
-#include <GL/glew.h>
-#include <iostream>
-#include <stb_image.h>
-#include <stb_image_write.h>
-#include <string>
-#include <unordered_map>
-#include <vector>
+#pragma once
+#include "ECS.h"
+#include "ImageUtils.hpp"
+#include <exiv2/exiv2.hpp>
+#include <pch.h>
+#include <nlohmann/json.hpp>
 
 namespace ECS {
 
 class ImageSystem : public BaseSystem {
 public:
-    ImageSystem(EntityManager &entityMgr) : BaseSystem(entityMgr) { sysName = "ImageSystem"; }
-    ~ImageSystem() = default;
+    ImageSystem(EntityManager &entityMgr) : BaseSystem(entityMgr) {
+        sysName = "Image_System";
+        AddComponentSignature<ImageComponent>();
+        currentImageEntity = 0;
+        Exiv2::XmpParser::initialize();
+    }
 
-    void Update(const float deltaT) {}
+    ~ImageSystem() { Exiv2::XmpParser::terminate(); }
 
-    void AddImage(const ImageComponent &image) { loadedImages.push_back(image); }
-    void AddImage(const EntityID entity) { loadedImages.push_back(mgr.GetComponent<ImageComponent>(entity)); }
+    void LoadImage(const std::string &path) {
+        try {
+            EntityID newEntity = mgr.AddNewEntity();
+            auto &imageComp = mgr.GetComponent<ImageComponent>(newEntity);
 
-    void RemoveImage(const size_t index) {
-        if (index >= loadedImages.size()) {
-            throw std::out_of_range("Image index out of range");
+            cv::Mat image = Util::LoadImageAsMat(path);
+            if (image.empty()) {
+                throw std::runtime_error("Failed to load image: " + path);
+            }
+
+            imageComp.width = image.cols;
+            imageComp.height = image.rows;
+            imageComp.channels = image.channels();
+            imageComp.data = std::vector<unsigned char>(image.data, image.data + image.total() * image.channels());
+            imageComp.filePath = path;
+            imageComp.fileName = std::filesystem::path(path).filename().string();
+
+            currentImageEntity = newEntity;
+            LoadMetadata(newEntity);
+        } catch (const std::exception &e) {
+            std::cerr << "Error loading image: " << e.what() << std::endl;
         }
-        loadedImages.erase(loadedImages.begin() + index);
     }
 
-    ImageComponent &GetImage(const size_t index) {
-        if (index >= loadedImages.size()) {
-            throw std::out_of_range("Image index out of range");
+    void SaveImage(EntityID entity) {
+        try {
+            auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
+            if (imageComp.data.empty()) {
+                throw std::runtime_error("No image data to save");
+            }
+
+            std::filesystem::path savePath = std::filesystem::path(imageComp.filePath) / imageComp.fileName;
+            cv::Mat image(imageComp.height, imageComp.width, CV_8UC(imageComp.channels), imageComp.data.data());
+
+            Util::SaveMatAsImage(savePath.string(), image);
+            SaveMetadata(entity);
+        } catch (const std::exception &e) {
+            std::cerr << "Error saving image: " << e.what() << std::endl;
         }
-        return loadedImages[index];
     }
 
-    std::vector<ImageComponent> &GetImages() { return loadedImages; }
+    void SaveMetadata(EntityID entity) {
+        try {
+            auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
+            auto image = Exiv2::ImageFactory::open(imageComp.filePath);
+            if (!image.get()) {
+                throw std::runtime_error("Failed to open image for metadata");
+            }
 
-    void SaveImage(const EntityID entityID) { 
-        const auto &imageComp = mgr.GetComponent<ImageComponent>(entityID); 
-        HandleSave(imageComp);
+            image->readMetadata();
+            Exiv2::XmpData &xmpData = image->xmpData();
+
+            nlohmann::json metadata;
+            metadata["version"] = 1;
+            metadata["entityData"] = mgr.SerializeEntity(entity);
+
+            std::string jsonStr = metadata.dump();
+            xmpData["Xmp.AniStudio.Metadata"] = jsonStr;
+
+            image->setXmpData(xmpData);
+            image->writeMetadata();
+        } catch (const std::exception &e) {
+            std::cerr << "Error saving metadata: " << e.what() << std::endl;
+        }
     }
-    void SaveImage(const ImageComponent &imageComp) { HandleSave(imageComp); }
+
+    void LoadMetadata(EntityID entity) {
+        try {
+            auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
+            auto image = Exiv2::ImageFactory::open(imageComp.filePath);
+            if (!image.get()) {
+                return;
+            }
+
+            image->readMetadata();
+            Exiv2::XmpData &xmpData = image->xmpData();
+
+            auto it = xmpData.findKey(Exiv2::XmpKey("Xmp.AniStudio.Metadata"));
+            if (it != xmpData.end()) {
+                std::string jsonStr = it->toString();
+                nlohmann::json metadata = nlohmann::json::parse(jsonStr);
+
+                if (metadata.contains("entityData")) {
+                    mgr.DeserializeEntity(metadata["entityData"]);
+                }
+            }
+        } catch (const std::exception &e) {
+            std::cerr << "Error loading metadata: " << e.what() << std::endl;
+        }
+    }
+
+    void SetCurrentImage(EntityID entity) {
+        if (mgr.HasComponent<ImageComponent>(entity)) {
+            currentImageEntity = entity;
+        }
+    }
+
+    EntityID GetCurrentImage() const { return currentImageEntity; }
+
+    std::vector<EntityID> GetLoadedImages() const {
+        std::vector<EntityID> loadedImages;
+        for (const auto &entity : entities) {
+            if (mgr.HasComponent<ImageComponent>(entity)) {
+                loadedImages.push_back(entity);
+            }
+        }
+        return loadedImages;
+    }
 
 private:
-    std::vector<ImageComponent> loadedImages;
-    std::queue<ImageComponent> imageQueue;
-
-    enum class FileType { PNG, JPG, BMP, TGA, HDR, Unsupported };
-
-    FileType GetFileType(const std::string &extension) {
-        if (extension == "png")
-            return FileType::PNG;
-        if (extension == "jpg" || extension == "jpeg")
-            return FileType::JPG;
-        if (extension == "bmp")
-            return FileType::BMP;
-        if (extension == "tga")
-            return FileType::TGA;
-        if (extension == "hdr")
-            return FileType::HDR;
-        return FileType::Unsupported;
-    }
-
-    std::string GetFileExtension(const std::string &filePath) {
-        size_t pos = filePath.find_last_of('.');
-        if (pos != std::string::npos) {
-            return filePath.substr(pos + 1);
-        }
-        return ""; // No extension found
-    }
-
-    void HandleSave(const ImageComponent &imageComp) {
-        if (imageComp.textureID == 0) {
-            std::cerr << "No valid texture to save for Entity ID " << imageComp.GetID() << "." << std::endl;
-            return;
-        }
-
-        // Get the texture size
-        GLint width, height;
-        glBindTexture(GL_TEXTURE_2D, imageComp.textureID);
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-
-        // Read the texture pixels back from OpenGL
-        std::vector<unsigned char> pixels(width * height * 4); // 4 bytes per pixel (RGBA)
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-        // Extract file extension and determine the save format
-        std::string filePath = imageComp.filePath;
-        std::string extension = GetFileExtension(filePath);
-
-        switch (GetFileType(extension)) {
-        case FileType::PNG:
-            if (stbi_write_png(filePath.c_str(), width, height, 4, pixels.data(), width * 4)) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as PNG." << std::endl;
-            }
-            break;
-        case FileType::JPG:
-            if (stbi_write_jpg(filePath.c_str(), width, height, 4, pixels.data(), 90)) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as JPG." << std::endl;
-            }
-            break;
-        case FileType::BMP:
-            if (stbi_write_bmp(filePath.c_str(), width, height, 4, pixels.data())) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as BMP." << std::endl;
-            }
-            break;
-        case FileType::TGA:
-            if (stbi_write_tga(filePath.c_str(), width, height, 4, pixels.data())) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as TGA." << std::endl;
-            }
-            break;
-        case FileType::HDR:
-            if (stbi_write_hdr(filePath.c_str(), width, height, 4, reinterpret_cast<float *>(pixels.data()))) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as HDR." << std::endl;
-            }
-            break;
-        default:
-            std::cerr << "Unsupported file extension for saving image: " << extension << std::endl;
-            break;
-        }
-    }
+    EntityID currentImageEntity;
 };
 
 } // namespace ECS
-
-#endif // IMAGESYSTEM_HPP

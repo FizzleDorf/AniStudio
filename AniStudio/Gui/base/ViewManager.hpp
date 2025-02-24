@@ -73,7 +73,7 @@ public:
         GetViewSignature(viewList)->insert(ViewType<T>());
 
         // Add to appropriate view list
-        auto &viewListPtr = GetViewList<T>();
+        auto viewListPtr = GetViewList<T>();
         std::cout << "Adding view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
         viewListPtr->Insert(std::move(view));
 
