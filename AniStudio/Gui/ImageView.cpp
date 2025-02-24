@@ -1,13 +1,13 @@
 #include "ImageView.hpp"
+#include "pch.h"
 #include <GL/glew.h>
 #include <ImGuiFileDialog.h>
+#include <algorithm>
 #include <imgui.h>
 #include <iostream>
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <algorithm>
 #include <stdexcept>
-#include "pch.h"
 
 using namespace ECS;
 
@@ -180,7 +180,7 @@ void ImageView::RenderSelector() {
                 imgIndex = size - 1;
             }
             imgIndex = (imgIndex % size + size) % size;
-        } 
+        }
         ImGui::SameLine();
         if (ImGui::Button("First")) {
             imgIndex = 0;
@@ -191,7 +191,7 @@ void ImageView::RenderSelector() {
         }
         imageComponent = loadedMedia.GetImage(imgIndex);
         CleanUpCurrentImage();
-        CreateCurrentTexture();     
+        CreateCurrentTexture();
     }
 }
 
@@ -200,59 +200,53 @@ void ImageView::RenderHistory() {
     if (!loadedMedia.GetImages().empty()) {
 
         // Create scrollable history panel
-        if (ImGui::BeginChild("HistoryPanel", ImVec2(0, 160), true, ImGuiWindowFlags_HorizontalScrollbar)) {
-            const auto &images = loadedMedia.GetImages();
+        const auto &images = loadedMedia.GetImages();
 
-            for (size_t i = 0; i < images.size(); ++i) {
-                ImGui::BeginGroup();
-                const auto &image = images[i];
+        for (size_t i = 0; i < images.size(); ++i) {
+            ImGui::BeginGroup();
+            const auto &image = images[i];
 
-                if (image.textureID == 0) {
-                    CreateTexture(i);
-                }
-                if (!image.imageData) {
-                    mgr.DestroyEntity(image.GetID());
-                    ImGui::EndGroup();
-                    break;
-                }
-
-                if (static_cast<int>(i) == imgIndex) {
-                    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
-                }
-                ImGui::Text("%zu: %s", i, image.fileName.c_str());
-                if (static_cast<int>(i) == imgIndex) {
-                    ImGui::PopStyleColor();
-                }
-
-                // Calculate image dimensions
-                float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
-                ImVec2 maxSize(128.0f, 128.0f);
-                ImVec2 imageSize;
-                if (aspectRatio > 1.0f) {
-                    imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
-                } else {
-                    imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
-                }
-
-                if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
-                                       reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
-                    imgIndex = static_cast<int>(i);
-                    imageComponent = loadedMedia.GetImage(imgIndex);
-                    CleanUpCurrentImage();
-                    CreateCurrentTexture();
-                }
-
-                ImGui::EndGroup();
-                ImGui::SameLine();
+            if (image.textureID == 0) {
+                CreateTexture(i);
             }
-            ImGui::NewLine();
+            if (!image.imageData) {
+                mgr.DestroyEntity(image.GetID());
+                ImGui::EndGroup();
+                break;
+            }
+
+            if (static_cast<int>(i) == imgIndex) {
+                ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+            }
+            ImGui::Text("%zu: %s", i, image.fileName.c_str());
+            if (static_cast<int>(i) == imgIndex) {
+                ImGui::PopStyleColor();
+            }
+
+            // Calculate image dimensions
+            float aspectRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
+            ImVec2 maxSize(128.0f, 128.0f);
+            ImVec2 imageSize;
+            if (aspectRatio > 1.0f) {
+                imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
+            } else {
+                imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
+            }
+
+            if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
+                                   reinterpret_cast<void *>(static_cast<intptr_t>(image.textureID)), imageSize)) {
+                imgIndex = static_cast<int>(i);
+                imageComponent = loadedMedia.GetImage(imgIndex);
+                CleanUpCurrentImage();
+                CreateCurrentTexture();
+            }
+
+            ImGui::EndGroup();
         }
-        ImGui::EndChild();
+        ImGui::NewLine();
     }
     ImGui::End();
 }
-
-
 
 void ImageView::LoadImages(const std::vector<std::string> &filePaths) {
     for (const auto &filePath : filePaths) {
@@ -347,4 +341,4 @@ void ImageView::CleanUpCurrentImage() {
 
 ImageView::~ImageView() { CleanUpCurrentImage(); }
 
-} // namespace ECS
+} // namespace GUI

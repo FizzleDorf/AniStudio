@@ -1,7 +1,6 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
 #include "Constants.hpp"
-#define NOMINMAX
 #include <exiv2/exiv2.hpp>
 
 using namespace ECS;
@@ -45,7 +44,9 @@ DiffusionView::DiffusionView(EntityManager &entityMgr) : BaseView(entityMgr) {
 
 void DiffusionView::RenderModelLoader() {
 
-    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+    int current_type = static_cast<int>(samplerComp.current_type_method);
+    ImGui::Combo("Quant Type", &current_type, type_method_items, type_method_item_count);
+    samplerComp.current_type_method = static_cast<decltype(samplerComp.current_type_method)>(current_type);
 
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -173,16 +174,13 @@ void DiffusionView::RenderFilePath() {
 
 void DiffusionView::RenderLatents() {
 
-    ImGui::Combo("RNG Type", &int(samplerComp.current_rng_type), type_rng_items, type_rng_item_count);
+    int current_rng = static_cast<int>(samplerComp.current_rng_type);
+    ImGui::Combo("RNG Type", &current_rng, type_rng_items, type_rng_item_count);
+    samplerComp.current_rng_type = static_cast<decltype(samplerComp.current_rng_type)>(current_rng);
 
     if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("Height");
-        ImGui::TableNextColumn();
-        ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
         ImGui::Text("Width");
@@ -190,7 +188,12 @@ void DiffusionView::RenderLatents() {
         ImGui::InputInt("##Width", &latentComp.latentWidth, 8, 8);
         ImGui::TableNextRow();
         ImGui::TableNextColumn();
-        ImGui::Text("Batch");
+        ImGui::Text("Height");
+        ImGui::TableNextColumn();
+        ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("Height");
         ImGui::TableNextColumn();
         ImGui::InputInt("##Batch Size", &latentComp.batchSize);
         ImGui::EndTable();
@@ -461,7 +464,9 @@ void DiffusionView::RenderEmbeddings() {
 
 void DiffusionView::RenderDiffusionModelLoader() {
 
-    ImGui::Combo("Quant Type", &int(samplerComp.current_type_method), type_method_items, type_method_item_count);
+    int current_type_method = static_cast<int>(samplerComp.current_type_method);
+    ImGui::Combo("Quant Type", &current_type_method, type_method_items, type_method_item_count);
+    samplerComp.current_type_method = static_cast<decltype(samplerComp.current_type_method)>(current_type_method);
 
     if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
         ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -694,41 +699,41 @@ void DiffusionView::RenderQueueList() {
         }
         ImGui::Separator();
 
-            if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-                for (int i = 0; i < numQueues; i++) {
-                    HandleT2IEvent();
-                    // seedControl->activate();
-                }
+        if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
+            for (int i = 0; i < numQueues; i++) {
+                HandleT2IEvent();
+                // seedControl->activate();
             }
-            if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
-                if (numQueues < 1) {
-                    numQueues = 1;
-                }
+        }
+        if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
+            if (numQueues < 1) {
+                numQueues = 1;
             }
-            if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
-                Event event;
-                event.type = EventType::PauseInference;
-                ANI::Events::Ref().QueueEvent(event);
-            }
+        }
+        if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::PauseInference;
+            ANI::Events::Ref().QueueEvent(event);
+        }
 
-            if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
-                Event event;
-                event.type = EventType::ResumeInference;
-                ANI::Events::Ref().QueueEvent(event);
-            }
+        if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::ResumeInference;
+            ANI::Events::Ref().QueueEvent(event);
+        }
 
-            if (ImGui::Button("Stop Current", ImVec2(-FLT_MIN, 0))) {
-                Event event;
-                event.type = EventType::StopCurrentTask;
-                ANI::Events::Ref().QueueEvent(event);
-            }
+        if (ImGui::Button("Stop Current", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::StopCurrentTask;
+            ANI::Events::Ref().QueueEvent(event);
+        }
 
-            if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
-                Event event;
-                event.type = EventType::ClearInferenceQueue;
-                ANI::Events::Ref().QueueEvent(event);
-            }
-            ImGui::Separator();
+        if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
+            Event event;
+            event.type = EventType::ClearInferenceQueue;
+            ANI::Events::Ref().QueueEvent(event);
+        }
+        ImGui::Separator();
         if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
             ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
             ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
@@ -737,7 +742,7 @@ void DiffusionView::RenderQueueList() {
             ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
 
-            auto &sdSystem = mgr.GetSystem<SDCPPSystem>();
+            auto sdSystem = mgr.GetSystem<SDCPPSystem>();
             if (sdSystem) {
                 auto queueItems = sdSystem->GetQueueSnapshot();
                 for (size_t i = 0; i < queueItems.size(); i++) {
@@ -913,7 +918,6 @@ void DiffusionView::Render() {
     }
     ImGui::End();
 }
-
 nlohmann::json DiffusionView::Serialize() const {
     nlohmann::json j = BaseView::Serialize();
     j["modelComp"] = modelComp.Serialize();
