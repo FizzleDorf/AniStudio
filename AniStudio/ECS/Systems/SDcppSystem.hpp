@@ -384,20 +384,29 @@ private:
     }
 
     sd_image_t *GenerateImage(sd_ctx_t *context, EntityID entityID) {
-        return txt2img(context, mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-                       mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
-                       mgr.GetComponent<CFGComponent>(entityID).cfg, mgr.GetComponent<CFGComponent>(entityID).guidance,
-                       mgr.GetComponent<LatentComponent>(entityID).latentWidth,
-                       mgr.GetComponent<LatentComponent>(entityID).latentHeight,
-                       mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
-                       mgr.GetComponent<SamplerComponent>(entityID).steps,
-                       mgr.GetComponent<SamplerComponent>(entityID).seed,
-                       mgr.GetComponent<LatentComponent>(entityID).batchSize, nullptr, 0.0f, 0.0f, false, "",
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
+        return txt2img(
+            context, 
+            mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
+            mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
+            mgr.GetComponent<CFGComponent>(entityID).cfg, 
+            mgr.GetComponent<CFGComponent>(entityID).guidance,
+            0,
+            mgr.GetComponent<LatentComponent>(entityID).latentWidth,
+            mgr.GetComponent<LatentComponent>(entityID).latentHeight,
+            mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
+            mgr.GetComponent<SamplerComponent>(entityID).steps,
+            mgr.GetComponent<SamplerComponent>(entityID).seed,
+            mgr.GetComponent<LatentComponent>(entityID).batchSize, 
+            nullptr, 
+            0.0f, 
+            0.0f, 
+            false, 
+            "",
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
+            mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
     }
 
     nlohmann::json SerializeEntityComponents(EntityID entity) {
