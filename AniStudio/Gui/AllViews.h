@@ -7,7 +7,6 @@
 #include "UpscaleView.hpp"
 #include "NodeGraphView.hpp"
 #include "SequencerView.hpp"
-#include "CanvasView.hpp"
 #include "DebugView.hpp"
 #include "PluginView.hpp"
 #include "ConvertView.hpp"

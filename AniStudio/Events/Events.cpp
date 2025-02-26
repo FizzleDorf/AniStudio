@@ -1,5 +1,5 @@
 #include "Events.hpp"
-#include "guis.h"
+#include "AllViews.h"
 #include <iostream>
 
 namespace ANI {
