@@ -384,74 +384,125 @@ private:
     }
 
     sd_image_t *GenerateImage(sd_ctx_t *context, EntityID entityID) {
-        return txt2img(context, mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-                       mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
-                       mgr.GetComponent<CFGComponent>(entityID).cfg, mgr.GetComponent<CFGComponent>(entityID).guidance,
-                       mgr.GetComponent<LatentComponent>(entityID).latentWidth,
-                       mgr.GetComponent<LatentComponent>(entityID).latentHeight,
-                       mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
-                       mgr.GetComponent<SamplerComponent>(entityID).steps,
-                       mgr.GetComponent<SamplerComponent>(entityID).seed,
-                       mgr.GetComponent<LatentComponent>(entityID).batchSize, nullptr, 0.0f, 0.0f, false, "",
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
-                       mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
+        return txt2img(
+            context, 
+            mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
+            mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
+            mgr.GetComponent<CFGComponent>(entityID).cfg, 
+            mgr.GetComponent<CFGComponent>(entityID).guidance,
+            0,
+            mgr.GetComponent<LatentComponent>(entityID).latentWidth,
+            mgr.GetComponent<LatentComponent>(entityID).latentHeight,
+            mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
+            mgr.GetComponent<SamplerComponent>(entityID).steps,
+            mgr.GetComponent<SamplerComponent>(entityID).seed,
+            mgr.GetComponent<LatentComponent>(entityID).batchSize, 
+            nullptr, 
+            0.0f, 
+            0.0f, 
+            false, 
+            "",
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
+            mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
+            mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
     }
 
     nlohmann::json SerializeEntityComponents(EntityID entity) {
         nlohmann::json componentData;
 
+        // Create a structured metadata format
+        componentData["version"] = "1.0";
+        componentData["software"] = "AniStudio";
+        componentData["timestamp"] = std::time(nullptr);
+
+        // Create a components object to store all component data
+        nlohmann::json components;
+
         // Helper lambda to check and serialize a component if it exists
-        auto serializeComponent = [this](EntityID entity, auto componentType) {
+        auto serializeComponent = [this](EntityID entity,
+                                         auto componentType) -> std::pair<std::string, nlohmann::json> {
             using T = decltype(componentType);
             if (mgr.HasComponent<T>(entity)) {
                 const auto &comp = mgr.GetComponent<T>(entity);
-                return comp.Serialize();
+                return {comp.compName, comp.Serialize()};
             }
-            return nlohmann::json{};
+            return {"", nlohmann::json{}};
         };
 
-        // Serialize each component type
-        componentData.merge_patch(serializeComponent(entity, ModelComponent{}));
-        componentData.merge_patch(serializeComponent(entity, CLipLComponent{}));
-        componentData.merge_patch(serializeComponent(entity, CLipGComponent{}));
-        componentData.merge_patch(serializeComponent(entity, T5XXLComponent{}));
-        componentData.merge_patch(serializeComponent(entity, DiffusionModelComponent{}));
-        componentData.merge_patch(serializeComponent(entity, VaeComponent{}));
-        componentData.merge_patch(serializeComponent(entity, TaesdComponent{}));
-        componentData.merge_patch(serializeComponent(entity, ControlnetComponent{}));
-        componentData.merge_patch(serializeComponent(entity, LoraComponent{}));
-        componentData.merge_patch(serializeComponent(entity, LatentComponent{}));
-        componentData.merge_patch(serializeComponent(entity, SamplerComponent{}));
-        componentData.merge_patch(serializeComponent(entity, CFGComponent{}));
-        componentData.merge_patch(serializeComponent(entity, PromptComponent{}));
-        componentData.merge_patch(serializeComponent(entity, EmbeddingComponent{}));
-        componentData.merge_patch(serializeComponent(entity, LayerSkipComponent{}));
-        componentData.merge_patch(serializeComponent(entity, ImageComponent{}));
+        // Serialize each component type and add to components object if it exists
+        auto addComponentIfExists = [&components, &serializeComponent, entity](auto componentType) {
+            auto [name, data] = serializeComponent(entity, componentType);
+            if (!name.empty() && !data.empty()) {
+                components[name] = data;
+            }
+        };
+
+        // Add all components
+        addComponentIfExists(ModelComponent{});
+        addComponentIfExists(CLipLComponent{});
+        addComponentIfExists(CLipGComponent{});
+        addComponentIfExists(T5XXLComponent{});
+        addComponentIfExists(DiffusionModelComponent{});
+        addComponentIfExists(VaeComponent{});
+        addComponentIfExists(TaesdComponent{});
+        addComponentIfExists(ControlnetComponent{});
+        addComponentIfExists(LoraComponent{});
+        addComponentIfExists(LatentComponent{});
+        addComponentIfExists(SamplerComponent{});
+        addComponentIfExists(CFGComponent{});
+        addComponentIfExists(PromptComponent{});
+        addComponentIfExists(EmbeddingComponent{});
+        addComponentIfExists(LayerSkipComponent{});
+        addComponentIfExists(ImageComponent{});
+
+        // Add components to the main metadata
+        componentData["components"] = components;
 
         return componentData;
     }
 
     bool WriteMetadataToPNG(EntityID entity, const nlohmann::json &metadata) {
         const auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
+        std::cout << "Writing metadata to: " << imageComp.filePath << std::endl;
+        std::cout << "Metadata content: " << metadata.dump(2) << std::endl;
 
+        // Open the PNG file for reading
         FILE *fp = fopen(imageComp.filePath.c_str(), "rb");
         if (!fp) {
             std::cerr << "Failed to open PNG for reading: " << imageComp.filePath << std::endl;
             return false;
         }
 
+        // Verify PNG signature
+        unsigned char header[8];
+        if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8)) {
+            std::cerr << "Not a valid PNG file" << std::endl;
+            fclose(fp);
+            return false;
+        }
+        fseek(fp, 0, SEEK_SET);
+
+        // Initialize PNG read structures
         png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
         if (!png) {
+            std::cerr << "Failed to create PNG read struct" << std::endl;
             fclose(fp);
             return false;
         }
 
         png_infop info = png_create_info_struct(png);
         if (!info) {
+            std::cerr << "Failed to create PNG info struct" << std::endl;
             png_destroy_read_struct(&png, nullptr, nullptr);
+            fclose(fp);
+            return false;
+        }
+
+        if (setjmp(png_jmpbuf(png))) {
+            std::cerr << "Error during PNG read initialization" << std::endl;
+            png_destroy_read_struct(&png, &info, nullptr);
             fclose(fp);
             return false;
         }
@@ -459,59 +510,98 @@ private:
         png_init_io(png, fp);
         png_read_info(png, info);
 
+        // Get image info
+        png_uint_32 width, height;
+        int bit_depth, color_type;
+        png_get_IHDR(png, info, &width, &height, &bit_depth, &color_type, nullptr, nullptr, nullptr);
+
         // Create temporary file
         std::string tempFile = imageComp.filePath + ".tmp";
         FILE *out = fopen(tempFile.c_str(), "wb");
         if (!out) {
+            std::cerr << "Failed to create temporary file" << std::endl;
             png_destroy_read_struct(&png, &info, nullptr);
             fclose(fp);
             return false;
         }
 
+        // Initialize PNG write structures
         png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+        if (!pngWrite) {
+            std::cerr << "Failed to create PNG write struct" << std::endl;
+            fclose(out);
+            png_destroy_read_struct(&png, &info, nullptr);
+            fclose(fp);
+            return false;
+        }
+
         png_infop infoWrite = png_create_info_struct(pngWrite);
+        if (!infoWrite) {
+            std::cerr << "Failed to create PNG write info struct" << std::endl;
+            png_destroy_write_struct(&pngWrite, nullptr);
+            fclose(out);
+            png_destroy_read_struct(&png, &info, nullptr);
+            fclose(fp);
+            return false;
+        }
+
+        if (setjmp(png_jmpbuf(pngWrite))) {
+            std::cerr << "Error during PNG write initialization" << std::endl;
+            png_destroy_write_struct(&pngWrite, &infoWrite);
+            fclose(out);
+            png_destroy_read_struct(&png, &info, nullptr);
+            fclose(fp);
+            return false;
+        }
+
         png_init_io(pngWrite, out);
 
-        // Copy original PNG header
-        png_uint_32 width, height;
-        int bit_depth, color_type;
-        png_get_IHDR(png, info, &width, &height, &bit_depth, &color_type, nullptr, nullptr, nullptr);
+        // Copy IHDR
         png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
                      PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
-        // Set up metadata text
+        // Set up metadata chunks
         std::string metadataStr = metadata.dump();
-        png_text texts[2];
+        std::vector<png_text> texts;
 
-        // Main parameters chunk
-        texts[0].compression = PNG_TEXT_COMPRESSION_NONE;
-        texts[0].key = const_cast<char *>("parameters");
-        texts[0].text = const_cast<char *>(metadataStr.c_str());
-        texts[0].text_length = metadataStr.length();
-        texts[0].itxt_length = 0;
-        texts[0].lang = nullptr;
-        texts[0].lang_key = nullptr;
+        // Parameters text chunk
+        png_text paramText;
+        paramText.compression = PNG_TEXT_COMPRESSION_NONE;
+        // PNG_TEXT_COMPRESSION_zTXt; Use zlib compression for the metadata
+        paramText.key = const_cast<char *>("parameters");
+        paramText.text = const_cast<char *>(metadataStr.c_str());
+        paramText.text_length = metadataStr.length();
+        paramText.itxt_length = 0;
+        paramText.lang = nullptr;
+        paramText.lang_key = nullptr;
+        texts.push_back(paramText);
 
         // Software identifier
-        texts[1].compression = PNG_TEXT_COMPRESSION_NONE;
-        texts[1].key = const_cast<char *>("Software");
-        texts[1].text = const_cast<char *>("AniStudio");
-        texts[1].text_length = 9;
-        texts[1].itxt_length = 0;
-        texts[1].lang = nullptr;
-        texts[1].lang_key = nullptr;
+        png_text softwareText;
+        softwareText.compression = PNG_TEXT_COMPRESSION_NONE;
+        softwareText.key = const_cast<char *>("Software");
+        softwareText.text = const_cast<char *>("AniStudio");
+        softwareText.text_length = 9;
+        softwareText.itxt_length = 0;
+        softwareText.lang = nullptr;
+        softwareText.lang_key = nullptr;
+        texts.push_back(softwareText);
 
-        png_set_text(pngWrite, infoWrite, texts, 2);
+        // Write the text chunks
+        std::cout << "Writing " << texts.size() << " text chunks..." << std::endl;
+        png_set_text(pngWrite, infoWrite, texts.data(), texts.size());
+
+        // Write PNG header
         png_write_info(pngWrite, infoWrite);
 
         // Copy image data
-        png_bytep row = new png_byte[png_get_rowbytes(png, info)];
+        std::vector<png_byte> row(png_get_rowbytes(png, info));
         for (png_uint_32 y = 0; y < height; y++) {
-            png_read_row(png, row, nullptr);
-            png_write_row(pngWrite, row);
+            png_read_row(png, row.data(), nullptr);
+            png_write_row(pngWrite, row.data());
         }
-        delete[] row;
 
+        // Finish writing
         png_write_end(pngWrite, infoWrite);
 
         // Clean up
@@ -520,13 +610,24 @@ private:
         fclose(out);
         fclose(fp);
 
-        // Replace original with new file using proper filesystem calls
-        std::filesystem::path originalPath(imageComp.filePath);
-        std::filesystem::path tempPath(tempFile);
-        std::filesystem::remove(originalPath);
-        std::filesystem::rename(tempPath, originalPath);
+        // Replace original with new file
+        try {
+            std::filesystem::path originalPath(imageComp.filePath);
+            std::filesystem::path tempPath(tempFile);
 
-        return true;
+            // Remove original file
+            if (std::filesystem::exists(originalPath)) {
+                std::filesystem::remove(originalPath);
+            }
+
+            // Rename temp file to original
+            std::filesystem::rename(tempPath, originalPath);
+            std::cout << "Successfully wrote metadata to PNG" << std::endl;
+            return true;
+        } catch (const std::filesystem::filesystem_error &e) {
+            std::cerr << "Error replacing file: " << e.what() << std::endl;
+            return false;
+        }
     }
 };
 

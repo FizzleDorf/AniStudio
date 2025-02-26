@@ -110,9 +110,12 @@ if(BUILD_ANISTUDIO)
     add_subdirectory(external/stable-diffusion.cpp)
     add_subdirectory(external/imgui)
     add_subdirectory(external/imgui_nodes)
+    add_subdirectory(external/ImNodeFlow)
     add_subdirectory(external/stb_image)
     add_subdirectory(external/imgui_filedialog)
     add_subdirectory(external/ImGuizmo)
+
+    add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
 
     # Include directories
     include_directories(
@@ -167,6 +170,7 @@ if(BUILD_ANISTUDIO)
         stable-diffusion
         ImGui
         ImGui_Nodes
+        ImNodeFlow
         stb_image
         ImGuiFileDialog 
         ImGuizmo
