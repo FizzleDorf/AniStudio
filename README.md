@@ -143,13 +143,16 @@ You can also build manually and specify which backend and featured you want to u
 The first thing you need is the app requirements.
 
 Next you will need Conan installed to a python virtual environment (venv) in the source code root:
+*optional*
 ```
-  python -m venv venv
+python -m venv venv
+```
+*make sure you activate the script before installation*
+
+```
   pip install conan
   conan install . --build=missing -s compiler.cppstd=17
 ```
-
-for selecting different inference backends, you need to use the appropriate flags.
 
 ### Main Build Options
 | Command Flag             | Description                                                                     |
@@ -158,6 +161,8 @@ for selecting different inference backends, you need to use the appropriate flag
 | ```-DSD_CUBLAS=ON```      | Configures and builds all the plugin projects in the root `/plugins` directory |
 
 #### Stable Diffusion Build Options
+
+for building with different inference backends, you need to use the appropriate flags.
 
 | Command Flag             | Description                                                                     |
 |--------------------------|---------------------------------------------------------------------------------|
@@ -187,3 +192,5 @@ cd build
 cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
+
+##TODO:
