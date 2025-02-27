@@ -387,10 +387,11 @@ private:
         return txt2img(
             context, 
             mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-            mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
-            mgr.GetComponent<CFGComponent>(entityID).cfg, 
-            mgr.GetComponent<CFGComponent>(entityID).guidance,
-            0,
+            mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(),
+            mgr.GetComponent<ClipSkipComponent>(entityID).clipSkip,
+            mgr.GetComponent<SamplerComponent>(entityID).cfg, 
+            mgr.GetComponent<GuidanceComponent>(entityID).guidance,
+            mgr.GetComponent<GuidanceComponent>(entityID).eta,
             mgr.GetComponent<LatentComponent>(entityID).latentWidth,
             mgr.GetComponent<LatentComponent>(entityID).latentHeight,
             mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
@@ -410,7 +411,7 @@ private:
     }
 
     nlohmann::json SerializeEntityComponents(EntityID entity) {
-        nlohmann::json componentData;
+        nlohmann::json componentData = mgr.SerializeEntity(entity);
 
         // Create a structured metadata format
         componentData["version"] = "1.0";
@@ -451,7 +452,8 @@ private:
         addComponentIfExists(LoraComponent{});
         addComponentIfExists(LatentComponent{});
         addComponentIfExists(SamplerComponent{});
-        addComponentIfExists(CFGComponent{});
+        addComponentIfExists(GuidanceComponent{});
+        addComponentIfExists(ClipSkipComponent{});
         addComponentIfExists(PromptComponent{});
         addComponentIfExists(EmbeddingComponent{});
         addComponentIfExists(LayerSkipComponent{});

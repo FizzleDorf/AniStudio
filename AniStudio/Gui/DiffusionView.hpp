@@ -71,12 +71,13 @@ private:
     LoraComponent loraComp;
     PromptComponent promptComp;
     SamplerComponent samplerComp;
-    CFGComponent cfgComp;
     VaeComponent vaeComp;
     TaesdComponent taesdComp;
     ImageComponent imageComp;
     EmbeddingComponent embedComp;
     ControlnetComponent controlComp;
     LayerSkipComponent layerSkipComp;
+    GuidanceComponent guidanceComp;
+    ClipSkipComponent clipSkipComp;
 };
 } // namespace GUI

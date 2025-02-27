@@ -5,7 +5,7 @@
 
 namespace ECS {
 struct LatentComponent : public ECS::BaseComponent {
-    LatentComponent() { compName = "LatentComponent"; }
+    LatentComponent() { compName = "Latent"; }
     // unsigned char *latentData = nullptr;
     int latentWidth = 512;
     int latentHeight = 512;
@@ -30,16 +30,30 @@ struct LatentComponent : public ECS::BaseComponent {
     }
 
     // Deserialize the component from JSON
-    void Deserialize(const nlohmann::json &j) {
+    void Deserialize(const nlohmann::json& j) override {
+        nlohmann::json componentData;
+
         if (j.contains(compName)) {
-            const auto &obj = j.at("LatentComponent");
-            if (obj.contains("latentWidth"))
-                latentWidth = obj["latentWidth"];
-            if (obj.contains("latentHeight"))
-                latentHeight = obj["latentHeight"];
-            if (obj.contains("batchSize"))
-                batchSize = obj["batchSize"];
+            componentData = j.at(compName);
         }
+        else {
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                if (it.key() == compName) {
+                    componentData = it.value();
+                    break;
+                }
+            }
+            if (componentData.empty()) {
+                componentData = j;
+            }
+        }
+
+        if (componentData.contains("latentWidth"))
+            latentWidth = componentData["latentWidth"];
+        if (componentData.contains("latentHeight"))
+            latentHeight = componentData["latentHeight"];
+        if (componentData.contains("batchSize"))
+            batchSize = componentData["batchSize"];
     }
 };
 }
