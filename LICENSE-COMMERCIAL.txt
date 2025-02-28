@@ -1,0 +1,56 @@
+COMMERCIAL LICENSE AGREEMENT
+This Commercial License Agreement ("Agreement") is entered into as of 2025-02-28 by and between:
+
+FizzleDorf (AnimAnon) ("Licensor") and
+
+The Licensee ("You" or "Licensee"), the individual or entity purchasing a commercial license.
+
+1. Grant of License
+1.1. Subject to the terms and conditions of this Agreement, Licensor grants Licensee a non-exclusive, non-transferable, worldwide license to:
+
+Use, modify, and distribute the software ("Software") in proprietary applications.
+
+Statically or dynamically link the Software with proprietary software.
+
+Distribute the Software as part of a proprietary application without providing source code.
+
+In the case of a change of Licensor, the agreement is still in effect with the agreed terms with the only changes being the identity of the Licensor,
+ regional laws in accordance with the business registration of the new Licensor, the business address of the Licensor entity and updated contact information.
+
+1.2. The license granted herein is perpetual, unless terminated in accordance with Section 6.
+
+2. Restrictions
+2.1. Licensee may not:
+
+Redistribute the Software under the terms of the GNU Lesser General Public License v3.0 (LGPL-3.0) or any other open-source license.
+
+Use the Software in a manner that violates applicable laws or regulations.
+
+Remove or alter any copyright, trademark, or proprietary notices in the Software.
+
+3. Ownership
+3.1. Licensor retains all ownership and intellectual property rights in the Software.
+3.2. Licensee does not acquire any ownership rights in the Software, except for the license granted under this Agreement.
+
+4. Fees and Payment
+4.1. The license fee for the Software shall be determined through email contact with Licensor at 1fizzledorf@gmail.com.
+4.2. Payment terms, including due dates and methods, will be specified in the invoice provided by Licensor.
+
+5. Warranty and Liability
+5.1. The Software is provided "as-is," without any warranties, express or implied, including but not limited to the implied warranties of merchantability, fitness for a particular purpose, and non-infringement.
+5.2. Licensor shall not be liable for any damages arising from the use or inability to use the Software, including but not limited to direct, indirect, incidental, special, or consequential damages.
+
+6. Termination
+6.1. This Agreement shall terminate automatically if Licensee fails to comply with any of its terms.
+6.2. Upon termination, Licensee must cease all use and distribution of the Software and destroy all copies in its possession.
+
+7. Governing Law
+This Agreement shall be governed by and construed in accordance with the laws of the state of Delaware, without regard to its conflict of laws principles.
+
+8. Entire Agreement
+This Agreement constitutes the entire understanding between the parties with respect to the subject matter hereof and supersedes all prior agreements, understandings, or representations.
+
+9. Contact Information
+For inquiries about this Agreement or to purchase a commercial license, please contact:
+
+Email: 1fizzledorf@gmail.com
