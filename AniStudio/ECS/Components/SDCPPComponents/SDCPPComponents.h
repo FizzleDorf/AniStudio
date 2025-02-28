@@ -3,6 +3,8 @@
 // Sampling and Inference
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
+#include "GuidanceComponent.hpp"
+#include "ClipSkipComponent.hpp"
 
 // Models
 #include "ModelComponents.hpp"

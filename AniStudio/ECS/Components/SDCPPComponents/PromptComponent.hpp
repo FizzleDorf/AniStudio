@@ -7,7 +7,7 @@
 namespace ECS {
 
 struct PromptComponent : public BaseComponent {
-    PromptComponent() { compName = "PromptComponent"; }
+    PromptComponent() { compName = "Prompt"; }
     std::string posPrompt = "";
     std::string negPrompt = "";
     char PosBuffer[9999] = "Positive";
@@ -31,18 +31,32 @@ struct PromptComponent : public BaseComponent {
                   {"negPrompt", negPrompt}}}};
     }
 
-    void Deserialize(const nlohmann::json &json) {
-        if (!json.contains("PromptComponent")) {
-            throw std::runtime_error("Invalid JSON structure for deserialization");
+    void Deserialize(const nlohmann::json& j) override {
+        nlohmann::json componentData;
+
+        if (j.contains(compName)) {
+            componentData = j.at(compName);
         }
-        const auto &componentData = json.at("PromptComponent");
+        else {
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                if (it.key() == compName) {
+                    componentData = it.value();
+                    break;
+                }
+            }
+            if (componentData.empty()) {
+                componentData = j;
+            }
+        }
+
         if (componentData.contains("posPrompt")) {
-            posPrompt = componentData.at("posPrompt").get<std::string>();
+            posPrompt = componentData["posPrompt"].get<std::string>();
             strncpy(PosBuffer, posPrompt.c_str(), sizeof(PosBuffer) - 1);
             PosBuffer[sizeof(PosBuffer) - 1] = '\0'; // Ensure null termination
         }
+
         if (componentData.contains("negPrompt")) {
-            negPrompt = componentData.at("negPrompt").get<std::string>();
+            negPrompt = componentData["negPrompt"].get<std::string>();
             strncpy(NegBuffer, negPrompt.c_str(), sizeof(NegBuffer) - 1);
             NegBuffer[sizeof(NegBuffer) - 1] = '\0'; // Ensure null termination
         }

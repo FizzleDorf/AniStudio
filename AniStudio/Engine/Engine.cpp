@@ -82,24 +82,44 @@ void Engine::Init() {
 
     // Initialize managers
     filePaths.Init();
-    entityManager.Reset();
+    mgr.Reset();
     viewManager.Reset();
     viewManager.Init();
     pluginManager.Init();
     
-    const EntityID temp = entityManager.AddNewEntity();
-    entityManager.DestroyEntity(temp);
-    
+    // Invalidate ID 0 for all entities and viewlists
+    const EntityID temp = mgr.AddNewEntity();
+    mgr.DestroyEntity(temp);
     auto tempView = viewManager.CreateView();
     viewManager.DestroyView(tempView);
 
+    // Register Component Names
+    mgr.RegisterComponentName<ModelComponent>("Model");
+    mgr.RegisterComponentName<CLipLComponent>("CLipL");
+    mgr.RegisterComponentName<CLipGComponent>("CLipG");
+    mgr.RegisterComponentName<T5XXLComponent>("T5XXL");
+    mgr.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
+    mgr.RegisterComponentName<LatentComponent>("Latent");
+    mgr.RegisterComponentName<LoraComponent>("Lora");
+    mgr.RegisterComponentName<PromptComponent>("Prompt");
+    mgr.RegisterComponentName<SamplerComponent>("Sampler");
+    mgr.RegisterComponentName<GuidanceComponent>("Guidance");
+    mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
+    mgr.RegisterComponentName<VaeComponent>("Vae");
+    mgr.RegisterComponentName<ImageComponent>("Image");
+    mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
+    mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
+    mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
+
+    // TODO: Register View Names
+
     // Register core systems
-    entityManager.RegisterSystem<SDCPPSystem>();
-    entityManager.RegisterSystem<ImageSystem>();
+    mgr.RegisterSystem<SDCPPSystem>();
+    mgr.RegisterSystem<ImageSystem>();
     
     auto diffusionViewID = viewManager.CreateView();
-    viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
-    viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
+    viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
+    viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
 
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
@@ -119,7 +139,7 @@ void Engine::Update(const float deltaT) {
     }
     
     // Update managers
-    entityManager.Update(deltaT);
+    mgr.Update(deltaT);
     pluginManager.Update(deltaT);
 }
 

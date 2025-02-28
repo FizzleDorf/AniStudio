@@ -38,7 +38,7 @@ public:
     void QueueInference(const EntityID entityID) {
         {
             std::lock_guard<std::mutex> lock(queueMutex);
-            inferenceQueue.push_back({entityID, false, SerializeEntityComponents(entityID)});
+            inferenceQueue.push_back({entityID, false, mgr.SerializeEntity(entityID)});
         }
         std::cout << "metadata: " << '\n' << inferenceQueue.back().metadata << std::endl;
         queueCondition.notify_one();
@@ -387,10 +387,11 @@ private:
         return txt2img(
             context, 
             mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-            mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(), 0,
-            mgr.GetComponent<CFGComponent>(entityID).cfg, 
-            mgr.GetComponent<CFGComponent>(entityID).guidance,
-            0,
+            mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(),
+            mgr.GetComponent<ClipSkipComponent>(entityID).clipSkip,
+            mgr.GetComponent<SamplerComponent>(entityID).cfg, 
+            mgr.GetComponent<GuidanceComponent>(entityID).guidance,
+            mgr.GetComponent<GuidanceComponent>(entityID).eta,
             mgr.GetComponent<LatentComponent>(entityID).latentWidth,
             mgr.GetComponent<LatentComponent>(entityID).latentHeight,
             mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
@@ -409,67 +410,23 @@ private:
             mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end);
     }
 
-    nlohmann::json SerializeEntityComponents(EntityID entity) {
-        nlohmann::json componentData;
+    bool WriteMetadataToPNG(EntityID entity, const nlohmann::json& metadata) {
+        // Get the image component
+        const auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
-        // Create a structured metadata format
-        componentData["version"] = "1.0";
-        componentData["software"] = "AniStudio";
-        componentData["timestamp"] = std::time(nullptr);
+        // Create a new JSON object that combines entity metadata with the additional fields
+        nlohmann::json combinedMetadata = metadata; // Use the passed metadata (from EntityManager)
 
-        // Create a components object to store all component data
-        nlohmann::json components;
+        // Add the additional metadata fields
+        combinedMetadata["version"] = "1.0";
+        combinedMetadata["software"] = "AniStudio";
+        combinedMetadata["timestamp"] = std::time(nullptr);
 
-        // Helper lambda to check and serialize a component if it exists
-        auto serializeComponent = [this](EntityID entity,
-                                         auto componentType) -> std::pair<std::string, nlohmann::json> {
-            using T = decltype(componentType);
-            if (mgr.HasComponent<T>(entity)) {
-                const auto &comp = mgr.GetComponent<T>(entity);
-                return {comp.compName, comp.Serialize()};
-            }
-            return {"", nlohmann::json{}};
-        };
-
-        // Serialize each component type and add to components object if it exists
-        auto addComponentIfExists = [&components, &serializeComponent, entity](auto componentType) {
-            auto [name, data] = serializeComponent(entity, componentType);
-            if (!name.empty() && !data.empty()) {
-                components[name] = data;
-            }
-        };
-
-        // Add all components
-        addComponentIfExists(ModelComponent{});
-        addComponentIfExists(CLipLComponent{});
-        addComponentIfExists(CLipGComponent{});
-        addComponentIfExists(T5XXLComponent{});
-        addComponentIfExists(DiffusionModelComponent{});
-        addComponentIfExists(VaeComponent{});
-        addComponentIfExists(TaesdComponent{});
-        addComponentIfExists(ControlnetComponent{});
-        addComponentIfExists(LoraComponent{});
-        addComponentIfExists(LatentComponent{});
-        addComponentIfExists(SamplerComponent{});
-        addComponentIfExists(CFGComponent{});
-        addComponentIfExists(PromptComponent{});
-        addComponentIfExists(EmbeddingComponent{});
-        addComponentIfExists(LayerSkipComponent{});
-        addComponentIfExists(ImageComponent{});
-
-        // Add components to the main metadata
-        componentData["components"] = components;
-
-        return componentData;
-    }
-
-    bool WriteMetadataToPNG(EntityID entity, const nlohmann::json &metadata) {
-        const auto &imageComp = mgr.GetComponent<ImageComponent>(entity);
         std::cout << "Writing metadata to: " << imageComp.filePath << std::endl;
-        std::cout << "Metadata content: " << metadata.dump(2) << std::endl;
+        std::cout << "Metadata content: " << combinedMetadata.dump(2) << std::endl;
 
         // Open the PNG file for reading
-        FILE *fp = fopen(imageComp.filePath.c_str(), "rb");
+        FILE* fp = fopen(imageComp.filePath.c_str(), "rb");
         if (!fp) {
             std::cerr << "Failed to open PNG for reading: " << imageComp.filePath << std::endl;
             return false;
@@ -517,7 +474,7 @@ private:
 
         // Create temporary file
         std::string tempFile = imageComp.filePath + ".tmp";
-        FILE *out = fopen(tempFile.c_str(), "wb");
+        FILE* out = fopen(tempFile.c_str(), "wb");
         if (!out) {
             std::cerr << "Failed to create temporary file" << std::endl;
             png_destroy_read_struct(&png, &info, nullptr);
@@ -558,18 +515,18 @@ private:
 
         // Copy IHDR
         png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
-                     PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+            PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
         // Set up metadata chunks
-        std::string metadataStr = metadata.dump();
+        std::string metadataStr = combinedMetadata.dump(); // Use the combined metadata
         std::vector<png_text> texts;
 
         // Parameters text chunk
         png_text paramText;
         paramText.compression = PNG_TEXT_COMPRESSION_NONE;
         // PNG_TEXT_COMPRESSION_zTXt; Use zlib compression for the metadata
-        paramText.key = const_cast<char *>("parameters");
-        paramText.text = const_cast<char *>(metadataStr.c_str());
+        paramText.key = const_cast<char*>("parameters");
+        paramText.text = const_cast<char*>(metadataStr.c_str());
         paramText.text_length = metadataStr.length();
         paramText.itxt_length = 0;
         paramText.lang = nullptr;
@@ -579,8 +536,8 @@ private:
         // Software identifier
         png_text softwareText;
         softwareText.compression = PNG_TEXT_COMPRESSION_NONE;
-        softwareText.key = const_cast<char *>("Software");
-        softwareText.text = const_cast<char *>("AniStudio");
+        softwareText.key = const_cast<char*>("Software");
+        softwareText.text = const_cast<char*>("AniStudio");
         softwareText.text_length = 9;
         softwareText.itxt_length = 0;
         softwareText.lang = nullptr;
@@ -624,7 +581,8 @@ private:
             std::filesystem::rename(tempPath, originalPath);
             std::cout << "Successfully wrote metadata to PNG" << std::endl;
             return true;
-        } catch (const std::filesystem::filesystem_error &e) {
+        }
+        catch (const std::filesystem::filesystem_error& e) {
             std::cerr << "Error replacing file: " << e.what() << std::endl;
             return false;
         }

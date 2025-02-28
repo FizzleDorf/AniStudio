@@ -2,6 +2,7 @@
 #include "BaseComponent.hpp"
 namespace ECS {
 struct LatentTransformComponent : public ECS::BaseComponent {
+    LatentTransformComponent() { compName = "LatentTransform"; }
     int newLatentWidth = 1024;
     int newLatentHeight = 1024;
     float latentWidthMultiplier = 1.5f;

@@ -6,23 +6,112 @@ I created this application to leverage C/C++ for a highly modular and paralleliz
 
 ## Features
 - Entity Component System for modular development with low technical debt
-- Dockable Windows to personalize your UI/UX experience
-- Customizable hotkeys
+- Dockable Views to personalize your UI/UX experience
 - Customizable ImGui Themes
 - Image and video inference (StableDiffusion.cpp)
 - Cross-platform (Windows, Linux)
 - Included UI editor for ease of development
-- Hot-reload plugin system for extensible features and experiences
+
+---
 
 ## Requirements
-| **Requirement** | **Windows** | **Ubuntu/Debian** | **Fedora** | **Arch Linux** |
-|------------------|-------------|-------------------|------------|----------------|
-| **[Vulkan](https://vulkan.lunarg.com/sdk/home)** (verify with `vulkaninfo`) | Already included (or download from the link provided) | `sudo apt install vulkan-tools libvulkan-dev` | `sudo dnf install vulkan vulkan-tools vulkan-headers` | `sudo pacman -Syu vulkan-tools vulkan-devel` |
-| **[Python](https://www.python.org/)** >= 3.10 (verify with `python --version`) | Download from the link provided (ensure the installer sets up PATH) | `sudo apt install python3 python3-pip` <br> (If outdated: Add PPA for Python 3.10+ and install) <br> `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt update && sudo apt install python3.10 python3.10-venv python3.10-distutils` | `sudo dnf install python3 python3-pip` | `sudo pacman -Syu python python-pip` |
-| **[CMake](https://cmake.org/download/)** >= 3.20 (verify with `cmake --version`) | Download from the link provided | `sudo apt remove --purge cmake && sudo apt update && sudo apt install wget` <br> `wget https://github.com/Kitware/CMake/releases/download/v3.20.0/cmake-3.20.0-linux-x86_64.sh` <br> `sudo bash cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license` | `sudo dnf install cmake` <br> *(If outdated: Download and install manually like Ubuntu)* | `sudo pacman -Syu cmake` |
 
+### **Windows**
+- **Vulkan**  
+  - Already included (or download from [here](https://vulkan.lunarg.com/sdk/home)).  
+  - Verify with `vulkaninfo`.  
 
-  
+- **Python >= 3.10**  
+  - Download from [here](https://www.python.org/).  
+  - Ensure the installer adds Python to your PATH.  
+  - Verify with `python --version`.  
+
+- **CMake >= 3.20**  
+  - Download from [here](https://cmake.org/download/).  
+  - Verify with `cmake --version`.  
+
+### **Ubuntu/Debian**
+- **Vulkan**  
+  - Install:  
+    ```bash
+    sudo apt install vulkan-tools libvulkan-dev
+    ```  
+  - Verify with `vulkaninfo`.  
+
+- **Python >= 3.10**  
+  - Install:  
+    ```bash
+    sudo apt install python3 python3-pip
+    ```  
+  - If Python 3.10+ is not available, add a PPA and install:  
+    ```bash
+    sudo add-apt-repository ppa:deadsnakes/ppa
+    sudo apt update
+    sudo apt install python3.10 python3.10-venv python3.10-distutils
+    ```  
+  - Verify with `python --version`.  
+
+- **CMake >= 3.20**  
+  - Remove old CMake (if needed):  
+    ```bash
+    sudo apt remove --purge cmake
+    ```  
+  - Download and install:  
+    ```bash
+    sudo apt update
+    sudo apt install wget
+    wget https://github.com/Kitware/CMake/releases/download/v3.20.0/cmake-3.20.0-linux-x86_64.sh
+    sudo bash cmake-3.20.0-linux-x86_64.sh --prefix=/usr/local --skip-license
+    ```  
+  - Verify with `cmake --version`.  
+
+### **Fedora**
+- **Vulkan**  
+  - Install:  
+    ```bash
+    sudo dnf install vulkan vulkan-tools vulkan-headers
+    ```  
+  - Verify with `vulkaninfo`.  
+
+- **Python >= 3.10**  
+  - Install:  
+    ```bash
+    sudo dnf install python3 python3-pip
+    ```  
+  - Verify with `python --version`.  
+
+- **CMake >= 3.20**  
+  - Install:  
+    ```bash
+    sudo dnf install cmake
+    ```  
+  - If outdated, download and install manually (follow Ubuntu instructions).  
+  - Verify with `cmake --version`.  
+
+### **Arch Linux**
+- **Vulkan**  
+  - Install:  
+    ```bash
+    sudo pacman -Syu vulkan-tools vulkan-devel
+    ```  
+  - Verify with `vulkaninfo`.  
+
+- **Python >= 3.10**  
+  - Install:  
+    ```bash
+    sudo pacman -Syu python python-pip
+    ```  
+  - Verify with `python --version`.  
+
+- **CMake >= 3.20**  
+  - Install:  
+    ```bash
+    sudo pacman -Syu cmake
+    ```  
+  - Verify with `cmake --version`.  
+
+---
+
 ## Install
 *cloning, installing and building will take a while. speeding up the build process using repo options is in the TODO*
 ```
@@ -54,13 +143,16 @@ You can also build manually and specify which backend and featured you want to u
 The first thing you need is the app requirements.
 
 Next you will need Conan installed to a python virtual environment (venv) in the source code root:
+*optional*
 ```
-  python -m venv venv
+python -m venv venv
+```
+*make sure you activate the script before installation*
+
+```
   pip install conan
   conan install . --build=missing -s compiler.cppstd=17
 ```
-
-for selecting different inference backends, you need to use the appropriate flags.
 
 ### Main Build Options
 | Command Flag             | Description                                                                     |
@@ -69,6 +161,8 @@ for selecting different inference backends, you need to use the appropriate flag
 | ```-DSD_CUBLAS=ON```      | Configures and builds all the plugin projects in the root `/plugins` directory |
 
 #### Stable Diffusion Build Options
+
+for building with different inference backends, you need to use the appropriate flags.
 
 | Command Flag             | Description                                                                     |
 |--------------------------|---------------------------------------------------------------------------------|
@@ -98,3 +192,5 @@ cd build
 cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
 cmake --build . --config Release
 ```
+
+##TODO:

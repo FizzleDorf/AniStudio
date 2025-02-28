@@ -181,10 +181,10 @@ void ImageView::RenderSelector() {
     if (ImGui::Button("Last")) {
         if (!loadedMedia.GetImages().empty()) {
             imgIndex = static_cast<int>(loadedMedia.GetImages().size() - 1);
+            imageComponent = loadedMedia.GetImage(imgIndex);
+            CleanUpCurrentImage();
+            CreateCurrentTexture();
         }
-        imageComponent = loadedMedia.GetImage(imgIndex);
-        CleanUpCurrentImage();
-        CreateCurrentTexture();
     }
 
     if (ImGui::InputInt("Current Image", &imgIndex)) {

@@ -8,9 +8,11 @@
 namespace ECS {
 
 struct SamplerComponent : public ECS::BaseComponent {
+    SamplerComponent() { compName = "Sampler"; }
     int steps = 20;
     float denoise = 1.0;
-    int seed = 31337;
+    float cfg = 7.0;
+    int seed = -1;
     int n_threads = 4;
     bool free_params_immediately = true;
 
@@ -23,6 +25,7 @@ struct SamplerComponent : public ECS::BaseComponent {
         if (this != &other) {
             steps = other.steps;
             denoise = other.denoise;
+            cfg = other.cfg;
             seed = other.seed;
             n_threads = other.n_threads;
             free_params_immediately = other.free_params_immediately;
@@ -35,9 +38,10 @@ struct SamplerComponent : public ECS::BaseComponent {
     }
 
     nlohmann::json Serialize() const override {
-        return {{"Base_Component",
+        return {{compName,
                  {{"seed", seed},
                   {"steps", steps},
+                  {"cfg", cfg},
                   {"denoise", denoise},
                   {"n_threads", n_threads},
                   {"free_params_immediately", free_params_immediately},
@@ -47,53 +51,45 @@ struct SamplerComponent : public ECS::BaseComponent {
                   {"current_rng_type", static_cast<int>(current_rng_type)}}}};
     }
 
-    void Deserialize(const nlohmann::json &j) override {
-        if (j.contains("Base_Component")) {
-            const auto &obj = j.at("Base_Component");
-            if (obj.contains("seed"))
-                seed = obj["seed"];
-            if (obj.contains("steps"))
-                steps = obj["steps"];
-            if (obj.contains("denoise"))
-                denoise = obj["denoise"];
-            if (obj.contains("n_threads"))
-                n_threads = obj["n_threads"];
-            if (obj.contains("free_params_immediately"))
-                free_params_immediately = obj["free_params_immediately"];
-            if (obj.contains("current_sample_method"))
-                current_sample_method = static_cast<sample_method_t>(obj["current_sample_method"]);
-            if (obj.contains("current_scheduler_method"))
-                current_scheduler_method = static_cast<schedule_t>(obj["current_scheduler_method"]);
-            if (obj.contains("current_type_method"))
-                current_type_method = static_cast<sd_type_t>(obj["current_type_method"]);
-            if (obj.contains("current_rng_type"))
-                current_rng_type = static_cast<rng_type_t>(obj["current_rng_type"]);
+    void Deserialize(const nlohmann::json& j) {
+        
+        nlohmann::json componentData;
+
+        if (j.contains(compName)) {
+            componentData = j.at(compName);
         }
-    }
-};
-
-struct CFGComponent : public ECS::BaseComponent {
-    float cfg = 7.0;
-    float guidance = 2.0f;
-
-    CFGComponent &operator=(const CFGComponent &other) {
-        if (this != &other) { // Self-assignment check
-            cfg = other.cfg;
-            guidance = other.guidance;
+        else {
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                if (it.key() == compName) {
+                    componentData = it.value();
+                    break;
+                }
+            }
+            if (componentData.empty()) {
+                componentData = j;
+            }
         }
-        return *this;
-    }
 
-    nlohmann::json Serialize() const override { return {{"Base_Component", {{"cfg", cfg}, {"guidance", guidance}}}}; }
-
-    void Deserialize(const nlohmann::json &j) override {
-        if (j.contains("Base_Component")) {
-            const auto &obj = j.at("Base_Component");
-            if (obj.contains("cfg"))
-                cfg = obj["cfg"];
-            if (obj.contains("guidance"))
-                guidance = obj["guidance"];
-        }
+        if (componentData.contains("seed"))
+            seed = componentData["seed"];
+        if (componentData.contains("steps"))
+            steps = componentData["steps"];
+        if (componentData.contains("cfg"))
+            cfg = componentData["cfg"];
+        if (componentData.contains("denoise"))
+            denoise = componentData["denoise"];
+        if (componentData.contains("n_threads"))
+            n_threads = componentData["n_threads"];
+        if (componentData.contains("free_params_immediately"))
+            free_params_immediately = componentData["free_params_immediately"].get<bool>();
+        if (componentData.contains("current_sample_method"))
+            current_sample_method = static_cast<sample_method_t>(componentData["current_sample_method"]);
+        if (componentData.contains("current_scheduler_method"))
+            current_scheduler_method = static_cast<schedule_t>(componentData["current_scheduler_method"]);
+        if (componentData.contains("current_type_method"))
+            current_type_method = static_cast<sd_type_t>(componentData["current_type_method"]);
+        if (componentData.contains("current_rng_type"))
+            current_rng_type = static_cast<rng_type_t>(componentData["current_rng_type"]);
     }
 };
 
