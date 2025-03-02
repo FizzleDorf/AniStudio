@@ -194,3 +194,35 @@ cmake --build . --config Release
 ```
 
 ##TODO:
+- update headers to include the licence disclaimer for clarity. probably something like this:
+```
+ /*
+ * This file is part of AniStudio.
+ *
+ * It is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For the commercial license, contact 1fizzledorf@gmail.com.
+ */
+```
+- attributions for external libraries and code
+
+## License
+
+This project is dual-licensed under the **GNU Lesser General Public License v3.0 (LGPL-3.0)** and a **commercial license**.
+
+### LGPL-3.0
+If you use this project under the LGPL-3.0, you must:
+- Provide the source code of any modifications to the LGPL-licensed parts.
+- Allow users to replace the LGPL-licensed components with their own versions.
+
+For full details, see the [LICENSE-LGPL-3.0.txt](LICENSE-LGPL-3.0.txt) file.
+
+### Commercial License
+If you prefer to use this project under a commercial license, please contact us at [your-email@example.com] to discuss terms. The commercial license allows:
+- Static linking of the library in proprietary software.
+- No obligation to provide source code.
+- Priority support and additional benefits.
+
+For full details, see the [LICENSE-COMMERCIAL.txt](LICENSE-COMMERCIAL.txt) file.
