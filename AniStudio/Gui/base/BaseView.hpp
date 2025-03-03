@@ -16,6 +16,7 @@ public:
     inline const ViewListID GetID() const { return viewID; }
 
     virtual void Init() {}
+    virtual void Update(const float deltaT) {}
     virtual void Render() = 0;
     virtual void HandleInput(int key, int action) {}
 

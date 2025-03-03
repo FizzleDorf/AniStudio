@@ -141,6 +141,7 @@ void Engine::Update(const float deltaT) {
     // Update managers
     mgr.Update(deltaT);
     pluginManager.Update(deltaT);
+    viewManager.Update(deltaT);
 }
 
 void Engine::Draw() {
