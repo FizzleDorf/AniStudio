@@ -1,148 +1,237 @@
-#ifndef IMAGESYSTEM_HPP
-#define IMAGESYSTEM_HPP
+#pragma once
 
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
 #include "ImageComponent.hpp"
-#include "LoadedMedia.hpp"
+#include "ImageManager.hpp"
 #include <GL/glew.h>
-#include <iostream>
+#include <memory>
+#include <functional>
 #include <stb_image.h>
 #include <stb_image_write.h>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
 namespace ECS {
 
-class ImageSystem : public BaseSystem {
-public:
-    ImageSystem(EntityManager &entityMgr) : BaseSystem(entityMgr) { sysName = "ImageSystem"; }
-    ~ImageSystem() = default;
+    class ImageSystem : public BaseSystem {
+    public:
+        // Callback function types
+        using ImageCallback = std::function<void(EntityID)>;
 
-    void Update(const float deltaT) {}
+        ImageSystem(EntityManager& entityMgr) : BaseSystem(entityMgr) {
+            sysName = "Image_System";
 
-    void AddImage(const ImageComponent &image) { loadedImages.push_back(image); }
-    void AddImage(const EntityID entity) { loadedImages.push_back(mgr.GetComponent<ImageComponent>(entity)); }
+            // Define which components this system operates on
+            AddComponentSignature<ImageComponent>();
 
-    void RemoveImage(const size_t index) {
-        if (index >= loadedImages.size()) {
-            throw std::out_of_range("Image index out of range");
-        }
-        loadedImages.erase(loadedImages.begin() + index);
-    }
-
-    ImageComponent &GetImage(const size_t index) {
-        if (index >= loadedImages.size()) {
-            throw std::out_of_range("Image index out of range");
-        }
-        return loadedImages[index];
-    }
-
-    std::vector<ImageComponent> &GetImages() { return loadedImages; }
-
-    void SaveImage(const EntityID entityID) { 
-        const auto &imageComp = mgr.GetComponent<ImageComponent>(entityID); 
-        HandleSave(imageComp);
-    }
-    void SaveImage(const ImageComponent &imageComp) { HandleSave(imageComp); }
-
-private:
-    std::vector<ImageComponent> loadedImages;
-    std::queue<ImageComponent> imageQueue;
-
-    enum class FileType { PNG, JPG, BMP, TGA, HDR, Unsupported };
-
-    FileType GetFileType(const std::string &extension) {
-        if (extension == "png")
-            return FileType::PNG;
-        if (extension == "jpg" || extension == "jpeg")
-            return FileType::JPG;
-        if (extension == "bmp")
-            return FileType::BMP;
-        if (extension == "tga")
-            return FileType::TGA;
-        if (extension == "hdr")
-            return FileType::HDR;
-        return FileType::Unsupported;
-    }
-
-    std::string GetFileExtension(const std::string &filePath) {
-        size_t pos = filePath.find_last_of('.');
-        if (pos != std::string::npos) {
-            return filePath.substr(pos + 1);
-        }
-        return ""; // No extension found
-    }
-
-    void HandleSave(const ImageComponent &imageComp) {
-        if (imageComp.textureID == 0) {
-            std::cerr << "No valid texture to save for Entity ID " << imageComp.GetID() << "." << std::endl;
-            return;
+            // Initialize the image manager
+            imageManager = std::make_unique<ImageManager>();
         }
 
-        // Get the texture size
-        GLint width, height;
-        glBindTexture(GL_TEXTURE_2D, imageComp.textureID);
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
-        glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-
-        // Read the texture pixels back from OpenGL
-        std::vector<unsigned char> pixels(width * height * 4); // 4 bytes per pixel (RGBA)
-        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-        // Extract file extension and determine the save format
-        std::string filePath = imageComp.filePath;
-        std::string extension = GetFileExtension(filePath);
-
-        switch (GetFileType(extension)) {
-        case FileType::PNG:
-            if (stbi_write_png(filePath.c_str(), width, height, 4, pixels.data(), width * 4)) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as PNG." << std::endl;
-            }
-            break;
-        case FileType::JPG:
-            if (stbi_write_jpg(filePath.c_str(), width, height, 4, pixels.data(), 90)) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as JPG." << std::endl;
-            }
-            break;
-        case FileType::BMP:
-            if (stbi_write_bmp(filePath.c_str(), width, height, 4, pixels.data())) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as BMP." << std::endl;
-            }
-            break;
-        case FileType::TGA:
-            if (stbi_write_tga(filePath.c_str(), width, height, 4, pixels.data())) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as TGA." << std::endl;
-            }
-            break;
-        case FileType::HDR:
-            if (stbi_write_hdr(filePath.c_str(), width, height, 4, reinterpret_cast<float *>(pixels.data()))) {
-                std::cout << "Image saved for Entity ID " << imageComp.GetID() << " at " << filePath << "."
-                          << std::endl;
-            } else {
-                std::cerr << "Failed to save image for Entity ID " << imageComp.GetID() << " as HDR." << std::endl;
-            }
-            break;
-        default:
-            std::cerr << "Unsupported file extension for saving image: " << extension << std::endl;
-            break;
+        ~ImageSystem() override {
+            Destroy();
         }
-    }
-};
+
+        void Start() override {
+            // Load images for existing entities with ImageComponent
+            for (auto entity : entities) {
+                if (mgr.HasComponent<ImageComponent>(entity)) {
+                    auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+                    LoadImage(imageComp);
+                }
+            }
+        }
+
+        void Update(const float deltaT) override {
+            // Check if any images need to be loaded or updated
+            for (auto entity : entities) {
+                if (mgr.HasComponent<ImageComponent>(entity)) {
+                    auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+
+                    // Check if image needs to be loaded (textureID is 0)
+                    if (imageComp.textureID == 0 && !imageComp.filePath.empty()) {
+                        LoadImage(imageComp);
+                    }
+                }
+            }
+        }
+
+        void Render() override {
+            // This system doesn't render directly; it manages images for other rendering systems
+        }
+
+        void Destroy() override {
+            // Clean up images when the system is destroyed
+            for (auto entity : entities) {
+                if (mgr.HasComponent<ImageComponent>(entity)) {
+                    auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+                    UnloadImage(imageComp);
+                }
+            }
+        }
+
+        // Load image for an entity
+        void LoadImage(ImageComponent& imageComp) {
+            if (!imageComp.filePath.empty()) {
+                imageManager->ApplyImageToComponent(imageComp);
+            }
+        }
+
+        // Unload image for an entity
+        void UnloadImage(ImageComponent& imageComp) {
+            if (imageComp.textureID != 0) {
+                imageManager->ReleaseImage(imageComp.filePath);
+                imageComp.textureID = 0;
+            }
+        }
+
+        // Reload image (useful for hot-reloading during development)
+        void ReloadImage(EntityID entity) {
+            if (mgr.HasComponent<ImageComponent>(entity)) {
+                auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+                UnloadImage(imageComp);
+                LoadImage(imageComp);
+            }
+        }
+
+        // Set image filepath and load it
+        void SetImage(EntityID entity, const std::string& filePath) {
+            if (mgr.HasComponent<ImageComponent>(entity)) {
+                auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+
+                // Unload current image if any
+                if (imageComp.textureID != 0) {
+                    UnloadImage(imageComp);
+                }
+
+                // Set new path and load
+                imageComp.filePath = filePath;
+
+                // Extract filename from path
+                size_t lastSlash = filePath.find_last_of("/\\");
+                if (lastSlash != std::string::npos) {
+                    imageComp.fileName = filePath.substr(lastSlash + 1);
+                }
+                else {
+                    imageComp.fileName = filePath;
+                }
+
+                LoadImage(imageComp);
+            }
+        }
+
+        // Get a list of all entities with an ImageComponent
+        std::vector<EntityID> GetAllImageEntities() const {
+            std::vector<EntityID> result;
+            for (auto entity : entities) {
+                if (mgr.HasComponent<ImageComponent>(entity)) {
+                    result.push_back(entity);
+                }
+            }
+            return result;
+        }
+
+        // Create an entity with an image loaded from a file
+        EntityID CreateImageEntity(const std::string& filePath) {
+            EntityID entity = mgr.AddNewEntity();
+            auto& imageComp = mgr.AddComponent<ImageComponent>(entity);
+
+            SetImage(entity, filePath);
+
+            // Notify listeners that an image was added
+            for (const auto& callback : imageAddedCallbacks) {
+                callback(entity);
+            }
+
+            return entity;
+        }
+
+        // Load multiple images and return the created entities
+        std::vector<EntityID> LoadImages(const std::vector<std::string>& filePaths) {
+            std::vector<EntityID> entities;
+            for (const auto& path : filePaths) {
+                EntityID entity = CreateImageEntity(path);
+                entities.push_back(entity);
+            }
+            return entities;
+        }
+
+        // Save an image to a file
+        bool SaveImage(EntityID entity, const std::string& filePath) {
+            if (!mgr.HasComponent<ImageComponent>(entity)) {
+                return false;
+            }
+
+            auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+
+            // If we don't have image data in memory, we need to reload it
+            if (!imageComp.imageData) {
+                // Load image data without affecting the GPU texture
+                imageComp.imageData = stbi_load(imageComp.filePath.c_str(),
+                    &imageComp.width,
+                    &imageComp.height,
+                    &imageComp.channels,
+                    0);
+                if (!imageComp.imageData) {
+                    return false;
+                }
+            }
+
+            // Determine the file format based on extension
+            std::string ext = filePath.substr(filePath.find_last_of(".") + 1);
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            bool success = false;
+            if (ext == "png") {
+                success = stbi_write_png(filePath.c_str(), imageComp.width, imageComp.height,
+                    imageComp.channels, imageComp.imageData, 0);
+            }
+            else if (ext == "jpg" || ext == "jpeg") {
+                success = stbi_write_jpg(filePath.c_str(), imageComp.width, imageComp.height,
+                    imageComp.channels, imageComp.imageData, 90); // 90 quality
+            }
+            else if (ext == "bmp") {
+                success = stbi_write_bmp(filePath.c_str(), imageComp.width, imageComp.height,
+                    imageComp.channels, imageComp.imageData);
+            }
+            else if (ext == "tga") {
+                success = stbi_write_tga(filePath.c_str(), imageComp.width, imageComp.height,
+                    imageComp.channels, imageComp.imageData);
+            }
+
+            // Update the component's filepath if save was successful
+            if (success) {
+                imageComp.filePath = filePath;
+                // Extract filename from path
+                size_t lastSlash = filePath.find_last_of("/\\");
+                if (lastSlash != std::string::npos) {
+                    imageComp.fileName = filePath.substr(lastSlash + 1);
+                }
+                else {
+                    imageComp.fileName = filePath;
+                }
+            }
+
+            return success;
+        }
+
+        // Get ImageManager instance
+        ImageManager* GetImageManager() {
+            return imageManager.get();
+        }
+
+        // Register callbacks
+        void RegisterImageAddedCallback(const ImageCallback& callback) {
+            imageAddedCallbacks.push_back(callback);
+        }
+
+        void RegisterImageRemovedCallback(const ImageCallback& callback) {
+            imageRemovedCallbacks.push_back(callback);
+        }
+
+    private:
+        std::unique_ptr<ImageManager> imageManager;
+        std::vector<ImageCallback> imageAddedCallbacks;
+        std::vector<ImageCallback> imageRemovedCallbacks;
+    };
 
 } // namespace ECS
-
-#endif // IMAGESYSTEM_HPP

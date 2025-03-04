@@ -10,18 +10,22 @@ namespace GUI {
 
 class ViewManager {
 public:
-    // Constructor
     ViewManager() : viewListCount(0) {
         for (ViewListID viewList = 0u; viewList < MAX_VIEW_COUNT; viewList++) {
             availableViews.push(viewList);
         }
     }
-    
-    // Destructor
+
     ~ViewManager() = default;
 
-    // Initilization
     void Init() {}
+
+    // Update all view lists
+    void Update(const float deltaT) {
+        for (const auto& viewList : viewArrays) {
+            viewList.second->UpdateViews(deltaT);
+        }
+    }
 
     // Render all views
     void Render() {

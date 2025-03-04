@@ -172,23 +172,23 @@ void Events::ProcessEvents() {
             break;
         }
 
-        case EventType::ClearInferenceQueue: {
-            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-            if (sdcppSystem) {
-                sdcppSystem->ClearQueue();
-            }
-            break;
-        }
-        case EventType::SaveImageEvent: {
-            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-            imageSystem->SaveImage(event.entityID);
-            break;
-        }
-        case EventType::LoadImageEvent: {
-            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-            // imageSystem->AddImage(event.entityID);
-            break;
-        }
+        //case EventType::ClearInferenceQueue: {
+        //    auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+        //    if (sdcppSystem) {
+        //        sdcppSystem->ClearQueue();
+        //    }
+        //    break;
+        //}
+        //case EventType::SaveImageEvent: {
+        //    auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+        //    imageSystem->SaveImage(event.entityID);
+        //    break;
+        //}
+        //case EventType::LoadImageEvent: {
+        //    auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+        //    // imageSystem->AddImage(event.entityID);
+        //    break;
+        //}
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
             break;

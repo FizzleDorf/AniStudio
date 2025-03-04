@@ -9,6 +9,7 @@ public:
     IViewList() = default;
     virtual ~IViewList() = default;
     virtual void Erase(const ViewListID viewID) {}
+    virtual void UpdateViews(const float deltaT) {}
     virtual void RenderViews() = 0;
 };
 
@@ -55,6 +56,14 @@ public:
             std::cout << "View erased! ID: " << viewID << ", Type ID: " << ViewType<T>() << std::endl;
         } else {
             std::cout << "No view found with ID: " << viewID << ", Type ID: " << ViewType<T>() << std::endl;
+        }
+    }
+
+    void UpdateViews(const float deltaT) override {
+        for (auto& view : data) {
+            if (view) {
+                view->Update(deltaT);
+            }
         }
     }
 
