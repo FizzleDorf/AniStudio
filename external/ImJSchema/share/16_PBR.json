@@ -1,0 +1,28 @@
+{
+    "$defs": {
+        "normalized_number": {
+            "type" : "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "default": 0.0,
+            "ui:widget" : "slider"
+        }
+    },
+    "ui:order" : ["albedo", "metallic", "roughness", "emissive", "emissiveFactor", "unlit"],
+    "properties" : {
+        "metallic"  : { "$ref": "#/$defs/normalized_number" },
+        "roughness" : { "$ref": "#/$defs/normalized_number" },
+        "albedo"    : { "type" : "string", "ui:widget" : "color" },
+        "emissive"  : { "type" : "string", "ui:widget" : "color" },
+        "emissiveFactor" : {
+            "type" : "number",
+            "minimum" : 0.0,
+            "ui:speed" : 0.01,
+            "ui:widget" : "drag"
+        },
+        "unlit" : {
+            "type" : "boolean"
+        }
+    },
+    "type": "object"
+}

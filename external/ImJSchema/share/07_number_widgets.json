@@ -1,0 +1,54 @@
+{
+    "type": "object",
+    "properties": {
+        "float": {
+            "type": "number",
+            "default": 0.0,
+            "ui:step": 1,
+            "ui:step_fast": 10,
+            "description" : "Default floating point number. if ui:step is not provided, the increment buttons will not show. Default ui:step_fast is 10x ui:step"
+        },
+        "float_slider": {
+            "type": "number",
+            "default": 0.0,
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "ui:widget": "slider",
+            "description" : "Slider widgets require both a minimum and maximum property to be set. Will default to drag widget if either of these are not provided"
+        },
+        "float_drag": {
+            "type": "number",
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "ui:speed": 0.0010000000474974513,
+            "ui:widget": "drag",
+            "description" : "Drag widgets"
+        },
+        "int": {
+            "type": "integer",
+            "default": 0,
+            "ui:step": 1,
+            "ui:step_fast": 10,
+            "description" : "Integer widgets can be used as well, by setting the type to \"integer\""
+        },
+        "int_drag": {
+            "type": "integer",
+            "default": 0,
+            "maximum": 10,
+            "minimum": 0,
+            "ui:step": 1,
+            "ui:step_fast": 10,
+            "ui:widget": "drag"
+        },
+        "int_slider": {
+            "type": "integer",
+            "default": 0,
+            "maximum": 10,
+            "minimum": 0,
+            "ui:step": 1,
+            "ui:step_fast": 10,
+            "ui:widget": "slider"
+        }
+    }
+}

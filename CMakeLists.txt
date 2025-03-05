@@ -138,6 +138,7 @@ if(BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/external/glm
         ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
         ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
+        ${CMAKE_SOURCE_DIR}/external/ImJSchema
         ${CMAKE_SOURCE_DIR}/external/nlohmann_json
         ${CMAKE_SOURCE_DIR}/external/imgui_nodes
         ${CMAKE_SOURCE_DIR}/external/immvision

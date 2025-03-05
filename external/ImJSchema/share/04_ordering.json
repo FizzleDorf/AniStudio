@@ -1,0 +1,11 @@
+{
+    "type": "object",
+    "description" : "By default, properties in an object will be displayed in alphabetical order. You can set the order the widgets appear by setting the ui:order property. If you do not list the widget, it will not show up in the list",
+    "ui:order" : ["b", "c", "a"],
+    "properties": {
+        "a": { "type": "string", "ui:help" : "Hover over the label to show this tooltip"},
+        "b": { "type": "string" },
+        "c": { "type": "string" },
+        "d": { "type": "string" }
+    }
+}

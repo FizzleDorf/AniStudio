@@ -1,0 +1,14 @@
+{
+    "type": "object",
+    "description" : "You can hide constant values in the form by setting the 'default', 'ui:hidden', and 'ui:disabled' properties.",
+    "properties": {
+        "constant_value": {
+            "type": "string",
+            "default" : "This is the default value",
+            "ui:hidden" : true,
+            "ui:disabled" : true
+        },
+        "b": { "type": "string" },
+        "c": { "type": "string" }
+    }
+}

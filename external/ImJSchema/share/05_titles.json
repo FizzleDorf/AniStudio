@@ -1,0 +1,33 @@
+{
+    "description" : "Each schema object can have a \"title\". This value will show up as the label ",
+    "type": "object",
+    "ui:order" : ["name", "age", "imguiAwesome", "array", "object"],
+    "properties" : {
+        "name" : {
+            "type" : "string",
+            "title" : "Name"
+        },
+        "age" : {
+            "type" : "number",
+            "title" : "Age"
+        },
+        "imguiAwesome" : {
+            "type" : "boolean",
+            "title" : "Is ImGui Awesome?"
+        },
+        "object" : {
+            "type" : "object",
+            "title" : "Super Special Object",
+            "properties" : {
+                 "number" : { "type" : "number"}
+            }
+        },
+        "array" : {
+            "type" : "array",
+            "title" : "Super Special Array",
+            "items" : {
+                 "type" : "number"
+            }
+        }
+    }
+}

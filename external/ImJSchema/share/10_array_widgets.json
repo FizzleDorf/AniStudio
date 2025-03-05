@@ -1,0 +1,46 @@
+{
+    "type": "object",
+    "ui:order" : ["fixed_length", "varying_size", "color_array", "color_array_alpha"],
+    "properties": {
+        "fixed_length": {
+            "type": "array",
+            "items" : {
+                "type": "string",
+                "default": "hello world"
+            },
+            "minItems" : 3,
+            "maxItems" : 3,
+            "title" : "Fixed Length Array",
+            "description" : "You can set the number of items in the array using the minItems and maxItems properties"
+        },
+        "varying_size": {
+            "type": "array",
+            "items" : {
+                "type": "string",
+                "default": "hello world"
+            },
+            "title" : "Varying Length Array",
+            "description" : "If you dont set the minItems/maxItems, you can grow or shrink the array using the buttons."
+        },
+        "color_array": {
+            "type": "array",
+            "items" : {
+                "type": "number"
+            },
+            "minItems" : 3,
+            "ui:widget" : "color",
+            "title" : "Color Array",
+            "description" : "Must have items set to number. If minItems==3"
+        },
+        "color_array_alpha": {
+            "type": "array",
+            "items" : {
+                "type": "number"
+            },
+            "minItems" : 4,
+            "ui:widget" : "color",
+            "title" : "Color Array Alpha",
+            "description" : "Must have items set to number. Requires minItems==4"
+        }
+    }
+}

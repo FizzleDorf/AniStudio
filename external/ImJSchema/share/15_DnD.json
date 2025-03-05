@@ -1,0 +1,58 @@
+{
+    "$defs" : {
+        "class_list" : ["Wizard", "Sorcerer", "Warlock", "Fighter", "Barbarian", "Artificer", "Rogue", "Monk", "Paladin"],
+        "race_list" : ["Human", "Dwarf", "Elf", "Halfling"],
+        "stat" : {
+            "type" : "integer",
+            "ui:step" : 1,
+            "minimum" : 1,
+            "maximum" : 20,
+            "default" : 10
+        },
+        "character" : {
+            "type" : "object",
+            "ui:order" : ["name", "race", "class", "alignment_1", "alignment_2", "stats"],
+            "properties" : {
+                "name" : {"type" : "string"},
+                "race" : {
+                    "type" : "string",
+                    "enum" : { "$ref" : "#/$defs/race_list" }
+                },
+                "class" : {
+                    "type" : "string",
+                    "enum" : { "$ref" : "#/$defs/class_list" }
+                },
+                "alignment_1" : {
+                    "type" : "string",
+                    "enum" : ["Lawful", "Neutral", "Chaotic"],
+                    "ui:widget" : "button"
+                },
+                "alignment_2" : {
+                    "type" : "string",
+                    "enum" : ["Good", "Neutral", "Evil"],
+                    "ui:widget" : "button"
+                },
+                "stats" : {
+                    "type" : "object",
+                    "properties" : {
+                        "str" : { "$ref" : "#/$defs/stat" },
+                        "con" : { "$ref" : "#/$defs/stat" },
+                        "dex" : { "$ref" : "#/$defs/stat" },
+                        "int" : { "$ref" : "#/$defs/stat" },
+                        "wis" : { "$ref" : "#/$defs/stat" },
+                        "cha" : { "$ref" : "#/$defs/stat" }
+                    }
+                }
+            }
+        }
+    },
+    "type": "object",
+    "properties": {
+        "party" : {
+            "type" : "array",
+            "items" : {
+                "$ref" : "#/$defs/character"
+            }
+        }
+    }
+}

@@ -1,0 +1,43 @@
+{
+    "type": "object",
+    "ui:order" : ["regular", "header", "collapsing"],
+    "properties": {
+        "regular": {
+            "type": "object",
+            "title" : "Regular Object",
+            "ui:label_width" : 0.25,
+            "ui:label_width_fixed" : false,
+            "properties" :
+            {
+                "string" : { "type" : "string" },
+                "number" : { "type" : "number" },
+                "boolean" : { "type" : "boolean" }
+            },
+            "description" : "This is a regular object type. If ui:label_width_fixed is true, then ui:label_width is a value in pixels"
+        },
+        "header": {
+            "type": "object",
+            "title" : "Header Widget",
+            "ui:widget" : "header",
+            "properties" :
+            {
+                "string" : { "type" : "string" },
+                "number" : { "type" : "number" },
+                "boolean" : { "type" : "boolean" }
+            },
+            "description" : "Objects with ui:widget=header, will show up as headers"
+        },
+        "collapsing": {
+            "type": "object",
+            "title" : "Collapsing Widget",
+            "ui:widget" : "collapsing",
+            "properties" :
+            {
+                "string" : { "type" : "string" },
+                "number" : { "type" : "number" },
+                "boolean" : { "type" : "boolean" }
+            },
+            "description" : "Objects with ui:widget=collapsing, will show up as collapsable headers"
+        }
+    }
+}
