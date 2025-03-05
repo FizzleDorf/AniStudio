@@ -1,3 +1,9 @@
+#pragma once
+
+#include "Types.hpp"
+#include "nlohmann/json.hpp"
+
+namespace ECS {
 struct BaseComponent {
     std::string compName = "Base_Component";
     std::string compCategory = "";
@@ -27,3 +33,4 @@ private:
     friend class EntityManager; // Friend class
     EntityID entityID;
 };
+} // namespace ECS

@@ -113,6 +113,7 @@ if(BUILD_ANISTUDIO)
     add_subdirectory(external/ImNodeFlow)
     add_subdirectory(external/stb_image)
     add_subdirectory(external/imgui_filedialog)
+    add_subdirectory(external/ImJSchema)
     add_subdirectory(external/ImGuizmo)
 
     add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
@@ -138,7 +139,6 @@ if(BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/external/glm
         ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
         ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
-        ${CMAKE_SOURCE_DIR}/external/ImJSchema
         ${CMAKE_SOURCE_DIR}/external/nlohmann_json
         ${CMAKE_SOURCE_DIR}/external/imgui_nodes
         ${CMAKE_SOURCE_DIR}/external/immvision
@@ -172,6 +172,7 @@ if(BUILD_ANISTUDIO)
         ImGui
         ImGui_Nodes
         ImNodeFlow
+        ImJSchema
         stb_image
         ImGuiFileDialog 
         ImGuizmo
