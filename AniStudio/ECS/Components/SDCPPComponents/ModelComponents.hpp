@@ -448,21 +448,24 @@ namespace ECS {
     // Upscale models
     struct EsrganComponent : public BaseModelComponent {
         EsrganComponent() { compName = "Esrgan"; }
-        float scale = 1.5;
+        uint32_t upscaleFactor = 2; // Default 2x upscaling
+        bool preserveAspectRatio = true;
 
         EsrganComponent& operator=(const EsrganComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
                 modelName = other.modelName;
                 isModelLoaded = other.isModelLoaded;
-                scale = other.scale;
+                upscaleFactor = other.upscaleFactor;
+                preserveAspectRatio = other.preserveAspectRatio;
             }
             return *this;
         }
         nlohmann::json Serialize() const override {
             return { {compName, {
                 {"modelName", modelName},
-                {"scale", scale}
+                {"upscaleFactor", upscaleFactor},
+                {"preserveAspectRatio",preserveAspectRatio}
             }} };
         }
         void Deserialize(const nlohmann::json& j) override {
@@ -485,8 +488,10 @@ namespace ECS {
 
             if (componentData.contains("modelName"))
                 modelName = componentData["modelName"];
-            if (componentData.contains("scale"))
-                scale = componentData["scale"];
+            if (componentData.contains("upscaleFactor"))
+                upscaleFactor = componentData["upscaleFactor"];
+            if (componentData.contains("preserveAspectRatio"))
+                preserveAspectRatio = componentData["preserveAspectRatio"].get<bool>();
             if (!modelName.empty())
                 modelPath = filePaths.upscaleDir + "\\" + modelName;
         }
@@ -526,6 +531,44 @@ namespace ECS {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
                     modelPath = filePaths.embedDir + "\\" + modelName;
+            }
+        }
+    };
+
+    // Packaged Checkpoint loader (sd1.5 and sdxl with vae and encoders)
+    struct StackedIDComponent : public BaseModelComponent {
+        StackedIDComponent() { compName = "Model"; }
+        StackedIDComponent& operator=(const StackedIDComponent& other) {
+            if (this != &other) {
+                modelPath = other.modelPath;
+                modelName = other.modelName;
+                isModelLoaded = other.isModelLoaded;
+            }
+            return *this;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            nlohmann::json componentData;
+
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) {
+                modelName = componentData["modelName"];
+                if (!modelName.empty())
+                    modelPath = filePaths.checkpointDir + "\\" + modelName;
             }
         }
     };

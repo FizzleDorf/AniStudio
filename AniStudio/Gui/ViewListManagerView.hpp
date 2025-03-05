@@ -11,7 +11,7 @@ public:
     ViewListManagerView(ECS::EntityManager &entityMgr, ViewManager &viewMgr)
         : BaseView(entityMgr), viewManager(viewMgr), selectedViewList(-1), selectedActiveView(-1),
           selectedInactiveView(-1) {
-        viewName = "ViewList Manager";
+        viewName = "ViewListManagerView";
     }
 
     void Init() override { RefreshViewLists(); }

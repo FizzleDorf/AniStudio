@@ -9,6 +9,7 @@
 // Models
 #include "ModelComponents.hpp"
 #include "PhotomakerComponent.hpp"
+#include "InputIdComponent.hpp"
 
 // Latents
 #include "LatentComponent.hpp"

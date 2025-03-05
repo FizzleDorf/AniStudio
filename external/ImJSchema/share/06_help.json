@@ -1,0 +1,29 @@
+{
+    "description" : "You can use the \"ui:help\" : \"tool tip text\" to show tooltip. Hover over the object label",
+    "type": "object",
+    "ui:order" : ["name", "age", "imguiAwesome", "object"],
+    "properties" : {
+        "name" : {
+            "type" : "string",
+            "title" : "Name",
+            "ui:help" : "Please enter the name wish to be called"
+        },
+        "age" : {
+            "type" : "number",
+            "title" : "Age",
+            "ui:help" : "The age you will be at the end of this year"
+        },
+        "imguiAwesome" : {
+            "type" : "boolean",
+            "title" : "Is ImGui Awesome?",
+            "ui:help" : "Check this box if you think ImGui is awesome."
+        },
+        "object" : {
+            "type" : "object",
+            "ui:help" : "Objects within an object type will show up as a Collapsable header",
+            "properties" : {
+                 "number" : { "type" : "number"}
+            }
+        }
+    }
+}

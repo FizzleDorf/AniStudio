@@ -16,6 +16,10 @@ struct ImageComponent : public BaseComponent {
     int channels = 0;                                    // Number of color channels
     GLuint textureID = 0;                                // OpenGL texture ID
 
+    ImageComponent() {
+        compName = "Image";
+    }
+
     ~ImageComponent() {
         if (imageData) {
             stbi_image_free(imageData);
@@ -34,5 +38,31 @@ struct ImageComponent : public BaseComponent {
     }
 };
 
-struct InputImageComponent : public ImageComponent {};
+struct InputImageComponent : public ImageComponent {
+    InputImageComponent() {
+        compName = "InputImage";
+    }
+};
+
+struct OutputImageComponent : public ImageComponent {
+    OutputImageComponent() {
+        compName = "OutputImage";
+    }
+};
+
+struct ControlNetImageComponent : public ImageComponent {
+    ControlNetImageComponent() {
+        compName = "ControlNetImageComponent";
+    }
+};
+
+struct MaskImageComponent : public ImageComponent {
+    MaskImageComponent() {
+        compName = "MaskImageComponent";
+    }
+};
+
+
+
+
 } // namespace ECS

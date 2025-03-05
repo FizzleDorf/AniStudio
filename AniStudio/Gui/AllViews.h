@@ -1,13 +1,14 @@
 #pragma once
 
-#include "MenuBar.hpp"
-#include "SettingsView.hpp"
+// Include all view headers here for consistent access
+#include "ConvertView.hpp"
+#include "DebugView.hpp"
 #include "DiffusionView.hpp"
 #include "ImageView.hpp"
-#include "UpscaleView.hpp"
+#include "MenuBar.hpp"
 #include "NodeGraphView.hpp"
-#include "SequencerView.hpp"
-#include "DebugView.hpp"
 #include "PluginView.hpp"
-#include "ConvertView.hpp"
+#include "SequencerView.hpp"
+#include "SettingsView.hpp"
+#include "UpscaleView.hpp"
 #include "ViewListManagerView.hpp"

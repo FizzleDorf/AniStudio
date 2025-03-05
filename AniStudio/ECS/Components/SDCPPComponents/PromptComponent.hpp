@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO: reduce to a single input when execution pipeline is completed
+
 #include "BaseComponent.hpp"
 #include "stable-diffusion.h"
 #include <string>

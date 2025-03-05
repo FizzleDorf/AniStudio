@@ -1,0 +1,32 @@
+{
+    "description" : "Boolean widgets. This object makes use of the \"ui:column_size\" property.",
+    "ui:column_size" : 50,
+    "type": "object",
+    "properties": {
+        "checkbox": {
+            "type": "boolean",
+            "default": false,
+            "title" : "Check Box",
+            "description" : "The default is checkbox"
+        },
+        "enabledisable": {
+            "type": "boolean",
+            "default": false,
+            "ui:widget": "enabledisable",
+            "title" : "Enable/Disable",
+            "description" : "But there are also different styles. See Enumerated Types for an alternative method"
+        },
+        "truefalse": {
+            "type": "boolean",
+            "default": false,
+            "ui:widget": "truefalse",
+            "title" : "True/False"
+        },
+        "yesno": {
+            "type": "boolean",
+            "default": true,
+            "ui:widget": "yesno",
+            "title" : "Yes/No"
+        }
+    }
+}

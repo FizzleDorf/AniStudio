@@ -1,0 +1,33 @@
+{
+    "$defs": {
+        "number": {
+            "default": 0.75,
+            "type": "number"
+        },
+        "normalized": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "default": 0.33,
+            "ui:widget" : "slider"
+        },
+        "enum_list" : ["Hello", "this", "is", "a", "list"]
+    },
+    "description" : "References allow you to reuse parts of your schema.\n\nThe drawSchemaWidget( ) function does not natively support the $ref property.\n\nIf you have a schema object, J,  you can use the jsonExpandAllReferences(J) function\nto expand the references before you pass it into the drawSchemaWidget()",
+    "ui:order" : ["single_ref", "multi_ref", "enum_list"],
+    "properties" : {
+        "single_ref" : {
+            "description" : "The $ref string property points to a path within the JSON document",
+            "$ref": "#/$defs/number"
+        },
+        "multi_ref" : {
+            "description" : "You can also use multiple references as a string array. Earlier items are overridden by later values in the array",
+            "$ref": ["#/$defs/number", "#/$defs/normalized"]
+        },
+        "enum_list" : {
+            "description" : "Any property can set as a reference to a definition",
+            "type" : "string",
+            "enum" : { "$ref" : "#/$defs/enum_list"}
+        }
+    },
+    "type": "object"
+}

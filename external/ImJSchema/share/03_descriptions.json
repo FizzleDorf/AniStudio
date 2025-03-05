@@ -1,0 +1,26 @@
+{
+    "description" : "Each schema object can have a \"description\" property to display visible text",
+    "type": "object",
+    "ui:order" : ["name", "age", "imguiAwesome", "object"],
+    "properties" : {
+        "name" : {
+            "type" : "string",
+            "description" : "Please enter the name wish to be called"
+        },
+        "age" : {
+            "type" : "number",
+            "description" : "The age you will be at the end of this year"
+        },
+        "imguiAwesome" : {
+            "type" : "boolean",
+            "description" : "Check this box if you think ImGui is awesome."
+        },
+        "object" : {
+            "type" : "object",
+            "description" : "Objects within an object type will show up as a Collapsable header",
+            "properties" : {
+                 "number" : { "type" : "number"}
+            }
+        }
+    }
+}

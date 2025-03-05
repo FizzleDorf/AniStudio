@@ -25,13 +25,6 @@ namespace ECS {
             }
         }
 
-        // Delegated to Viewmanager for adding custom user views
-        void Render() {
-            for (auto& system : registeredSystems) {
-                system.second->Render();
-            }
-        }
-
         const EntityID AddNewEntity() {
             const EntityID entity = availableEntities.front();
             AddEntitySignature(entity);
@@ -74,7 +67,7 @@ namespace ECS {
         void RemoveComponent(const EntityID entity) {
             assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
             const ComponentTypeID compType = CompType<T>();
-            entitiesSignatures.at(entity).erase(compType);
+            entitiesSignatures.at(entity)->erase(compType);
             GetCompList<T>()->Erase(entity);
             UpdateEntityTargetSystem(entity);
         }
@@ -264,41 +257,6 @@ namespace ECS {
                 });
         }
 
-        void SaveWorkflow(const std::string& filepath) {
-            nlohmann::json workflowJson;
-            workflowJson["entities"] = nlohmann::json::array();
-
-            for (const auto& entity : GetAllEntities()) {
-                workflowJson["entities"].push_back(SerializeEntity(entity));
-            }
-
-            std::ofstream file(filepath);
-            file << workflowJson.dump(4);
-        }
-
-        void LoadWorkflow(const std::string& filepath) {
-            std::ifstream file(filepath);
-            if (!file.is_open()) {
-                return;
-            }
-
-            try {
-                nlohmann::json workflowJson;
-                file >> workflowJson;
-
-                Reset();
-
-                if (workflowJson.contains("entities")) {
-                    for (const auto& entityJson : workflowJson["entities"]) {
-                        DeserializeEntity(entityJson);
-                    }
-                }
-            }
-            catch (const std::exception& e) {
-                std::cerr << "Error loading workflow: " << e.what() << std::endl;
-            }
-        }
-
         // Getters for private variables
         EntityID GetEntityCount() const { return entityCount; }
         std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }
@@ -370,9 +328,7 @@ namespace ECS {
         std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
         std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
         std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
-        // Map component names to their type IDs
         std::unordered_map<std::string, ComponentTypeID> componentNameToId;
-        // Map type IDs to component names
         std::unordered_map<ComponentTypeID, std::string> componentIdToName;
     };
 }

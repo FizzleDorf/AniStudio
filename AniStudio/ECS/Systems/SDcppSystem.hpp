@@ -7,7 +7,7 @@
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
-#include <png.h>
+#include "PngMetadataUtils.hpp"  // Include the PNG metadata utility
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -26,11 +26,13 @@ namespace ECS {
             std::shared_ptr<Utils::Task> task;
         };
 
+        // Constructor, destructor, and public methods remain unchanged
         SDCPPSystem(EntityManager& entityMgr, size_t numThreads = 0)
             : BaseSystem(entityMgr),
             threadPool(numThreads > 0 ? numThreads : std::thread::hardware_concurrency() / 2) {
             sysName = "SDCPPSystem";
             AddComponentSignature<LatentComponent>();
+            AddComponentSignature<OutputImageComponent>();
             AddComponentSignature<InputImageComponent>();
 
             activeInferenceTasks = 0;
@@ -54,6 +56,7 @@ namespace ECS {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
+        // Public methods (unchanged)
         void QueueInference(const EntityID entityID) {
             std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -151,25 +154,20 @@ namespace ECS {
         size_t GetActiveConversionCount() const { return activeConversionTasks; }
 
     private:
-        // Thread pool for parallel processing
+        // Private member variables
         Utils::ThreadPool threadPool;
-
-        // Task counters
         std::atomic<size_t> activeInferenceTasks;
         std::atomic<size_t> activeConversionTasks;
-
-        // Queues
         std::vector<QueueItem> inferenceQueue;
         std::vector<QueueItem> convertQueue;
         std::atomic<bool> pauseWorker{ false };
-
-        // Synchronization
         std::mutex queueMutex;
 
         // Friend classes for tasks
         friend class InferenceTask;
         friend class ConvertTask;
 
+        // Queue processing methods
         void ProcessQueues() {
             std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -236,7 +234,7 @@ namespace ECS {
             }
         }
 
-        // Helper methods to create tasks
+        // Helper methods to create tasks (unchanged)
         std::shared_ptr<Utils::Task> CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID);
 
@@ -244,7 +242,7 @@ namespace ECS {
         bool RunInference(EntityID entityID, const nlohmann::json& metadata);
         bool ConvertToGGUF(EntityID entityID);
 
-        // SD context initialization
+        // SD context initialization (unchanged)
         sd_ctx_t* InitializeStableDiffusionContext(EntityID entityID) {
             return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
                 mgr.GetComponent<CLipLComponent>(entityID).modelPath.c_str(),
@@ -266,7 +264,7 @@ namespace ECS {
                 mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu, false);
         }
 
-        // Generate image 
+        // Generate image (unchanged)
         sd_image_t* GenerateImage(sd_ctx_t* context, EntityID entityID) {
             return txt2img(
                 context,
@@ -295,9 +293,37 @@ namespace ECS {
             );
         }
 
-        // Save image 
-        void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entityID, const nlohmann::json& metadata) {
-            ImageComponent& imageComp = mgr.GetComponent<ImageComponent>(entityID);
+        // Save image - SIMPLIFIED using PngMetadata utility
+        void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entity, const nlohmann::json& metadata) {
+            // Make sure entity has OutputImageComponent
+            if (!mgr.HasComponent<OutputImageComponent>(entity)) {
+                // Add it if it doesn't exist yet
+                mgr.AddComponent<OutputImageComponent>(entity);
+            }
+
+            OutputImageComponent& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
+
+            // Copy the raw data to the output component
+            if (imageComp.imageData) {
+                stbi_image_free(imageComp.imageData); // Free any existing data
+                imageComp.imageData = nullptr;
+            }
+
+            // Allocate new memory for the image data
+            size_t dataSize = width * height * channels;
+            imageComp.imageData = (unsigned char*)malloc(dataSize);
+            if (!imageComp.imageData) {
+                std::cerr << "Failed to allocate memory for image data" << std::endl;
+                return;
+            }
+
+            // Copy the data
+            memcpy(imageComp.imageData, data, dataSize);
+
+            // Update image component properties
+            imageComp.width = width;
+            imageComp.height = height;
+            imageComp.channels = channels;
 
             // Create a path for the filename and ensure .png extension
             std::filesystem::path filename(imageComp.fileName);
@@ -306,253 +332,82 @@ namespace ECS {
                 imageComp.fileName = filename.string();
             }
 
-            // Construct full path by combining directory with filename
-            std::filesystem::path directoryPath = imageComp.filePath;
-            std::filesystem::path fullPath = directoryPath / filename;
-
             try {
-                // Ensure the directory exists, or create it
-                if (!std::filesystem::exists(directoryPath)) {
-                    std::filesystem::create_directories(directoryPath);
-                    std::cout << "Directory created: " << directoryPath << '\n';
-                }
+                // Use PngMetadata utility to get a unique filename
+                std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+                    imageComp.fileName,
+                    imageComp.filePath,
+                    ".png"
+                );
 
-                // Find the highest existing index in the directory
-                int highestIndex = 0;
-                for (const auto& entry : std::filesystem::directory_iterator(directoryPath)) {
-                    if (entry.path().extension() == ".png") {
-                        std::string filenameStr = entry.path().stem().string();
-                        size_t lastDashPos = filenameStr.find_last_of('-');
-                        if (lastDashPos != std::string::npos) {
-                            try {
-                                int index = std::stoi(filenameStr.substr(lastDashPos + 1));
-                                if (index > highestIndex) {
-                                    highestIndex = index;
-                                }
-                            }
-                            catch (const std::invalid_argument&) {
-                                // Skip files that do not have the expected format
-                            }
-                        }
-                    }
-                }
+                // Update the component with the new path
+                std::filesystem::path fullPath(uniqueFilePath);
+                imageComp.fileName = fullPath.filename().string();
+                imageComp.filePath = uniqueFilePath;
 
-                // Increment the index for the new file
-                highestIndex++;
-                std::ostringstream formattedIndex;
-                formattedIndex << std::setw(5) << std::setfill('0') << highestIndex; // Format with leading zeros
-
-                std::string newFilename = filename.stem().string() + "-" + formattedIndex.str() + ".png";
-
-                // Update the full path with the new filename
-                fullPath = directoryPath / newFilename;
-
-                // Write the image to file
-                if (!stbi_write_png(fullPath.string().c_str(), width, height, channels, data, width * channels)) {
-                    std::cerr << "Failed to save image: " << fullPath << std::endl;
+                // Save the image
+                if (!stbi_write_png(uniqueFilePath.c_str(), width, height, channels, data, width * channels)) {
+                    std::cerr << "Failed to save image: " << uniqueFilePath << std::endl;
                     return;
                 }
-
-                // Update component with full path including filename
-                imageComp.filePath = fullPath.string();
 
                 // Allow time for file to be fully written
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-                // Write metadata
-                WriteMetadataToPNG(entityID, metadata);
+                // Create metadata with additional fields and write to PNG
+                nlohmann::json enhancedMetadata = Utils::PngMetadata::CreateGenerationMetadata(metadata);
+                Utils::PngMetadata::WriteMetadataToPNG(uniqueFilePath, enhancedMetadata);
 
-                std::cout << "Image saved successfully: \"" << fullPath << "\"" << std::endl;
+                std::cout << "Image saved successfully: \"" << uniqueFilePath << "\"" << std::endl;
 
-                // Add to loaded media
-                mgr.GetSystem<ImageSystem>()->SaveImage(entityID, imageComp.filePath);
+                static std::mutex imageMutex;
+                {
+                    std::lock_guard<std::mutex> lock(imageMutex);
 
+                    // First create a new entity instead of modifying the current one
+                    EntityID newImageEntity = mgr.AddNewEntity();
+
+                    // Add ImageComponent to the new entity
+                    auto& newImageComp = mgr.AddComponent<ImageComponent>(newImageEntity);
+
+                    // Copy data from the output component to the new image component
+                    newImageComp.filePath = imageComp.filePath;
+                    newImageComp.fileName = imageComp.fileName;
+                    newImageComp.width = imageComp.width;
+                    newImageComp.height = imageComp.height;
+                    newImageComp.channels = imageComp.channels;
+
+                    // Allocate and copy image data
+                    if (imageComp.imageData) {
+                        newImageComp.imageData = (unsigned char*)malloc(dataSize);
+                        if (newImageComp.imageData) {
+                            memcpy(newImageComp.imageData, imageComp.imageData, dataSize);
+                        }
+                    }
+
+                    // Get the ImageSystem
+                    auto imageSystem = mgr.GetSystem<ImageSystem>();
+                    if (imageSystem) {
+                        // Load the image into the new entity
+                        imageSystem->LoadImage(newImageComp);
+
+                        // Clean up the original entity's output component 
+                        // but keep the entity itself for potential reuse
+                        mgr.RemoveComponent<OutputImageComponent>(entity);
+                    }
+                }
             }
             catch (const std::filesystem::filesystem_error& e) {
                 std::cerr << "Error creating directory: " << e.what() << '\n';
             }
-        }
-
-        // Write metadata to PNG
-        bool WriteMetadataToPNG(EntityID entity, const nlohmann::json& metadata) {
-            // Get the image component
-            const auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-
-            // Create a new JSON object that combines entity metadata with the additional fields
-            nlohmann::json combinedMetadata = metadata; // Use the passed metadata (from EntityManager)
-
-            // Add the additional metadata fields
-            combinedMetadata["version"] = "1.0";
-            combinedMetadata["software"] = "AniStudio";
-            combinedMetadata["timestamp"] = std::time(nullptr);
-
-            std::cout << "Writing metadata to: " << imageComp.filePath << std::endl;
-
-            // Open the PNG file for reading
-            FILE* fp = fopen(imageComp.filePath.c_str(), "rb");
-            if (!fp) {
-                std::cerr << "Failed to open PNG for reading: " << imageComp.filePath << std::endl;
-                return false;
-            }
-
-            // Verify PNG signature
-            unsigned char header[8];
-            if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8)) {
-                std::cerr << "Not a valid PNG file" << std::endl;
-                fclose(fp);
-                return false;
-            }
-            fseek(fp, 0, SEEK_SET);
-
-            // Initialize PNG read structures
-            png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-            if (!png) {
-                std::cerr << "Failed to create PNG read struct" << std::endl;
-                fclose(fp);
-                return false;
-            }
-
-            png_infop info = png_create_info_struct(png);
-            if (!info) {
-                std::cerr << "Failed to create PNG info struct" << std::endl;
-                png_destroy_read_struct(&png, nullptr, nullptr);
-                fclose(fp);
-                return false;
-            }
-
-            if (setjmp(png_jmpbuf(png))) {
-                std::cerr << "Error during PNG read initialization" << std::endl;
-                png_destroy_read_struct(&png, &info, nullptr);
-                fclose(fp);
-                return false;
-            }
-
-            png_init_io(png, fp);
-            png_read_info(png, info);
-
-            // Get image info
-            png_uint_32 width, height;
-            int bit_depth, color_type;
-            png_get_IHDR(png, info, &width, &height, &bit_depth, &color_type, nullptr, nullptr, nullptr);
-
-            // Create temporary file
-            std::string tempFile = imageComp.filePath + ".tmp";
-            FILE* out = fopen(tempFile.c_str(), "wb");
-            if (!out) {
-                std::cerr << "Failed to create temporary file" << std::endl;
-                png_destroy_read_struct(&png, &info, nullptr);
-                fclose(fp);
-                return false;
-            }
-
-            // Initialize PNG write structures
-            png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-            if (!pngWrite) {
-                std::cerr << "Failed to create PNG write struct" << std::endl;
-                fclose(out);
-                png_destroy_read_struct(&png, &info, nullptr);
-                fclose(fp);
-                return false;
-            }
-
-            png_infop infoWrite = png_create_info_struct(pngWrite);
-            if (!infoWrite) {
-                std::cerr << "Failed to create PNG write info struct" << std::endl;
-                png_destroy_write_struct(&pngWrite, nullptr);
-                fclose(out);
-                png_destroy_read_struct(&png, &info, nullptr);
-                fclose(fp);
-                return false;
-            }
-
-            if (setjmp(png_jmpbuf(pngWrite))) {
-                std::cerr << "Error during PNG write initialization" << std::endl;
-                png_destroy_write_struct(&pngWrite, &infoWrite);
-                fclose(out);
-                png_destroy_read_struct(&png, &info, nullptr);
-                fclose(fp);
-                return false;
-            }
-
-            png_init_io(pngWrite, out);
-
-            // Copy IHDR
-            png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
-                PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
-
-            // Set up metadata chunks
-            std::string metadataStr = combinedMetadata.dump(); // Use the combined metadata
-            std::vector<png_text> texts;
-
-            // Parameters text chunk
-            png_text paramText;
-            paramText.compression = PNG_TEXT_COMPRESSION_NONE;
-            // PNG_TEXT_COMPRESSION_zTXt; Use zlib compression for the metadata
-            paramText.key = const_cast<char*>("parameters");
-            paramText.text = const_cast<char*>(metadataStr.c_str());
-            paramText.text_length = metadataStr.length();
-            paramText.itxt_length = 0;
-            paramText.lang = nullptr;
-            paramText.lang_key = nullptr;
-            texts.push_back(paramText);
-
-            // Software identifier
-            png_text softwareText;
-            softwareText.compression = PNG_TEXT_COMPRESSION_NONE;
-            softwareText.key = const_cast<char*>("Software");
-            softwareText.text = const_cast<char*>("AniStudio");
-            softwareText.text_length = 9;
-            softwareText.itxt_length = 0;
-            softwareText.lang = nullptr;
-            softwareText.lang_key = nullptr;
-            texts.push_back(softwareText);
-
-            // Write the text chunks
-            std::cout << "Writing " << texts.size() << " text chunks..." << std::endl;
-            png_set_text(pngWrite, infoWrite, texts.data(), texts.size());
-
-            // Write PNG header
-            png_write_info(pngWrite, infoWrite);
-
-            // Copy image data
-            std::vector<png_byte> row(png_get_rowbytes(png, info));
-            for (png_uint_32 y = 0; y < height; y++) {
-                png_read_row(png, row.data(), nullptr);
-                png_write_row(pngWrite, row.data());
-            }
-
-            // Finish writing
-            png_write_end(pngWrite, infoWrite);
-
-            // Clean up
-            png_destroy_write_struct(&pngWrite, &infoWrite);
-            png_destroy_read_struct(&png, &info, nullptr);
-            fclose(out);
-            fclose(fp);
-
-            // Replace original with new file
-            try {
-                std::filesystem::path originalPath(imageComp.filePath);
-                std::filesystem::path tempPath(tempFile);
-
-                // Remove original file
-                if (std::filesystem::exists(originalPath)) {
-                    std::filesystem::remove(originalPath);
-                }
-
-                // Rename temp file to original
-                std::filesystem::rename(tempPath, originalPath);
-                std::cout << "Successfully wrote metadata to PNG" << std::endl;
-                return true;
-            }
-            catch (const std::filesystem::filesystem_error& e) {
-                std::cerr << "Error replacing file: " << e.what() << std::endl;
-                return false;
+            catch (const std::exception& e) {
+                std::cerr << "Exception in SaveImage: " << e.what() << '\n';
             }
         }
+
     };
 
-    // Concrete Task implementation for inference
+    // Task classes
     class InferenceTask : public Utils::Task {
     public:
         InferenceTask(SDCPPSystem* system, EntityID entityID, const nlohmann::json& metadata)
@@ -580,7 +435,6 @@ namespace ECS {
         nlohmann::json metadata;
     };
 
-    // Concrete Task implementation for conversion
     class ConvertTask : public Utils::Task {
     public:
         ConvertTask(SDCPPSystem* system, EntityID entityID)
@@ -606,7 +460,7 @@ namespace ECS {
         EntityID entityID;
     };
 
-    // Implementation of task creation methods
+    // Implementation of task creation methods (unchanged)
     inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata) {
         return std::make_shared<InferenceTask>(this, entityID, metadata);
     }
@@ -623,6 +477,22 @@ namespace ECS {
         try {
             std::cout << "Starting inference for Entity " << entityID << std::endl;
 
+            if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
+                mgr.AddComponent<OutputImageComponent>(entityID);
+                auto& outputComp = mgr.GetComponent<OutputImageComponent>(entityID);
+
+                if (mgr.HasComponent<ImageComponent>(entityID)) {
+                    const auto& imgComp = mgr.GetComponent<ImageComponent>(entityID);
+                    outputComp.fileName = imgComp.fileName;
+                    outputComp.filePath = imgComp.filePath;
+                }
+                else {
+                    // Use defaults if no image component exists
+                    outputComp.fileName = "AniStudio.png";
+                    outputComp.filePath = filePaths.defaultProjectPath;
+                }
+            }
+
             // Initialize Stable Diffusion context
             sd_context = InitializeStableDiffusionContext(entityID);
             if (!sd_context) {
@@ -635,10 +505,8 @@ namespace ECS {
                 throw std::runtime_error("Failed to generate image!");
             }
 
-            // Save the image
             SaveImage(image->data, image->width, image->height, image->channel, entityID, metadata);
 
-            // Clean up
             free_sd_ctx(sd_context);
 
             std::cout << "Inference completed for Entity " << entityID << std::endl;
@@ -654,14 +522,17 @@ namespace ECS {
 
             {
                 std::lock_guard<std::mutex> lock(queueMutex);
-                mgr.DestroyEntity(entityID);
+                // Only destroy the entity if it's not being used by another system
+                if (mgr.HasComponent<OutputImageComponent>(entityID)) {
+                    mgr.DestroyEntity(entityID);
+                }
             }
 
             return false;
         }
     }
 
-    // Convert to GGUF
+    // Convert to GGUF (unchanged)
     inline bool SDCPPSystem::ConvertToGGUF(EntityID entityID) {
         try {
             std::cout << "Starting conversion for Entity " << entityID << std::endl;

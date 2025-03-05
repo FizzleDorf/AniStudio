@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <functional>
 #include <future>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <thread>
@@ -11,45 +12,56 @@
 
 namespace Utils {
 
-    // Custom task wrapper that can be safely copied (unlike std::future)
+    // Base Task class with cancellation support
     class Task {
     public:
-        Task() : _done(false), _cancelled(false) {}
+        Task() : cancelled(false), done(false) {}
         virtual ~Task() = default;
 
-        // Execute the task
         virtual void execute() = 0;
 
-        // Check if task is done
-        bool isDone() const { return _done; }
-
-        // Check if task was cancelled
-        bool isCancelled() const { return _cancelled; }
-
-        // Cancel the task
-        void cancel() { _cancelled = true; }
+        void cancel() { cancelled = true; }
+        bool isCancelled() const { return cancelled; }
+        bool isDone() const { return done; }
 
     protected:
-        void markDone() { _done = true; }
+        void markDone() { done = true; }
 
     private:
-        std::atomic<bool> _done;
-        std::atomic<bool> _cancelled;
+        std::atomic<bool> cancelled;
+        std::atomic<bool> done;
     };
 
-    // Thread pool for executing tasks in parallel
+    // Thread Pool for managing worker threads
     class ThreadPool {
     public:
-        ThreadPool(size_t numThreads = std::thread::hardware_concurrency()) : stop(false) {
-            // Create worker threads
-            for (size_t i = 0; i < numThreads; ++i) {
-                workers.emplace_back([this] {
-                    workerLoop();
-                    });
-            }
+        ThreadPool(size_t numThreads = 0) {
+            size_t threadCount = numThreads > 0 ? numThreads : std::thread::hardware_concurrency();
+            startThreads(threadCount);
         }
 
         ~ThreadPool() {
+            shutdown();
+        }
+
+        void addTask(std::shared_ptr<Task> task) {
+            {
+                std::unique_lock<std::mutex> lock(queueMutex);
+                tasks.push(task);
+            }
+            condition.notify_one();
+        }
+
+        size_t size() const {
+            return workers.size();
+        }
+
+        size_t getQueueSize() const {
+            std::unique_lock<std::mutex> lock(queueMutex);
+            return tasks.size();
+        }
+
+        void shutdown() {
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 stop = true;
@@ -57,76 +69,51 @@ namespace Utils {
 
             condition.notify_all();
 
-            for (std::thread& worker : workers) {
+            for (auto& worker : workers) {
                 if (worker.joinable()) {
                     worker.join();
                 }
             }
-        }
 
-        // Disable copying
-        ThreadPool(const ThreadPool&) = delete;
-        ThreadPool& operator=(const ThreadPool&) = delete;
-
-        // Add a task to the pool
-        void addTask(std::shared_ptr<Task> task) {
-            {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                if (stop) {
-                    throw std::runtime_error("Cannot add task to stopped ThreadPool");
-                }
-                tasks.push(task);
-            }
-            condition.notify_one();
-        }
-
-        // Get the number of worker threads
-        size_t size() const {
-            return workers.size();
-        }
-
-        // Get the number of tasks in the queue
-        size_t getQueueSize() const {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            return tasks.size();
+            workers.clear();
         }
 
     private:
-        // Worker thread main loop
-        void workerLoop() {
-            while (true) {
-                std::shared_ptr<Task> task;
+        void startThreads(size_t numThreads) {
+            stop = false;
+            for (size_t i = 0; i < numThreads; ++i) {
+                workers.emplace_back([this] {
+                    while (true) {
+                        std::shared_ptr<Task> task;
 
-                {
-                    std::unique_lock<std::mutex> lock(queueMutex);
-                    condition.wait(lock, [this] { return stop || !tasks.empty(); });
+                        {
+                            std::unique_lock<std::mutex> lock(queueMutex);
+                            condition.wait(lock, [this] {
+                                return stop || !tasks.empty();
+                                });
 
-                    if (stop && tasks.empty()) {
-                        return;
+                            if (stop && tasks.empty()) {
+                                return;
+                            }
+
+                            task = tasks.front();
+                            tasks.pop();
+                        }
+
+                        if (task && !task->isCancelled()) {
+                            task->execute();
+                        }
                     }
-
-                    task = tasks.front();
-                    tasks.pop();
-                }
-
-                if (task && !task->isCancelled()) {
-                    task->execute();
-                }
+                    });
             }
         }
 
-        // Worker threads
         std::vector<std::thread> workers;
-
-        // Task queue
         std::queue<std::shared_ptr<Task>> tasks;
 
-        // Synchronization
         mutable std::mutex queueMutex;
         std::condition_variable condition;
-
-        // Flag to signal threads to stop
-        std::atomic<bool> stop;
+        bool stop;
     };
 
 } // namespace Utils

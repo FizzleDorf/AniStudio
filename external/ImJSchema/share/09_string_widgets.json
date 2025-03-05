@@ -1,0 +1,24 @@
+{
+    "type": "object",
+    "ui:order" : ["basic", "textarea", "color", "color_picker"],
+    "properties": {
+        "basic": {
+            "type": "string"
+        },
+        "color": {
+            "type": "string",
+            "ui:widget": "color"
+        },
+        "color_picker": {
+            "type": "string",
+            "ui:widget": "color_picker"
+        },
+        "textarea": {
+            "type": "string",
+            "ui:options": {
+                "rows": 5
+            },
+            "ui:widget": "textarea"
+        }
+    }
+}
