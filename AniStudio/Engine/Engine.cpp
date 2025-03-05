@@ -93,6 +93,8 @@ void Engine::Init() {
     auto tempView = viewManager.CreateView();
     viewManager.DestroyView(tempView);
 
+    // TODO: move registry to other file and add reset logic to managers
+
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
     mgr.RegisterComponentName<CLipLComponent>("CLipL");
@@ -107,11 +109,22 @@ void Engine::Init() {
     mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
     mgr.RegisterComponentName<VaeComponent>("Vae");
     mgr.RegisterComponentName<ImageComponent>("Image");
+    mgr.RegisterComponentName<EmbeddingComponent>("InputImage");
+    mgr.RegisterComponentName<EmbeddingComponent>("OutputImage");
     mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
     mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
     mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
 
-    // TODO: Register View Names
+    // Register Views
+    viewManager.RegisterViewType<DebugView>("DebugView");
+    viewManager.RegisterViewType<SettingsView>("SettingsView");
+    viewManager.RegisterViewType<DiffusionView>("DiffusionView");
+    viewManager.RegisterViewType<ImageView>("ImageView");
+    viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
+    viewManager.RegisterViewType<ConvertView>("ConvertView");
+    viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
+    viewManager.RegisterViewType<SequencerView>("SequencerView");
+    viewManager.RegisterViewType<PluginView>("PluginView");
 
     // Register core systems
     mgr.RegisterSystem<SDCPPSystem>();
@@ -140,8 +153,8 @@ void Engine::Update(const float deltaT) {
     
     // Update managers
     mgr.Update(deltaT);
-    pluginManager.Update(deltaT);
     viewManager.Update(deltaT);
+    pluginManager.Update(deltaT);
 }
 
 void Engine::Draw() {

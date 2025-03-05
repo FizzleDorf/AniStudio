@@ -312,7 +312,7 @@ namespace GUI {
 			mgr.AddComponent<PromptComponent>(newEntity);
 			mgr.AddComponent<EmbeddingComponent>(newEntity);
 			mgr.AddComponent<LayerSkipComponent>(newEntity);
-			mgr.AddComponent<ImageComponent>(newEntity);
+			mgr.AddComponent<OutputImageComponent>(newEntity);
 
 			// Assign component data
 			mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
@@ -331,7 +331,7 @@ namespace GUI {
 			mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
 			mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
 			mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
-			mgr.GetComponent<ImageComponent>(newEntity) = imageComp;
+			mgr.GetComponent<OutputImageComponent>(newEntity) = imageComp;
 
 			std::cout << "Components successfully assigned to entity " << newEntity << std::endl;
 
@@ -944,7 +944,7 @@ namespace GUI {
 		mgr.AddComponent<GuidanceComponent>(entity) = guidanceComp;
 		mgr.AddComponent<ClipSkipComponent>(entity) = clipSkipComp;
 		mgr.AddComponent<VaeComponent>(entity) = vaeComp;
-		mgr.AddComponent<ImageComponent>(entity) = imageComp;
+		mgr.AddComponent<OutputImageComponent>(entity) = imageComp;
 		mgr.AddComponent<EmbeddingComponent>(entity) = embedComp;
 		mgr.AddComponent<ControlnetComponent>(entity) = controlComp;
 		mgr.AddComponent<LayerSkipComponent>(entity) = layerSkipComp;
@@ -988,7 +988,7 @@ namespace GUI {
 		if (mgr.HasComponent<VaeComponent>(entity))
 			vaeComp = mgr.GetComponent<VaeComponent>(entity);
 		if (mgr.HasComponent<ImageComponent>(entity))
-			imageComp = mgr.GetComponent<ImageComponent>(entity);
+			imageComp = mgr.GetComponent<OutputImageComponent>(entity);
 		if (mgr.HasComponent<EmbeddingComponent>(entity))
 			embedComp = mgr.GetComponent<EmbeddingComponent>(entity);
 		if (mgr.HasComponent<ControlnetComponent>(entity))

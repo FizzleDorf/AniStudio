@@ -33,10 +33,12 @@ void Events::ProcessEvents() {
         eventQueue.pop();
 
         switch (event.type) {
+
         case EventType::Quit: {
             Core.Quit();
             break;
         }
+
         case EventType::OpenSettings: {
             auto &vMgr = Core.GetViewManager();
             ViewListID id = vMgr.CreateView();
@@ -45,6 +47,7 @@ void Events::ProcessEvents() {
             settingsID = id;
             break;
         }
+
         case EventType::CloseSettings: {
             auto &vMgr = Core.GetViewManager();
             auto views = vMgr.GetAllViews();
@@ -83,6 +86,7 @@ void Events::ProcessEvents() {
             viewsID = id;
             break;
         }
+
         case EventType::CloseConvert: {
             auto &vMgr = Core.GetViewManager();
             auto views = vMgr.GetAllViews();
@@ -102,6 +106,7 @@ void Events::ProcessEvents() {
             viewsID = id;
             break;
         }
+
         case EventType::CloseViews: {
             auto &vMgr = Core.GetViewManager();
             auto views = vMgr.GetAllViews();
@@ -112,6 +117,7 @@ void Events::ProcessEvents() {
             }
             break;
         }
+
         case EventType::InferenceRequest: {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
 
@@ -124,6 +130,7 @@ void Events::ProcessEvents() {
             }
             break;
         }
+
         case EventType::UpscaleRequest: {
             std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
 
@@ -136,6 +143,7 @@ void Events::ProcessEvents() {
             }
             break;
         }
+
         case EventType::ConvertToGGUF: {
             std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
 
@@ -172,13 +180,14 @@ void Events::ProcessEvents() {
             break;
         }
 
-        //case EventType::ClearInferenceQueue: {
-        //    auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-        //    if (sdcppSystem) {
-        //        sdcppSystem->ClearQueue();
-        //    }
-        //    break;
-        //}
+        case EventType::ClearInferenceQueue: {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                sdcppSystem->ClearQueue();
+            }
+            break;
+        }
+
         //case EventType::SaveImageEvent: {
         //    auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
         //    imageSystem->SaveImage(event.entityID);

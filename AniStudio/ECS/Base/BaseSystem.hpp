@@ -26,7 +26,6 @@ public:
 
     virtual void Start() {}
     virtual void Update(const float deltaT) {}
-    virtual void Render() {}
     virtual void Destroy() {}
 
     std::string GetSystemName() { return sysName; }
