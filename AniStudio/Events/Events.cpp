@@ -124,7 +124,7 @@ void Events::ProcessEvents() {
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
-                sdcppSystem->QueueInference(event.entityID);
+                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Inference);
             } else {
                 std::cerr << "SDCPPSystem is not registered." << std::endl;
             }
@@ -134,10 +134,10 @@ void Events::ProcessEvents() {
         case EventType::UpscaleRequest: {
             std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
 
-            auto upscaleSystem = Core.GetEntityManager().GetSystem<ECS::UpscaleSystem>();
-            if (upscaleSystem) {
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
                 std::cout << "UpscaleSystem is registered." << std::endl;
-                upscaleSystem->QueueInference(event.entityID);
+                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Conversion);
             } else {
                 std::cerr << "UpscaleSystem is not registered." << std::endl;
             }
@@ -150,7 +150,7 @@ void Events::ProcessEvents() {
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "SDCPPSystem is registered." << std::endl;
-                sdcppSystem->QueueConversion(event.entityID);
+                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Conversion);
             } else {
                 std::cerr << "SDCPPSystem is not registered." << std::endl;
             }
@@ -175,7 +175,7 @@ void Events::ProcessEvents() {
         case EventType::StopCurrentTask: {
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
-                // sdcppSystem->StopCurrentTask();
+                sdcppSystem->StopCurrentTask();
             }
             break;
         }

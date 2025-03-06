@@ -19,11 +19,17 @@ namespace ECS {
 
     class SDCPPSystem : public BaseSystem {
     public:
+        enum class TaskType {
+            Inference,
+            Conversion
+        };
+
         struct QueueItem {
             EntityID entityID = 0;
             bool processing = false;
             nlohmann::json metadata = nlohmann::json();
             std::shared_ptr<Utils::Task> task;
+            TaskType taskType;
         };
 
         // Constructor, destructor, and public methods remain unchanged
@@ -35,8 +41,7 @@ namespace ECS {
             AddComponentSignature<OutputImageComponent>();
             AddComponentSignature<InputImageComponent>();
 
-            activeInferenceTasks = 0;
-            activeConversionTasks = 0;
+            activeTasks = 0;
         }
 
         ~SDCPPSystem() {
@@ -44,7 +49,7 @@ namespace ECS {
             std::unique_lock<std::mutex> lock(queueMutex);
 
             // Cancel all tasks
-            for (auto& item : inferenceQueue) {
+            for (auto& item : taskQueue) {
                 if (item.task) {
                     item.task->cancel();
                 }
@@ -57,29 +62,21 @@ namespace ECS {
         }
 
         // Public methods (unchanged)
-        void QueueInference(const EntityID entityID) {
+        void QueueTask(const EntityID entityID, TaskType taskType) {
             std::lock_guard<std::mutex> lock(queueMutex);
 
             // Create a queue item
             QueueItem item;
             item.entityID = entityID;
             item.processing = false;
-            item.metadata = mgr.SerializeEntity(entityID);
+            item.taskType = taskType;
 
-            inferenceQueue.push_back(std::move(item));
-            std::cout << "Entity " << entityID << " queued for inference." << std::endl;
-        }
+            if (taskType == TaskType::Inference) {
+                item.metadata = mgr.SerializeEntity(entityID);
+            }
 
-        void QueueConversion(const EntityID entityID) {
-            std::lock_guard<std::mutex> lock(queueMutex);
-
-            // Create a queue item for conversion
-            QueueItem item;
-            item.entityID = entityID;
-            item.processing = false;
-
-            convertQueue.push_back(std::move(item));
-            std::cout << "Entity " << entityID << " queued for conversion." << std::endl;
+            taskQueue.push_back(std::move(item));
+            std::cout << "Entity " << entityID << " queued for " << (taskType == TaskType::Inference ? "inference" : "conversion") << "." << std::endl;
         }
 
         void Update(const float deltaT) override {
@@ -92,31 +89,31 @@ namespace ECS {
 
         void RemoveFromQueue(const size_t index) {
             std::lock_guard<std::mutex> lock(queueMutex);
-            if (index < inferenceQueue.size() && !inferenceQueue[index].processing) {
-                inferenceQueue.erase(inferenceQueue.begin() + index);
+            if (index < taskQueue.size() && !taskQueue[index].processing) {
+                taskQueue.erase(taskQueue.begin() + index);
             }
         }
 
         void MoveInQueue(const size_t fromIndex, const size_t toIndex) {
             std::lock_guard<std::mutex> lock(queueMutex);
-            if (fromIndex >= inferenceQueue.size() || toIndex >= inferenceQueue.size())
+            if (fromIndex >= taskQueue.size() || toIndex >= taskQueue.size())
                 return;
-            if (inferenceQueue[fromIndex].processing)
+            if (taskQueue[fromIndex].processing)
                 return;
 
-            QueueItem item = inferenceQueue[fromIndex];
-            inferenceQueue.erase(inferenceQueue.begin() + fromIndex);
-            inferenceQueue.insert(inferenceQueue.begin() + toIndex, item);
+            QueueItem item = taskQueue[fromIndex];
+            taskQueue.erase(taskQueue.begin() + fromIndex);
+            taskQueue.insert(taskQueue.begin() + toIndex, item);
         }
 
         std::vector<QueueItem> GetQueueSnapshot() {
             std::lock_guard<std::mutex> lock(queueMutex);
-            return inferenceQueue;
+            return taskQueue;
         }
 
         void StopCurrentTask() {
             std::lock_guard<std::mutex> lock(queueMutex);
-            for (auto& item : inferenceQueue) {
+            for (auto& item : taskQueue) {
                 if (item.processing && item.task) {
                     item.task->cancel();
                 }
@@ -126,10 +123,10 @@ namespace ECS {
         void ClearQueue() {
             std::lock_guard<std::mutex> lock(queueMutex);
             // Remove all non-processing tasks
-            inferenceQueue.erase(
-                std::remove_if(inferenceQueue.begin(), inferenceQueue.end(),
+            taskQueue.erase(
+                std::remove_if(taskQueue.begin(), taskQueue.end(),
                     [](const QueueItem& item) { return !item.processing; }),
-                inferenceQueue.end()
+                taskQueue.end()
             );
         }
 
@@ -150,16 +147,13 @@ namespace ECS {
         // Thread pool stats
         size_t GetNumThreads() const { return threadPool.size(); }
         size_t GetQueuedTaskCount() const { return threadPool.getQueueSize(); }
-        size_t GetActiveInferenceCount() const { return activeInferenceTasks; }
-        size_t GetActiveConversionCount() const { return activeConversionTasks; }
+        size_t GetActiveTaskCount() const { return activeTasks; }
 
     private:
         // Private member variables
         Utils::ThreadPool threadPool;
-        std::atomic<size_t> activeInferenceTasks;
-        std::atomic<size_t> activeConversionTasks;
-        std::vector<QueueItem> inferenceQueue;
-        std::vector<QueueItem> convertQueue;
+        std::atomic<size_t> activeTasks;
+        std::vector<QueueItem> taskQueue;
         std::atomic<bool> pauseWorker{ false };
         std::mutex queueMutex;
 
@@ -176,34 +170,29 @@ namespace ECS {
                 return;
             }
 
-            // Process conversion queue first (higher priority)
-            for (auto& item : convertQueue) {
-                if (!item.processing && activeConversionTasks < 1) {
-                    // Create a conversion task
-                    item.task = CreateConversionTask(item.entityID);
+            // Process task queue
+            for (auto& item : taskQueue) {
+                if (!item.processing && activeTasks < 1) {
+                    // Create a task based on the task type
+                    switch (item.taskType) {
+                    case TaskType::Inference:
+                        item.task = CreateInferenceTask(item.entityID, item.metadata);
+                        break;
+                    case TaskType::Conversion:
+                        item.task = CreateConversionTask(item.entityID);
+                        break;
+                    default:
+                        continue;
+                    }
+
                     item.processing = true;
-                    activeConversionTasks++;
+                    activeTasks++;
 
                     // Add to thread pool
                     threadPool.addTask(item.task);
-                }
-            }
 
-            // Process inference queue only if no active inference tasks
-            if (activeInferenceTasks < 1) {
-                for (auto& item : inferenceQueue) {
-                    if (!item.processing) {
-                        // Create an inference task
-                        item.task = CreateInferenceTask(item.entityID, item.metadata);
-                        item.processing = true;
-                        activeInferenceTasks++;
-
-                        // Add to thread pool
-                        threadPool.addTask(item.task);
-
-                        // Only start one task per update
-                        break;
-                    }
+                    // Only start one task per update
+                    break;
                 }
             }
         }
@@ -211,22 +200,11 @@ namespace ECS {
         void CheckTaskCompletion() {
             std::unique_lock<std::mutex> lock(queueMutex);
 
-            // Check inference queue
-            for (auto it = inferenceQueue.begin(); it != inferenceQueue.end();) {
+            // Check task queue
+            for (auto it = taskQueue.begin(); it != taskQueue.end();) {
                 if (it->processing && it->task && it->task->isDone()) {
-                    activeInferenceTasks--;
-                    it = inferenceQueue.erase(it);
-                }
-                else {
-                    ++it;
-                }
-            }
-
-            // Check conversion queue
-            for (auto it = convertQueue.begin(); it != convertQueue.end();) {
-                if (it->processing && it->task && it->task->isDone()) {
-                    activeConversionTasks--;
-                    it = convertQueue.erase(it);
+                    activeTasks--;
+                    it = taskQueue.erase(it);
                 }
                 else {
                     ++it;
