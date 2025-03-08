@@ -155,37 +155,122 @@ namespace Utils {
 
         // Utility function to generate an OpenGL texture from image data
         static GLuint GenerateTexture(int width, int height, int channels, const unsigned char* data) {
-            if (!data || width <= 0 || height <= 0 || channels <= 0) {
+            // Validate input parameters
+            if (!data) {
+                std::cerr << "GenerateTexture: Input data is null" << std::endl;
                 return 0;
             }
 
-            GLuint textureID;
-            glGenTextures(1, &textureID);
-            glBindTexture(GL_TEXTURE_2D, textureID);
-
-            // Set texture parameters
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-            // Determine the format based on the number of channels
-            GLenum format;
-            switch (channels) {
-            case 1: format = GL_RED; break;
-            case 3: format = GL_RGB; break;
-            case 4: format = GL_RGBA; break;
-            default:
-                // Unsupported format
-                glDeleteTextures(1, &textureID);
+            if (width <= 0 || height <= 0) {
+                std::cerr << "GenerateTexture: Invalid dimensions: " << width << "x" << height << std::endl;
                 return 0;
             }
 
-            // Upload image data
-            glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-            glGenerateMipmap(GL_TEXTURE_2D);
+            if (channels <= 0 || channels > 4) {
+                std::cerr << "GenerateTexture: Invalid channel count: " << channels << std::endl;
+                return 0;
+            }
 
-            return textureID;
+            GLuint textureID = 0;
+
+            try {
+                // Generate texture ID
+                glGenTextures(1, &textureID);
+                if (textureID == 0) {
+                    GLenum error = glGetError();
+                    std::cerr << "GenerateTexture: glGenTextures failed with error: " << error << std::endl;
+                    return 0;
+                }
+
+                // Bind the texture
+                glBindTexture(GL_TEXTURE_2D, textureID);
+                GLenum bindError = glGetError();
+                if (bindError != GL_NO_ERROR) {
+                    std::cerr << "GenerateTexture: glBindTexture failed with error: " << bindError << std::endl;
+                    glDeleteTextures(1, &textureID);
+                    return 0;
+                }
+
+                // Set texture parameters with error checking
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+                // Check for errors in texture parameters
+                GLenum paramError = glGetError();
+                if (paramError != GL_NO_ERROR) {
+                    std::cerr << "GenerateTexture: Setting texture parameters failed with error: " << paramError << std::endl;
+                    glDeleteTextures(1, &textureID);
+                    return 0;
+                }
+
+                // Determine the format based on the number of channels
+                GLenum format;
+                GLenum internalFormat;
+                switch (channels) {
+                case 1:
+                    format = GL_RED;
+                    internalFormat = GL_RED;
+                    break;
+                case 3:
+                    format = GL_RGB;
+                    internalFormat = GL_RGB;
+                    break;
+                case 4:
+                    format = GL_RGBA;
+                    internalFormat = GL_RGBA;
+                    break;
+                default:
+                    // Unsupported format (should never reach here due to validation above)
+                    glDeleteTextures(1, &textureID);
+                    return 0;
+                }
+
+                // Upload image data with error checking
+                glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+                GLenum texError = glGetError();
+                if (texError != GL_NO_ERROR) {
+                    std::cerr << "GenerateTexture: glTexImage2D failed with error: " << texError
+                        << " for dimensions " << width << "x" << height
+                        << ", channels: " << channels << std::endl;
+                    glDeleteTextures(1, &textureID);
+                    return 0;
+                }
+
+                // Generate mipmaps with error checking
+                glGenerateMipmap(GL_TEXTURE_2D);
+
+                GLenum mipError = glGetError();
+                if (mipError != GL_NO_ERROR) {
+                    std::cerr << "GenerateTexture: glGenerateMipmap failed with error: " << mipError << std::endl;
+                    // Continue despite mipmap error - texture might still be usable
+                }
+
+                // Unbind the texture
+                glBindTexture(GL_TEXTURE_2D, 0);
+
+                std::cout << "GenerateTexture: Successfully created texture ID " << textureID
+                    << " with dimensions " << width << "x" << height
+                    << ", channels: " << channels << std::endl;
+
+                return textureID;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "GenerateTexture: Exception: " << e.what() << std::endl;
+                if (textureID != 0) {
+                    glDeleteTextures(1, &textureID);
+                }
+                return 0;
+            }
+            catch (...) {
+                std::cerr << "GenerateTexture: Unknown exception" << std::endl;
+                if (textureID != 0) {
+                    glDeleteTextures(1, &textureID);
+                }
+                return 0;
+            }
         }
 
         // Delete an OpenGL texture

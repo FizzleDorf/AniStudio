@@ -42,6 +42,8 @@ enum class EventType {
     // IO Events
     LoadImageEvent,
     SaveImageEvent,
+    RemoveImageEvent,
+
     LoadVideoEvent,
     SaveVideoEvent
 };

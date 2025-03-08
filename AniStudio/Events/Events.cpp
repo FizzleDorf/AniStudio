@@ -188,16 +188,44 @@ void Events::ProcessEvents() {
             break;
         }
 
-        //case EventType::SaveImageEvent: {
-        //    auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-        //    imageSystem->SaveImage(event.entityID);
-        //    break;
-        //}
-        //case EventType::LoadImageEvent: {
-        //    auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
-        //    // imageSystem->AddImage(event.entityID);
-        //    break;
-        //}
+        case EventType::SaveImageEvent: {
+            std::cout << "Handling SaveImage event for Entity ID: " << event.entityID << " to path: " << '\n';
+
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+            if (imageSystem) {
+                imageSystem->QueueSaveImage(event.entityID);
+            }
+            else {
+                std::cerr << "ImageSystem is not registered." << std::endl;
+            }
+            break;
+        }
+
+        case EventType::LoadImageEvent: {
+            std::cout << "Handling LoadImage event for Entity ID: " << event.entityID << " from path: " << '\n';
+
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+            if (imageSystem) {
+                imageSystem->QueueLoadImage(event.entityID);
+            }
+            else {
+                std::cerr << "ImageSystem is not registered." << std::endl;
+            }
+            break;
+        }
+
+        case EventType::RemoveImageEvent: {
+            std::cout << "Handling RemoveImage event for Entity ID: " << event.entityID << '\n';
+
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+            if (imageSystem) {
+                imageSystem->QueueRemoveImage(event.entityID);
+            }
+            else {
+                std::cerr << "ImageSystem is not registered." << std::endl;
+            }
+            break;
+        }
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
             break;

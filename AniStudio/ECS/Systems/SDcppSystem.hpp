@@ -2,7 +2,8 @@
 
 #include "Constants.hpp"
 #include "ECS.h"
-#include "ImageSystem.hpp"
+#include "ImageComponent.hpp"
+#include "ImageUtils.hpp"
 #include "SDCPPComponents.h"
 #include "pch.h"
 #include "stable-diffusion.h"
@@ -38,7 +39,7 @@ namespace ECS {
             threadPool(numThreads > 0 ? numThreads : std::thread::hardware_concurrency() / 2) {
             sysName = "SDCPPSystem";
             AddComponentSignature<LatentComponent>();
-            AddComponentSignature<OutputImageComponent>();
+            AddComponentSignature<ImageComponent>();
             AddComponentSignature<InputImageComponent>();
 
             activeTasks = 0;
@@ -61,7 +62,7 @@ namespace ECS {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        // Public methods (unchanged)
+        // Public methods
         void QueueTask(const EntityID entityID, TaskType taskType) {
             std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -212,7 +213,7 @@ namespace ECS {
             }
         }
 
-        // Helper methods to create tasks (unchanged)
+        // Helper methods to create tasks
         std::shared_ptr<Utils::Task> CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID);
 
@@ -220,7 +221,7 @@ namespace ECS {
         bool RunInference(EntityID entityID, const nlohmann::json& metadata);
         bool ConvertToGGUF(EntityID entityID);
 
-        // SD context initialization (unchanged)
+        // SD context initialization
         sd_ctx_t* InitializeStableDiffusionContext(EntityID entityID) {
             return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
                 mgr.GetComponent<CLipLComponent>(entityID).modelPath.c_str(),
@@ -242,7 +243,7 @@ namespace ECS {
                 mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu, false);
         }
 
-        // Generate image (unchanged)
+        // Generate image
         sd_image_t* GenerateImage(sd_ctx_t* context, EntityID entityID) {
             return txt2img(
                 context,
@@ -271,46 +272,32 @@ namespace ECS {
             );
         }
 
-        // Save image - SIMPLIFIED using PngMetadata utility
         void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entity, const nlohmann::json& metadata) {
-            // Make sure entity has OutputImageComponent
-            if (!mgr.HasComponent<OutputImageComponent>(entity)) {
-                // Add it if it doesn't exist yet
-                mgr.AddComponent<OutputImageComponent>(entity);
-            }
-
-            OutputImageComponent& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
-
-            // Copy the raw data to the output component
-            if (imageComp.imageData) {
-                stbi_image_free(imageComp.imageData); // Free any existing data
-                imageComp.imageData = nullptr;
-            }
-
-            // Allocate new memory for the image data
-            size_t dataSize = width * height * channels;
-            imageComp.imageData = (unsigned char*)malloc(dataSize);
-            if (!imageComp.imageData) {
-                std::cerr << "Failed to allocate memory for image data" << std::endl;
-                return;
-            }
-
-            // Copy the data
-            memcpy(imageComp.imageData, data, dataSize);
-
-            // Update image component properties
-            imageComp.width = width;
-            imageComp.height = height;
-            imageComp.channels = channels;
-
-            // Create a path for the filename and ensure .png extension
-            std::filesystem::path filename(imageComp.fileName);
-            if (filename.extension() != ".png") {
-                filename.replace_extension(".png");
-                imageComp.fileName = filename.string();
-            }
-
             try {
+                // Get the component for storing image data
+                auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+
+                // Update image dimensions from the actual generated data
+                imageComp.width = width;
+                imageComp.height = height;
+                imageComp.channels = channels;
+
+                // Set up default image properties if not already set
+                if (imageComp.fileName.empty()) {
+                    imageComp.fileName = "AniStudio.png";
+                }
+
+                if (imageComp.filePath.empty()) {
+                    imageComp.filePath = filePaths.defaultProjectPath;
+                }
+
+                // Ensure PNG extension
+                std::filesystem::path fileNamePath(imageComp.fileName);
+                if (fileNamePath.extension() != ".png") {
+                    fileNamePath.replace_extension(".png");
+                    imageComp.fileName = fileNamePath.string();
+                }
+
                 // Use PngMetadata utility to get a unique filename
                 std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
                     imageComp.fileName,
@@ -318,13 +305,37 @@ namespace ECS {
                     ".png"
                 );
 
-                // Update the component with the new path
+                // Update the component with the path info
                 std::filesystem::path fullPath(uniqueFilePath);
                 imageComp.fileName = fullPath.filename().string();
                 imageComp.filePath = uniqueFilePath;
 
-                // Save the image
-                if (!stbi_write_png(uniqueFilePath.c_str(), width, height, channels, data, width * channels)) {
+                // First, store a copy of the raw image data in the component
+                if (imageComp.imageData) {
+                    free(imageComp.imageData);
+                    imageComp.imageData = nullptr;
+                }
+
+                // Copy the data to the component
+                size_t dataSize = width * height * channels;
+                imageComp.imageData = static_cast<unsigned char*>(malloc(dataSize));
+                if (imageComp.imageData) {
+                    memcpy(imageComp.imageData, data, dataSize);
+                }
+                else {
+                    std::cerr << "Failed to allocate memory for image data" << std::endl;
+                }
+
+                // Save the image to disk
+                bool success = Utils::ImageUtils::SaveImage(
+                    uniqueFilePath,
+                    width,
+                    height,
+                    channels,
+                    data
+                );
+
+                if (!success) {
                     std::cerr << "Failed to save image: " << uniqueFilePath << std::endl;
                     return;
                 }
@@ -338,42 +349,7 @@ namespace ECS {
 
                 std::cout << "Image saved successfully: \"" << uniqueFilePath << "\"" << std::endl;
 
-                static std::mutex imageMutex;
-                {
-                    std::lock_guard<std::mutex> lock(imageMutex);
-
-                    // First create a new entity instead of modifying the current one
-                    EntityID newImageEntity = mgr.AddNewEntity();
-
-                    // Add ImageComponent to the new entity
-                    auto& newImageComp = mgr.AddComponent<ImageComponent>(newImageEntity);
-
-                    // Copy data from the output component to the new image component
-                    newImageComp.filePath = imageComp.filePath;
-                    newImageComp.fileName = imageComp.fileName;
-                    newImageComp.width = imageComp.width;
-                    newImageComp.height = imageComp.height;
-                    newImageComp.channels = imageComp.channels;
-
-                    // Allocate and copy image data
-                    if (imageComp.imageData) {
-                        newImageComp.imageData = (unsigned char*)malloc(dataSize);
-                        if (newImageComp.imageData) {
-                            memcpy(newImageComp.imageData, imageComp.imageData, dataSize);
-                        }
-                    }
-
-                    // Get the ImageSystem
-                    auto imageSystem = mgr.GetSystem<ImageSystem>();
-                    if (imageSystem) {
-                        // Load the image into the new entity
-                        imageSystem->LoadImage(newImageComp);
-
-                        // Clean up the original entity's output component 
-                        // but keep the entity itself for potential reuse
-                        mgr.RemoveComponent<OutputImageComponent>(entity);
-                    }
-                }
+                // Texture will be generated during next update by ImageSystem since we have imageData set
             }
             catch (const std::filesystem::filesystem_error& e) {
                 std::cerr << "Error creating directory: " << e.what() << '\n';
@@ -455,22 +431,6 @@ namespace ECS {
         try {
             std::cout << "Starting inference for Entity " << entityID << std::endl;
 
-            if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-                mgr.AddComponent<OutputImageComponent>(entityID);
-                auto& outputComp = mgr.GetComponent<OutputImageComponent>(entityID);
-
-                if (mgr.HasComponent<ImageComponent>(entityID)) {
-                    const auto& imgComp = mgr.GetComponent<ImageComponent>(entityID);
-                    outputComp.fileName = imgComp.fileName;
-                    outputComp.filePath = imgComp.filePath;
-                }
-                else {
-                    // Use defaults if no image component exists
-                    outputComp.fileName = "AniStudio.png";
-                    outputComp.filePath = filePaths.defaultProjectPath;
-                }
-            }
-
             // Initialize Stable Diffusion context
             sd_context = InitializeStableDiffusionContext(entityID);
             if (!sd_context) {
@@ -483,13 +443,14 @@ namespace ECS {
                 throw std::runtime_error("Failed to generate image!");
             }
 
+            // Save the generated image - this now creates a new entity with ImageComponent
             SaveImage(image->data, image->width, image->height, image->channel, entityID, metadata);
 
+            // Cleanup SD context
             free_sd_ctx(sd_context);
 
             std::cout << "Inference completed for Entity " << entityID << std::endl;
             return true;
-
         }
         catch (const std::exception& e) {
             std::cerr << "Exception during inference: " << e.what() << std::endl;
@@ -498,19 +459,11 @@ namespace ECS {
                 free_sd_ctx(sd_context);
             }
 
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                // Only destroy the entity if it's not being used by another system
-                if (mgr.HasComponent<OutputImageComponent>(entityID)) {
-                    mgr.DestroyEntity(entityID);
-                }
-            }
-
             return false;
         }
     }
 
-    // Convert to GGUF (unchanged)
+    // Convert to GGUF
     inline bool SDCPPSystem::ConvertToGGUF(EntityID entityID) {
         try {
             std::cout << "Starting conversion for Entity " << entityID << std::endl;

@@ -74,7 +74,7 @@ private:
     VaeComponent vaeComp;
     TaesdComponent taesdComp;
     InputImageComponent inputImageComp;
-    OutputImageComponent imageComp;
+    ImageComponent imageComp;
     EmbeddingComponent embedComp;
     ControlnetComponent controlComp;
     LayerSkipComponent layerSkipComp;
