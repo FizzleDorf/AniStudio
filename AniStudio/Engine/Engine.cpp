@@ -125,11 +125,17 @@ void Engine::Init() {
     viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
     viewManager.RegisterViewType<SequencerView>("SequencerView");
     viewManager.RegisterViewType<PluginView>("PluginView");
+    viewManager.RegisterViewType<NodeView>("NodeView");
 
     // Register core systems
     mgr.RegisterSystem<SDCPPSystem>();
-    mgr.RegisterSystem<ImageSystem>();
-    
+    mgr.RegisterSystem<ImageSystem>();    
+
+    // Create a NodeView instance (you can also do this on demand via a menu action)
+    auto nodeViewID = viewManager.CreateView();
+    viewManager.AddView<NodeView>(nodeViewID, NodeView(mgr));
+    viewManager.GetView<NodeView>(nodeViewID).Init();
+
     auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
     viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
