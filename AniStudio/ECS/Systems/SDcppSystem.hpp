@@ -8,7 +8,7 @@
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
-#include "PngMetadataUtils.hpp"  // Include the PNG metadata utility
+#include "PngMetadataUtils.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -22,7 +22,9 @@ namespace ECS {
     public:
         enum class TaskType {
             Inference,
-            Conversion
+            Conversion,
+            Img2Img,
+            Upscaling
         };
 
         struct QueueItem {
@@ -161,8 +163,11 @@ namespace ECS {
         // Friend classes for tasks
         friend class InferenceTask;
         friend class ConvertTask;
+        friend class Img2ImgTask;
+        friend class UpscalingTask;
 
         // Queue processing methods
+        // Update ProcessQueues method
         void ProcessQueues() {
             std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -181,6 +186,12 @@ namespace ECS {
                         break;
                     case TaskType::Conversion:
                         item.task = CreateConversionTask(item.entityID);
+                        break;
+                    case TaskType::Img2Img:
+                        item.task = CreateImg2ImgTask(item.entityID, item.metadata);
+                        break;
+                    case TaskType::Upscaling:
+                        item.task = CreateUpscalingTask(item.entityID, item.metadata);
                         break;
                     default:
                         continue;
@@ -216,10 +227,14 @@ namespace ECS {
         // Helper methods to create tasks
         std::shared_ptr<Utils::Task> CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID);
+        std::shared_ptr<Utils::Task> CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata);
+        std::shared_ptr<Utils::Task> CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata);
 
         // Core methods that will be used by task classes
         bool RunInference(EntityID entityID, const nlohmann::json& metadata);
         bool ConvertToGGUF(EntityID entityID);
+        bool RunImg2Img(EntityID entityID, const nlohmann::json& metadata);
+        bool RunUpscaling(EntityID entityID, const nlohmann::json& metadata);
 
         // SD context initialization
         sd_ctx_t* InitializeStableDiffusionContext(EntityID entityID) {
@@ -414,13 +429,71 @@ namespace ECS {
         EntityID entityID;
     };
 
-    // Implementation of task creation methods (unchanged)
+    class Img2ImgTask : public Utils::Task {
+    public:
+        Img2ImgTask(SDCPPSystem* system, EntityID entityID, const nlohmann::json& metadata)
+            : system(system), entityID(entityID), metadata(metadata) {
+        }
+
+        void execute() override {
+            if (!system) return;
+
+            try {
+                bool success = system->RunImg2Img(entityID, metadata);
+                markDone();
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Exception in img2img task: " << e.what() << std::endl;
+                markDone();
+            }
+        }
+
+    private:
+        SDCPPSystem* system;
+        EntityID entityID;
+        nlohmann::json metadata;
+    };
+
+    class UpscalingTask : public Utils::Task {
+    public:
+        UpscalingTask(SDCPPSystem* system, EntityID entityID, const nlohmann::json& metadata)
+            : system(system), entityID(entityID), metadata(metadata) {
+        }
+
+        void execute() override {
+            if (!system) return;
+
+            try {
+                bool success = system->RunUpscaling(entityID, metadata);
+                markDone();
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Exception in upscaling task: " << e.what() << std::endl;
+                markDone();
+            }
+        }
+
+    private:
+        SDCPPSystem* system;
+        EntityID entityID;
+        nlohmann::json metadata;
+    };
+
+    // Implementation of task creation methods
     inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata) {
         return std::make_shared<InferenceTask>(this, entityID, metadata);
     }
 
     inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateConversionTask(EntityID entityID) {
         return std::make_shared<ConvertTask>(this, entityID);
+    }
+
+    inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata) {
+        return std::make_shared<Img2ImgTask>(this, entityID, metadata);
+    }
+
+    inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata) {
+        return std::make_shared<UpscalingTask>(this, entityID, metadata);
     }
 
     // Implementation of core methods
@@ -516,6 +589,170 @@ namespace ECS {
             {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 mgr.DestroyEntity(entityID);
+            }
+
+            return false;
+        }
+    }
+
+    inline bool ECS::SDCPPSystem::RunImg2Img(EntityID entityID, const nlohmann::json& metadata) {
+        sd_ctx_t* sd_context = nullptr;
+        try {
+            std::cout << "Starting img2img inference for Entity " << entityID << std::endl;
+
+            // Initialize Stable Diffusion context
+            sd_context = InitializeStableDiffusionContext(entityID);
+            if (!sd_context) {
+                throw std::runtime_error("Failed to initialize Stable Diffusion context!");
+            }
+
+            // Check if we have input image data
+            if (!mgr.HasComponent<InputImageComponent>(entityID) ||
+                !mgr.GetComponent<InputImageComponent>(entityID).imageData) {
+                throw std::runtime_error("Input image required for img2img generation!");
+            }
+
+            // Get components
+            auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
+
+            // Prepare input image
+            sd_image_t init_image = {
+                static_cast<uint32_t>(inputComp.width),
+                static_cast<uint32_t>(inputComp.height),
+                static_cast<uint32_t>(inputComp.channels),
+                inputComp.imageData
+            };
+
+            // Prepare mask image if we have MaskImageComponent
+            sd_image_t mask_image = { 0 };
+            float denoiseStrength = 0.75f; // Default strength
+
+            if (mgr.HasComponent<MaskImageComponent>(entityID)) {
+                auto& maskComp = mgr.GetComponent<MaskImageComponent>(entityID);
+                if (maskComp.imageData) {
+                    mask_image.width = static_cast<uint32_t>(maskComp.width);
+                    mask_image.height = static_cast<uint32_t>(maskComp.height);
+                    mask_image.channel = static_cast<uint32_t>(maskComp.channels);
+                    mask_image.data = maskComp.imageData;
+                }
+                // Use the mask component's value for denoise strength
+                denoiseStrength = maskComp.value;
+            }
+
+            // Generate image
+            sd_image_t* image = img2img(
+                sd_context,
+                init_image,
+                mask_image,
+                mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
+                mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(),
+                mgr.GetComponent<ClipSkipComponent>(entityID).clipSkip,
+                mgr.GetComponent<SamplerComponent>(entityID).cfg,
+                mgr.GetComponent<GuidanceComponent>(entityID).guidance,
+                mgr.GetComponent<GuidanceComponent>(entityID).eta,
+                mgr.GetComponent<LatentComponent>(entityID).latentWidth,
+                mgr.GetComponent<LatentComponent>(entityID).latentHeight,
+                mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
+                mgr.GetComponent<SamplerComponent>(entityID).steps,
+                denoiseStrength,
+                mgr.GetComponent<SamplerComponent>(entityID).seed,
+                mgr.GetComponent<LatentComponent>(entityID).batchSize,
+                nullptr,  // control_cond
+                0.0f,     // control_strength
+                0.0f,     // style_strength
+                false,    // normalize_input
+                "",       // input_id_images_path
+                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
+                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
+                mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
+                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
+                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end
+            );
+
+            if (!image) {
+                throw std::runtime_error("Failed to generate image!");
+            }
+
+            // Save the generated image
+            SaveImage(image->data, image->width, image->height, image->channel, entityID, metadata);
+
+            // Cleanup SD context
+            free_sd_ctx(sd_context);
+
+            std::cout << "Img2Img inference completed for Entity " << entityID << std::endl;
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Exception during img2img inference: " << e.what() << std::endl;
+
+            if (sd_context) {
+                free_sd_ctx(sd_context);
+            }
+
+            return false;
+        }
+    }
+
+    inline bool ECS::SDCPPSystem::RunUpscaling(EntityID entityID, const nlohmann::json& metadata) {
+        upscaler_ctx_t* upscaler_context = nullptr;
+        try {
+            std::cout << "Starting upscaling for Entity " << entityID << std::endl;
+
+            // Check if we have input image data
+            if (!mgr.HasComponent<InputImageComponent>(entityID) ||
+                !mgr.GetComponent<InputImageComponent>(entityID).imageData) {
+                throw std::runtime_error("Input image required for upscaling!");
+            }
+
+            // Get ESRGAN path and settings
+            auto& esrganComp = mgr.GetComponent<EsrganComponent>(entityID);
+            if (esrganComp.modelPath.empty()) {
+                throw std::runtime_error("ESRGAN model path is empty!");
+            }
+
+            // Initialize upscaler context - use default thread count from system
+            upscaler_context = new_upscaler_ctx(
+                esrganComp.modelPath.c_str(),
+                mgr.GetComponent<SamplerComponent>(entityID).n_threads
+            );
+
+            if (!upscaler_context) {
+                throw std::runtime_error("Failed to initialize upscaler context!");
+            }
+
+            // Get input image component
+            auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
+
+            // Create input image
+            sd_image_t input_image = {
+                static_cast<uint32_t>(inputComp.width),
+                static_cast<uint32_t>(inputComp.height),
+                static_cast<uint32_t>(inputComp.channels),
+                inputComp.imageData
+            };
+
+            // Perform upscaling
+            sd_image_t upscaled_image = upscale(
+                upscaler_context,
+                input_image,
+                esrganComp.upscaleFactor
+            );
+
+            // Save the upscaled image
+            SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
+                upscaled_image.channel, entityID, metadata);
+
+            // Cleanup upscaler context
+            free_upscaler_ctx(upscaler_context);
+
+            std::cout << "Upscaling completed for Entity " << entityID << std::endl;
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "Exception during upscaling: " << e.what() << std::endl;
+
+            if (upscaler_context) {
+                free_upscaler_ctx(upscaler_context);
             }
 
             return false;

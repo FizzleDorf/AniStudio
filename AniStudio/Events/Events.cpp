@@ -131,13 +131,27 @@ void Events::ProcessEvents() {
             break;
         }
 
+        case EventType::Img2ImgRequest: {
+            std::cout << "Handling Img2Img event for Entity ID: " << event.entityID << '\n';
+
+            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+            if (sdcppSystem) {
+                std::cout << "SDCPPSystem is registered." << std::endl;
+                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Img);
+            }
+            else {
+                std::cerr << "SDCPPSystem is not registered." << std::endl;
+            }
+            break;
+        }
+
         case EventType::UpscaleRequest: {
             std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
 
             auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
             if (sdcppSystem) {
                 std::cout << "UpscaleSystem is registered." << std::endl;
-                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Conversion);
+                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
             } else {
                 std::cerr << "UpscaleSystem is not registered." << std::endl;
             }

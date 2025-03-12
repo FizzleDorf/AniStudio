@@ -54,5 +54,6 @@ struct MaskImageComponent : public ImageComponent {
     MaskImageComponent() {
         compName = "MaskImageComponent";
     }
+    float value = 0.75f;
 };
 } // namespace ECS
