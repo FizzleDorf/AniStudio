@@ -11,9 +11,7 @@ namespace GUI {
 class ViewManager {
 public:
     ViewManager() : viewListCount(0) {
-        for (ViewListID viewList = 0u; viewList < MAX_VIEW_COUNT; viewList++) {
-            availableViews.push(viewList);
-        }
+        Reset();
     }
 
     ~ViewManager() = default;
@@ -158,6 +156,7 @@ public:
         viewListCount = 0;
         viewArrays.clear();
         registeredViews.clear();
+        Init();
     }
 
     // Return all view IDs

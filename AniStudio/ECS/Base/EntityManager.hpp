@@ -10,9 +10,7 @@ namespace ECS {
 
     public:
         EntityManager() : entityCount(0) {
-            for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; entity++) {
-                availableEntities.push(entity);
-            }
+            Reset();
         }
 
         ~EntityManager() {

@@ -82,9 +82,6 @@ void Engine::Init() {
 
     // Initialize managers
     filePaths.Init();
-    mgr.Reset();
-    viewManager.Reset();
-    viewManager.Init();
     pluginManager.Init();
     
     // Invalidate ID 0 for all entities and viewlists
@@ -93,7 +90,18 @@ void Engine::Init() {
     auto tempView = viewManager.CreateView();
     viewManager.DestroyView(tempView);
 
-    // TODO: move registry to other file and add reset logic to managers
+    // TODO: move registers to other file
+    // Register Views
+    viewManager.RegisterViewType<DebugView>("DebugView");
+    viewManager.RegisterViewType<SettingsView>("SettingsView");
+    viewManager.RegisterViewType<DiffusionView>("DiffusionView");
+    viewManager.RegisterViewType<ImageView>("ImageView");
+    viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
+    viewManager.RegisterViewType<ConvertView>("ConvertView");
+    viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
+    viewManager.RegisterViewType<SequencerView>("SequencerView");
+    viewManager.RegisterViewType<PluginView>("PluginView");
+    viewManager.RegisterViewType<NodeView>("NodeView");
 
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
@@ -115,26 +123,14 @@ void Engine::Init() {
     mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
     mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
 
-    // Register Views
-    viewManager.RegisterViewType<DebugView>("DebugView");
-    viewManager.RegisterViewType<SettingsView>("SettingsView");
-    viewManager.RegisterViewType<DiffusionView>("DiffusionView");
-    viewManager.RegisterViewType<ImageView>("ImageView");
-    viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
-    viewManager.RegisterViewType<ConvertView>("ConvertView");
-    viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
-    viewManager.RegisterViewType<SequencerView>("SequencerView");
-    viewManager.RegisterViewType<PluginView>("PluginView");
-    viewManager.RegisterViewType<NodeView>("NodeView");
-
     // Register core systems
     mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();    
 
-    // Create a NodeView instance (you can also do this on demand via a menu action)
-    auto nodeViewID = viewManager.CreateView();
+    // Create a NodeView instance
+    /*auto nodeViewID = viewManager.CreateView();
     viewManager.AddView<NodeView>(nodeViewID, NodeView(mgr));
-    viewManager.GetView<NodeView>(nodeViewID).Init();
+    viewManager.GetView<NodeView>(nodeViewID).Init();*/
 
     auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
