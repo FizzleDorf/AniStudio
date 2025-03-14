@@ -220,6 +220,8 @@ namespace GUI {
 			if (ImGui::InputTextMultiline("##Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer),
 				ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8))) { // Adjust height
 				promptComp.posPrompt = promptComp.PosBuffer;
+				promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0'; // Ensure null termination
+				
 			}
 			ImGui::PopStyleVar(); // Restore frame padding
 
@@ -232,6 +234,7 @@ namespace GUI {
 			if (ImGui::InputTextMultiline("##Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer),
 				ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8))) { // Adjust height
 				promptComp.negPrompt = promptComp.NegBuffer;
+				promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0'; // Ensure null termination
 			}
 			ImGui::PopStyleVar(); // Restore frame padding
 
@@ -705,46 +708,54 @@ namespace GUI {
 			}
 			ImGui::Separator();
 
+			if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
+				if (numQueues < 1) {
+					numQueues = 1;
+				}
+			}
+
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
 				for (int i = 0; i < numQueues; i++) {
 					HandleT2IEvent();
 					// seedControl->activate();
 				}
 			}
-			if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
-				if (numQueues < 1) {
-					numQueues = 1;
+
+			if (isPaused) {
+				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
+					Event event;
+					event.type = EventType::ResumeInference;
+					ANI::Events::Ref().QueueEvent(event);
+					isPaused = false;
 				}
 			}
-			if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
-				Event event;
-				event.type = EventType::PauseInference;
-				ANI::Events::Ref().QueueEvent(event);
+			else {
+				if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
+					Event event;
+					event.type = EventType::PauseInference;
+					ANI::Events::Ref().QueueEvent(event);
+					isPaused = true;
+				}
 			}
 
-			if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
-				Event event;
-				event.type = EventType::ResumeInference;
-				ANI::Events::Ref().QueueEvent(event);
-			}
-
-			if (ImGui::Button("Stop Current", ImVec2(-FLT_MIN, 0))) {
+			/*if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
 				Event event;
 				event.type = EventType::StopCurrentTask;
 				ANI::Events::Ref().QueueEvent(event);
-			}
+			}*/
 
 			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
 				Event event;
 				event.type = EventType::ClearInferenceQueue;
 				ANI::Events::Ref().QueueEvent(event);
 			}
+
 			ImGui::Separator();
-			if (ImGui::BeginTable("InferenceQueue", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+
+			if (ImGui::BeginTable("InferenceQueue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-				ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthFixed, 48.0f);
-				ImGui::TableSetupColumn("Move", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 44.0f);
+				ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
 				// ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableHeadersRow();
 
@@ -753,7 +764,6 @@ namespace GUI {
 					auto queueItems = sdSystem->GetQueueSnapshot();
 					for (size_t i = 0; i < queueItems.size(); i++) {
 						const auto& item = queueItems[i];
-						auto& prompt = mgr.GetComponent<PromptComponent>(item.entityID).posPrompt;
 
 						ImGui::TableNextRow();
 
@@ -773,27 +783,46 @@ namespace GUI {
 						// Controls column
 						ImGui::TableNextColumn();
 						if (!item.processing) {
-							if (ImGui::Button(("Remove##" + std::to_string(i)).c_str())) {
-								sdSystem->RemoveFromQueue(i);
-							}
-						}
 
-						// Move column
-						ImGui::TableNextColumn();
-						if (!item.processing) {
 							if (i > 0) {
 								if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
 									sdSystem->MoveInQueue(i, i - 1);
 								}
-								if (i < queueItems.size() - 1) {
-									ImGui::SameLine();
-								}
+								ImGui::SameLine();
+
 							}
+
 							if (i < queueItems.size() - 1) {
 								if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
 									sdSystem->MoveInQueue(i, i + 1);
 								}
+								ImGui::SameLine();
 							}
+
+							if (i > 0) {
+								if (ImGui::Button(("Top##Top" + std::to_string(i)).c_str())) {
+									if (queueItems[0].processing) {
+										sdSystem->MoveInQueue(i, 1);
+									}
+									else {
+										sdSystem->MoveInQueue(i, 0);
+									}
+										
+								}
+								ImGui::SameLine();
+							}
+
+							if (i < queueItems.size() - 1) {
+								if (ImGui::Button(("Bottom##Bottom" + std::to_string(i)).c_str())) {
+									sdSystem->MoveInQueue(i, queueItems.size() - 1);
+								}
+								ImGui::SameLine();
+							}
+
+							if (ImGui::Button(("X##Remove" + std::to_string(i)).c_str())) {
+								sdSystem->RemoveFromQueue(i);
+							}
+
 						}
 
 						// // Prompt column

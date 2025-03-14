@@ -12,3 +12,4 @@
 #include "SettingsView.hpp"
 #include "UpscaleView.hpp"
 #include "ViewListManagerView.hpp"
+#include "NodeView.hpp"

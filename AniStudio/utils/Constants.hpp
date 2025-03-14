@@ -14,8 +14,8 @@ constexpr const char *type_method_items[] = {
 constexpr const int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
 
 // sampler method constants
-constexpr const char *sample_method_items[] = {"Euler a",  "Euler",       "Heun",  "Dpm 2",   "Dpmpp 2 a",
-                                               "Dpmpp 2m", "Dpm++ 2m v2", "Ipndm", "Ipndm v", "Lcm"};
+constexpr const char *sample_method_items[] = {"Euler a",  "Euler", "Heun",  "Dpm 2", "Dpm++ 2 a",
+                                               "Dpm++ 2m", "Dpm++ 2m v2", "Ipndm", "Ipndm v", "Lcm", "Ddim Trailing", "TCD"};
 constexpr const int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
 
 // scheduler method constants
