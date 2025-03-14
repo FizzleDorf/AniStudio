@@ -752,7 +752,7 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			if (ImGui::BeginTable("InferenceQueue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+			if (ImGui::BeginTable("Queue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
 				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 44.0f);
 				ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);

@@ -65,7 +65,7 @@ namespace ECS {
         }
 
         // Public methods
-        void QueueTask(const EntityID entityID, TaskType taskType) {
+        void QueueTask(const EntityID entityID, const TaskType taskType) {
             std::lock_guard<std::mutex> lock(queueMutex);
 
             // Create a queue item
@@ -179,7 +179,7 @@ namespace ECS {
                         item.task = CreateInferenceTask(item.entityID, item.metadata);
                         break;
                     case TaskType::Conversion:
-                        item.task = CreateConversionTask(item.entityID);
+                        item.task = CreateConversionTask(item.entityID, item.metadata);
                         break;
                     case TaskType::Img2Img:
                         item.task = CreateImg2ImgTask(item.entityID, item.metadata);
@@ -220,13 +220,13 @@ namespace ECS {
 
         // Helper methods to create tasks
         std::shared_ptr<Utils::Task> CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata);
-        std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID);
+        std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata);
 
         // Core methods that will be used by task classes
         bool RunInference(EntityID entityID, const nlohmann::json& metadata);
-        bool ConvertToGGUF(EntityID entityID);
+        bool ConvertToGGUF(EntityID entityID, const nlohmann::json& metadata);
         bool RunImg2Img(EntityID entityID, const nlohmann::json& metadata);
         bool RunUpscaling(EntityID entityID, const nlohmann::json& metadata);
 
@@ -400,8 +400,8 @@ namespace ECS {
 
     class ConvertTask : public Utils::Task {
     public:
-        ConvertTask(SDCPPSystem* system, EntityID entityID)
-            : system(system), entityID(entityID) {
+        ConvertTask(SDCPPSystem* system, EntityID entityID, const nlohmann::json& metadata)
+            : system(system), entityID(entityID), metadata(metadata) {
         }
 
         void execute() override {
@@ -409,7 +409,7 @@ namespace ECS {
 
             // Run the conversion
             try {
-                bool success = system->ConvertToGGUF(entityID);
+                bool success = system->ConvertToGGUF(entityID, metadata);
                 markDone();
             }
             catch (const std::exception& e) {
@@ -421,6 +421,7 @@ namespace ECS {
     private:
         SDCPPSystem* system;
         EntityID entityID;
+        nlohmann::json metadata;
     };
 
     class Img2ImgTask : public Utils::Task {
@@ -478,8 +479,8 @@ namespace ECS {
         return std::make_shared<InferenceTask>(this, entityID, metadata);
     }
 
-    inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateConversionTask(EntityID entityID) {
-        return std::make_shared<ConvertTask>(this, entityID);
+    inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateConversionTask(EntityID entityID, const nlohmann::json& metadata) {
+        return std::make_shared<ConvertTask>(this, entityID, metadata);
     }
 
     inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata) {
@@ -531,7 +532,7 @@ namespace ECS {
     }
 
     // Convert to GGUF
-    inline bool SDCPPSystem::ConvertToGGUF(EntityID entityID) {
+    inline bool SDCPPSystem::ConvertToGGUF(EntityID entityID, const nlohmann::json& metadata) {
         try {
             std::cout << "Starting conversion for Entity " << entityID << std::endl;
 
