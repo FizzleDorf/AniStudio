@@ -73,10 +73,7 @@ namespace ECS {
             item.entityID = entityID;
             item.processing = false;
             item.taskType = taskType;
-
-            if (taskType == TaskType::Inference) {
-                item.metadata = mgr.SerializeEntity(entityID);
-            }
+            item.metadata = mgr.SerializeEntity(entityID);
 
             taskQueue.push_back(std::move(item));
             std::cout << "Entity " << entityID << " queued for " << (taskType == TaskType::Inference ? "inference" : "conversion") << "." << std::endl;
@@ -93,6 +90,7 @@ namespace ECS {
         void RemoveFromQueue(const size_t index) {
             std::lock_guard<std::mutex> lock(queueMutex);
             if (index < taskQueue.size() && !taskQueue[index].processing) {
+                mgr.DestroyEntity(taskQueue[index].entityID);
                 taskQueue.erase(taskQueue.begin() + index);
             }
         }
@@ -124,13 +122,9 @@ namespace ECS {
         }
 
         void ClearQueue() {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            // Remove all non-processing tasks
-            taskQueue.erase(
-                std::remove_if(taskQueue.begin(), taskQueue.end(),
-                    [](const QueueItem& item) { return !item.processing; }),
-                taskQueue.end()
-            );
+            for (size_t i = taskQueue.size(); i > 0; --i) {
+                RemoveFromQueue(i);
+            }
         }
 
         void PauseWorker() {

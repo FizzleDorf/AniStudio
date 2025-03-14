@@ -57,6 +57,7 @@ public:
 
 private:
     bool isFilenameChanged = false;
+    bool isPaused = false;
     int numQueues = 1;
     // ECS-related variables
     EntityID entity;

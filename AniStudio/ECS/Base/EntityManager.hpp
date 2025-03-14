@@ -33,6 +33,26 @@ namespace ECS {
             return entity;
         }
 
+        EntityID CopyEntity(EntityID sourceEntity) {
+            EntityID newEntity = AddNewEntity();
+            for (const auto& componentType : GetEntityComponents(sourceEntity)) {
+                if (auto* baseComponent = GetComponentById(sourceEntity, componentType)) {
+                    if (componentCreators.find(componentType) == componentCreators.end()) {
+                        RegisterComponentType(componentType, [this, componentType](EntityID entity) {
+                            componentCreators[componentType](entity);
+                            }, [this, componentType](EntityID entity) -> BaseComponent* {
+                                return componentGetters[componentType](entity);
+                                });
+                    }
+                    componentCreators[componentType](newEntity);
+                    if (auto* newComponent = GetComponentById(newEntity, componentType)) {
+                        *newComponent = *baseComponent;
+                    }
+                }
+            }
+            return newEntity;
+        }
+
         void DestroyEntity(const EntityID entity) {
             assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
             entitiesSignatures.erase(entity);
