@@ -28,8 +28,8 @@ enum class EventType {
 
     // Diffusion
     InferenceRequest,
+    Img2ImgRequest,
     UpscaleRequest,
-    I2IInferenceRequest,
     T2VInferenceRequest,
     ConvertToGGUF,
     
@@ -42,6 +42,8 @@ enum class EventType {
     // IO Events
     LoadImageEvent,
     SaveImageEvent,
+    RemoveImageEvent,
+
     LoadVideoEvent,
     SaveVideoEvent
 };

@@ -44,12 +44,6 @@ struct InputImageComponent : public ImageComponent {
     }
 };
 
-struct OutputImageComponent : public ImageComponent {
-    OutputImageComponent() {
-        compName = "OutputImage";
-    }
-};
-
 struct ControlNetImageComponent : public ImageComponent {
     ControlNetImageComponent() {
         compName = "ControlNetImageComponent";
@@ -60,9 +54,6 @@ struct MaskImageComponent : public ImageComponent {
     MaskImageComponent() {
         compName = "MaskImageComponent";
     }
+    float value = 0.75f;
 };
-
-
-
-
 } // namespace ECS

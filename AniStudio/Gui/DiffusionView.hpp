@@ -57,6 +57,7 @@ public:
 
 private:
     bool isFilenameChanged = false;
+    bool isPaused = false;
     int numQueues = 1;
     // ECS-related variables
     EntityID entity;
@@ -74,7 +75,7 @@ private:
     VaeComponent vaeComp;
     TaesdComponent taesdComp;
     InputImageComponent inputImageComp;
-    OutputImageComponent imageComp;
+    ImageComponent imageComp;
     EmbeddingComponent embedComp;
     ControlnetComponent controlComp;
     LayerSkipComponent layerSkipComp;

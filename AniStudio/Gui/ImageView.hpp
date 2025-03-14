@@ -4,6 +4,7 @@
 #include "Base/BaseView.hpp"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
+#include "../Events/Events.hpp"
 #include <pch.h>
 
 namespace GUI {
@@ -20,51 +21,6 @@ namespace GUI {
 			offsetY(0.0f)
 		{
 			viewName = "ImageView";
-
-			// Ensure ImageSystem is registered
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (!imageSystem) {
-				mgr.RegisterSystem<ECS::ImageSystem>();
-				imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			}
-
-			// Register callbacks to update the view when images change
-			if (imageSystem) {
-				imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
-					// If nothing is selected yet, select the new image
-					if (selectedEntityID == 0) {
-						selectedEntityID = entityID;
-						imgIndex = GetCurrentImageIndex();
-					}
-					});
-
-				imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entityID) {
-					// If the selected image was removed, select a different one
-					if (selectedEntityID == entityID) {
-						// Get current index before removal
-						int currentIndex = GetCurrentImageIndex();
-
-						// After removal, we need to select another image
-						auto imageEntities = GetImageEntities();
-
-						if (imageEntities.empty()) {
-							selectedEntityID = 0;
-							imgIndex = 0;
-						}
-						else {
-							// Try to select image at same index, or the last one
-							if (currentIndex < imageEntities.size()) {
-								selectedEntityID = imageEntities[currentIndex];
-								imgIndex = currentIndex;
-							}
-							else {
-								selectedEntityID = imageEntities.back();
-								imgIndex = imageEntities.size() - 1;
-							}
-						}
-					}
-					});
-			}
 		}
 
 		void Init() override {
@@ -95,7 +51,7 @@ namespace GUI {
 			if (ImGui::Button("Load Image(s)")) {
 				IGFD::FileDialogConfig config;
 				config.path = ".";
-				// Enable multiple selection
+
 				config.countSelectionMax = 0; // 0 means infinite selections
 				ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)",
 					filters, config);
@@ -137,6 +93,12 @@ namespace GUI {
 					SaveSelectedImageAs(savePath);
 				}
 				ImGuiFileDialog::Instance()->Close();
+			}
+
+			ImGui::SameLine();
+
+			if (selectedEntityID != 0 && ImGui::Button("Remove Image")) {
+				RemoveSelectedImage();
 			}
 
 			// Option to show/hide history panel
@@ -260,6 +222,9 @@ namespace GUI {
 				return;
 			}
 
+			// Track the total width of buttons in the current row
+			float currentRowWidth = 0.0f;
+
 			// Create scrollable history panel
 			for (size_t i = 0; i < imageEntities.size(); ++i) {
 				ECS::EntityID entityID = imageEntities[i];
@@ -269,64 +234,68 @@ namespace GUI {
 				}
 
 				const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(entityID);
-
-				ImGui::BeginGroup();
-
-				// Highlight the selected image
-				if (static_cast<int>(i) == imgIndex) {
-					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
-				}
-
-				ImGui::Text("%zu: %s", i, imageComp.fileName.c_str());
-
-				if (static_cast<int>(i) == imgIndex) {
-					ImGui::PopStyleColor();
-				}
-
-				// Calculate image dimensions for the thumbnail
-				float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
-				ImVec2 maxSize(128.0f, 128.0f);
-				ImVec2 imageSize;
-
-				if (aspectRatio > 1.0f) {
-					imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
-				}
-				else {
-					imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
-				}
-
-				// Make the image clickable
 				if (imageComp.textureID != 0) {
-					if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
-						reinterpret_cast<void*>(static_cast<intptr_t>(imageComp.textureID)),
-						imageSize)) {
-						imgIndex = static_cast<int>(i);
-						selectedEntityID = entityID;
+					ImGui::BeginGroup();
+
+					// Highlight the selected image
+					if (static_cast<int>(i) == imgIndex) {
+						ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+					}
+
+					// Calculate image dimensions for the thumbnail
+					float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
+					ImVec2 maxSize(128.0f, 128.0f);
+					ImVec2 imageSize;
+
+					if (aspectRatio > 1.0f) {
+						imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
+					}
+					else {
+						imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
+					}
+
+					// Display the filename
+					ImGui::Text("%zu: %s", i, TruncateFilename(imageComp.fileName,imageSize.x).c_str());
+
+					if (static_cast<int>(i) == imgIndex) {
+						ImGui::PopStyleColor();
+					}
+
+					// Make the image clickable
+					if (imageComp.textureID != 0) {
+						if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
+							reinterpret_cast<void*>(static_cast<intptr_t>(imageComp.textureID)),
+							imageSize)) {
+							imgIndex = static_cast<int>(i);
+							selectedEntityID = entityID;
+						}
+					}
+					else {
+						// Fallback if no texture
+						if (ImGui::Button(("Select##" + std::to_string(i)).c_str(), imageSize)) {
+							imgIndex = static_cast<int>(i);
+							selectedEntityID = entityID;
+						}
+					}
+
+					ImGui::EndGroup();
+
+					float buttonWidth = imageSize.x + ImGui::GetStyle().ItemSpacing.x;
+
+					currentRowWidth += buttonWidth;
+
+					if (i < imageEntities.size() - 1) {
+						float nextButtonWidth = std::min(maxSize.x, maxSize.y * aspectRatio) + ImGui::GetStyle().ItemSpacing.x;
+
+						if (currentRowWidth + nextButtonWidth > ImGui::GetContentRegionAvail().x) {
+							ImGui::NewLine();
+							currentRowWidth = 0.0f;
+						}
+						else {
+							ImGui::SameLine();
+						}
 					}
 				}
-				else {
-					// Fallback if no texture
-					if (ImGui::Button(("Select##" + std::to_string(i)).c_str(), imageSize)) {
-						imgIndex = static_cast<int>(i);
-						selectedEntityID = entityID;
-					}
-				}
-
-				ImGui::EndGroup();
-
-				// Flow thumbnails horizontally
-				if (i < imageEntities.size() - 1) {
-					ImGui::SameLine();
-
-					// Check if we need to wrap to next line
-					float totalWidth = ImGui::GetContentRegionAvail().x;
-					float nextWidth = std::min(maxSize.x, maxSize.y * aspectRatio) + ImGui::GetStyle().ItemSpacing.x;
-
-					if (ImGui::GetCursorPosX() + nextWidth > totalWidth) {
-						ImGui::NewLine();
-					}
-				}
-
 			}
 
 			ImGui::End();
@@ -342,16 +311,25 @@ namespace GUI {
 
 			// Handle zooming with mouse wheel when child window is hovered
 			if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
-				SetZoom(zoom + ImGui::GetIO().MouseWheel * 0.1f);
+				float newZoom = zoom + ImGui::GetIO().MouseWheel * 0.1f;
+				SetZoom(newZoom);
 			}
 
 			// Calculate the window padding
 			const ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
 			const ImVec2 windowPos = ImGui::GetWindowPos();
+			const ImVec2 windowSize = ImGui::GetWindowSize();
 			const ImVec2 contentPos = ImVec2(windowPos.x + windowPadding.x, windowPos.y + windowPadding.y);
 
 			// Calculate image size and position
 			ImVec2 imageSize = ImVec2(imageComp.width * zoom, imageComp.height * zoom);
+
+			// Center the image when zoomed out
+			if (zoom <= 1.0f) {
+				offsetX = (windowSize.x - imageSize.x) * 0.5f;
+				offsetY = (windowSize.y - imageSize.y) * 0.5f;
+			}
+
 			ImVec2 imagePos = ImVec2(offsetX + windowPadding.x, offsetY + windowPadding.y);
 
 			// Draw grid before the image
@@ -363,8 +341,8 @@ namespace GUI {
 				ImGui::Image((void*)(intptr_t)imageComp.textureID, imageSize,
 					ImVec2(0, 0), ImVec2(1, 1), ImVec4(1, 1, 1, 1));
 
-				// Handle panning only when the image is hovered
-				if (ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+				// Handle panning only when the image is hovered and zoomed in
+				if (zoom > 1.0f && ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
 					offsetX += ImGui::GetIO().MouseDelta.x;
 					offsetY += ImGui::GetIO().MouseDelta.y;
 				}
@@ -407,30 +385,98 @@ namespace GUI {
 		}
 
 		void LoadImages(const std::vector<std::string>& filePaths) {
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (!imageSystem) return;
+			// Debug output first
+			std::cout << "Selected files to load:" << std::endl;
+			for (const auto& filePath : filePaths) {
+				std::cout << "  - " << filePath << std::endl;
+			}
 
-			std::vector<ECS::EntityID> newEntities = imageSystem->LoadImages(filePaths);
+			// Get ImageSystem
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (!imageSystem) {
+				std::cerr << "Error: ImageSystem not found!" << std::endl;
+				return;
+			}
+
+			// Create entities and load images directly
+			for (const auto& filePath : filePaths) {
+				if (filePath.empty()) {
+					continue; // Skip empty paths
+				}
+
+				// Create entity with component
+				ECS::EntityID entity = mgr.AddNewEntity();
+				auto& imageComp = mgr.AddComponent<ECS::ImageComponent>(entity);
+
+				// Set file info
+				imageComp.filePath = filePath;
+				std::filesystem::path path(filePath);
+				imageComp.fileName = path.filename().string();
+
+				// Load the image directly
+				imageSystem->SetImage(entity, filePath);
+			}
 		}
 
 		void SaveSelectedImage() {
 			if (selectedEntityID == 0) return;
 
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (!imageSystem) return;
-
-			// Use the existing file path
+			// Use existing filepath
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
-			imageSystem->SaveImage(selectedEntityID, imageComp.filePath);
+
+			// Queue save operation via event
+			ANI::Event event;
+			event.type = ANI::EventType::SaveImageEvent;
+			event.entityID = selectedEntityID;
+			ANI::Events::Ref().QueueEvent(event);
 		}
 
 		void SaveSelectedImageAs(const std::string& filePath) {
 			if (selectedEntityID == 0) return;
 
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (!imageSystem) return;
+			// Queue save operation via event
+			ANI::Event event;
+			event.type = ANI::EventType::SaveImageEvent;
+			event.entityID = selectedEntityID;
+			ANI::Events::Ref().QueueEvent(event);
+		}
 
-			imageSystem->SaveImage(selectedEntityID, filePath);
+		void RemoveSelectedImage() {
+			if (selectedEntityID == 0) return;
+
+			// Queue remove operation via event
+			ANI::Event event;
+			event.type = ANI::EventType::RemoveImageEvent;
+			event.entityID = selectedEntityID;
+			ANI::Events::Ref().QueueEvent(event);
+
+			// Reset selection
+			selectedEntityID = 0;
+		}
+
+		// Truncate the filename to fit the width of the image
+		std::string TruncateFilename(const std::string& filename, float maxTextWidth) {
+			float textWidth = ImGui::CalcTextSize(filename.c_str()).x;
+
+			if (textWidth <= maxTextWidth) {
+				return filename;
+			}
+
+			std::string truncated = "...";
+			float ellipsisWidth = ImGui::CalcTextSize(truncated.c_str()).x;
+
+			for (int i = filename.length() - 1; i >= 0; --i) {
+				
+				truncated.insert(3, 1, filename[i]);
+				float newWidth = ImGui::CalcTextSize(truncated.c_str()).x;
+
+				if (newWidth > maxTextWidth) {
+					truncated.erase(3, 1);
+					return truncated;
+				}
+			}
+
+			return truncated;
 		}
 	};
 
