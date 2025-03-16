@@ -1,6 +1,7 @@
 #include "DiffusionView.hpp"
 #include "../Events/Events.hpp"
 #include "Constants.hpp"
+#include "UISchema.hpp"
 #include <exiv2/exiv2.hpp>
 
 using namespace ECS;
@@ -206,39 +207,29 @@ namespace GUI {
 	}
 
 	void DiffusionView::RenderPrompts() {
-		if (ImGui::BeginTable("PromptTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
+		// Create a temporary JSON object with current values from promptComp
+		static nlohmann::json promptCache = nlohmann::json::object();
 
-			// Positive Prompt
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::Text("Positive");
-			ImGui::TableNextColumn();
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
-			if (ImGui::InputTextMultiline("##Positive Prompt", promptComp.PosBuffer, sizeof(promptComp.PosBuffer),
-				ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8))) { // Adjust height
-				promptComp.posPrompt = promptComp.PosBuffer;
-				promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0'; // Ensure null termination
-				
-			}
-			ImGui::PopStyleVar(); // Restore frame padding
+		// Create values object with the current state
+		nlohmann::json promptValues = {
+			{"posPrompt", promptComp.posPrompt},
+			{"negPrompt", promptComp.negPrompt}
+		};
 
-			// Negative Prompt
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::Text("Negative");
-			ImGui::TableNextColumn();
-			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
-			if (ImGui::InputTextMultiline("##Negative Prompt", promptComp.NegBuffer, sizeof(promptComp.NegBuffer),
-				ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 8))) { // Adjust height
-				promptComp.negPrompt = promptComp.NegBuffer;
-				promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0'; // Ensure null termination
-			}
-			ImGui::PopStyleVar(); // Restore frame padding
+		// Create a map of external buffers
+		std::map<std::string, std::pair<char*, size_t>> buffers = {
+			{"Prompts/posPrompt", {promptComp.PosBuffer, sizeof(promptComp.PosBuffer)}},
+			{"Prompts/negPrompt", {promptComp.NegBuffer, sizeof(promptComp.NegBuffer)}}
+		};
 
-			ImGui::EndTable();
+		// Render the UI using our UISchema with the component's schema and external buffers
+		if (UISchema::drawComponentWithBuffers("Prompts", promptValues, promptComp.schema, promptCache, buffers)) {
+			// Update the component values when UI changes
+			promptComp.posPrompt = promptValues["posPrompt"];
+			promptComp.negPrompt = promptValues["negPrompt"];
+
+			// Print what was modified
+			std::cout << "Modified prompt: " << UISchema::getLastModifiedPath() << std::endl;
 		}
 	}
 

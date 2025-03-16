@@ -9,7 +9,42 @@
 namespace ECS {
 
 struct PromptComponent : public BaseComponent {
-    PromptComponent() { compName = "Prompt"; }
+    PromptComponent() { 
+        compName = "Prompt"; 
+        schema = {
+            {"title", "Prompt Settings"},
+            {"type", "object"},
+            {"propertyOrder", {"posPrompt", "negPrompt"}},
+            {"properties", {
+                {"posPrompt", {
+                    {"type", "string"},
+                    {"title", "Positive Prompt"},
+                    {"ui:widget", "textarea"},
+                    {"ui:resizable", true},
+                    {"ui:minWidth", 80.0f},
+                    {"ui:minHeight", 80.0f},
+                    {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
+                    {"ui:options", {
+                        {"rows", 8}
+                    }},
+                    {"description", "Enter the positive prompt that describes what you want to generate"}
+                }},
+                {"negPrompt", {
+                    {"type", "string"},
+                    {"title", "Negative Prompt"},
+                    {"ui:widget", "textarea"},
+                    {"ui:resizable", true},
+                    {"ui:minWidth", 80.0f},
+                    {"ui:minHeight", 80.0f},
+                    {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
+                    {"ui:options", {
+                        {"rows", 8}
+                    }},
+                    {"description", "Enter negative prompt you want to decribe what to avoid generating"}
+                }}
+            }}
+        };
+    }
     std::string posPrompt = "";
     std::string negPrompt = "";
     char PosBuffer[9999] = "Positive";
