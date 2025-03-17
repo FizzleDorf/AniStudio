@@ -207,75 +207,40 @@ namespace GUI {
 	}
 
 	void DiffusionView::RenderPrompts() {
-		// Create a temporary JSON object with current values from promptComp
-		static nlohmann::json promptCache = nlohmann::json::object();
+		// Get the property map directly from the component
+		auto properties = promptComp.GetPropertyMap();
 
-		// Create values object with the current state
-		nlohmann::json promptValues = {
-			{"posPrompt", promptComp.posPrompt},
-			{"negPrompt", promptComp.negPrompt}
-		};
-
-		// Create a map of external buffers
-		std::map<std::string, std::pair<char*, size_t>> buffers = {
-			{"Prompts/posPrompt", {promptComp.PosBuffer, sizeof(promptComp.PosBuffer)}},
-			{"Prompts/negPrompt", {promptComp.NegBuffer, sizeof(promptComp.NegBuffer)}}
-		};
-
-		// Render the UI using our UISchema with the component's schema and external buffers
-		if (UISchema::drawComponentWithBuffers("Prompts", promptValues, promptComp.schema, promptCache, buffers)) {
-			// Update the component values when UI changes
-			promptComp.posPrompt = promptValues["posPrompt"];
-			promptComp.negPrompt = promptValues["negPrompt"];
-
-			// Print what was modified
-			std::cout << "Modified prompt: " << UISchema::getLastModifiedPath() << std::endl;
+		// Use the component's schema to render the UI
+		if (UISchema::RenderSchema(promptComp.schema, properties)) {
 		}
 	}
 
 	void DiffusionView::RenderSampler() {
-		if (ImGui::BeginTable("SamplerSettingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 64.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
+		// Get the property map directly from the component
+		auto properties = samplerComp.GetPropertyMap();
 
-			auto addRow = [](const char* label, auto renderInput) {
-				ImGui::TableNextRow();
-
-				// Column 1: Label
-				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted(label);
-
-				// Column 2: Input Field
-				ImGui::TableSetColumnIndex(1);
-				renderInput();
-				};
-
-			// Add rows for each control
-			addRow("Sampler", [&]() {
-				ImGui::Combo("##Sampler", reinterpret_cast<int*>(&samplerComp.current_sample_method), sample_method_items,
-					sample_method_item_count);
-				});
-
-			addRow("Scheduler", [&]() {
-				ImGui::Combo("##Scheduler", reinterpret_cast<int*>(&samplerComp.current_scheduler_method),
-					scheduler_method_items, scheduler_method_item_count);
-				});
-
-			addRow("Seed", [&]() {
-				ImGui::InputInt("##Seed", &samplerComp.seed);
-				// renderControlUI<int>(*seedControl);
-				});
-			addRow("CFG", [&]() { ImGui::InputFloat("##CFG", &samplerComp.cfg, 0.5f, 0.5f, "%.2f"); });
-			addRow("Guidance", [&]() { ImGui::InputFloat("##Guidance", &guidanceComp.guidance, 0.05f, 0.1f, "%.2f"); });
-			addRow("eta", [&]() { ImGui::InputFloat("##eta", &guidanceComp.eta, 0.05f, 0.1f, "%.2f"); });
-			addRow("Steps", [&]() { ImGui::InputInt("##Steps", &samplerComp.steps); });
-			addRow("Denoise", [&]() { ImGui::InputFloat("##Denoise", &samplerComp.denoise, 0.01f, 0.1f, "%.2f"); });
-
-			ImGui::EndTable();
+		// Use the component's schema to render the UI
+		if (UISchema::RenderSchema(samplerComp.schema, properties)) {
 		}
 	}
 
+	//void DiffusionView::RenderClipSkip() {
+	//	// Get the property map directly from the component
+	//	auto properties = clipSkipComp.GetPropertyMap();
+
+	//	// Use the component's schema to render the UI
+	//	if (UISchema::RenderSchema(clipSkipComp.schema, properties)) {
+	//	}
+	//}
+
+	//void DiffusionView::RenderGuidance() {
+	//	// Get the property map directly from the component
+	//	auto properties = guidanceComp.GetPropertyMap();
+
+	//	// Use the component's schema to render the UI
+	//	if (UISchema::RenderSchema(guidanceComp.schema, properties)) {
+	//	}
+	//}
 	void DiffusionView::HandleT2IEvent() {
 		std::cout << "Adding new entity..." << std::endl;
 		EntityID newEntity = mgr.AddNewEntity();
@@ -1015,16 +980,6 @@ namespace GUI {
 			controlComp = mgr.GetComponent<ControlnetComponent>(entity);
 		if (mgr.HasComponent<LayerSkipComponent>(entity))
 			layerSkipComp = mgr.GetComponent<LayerSkipComponent>(entity);
-
-		// Update prompt buffers
-		if (!promptComp.posPrompt.empty()) {
-			strncpy(promptComp.PosBuffer, promptComp.posPrompt.c_str(), sizeof(promptComp.PosBuffer) - 1);
-			promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0';
-		}
-		if (!promptComp.negPrompt.empty()) {
-			strncpy(promptComp.NegBuffer, promptComp.negPrompt.c_str(), sizeof(promptComp.NegBuffer) - 1);
-			promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0';
-		}
 
 		// Clean up the temporary entity
 		mgr.DestroyEntity(entity);

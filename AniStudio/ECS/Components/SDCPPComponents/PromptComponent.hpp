@@ -1,102 +1,108 @@
 #pragma once
 
-// TODO: reduce to a single input when execution pipeline is completed
-
 #include "BaseComponent.hpp"
 #include "stable-diffusion.h"
 #include <string>
 
 namespace ECS {
 
-struct PromptComponent : public BaseComponent {
-    PromptComponent() { 
-        compName = "Prompt"; 
-        schema = {
-            {"title", "Prompt Settings"},
-            {"type", "object"},
-            {"propertyOrder", {"posPrompt", "negPrompt"}},
-            {"properties", {
-                {"posPrompt", {
-                    {"type", "string"},
-                    {"title", "Positive Prompt"},
-                    {"ui:widget", "textarea"},
-                    {"ui:resizable", true},
-                    {"ui:minWidth", 80.0f},
-                    {"ui:minHeight", 80.0f},
-                    {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
-                    {"ui:options", {
-                        {"rows", 8}
-                    }},
-                    {"description", "Enter the positive prompt that describes what you want to generate"}
+    struct PromptComponent : public BaseComponent {
+        PromptComponent() {
+            compName = "Prompt";
+
+            // Define the component schema
+            schema = {
+                {"title", "Prompt Settings"},
+                {"type", "object"},
+                {"propertyOrder", {"posPrompt", "negPrompt"}},
+                {"ui:table", {
+                    {"columns", 2},
+                    {"flags", ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp},
+                    {"columnSetup", {
+                        {"Param", ImGuiTableColumnFlags_WidthFixed, 52.0f},
+                        {"Value", ImGuiTableColumnFlags_WidthStretch}
+                    }}
                 }},
-                {"negPrompt", {
-                    {"type", "string"},
-                    {"title", "Negative Prompt"},
-                    {"ui:widget", "textarea"},
-                    {"ui:resizable", true},
-                    {"ui:minWidth", 80.0f},
-                    {"ui:minHeight", 80.0f},
-                    {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
-                    {"ui:options", {
-                        {"rows", 8}
+                {"properties", {
+                    {"posPrompt", {
+                        {"type", "string"},
+                        {"title", "Positive"},
+                        {"ui:widget", "textarea"},
+                        {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
+                        {"ui:options", {
+                            {"rows", 8}
+                        }}
                     }},
-                    {"description", "Enter negative prompt you want to decribe what to avoid generating"}
+                    {"negPrompt", {
+                        {"type", "string"},
+                        {"title", "Negative"},
+                        {"ui:widget", "textarea"},
+                        {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
+                        {"ui:options", {
+                            {"rows", 8}
+                        }}
+                    }}
                 }}
-            }}
-        };
-    }
-    std::string posPrompt = "";
-    std::string negPrompt = "";
-    char PosBuffer[9999] = "Positive";
-    char NegBuffer[9999] = "Negative";
-
-    PromptComponent &operator=(const PromptComponent &other) {
-        if (this != &other) {
-            posPrompt = other.posPrompt;
-            negPrompt = other.negPrompt;
-            strncpy(PosBuffer, posPrompt.c_str(), sizeof(PosBuffer) - 1);
-            strncpy(NegBuffer, negPrompt.c_str(), sizeof(NegBuffer) - 1);
-            PosBuffer[sizeof(PosBuffer) - 1] = '\0'; // Ensure null termination
-            NegBuffer[sizeof(NegBuffer) - 1] = '\0'; // Ensure null termination
+            };
         }
-        return *this;
-    }
 
-    nlohmann::json Serialize() const { return {{compName,
-                 {
-                  {"posPrompt", posPrompt},
-                  {"negPrompt", negPrompt}}}};
-    }
+        std::string posPrompt = "";
+        std::string negPrompt = "";
 
-    void Deserialize(const nlohmann::json& j) override {
-        nlohmann::json componentData;
-
-        if (j.contains(compName)) {
-            componentData = j.at(compName);
+        // Override the GetPropertyMap method to map component properties to UI schema
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+            properties["posPrompt"] = &posPrompt;
+            properties["negPrompt"] = &negPrompt;
+            return properties;
         }
-        else {
-            for (auto it = j.begin(); it != j.end(); ++it) {
-                if (it.key() == compName) {
-                    componentData = it.value();
-                    break;
+
+        PromptComponent& operator=(const PromptComponent& other) {
+            if (this != &other) {
+                posPrompt = other.posPrompt;
+                negPrompt = other.negPrompt;
+            }
+            return *this;
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j["compName"] = compName;
+            j[compName] = {
+                {"posPrompt", posPrompt},
+                {"negPrompt", negPrompt}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            BaseComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
                 }
             }
-            if (componentData.empty()) {
-                componentData = j;
+
+            if (componentData.contains("posPrompt")) {
+                posPrompt = componentData["posPrompt"].get<std::string>();
+            }
+
+            if (componentData.contains("negPrompt")) {
+                negPrompt = componentData["negPrompt"].get<std::string>();
             }
         }
+    };
 
-        if (componentData.contains("posPrompt")) {
-            posPrompt = componentData["posPrompt"].get<std::string>();
-            strncpy(PosBuffer, posPrompt.c_str(), sizeof(PosBuffer) - 1);
-            PosBuffer[sizeof(PosBuffer) - 1] = '\0'; // Ensure null termination
-        }
-
-        if (componentData.contains("negPrompt")) {
-            negPrompt = componentData["negPrompt"].get<std::string>();
-            strncpy(NegBuffer, negPrompt.c_str(), sizeof(NegBuffer) - 1);
-            NegBuffer[sizeof(NegBuffer) - 1] = '\0'; // Ensure null termination
-        }
-    }
-};
-}
+} // namespace ECS

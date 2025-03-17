@@ -1,208 +1,108 @@
-// UISchema.hpp
 #pragma once
 
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <string>
-#include <vector>
-#include <map>
-#include <algorithm>
-#include <cstring>
+#include <functional>
+#include <unordered_map>
+#include <variant>
 
 namespace UISchema {
 
-    using json = nlohmann::json;
+    // Type definitions for different property types
+    using PropertyVariant = std::variant<
+        bool*,                  // Boolean values (checkboxes)
+        int*,                   // Integer values
+        float*,                 // Float values
+        double*,                // Double values
+        std::string*,           // String values (text input)
+        ImVec2*,                // 2D vector values
+        ImVec4*,                // 4D vector/color values
+        std::vector<std::string>*  // String arrays
+    >;
 
-    // Path of the last modified widget
-    inline std::string lastModifiedPath;
+    // Base function to render a schema
+    bool RenderSchema(const nlohmann::json& schema,
+        std::unordered_map<std::string, PropertyVariant>& properties);
 
-    // Helper function to get default value from schema
-    json getDefaultValue(const json& schema) {
-        if (schema.contains("default")) {
-            return schema["default"];
-        }
+    // Render an ImGui table based on a schema
+    bool RenderTable(const nlohmann::json& schema,
+        std::unordered_map<std::string, PropertyVariant>& properties);
 
-        if (schema["type"] == "string") return "";
-        if (schema["type"] == "float") return 0.0f;
-        if (schema["type"] == "int") return 0;
-        if (schema["type"] == "bool") return false;
-        if (schema["type"] == "array") return json::array();
-        if (schema["type"] == "object") return json::object();
+    // Render different types of input widgets
+    bool RenderCheckbox(const std::string& label, bool* value, const nlohmann::json& options = {});
+    bool RenderInputInt(const std::string& label, int* value, const nlohmann::json& options = {});
+    bool RenderInputFloat(const std::string& label, float* value, const nlohmann::json& options = {});
+    bool RenderInputDouble(const std::string& label, double* value, const nlohmann::json& options = {});
+    bool RenderInputText(const std::string& label, std::string* value, const nlohmann::json& options = {});
+    bool RenderTextArea(const std::string& label, std::string* value, const nlohmann::json& options = {});
+    bool RenderColorEdit(const std::string& label, ImVec4* value, const nlohmann::json& options = {});
+    bool RenderVec2(const std::string& label, ImVec2* value, const nlohmann::json& options = {});
+    bool RenderCombo(const std::string& label, int* selectedIndex, const std::vector<std::string>* items, const nlohmann::json& options = {});
+    bool RenderSliderInt(const std::string& label, int* value, int min, int max, const nlohmann::json& options = {});
+    bool RenderSliderFloat(const std::string& label, float* value, float min, float max, const nlohmann::json& options = {});
+    bool RenderDragInt(const std::string& label, int* value, const nlohmann::json& options = {});
+    bool RenderDragFloat(const std::string& label, float* value, const nlohmann::json& options = {});
+    bool RenderRadioButtons(const std::string& label, int* value, const std::vector<std::string>* items, const nlohmann::json& options = {});
 
-        return json();
-    }
+    // Helper functions for parsing schema options
+    ImGuiInputTextFlags GetInputTextFlags(const nlohmann::json& schema);
+    ImGuiColorEditFlags GetColorEditFlags(const nlohmann::json& schema);
+    ImGuiSliderFlags GetSliderFlags(const nlohmann::json& schema);
+    ImGuiTableFlags GetTableFlags(const nlohmann::json& schema);
+    ImGuiTabBarFlags GetTabBarFlags(const nlohmann::json& schema);
+    ImGuiTreeNodeFlags GetTreeNodeFlags(const nlohmann::json& schema);
+    ImGuiSelectableFlags GetSelectableFlags(const nlohmann::json& schema);
 
-    // Main function to draw a component UI with optional buffer support
-    bool drawComponent(const char* label, json& values, const json& schema, json& cache,
-        std::map<std::string, std::pair<char*, size_t>>* buffers = nullptr) {
-        bool modified = false;
-        lastModifiedPath = "";
+    // Apply schema-defined style elements
+    void PushStyleFromSchema(const nlohmann::json& schema);
+    void PopStyleFromSchema(const nlohmann::json& schema);
 
-        // Only process objects with properties
-        if (schema["type"] != "object" || !schema.contains("properties")) {
-            return false;
-        }
+    // Example usage for a prompt component:
+    /*
+    // Define your schema (usually loaded from a file)
+    nlohmann::json promptSchema = {
+        {"title", "Prompt Settings"},
+        {"type", "object"},
+        {"propertyOrder", {"posPrompt", "negPrompt"}},
+        {"ui:table", {
+            {"columns", 2},
+            {"flags", ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp},
+            {"columnSetup", {
+                {"Param", ImGuiTableColumnFlags_WidthFixed, 52.0f},
+                {"Value", ImGuiTableColumnFlags_WidthStretch}
+            }}
+        }},
+        {"properties", {
+            {"posPrompt", {
+                {"type", "string"},
+                {"title", "Positive"},
+                {"ui:widget", "textarea"},
+                {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
+                {"ui:options", {
+                    {"rows", 8}
+                }}
+            }},
+            {"negPrompt", {
+                {"type", "string"},
+                {"title", "Negative"},
+                {"ui:widget", "textarea"},
+                {"ui:flags", {ImGuiInputTextFlags_AllowTabInput}},
+                {"ui:options", {
+                    {"rows", 8}
+                }}
+            }}
+        }}
+    };
 
-        // If cache is not an object, initialize it
-        if (!cache.is_object()) {
-            cache = json::object();
-        }
+    // Map your component variables to property pointers
+    std::unordered_map<std::string, UISchema::PropertyVariant> promptProps = {
+        {"posPrompt", &promptComponent.posPrompt},
+        {"negPrompt", &promptComponent.negPrompt}
+    };
 
-        // Begin a table for layout
-        if (ImGui::BeginTable("UISchema_Table", 2, ImGuiTableFlags_Borders)) {
-            ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-            // Get properties in the order they were defined
-            std::vector<std::string> propOrder;
-
-            // Use explicit property order if available
-            if (schema.contains("propertyOrder")) {
-                for (const auto& prop : schema["propertyOrder"]) {
-                    propOrder.push_back(prop.get<std::string>());
-                }
-            }
-            else {
-                // Fall back to iteration order from the schema
-                for (auto it = schema["properties"].begin(); it != schema["properties"].end(); ++it) {
-                    propOrder.push_back(it.key());
-                }
-            }
-
-            // Process each property in the schema in the determined order
-            for (const auto& propName : propOrder) {
-                // Skip if property doesn't exist in schema
-                if (!schema["properties"].contains(propName)) {
-                    continue;
-                }
-
-                const auto& propSchema = schema["properties"][propName];
-
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-
-                // Display property title/label
-                std::string propTitle = propSchema.value("title", propName);
-                ImGui::Text("%s", propTitle.c_str());
-
-                // Show tooltip if there's a description
-                if (propSchema.contains("description") && ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s", propSchema["description"].get<std::string>().c_str());
-                }
-
-                ImGui::TableNextColumn();
-
-                // Generate a unique ID for this control
-                std::string id = "##" + propName;
-                std::string path = std::string(label) + "/" + propName;
-
-                // Make sure value exists
-                if (!values.contains(propName)) {
-                    values[propName] = getDefaultValue(propSchema);
-                }
-
-                // Handle different types of widgets
-                std::string type = propSchema.value("type", "");
-                std::string widgetType = propSchema.value("ui:widget", "");
-
-                ImGui::PushItemWidth(-FLT_MIN);
-
-                if (type == "string") {
-                    // Check if we have a textarea with external buffer
-                    if (widgetType == "textarea" && buffers && buffers->count(path) > 0) {
-                        // Get rows
-                        int rows = 4;
-                        if (propSchema.contains("ui:options") && propSchema["ui:options"].contains("rows")) {
-                            rows = propSchema["ui:options"]["rows"];
-                        }
-
-                        // Get the buffer and its size
-                        auto& [buffer, size] = (*buffers)[path];
-
-                        // Draw the textarea using the external buffer
-                        ImVec2 textareaSize(ImGui::GetContentRegionAvail().x, ImGui::GetTextLineHeight() * rows);
-                        if (ImGui::InputTextMultiline(id.c_str(), buffer, size, textareaSize, ImGuiInputTextFlags_AllowTabInput)) {
-                            values[propName] = std::string(buffer);
-                            modified = true;
-                            lastModifiedPath = path;
-                        }
-                    }
-                    else if (widgetType == "textarea") {
-                        // Regular textarea without external buffer
-                        int rows = 4;
-                        if (propSchema.contains("ui:options") && propSchema["ui:options"].contains("rows")) {
-                            rows = propSchema["ui:options"]["rows"];
-                        }
-
-                        std::string value = values[propName].get<std::string>();
-                        char buffer[4096]; // Using a reasonably sized static buffer
-                        strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
-                        buffer[sizeof(buffer) - 1] = '\0';
-
-                        ImVec2 size(ImGui::GetContentRegionAvail().x, ImGui::GetTextLineHeight() * rows);
-                        if (ImGui::InputTextMultiline(id.c_str(), buffer, sizeof(buffer), size, ImGuiInputTextFlags_AllowTabInput)) {
-                            values[propName] = std::string(buffer);
-                            modified = true;
-                            lastModifiedPath = path;
-                        }
-                    }
-                    else {
-                        // Simple text input
-                        std::string value = values[propName].get<std::string>();
-                        char buffer[1024];
-                        strncpy(buffer, value.c_str(), sizeof(buffer) - 1);
-                        buffer[sizeof(buffer) - 1] = '\0';
-
-                        if (ImGui::InputText(id.c_str(), buffer, sizeof(buffer))) {
-                            values[propName] = std::string(buffer);
-                            modified = true;
-                            lastModifiedPath = path;
-                        }
-                    }
-                }
-                else if (type == "int") {
-                    int val = values[propName].get<int>();
-                    if (ImGui::InputInt(id.c_str(), &val)) {
-                        values[propName] = val;
-                        modified = true;
-                        lastModifiedPath = path;
-                    }
-                }
-                else if (type == "float") {
-                    float val = values[propName].get<float>();
-                    if (ImGui::InputFloat(id.c_str(), &val)) {
-                        values[propName] = val;
-                        modified = true;
-                        lastModifiedPath = path;
-                    }
-                }
-                else if (type == "bool") {
-                    bool val = values[propName].get<bool>();
-                    if (ImGui::Checkbox(id.c_str(), &val)) {
-                        values[propName] = val;
-                        modified = true;
-                        lastModifiedPath = path;
-                    }
-                }
-
-                ImGui::PopItemWidth();
-            }
-
-            ImGui::EndTable();
-        }
-
-        return modified;
-    }
-
-    // Convenience function for direct buffer support
-    inline bool drawComponentWithBuffers(const char* label, json& values, const json& schema, json& cache,
-        std::map<std::string, std::pair<char*, size_t>>& buffers) {
-        return drawComponent(label, values, schema, cache, &buffers);
-    }
-
-    // Get the path of the last modified property
-    const std::string& getLastModifiedPath() {
-        return lastModifiedPath;
-    }
+    // Render the UI from the schema
+    bool modified = UISchema::RenderSchema(promptSchema, promptProps);
+    */
 
 } // namespace UISchema
