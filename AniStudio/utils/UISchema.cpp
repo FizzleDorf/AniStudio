@@ -402,11 +402,11 @@ namespace UISchema {
                             float height = ImGui::GetTextLineHeight() * rows + ImGui::GetStyle().FramePadding.y * 2.0f;
 
                             // Create text buffer
-                            char* buffer = new char[value->capacity() + 1];
-                            strncpy(buffer, value->c_str(), value->capacity());
-                            buffer[value->capacity()] = '\0';
+                            char* buffer = new char[8193];
+                            strncpy(buffer, value->c_str(), 8192);
+                            buffer[8192] = '\0';
 
-                            if (ImGui::InputTextMultiline("##value", buffer, value->capacity() + 1,
+                            if (ImGui::InputTextMultiline("##value", buffer, 8193,
                                 ImVec2(-FLT_MIN, height), flags)) {
                                 *value = buffer;
                                 modified = true;
