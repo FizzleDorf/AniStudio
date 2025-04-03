@@ -1,8 +1,24 @@
-// BaseComponent.hpp
 #pragma once
 
 #include "Types.hpp"
 #include "nlohmann/json.hpp"
+#include <unordered_map>
+#include <variant>
+#include <string>
+
+namespace UISchema {
+    // Forward declaration of PropertyVariant
+    using PropertyVariant = std::variant<
+        bool*,
+        int*,
+        float*,
+        double*,
+        std::string*,
+        ImVec2*,
+        ImVec4*,
+        std::vector<std::string>*
+    >;
+}
 
 namespace ECS {
     struct BaseComponent {
@@ -47,6 +63,11 @@ namespace ECS {
                 uiSchema["properties"] = schema["properties"];
 
             return uiSchema;
+        }
+
+        // Get property map for UI rendering - to be overridden by derived components
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() {
+            return {}; // Empty map by default
         }
 
         // Serialize to JSON

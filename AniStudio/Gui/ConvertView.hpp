@@ -80,7 +80,10 @@ private:
     ECS::VaeComponent vaeComp;
     
     void Convert() {
-        mgr.RegisterSystem<ECS::SDCPPSystem>();
+        auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+        if (!sdSystem) {
+            mgr.RegisterSystem<ECS::SDCPPSystem>();
+        }
         ECS::EntityID entity = mgr.AddNewEntity();
         mgr.AddComponent<ECS::ModelComponent>(entity);
         mgr.AddComponent<ECS::SamplerComponent>(entity);
