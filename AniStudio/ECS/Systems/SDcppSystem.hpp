@@ -66,17 +66,39 @@ namespace ECS {
 
         // Public methods
         void QueueTask(const EntityID entityID, const TaskType taskType) {
-            std::lock_guard<std::mutex> lock(queueMutex);
+            // Validate entity exists first
+            if (!mgr.GetEntitiesSignatures().count(entityID)) {
+                std::cerr << "Error: Entity " << entityID << " does not exist!" << std::endl;
+                return;
+            }
 
-            // Create a queue item
-            QueueItem item;
-            item.entityID = entityID;
-            item.processing = false;
-            item.taskType = taskType;
-            item.metadata = mgr.SerializeEntity(entityID);
+            try {
+                // First try serializing entity before locking mutex
+                QueueItem item;
+                item.metadata = mgr.SerializeEntity(entityID);
+                std::cout << "Successfully serialized entity " << entityID << std::endl;
 
-            taskQueue.push_back(std::move(item));
-            std::cout << "Entity " << entityID << " queued for " << (taskType == TaskType::Inference ? "inference" : "conversion") << "." << std::endl;
+                // lock and add to queue
+                std::lock_guard<std::mutex> lock(queueMutex);
+
+                item.entityID = entityID;
+                item.processing = false;
+                item.taskType = taskType;
+
+                // Print the queue size before adding
+                std::cout << "Current queue size: " << taskQueue.size() << std::endl;
+
+                // Add to queue with normal copying instead of move to see if that helps
+                taskQueue.push_back(item);
+
+                std::cout << "Entity " << entityID << " queued for inference. New queue size: " << taskQueue.size() << std::endl;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Exception in QueueTask: " << e.what() << std::endl;
+            }
+            catch (...) {
+                std::cerr << "Unknown exception in QueueTask!" << std::endl;
+            }
         }
 
         void Update(const float deltaT) override {
@@ -122,7 +144,7 @@ namespace ECS {
         }
 
         void ClearQueue() {
-            for (size_t i = taskQueue.size(); i > 0; --i) {
+            for (size_t i = taskQueue.size() - 1; i > 0; --i) {
                 RemoveFromQueue(i);
             }
         }
@@ -206,15 +228,20 @@ namespace ECS {
         void CheckTaskCompletion() {
             std::unique_lock<std::mutex> lock(queueMutex);
 
-            // Check task queue
-            for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-                if (it->processing && it->task && it->task->isDone()) {
+            // Create a list of tasks to be removed
+            std::vector<size_t> tasksToRemove;
+
+            for (size_t i = 0; i < taskQueue.size(); i++) {
+                auto& item = taskQueue[i];
+                if (item.processing && item.task && item.task->isDone()) {
                     activeTasks--;
-                    it = taskQueue.erase(it);
+                    tasksToRemove.push_back(i);
                 }
-                else {
-                    ++it;
-                }
+            }
+
+            // Remove tasks in reverse order to avoid index shifting
+            for (auto it = tasksToRemove.rbegin(); it != tasksToRemove.rend(); ++it) {
+                taskQueue.erase(taskQueue.begin() + *it);
             }
         }
 
