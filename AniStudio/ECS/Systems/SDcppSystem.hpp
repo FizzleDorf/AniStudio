@@ -2,6 +2,7 @@
 
 #include "Constants.hpp"
 #include "ECS.h"
+#include "rng.hpp"
 #include "ImageComponent.hpp"
 #include "ImageUtils.hpp"
 #include "SDCPPComponents.h"
@@ -17,6 +18,10 @@ namespace ECS {
     // Forward declarations
     class InferenceTask;
     class ConvertTask;
+
+    static STDDefaultRNG rng;
+    static std::random_device rd;
+    static bool initialized = false;
 
     class SDCPPSystem : public BaseSystem {
     public:
@@ -34,6 +39,23 @@ namespace ECS {
             std::shared_ptr<Utils::Task> task;
             TaskType taskType;
         };
+
+        // Function to generate a random seed using STDDefaultRNG
+        uint64_t generateRandomSeed() {
+            
+            // Seed the RNG with a random device if not already seeded
+            if (!initialized) {
+                rng.manual_seed(rd());
+                initialized = true;
+            }
+
+            // Get random numbers
+            std::vector<float> random_values = rng.randn(1);
+
+            // Convert to a positive integer seed
+            uint64_t seed = static_cast<uint64_t>(std::abs(random_values[0] * UINT32_MAX)) % INT32_MAX;
+            return seed > 0 ? seed : 1; // Ensure seed is positive
+        }
 
         // Constructor, destructor, and public methods remain unchanged
         SDCPPSystem(EntityManager& entityMgr, size_t numThreads = 0)
@@ -73,8 +95,35 @@ namespace ECS {
             }
 
             try {
-                // First try serializing entity before locking mutex
+                // try serializing entity before locking mutex
                 QueueItem item;
+                
+                // Check if we need to generate a random seed
+                if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
+
+                    // Access the sampler component
+                    if (mgr.HasComponent<SamplerComponent>(entityID)) {
+                        auto& samplerComp = mgr.GetComponent<SamplerComponent>(entityID);
+
+                        // Generate random seed if needed
+                        if (samplerComp.seed < 0) {
+                            uint64_t newSeed = generateRandomSeed();
+                            samplerComp.seed = static_cast<int>(newSeed);
+
+                            std::cout << "Generated random seed: " << samplerComp.seed << std::endl;
+
+                            // Update metadata with new seed for logging
+                            if (item.metadata.contains("components") && item.metadata["components"].is_array()) {
+                                for (auto& comp : item.metadata["components"]) {
+                                    if (comp.contains("Sampler")) {
+                                        comp["Sampler"]["seed"] = samplerComp.seed;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 item.metadata = mgr.SerializeEntity(entityID);
                 std::cout << "Successfully serialized entity " << entityID << std::endl;
 
@@ -195,6 +244,7 @@ namespace ECS {
             // Process task queue
             for (auto& item : taskQueue) {
                 if (!item.processing && activeTasks < 1) {
+
                     // Create a task based on the task type
                     switch (item.taskType) {
                     case TaskType::Inference:
@@ -780,5 +830,4 @@ namespace ECS {
             return false;
         }
     }
-
 } // namespace ECS
