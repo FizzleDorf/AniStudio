@@ -43,7 +43,67 @@ namespace GUI {
 		sd_set_progress_callback(ProgressCallback, nullptr);
 	}
 
-	void DiffusionView::RenderModelLoader() {
+	DiffusionView::~DiffusionView() {
+		mgr.DestroyEntity(txt2imgEntity);
+		mgr.DestroyEntity(img2imgEntity);
+	}
+
+	void DiffusionView::Init() {
+		CreateEntities();
+	}
+
+	void DiffusionView::CreateEntities() {
+		// Create entity for Txt2Img mode
+		txt2imgEntity = mgr.AddNewEntity();
+
+		// Add components for Txt2Img
+		mgr.AddComponent<ModelComponent>(txt2imgEntity);
+		mgr.AddComponent<ClipLComponent>(txt2imgEntity);
+		mgr.AddComponent<ClipGComponent>(txt2imgEntity);
+		mgr.AddComponent<T5XXLComponent>(txt2imgEntity);
+		mgr.AddComponent<DiffusionModelComponent>(txt2imgEntity);
+		mgr.AddComponent<VaeComponent>(txt2imgEntity);
+		mgr.AddComponent<TaesdComponent>(txt2imgEntity);
+		mgr.AddComponent<LatentComponent>(txt2imgEntity);
+		mgr.AddComponent<SamplerComponent>(txt2imgEntity);
+		mgr.AddComponent<GuidanceComponent>(txt2imgEntity);
+		mgr.AddComponent<ClipSkipComponent>(txt2imgEntity);
+		mgr.AddComponent<PromptComponent>(txt2imgEntity);
+		mgr.AddComponent<LayerSkipComponent>(txt2imgEntity);
+		mgr.AddComponent<OutputImageComponent>(txt2imgEntity);
+
+		// Create entity for Img2Img mode 
+		img2imgEntity = mgr.AddNewEntity();
+
+		// Add components for Img2Img
+		mgr.AddComponent<ModelComponent>(img2imgEntity);
+		mgr.AddComponent<ClipLComponent>(img2imgEntity);
+		mgr.AddComponent<ClipGComponent>(img2imgEntity);
+		mgr.AddComponent<T5XXLComponent>(img2imgEntity);
+		mgr.AddComponent<DiffusionModelComponent>(img2imgEntity);
+		mgr.AddComponent<VaeComponent>(img2imgEntity);
+		mgr.AddComponent<TaesdComponent>(img2imgEntity);
+		mgr.AddComponent<LatentComponent>(img2imgEntity);
+		mgr.AddComponent<SamplerComponent>(img2imgEntity);
+		mgr.AddComponent<GuidanceComponent>(img2imgEntity);
+		mgr.AddComponent<ClipSkipComponent>(img2imgEntity);
+		mgr.AddComponent<PromptComponent>(img2imgEntity);
+		mgr.AddComponent<LayerSkipComponent>(img2imgEntity);
+		mgr.AddComponent<OutputImageComponent>(img2imgEntity);
+		mgr.AddComponent<InputImageComponent>(img2imgEntity);
+
+		// Default denoise value for Img2Img
+		mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;
+	}
+
+	void DiffusionView::RenderModelLoader(const EntityID entity) {
+		if (!mgr.HasComponent<ModelComponent>(entity) ||
+			!mgr.HasComponent<SamplerComponent>(entity)) {
+			return;
+		}
+
+		auto& modelComp = mgr.GetComponent<ModelComponent>(entity);
+		auto& samplerComp = mgr.GetComponent<SamplerComponent>(entity);
 
 		int current_type = static_cast<int>(samplerComp.current_type_method);
 		ImGui::Combo("Quant Type", &current_type, type_method_items, type_method_item_count);
@@ -73,7 +133,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			ImGui::Text("%s", modelComp.modelName.c_str());
 
-			RenderVaeLoader();
+			RenderVaeLoader(entity);
 		}
 
 		if (ImGuiFileDialog::Instance()->Display("LoadFileDialog", 32, ImVec2(700, 400))) {
@@ -95,7 +155,13 @@ namespace GUI {
 	static char fileName[256] = "AniStudio"; // Buffer for file name
 	static char outputDir[256] = "";         // Buffer for output directory
 
-	void DiffusionView::RenderFilePath() {
+	void DiffusionView::RenderFilePath(const EntityID entity) {
+		if (!mgr.HasComponent<OutputImageComponent>(entity)) {
+			return;
+		}
+
+		auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
+
 		if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -174,7 +240,14 @@ namespace GUI {
 		}
 	}
 
-	void DiffusionView::RenderLatents() {
+	void DiffusionView::RenderLatents(const EntityID entity) {
+		if (!mgr.HasComponent<LatentComponent>(entity) ||
+			!mgr.HasComponent<SamplerComponent>(entity)) {
+			return;
+		}
+
+		auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+		auto& samplerComp = mgr.GetComponent<SamplerComponent>(entity);
 
 		int current_rng = static_cast<int>(samplerComp.current_rng_type);
 		ImGui::Combo("RNG Type", &current_rng, type_rng_items, type_rng_item_count);
@@ -195,18 +268,37 @@ namespace GUI {
 			ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text("Height");
-			ImGui::TableNextColumn();
-			ImGui::InputInt("##Batch Size", &latentComp.batchSize);
+			// Batching using sdcpp just queues, not actually batch
+			// ImGui::Text("Batch");
+			// ImGui::TableNextColumn();
+			// ImGui::InputInt("##Batch Size", &latentComp.batchSize);
 			ImGui::EndTable();
+			if(ImGui::Button("Swap XY")) {
+				int temp = latentComp.latentWidth;
+				latentComp.latentWidth = latentComp.latentHeight;
+				latentComp.latentHeight = temp;
+			}
 		}
 	}
 
-	void DiffusionView::RenderInputImage() {
+	void DiffusionView::RenderInputImage(const EntityID entity) {
+		if (!mgr.HasComponent<InputImageComponent>(entity)) {
+			return;
+		}
+
+		auto& imageComp = mgr.GetComponent<InputImageComponent>(entity);
+
 		ImGui::Text("Image input placeholder"); // Adjust to render the actual image component if needed
 	}
 
-	void DiffusionView::RenderPrompts() {
+	void DiffusionView::RenderPrompts(const EntityID entity) {
+
+		if (!mgr.HasComponent<PromptComponent>(entity)) {
+			return;
+		}
+
+		auto& promptComp = mgr.GetComponent<PromptComponent>(entity);
+
 		// Get the property map directly from the component
 		auto properties = promptComp.GetPropertyMap();
 
@@ -215,7 +307,13 @@ namespace GUI {
 		}
 	}
 
-	void DiffusionView::RenderSampler() {
+	void DiffusionView::RenderSampler(const EntityID entity) {
+		if (!mgr.HasComponent<SamplerComponent>(entity)) {
+			return;
+		}
+
+		auto& samplerComp = mgr.GetComponent<SamplerComponent>(entity);
+
 		// Get the property map directly from the component
 		auto properties = samplerComp.GetPropertyMap();
 
@@ -241,62 +339,12 @@ namespace GUI {
 	//	if (UISchema::RenderSchema(guidanceComp.schema, properties)) {
 	//	}
 	//}
+
 	void DiffusionView::HandleT2IEvent() {
 		std::cout << "Adding new entity..." << std::endl;
-		EntityID newEntity = mgr.AddNewEntity();
+		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
-			return;
-		}
-
-		std::cout << "Initialized entity with ID: " << newEntity << std::endl;
-
-		try {
-			loraComp.modelPath = filePaths.loraDir;
-
-			// Add components
-			mgr.AddComponent<ModelComponent>(newEntity);
-			mgr.AddComponent<CLipLComponent>(newEntity);
-			mgr.AddComponent<CLipGComponent>(newEntity);
-			mgr.AddComponent<T5XXLComponent>(newEntity);
-			mgr.AddComponent<DiffusionModelComponent>(newEntity);
-			mgr.AddComponent<VaeComponent>(newEntity);
-			mgr.AddComponent<TaesdComponent>(newEntity);
-			mgr.AddComponent<ControlnetComponent>(newEntity);
-			mgr.AddComponent<LoraComponent>(newEntity);
-			mgr.AddComponent<LatentComponent>(newEntity);
-			mgr.AddComponent<SamplerComponent>(newEntity);
-			mgr.AddComponent<GuidanceComponent>(newEntity);
-			mgr.AddComponent<ClipSkipComponent>(newEntity);
-			mgr.AddComponent<PromptComponent>(newEntity);
-			mgr.AddComponent<EmbeddingComponent>(newEntity);
-			mgr.AddComponent<LayerSkipComponent>(newEntity);
-			mgr.AddComponent<ImageComponent>(newEntity);
-
-			// Assign component data
-			mgr.GetComponent<ModelComponent>(newEntity) = modelComp;
-			mgr.GetComponent<CLipLComponent>(newEntity) = clipLComp;
-			mgr.GetComponent<CLipGComponent>(newEntity) = clipGComp;
-			mgr.GetComponent<T5XXLComponent>(newEntity) = t5xxlComp;
-			mgr.GetComponent<DiffusionModelComponent>(newEntity) = ckptComp;
-			mgr.GetComponent<VaeComponent>(newEntity) = vaeComp;
-			mgr.GetComponent<TaesdComponent>(newEntity) = taesdComp;
-			mgr.GetComponent<ControlnetComponent>(newEntity) = controlComp;
-			mgr.GetComponent<LoraComponent>(newEntity) = loraComp;
-			mgr.GetComponent<LatentComponent>(newEntity) = latentComp;
-			mgr.GetComponent<SamplerComponent>(newEntity) = samplerComp;
-			mgr.GetComponent<GuidanceComponent>(newEntity) = guidanceComp;
-			mgr.GetComponent<ClipSkipComponent>(newEntity) = clipSkipComp;
-			mgr.GetComponent<PromptComponent>(newEntity) = promptComp;
-			mgr.GetComponent<EmbeddingComponent>(newEntity) = embedComp;
-			mgr.GetComponent<LayerSkipComponent>(newEntity) = layerSkipComp;
-			mgr.GetComponent<ImageComponent>(newEntity) = imageComp;
-
-			std::cout << "Components successfully assigned to entity " << newEntity << std::endl;
-
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Error adding components: " << e.what() << std::endl;
 			return;
 		}
 
@@ -319,12 +367,24 @@ namespace GUI {
 		ANI::Events::Ref().QueueEvent(event);
 	}
 
-	void DiffusionView::RenderOther() {
+	void DiffusionView::RenderOther(const EntityID entity) {
+		if (!mgr.HasComponent<SamplerComponent>(entity)) {
+			return;
+		}
+
+		auto& samplerComp = mgr.GetComponent<SamplerComponent>(entity);
+
 		ImGui::Checkbox("Free Params", &samplerComp.free_params_immediately);
 		ImGui::InputInt("# Threads (CPU Only)", &samplerComp.n_threads);
 	}
 
-	void DiffusionView::RenderControlnets() {
+	void DiffusionView::RenderControlnets(const EntityID entity) {
+		if (!mgr.HasComponent<ControlnetComponent>(entity)) {
+			return;
+		}
+
+		auto& controlComp = mgr.GetComponent<ControlnetComponent>(entity);
+
 		if (ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 64.0f);
 			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -385,7 +445,13 @@ namespace GUI {
 			ImGui::EndTable();
 		}
 	}
-	void DiffusionView::RenderEmbeddings() {
+	void DiffusionView::RenderEmbeddings(const EntityID entity) {
+		if (!mgr.HasComponent<EmbeddingComponent>(entity)) {
+			return;
+		}
+
+		auto& embedComp = mgr.GetComponent<EmbeddingComponent>(entity);
+
 		if (ImGui::BeginTable("Controlnet", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -426,7 +492,22 @@ namespace GUI {
 		}
 	}
 
-	void DiffusionView::RenderDiffusionModelLoader() {
+	void DiffusionView::RenderDiffusionModelLoader(const EntityID entity) {
+		if (
+			!mgr.HasComponent<DiffusionModelComponent>(entity) ||
+			!mgr.HasComponent<ClipLComponent>(entity) ||
+			!mgr.HasComponent<ClipGComponent>(entity) ||
+			!mgr.HasComponent<T5XXLComponent>(entity) ||
+			!mgr.HasComponent<SamplerComponent>(entity)
+			) {
+			return;
+		}
+
+		auto& ckptComp = mgr.GetComponent<DiffusionModelComponent>(entity);
+		auto& clipLComp = mgr.GetComponent<ClipLComponent>(entity);
+		auto& clipGComp = mgr.GetComponent<ClipGComponent>(entity);
+		auto& t5xxlComp = mgr.GetComponent<T5XXLComponent>(entity);
+		auto& samplerComp = mgr.GetComponent<SamplerComponent>(entity);
 
 		int current_type_method = static_cast<int>(samplerComp.current_type_method);
 		ImGui::Combo("Quant Type", &current_type_method, type_method_items, type_method_item_count);
@@ -561,11 +642,17 @@ namespace GUI {
 			}
 
 			// Row for Vae
-			RenderVaeLoader();
+			RenderVaeLoader(entity);
 		}
 	}
 
-	void DiffusionView::RenderVaeLoader() {
+	void DiffusionView::RenderVaeLoader(const EntityID entity) {
+		if (!mgr.HasComponent<VaeComponent>(entity)) {
+			return;
+		}
+
+		auto& vaeComp = mgr.GetComponent<VaeComponent>(entity);
+
 		ImGui::TableNextColumn();
 		ImGui::Text("Vae: ");
 		ImGui::TableNextColumn();
@@ -603,10 +690,16 @@ namespace GUI {
 		ImGui::Separator();
 		ImGui::Spacing();
 
-		RenderVaeOptions();
+		RenderVaeOptions(entity);
 	}
 
-	void DiffusionView::RenderVaeOptions() {
+	void DiffusionView::RenderVaeOptions(const EntityID entity) {
+		if (!mgr.HasComponent<VaeComponent>(entity)) {
+			return;
+		}
+
+		auto& vaeComp = mgr.GetComponent<VaeComponent>(entity);
+
 		if (ImGui::BeginTable("VaeOptionsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
 			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 64.0f); // Fixed width for Model
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
@@ -801,188 +894,143 @@ namespace GUI {
 	}
 
 	void DiffusionView::Render() {
-
-		// Queue Controls (detached from the options)
+		// Render queue controls
 		RenderQueueList();
 
+		// Main window
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Image Generation")) {
-
-			if (ImGui::CollapsingHeader("Metadata Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+			// Metadata controls
+			if (ImGui::CollapsingHeader("Metadata Controls")) {
 				RenderMetadataControls();
 			}
+
+			// Tab bar for switching between Txt2Img and Img2Img
 			if (ImGui::BeginTabBar("Image")) {
+				// Text-to-Image tab
 				if (ImGui::BeginTabItem("Txt2Img")) {
-					// Output FileName
-					if (ImGui::CollapsingHeader("Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderFilePath();
+					isTxt2ImgMode = true;
+
+					// Render appropriate UI sections
+					if (ImGui::CollapsingHeader("Output Settings")) {
+						RenderFilePath(txt2imgEntity);
 					}
-					// Checkpoint loader
-					if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+					if (ImGui::CollapsingHeader("Model Selection")) {
 						if (ImGui::BeginTabBar("Model Loader")) {
 							if (ImGui::BeginTabItem("Full")) {
-								RenderModelLoader();
+								RenderModelLoader(txt2imgEntity);
 								ImGui::EndTabItem();
 							}
-							// Separated Model loader
 							if (ImGui::BeginTabItem("Separate")) {
-								RenderDiffusionModelLoader();
+								RenderDiffusionModelLoader(txt2imgEntity);
 								ImGui::EndTabItem();
 							}
+							ImGui::EndTabBar();
 						}
-						ImGui::EndTabBar();
 					}
-					// Latent Params
-					if (ImGui::CollapsingHeader("Latent Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderLatents();
+
+					if (ImGui::CollapsingHeader("Latent Settings")) {
+						RenderLatents(txt2imgEntity);
 					}
-					// Prompt Inputs
-					if (ImGui::CollapsingHeader("Prompt Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderPrompts();
+
+					if (ImGui::CollapsingHeader("Prompt Inputs")) {
+						RenderPrompts(txt2imgEntity);
 					}
-					// Sampler Inputs
-					if (ImGui::CollapsingHeader("Sampler Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderSampler();
+
+					if (ImGui::CollapsingHeader("Sampler Settings")) {
+						RenderSampler(txt2imgEntity);
 					}
-					// Controlnet Loader and Params
-					if (ImGui::CollapsingHeader("ControlNet")) {
-						RenderControlnets();
-					}
-					// Embedding Inputs
-					if (ImGui::CollapsingHeader("Embeddings")) {
-						RenderEmbeddings();
-					}
-					// Other Settings
+
 					if (ImGui::CollapsingHeader("Other Settings")) {
-						RenderOther();
+						RenderOther(txt2imgEntity);
 					}
+
 					ImGui::EndTabItem();
 				}
 
+				// Image-to-Image tab
 				if (ImGui::BeginTabItem("Img2Img")) {
+					isTxt2ImgMode = false;
 
-					// Output FileName
-					if (ImGui::CollapsingHeader("Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderFilePath();
+					if (ImGui::CollapsingHeader("Output Settings")) {
+						RenderFilePath(img2imgEntity);
 					}
-					// Checkpoint loader
-					if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+					if (ImGui::CollapsingHeader("Input Image")) {
+						RenderInputImage(img2imgEntity);
+					}
+
+					if (ImGui::CollapsingHeader("Model Selection")) {
 						if (ImGui::BeginTabBar("Model Loader")) {
 							if (ImGui::BeginTabItem("Full")) {
-								RenderModelLoader();
+								RenderModelLoader(img2imgEntity);
 								ImGui::EndTabItem();
 							}
-							// Separated Model loader
 							if (ImGui::BeginTabItem("Separate")) {
-								RenderDiffusionModelLoader();
+								RenderDiffusionModelLoader(img2imgEntity);
 								ImGui::EndTabItem();
 							}
+							ImGui::EndTabBar();
 						}
-						ImGui::EndTabBar();
 					}
-					// Latent Params
-					if (ImGui::CollapsingHeader("Latent Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderLatents();
+
+					if (ImGui::CollapsingHeader("Latent Settings")) {
+						RenderLatents(img2imgEntity);
 					}
-					// Prompt Inputs
-					if (ImGui::CollapsingHeader("Prompt Inputs", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderPrompts();
+
+					if (ImGui::CollapsingHeader("Prompt Inputs")) {
+						RenderPrompts(img2imgEntity);
 					}
-					// Sampler Inputs
-					if (ImGui::CollapsingHeader("Sampler Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-						RenderSampler();
+
+					if (ImGui::CollapsingHeader("Sampler Settings")) {
+						RenderSampler(img2imgEntity);
 					}
-					// Controlnet Loader and Params
-					if (ImGui::CollapsingHeader("ControlNet")) {
-						RenderControlnets();
-					}
-					// Embedding Inputs
-					if (ImGui::CollapsingHeader("Embeddings")) {
-						RenderEmbeddings();
-					}
-					// Other Settings
+
 					if (ImGui::CollapsingHeader("Other Settings")) {
-						RenderOther();
+						RenderOther(img2imgEntity);
 					}
+
 					ImGui::EndTabItem();
 				}
+				ImGui::EndTabBar();
 			}
-			ImGui::EndTabBar();
+			ImGui::End();
 		}
-		ImGui::End();
 	}
 
 	nlohmann::json DiffusionView::Serialize() const {
-		// Create a new entity to hold all components
-		EntityID entity = mgr.AddNewEntity();
-
-		// Add all components to the entity
-		mgr.AddComponent<ModelComponent>(entity) = modelComp;
-		mgr.AddComponent<CLipLComponent>(entity) = clipLComp;
-		mgr.AddComponent<CLipGComponent>(entity) = clipGComp;
-		mgr.AddComponent<T5XXLComponent>(entity) = t5xxlComp;
-		mgr.AddComponent<DiffusionModelComponent>(entity) = ckptComp;
-		mgr.AddComponent<LatentComponent>(entity) = latentComp;
-		mgr.AddComponent<LoraComponent>(entity) = loraComp;
-		mgr.AddComponent<PromptComponent>(entity) = promptComp;
-		mgr.AddComponent<SamplerComponent>(entity) = samplerComp;
-		mgr.AddComponent<GuidanceComponent>(entity) = guidanceComp;
-		mgr.AddComponent<ClipSkipComponent>(entity) = clipSkipComp;
-		mgr.AddComponent<VaeComponent>(entity) = vaeComp;
-		mgr.AddComponent<ImageComponent>(entity) = imageComp;
-		mgr.AddComponent<EmbeddingComponent>(entity) = embedComp;
-		mgr.AddComponent<ControlnetComponent>(entity) = controlComp;
-		mgr.AddComponent<LayerSkipComponent>(entity) = layerSkipComp;
-
-		// Use EntityManager to serialize the entity
-		nlohmann::json entityJson = mgr.SerializeEntity(entity);
-
-		// Clean up the temporary entity
-		mgr.DestroyEntity(entity);
-
+		nlohmann::json entityJson = "";
+		if (isTxt2ImgMode) {
+			entityJson = mgr.SerializeEntity(txt2imgEntity);
+		}
+		else {
+			entityJson = mgr.SerializeEntity(img2imgEntity);
+		}
+		
 		return entityJson;
 	}
 
 	void DiffusionView::Deserialize(const nlohmann::json& j) {
-		// Create a temporary entity and deserialize into it
-		EntityID entity = mgr.DeserializeEntity(j);
+		EntityID entityId = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
 
-		// Copy components back to our member variables
-		if (mgr.HasComponent<ModelComponent>(entity))
-			modelComp = mgr.GetComponent<ModelComponent>(entity);
-		if (mgr.HasComponent<CLipLComponent>(entity))
-			clipLComp = mgr.GetComponent<CLipLComponent>(entity);
-		if (mgr.HasComponent<CLipGComponent>(entity))
-			clipGComp = mgr.GetComponent<CLipGComponent>(entity);
-		if (mgr.HasComponent<T5XXLComponent>(entity))
-			t5xxlComp = mgr.GetComponent<T5XXLComponent>(entity);
-		if (mgr.HasComponent<DiffusionModelComponent>(entity))
-			ckptComp = mgr.GetComponent<DiffusionModelComponent>(entity);
-		if (mgr.HasComponent<LatentComponent>(entity))
-			latentComp = mgr.GetComponent<LatentComponent>(entity);
-		if (mgr.HasComponent<LoraComponent>(entity))
-			loraComp = mgr.GetComponent<LoraComponent>(entity);
-		if (mgr.HasComponent<PromptComponent>(entity))
-			promptComp = mgr.GetComponent<PromptComponent>(entity);
-		if (mgr.HasComponent<SamplerComponent>(entity))
-			samplerComp = mgr.GetComponent<SamplerComponent>(entity);
-		if (mgr.HasComponent<GuidanceComponent>(entity))
-			guidanceComp = mgr.GetComponent<GuidanceComponent>(entity);
-		if (mgr.HasComponent<ClipSkipComponent>(entity))
-			clipSkipComp = mgr.GetComponent<ClipSkipComponent>(entity);
-		if (mgr.HasComponent<VaeComponent>(entity))
-			vaeComp = mgr.GetComponent<VaeComponent>(entity);
-		if (mgr.HasComponent<ImageComponent>(entity))
-			imageComp = mgr.GetComponent<ImageComponent>(entity);
-		if (mgr.HasComponent<EmbeddingComponent>(entity))
-			embedComp = mgr.GetComponent<EmbeddingComponent>(entity);
-		if (mgr.HasComponent<ControlnetComponent>(entity))
-			controlComp = mgr.GetComponent<ControlnetComponent>(entity);
-		if (mgr.HasComponent<LayerSkipComponent>(entity))
-			layerSkipComp = mgr.GetComponent<LayerSkipComponent>(entity);
+		EntityID newEntity = mgr.DeserializeEntity(j);
 
-		// Clean up the temporary entity
-		mgr.DestroyEntity(entity);
+		if (newEntity != 0) {
+			mgr.DestroyEntity(entityId);
+
+			if (isTxt2ImgMode) {
+				txt2imgEntity = newEntity;
+			}
+			else {
+				img2imgEntity = newEntity;
+			}
+
+			std::cout << "Successfully replaced entity " << entityId << " with " << newEntity << std::endl;
+		}
+		else {
+			std::cerr << "Failed to deserialize entity, kept original entity " << entityId << std::endl;
+		}
 	}
 
 

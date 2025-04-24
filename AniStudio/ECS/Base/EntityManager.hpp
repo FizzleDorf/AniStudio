@@ -31,8 +31,7 @@ namespace ECS {
             return entity;
         }
 
-        EntityID CopyEntity(EntityID sourceEntity) {
-            EntityID newEntity = AddNewEntity();
+        void CopyEntity(EntityID sourceEntity, EntityID targetEntity) {
             for (const auto& componentType : GetEntityComponents(sourceEntity)) {
                 if (auto* baseComponent = GetComponentById(sourceEntity, componentType)) {
                     if (componentCreators.find(componentType) == componentCreators.end()) {
@@ -42,13 +41,12 @@ namespace ECS {
                                 return componentGetters[componentType](entity);
                                 });
                     }
-                    componentCreators[componentType](newEntity);
-                    if (auto* newComponent = GetComponentById(newEntity, componentType)) {
+                    componentCreators[componentType](targetEntity);
+                    if (auto* newComponent = GetComponentById(targetEntity, componentType)) {
                         *newComponent = *baseComponent;
                     }
                 }
             }
-            return newEntity;
         }
 
         void DestroyEntity(const EntityID entity) {

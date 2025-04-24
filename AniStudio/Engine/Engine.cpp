@@ -105,8 +105,8 @@ void Engine::Init() {
 
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
-    mgr.RegisterComponentName<CLipLComponent>("CLipL");
-    mgr.RegisterComponentName<CLipGComponent>("CLipG");
+    mgr.RegisterComponentName<ClipLComponent>("ClipL");
+    mgr.RegisterComponentName<ClipGComponent>("ClipG");
     mgr.RegisterComponentName<T5XXLComponent>("T5XXL");
     mgr.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
     mgr.RegisterComponentName<LatentComponent>("Latent");
@@ -117,8 +117,8 @@ void Engine::Init() {
     mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
     mgr.RegisterComponentName<VaeComponent>("Vae");
     mgr.RegisterComponentName<ImageComponent>("Image");
-    mgr.RegisterComponentName<EmbeddingComponent>("InputImage");
-    mgr.RegisterComponentName<EmbeddingComponent>("OutputImage");
+    mgr.RegisterComponentName<InputImageComponent>("InputImage");
+    mgr.RegisterComponentName<OutputImageComponent>("OutputImage");
     mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
     mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
     mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");

@@ -19,6 +19,8 @@ namespace ECS {
     class InferenceTask;
     class ConvertTask;
 
+    // static rng variables
+    // TODO: use as a util instead
     static STDDefaultRNG rng;
     static std::random_device rd;
     static bool initialized = false;
@@ -40,7 +42,8 @@ namespace ECS {
             TaskType taskType;
         };
 
-        // Function to generate a random seed using STDDefaultRNG
+        // Function to generate a random seed using STDDefaultRNG from sdcpp
+        // TODO: use as a util instead
         uint64_t generateRandomSeed() {
             
             // Seed the RNG with a random device if not already seeded
@@ -63,7 +66,7 @@ namespace ECS {
             threadPool(numThreads > 0 ? numThreads : std::thread::hardware_concurrency() / 2) {
             sysName = "SDCPPSystem";
             AddComponentSignature<LatentComponent>();
-            AddComponentSignature<ImageComponent>();
+            AddComponentSignature<OutputImageComponent>();
             AddComponentSignature<InputImageComponent>();
 
             activeTasks = 0;
@@ -310,8 +313,8 @@ namespace ECS {
         // SD context initialization
         sd_ctx_t* InitializeStableDiffusionContext(EntityID entityID) {
             return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<CLipLComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<CLipGComponent>(entityID).modelPath.c_str(),
+                mgr.GetComponent<ClipLComponent>(entityID).modelPath.c_str(),
+                mgr.GetComponent<ClipGComponent>(entityID).modelPath.c_str(),
                 mgr.GetComponent<T5XXLComponent>(entityID).modelPath.c_str(),
                 mgr.GetComponent<DiffusionModelComponent>(entityID).modelPath.c_str(),
                 mgr.GetComponent<VaeComponent>(entityID).modelPath.c_str(),
@@ -361,7 +364,7 @@ namespace ECS {
         void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entity, const nlohmann::json& metadata) {
             try {
                 // Get the component for storing image data
-                auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+                auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
 
                 // Update image dimensions from the actual generated data
                 imageComp.width = width;
