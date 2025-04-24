@@ -28,7 +28,7 @@ namespace GUI {
         void Init() override;
 
         // Generate both Txt2Img and Img2Img entities 
-        void CreateEntities();
+        void ResetEntities();
 
         // Gui Elements
         void RenderModelLoader(const EntityID entity);

@@ -12,12 +12,20 @@
 #include "PngMetadataUtils.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <filesystem>
+#include <iostream>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <algorithm>
 
 namespace ECS {
 
     // Forward declarations
     class InferenceTask;
     class ConvertTask;
+    class Img2ImgTask;
+    class UpscalingTask;
 
     // static rng variables
     // TODO: use as a util instead
@@ -45,7 +53,7 @@ namespace ECS {
         // Function to generate a random seed using STDDefaultRNG from sdcpp
         // TODO: use as a util instead
         uint64_t generateRandomSeed() {
-            
+
             // Seed the RNG with a random device if not already seeded
             if (!initialized) {
                 rng.manual_seed(rd());
@@ -100,7 +108,7 @@ namespace ECS {
             try {
                 // try serializing entity before locking mutex
                 QueueItem item;
-                
+
                 // Check if we need to generate a random seed
                 if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
 
@@ -136,9 +144,6 @@ namespace ECS {
                 item.entityID = entityID;
                 item.processing = false;
                 item.taskType = taskType;
-
-                // Print the queue size before adding
-                std::cout << "Current queue size: " << taskQueue.size() << std::endl;
 
                 // Add to queue with normal copying instead of move to see if that helps
                 taskQueue.push_back(item);
@@ -299,70 +304,294 @@ namespace ECS {
         }
 
         // Helper methods to create tasks
-        std::shared_ptr<Utils::Task> CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata);
+        std::shared_ptr<Utils::Task> CreateInferenceTask(const EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata);
         std::shared_ptr<Utils::Task> CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata);
 
         // Core methods that will be used by task classes
-        bool RunInference(EntityID entityID, const nlohmann::json& metadata);
+        bool RunInference(const EntityID entityID, const nlohmann::json& metadata);
         bool ConvertToGGUF(EntityID entityID, const nlohmann::json& metadata);
         bool RunImg2Img(EntityID entityID, const nlohmann::json& metadata);
         bool RunUpscaling(EntityID entityID, const nlohmann::json& metadata);
 
         // SD context initialization
-        sd_ctx_t* InitializeStableDiffusionContext(EntityID entityID) {
-            return new_sd_ctx(mgr.GetComponent<ModelComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<ClipLComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<ClipGComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<T5XXLComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<DiffusionModelComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<VaeComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<TaesdComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<ControlnetComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<LoraComponent>(entityID).modelPath.c_str(),
-                mgr.GetComponent<EmbeddingComponent>(entityID).modelPath.c_str(), "",
-                mgr.GetComponent<VaeComponent>(entityID).vae_decode_only,
-                mgr.GetComponent<VaeComponent>(entityID).isTiled,
-                mgr.GetComponent<SamplerComponent>(entityID).free_params_immediately,
-                mgr.GetComponent<SamplerComponent>(entityID).n_threads,
-                mgr.GetComponent<SamplerComponent>(entityID).current_type_method,
-                mgr.GetComponent<SamplerComponent>(entityID).current_rng_type,
-                mgr.GetComponent<SamplerComponent>(entityID).current_scheduler_method, true, false,
-                mgr.GetComponent<VaeComponent>(entityID).keep_vae_on_cpu, false);
+        sd_ctx_t* InitializeStableDiffusionContext(const nlohmann::json& metadata) {
+            try {
+                std::string modelPath = "", clipLPath = "", clipGPath = "", t5xxlPath = "";
+                std::string diffusionModelPath = "", vaePath = "", taesdPath = "", controlnetPath = "";
+                std::string loraPath = "", embedPath = "";
+                bool vae_decode_only = false, isTiled = false, free_params_immediately = true;
+                bool keep_vae_on_cpu = false;
+                int n_threads = 4;
+                sd_type_t type_method = SD_TYPE_F16;
+                rng_type_t rng_type = STD_DEFAULT_RNG;
+                schedule_t scheduler_method = DEFAULT;
+
+                // Extract parameters from components array in metadata
+                if (metadata.contains("components") && metadata["components"].is_array()) {
+                    for (const auto& comp : metadata["components"]) {
+                        // Model component
+                        if (comp.contains("Model")) {
+                            auto model = comp["Model"];
+                            if (model.contains("modelPath"))
+                                modelPath = model["modelPath"];
+                            else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty())
+                                modelPath = filePaths.checkpointDir + "/" + model["modelName"].get<std::string>();
+                        }
+
+                        // ClipL component
+                        if (comp.contains("ClipL")) {
+                            auto clipL = comp["ClipL"];
+                            if (clipL.contains("modelPath"))
+                                clipLPath = clipL["modelPath"];
+                            else if (clipL.contains("modelName") && !clipL["modelName"].get<std::string>().empty())
+                                clipLPath = filePaths.encoderDir + "/" + clipL["modelName"].get<std::string>();
+                        }
+
+                        // ClipG component
+                        if (comp.contains("ClipG")) {
+                            auto clipG = comp["ClipG"];
+                            if (clipG.contains("modelPath"))
+                                clipGPath = clipG["modelPath"];
+                            else if (clipG.contains("modelName") && !clipG["modelName"].get<std::string>().empty())
+                                clipGPath = filePaths.encoderDir + "/" + clipG["modelName"].get<std::string>();
+                        }
+
+                        // T5XXL component
+                        if (comp.contains("T5XXL")) {
+                            auto t5xxl = comp["T5XXL"];
+                            if (t5xxl.contains("modelPath"))
+                                t5xxlPath = t5xxl["modelPath"];
+                            else if (t5xxl.contains("modelName") && !t5xxl["modelName"].get<std::string>().empty())
+                                t5xxlPath = filePaths.encoderDir + "/" + t5xxl["modelName"].get<std::string>();
+                        }
+
+                        // DiffusionModel component
+                        if (comp.contains("DiffusionModel")) {
+                            auto diffusion = comp["DiffusionModel"];
+                            if (diffusion.contains("modelPath"))
+                                diffusionModelPath = diffusion["modelPath"];
+                            else if (diffusion.contains("modelName") && !diffusion["modelName"].get<std::string>().empty())
+                                diffusionModelPath = filePaths.unetDir + "/" + diffusion["modelName"].get<std::string>();
+                        }
+
+                        // Vae component
+                        if (comp.contains("Vae")) {
+                            auto vae = comp["Vae"];
+                            if (vae.contains("modelPath"))
+                                vaePath = vae["modelPath"];
+                            else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty())
+                                vaePath = filePaths.vaeDir + "/" + vae["modelName"].get<std::string>();
+
+                            if (vae.contains("isTiled"))
+                                isTiled = vae["isTiled"];
+                            if (vae.contains("keep_vae_on_cpu"))
+                                keep_vae_on_cpu = vae["keep_vae_on_cpu"];
+                            if (vae.contains("vae_decode_only"))
+                                vae_decode_only = vae["vae_decode_only"];
+                        }
+
+                        // Taesd component
+                        if (comp.contains("Taesd")) {
+                            auto taesd = comp["Taesd"];
+                            if (taesd.contains("modelPath"))
+                                taesdPath = taesd["modelPath"];
+                            else if (taesd.contains("modelName") && !taesd["modelName"].get<std::string>().empty())
+                                taesdPath = filePaths.vaeDir + "/" + taesd["modelName"].get<std::string>();
+                        }
+
+                        // Controlnet component
+                        if (comp.contains("Controlnet")) {
+                            auto controlnet = comp["Controlnet"];
+                            if (controlnet.contains("modelPath"))
+                                controlnetPath = controlnet["modelPath"];
+                            else if (controlnet.contains("modelName") && !controlnet["modelName"].get<std::string>().empty())
+                                controlnetPath = filePaths.controlnetDir + "/" + controlnet["modelName"].get<std::string>();
+                        }
+
+                        // Lora component
+                        if (comp.contains("Lora")) {
+                            auto lora = comp["Lora"];
+                            if (lora.contains("modelPath"))
+                                loraPath = lora["modelPath"];
+                            else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
+                                loraPath = filePaths.loraDir + "/" + lora["modelName"].get<std::string>();
+                        }
+
+                        // Embedding component
+                        if (comp.contains("EmbeddingComponent")) {
+                            auto embed = comp["EmbeddingComponent"];
+                            if (embed.contains("modelPath"))
+                                embedPath = embed["modelPath"];
+                            else if (embed.contains("modelName") && !embed["modelName"].get<std::string>().empty())
+                                embedPath = filePaths.embedDir + "/" + embed["modelName"].get<std::string>();
+                        }
+
+                        // Sampler component
+                        if (comp.contains("Sampler")) {
+                            auto sampler = comp["Sampler"];
+                            if (sampler.contains("n_threads"))
+                                n_threads = sampler["n_threads"];
+                            if (sampler.contains("free_params_immediately"))
+                                free_params_immediately = sampler["free_params_immediately"];
+                            if (sampler.contains("current_type_method"))
+                                type_method = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
+                            if (sampler.contains("current_rng_type"))
+                                rng_type = static_cast<rng_type_t>(sampler["current_rng_type"].get<int>());
+                            if (sampler.contains("current_scheduler_method"))
+                                scheduler_method = static_cast<schedule_t>(sampler["current_scheduler_method"].get<int>());
+                        }
+                    }
+                }
+
+                // Initialize SD context with parsed metadata
+                return new_sd_ctx(
+                    modelPath.c_str(),
+                    clipLPath.c_str(),
+                    clipGPath.c_str(),
+                    t5xxlPath.c_str(),
+                    diffusionModelPath.c_str(),
+                    vaePath.c_str(),
+                    taesdPath.c_str(),
+                    controlnetPath.c_str(),
+                    loraPath.c_str(),
+                    embedPath.c_str(),
+                    "",  // placeholder_token_text
+                    vae_decode_only,
+                    isTiled,
+                    free_params_immediately,
+                    n_threads,
+                    type_method,
+                    rng_type,
+                    scheduler_method,
+                    true,  // shift_text_decoder
+                    false, // debug_clip_pos
+                    keep_vae_on_cpu,
+                    false  // debug_extract_shifts
+                );
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Error initializing SD context: " << e.what() << std::endl;
+                return nullptr;
+            }
         }
 
-        // Generate image
-        sd_image_t* GenerateImage(sd_ctx_t* context, EntityID entityID) {
+        // Generate image based on metadata
+        sd_image_t* GenerateImage(sd_ctx_t* context, const nlohmann::json& metadata) {
+            std::string posPrompt = "", negPrompt = "";
+            float clipSkip = 2.0f, cfg = 7.0f, guidance = 2.0f, eta = 0.0f;
+            int latentWidth = 512, latentHeight = 512, steps = 20, seed = -1, batchSize = 1;
+            sample_method_t sample_method = EULER;
+            int* skipLayers = nullptr;
+            size_t skipLayersCount = 0;
+            float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
+
+            // Extract parameters from components array in metadata
+            if (metadata.contains("components") && metadata["components"].is_array()) {
+                for (const auto& comp : metadata["components"]) {
+                    // Prompt component
+                    if (comp.contains("Prompt")) {
+                        auto prompt = comp["Prompt"];
+                        if (prompt.contains("posPrompt"))
+                            posPrompt = prompt["posPrompt"];
+                        if (prompt.contains("negPrompt"))
+                            negPrompt = prompt["negPrompt"];
+                    }
+
+                    // ClipSkip component
+                    if (comp.contains("ClipSkip")) {
+                        auto clipSkipComp = comp["ClipSkip"];
+                        if (clipSkipComp.contains("clipSkip"))
+                            clipSkip = clipSkipComp["clipSkip"];
+                    }
+
+                    // Sampler component
+                    if (comp.contains("Sampler")) {
+                        auto sampler = comp["Sampler"];
+                        if (sampler.contains("cfg"))
+                            cfg = sampler["cfg"];
+                        if (sampler.contains("steps"))
+                            steps = sampler["steps"];
+                        if (sampler.contains("seed"))
+                            seed = sampler["seed"];
+                        if (sampler.contains("current_sample_method"))
+                            sample_method = static_cast<sample_method_t>(sampler["current_sample_method"].get<int>());
+                    }
+
+                    // Guidance component
+                    if (comp.contains("Guidance")) {
+                        auto guidanceComp = comp["Guidance"];
+                        if (guidanceComp.contains("guidance"))
+                            guidance = guidanceComp["guidance"];
+                        if (guidanceComp.contains("eta"))
+                            eta = guidanceComp["eta"];
+                    }
+
+                    // Latent component
+                    if (comp.contains("Latent")) {
+                        auto latent = comp["Latent"];
+                        if (latent.contains("latentWidth"))
+                            latentWidth = latent["latentWidth"];
+                        if (latent.contains("latentHeight"))
+                            latentHeight = latent["latentHeight"];
+                        if (latent.contains("batchSize"))
+                            batchSize = latent["batchSize"];
+                    }
+
+                    // Skip layers component
+                    if (comp.contains("LayerSkip")) {
+                        auto layerSkip = comp["LayerSkip"];
+                        if (layerSkip.contains("skip_layers"))
+                            skipLayers = reinterpret_cast<int*>(layerSkip["skip_layers"].get<intptr_t>());
+                        if (layerSkip.contains("skip_layers_count"))
+                            skipLayersCount = layerSkip["skip_layers_count"];
+                        if (layerSkip.contains("slg_scale"))
+                            slgScale = layerSkip["slg_scale"];
+                        if (layerSkip.contains("skip_layer_start"))
+                            skipLayerStart = layerSkip["skip_layer_start"];
+                        if (layerSkip.contains("skip_layer_end"))
+                            skipLayerEnd = layerSkip["skip_layer_end"];
+                    }
+                }
+            }
+
+            // Call the Stable Diffusion txt2img function with extracted parameters
             return txt2img(
                 context,
-                mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-                mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(),
-                mgr.GetComponent<ClipSkipComponent>(entityID).clipSkip,
-                mgr.GetComponent<SamplerComponent>(entityID).cfg,
-                mgr.GetComponent<GuidanceComponent>(entityID).guidance,
-                mgr.GetComponent<GuidanceComponent>(entityID).eta,
-                mgr.GetComponent<LatentComponent>(entityID).latentWidth,
-                mgr.GetComponent<LatentComponent>(entityID).latentHeight,
-                mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
-                mgr.GetComponent<SamplerComponent>(entityID).steps,
-                mgr.GetComponent<SamplerComponent>(entityID).seed,
-                mgr.GetComponent<LatentComponent>(entityID).batchSize,
-                nullptr,
-                0.0f,
-                0.0f,
-                false,
-                "",
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
-                mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end
+                posPrompt.c_str(),
+                negPrompt.c_str(),
+                clipSkip,
+                cfg,
+                guidance,
+                eta,
+                latentWidth,
+                latentHeight,
+                sample_method,
+                steps,
+                seed,
+                batchSize,
+                nullptr,  // control_image
+                0.0f,     // control_strength
+                0.0f,     // style_strength
+                false,    // normalize_input
+                "",       // input_id_images_path
+                skipLayers,
+                skipLayersCount,
+                slgScale,
+                skipLayerStart,
+                skipLayerEnd
             );
         }
 
+        // Save image with metadata
         void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entity, const nlohmann::json& metadata) {
             try {
+                // Check if entity exists and has OutputImageComponent
+                if (!mgr.HasComponent<OutputImageComponent>(entity)) {
+                    mgr.AddComponent<OutputImageComponent>(entity);
+                }
+
                 // Get the component for storing image data
                 auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
 
@@ -447,7 +676,6 @@ namespace ECS {
                 std::cerr << "Exception in SaveImage: " << e.what() << '\n';
             }
         }
-
     };
 
     // Task classes
@@ -458,7 +686,7 @@ namespace ECS {
         }
 
         void execute() override {
-            if (!system) return;
+            if (!system || isCancelled()) return;
 
             // Run the inference
             try {
@@ -485,7 +713,7 @@ namespace ECS {
         }
 
         void execute() override {
-            if (!system) return;
+            if (!system || isCancelled()) return;
 
             // Run the conversion
             try {
@@ -511,7 +739,7 @@ namespace ECS {
         }
 
         void execute() override {
-            if (!system) return;
+            if (!system || isCancelled()) return;
 
             try {
                 bool success = system->RunImg2Img(entityID, metadata);
@@ -536,7 +764,7 @@ namespace ECS {
         }
 
         void execute() override {
-            if (!system) return;
+            if (!system || isCancelled()) return;
 
             try {
                 bool success = system->RunUpscaling(entityID, metadata);
@@ -555,7 +783,7 @@ namespace ECS {
     };
 
     // Implementation of task creation methods
-    inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateInferenceTask(EntityID entityID, const nlohmann::json& metadata) {
+    inline std::shared_ptr<Utils::Task> SDCPPSystem::CreateInferenceTask(const EntityID entityID, const nlohmann::json& metadata) {
         return std::make_shared<InferenceTask>(this, entityID, metadata);
     }
 
@@ -571,30 +799,36 @@ namespace ECS {
         return std::make_shared<UpscalingTask>(this, entityID, metadata);
     }
 
-    // Implementation of core methods
+    // Implementation of core methods for generation
 
     // Run inference
-    inline bool SDCPPSystem::RunInference(EntityID entityID, const nlohmann::json& metadata) {
+    inline bool SDCPPSystem::RunInference(const EntityID entityID, const nlohmann::json& metadata) {
         sd_ctx_t* sd_context = nullptr;
         try {
             std::cout << "Starting inference for Entity " << entityID << std::endl;
 
             // Initialize Stable Diffusion context
-            sd_context = InitializeStableDiffusionContext(entityID);
+            std::cout << "Initializing SD context..." << std::endl;
+            sd_context = InitializeStableDiffusionContext(metadata);
             if (!sd_context) {
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
             }
 
             // Generate image
-            sd_image_t* image = GenerateImage(sd_context, entityID);
+            sd_image_t* image = GenerateImage(sd_context, metadata);
             if (!image) {
                 throw std::runtime_error("Failed to generate image!");
             }
 
-            // Save the generated image - this now creates a new entity with ImageComponent
+            // Save the generated image
             SaveImage(image->data, image->width, image->height, image->channel, entityID, metadata);
 
-            // Cleanup SD context
+            // Cleanup
+            if (image) {
+                delete image;
+                // image = nullptr;
+            }
+
             free_sd_ctx(sd_context);
 
             std::cout << "Inference completed for Entity " << entityID << std::endl;
@@ -616,10 +850,31 @@ namespace ECS {
         try {
             std::cout << "Starting conversion for Entity " << entityID << std::endl;
 
-            // Get model paths and settings
-            std::string inputPath = mgr.GetComponent<ModelComponent>(entityID).modelPath;
-            std::string vaePath = mgr.GetComponent<VaeComponent>(entityID).modelPath;
-            sd_type_t type = mgr.GetComponent<SamplerComponent>(entityID).current_type_method;
+            std::string inputPath, vaePath;
+            sd_type_t type = SD_TYPE_F16;
+
+            // Extract model paths from metadata
+            if (metadata.contains("components") && metadata["components"].is_array()) {
+                for (const auto& comp : metadata["components"]) {
+                    if (comp.contains("Model")) {
+                        auto model = comp["Model"];
+                        if (model.contains("modelPath"))
+                            inputPath = model["modelPath"];
+                    }
+
+                    if (comp.contains("Vae")) {
+                        auto vae = comp["Vae"];
+                        if (vae.contains("modelPath"))
+                            vaePath = vae["modelPath"];
+                    }
+
+                    if (comp.contains("Sampler")) {
+                        auto sampler = comp["Sampler"];
+                        if (sampler.contains("current_type_method"))
+                            type = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
+                    }
+                }
+            }
 
             // Validate input path
             if (inputPath.empty()) {
@@ -648,70 +903,94 @@ namespace ECS {
             }
 
             std::cout << "Successfully converted model to: " << outPath << std::endl;
-
-            // Clean up
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                mgr.DestroyEntity(entityID);
-            }
-
             return true;
         }
         catch (const std::exception& e) {
             std::cerr << "Exception during conversion: " << e.what() << std::endl;
-
-            // Clean up
-            {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                mgr.DestroyEntity(entityID);
-            }
-
             return false;
         }
     }
 
-    inline bool ECS::SDCPPSystem::RunImg2Img(EntityID entityID, const nlohmann::json& metadata) {
+    inline bool SDCPPSystem::RunImg2Img(EntityID entityID, const nlohmann::json& metadata) {
         sd_ctx_t* sd_context = nullptr;
         try {
             std::cout << "Starting img2img inference for Entity " << entityID << std::endl;
 
             // Initialize Stable Diffusion context
-            sd_context = InitializeStableDiffusionContext(entityID);
+            sd_context = InitializeStableDiffusionContext(metadata);
             if (!sd_context) {
                 throw std::runtime_error("Failed to initialize Stable Diffusion context!");
             }
 
+            std::string posPrompt = "", negPrompt = "";
+            float clipSkip = 2.0f, cfg = 7.0f, guidance = 2.0f, eta = 0.0f;
+            int latentWidth = 512, latentHeight = 512, steps = 20, seed = -1, batchSize = 1;
+            float denoiseStrength = 0.75f;
+            sample_method_t sample_method = EULER;
+
+            // Extract image data and parameters from metadata
+            unsigned char* inputImageData = nullptr;
+            int inputWidth = 0, inputHeight = 0, inputChannels = 0;
+            unsigned char* maskImageData = nullptr;
+            int maskWidth = 0, maskHeight = 0, maskChannels = 0;
+
+            if (metadata.contains("components") && metadata["components"].is_array()) {
+                for (const auto& comp : metadata["components"]) {
+                    // Extract parameters similar to RunInference
+                    // (Add code to extract the necessary parameters)
+
+                    // Input image component
+                    if (comp.contains("InputImage") && mgr.HasComponent<InputImageComponent>(entityID)) {
+                        auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
+                        inputImageData = inputComp.imageData;
+                        inputWidth = inputComp.width;
+                        inputHeight = inputComp.height;
+                        inputChannels = inputComp.channels;
+                    }
+
+                    // Mask image component
+                    if (comp.contains("MaskImageComponent") && mgr.HasComponent<MaskImageComponent>(entityID)) {
+                        auto& maskComp = mgr.GetComponent<MaskImageComponent>(entityID);
+                        maskImageData = maskComp.imageData;
+                        maskWidth = maskComp.width;
+                        maskHeight = maskComp.height;
+                        maskChannels = maskComp.channels;
+
+                        // Some implementations might store the denoise strength in the mask component
+                        if (comp["MaskImageComponent"].contains("value")) {
+                            denoiseStrength = comp["MaskImageComponent"]["value"];
+                        }
+                    }
+
+                    // Sampler component (for denoise strength)
+                    if (comp.contains("Sampler")) {
+                        if (comp["Sampler"].contains("denoise")) {
+                            denoiseStrength = comp["Sampler"]["denoise"];
+                        }
+                    }
+                }
+            }
+
             // Check if we have input image data
-            if (!mgr.HasComponent<InputImageComponent>(entityID) ||
-                !mgr.GetComponent<InputImageComponent>(entityID).imageData) {
+            if (!inputImageData) {
                 throw std::runtime_error("Input image required for img2img generation!");
             }
 
-            // Get components
-            auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
-
             // Prepare input image
             sd_image_t init_image = {
-                static_cast<uint32_t>(inputComp.width),
-                static_cast<uint32_t>(inputComp.height),
-                static_cast<uint32_t>(inputComp.channels),
-                inputComp.imageData
+                static_cast<uint32_t>(inputWidth),
+                static_cast<uint32_t>(inputHeight),
+                static_cast<uint32_t>(inputChannels),
+                inputImageData
             };
 
-            // Prepare mask image if we have MaskImageComponent
+            // Prepare mask image if available
             sd_image_t mask_image = { 0 };
-            float denoiseStrength = 0.75f; // Default strength
-
-            if (mgr.HasComponent<MaskImageComponent>(entityID)) {
-                auto& maskComp = mgr.GetComponent<MaskImageComponent>(entityID);
-                if (maskComp.imageData) {
-                    mask_image.width = static_cast<uint32_t>(maskComp.width);
-                    mask_image.height = static_cast<uint32_t>(maskComp.height);
-                    mask_image.channel = static_cast<uint32_t>(maskComp.channels);
-                    mask_image.data = maskComp.imageData;
-                }
-                // Use the mask component's value for denoise strength
-                denoiseStrength = maskComp.value;
+            if (maskImageData) {
+                mask_image.width = static_cast<uint32_t>(maskWidth);
+                mask_image.height = static_cast<uint32_t>(maskHeight);
+                mask_image.channel = static_cast<uint32_t>(maskChannels);
+                mask_image.data = maskImageData;
             }
 
             // Generate image
@@ -719,29 +998,29 @@ namespace ECS {
                 sd_context,
                 init_image,
                 mask_image,
-                mgr.GetComponent<PromptComponent>(entityID).posPrompt.c_str(),
-                mgr.GetComponent<PromptComponent>(entityID).negPrompt.c_str(),
-                mgr.GetComponent<ClipSkipComponent>(entityID).clipSkip,
-                mgr.GetComponent<SamplerComponent>(entityID).cfg,
-                mgr.GetComponent<GuidanceComponent>(entityID).guidance,
-                mgr.GetComponent<GuidanceComponent>(entityID).eta,
-                mgr.GetComponent<LatentComponent>(entityID).latentWidth,
-                mgr.GetComponent<LatentComponent>(entityID).latentHeight,
-                mgr.GetComponent<SamplerComponent>(entityID).current_sample_method,
-                mgr.GetComponent<SamplerComponent>(entityID).steps,
+                posPrompt.c_str(),
+                negPrompt.c_str(),
+                clipSkip,
+                cfg,
+                guidance,
+                eta,
+                latentWidth,
+                latentHeight,
+                sample_method,
+                steps,
                 denoiseStrength,
-                mgr.GetComponent<SamplerComponent>(entityID).seed,
-                mgr.GetComponent<LatentComponent>(entityID).batchSize,
+                seed,
+                batchSize,
                 nullptr,  // control_cond
                 0.0f,     // control_strength
                 0.0f,     // style_strength
                 false,    // normalize_input
                 "",       // input_id_images_path
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers,
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layers_count,
-                mgr.GetComponent<LayerSkipComponent>(entityID).slg_scale,
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_start,
-                mgr.GetComponent<LayerSkipComponent>(entityID).skip_layer_end
+                nullptr,  // skip_layers
+                0,        // skip_layers_count
+                0.0f,     // slg_scale
+                0.0f,     // skip_layer_start
+                1.0f      // skip_layer_end
             );
 
             if (!image) {
@@ -768,50 +1047,78 @@ namespace ECS {
         }
     }
 
-    inline bool ECS::SDCPPSystem::RunUpscaling(EntityID entityID, const nlohmann::json& metadata) {
+    inline bool SDCPPSystem::RunUpscaling(EntityID entityID, const nlohmann::json& metadata) {
         upscaler_ctx_t* upscaler_context = nullptr;
         try {
             std::cout << "Starting upscaling for Entity " << entityID << std::endl;
 
-            // Check if we have input image data
-            if (!mgr.HasComponent<InputImageComponent>(entityID) ||
-                !mgr.GetComponent<InputImageComponent>(entityID).imageData) {
-                throw std::runtime_error("Input image required for upscaling!");
+            std::string modelPath;
+            uint32_t upscaleFactor = 2;
+            bool preserveAspectRatio = true;
+            unsigned char* inputImageData = nullptr;
+            int inputWidth = 0, inputHeight = 0, inputChannels = 0;
+            int n_threads = 4;
+
+            // Extract parameters from metadata
+            if (metadata.contains("components") && metadata["components"].is_array()) {
+                for (const auto& comp : metadata["components"]) {
+                    // Esrgan component (upscaler model)
+                    if (comp.contains("Esrgan")) {
+                        auto esrgan = comp["Esrgan"];
+                        if (esrgan.contains("modelPath"))
+                            modelPath = esrgan["modelPath"];
+                        else if (esrgan.contains("modelName") && !esrgan["modelName"].get<std::string>().empty())
+                            modelPath = filePaths.upscaleDir + "/" + esrgan["modelName"].get<std::string>();
+
+                        if (esrgan.contains("upscaleFactor"))
+                            upscaleFactor = esrgan["upscaleFactor"];
+
+                        if (esrgan.contains("preserveAspectRatio"))
+                            preserveAspectRatio = esrgan["preserveAspectRatio"];
+                    }
+
+                    // Input image component
+                    if (comp.contains("InputImage") && mgr.HasComponent<InputImageComponent>(entityID)) {
+                        auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
+                        inputImageData = inputComp.imageData;
+                        inputWidth = inputComp.width;
+                        inputHeight = inputComp.height;
+                        inputChannels = inputComp.channels;
+                    }
+
+                    // Sampler component for threads count
+                    if (comp.contains("Sampler")) {
+                        if (comp["Sampler"].contains("n_threads"))
+                            n_threads = comp["Sampler"]["n_threads"];
+                    }
+                }
             }
 
-            // Get ESRGAN path and settings
-            auto& esrganComp = mgr.GetComponent<EsrganComponent>(entityID);
-            if (esrganComp.modelPath.empty()) {
+            // Validate parameters
+            if (modelPath.empty()) {
                 throw std::runtime_error("ESRGAN model path is empty!");
             }
 
-            // Initialize upscaler context - use default thread count from system
-            upscaler_context = new_upscaler_ctx(
-                esrganComp.modelPath.c_str(),
-                mgr.GetComponent<SamplerComponent>(entityID).n_threads
-            );
+            if (!inputImageData) {
+                throw std::runtime_error("Input image required for upscaling!");
+            }
 
+            // Initialize upscaler context
+            upscaler_context = new_upscaler_ctx(modelPath.c_str(), n_threads);
             if (!upscaler_context) {
                 throw std::runtime_error("Failed to initialize upscaler context!");
             }
 
-            // Get input image component
-            auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
-
             // Create input image
             sd_image_t input_image = {
-                static_cast<uint32_t>(inputComp.width),
-                static_cast<uint32_t>(inputComp.height),
-                static_cast<uint32_t>(inputComp.channels),
-                inputComp.imageData
+                static_cast<uint32_t>(inputWidth),
+                static_cast<uint32_t>(inputHeight),
+                static_cast<uint32_t>(inputChannels),
+                inputImageData
             };
 
             // Perform upscaling
-            sd_image_t upscaled_image = upscale(
-                upscaler_context,
-                input_image,
-                esrganComp.upscaleFactor
-            );
+            sd_image_t upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
 
             // Save the upscaled image
             SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,

@@ -39,20 +39,33 @@ namespace GUI {
 
 	DiffusionView::DiffusionView(EntityManager& entityMgr) : BaseView(entityMgr) {
 		viewName = "DiffusionView";
-		sd_set_log_callback(LogCallback, nullptr);
-		sd_set_progress_callback(ProgressCallback, nullptr);
 	}
 
 	DiffusionView::~DiffusionView() {
-		mgr.DestroyEntity(txt2imgEntity);
-		mgr.DestroyEntity(img2imgEntity);
+		if(txt2imgEntity != 0)
+			mgr.DestroyEntity(txt2imgEntity);
+		if (img2imgEntity != 0)
+			mgr.DestroyEntity(img2imgEntity);
 	}
 
 	void DiffusionView::Init() {
-		CreateEntities();
+		sd_set_log_callback(LogCallback, nullptr);
+		sd_set_progress_callback(ProgressCallback, nullptr);
+		ResetEntities();
 	}
 
-	void DiffusionView::CreateEntities() {
+	void DiffusionView::ResetEntities() {
+		
+		if (txt2imgEntity != 0) {
+			mgr.DestroyEntity(txt2imgEntity);
+			txt2imgEntity = 0;
+		}
+			
+		if (img2imgEntity != 0) {
+			mgr.DestroyEntity(img2imgEntity);
+			img2imgEntity = 0;
+		}
+			
 		// Create entity for Txt2Img mode
 		txt2imgEntity = mgr.AddNewEntity();
 
@@ -1012,25 +1025,37 @@ namespace GUI {
 	}
 
 	void DiffusionView::Deserialize(const nlohmann::json& j) {
-		EntityID entityId = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
-
+		// Create a new entity with the deserialized data
 		EntityID newEntity = mgr.DeserializeEntity(j);
 
-		if (newEntity != 0) {
-			mgr.DestroyEntity(entityId);
-
-			if (isTxt2ImgMode) {
-				txt2imgEntity = newEntity;
-			}
-			else {
-				img2imgEntity = newEntity;
-			}
-
-			std::cout << "Successfully replaced entity " << entityId << " with " << newEntity << std::endl;
+		if (newEntity == 0) {
+			std::cerr << "Error: Failed to deserialize entity" << std::endl;
+			return;
 		}
-		else {
-			std::cerr << "Failed to deserialize entity, kept original entity " << entityId << std::endl;
-		}
+
+		// Get target entity based on current mode
+		EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
+
+		// Copy components from new entity to our target entity
+		mgr.CopyEntity(newEntity, targetEntity);
+
+		// Update text buffers for the prompt component
+		//if (mgr.HasComponent<PromptComponent>(targetEntity)) {
+		//	auto& promptComp = mgr.GetComponent<PromptComponent>(targetEntity);
+		//	if (!promptComp.posPrompt.empty()) {
+		//		strncpy(promptComp.PosBuffer, promptComp.posPrompt.c_str(), sizeof//(promptComp.PosBuffer) - 1);
+		//		promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0';
+		//	}
+		//	if (!promptComp.negPrompt.empty()) {
+		//		strncpy(promptComp.NegBuffer, promptComp.negPrompt.c_str(), sizeof//(promptComp.NegBuffer) - 1);
+		//		promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0';
+		//	}
+		//}
+
+		// Clean up the temporary entity
+		mgr.DestroyEntity(newEntity);
+
+		std::cout << "Successfully deserialized data to entity " << targetEntity << std::endl;
 	}
 
 
