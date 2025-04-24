@@ -116,9 +116,9 @@ namespace ECS {
     };
 
     // Clip G Encoder
-    struct CLipGComponent : public BaseModelComponent {
-        CLipGComponent() { compName = "CLipG"; }
-        CLipGComponent& operator=(const CLipGComponent& other) {
+    struct ClipGComponent : public BaseModelComponent {
+        ClipGComponent() { compName = "ClipG"; }
+        ClipGComponent& operator=(const ClipGComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
                 modelName = other.modelName;
@@ -154,9 +154,9 @@ namespace ECS {
     };
 
     // Clip L Encoder
-    struct CLipLComponent : public BaseModelComponent {
-        CLipLComponent() { compName = "CLipL"; }
-        CLipLComponent& operator=(const CLipLComponent& other) {
+    struct ClipLComponent : public BaseModelComponent {
+        ClipLComponent() { compName = "ClipL"; }
+        ClipLComponent& operator=(const ClipLComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
                 modelName = other.modelName;
