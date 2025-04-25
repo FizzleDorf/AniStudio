@@ -16,19 +16,7 @@ I created this application to leverage C/C++ for a highly modular and paralleliz
 
 
 ##TODO:
-- update headers to include the licence disclaimer for clarity. probably something like this:
-```
- /*
- * This file is part of AniStudio.
- *
- * It is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For the commercial license, contact 1fizzledorf@gmail.com.
- */
-```
-- attributions for external libraries and code
+
 
 ## License
 
