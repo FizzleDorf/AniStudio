@@ -585,66 +585,45 @@ namespace ECS {
         }
 
         // Save image with metadata
-        void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entity, const nlohmann::json& metadata) {
+        void SaveImage(const unsigned char* data, int width, int height, int channels, const nlohmann::json& metadata) {
             try {
-                // Check if entity exists and has OutputImageComponent
-                if (!mgr.HasComponent<OutputImageComponent>(entity)) {
-                    mgr.AddComponent<OutputImageComponent>(entity);
+                // Extract path information from metadata instead of accessing entity manager
+                std::string filePath = "";
+                std::string fileName = "AniStudio.png";
+
+                // Extract file information from metadata
+                if (metadata.contains("components") && metadata["components"].is_array()) {
+                    for (const auto& comp : metadata["components"]) {
+                        if (comp.contains("OutputImage")) {
+                            auto outputImg = comp["OutputImage"];
+                            if (outputImg.contains("filePath"))
+                                filePath = outputImg["filePath"];
+                            if (outputImg.contains("fileName"))
+                                fileName = outputImg["fileName"];
+                        }
+                    }
                 }
 
-                // Get the component for storing image data
-                auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
-
-                // Update image dimensions from the actual generated data
-                imageComp.width = width;
-                imageComp.height = height;
-                imageComp.channels = channels;
-
-                // Set up default image properties if not already set
-                if (imageComp.fileName.empty()) {
-                    imageComp.fileName = "AniStudio.png";
-                }
-
-                if (imageComp.filePath.empty()) {
-                    imageComp.filePath = filePaths.defaultProjectPath;
+                // If no path found in metadata, use defaults
+                if (filePath.empty()) {
+                    filePath = filePaths.defaultProjectPath;
                 }
 
                 // Ensure PNG extension
-                std::filesystem::path fileNamePath(imageComp.fileName);
+                std::filesystem::path fileNamePath(fileName);
                 if (fileNamePath.extension() != ".png") {
                     fileNamePath.replace_extension(".png");
-                    imageComp.fileName = fileNamePath.string();
+                    fileName = fileNamePath.string();
                 }
 
                 // Use PngMetadata utility to get a unique filename
                 std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-                    imageComp.fileName,
-                    imageComp.filePath,
+                    fileName,
+                    filePath,
                     ".png"
                 );
 
-                // Update the component with the path info
-                std::filesystem::path fullPath(uniqueFilePath);
-                imageComp.fileName = fullPath.filename().string();
-                imageComp.filePath = uniqueFilePath;
-
-                // First, store a copy of the raw image data in the component
-                if (imageComp.imageData) {
-                    free(imageComp.imageData);
-                    imageComp.imageData = nullptr;
-                }
-
-                // Copy the data to the component
-                size_t dataSize = width * height * channels;
-                imageComp.imageData = static_cast<unsigned char*>(malloc(dataSize));
-                if (imageComp.imageData) {
-                    memcpy(imageComp.imageData, data, dataSize);
-                }
-                else {
-                    std::cerr << "Failed to allocate memory for image data" << std::endl;
-                }
-
-                // Save the image to disk
+                // Save the image to disk without accessing entity manager
                 bool success = Utils::ImageUtils::SaveImage(
                     uniqueFilePath,
                     width,
@@ -667,7 +646,9 @@ namespace ECS {
 
                 std::cout << "Image saved successfully: \"" << uniqueFilePath << "\"" << std::endl;
 
-                // Texture will be generated during next update by ImageSystem since we have imageData set
+                // Store the image information to be processed in the main thread
+                // Either through a message queue or a callback system
+                // QueueImageLoadRequest(entity, uniqueFilePath);
             }
             catch (const std::filesystem::filesystem_error& e) {
                 std::cerr << "Error creating directory: " << e.what() << '\n';
@@ -821,14 +802,10 @@ namespace ECS {
             }
 
             // Save the generated image
-            SaveImage(image->data, image->width, image->height, image->channel, entityID, metadata);
+            SaveImage(image->data, image->width, image->height, image->channel, metadata);
 
             // Cleanup
-            if (image) {
-                delete image;
-                // image = nullptr;
-            }
-
+            free(image);
             free_sd_ctx(sd_context);
 
             std::cout << "Inference completed for Entity " << entityID << std::endl;
@@ -840,7 +817,6 @@ namespace ECS {
             if (sd_context) {
                 free_sd_ctx(sd_context);
             }
-
             return false;
         }
     }
@@ -1028,7 +1004,7 @@ namespace ECS {
             }
 
             // Save the generated image
-            SaveImage(image->data, image->width, image->height, image->channel, entityID, metadata);
+            SaveImage(image->data, image->width, image->height, image->channel, metadata);
 
             // Cleanup SD context
             free_sd_ctx(sd_context);
@@ -1122,7 +1098,7 @@ namespace ECS {
 
             // Save the upscaled image
             SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
-                upscaled_image.channel, entityID, metadata);
+                upscaled_image.channel, metadata);
 
             // Cleanup upscaler context
             free_upscaler_ctx(upscaler_context);
