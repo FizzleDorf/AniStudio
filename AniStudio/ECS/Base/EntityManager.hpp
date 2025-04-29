@@ -88,6 +88,21 @@ namespace ECS {
             UpdateEntityTargetSystem(entity);
         }
 
+		void RemoveComponentById(EntityID entityID, ComponentTypeID componentId) {			
+			auto getter = componentGetters.find(componentId);
+			if (getter != componentGetters.end()) {
+				auto it = entitiesSignatures.find(entityID);
+				if (it != entitiesSignatures.end()) {
+					it->second->erase(componentId);
+					auto arrayIt = componentsArrays.find(componentId);
+					if (arrayIt != componentsArrays.end()) {
+						arrayIt->second->Erase(entityID);
+					}
+					UpdateEntityTargetSystem(entityID);
+				}
+			}
+		}
+
         template<typename T>
         T& GetComponent(const EntityID entity) {
             assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");

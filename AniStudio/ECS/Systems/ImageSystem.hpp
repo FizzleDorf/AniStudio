@@ -57,13 +57,6 @@ namespace ECS {
                 if (mgr.HasComponent<ImageComponent>(entity)) {
                     auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
-                    // Debug current state
-                    if (imageComp.textureID == 0 && imageComp.imageData) {
-                        std::cout << "Entity " << entity << " has imageData but no texture. "
-                            << "Dimensions: " << imageComp.width << "x" << imageComp.height << "x" << imageComp.channels
-                            << ", imageData: " << (void*)imageComp.imageData << std::endl;
-                    }
-
                     // Only generate textures for components with imageData but no textureID
                     if (imageComp.textureID == 0 && imageComp.imageData) {
                         // Validate dimensions and data before attempting texture creation
@@ -105,7 +98,7 @@ namespace ECS {
         }
 
         // Set image filepath and load it
-        void SetImage(EntityID entity, const std::string& filePath) {
+        void SetImage(const EntityID entity, const std::string& filePath) {
             if (mgr.HasComponent<ImageComponent>(entity)) {
                 auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
