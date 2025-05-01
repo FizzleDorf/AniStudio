@@ -303,7 +303,151 @@ namespace GUI {
 
 		auto& imageComp = mgr.GetComponent<InputImageComponent>(entity);
 
-		
+		// Image selection UI
+		if (ImGui::BeginTable("InputImageTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Image", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+			ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
+
+			ImGui::TableNextColumn();
+			ImGui::Text("Input Image");
+
+			ImGui::TableNextColumn();
+			if (ImGui::Button("...##load_img")) {
+				IGFD::FileDialogConfig config;
+				config.path = filePaths.defaultProjectPath;
+				ImGuiFileDialog::Instance()->OpenDialog("LoadInputImageDialog", "Choose Image",
+					".png,.jpg,.jpeg,.bmp,.tga", config);
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("X##clear_img")) {
+				// Clear image
+				if (imageComp.imageData) {
+					Utils::ImageUtils::FreeImageData(imageComp.imageData);
+					imageComp.imageData = nullptr;
+				}
+				if (imageComp.textureID != 0) {
+					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					imageComp.textureID = 0;
+				}
+				imageComp.fileName = "";
+				imageComp.filePath = "";
+				imageComp.width = 0;
+				imageComp.height = 0;
+			}
+
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", imageComp.fileName.c_str());
+
+			ImGui::EndTable();
+		}
+
+		// File dialog for loading image
+		if (ImGuiFileDialog::Instance()->Display("LoadInputImageDialog", 32, ImVec2(700, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
+
+				// Clean up previous image data if it exists
+				if (imageComp.imageData) {
+					Utils::ImageUtils::FreeImageData(imageComp.imageData);
+					imageComp.imageData = nullptr;
+				}
+				if (imageComp.textureID != 0) {
+					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					imageComp.textureID = 0;
+				}
+
+				// Load new image
+				int width, height, channels;
+				unsigned char* data = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
+
+				if (data) {
+					// Update component data
+					imageComp.imageData = data;
+					imageComp.width = width;
+					imageComp.height = height;
+					imageComp.channels = channels;
+					imageComp.fileName = fileName;
+					imageComp.filePath = filePath;
+
+					// Generate texture for preview
+					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
+						width, height, channels, data);
+
+					// Update latent dimensions to match input image
+					if (mgr.HasComponent<LatentComponent>(entity)) {
+						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+						// Make dimensions divisible by 8 (required for stable diffusion)
+						latentComp.latentWidth = (width / 8) * 8;
+						latentComp.latentHeight = (height / 8) * 8;
+					}
+				}
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
+
+		// Image preview section
+		ImGui::Separator();
+
+		if (imageComp.textureID != 0 && imageComp.width > 0 && imageComp.height > 0) {
+			// Display image info
+			ImGui::Text("Image dimensions: %d x %d", imageComp.width, imageComp.height);
+
+			// Create a child window for the image preview with border
+			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
+
+			// Calculate image size to maintain aspect ratio
+			float availWidth = ImGui::GetContentRegionAvail().x;
+			float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
+
+			ImVec2 imageSize;
+			if (aspectRatio > 1.0f) {
+				// Image is wider than tall
+				imageSize = ImVec2(availWidth, availWidth / aspectRatio);
+			}
+			else {
+				// Image is taller than wide or square
+				imageSize = ImVec2(availWidth * aspectRatio, availWidth);
+			}
+
+			// Limit height to available space
+			float availHeight = ImGui::GetContentRegionAvail().y;
+			if (imageSize.y > availHeight) {
+				imageSize.y = availHeight;
+				imageSize.x = availHeight * aspectRatio;
+			}
+
+			// Center the image horizontally
+			float xOffset = (availWidth - imageSize.x) * 0.5f;
+			if (xOffset > 0) {
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
+			}
+
+			// Draw the image
+			ImGui::Image((void*)(intptr_t)imageComp.textureID, imageSize);
+
+			ImGui::EndChild();
+		}
+		else {
+			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
+			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+				"No image loaded. Click the '...' button to select an input image.");
+			ImGui::EndChild();
+		}
+
+		// Additional image processing options
+		if (imageComp.textureID != 0) {
+			if (ImGui::Button("Use image dimensions for latent size")) {
+				if (mgr.HasComponent<LatentComponent>(entity)) {
+					auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+					// Make dimensions divisible by 8 (required for stable diffusion)
+					latentComp.latentWidth = (imageComp.width / 8) * 8;
+					latentComp.latentHeight = (imageComp.height / 8) * 8;
+				}
+			}
+		}
 	}
 
 	void DiffusionView::RenderPrompts(const EntityID entity) {
@@ -1020,37 +1164,21 @@ namespace GUI {
 	}
 
 	void DiffusionView::Deserialize(const nlohmann::json& j) {
-		// Create a new entity with the deserialized data
-		EntityID newEntity = mgr.DeserializeEntity(j);
+		
+		EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
 
-		if (newEntity == 0) {
-			std::cerr << "Error: Failed to deserialize entity" << std::endl;
+		if (targetEntity == 0) {
+			std::cerr << "Error: Invalid target entity for deserialization" << std::endl;
 			return;
 		}
 
-		// Get target entity based on current mode
-		EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
-
-		// Copy components from new entity to our target entity
-		mgr.CopyEntity(newEntity, targetEntity);
-
-		// Update text buffers for the prompt component
-		//if (mgr.HasComponent<PromptComponent>(targetEntity)) {
-		//	auto& promptComp = mgr.GetComponent<PromptComponent>(targetEntity);
-		//	if (!promptComp.posPrompt.empty()) {
-		//		strncpy(promptComp.PosBuffer, promptComp.posPrompt.c_str(), sizeof//(promptComp.PosBuffer) - 1);
-		//		promptComp.PosBuffer[sizeof(promptComp.PosBuffer) - 1] = '\0';
-		//	}
-		//	if (!promptComp.negPrompt.empty()) {
-		//		strncpy(promptComp.NegBuffer, promptComp.negPrompt.c_str(), sizeof//(promptComp.NegBuffer) - 1);
-		//		promptComp.NegBuffer[sizeof(promptComp.NegBuffer) - 1] = '\0';
-		//	}
-		//}
-
-		// Clean up the temporary entity
-		mgr.DestroyEntity(newEntity);
-
-		std::cout << "Successfully deserialized data to entity " << targetEntity << std::endl;
+		try {
+			mgr.DeserializeEntity(j, targetEntity);
+			std::cout << "Successfully deserialized data to entity " << targetEntity << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Exception during deserialization: " << e.what() << std::endl;
+		}
 	}
 
 

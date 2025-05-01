@@ -31,24 +31,6 @@ namespace ECS {
             return entity;
         }
 
-        void CopyEntity(EntityID sourceEntity, EntityID targetEntity) {
-            for (const auto& componentType : GetEntityComponents(sourceEntity)) {
-                if (auto* baseComponent = GetComponentById(sourceEntity, componentType)) {
-                    if (componentCreators.find(componentType) == componentCreators.end()) {
-                        RegisterComponentType(componentType, [this, componentType](EntityID entity) {
-                            componentCreators[componentType](entity);
-                            }, [this, componentType](EntityID entity) -> BaseComponent* {
-                                return componentGetters[componentType](entity);
-                                });
-                    }
-                    componentCreators[componentType](targetEntity);
-                    if (auto* newComponent = GetComponentById(targetEntity, componentType)) {
-                        *newComponent = *baseComponent;
-                    }
-                }
-            }
-        }
-
         void DestroyEntity(const EntityID entity) {
             assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
             entitiesSignatures.erase(entity);
@@ -265,6 +247,29 @@ namespace ECS {
 
             return entity;
         }
+		
+		void DeserializeEntity(const nlohmann::json& json, const EntityID entity) {
+			if (!json.contains("components") || !json["components"].is_array()) {
+				std::cerr << "Error: Invalid entity data format in JSON" << std::endl;
+				return;
+			}
+
+			for (const auto& componentJson : json["components"]) {
+				for (auto it = componentJson.begin(); it != componentJson.end(); ++it) {
+					std::string componentName = it.key();
+					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
+					if (typeId != MAX_COMPONENT_COUNT) {
+						auto creator = componentCreators.find(typeId);
+						if (creator != componentCreators.end()) {
+							creator->second(entity);
+							if (auto* component = GetComponentById(entity, typeId)) {
+								component->Deserialize(componentJson[componentName]);
+							}
+						}
+					}
+				}
+			}
+		}
 
         // Plugin support for component registration
         using ComponentCreator = std::function<void(EntityID)>;
