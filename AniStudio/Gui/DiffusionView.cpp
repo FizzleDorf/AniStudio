@@ -76,6 +76,7 @@ namespace GUI {
 		mgr.AddComponent<T5XXLComponent>(txt2imgEntity);
 		mgr.AddComponent<DiffusionModelComponent>(txt2imgEntity);
 		mgr.AddComponent<VaeComponent>(txt2imgEntity);
+		mgr.AddComponent<LoraComponent>(txt2imgEntity);
 		mgr.AddComponent<TaesdComponent>(txt2imgEntity);
 		mgr.AddComponent<LatentComponent>(txt2imgEntity);
 		mgr.AddComponent<SamplerComponent>(txt2imgEntity);
@@ -95,6 +96,7 @@ namespace GUI {
 		mgr.AddComponent<T5XXLComponent>(img2imgEntity);
 		mgr.AddComponent<DiffusionModelComponent>(img2imgEntity);
 		mgr.AddComponent<VaeComponent>(img2imgEntity);
+		mgr.AddComponent<LoraComponent>(img2imgEntity);
 		mgr.AddComponent<TaesdComponent>(img2imgEntity);
 		mgr.AddComponent<LatentComponent>(img2imgEntity);
 		mgr.AddComponent<SamplerComponent>(img2imgEntity);
@@ -202,7 +204,7 @@ namespace GUI {
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("R##w9")) {
-				imageComp.fileName = "<none>";
+				imageComp.fileName = "AniStudio";
 				imageComp.filePath = "filePaths.defaultProjectPath";
 			}
 			ImGui::TableNextColumn();
@@ -281,7 +283,7 @@ namespace GUI {
 			ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			// Batching using sdcpp just queues, not actually batch
+			// Batching using sdcpp just queues, does not batch asyncronously
 			// ImGui::Text("Batch");
 			// ImGui::TableNextColumn();
 			// ImGui::InputInt("##Batch Size", &latentComp.batchSize);
@@ -301,7 +303,7 @@ namespace GUI {
 
 		auto& imageComp = mgr.GetComponent<InputImageComponent>(entity);
 
-		ImGui::Text("Image input placeholder"); // Adjust to render the actual image component if needed
+		
 	}
 
 	void DiffusionView::RenderPrompts(const EntityID entity) {
@@ -341,15 +343,6 @@ namespace GUI {
 
 	//	// Use the component's schema to render the UI
 	//	if (UISchema::RenderSchema(clipSkipComp.schema, properties)) {
-	//	}
-	//}
-
-	//void DiffusionView::RenderGuidance() {
-	//	// Get the property map directly from the component
-	//	auto properties = guidanceComp.GetPropertyMap();
-
-	//	// Use the component's schema to render the UI
-	//	if (UISchema::RenderSchema(guidanceComp.schema, properties)) {
 	//	}
 	//}
 
@@ -778,6 +771,8 @@ namespace GUI {
 
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
 				for (int i = 0; i < numQueues; i++) {
+					auto& loraComp = mgr.GetComponent<LoraComponent>(txt2imgEntity);
+					loraComp.modelPath = filePaths.loraDir;
 					HandleT2IEvent();
 					// seedControl->activate();
 				}

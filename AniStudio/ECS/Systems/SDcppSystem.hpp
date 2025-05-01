@@ -458,8 +458,6 @@ namespace ECS {
 							auto lora = comp["Lora"];
 							if (lora.contains("modelPath"))
 								loraPath = lora["modelPath"];
-							else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
-								loraPath = filePaths.loraDir + "/" + lora["modelName"].get<std::string>();
 						}
 
 						// Embedding component
@@ -498,7 +496,7 @@ namespace ECS {
 					vaePath.c_str(),
 					taesdPath.c_str(),
 					controlnetPath.c_str(),
-					loraPath.c_str(),
+					filePaths.loraDir.c_str(),
 					embedPath.c_str(),
 					"",  // placeholder_token_text
 					vae_decode_only,
