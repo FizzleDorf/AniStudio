@@ -361,11 +361,10 @@ namespace GUI {
 
 				// Load new image
 				int width, height, channels;
-				unsigned char* data = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
+				imageComp.imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
 
-				if (data) {
+				if (imageComp.imageData) {
 					// Update component data
-					imageComp.imageData = data;
 					imageComp.width = width;
 					imageComp.height = height;
 					imageComp.channels = channels;
@@ -374,7 +373,7 @@ namespace GUI {
 
 					// Generate texture for preview
 					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
-						width, height, channels, data);
+						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
 
 					// Update latent dimensions to match input image
 					if (mgr.HasComponent<LatentComponent>(entity)) {
@@ -504,6 +503,99 @@ namespace GUI {
 		event.type = EventType::InferenceRequest;
 		ANI::Events::Ref().QueueEvent(event);
 		std::cout << "Inference request queued for entity: " << newEntity << std::endl;
+	}
+
+	void DiffusionView::HandleI2IEvent() {
+		std::cout << "Creating new entity for img2img..." << std::endl;
+
+		// Create a new entity
+		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
+		if (newEntity == 0) {
+			std::cerr << "Failed to create new entity!" << std::endl;
+			return;
+		}
+
+		// Copy all components from the template entity using direct component copying
+		// instead of serialization/deserialization
+		std::vector<ComponentTypeID> componentTypes = mgr.GetEntityComponents(img2imgEntity);
+
+		for (const auto& componentId : componentTypes) {
+			std::string componentName = mgr.GetComponentNameById(componentId);
+			std::cout << "Copying component: " << componentName << " to new entity" << std::endl;
+
+			// Handle each component type specifically
+			if (componentName == "Model") {
+				mgr.AddComponent<ModelComponent>(newEntity) = mgr.GetComponent<ModelComponent>(img2imgEntity);
+			}
+			else if (componentName == "CLipL") {
+				mgr.AddComponent<ClipLComponent>(newEntity) = mgr.GetComponent<ClipLComponent>(img2imgEntity);
+			}
+			else if (componentName == "CLipG") {
+				mgr.AddComponent<ClipGComponent>(newEntity) = mgr.GetComponent<ClipGComponent>(img2imgEntity);
+			}
+			else if (componentName == "T5XXL") {
+				mgr.AddComponent<T5XXLComponent>(newEntity) = mgr.GetComponent<T5XXLComponent>(img2imgEntity);
+			}
+			else if (componentName == "DiffusionModel") {
+				mgr.AddComponent<DiffusionModelComponent>(newEntity) = mgr.GetComponent<DiffusionModelComponent>(img2imgEntity);
+			}
+			else if (componentName == "Vae") {
+				mgr.AddComponent<VaeComponent>(newEntity) = mgr.GetComponent<VaeComponent>(img2imgEntity);
+			}
+			else if (componentName == "Lora") {
+				mgr.AddComponent<LoraComponent>(newEntity) = mgr.GetComponent<LoraComponent>(img2imgEntity);
+			}
+			else if (componentName == "Taesd") {
+				mgr.AddComponent<TaesdComponent>(newEntity) = mgr.GetComponent<TaesdComponent>(img2imgEntity);
+			}
+			else if (componentName == "Latent") {
+				mgr.AddComponent<LatentComponent>(newEntity) = mgr.GetComponent<LatentComponent>(img2imgEntity);
+			}
+			else if (componentName == "Sampler") {
+				mgr.AddComponent<SamplerComponent>(newEntity) = mgr.GetComponent<SamplerComponent>(img2imgEntity);
+			}
+			else if (componentName == "Guidance") {
+				mgr.AddComponent<GuidanceComponent>(newEntity) = mgr.GetComponent<GuidanceComponent>(img2imgEntity);
+			}
+			else if (componentName == "ClipSkip") {
+				mgr.AddComponent<ClipSkipComponent>(newEntity) = mgr.GetComponent<ClipSkipComponent>(img2imgEntity);
+			}
+			else if (componentName == "Prompt") {
+				mgr.AddComponent<PromptComponent>(newEntity) = mgr.GetComponent<PromptComponent>(img2imgEntity);
+			}
+			else if (componentName == "LayerSkip") {
+				mgr.AddComponent<LayerSkipComponent>(newEntity) = mgr.GetComponent<LayerSkipComponent>(img2imgEntity);
+			}
+			else if (componentName == "OutputImage") {
+				auto& srcComp = mgr.GetComponent<OutputImageComponent>(img2imgEntity);
+				auto& destComp = mgr.AddComponent<OutputImageComponent>(newEntity);
+
+				destComp.fileName = srcComp.fileName;
+				destComp.filePath = srcComp.filePath;
+				destComp.width = srcComp.width;
+				destComp.height = srcComp.height;
+				destComp.channels = srcComp.channels;
+			}
+			else if (componentName == "InputImage") {
+				auto& srcComp = mgr.GetComponent<InputImageComponent>(img2imgEntity);
+				auto& destComp = mgr.AddComponent<InputImageComponent>(newEntity);
+
+				destComp.fileName = srcComp.fileName;
+				destComp.filePath = srcComp.filePath;
+				destComp.width = srcComp.width;
+				destComp.height = srcComp.height;
+				destComp.channels = srcComp.channels;
+			}
+		}
+
+		std::cout << "Entity cloning complete. Created entity: " << newEntity << std::endl;
+
+		// Queue event for img2img processing
+		Event event;
+		event.entityID = newEntity;
+		event.type = EventType::Img2ImgRequest;
+		ANI::Events::Ref().QueueEvent(event);
+		std::cout << "Img2Img request queued for entity: " << newEntity << std::endl;
 	}
 
 	void DiffusionView::HandleUpscaleEvent() {
@@ -914,10 +1006,20 @@ namespace GUI {
 			}
 
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-				for (int i = 0; i < numQueues; i++) {
-					auto& loraComp = mgr.GetComponent<LoraComponent>(txt2imgEntity);
+				EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
+				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
+					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
 					loraComp.modelPath = filePaths.loraDir;
-					HandleT2IEvent();
+				}
+				
+				for (int i = 0; i < numQueues; i++) {
+					if (isTxt2ImgMode) {
+						HandleT2IEvent();
+					}
+					else {
+						HandleI2IEvent();
+					}
+					
 					// seedControl->activate();
 				}
 			}

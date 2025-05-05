@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.12)
 
 # Build options
 option(BUILD_ANISTUDIO "Build the AniStudio application" ON)

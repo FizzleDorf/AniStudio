@@ -45,6 +45,7 @@ namespace GUI {
         void RenderEmbeddings(const EntityID entity);
         void RenderVaeOptions(const EntityID entity);
         void HandleT2IEvent();
+		void HandleI2IEvent();
         void HandleUpscaleEvent();
         void SaveMetadataToJson(const std::string& filepath);
         void LoadMetadataFromJson(const std::string& filepath);
