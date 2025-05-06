@@ -157,6 +157,7 @@ if(BUILD_ANISTUDIO)
         AniStudio/Engine/Engine.cpp
         AniStudio/Events/Events.cpp
         AniStudio/Timer/Timer.cpp
+		AniStudio/Plugins/PluginManager.cpp
         ${GUI_SOURCES}
         ${SYSTEM_SOURCES}
         ${UTILS_SOURCES}
@@ -187,25 +188,68 @@ if(BUILD_ANISTUDIO)
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
 
-    # target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_EXPORTS)
+	# Create an interface library for the core ECS functionality
+    add_library(AniStudioCore INTERFACE)
+    target_include_directories(AniStudioCore INTERFACE
+        ${CMAKE_SOURCE_DIR}/AniStudio
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
+        ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
+        ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
+        ${CMAKE_SOURCE_DIR}/external/imgui
+        ${CMAKE_SOURCE_DIR}/external/nlohmann_json
+    )
+    
+    # Export ECS symbols for plugins
+    if(WIN32)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE 
+            ANI_CORE_API=__declspec\(dllexport\)
+        )
+        target_compile_definitions(AniStudioCore INTERFACE
+            ANI_CORE_API=__declspec\(dllimport\)
+        )
+    else()
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_CORE_API=)
+        target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=)
+    endif()
+
 
 endif()
 
 # Build plugins if enabled
 if(BUILD_PLUGINS)
+    # Add API definition for plugin exports
+    if(WIN32)
+        add_definitions(-DPLUGIN_API=__declspec\(dllexport\))
+    else()
+        add_definitions(-DPLUGIN_API=)
+    endif()
+    
     # Only include headers needed for plugins
     if(NOT BUILD_ANISTUDIO)
         add_subdirectory(external/stb_image)
         add_subdirectory(external/stable-diffusion.cpp)
-        include_directories(
+        
+        # Create the core interface in standalone plugin mode
+        add_library(AniStudioCore INTERFACE)
+        target_include_directories(AniStudioCore INTERFACE
             ${CMAKE_SOURCE_DIR}/AniStudio
             ${CMAKE_SOURCE_DIR}/AniStudio/ECS
             ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
             ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
+            ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
             ${CMAKE_SOURCE_DIR}/external/nlohmann_json
             ${CMAKE_SOURCE_DIR}/external/stb_image
             ${CMAKE_SOURCE_DIR}/external/imgui
         )
+        if(WIN32)
+            target_compile_definitions(AniStudioCore INTERFACE
+                ANI_CORE_API=__declspec\(dllimport\)
+            )
+        else()
+            target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=)
+        endif()
     endif()
+    
     add_subdirectory(plugins)
 endif()

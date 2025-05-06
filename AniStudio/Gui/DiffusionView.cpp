@@ -1041,11 +1041,11 @@ namespace GUI {
 				}
 			}
 
-			/*if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
+			if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
 				Event event;
 				event.type = EventType::StopCurrentTask;
 				ANI::Events::Ref().QueueEvent(event);
-			}*/
+			}
 
 			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
 				Event event;

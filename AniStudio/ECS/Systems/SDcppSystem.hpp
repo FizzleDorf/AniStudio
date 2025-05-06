@@ -193,12 +193,7 @@ namespace ECS {
 
 		void StopCurrentTask() {
 			std::lock_guard<std::mutex> lock(queueMutex);
-			taskQueue.remove(taskQueue.begin());
-			/*for (auto& item : taskQueue) {
-				if (item.processing && item.task) {
-					item.task->cancel();
-				}
-			}*/
+			RemoveFromQueue(0);
 		}
 
 		void ClearQueue() {

@@ -1,182 +1,96 @@
+// PluginView.hpp
 #pragma once
+
 #include "Base/BaseView.hpp"
 #include "PluginManager.hpp"
-#include <imgui.h>
 
 namespace GUI {
 
-class PluginView : public BaseView {
-public:
-    PluginView(ECS::EntityManager &entityMgr, Plugin::PluginManager &pluginMgr)
-        : BaseView(entityMgr), pluginManager(pluginMgr) {
-        viewName = "Plugin View";
-    }
+	class PluginView : public BaseView {
+	public:
+		PluginView(ECS::EntityManager& entityMgr, Plugin::PluginManager& pluginMgr)
+			: BaseView(entityMgr), pluginManager(pluginMgr) {
+			viewName = "Plugin Manager";
+		}
 
-    void Render() override {
-        ImGui::Begin("Plugin Manager");
+		virtual ~PluginView() = default;
 
-        if (ImGui::Button("Refresh Plugins")) {
-            pluginManager.ScanPlugins();
-        }
+		void Render() override {
+			ImGui::Begin(viewName.c_str());
 
-        if (ImGui::BeginTable("Plugins", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-            ImGui::TableSetupColumn("Plugin Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-            ImGui::TableSetupColumn("Version", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-            ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableHeadersRow();
+			// Display plugin info
+			ImGui::Text("Loaded Plugins:");
+			ImGui::Separator();
 
-            const auto &plugins = pluginManager.GetPlugins();
-            for (const auto &[name, loader] : plugins) {
-                if (!loader)
-                    continue;
+			auto plugins = pluginManager.GetLoadedPlugins();
 
-                ImGui::TableNextRow();
+			if (plugins.empty()) {
+				ImGui::TextColored(ImVec4(1, 1, 0, 1), "No plugins loaded");
+			}
+			else {
+				if (ImGui::BeginTable("PluginsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+					ImGui::TableSetupColumn("Name");
+					ImGui::TableSetupColumn("Version");
+					ImGui::TableSetupColumn("Description");
+					ImGui::TableSetupColumn("Actions");
+					ImGui::TableHeadersRow();
 
-                // Plugin name
-                ImGui::TableNextColumn();
-                ImGui::Text("%s", name.c_str());
+					for (const auto& name : plugins) {
+						Plugin::IPlugin* plugin = pluginManager.GetPlugin(name);
+						if (!plugin) continue;
 
-                // Version
-                ImGui::TableNextColumn();
-                auto *plugin = loader->Get();
-                if (plugin) {
-                    auto version = plugin->GetVersion();
-                    ImGui::Text("%d.%d.%d", version.major, version.minor, version.patch);
-                } else {
-                    ImGui::Text("-");
-                }
+						ImGui::TableNextRow();
 
-                // Status
-                ImGui::TableNextColumn();
-                if (plugin) {
-                    switch (plugin->GetState()) {
-                    case Plugin::PluginState::Created:
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Created");
-                        break;
-                    case Plugin::PluginState::Loaded:
-                        ImGui::TextColored(ImVec4(0.0f, 0.7f, 1.0f, 1.0f), "Loaded");
-                        break;
-                    case Plugin::PluginState::Started:
-                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Running");
-                        break;
-                    case Plugin::PluginState::Stopped:
-                        ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f), "Stopped");
-                        break;
-                    case Plugin::PluginState::Unloaded:
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Unloaded");
-                        break;
-                    }
-                } else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Not Loaded");
-                }
+						// Name
+						ImGui::TableNextColumn();
+						ImGui::TextWrapped("%s", plugin->GetName().c_str());
 
-                // Actions
-                ImGui::TableNextColumn();
-                RenderPluginActions(name, plugin);
-            }
+						// Version
+						ImGui::TableNextColumn();
+						ImGui::TextWrapped("%s", plugin->GetVersion().c_str());
 
-            ImGui::EndTable();
-        }
+						// Description
+						ImGui::TableNextColumn();
+						ImGui::TextWrapped("%s", plugin->GetDescription().c_str());
 
-        if (ImGui::BeginChild("Plugin Details", ImVec2(0, 200), true)) {
-            if (selectedPlugin) {
-                RenderPluginDetails(*selectedPlugin);
-            } else {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Select a plugin to view details");
-            }
-        }
-        ImGui::EndChild();
+						// Actions
+						ImGui::TableNextColumn();
+						if (ImGui::Button(("Reload##" + name).c_str())) {
+							std::string path = pluginManager.GetPluginPath(name);
+							pluginManager.UnloadPlugin(name);
+							pluginManager.LoadPlugin(path);
+						}
 
-        ImGui::End();
-    }
+						ImGui::SameLine();
 
-private:
-    void RenderPluginActions(const std::string &name, Plugin::IPlugin *plugin) {
-        if (!plugin) {
-            if (ImGui::Button(("Load##" + name).c_str())) {
-                pluginManager.LoadPlugin(name);
-            }
-            return;
-        }
+						if (ImGui::Button(("Unload##" + name).c_str())) {
+							pluginManager.UnloadPlugin(name);
+						}
+					}
 
-        switch (plugin->GetState()) {
-        case Plugin::PluginState::Loaded:
-            if (ImGui::Button(("Start##" + name).c_str())) {
-                pluginManager.StartPlugin(name);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button(("Unload##" + name).c_str())) {
-                pluginManager.UnloadPlugin(name);
-            }
-            break;
+					ImGui::EndTable();
+				}
+			}
 
-        case Plugin::PluginState::Started:
-            if (ImGui::Button(("Stop##" + name).c_str())) {
-                pluginManager.StopPlugin(name);
-            }
-            break;
+			ImGui::Separator();
 
-        case Plugin::PluginState::Stopped:
-            if (ImGui::Button(("Start##" + name).c_str())) {
-                pluginManager.StartPlugin(name);
-            }
-            ImGui::SameLine();
-            if (ImGui::Button(("Unload##" + name).c_str())) {
-                pluginManager.UnloadPlugin(name);
-            }
-            break;
+			// Button to scan for new plugins
+			if (ImGui::Button("Scan for Plugins")) {
+				pluginManager.ScanForPlugins();
+			}
 
-        default:
-            break;
-        }
+			ImGui::SameLine();
 
-        ImGui::SameLine();
-        if (ImGui::Button(("Details##" + name).c_str())) {
-            selectedPlugin = plugin;
-        }
-    }
+			// Button to reload all plugins
+			if (ImGui::Button("Reload All Plugins")) {
+				pluginManager.HotReloadPlugins();
+			}
 
-    void RenderPluginDetails(const Plugin::IPlugin &plugin) {
-        ImGui::Text("Plugin: %s", plugin.GetName());
+			ImGui::End();
+		}
 
-        auto version = plugin.GetVersion();
-        ImGui::Text("Version: %d.%d.%d", version.major, version.minor, version.patch);
-
-        ImGui::Text("State: %s", GetPluginStateString(plugin.GetState()));
-
-        if (ImGui::CollapsingHeader("Dependencies")) {
-            auto deps = plugin.GetDependencies();
-            if (deps.empty()) {
-                ImGui::Text("No dependencies");
-            } else {
-                for (const auto &dep : deps) {
-                    ImGui::BulletText("%s", dep.c_str());
-                }
-            }
-        }
-    }
-
-    const char *GetPluginStateString(Plugin::PluginState state) {
-        switch (state) {
-        case Plugin::PluginState::Created:
-            return "Created";
-        case Plugin::PluginState::Loaded:
-            return "Loaded";
-        case Plugin::PluginState::Started:
-            return "Running";
-        case Plugin::PluginState::Stopped:
-            return "Stopped";
-        case Plugin::PluginState::Unloaded:
-            return "Unloaded";
-        default:
-            return "Unknown";
-        }
-    }
-
-private:
-    const Plugin::IPlugin *selectedPlugin = nullptr;
-    Plugin::PluginManager &pluginManager;
-};
+	private:
+		Plugin::PluginManager& pluginManager;
+	};
 
 } // namespace GUI

@@ -17,49 +17,48 @@ using namespace Plugin;
 
 namespace ANI {
 
-const int SCREEN_WIDTH = 1200;
-const int SCREEN_HEIGHT = 720;
+	const int SCREEN_WIDTH = 1200;
+	const int SCREEN_HEIGHT = 720;
 
-class Engine {
-public:
-    static Engine &Ref() {
-        static Engine instance;
-        return instance;
-    }
+	class Engine {
+	public:
+		static Engine &Ref() {
+			static Engine instance;
+			return instance;
+		}
 
-    ~Engine();
+		~Engine();
 
-    void Init();
-    void Update(const float deltatime);
-    void Draw();
-    void Quit();
+		void Init();
+		void Update(const float deltatime);
+		void Draw();
+		void Quit();
 
-    // Dependency accessors
-    EntityManager &GetEntityManager() { return mgr; }
-    ViewManager &GetViewManager() { return viewManager; }
-    PluginManager &GetPluginManager() { return pluginManager; }
-    GLFWwindow *Window() const { return window; }
-    bool Run() const { return run; }
+		// Dependency accessors
+		EntityManager &GetEntityManager() { return mgr; }
+		ViewManager &GetViewManager() { return viewManager; }
+		PluginManager &GetPluginManager() { return pluginManager; }
+		GLFWwindow *Window() const { return window; }
+		bool Run() const { return run; }
 
-private:
-    Engine();
+	private:
+		Engine();
 
-    // Core dependencies
-    EntityManager mgr;
-    ViewManager viewManager;
-    PluginManager pluginManager{mgr, viewManager};
+		// Core dependencies
+		EntityManager mgr;
+		ViewManager viewManager;
+		PluginManager pluginManager{ mgr, viewManager };
+		bool run;
+		GLFWwindow *window;
+		int videoWidth;
+		int videoHeight;
+		double fpsSum;
+		int frameCount;
+		double timeElapsed;
+	};
 
-    bool run;
-    GLFWwindow *window;
-    int videoWidth;
-    int videoHeight;
-    double fpsSum;
-    int frameCount;
-    double timeElapsed;
-};
-
-void WindowCloseCallback(GLFWwindow *window);
-extern Engine &Core;
+	void WindowCloseCallback(GLFWwindow *window);
+	extern Engine &Core;
 
 } // namespace ANI
 

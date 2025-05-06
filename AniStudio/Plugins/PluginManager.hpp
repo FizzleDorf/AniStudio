@@ -1,127 +1,67 @@
+// PluginManager.hpp
 #pragma once
-#include "PluginLoader.hpp"
-#include "filepaths.hpp"
-#include <filesystem>
-#include <map>
+
+#include "PluginInterface.hpp"
+#include <vector>
 #include <string>
+#include <memory>
+#include <unordered_map>
+#include <filesystem>
+
+// Forward declarations 
+namespace ECS {
+	class EntityManager;
+}
+
+namespace GUI {
+	class ViewManager;
+}
+
+#ifdef _WIN32
+#include <Windows.h>
+#define PLUGIN_EXTENSION ".dll"
+typedef HMODULE LibraryHandle;
+#else
+#include <dlfcn.h>
+#define PLUGIN_EXTENSION ".so"
+typedef void* LibraryHandle;
+#endif
 
 namespace Plugin {
+	class PluginManager {
+	public:
+		PluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr);
+		~PluginManager();
 
-class PluginManager {
-public:
-    PluginManager(ECS::EntityManager &entityMgr, GUI::ViewManager &viewMgr)
-        : entityManager(&entityMgr), viewManager(&viewMgr), appVersion_({1, 0, 0}) {}
+		void Init();
+		void Update(float deltaTime);
+		bool LoadPlugin(const std::string& path);
+		bool UnloadPlugin(const std::string& name);
+		void ScanForPlugins(const std::string& pluginDir = "../plugins");
+		std::vector<std::string> GetLoadedPlugins() const;
+		Plugin::IPlugin* GetPlugin(const std::string& name);
+		std::string GetPluginPath(const std::string& name) const;
+		void HotReloadPlugins();
 
-    void Init() {
-        pluginDirectory_ = filePaths.pluginPath;
-        ScanPlugins();
-    }
+	private:
+		struct PluginInfo {
+			std::string path;
+			LibraryHandle handle = nullptr;
+			Plugin::IPlugin* instance = nullptr;
+			Plugin::CreatePluginFn createFn = nullptr;
+			Plugin::DestroyPluginFn destroyFn = nullptr;
+			std::filesystem::file_time_type lastModified;
+			bool needsReload = false;
+		};
 
-    void ScanPlugins() {
-        try {
-            for (const auto &entry : std::filesystem::directory_iterator(pluginDirectory_)) {
-                if (!IsPluginFile(entry.path().string()))
-                    continue;
+		LibraryHandle OpenLibrary(const std::string& path);
+		void CloseLibrary(LibraryHandle handle);
+		void* GetSymbol(LibraryHandle handle, const std::string& name);
+		bool CheckPluginUpdates();
 
-                const std::string pluginName = entry.path().filename().string();
-                if (pluginLoaders_.find(pluginName) == pluginLoaders_.end()) {
-                    std::cout << "Found new plugin: " << pluginName << std::endl;
-                    pluginLoaders_[pluginName] = std::make_unique<PluginLoader>(entry.path().string());
-                }
-            }
-        } catch (const std::filesystem::filesystem_error &e) {
-            std::cerr << "Failed to scan plugins: " << e.what() << std::endl;
-        }
-    }
-
-    bool LoadPlugin(const std::string &name) {
-        auto it = pluginLoaders_.find(name);
-        if (it == pluginLoaders_.end()) {
-            return false;
-        }
-        return LoadPluginWithDependencies(name);
-    }
-
-    bool StartPlugin(const std::string &name) {
-        auto it = pluginLoaders_.find(name);
-        if (it == pluginLoaders_.end()) {
-            return false;
-        }
-        return it->second->Start();
-    }
-
-    void StopPlugin(const std::string &name) {
-        auto it = pluginLoaders_.find(name);
-        if (it != pluginLoaders_.end()) {
-            it->second->Stop();
-        }
-    }
-
-    bool UnloadPlugin(const std::string &name) {
-        auto it = pluginLoaders_.find(name);
-        if (it == pluginLoaders_.end()) {
-            return false;
-        }
-        it->second->Unload();
-        return true;
-    }
-
-    void Update(float dt) {
-        for (auto &[name, loader] : pluginLoaders_) {
-            if (loader) {
-                loader->Update(dt);
-            }
-        }
-    }
-
-    const std::map<std::string, std::unique_ptr<PluginLoader>> &GetPlugins() const { return pluginLoaders_; }
-
-private:
-    bool IsPluginFile(const std::string &path) const {
-#ifdef _WIN32
-        return path.length() > 4 && path.compare(path.length() - 4, 4, ".dll") == 0;
-#else
-        return path.length() > 3 && path.compare(path.length() - 3, 3, ".so") == 0;
-#endif
-    }
-
-    bool LoadPluginWithDependencies(const std::string &name) {
-        std::set<std::string> loaded;
-        return LoadPluginRecursive(name, loaded);
-    }
-
-    bool LoadPluginRecursive(const std::string &name, std::set<std::string> &loaded) {
-        if (loaded.find(name) != loaded.end()) {
-            return true;
-        }
-
-        auto it = pluginLoaders_.find(name);
-        if (it == pluginLoaders_.end()) {
-            return false;
-        }
-
-        auto *plugin = it->second->Get();
-        if (plugin) {
-            for (const auto &dep : plugin->GetDependencies()) {
-                if (!LoadPluginRecursive(dep, loaded)) {
-                    return false;
-                }
-            }
-        }
-
-        if (!it->second->Load(appVersion_, entityManager, viewManager)) {
-            return false;
-        }
-
-        loaded.insert(name);
-        return true;
-    }
-
-    std::string pluginDirectory_;
-    Version appVersion_;
-    std::map<std::string, std::unique_ptr<PluginLoader>> pluginLoaders_;
-    ECS::EntityManager *entityManager;
-    GUI::ViewManager *viewManager;
-};
-
-} // namespace Plugin
+		ECS::EntityManager& mgr;
+		GUI::ViewManager& viewMgr;
+		std::unordered_map<std::string, PluginInfo> loadedPlugins;
+		std::string pluginsDirectory;
+	};
+}
