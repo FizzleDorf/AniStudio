@@ -88,6 +88,19 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 project(AniStudio CXX)
 
 if(BUILD_ANISTUDIO)
+	# Create data directories in build folder and copy defaults
+	set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
+	set(DEFAULTS_DIR "${DATA_DIR}/defaults")
+	file(MAKE_DIRECTORY ${DATA_DIR})
+	file(MAKE_DIRECTORY ${DEFAULTS_DIR})
+	
+	# Copy the data/defaults directory and its contents
+	file(COPY "${CMAKE_SOURCE_DIR}/data/defaults/" 
+	     DESTINATION "${DEFAULTS_DIR}"
+	     PATTERN "*")
+	
+	message(STATUS "Copied data/defaults to ${DEFAULTS_DIR}")
+
     # Required packages for AniStudio
     find_package(Vulkan REQUIRED)
     find_package(OpenCV REQUIRED)
