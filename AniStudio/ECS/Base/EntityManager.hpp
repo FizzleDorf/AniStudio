@@ -31,26 +31,6 @@ namespace ECS {
             return entity;
         }
 
-        EntityID CopyEntity(EntityID sourceEntity) {
-            EntityID newEntity = AddNewEntity();
-            for (const auto& componentType : GetEntityComponents(sourceEntity)) {
-                if (auto* baseComponent = GetComponentById(sourceEntity, componentType)) {
-                    if (componentCreators.find(componentType) == componentCreators.end()) {
-                        RegisterComponentType(componentType, [this, componentType](EntityID entity) {
-                            componentCreators[componentType](entity);
-                            }, [this, componentType](EntityID entity) -> BaseComponent* {
-                                return componentGetters[componentType](entity);
-                                });
-                    }
-                    componentCreators[componentType](newEntity);
-                    if (auto* newComponent = GetComponentById(newEntity, componentType)) {
-                        *newComponent = *baseComponent;
-                    }
-                }
-            }
-            return newEntity;
-        }
-
         void DestroyEntity(const EntityID entity) {
             assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
             entitiesSignatures.erase(entity);
@@ -89,6 +69,21 @@ namespace ECS {
             GetCompList<T>()->Erase(entity);
             UpdateEntityTargetSystem(entity);
         }
+
+		void RemoveComponentById(EntityID entityID, ComponentTypeID componentId) {			
+			auto getter = componentGetters.find(componentId);
+			if (getter != componentGetters.end()) {
+				auto it = entitiesSignatures.find(entityID);
+				if (it != entitiesSignatures.end()) {
+					it->second->erase(componentId);
+					auto arrayIt = componentsArrays.find(componentId);
+					if (arrayIt != componentsArrays.end()) {
+						arrayIt->second->Erase(entityID);
+					}
+					UpdateEntityTargetSystem(entityID);
+				}
+			}
+		}
 
         template<typename T>
         T& GetComponent(const EntityID entity) {
@@ -252,6 +247,29 @@ namespace ECS {
 
             return entity;
         }
+		
+		void DeserializeEntity(const nlohmann::json& json, const EntityID entity) {
+			if (!json.contains("components") || !json["components"].is_array()) {
+				std::cerr << "Error: Invalid entity data format in JSON" << std::endl;
+				return;
+			}
+
+			for (const auto& componentJson : json["components"]) {
+				for (auto it = componentJson.begin(); it != componentJson.end(); ++it) {
+					std::string componentName = it.key();
+					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
+					if (typeId != MAX_COMPONENT_COUNT) {
+						auto creator = componentCreators.find(typeId);
+						if (creator != componentCreators.end()) {
+							creator->second(entity);
+							if (auto* component = GetComponentById(entity, typeId)) {
+								component->Deserialize(componentJson[componentName]);
+							}
+						}
+					}
+				}
+			}
+		}
 
         // Plugin support for component registration
         using ComponentCreator = std::function<void(EntityID)>;

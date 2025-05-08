@@ -8,78 +8,60 @@
 using namespace ECS;
 
 struct ProgressData {
-    std::atomic<int> currentStep{0};
-    std::atomic<int> totalSteps{0};
-    std::atomic<float> currentTime{0.0f};
-    std::atomic<bool> isProcessing{false};
+    std::atomic<int> currentStep{ 0 };
+    std::atomic<int> totalSteps{ 0 };
+    std::atomic<float> currentTime{ 0.0f };
+    std::atomic<bool> isProcessing{ false };
 };
 
 namespace GUI {
 
-class DiffusionView : public BaseView {
-public:
-    DiffusionView(EntityManager &entityMgr);
-    ~DiffusionView() {
-        // if (seedControl)
-        //     delete seedControl;
-    }
-    
-    // Overloaded Functions
-    nlohmann::json Serialize() const override;
-    void Deserialize(const nlohmann::json &j) override;
-    void Render() override;
-    // void ResetProgress();
-    // Gui Elements
-    void RenderModelLoader();
-    void RenderLatents();
-    void RenderInputImage();
-    void RenderSampler();
-    void RenderPrompts();
-    void RenderOther();
-    void RenderQueueList();
-    void RenderFilePath();
-    void RenderDiffusionModelLoader();
-    void RenderVaeLoader();
-    void RenderControlnets();
-    void RenderEmbeddings();
-    void RenderVaeOptions();
-    void HandleT2IEvent();
-    void HandleUpscaleEvent();
-    void SaveMetadataToJson(const std::string &filepath);
-    void LoadMetadataFromJson(const std::string &filepath);
-    void LoadMetadataFromExif(const std::string &imagePath);
-    void RenderMetadataControls();
-    void LoadMetadataFromPNG(const std::string &imagePath);
-    void UpdateBuffer(const std::string &source, char *buffer, size_t buffer_size) {
-        strncpy(buffer, source.c_str(), buffer_size - 1);
-        buffer[buffer_size - 1] = '\0';
-    }
+    class DiffusionView : public BaseView {
+    public:
+        DiffusionView(EntityManager& entityMgr);
+        ~DiffusionView();
 
-private:
-    bool isFilenameChanged = false;
-    bool isPaused = false;
-    int numQueues = 1;
-    // ECS-related variables
-    EntityID entity;
-    // Control<int> *seedControl = nullptr;
-    // Variables to handle the parameters for diffusion
-    ModelComponent modelComp;
-    CLipLComponent clipLComp;
-    CLipGComponent clipGComp;
-    T5XXLComponent t5xxlComp;
-    DiffusionModelComponent ckptComp;
-    LatentComponent latentComp;
-    LoraComponent loraComp;
-    PromptComponent promptComp;
-    SamplerComponent samplerComp;
-    VaeComponent vaeComp;
-    TaesdComponent taesdComp;
-    InputImageComponent inputImageComp;
-    ImageComponent imageComp;
-    EmbeddingComponent embedComp;
-    ControlnetComponent controlComp;
-    LayerSkipComponent layerSkipComp;
-    GuidanceComponent guidanceComp;
-    ClipSkipComponent clipSkipComp;
-};
+        // Overloaded Functions
+        nlohmann::json Serialize() const override;
+        void Deserialize(const nlohmann::json& j) override;
+        void Render() override;
+        void Init() override;
+
+        // Generate both Txt2Img and Img2Img entities 
+        void ResetEntities();
+
+        // Gui Elements
+        void RenderModelLoader(const EntityID entity);
+        void RenderLatents(const EntityID entity);
+        void RenderInputImage(const EntityID entity);
+        void RenderSampler(const EntityID entity);
+        void RenderPrompts(const EntityID entity);
+        void RenderOther(const EntityID entity);
+        void RenderQueueList();
+        void RenderFilePath(const EntityID entity);
+        void RenderDiffusionModelLoader(const EntityID entity);
+        void RenderVaeLoader(const EntityID entity);
+        void RenderControlnets(const EntityID entity);
+        void RenderEmbeddings(const EntityID entity);
+        void RenderVaeOptions(const EntityID entity);
+        void HandleT2IEvent();
+		void HandleI2IEvent();
+        void HandleUpscaleEvent();
+        void SaveMetadataToJson(const std::string& filepath);
+        void LoadMetadataFromJson(const std::string& filepath);
+        void LoadMetadataFromPNG(const std::string& imagePath);
+        void RenderMetadataControls();
+
+    private:
+        // Tab state
+        bool isFilenameChanged = false;
+        bool isPaused = false;
+        int numQueues = 1;
+        bool isTxt2ImgMode = true; // Tracks which tab is active
+
+        // Entity IDs for the two modes
+        EntityID txt2imgEntity = 0;
+        EntityID img2imgEntity = 0;
+    };
+
 } // namespace GUI

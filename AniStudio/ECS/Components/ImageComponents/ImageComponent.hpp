@@ -44,6 +44,12 @@ struct InputImageComponent : public ImageComponent {
     }
 };
 
+struct OutputImageComponent : public ImageComponent {
+    OutputImageComponent() {
+        compName = "OutputImage";
+    }
+};
+
 struct ControlNetImageComponent : public ImageComponent {
     ControlNetImageComponent() {
         compName = "ControlNetImageComponent";

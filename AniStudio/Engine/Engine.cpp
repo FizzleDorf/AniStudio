@@ -1,4 +1,5 @@
 #include "Engine.hpp"
+#include "PluginManager.hpp"
 #include "AllViews.h"
 #include <filesystem>
 #include <iostream>
@@ -12,9 +13,10 @@ namespace ANI {
     Engine &Core = Engine::Ref();
 void WindowCloseCallback(GLFWwindow *window) { Core.Quit(); }
 
-Engine::Engine()
-    : run(true), window(nullptr), videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT), fpsSum(0.0), frameCount(0),
-      timeElapsed(0.0) {}
+Engine::Engine() : run(true), window(nullptr),
+videoWidth(SCREEN_WIDTH), videoHeight(SCREEN_HEIGHT),
+fpsSum(0.0), frameCount(0), timeElapsed(0.0) {
+}
 
 Engine::~Engine() {
     // std::string relativePath = filePaths.dataPath + "/imgui.ini";
@@ -82,7 +84,7 @@ void Engine::Init() {
 
     // Initialize managers
     filePaths.Init();
-    pluginManager.Init();
+	pluginManager.Init();
     
     // Invalidate ID 0 for all entities and viewlists
     const EntityID temp = mgr.AddNewEntity();
@@ -105,8 +107,8 @@ void Engine::Init() {
 
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
-    mgr.RegisterComponentName<CLipLComponent>("CLipL");
-    mgr.RegisterComponentName<CLipGComponent>("CLipG");
+    mgr.RegisterComponentName<ClipLComponent>("ClipL");
+    mgr.RegisterComponentName<ClipGComponent>("ClipG");
     mgr.RegisterComponentName<T5XXLComponent>("T5XXL");
     mgr.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
     mgr.RegisterComponentName<LatentComponent>("Latent");
@@ -117,8 +119,8 @@ void Engine::Init() {
     mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
     mgr.RegisterComponentName<VaeComponent>("Vae");
     mgr.RegisterComponentName<ImageComponent>("Image");
-    mgr.RegisterComponentName<EmbeddingComponent>("InputImage");
-    mgr.RegisterComponentName<EmbeddingComponent>("OutputImage");
+    mgr.RegisterComponentName<InputImageComponent>("InputImage");
+    mgr.RegisterComponentName<OutputImageComponent>("OutputImage");
     mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
     mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
     mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
@@ -138,6 +140,10 @@ void Engine::Init() {
 
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
+
+	auto pluginViewID = viewManager.CreateView();
+	viewManager.AddView<PluginView>(pluginViewID, PluginView(mgr, pluginManager));
+	viewManager.GetView<PluginView>(pluginViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {
@@ -156,7 +162,7 @@ void Engine::Update(const float deltaT) {
     // Update managers
     mgr.Update(deltaT);
     viewManager.Update(deltaT);
-    pluginManager.Update(deltaT);
+	pluginManager.Update(deltaT);
 }
 
 void Engine::Draw() {
