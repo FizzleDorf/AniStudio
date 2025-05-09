@@ -8,7 +8,7 @@
 
 namespace ECS {
 struct ImageComponent : public BaseComponent {
-    std::string fileName = "AniStudio";                  // Default file name
+    std::string fileName = "AniStudio.png";                  // Default file name
     std::string filePath = Utils::FilePaths::defaultProjectPath; // Full path to the image
     unsigned char *imageData = nullptr;                  // Pointer to image data
     int width = 0;                                       // Image width
@@ -25,7 +25,49 @@ struct ImageComponent : public BaseComponent {
             stbi_image_free(imageData);
         }
     }
-    
+
+	// Serialize the component to JSON
+	virtual nlohmann::json Serialize() const override {
+		nlohmann::json j;
+		j["compName"] = compName;
+		j[compName] = {
+			{"width", width},
+			{"height", height},
+			{"channels", channels},
+			{"fileName", fileName}
+		};
+		return j;
+	}
+
+	// Deserialize the component from JSON
+	virtual void Deserialize(const nlohmann::json& j) override {
+		BaseComponent::Deserialize(j);
+
+		nlohmann::json componentData;
+
+		if (j.contains(compName)) {
+			componentData = j.at(compName);
+		}
+		else {
+			for (auto it = j.begin(); it != j.end(); ++it) {
+				if (it.key() == compName) {
+					componentData = it.value();
+					break;
+				}
+			}
+			if (componentData.empty()) {
+				componentData = j;
+			}
+		}
+
+		if (componentData.contains("width"))
+			width = componentData["width"];
+		if (componentData.contains("height"))
+			height = componentData["height"];
+		if (componentData.contains("channels"))
+			channels = componentData["channels"];
+	}
+
     ImageComponent &operator=(const ImageComponent &other) {
         if (this != &other) {
             fileName = other.fileName;
@@ -48,6 +90,18 @@ struct OutputImageComponent : public ImageComponent {
     OutputImageComponent() {
         compName = "OutputImage";
     }
+
+	OutputImageComponent &operator=(const OutputImageComponent &other) {
+		if (this != &other) {
+			fileName = other.fileName;
+			filePath = other.filePath;
+			width = other.width;
+			height = other.height;
+			channels = other.channels;
+		}
+		return *this;
+	}
+
 };
 
 struct ControlNetImageComponent : public ImageComponent {
