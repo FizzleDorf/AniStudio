@@ -44,7 +44,7 @@ void SettingsView::Render() {
                 ImGui::NewLine();
 
                 if (ImGui::Button("Save Configuration")) {
-                    filePaths.SaveFilepathDefaults();
+					Utils::FilePaths::SaveFilepathDefaults();
                 }
 
                 ImGui::NewLine();
@@ -87,16 +87,16 @@ void SettingsView::RenderSettingsWindow() {
             ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
 
-            RenderPathRow("Last Open Project Path", filePaths.lastOpenProjectPath);
-            RenderPathRow("Default Project Path", filePaths.defaultProjectPath);
-            RenderPathRow("Assets Folder Path", filePaths.assetsFolderPath);
+            RenderPathRow("Last Open Project Path", Utils::FilePaths::lastOpenProjectPath);
+            RenderPathRow("Default Project Path", Utils::FilePaths::defaultProjectPath);
+            RenderPathRow("Assets Folder Path", Utils::FilePaths::assetsFolderPath);
 
             ImGui::EndTable();
         }
     }
     ImGui::Separator();
     if (ImGui::Button("Reset Model Paths")) {
-        filePaths.SetByModelRoot();
+		Utils::FilePaths::SetByModelRoot();
     }
     // Model Paths Section
     if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -106,14 +106,14 @@ void SettingsView::RenderSettingsWindow() {
             ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
 
-            RenderPathRow("Default Model Root Path", filePaths.defaultModelRootPath);
-            RenderPathRow("Checkpoint Directory", filePaths.checkpointDir);
-            RenderPathRow("Encoder Directory", filePaths.encoderDir);
-            RenderPathRow("VAE Directory", filePaths.vaeDir);
-            RenderPathRow("UNet Directory", filePaths.unetDir);
-            RenderPathRow("LORA Directory", filePaths.loraDir);
-            RenderPathRow("ControlNet Directory", filePaths.controlnetDir);
-            RenderPathRow("Upscale Directory", filePaths.upscaleDir);
+            RenderPathRow("Default Model Root Path", Utils::FilePaths::defaultModelRootPath);
+            RenderPathRow("Checkpoint Directory", Utils::FilePaths::checkpointDir);
+            RenderPathRow("Encoder Directory", Utils::FilePaths::encoderDir);
+            RenderPathRow("VAE Directory", Utils::FilePaths::vaeDir);
+            RenderPathRow("UNet Directory", Utils::FilePaths::unetDir);
+            RenderPathRow("LORA Directory", Utils::FilePaths::loraDir);
+            RenderPathRow("ControlNet Directory", Utils::FilePaths::controlnetDir);
+            RenderPathRow("Upscale Directory", Utils::FilePaths::upscaleDir);
 
             ImGui::EndTable();
         }
@@ -122,12 +122,12 @@ void SettingsView::RenderSettingsWindow() {
     // Action Buttons
     ImGui::Separator();
     if (ImGui::Button("Save Defaults")) {
-        filePaths.SaveFilepathDefaults();
+		Utils::FilePaths::SaveFilepathDefaults();
         showSavePopup = true;
     }
     ImGui::SameLine();
     if (ImGui::Button("Load Defaults")) {
-        filePaths.LoadFilePathDefaults();
+		Utils::FilePaths::LoadFilePathDefaults();
     }
     ImGui::SameLine();
     if (ImGui::Button("Close")) {

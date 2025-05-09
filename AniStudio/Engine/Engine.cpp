@@ -19,7 +19,7 @@ fpsSum(0.0), frameCount(0), timeElapsed(0.0) {
 }
 
 Engine::~Engine() {
-    // std::string relativePath = filePaths.dataPath + "/imgui.ini";
+    // std::string relativePath = Utils::FilePaths::dataPath + "/imgui.ini";
     // std::string iniFilePath = std::filesystem::absolute(relativePath).string();
     // ImGui::SaveIniSettingsToDisk(iniFilePath.c_str());
     ImGui_ImplOpenGL3_Shutdown();
@@ -32,7 +32,7 @@ Engine::~Engine() {
 void Engine::Quit() { run = false; }
 
 void Engine::Init() {
-    filePaths.LoadFilePathDefaults();
+	Utils::FilePaths::LoadFilePathDefaults();
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -60,7 +60,7 @@ void Engine::Init() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
-    iniFilePath = std::filesystem::absolute(filePaths.ImguiStatePath).string();
+    iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
     // ImGui::LoadIniSettingsFromDisk(iniFilePath.c_str());
 
     ImGuiIO &io = ImGui::GetIO();
@@ -83,7 +83,7 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
 
     // Initialize managers
-    filePaths.Init();
+	Utils::FilePaths::Init();
 	pluginManager.Init();
     
     // Invalidate ID 0 for all entities and viewlists
@@ -140,10 +140,6 @@ void Engine::Init() {
 
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
-
-	auto pluginViewID = viewManager.CreateView();
-	viewManager.AddView<PluginView>(pluginViewID, PluginView(mgr, pluginManager));
-	viewManager.GetView<PluginView>(pluginViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {

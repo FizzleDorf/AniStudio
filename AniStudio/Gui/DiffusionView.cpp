@@ -136,7 +136,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##j6")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.checkpointDir;
+				config.path = Utils::FilePaths::checkpointDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
 					config);
 			}
@@ -199,13 +199,13 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##w8")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.defaultProjectPath; // Set the initial directory
+				config.path = Utils::FilePaths::defaultProjectPath; // Set the initial directory
 				ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("R##w9")) {
 				imageComp.fileName = "AniStudio";
-				imageComp.filePath = "filePaths.defaultProjectPath";
+				imageComp.filePath = Utils::FilePaths::defaultProjectPath;
 			}
 			ImGui::TableNextColumn();
 			ImGui::Text("%s", imageComp.filePath.c_str());
@@ -315,7 +315,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##load_img")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.defaultProjectPath;
+				config.path = Utils::FilePaths::defaultProjectPath;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadInputImageDialog", "Choose Image",
 					".png,.jpg,.jpeg,.bmp,.tga", config);
 			}
@@ -637,7 +637,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##5b")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.controlnetDir;
+				config.path = Utils::FilePaths::controlnetDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
 					config);
 			}
@@ -704,7 +704,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##v9")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.embedDir;
+				config.path = Utils::FilePaths::embedDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadFileDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
 					config);
 			}
@@ -765,7 +765,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##n2")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.unetDir;
+				config.path = Utils::FilePaths::unetDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadUnetDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
 					config);
 			}
@@ -796,7 +796,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##b7")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.encoderDir;
+				config.path = Utils::FilePaths::encoderDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadClipLDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
 					config);
 			}
@@ -827,7 +827,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##g7")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.encoderDir;
+				config.path = Utils::FilePaths::encoderDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadClipGDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
 					config);
 			}
@@ -858,7 +858,7 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##x6")) {
 				IGFD::FileDialogConfig config;
-				config.path = filePaths.encoderDir;
+				config.path = Utils::FilePaths::encoderDir;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadT5XXLDialog", "Choose Model", ".safetensors,.ckpt,.pt,.gguf",
 					config);
 			}
@@ -900,7 +900,7 @@ namespace GUI {
 		ImGui::TableNextColumn();
 		if (ImGui::Button("...##4b")) {
 			IGFD::FileDialogConfig config;
-			config.path = filePaths.vaeDir;
+			config.path = Utils::FilePaths::vaeDir;
 			ImGuiFileDialog::Instance()->OpenDialog("LoadVaeDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
 				config);
 		}
@@ -1009,7 +1009,7 @@ namespace GUI {
 				EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
 				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
 					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
-					loraComp.modelPath = filePaths.loraDir;
+					loraComp.modelPath = Utils::FilePaths::loraDir;
 				}
 				
 				for (int i = 0; i < numQueues; i++) {
@@ -1438,13 +1438,13 @@ namespace GUI {
 
 		if (ImGui::Button("Save Metadata", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = filePaths.defaultProjectPath;
+			config.path = Utils::FilePaths::defaultProjectPath;
 			ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Metadata", ".json", config);
 		}
 
 		if (ImGui::Button("Load Metadata", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = filePaths.defaultProjectPath;
+			config.path = Utils::FilePaths::defaultProjectPath;
 			ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Metadata", ".json,.png", config);
 		}
 

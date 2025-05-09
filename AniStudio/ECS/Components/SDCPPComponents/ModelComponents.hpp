@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "filepaths.hpp"
+#include "FilePaths.hpp"
 #include <string>
 
 namespace ECS {
@@ -73,7 +73,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.checkpointDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::checkpointDir + "\\" + modelName;
             }
         }
     };
@@ -110,7 +110,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.unetDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::unetDir + "\\" + modelName;
             }
         }
     };
@@ -148,7 +148,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.encoderDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::encoderDir + "\\" + modelName;
             }
         }
     };
@@ -185,7 +185,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.encoderDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::encoderDir + "\\" + modelName;
             }
         }
     };
@@ -222,7 +222,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.encoderDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::encoderDir + "\\" + modelName;
             }
         }
     };
@@ -286,7 +286,7 @@ namespace ECS {
                 vae_decode_only = componentData["vae_decode_only"].get<bool>();
 
             if (!modelName.empty() && modelPath.empty())
-                modelPath = filePaths.vaeDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::vaeDir + "\\" + modelName;
         }
     };
 
@@ -326,7 +326,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.vaeDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::vaeDir + "\\" + modelName;
             }
         }
     };
@@ -380,7 +380,7 @@ namespace ECS {
             if (componentData.contains("loraClipStrength"))
                 loraClipStrength = componentData["loraClipStrength"];
             if (!modelName.empty())
-                modelPath = filePaths.loraDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::loraDir + "\\" + modelName;
         }
     };
 
@@ -441,7 +441,7 @@ namespace ECS {
             if (componentData.contains("applyEnd"))
                 applyEnd = componentData["applyEnd"];
             if (!modelName.empty())
-                modelPath = filePaths.controlnetDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::controlnetDir + "\\" + modelName;
         }
     };
 
@@ -493,7 +493,7 @@ namespace ECS {
             if (componentData.contains("preserveAspectRatio"))
                 preserveAspectRatio = componentData["preserveAspectRatio"].get<bool>();
             if (!modelName.empty())
-                modelPath = filePaths.upscaleDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::upscaleDir + "\\" + modelName;
         }
     };
 
@@ -530,7 +530,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.embedDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::embedDir + "\\" + modelName;
             }
         }
     };
@@ -568,7 +568,7 @@ namespace ECS {
             if (componentData.contains("modelName")) {
                 modelName = componentData["modelName"];
                 if (!modelName.empty())
-                    modelPath = filePaths.checkpointDir + "\\" + modelName;
+                    modelPath = Utils::FilePaths::checkpointDir + "\\" + modelName;
             }
         }
     };

@@ -32,7 +32,7 @@ public:
             ImGui::TableNextColumn();
             if (ImGui::Button("...##j6")) {
                 IGFD::FileDialogConfig config;
-                config.path = filePaths.checkpointDir;
+                config.path = Utils::FilePaths::checkpointDir;
                 ImGuiFileDialog::Instance()->OpenDialog("ConvertModelDialog", "Choose Model",
                                                         ".safetensors, .ckpt, .pt, .gguf", config);
             }
@@ -104,7 +104,7 @@ private:
         ImGui::TableNextColumn();
         if (ImGui::Button("...##4b")) {
             IGFD::FileDialogConfig config;
-            config.path = filePaths.vaeDir;
+            config.path = Utils::FilePaths::vaeDir;
             ImGuiFileDialog::Instance()->OpenDialog("ConvertVaeDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
                                                     config);
         }

@@ -1,5 +1,6 @@
 #include "Events.hpp"
 #include "AllViews.h"
+#include "PluginManager.hpp"
 #include <iostream>
 
 namespace ANI {
@@ -25,6 +26,7 @@ void Events::Poll() {
 static size_t debugID = 0;
 static size_t settingsID = 0;
 static size_t viewsID = 0;
+static size_t pluginsID = 0;
 
 // Handle events based on its EventType
 void Events::ProcessEvents() {
@@ -117,6 +119,25 @@ void Events::ProcessEvents() {
             }
             break;
         }
+		case EventType::OpenPlugins: {
+			auto &vMgr = Core.GetViewManager();
+			auto id = vMgr.CreateView();
+			vMgr.AddView<PluginView>(id, PluginView(Core.GetEntityManager(), Core.GetPluginManager()));
+			vMgr.GetView<PluginView>(id).Init();
+			pluginsID = id;
+			break;
+		}
+
+		case EventType::ClosePlugins: {
+			auto &vMgr = Core.GetViewManager();
+			auto views = vMgr.GetAllViews();
+			for (auto view : views) {
+				if (vMgr.HasView<PluginView>(pluginsID)) {
+					vMgr.DestroyView(pluginsID);
+				}
+			}
+			break;
+		}
 
         case EventType::InferenceRequest: {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';

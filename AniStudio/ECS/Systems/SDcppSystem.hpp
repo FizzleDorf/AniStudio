@@ -3,8 +3,8 @@
 #include "Constants.hpp"
 #include "ECS.h"
 #include "rng.hpp"
-#include "ImageSystem.hpp"
 #include "ImageUtils.hpp"
+#include "ImageSystem.hpp"
 #include "SDCPPComponents.h"
 #include "pch.h"
 #include "stable-diffusion.h"
@@ -380,7 +380,7 @@ namespace ECS {
 							if (model.contains("modelPath"))
 								modelPath = model["modelPath"];
 							else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty())
-								modelPath = filePaths.checkpointDir + "/" + model["modelName"].get<std::string>();
+								modelPath = Utils::FilePaths::checkpointDir + "/" + model["modelName"].get<std::string>();
 						}
 
 						// ClipL component
@@ -389,7 +389,7 @@ namespace ECS {
 							if (clipL.contains("modelPath"))
 								clipLPath = clipL["modelPath"];
 							else if (clipL.contains("modelName") && !clipL["modelName"].get<std::string>().empty())
-								clipLPath = filePaths.encoderDir + "/" + clipL["modelName"].get<std::string>();
+								clipLPath = Utils::FilePaths::encoderDir + "/" + clipL["modelName"].get<std::string>();
 						}
 
 						// ClipG component
@@ -398,7 +398,7 @@ namespace ECS {
 							if (clipG.contains("modelPath"))
 								clipGPath = clipG["modelPath"];
 							else if (clipG.contains("modelName") && !clipG["modelName"].get<std::string>().empty())
-								clipGPath = filePaths.encoderDir + "/" + clipG["modelName"].get<std::string>();
+								clipGPath = Utils::FilePaths::encoderDir + "/" + clipG["modelName"].get<std::string>();
 						}
 
 						// T5XXL component
@@ -407,7 +407,7 @@ namespace ECS {
 							if (t5xxl.contains("modelPath"))
 								t5xxlPath = t5xxl["modelPath"];
 							else if (t5xxl.contains("modelName") && !t5xxl["modelName"].get<std::string>().empty())
-								t5xxlPath = filePaths.encoderDir + "/" + t5xxl["modelName"].get<std::string>();
+								t5xxlPath = Utils::FilePaths::encoderDir + "/" + t5xxl["modelName"].get<std::string>();
 						}
 
 						// DiffusionModel component
@@ -416,7 +416,7 @@ namespace ECS {
 							if (diffusion.contains("modelPath"))
 								diffusionModelPath = diffusion["modelPath"];
 							else if (diffusion.contains("modelName") && !diffusion["modelName"].get<std::string>().empty())
-								diffusionModelPath = filePaths.unetDir + "/" + diffusion["modelName"].get<std::string>();
+								diffusionModelPath = Utils::FilePaths::unetDir + "/" + diffusion["modelName"].get<std::string>();
 						}
 
 						// Vae component
@@ -425,7 +425,7 @@ namespace ECS {
 							if (vae.contains("modelPath"))
 								vaePath = vae["modelPath"];
 							else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty())
-								vaePath = filePaths.vaeDir + "/" + vae["modelName"].get<std::string>();
+								vaePath = Utils::FilePaths::vaeDir + "/" + vae["modelName"].get<std::string>();
 
 							if (vae.contains("isTiled"))
 								isTiled = vae["isTiled"];
@@ -441,7 +441,7 @@ namespace ECS {
 							if (taesd.contains("modelPath"))
 								taesdPath = taesd["modelPath"];
 							else if (taesd.contains("modelName") && !taesd["modelName"].get<std::string>().empty())
-								taesdPath = filePaths.vaeDir + "/" + taesd["modelName"].get<std::string>();
+								taesdPath = Utils::FilePaths::vaeDir + "/" + taesd["modelName"].get<std::string>();
 						}
 
 						// Controlnet component
@@ -450,7 +450,7 @@ namespace ECS {
 							if (controlnet.contains("modelPath"))
 								controlnetPath = controlnet["modelPath"];
 							else if (controlnet.contains("modelName") && !controlnet["modelName"].get<std::string>().empty())
-								controlnetPath = filePaths.controlnetDir + "/" + controlnet["modelName"].get<std::string>();
+								controlnetPath = Utils::FilePaths::controlnetDir + "/" + controlnet["modelName"].get<std::string>();
 						}
 
 						// Lora component
@@ -466,7 +466,7 @@ namespace ECS {
 							if (embed.contains("modelPath"))
 								embedPath = embed["modelPath"];
 							else if (embed.contains("modelName") && !embed["modelName"].get<std::string>().empty())
-								embedPath = filePaths.embedDir + "/" + embed["modelName"].get<std::string>();
+								embedPath = Utils::FilePaths::embedDir + "/" + embed["modelName"].get<std::string>();
 						}
 
 						// Sampler component
@@ -496,7 +496,7 @@ namespace ECS {
 					vaePath.c_str(),
 					taesdPath.c_str(),
 					controlnetPath.c_str(),
-					filePaths.loraDir.c_str(),
+					Utils::FilePaths::loraDir.c_str(),
 					embedPath.c_str(),
 					"",  // placeholder_token_text
 					vae_decode_only,
@@ -961,7 +961,7 @@ namespace ECS {
 				std::cout << "Added missing OutputImageComponent to entity " << entityID << std::endl;
 
 				// Set default output path and create directory if needed
-				std::string outputDir = filePaths.defaultProjectPath + "/images";
+				std::string outputDir = Utils::FilePaths::defaultProjectPath + "/images";
 				std::filesystem::create_directories(outputDir);
 
 				outputComp.fileName = "img2img_" + std::to_string(entityID) + ".png";
@@ -1143,7 +1143,7 @@ namespace ECS {
 						if (esrgan.contains("modelPath"))
 							modelPath = esrgan["modelPath"];
 						else if (esrgan.contains("modelName") && !esrgan["modelName"].get<std::string>().empty())
-							modelPath = filePaths.upscaleDir + "/" + esrgan["modelName"].get<std::string>();
+							modelPath = Utils::FilePaths::upscaleDir + "/" + esrgan["modelName"].get<std::string>();
 
 						if (esrgan.contains("upscaleFactor"))
 							upscaleFactor = esrgan["upscaleFactor"];

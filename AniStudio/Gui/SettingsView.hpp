@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Base/BaseView.hpp"
-#include "filepaths.hpp"
+#include "FilePaths.hpp"
 #include <nlohmann/json.hpp>
 #include "ImGuiFileDialog.h"
 #include "GuiStyleHelpers.hpp"
