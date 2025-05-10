@@ -171,89 +171,126 @@ namespace GUI {
 	static char outputDir[256] = "";         // Buffer for output directory
 
 	void DiffusionView::RenderFilePath(const EntityID entity) {
-		if (!mgr.HasComponent<OutputImageComponent>(entity)) {
-			return;
-		}
-
-		auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
-
-		if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
-			ImGui::TableNextColumn();
-			ImGui::Text("FileName"); // Row for "Filename"
-			ImGui::TableNextColumn();
-			if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
-				isFilenameChanged = true;
-			}
-			ImGui::EndTable();
-		}
-		if (ImGui::BeginTable("Output Dir", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f); // Fixed width for Model
-			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
-			ImGui::TableNextColumn();
-			ImGui::Text("Dir Path"); // Row for "Output Directory"
-			ImGui::TableNextColumn();
-			if (ImGui::Button("...##w8")) {
-				IGFD::FileDialogConfig config;
-				config.path = Utils::FilePaths::defaultProjectPath; // Set the initial directory
-				ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("R##w9")) {
-				imageComp.fileName = "AniStudio";
-				imageComp.filePath = Utils::FilePaths::defaultProjectPath;
-			}
-			ImGui::TableNextColumn();
-			ImGui::Text("%s", imageComp.filePath.c_str());
-
-			ImGui::EndTable();
-		}
-
-		// Handle the file dialog display and selection
-		if (ImGuiFileDialog::Instance()->Display("LoadDirDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
-				if (!selectedDir.empty()) {
-					strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
-					outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Null termination
-					imageComp.filePath = selectedDir;
-					isFilenameChanged = true;
-				}
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-
-		// Update ImageComponent properties if filename or filepath changes
-		if (isFilenameChanged) {
-			std::string newFileName(fileName);
-
-			// Ensure the file name has a .png extension
-			if (!newFileName.empty()) {
-				std::filesystem::path filePath(newFileName);
-				if (filePath.extension() != ".png") {
-					filePath.replace_extension(".png");
-					newFileName = filePath.filename().string();
-				}
-			}
-
-			// Update the ImageComponent
-			if (!newFileName.empty()) {
-				imageComp.fileName = newFileName;
-				std::cout << "ImageComponent updated:\n";
-				std::cout << "  FileName: " << imageComp.fileName << '\n';
-				std::cout << "  FilePath: " << imageComp.filePath << '\n';
-			}
-			else {
-				std::cerr << "Invalid directory or filename!" << '\n';
-			}
-
-			isFilenameChanged = false; // Reset the flag
-		}
-	}
+    if (!mgr.HasComponent<OutputImageComponent>(entity)) {
+        return;
+    }
+    auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
+    
+    // File name input
+    if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        // ImGui::TableHeadersRow();
+        ImGui::TableNextColumn();
+        ImGui::Text("FileName"); // Row for "Filename"
+        ImGui::TableNextColumn();
+        if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
+            imageComp.fileName = fileName;
+            isFilenameChanged = true;
+        }
+        ImGui::EndTable();
+    }
+    
+    // File extension selector
+    const char* extensions[] = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp" };
+    static int currentExtensionIndex = 0;
+    static std::string currentExtension = ".png"; // Default extension
+    
+    if (ImGui::BeginTable("Extension", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextColumn();
+        ImGui::Text("Format");
+        ImGui::TableNextColumn();
+        
+        if (ImGui::BeginCombo("##ExtensionCombo", currentExtension.c_str())) {
+            for (int i = 0; i < IM_ARRAYSIZE(extensions); i++) {
+                bool isSelected = (currentExtensionIndex == i);
+                if (ImGui::Selectable(extensions[i], isSelected)) {
+                    currentExtensionIndex = i;
+                    currentExtension = extensions[i];
+                    isFilenameChanged = true; // Trigger update of the file extension
+                }
+                if (isSelected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::EndTable();
+    }
+    
+    // Directory selector
+    if (ImGui::BeginTable("Output Dir", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+        ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextColumn();
+        ImGui::Text("Dir Path");
+        ImGui::TableNextColumn();
+        
+        if (ImGui::Button("...##w8")) {
+            IGFD::FileDialogConfig config;
+            config.path = Utils::FilePaths::defaultProjectPath; // Set the initial directory
+            ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
+        }
+        
+        ImGui::SameLine();
+        if (ImGui::Button("R##w9")) {
+            imageComp.fileName = "AniStudio";
+            imageComp.filePath = Utils::FilePaths::defaultProjectPath + "\\" + "AniStudio" + currentExtension;
+        }
+        
+        ImGui::TableNextColumn();
+        ImGui::Text("%s", imageComp.filePath.c_str());
+        ImGui::EndTable();
+    }
+    
+    // Handle the file dialog display and selection
+    if (ImGuiFileDialog::Instance()->Display("LoadDirDialog", 32, ImVec2(700, 400))) {
+        if (ImGuiFileDialog::Instance()->IsOk()) {
+            std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
+            if (!selectedDir.empty()) {
+                strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
+                outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Null termination
+                imageComp.filePath = selectedDir;
+                isFilenameChanged = true;
+            }
+        }
+        ImGuiFileDialog::Instance()->Close();
+    }
+    
+    // Update ImageComponent properties if filename or filepath changes
+    if (isFilenameChanged) {
+        std::string newFileName(fileName);
+        
+        // Process the file name
+        if (!newFileName.empty()) {
+            std::filesystem::path filePath(newFileName);
+            
+            // Check if the extension should be changed
+            std::string currentFileExtension = filePath.has_extension() ? 
+                filePath.extension().string() : "";
+            
+            // If the extension is missing or different from the selected one, update it
+            if (currentFileExtension != currentExtension) {
+                filePath.replace_extension(currentExtension);
+                newFileName = filePath.filename().string();
+            }
+            
+            // Update the ImageComponent
+            imageComp.fileName = newFileName;
+            
+            std::cout << "ImageComponent updated:\n";
+            std::cout << "  FileName: " << imageComp.fileName << '\n';
+            std::cout << "  FilePath: " << imageComp.filePath << '\n';
+        } else {
+            std::cerr << "Invalid directory or filename!" << '\n';
+        }
+        
+        isFilenameChanged = false; // Reset the flag
+    }
+}
 
 	void DiffusionView::RenderLatents(const EntityID entity) {
 		if (!mgr.HasComponent<LatentComponent>(entity) ||
@@ -494,8 +531,17 @@ namespace GUI {
 		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
+			mgr.DestroyEntity(newEntity);
 			return;
 		}
+
+		if (!mgr.HasComponent<OutputImageComponent>(txt2imgEntity)) {
+			mgr.DestroyEntity(newEntity);
+			return;
+		}
+			
+
+		mgr.GetComponent<OutputImageComponent>(newEntity) = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
 
 		// Queue event
 		Event event;
@@ -508,65 +554,19 @@ namespace GUI {
 	void DiffusionView::HandleI2IEvent() {
 		std::cout << "Creating new entity for img2img..." << std::endl;
 
-		// Create a new entity
-		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
+		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(img2imgEntity));
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
 			return;
 		}
 
-		// Copy all components from the template entity using direct component copying
-		// instead of serialization/deserialization
 		std::vector<ComponentTypeID> componentTypes = mgr.GetEntityComponents(img2imgEntity);
 
 		for (const auto& componentId : componentTypes) {
 			std::string componentName = mgr.GetComponentNameById(componentId);
 			std::cout << "Copying component: " << componentName << " to new entity" << std::endl;
 
-			// Handle each component type specifically
-			if (componentName == "Model") {
-				mgr.AddComponent<ModelComponent>(newEntity) = mgr.GetComponent<ModelComponent>(img2imgEntity);
-			}
-			else if (componentName == "CLipL") {
-				mgr.AddComponent<ClipLComponent>(newEntity) = mgr.GetComponent<ClipLComponent>(img2imgEntity);
-			}
-			else if (componentName == "CLipG") {
-				mgr.AddComponent<ClipGComponent>(newEntity) = mgr.GetComponent<ClipGComponent>(img2imgEntity);
-			}
-			else if (componentName == "T5XXL") {
-				mgr.AddComponent<T5XXLComponent>(newEntity) = mgr.GetComponent<T5XXLComponent>(img2imgEntity);
-			}
-			else if (componentName == "DiffusionModel") {
-				mgr.AddComponent<DiffusionModelComponent>(newEntity) = mgr.GetComponent<DiffusionModelComponent>(img2imgEntity);
-			}
-			else if (componentName == "Vae") {
-				mgr.AddComponent<VaeComponent>(newEntity) = mgr.GetComponent<VaeComponent>(img2imgEntity);
-			}
-			else if (componentName == "Lora") {
-				mgr.AddComponent<LoraComponent>(newEntity) = mgr.GetComponent<LoraComponent>(img2imgEntity);
-			}
-			else if (componentName == "Taesd") {
-				mgr.AddComponent<TaesdComponent>(newEntity) = mgr.GetComponent<TaesdComponent>(img2imgEntity);
-			}
-			else if (componentName == "Latent") {
-				mgr.AddComponent<LatentComponent>(newEntity) = mgr.GetComponent<LatentComponent>(img2imgEntity);
-			}
-			else if (componentName == "Sampler") {
-				mgr.AddComponent<SamplerComponent>(newEntity) = mgr.GetComponent<SamplerComponent>(img2imgEntity);
-			}
-			else if (componentName == "Guidance") {
-				mgr.AddComponent<GuidanceComponent>(newEntity) = mgr.GetComponent<GuidanceComponent>(img2imgEntity);
-			}
-			else if (componentName == "ClipSkip") {
-				mgr.AddComponent<ClipSkipComponent>(newEntity) = mgr.GetComponent<ClipSkipComponent>(img2imgEntity);
-			}
-			else if (componentName == "Prompt") {
-				mgr.AddComponent<PromptComponent>(newEntity) = mgr.GetComponent<PromptComponent>(img2imgEntity);
-			}
-			else if (componentName == "LayerSkip") {
-				mgr.AddComponent<LayerSkipComponent>(newEntity) = mgr.GetComponent<LayerSkipComponent>(img2imgEntity);
-			}
-			else if (componentName == "OutputImage") {
+			if (componentName == "OutputImage") {
 				auto& srcComp = mgr.GetComponent<OutputImageComponent>(img2imgEntity);
 				auto& destComp = mgr.AddComponent<OutputImageComponent>(newEntity);
 
@@ -1041,11 +1041,11 @@ namespace GUI {
 				}
 			}
 
-			if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
+			/*if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
 				Event event;
 				event.type = EventType::StopCurrentTask;
 				ANI::Events::Ref().QueueEvent(event);
-			}
+			}*/
 
 			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
 				Event event;

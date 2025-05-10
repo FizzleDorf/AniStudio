@@ -91,9 +91,6 @@ namespace ECS {
 
 			lock.unlock();
 
-			if (sd_context) {
-				free_sd_ctx(sd_context);
-			}
 			// Give tasks time to gracefully terminate
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
@@ -231,7 +228,6 @@ namespace ECS {
 		std::vector<QueueItem> taskQueue;
 		std::atomic<bool> pauseWorker{ false };
 		std::mutex queueMutex;
-		sd_ctx_t* sd_context = nullptr;
 
 		// Friend classes for tasks
 		friend class InferenceTask;
@@ -846,6 +842,7 @@ namespace ECS {
 			sd_image_t* image = GenerateImage(sd_context, metadata);
 			if (!image) {
 				throw std::runtime_error("Failed to generate image!");
+				mgr.DestroyEntity(entityID);
 			}
 
 			// Save the generated image
