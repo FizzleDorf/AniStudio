@@ -411,14 +411,6 @@ namespace GUI {
 					// Generate texture for preview
 					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-
-					// Update latent dimensions to match input image
-					if (mgr.HasComponent<LatentComponent>(entity)) {
-						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
-						// Make dimensions divisible by 8 (required for stable diffusion)
-						latentComp.latentWidth = (width / 8) * 8;
-						latentComp.latentHeight = (height / 8) * 8;
-					}
 				}
 			}
 			ImGuiFileDialog::Instance()->Close();
@@ -536,11 +528,11 @@ namespace GUI {
 		}
 
 		if (!mgr.HasComponent<OutputImageComponent>(txt2imgEntity)) {
+			std::cerr << "Failed to find output path!" << std::endl;
 			mgr.DestroyEntity(newEntity);
 			return;
 		}
 			
-
 		mgr.GetComponent<OutputImageComponent>(newEntity) = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
 
 		// Queue event
@@ -552,45 +544,31 @@ namespace GUI {
 	}
 
 	void DiffusionView::HandleI2IEvent() {
-		std::cout << "Creating new entity for img2img..." << std::endl;
-
+		std::cout << "Adding new entity..." << std::endl;
 		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(img2imgEntity));
+		
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
+			mgr.DestroyEntity(newEntity);
+			return;
+		}
+		
+		if (!mgr.HasComponent<OutputImageComponent>(img2imgEntity)) {
+			std::cerr << "Failed to find output path!" << std::endl;
+			mgr.DestroyEntity(newEntity);
 			return;
 		}
 
-		std::vector<ComponentTypeID> componentTypes = mgr.GetEntityComponents(img2imgEntity);
-
-		for (const auto& componentId : componentTypes) {
-			std::string componentName = mgr.GetComponentNameById(componentId);
-			std::cout << "Copying component: " << componentName << " to new entity" << std::endl;
-
-			if (componentName == "OutputImage") {
-				auto& srcComp = mgr.GetComponent<OutputImageComponent>(img2imgEntity);
-				auto& destComp = mgr.AddComponent<OutputImageComponent>(newEntity);
-
-				destComp.fileName = srcComp.fileName;
-				destComp.filePath = srcComp.filePath;
-				destComp.width = srcComp.width;
-				destComp.height = srcComp.height;
-				destComp.channels = srcComp.channels;
-			}
-			else if (componentName == "InputImage") {
-				auto& srcComp = mgr.GetComponent<InputImageComponent>(img2imgEntity);
-				auto& destComp = mgr.AddComponent<InputImageComponent>(newEntity);
-
-				destComp.fileName = srcComp.fileName;
-				destComp.filePath = srcComp.filePath;
-				destComp.width = srcComp.width;
-				destComp.height = srcComp.height;
-				destComp.channels = srcComp.channels;
-			}
+		if (!mgr.HasComponent<InputImageComponent>(img2imgEntity)) {
+			std::cerr << "Failed to find input image!" << std::endl;
+			mgr.DestroyEntity(newEntity);
+			return;
 		}
 
-		std::cout << "Entity cloning complete. Created entity: " << newEntity << std::endl;
+		mgr.GetComponent<OutputImageComponent>(newEntity) = mgr.GetComponent<OutputImageComponent>(img2imgEntity);
+		mgr.GetComponent<InputImageComponent>(newEntity) = mgr.GetComponent<InputImageComponent>(img2imgEntity);
 
-		// Queue event for img2img processing
+		// Queue event
 		Event event;
 		event.entityID = newEntity;
 		event.type = EventType::Img2ImgRequest;

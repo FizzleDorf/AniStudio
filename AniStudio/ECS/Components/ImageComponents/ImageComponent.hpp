@@ -9,7 +9,7 @@
 namespace ECS {
 struct ImageComponent : public BaseComponent {
     std::string fileName = "AniStudio";                  // Default file name
-    std::string filePath = Utils::FilePaths::defaultProjectPath; // Full path to the image
+    std::string filePath = Utils::FilePaths::defaultProjectPath; // Directory containing the Image
     unsigned char *imageData = nullptr;                  // Pointer to image data
     int width = 0;                                       // Image width
     int height = 0;                                      // Image height
@@ -34,7 +34,8 @@ struct ImageComponent : public BaseComponent {
 			{"width", width},
 			{"height", height},
 			{"channels", channels},
-			{"fileName", fileName}
+			{"fileName", fileName},
+			{"filePath", filePath}
 		};
 		return j;
 	}
@@ -66,6 +67,8 @@ struct ImageComponent : public BaseComponent {
 			height = componentData["height"];
 		if (componentData.contains("channels"))
 			channels = componentData["channels"];
+		if (componentData.contains("width"))
+			fileName = componentData["fileName"];
 	}
 
     ImageComponent &operator=(const ImageComponent &other) {
@@ -83,7 +86,20 @@ struct ImageComponent : public BaseComponent {
 struct InputImageComponent : public ImageComponent {
     InputImageComponent() {
         compName = "InputImage";
+		fileName = "";
+		filePath = "";
     }
+
+	InputImageComponent &operator=(const InputImageComponent &other) {
+		if (this != &other) {
+			fileName = other.fileName;
+			filePath = other.filePath;
+			width = other.width;
+			height = other.height;
+			channels = other.channels;
+		}
+		return *this;
+	}
 };
 
 struct OutputImageComponent : public ImageComponent {
@@ -113,7 +129,22 @@ struct ControlNetImageComponent : public ImageComponent {
 struct MaskImageComponent : public ImageComponent {
     MaskImageComponent() {
         compName = "MaskImageComponent";
+		fileName = "";
+		filePath = "";
     }
+
+	MaskImageComponent &operator=(const MaskImageComponent &other) {
+		if (this != &other) {
+			fileName = other.fileName;
+			filePath = other.filePath;
+			width = other.width;
+			height = other.height;
+			channels = other.channels;
+			value = other.value;
+		}
+		return *this;
+	}
+
     float value = 0.75f;
 };
 } // namespace ECS

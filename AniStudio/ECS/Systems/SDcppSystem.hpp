@@ -931,138 +931,210 @@ namespace ECS {
 		}
 	}
 
-	inline bool SDCPPSystem::RunImg2Img(const EntityID entityID, const nlohmann::json& metadata) {
+	// First, let's add a method to SDCPPSystem that handles both input and mask images
+	inline bool SDCPPSystem::RunImg2Img(EntityID entityID, const nlohmann::json& metadata) {
 		sd_ctx_t* sd_context = nullptr;
+		unsigned char* inputData = nullptr;
+		unsigned char* maskData = nullptr;
+		unsigned char* emptyMaskData = nullptr;
+		sd_image_t* result_image = nullptr;
+
 		try {
 			std::cout << "Starting img2img inference for Entity ID: " << entityID << std::endl;
 
-			// Verify input image component exists and has data
-			if (!mgr.HasComponent<InputImageComponent>(entityID)) {
-				std::cerr << "Error: Entity " << entityID << " missing InputImageComponent" << std::endl;
-				return false;
-			}
-
-			auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
-
-			if (!inputComp.imageData || inputComp.width <= 0 || inputComp.height <= 0) {
-				std::cerr << "Error: Input image data is invalid for entity " << entityID << std::endl;
-				return false;
-			}
-
-			std::cout << "Input image: " << inputComp.width << "x" << inputComp.height
-				<< " with " << inputComp.channels << " channels" << std::endl;
-
-			// Ensure output component exists
-			if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-				auto& outputComp = mgr.AddComponent<OutputImageComponent>(entityID);
-				std::cout << "Added missing OutputImageComponent to entity " << entityID << std::endl;
-
-				// Set default output path and create directory if needed
-				std::string outputDir = Utils::FilePaths::defaultProjectPath + "/images";
-				std::filesystem::create_directories(outputDir);
-
-				outputComp.fileName = "img2img_" + std::to_string(entityID) + ".png";
-				outputComp.filePath = outputDir;
-
-				std::cout << "Set output path to: " << outputComp.filePath << "/" << outputComp.fileName << std::endl;
-			}
-
-			// Initialize Stable Diffusion context
-			std::cout << "Initializing SD context..." << std::endl;
-			sd_context = InitializeStableDiffusionContext(metadata);
-			if (!sd_context) {
-				throw std::runtime_error("Failed to initialize Stable Diffusion context!");
-			}
-
 			// Extract parameters from metadata
+			std::string inputImagePath = "";
+			std::string maskImagePath = "";
+			std::string outputPath = Utils::FilePaths::defaultProjectPath;
+			std::string outputFilename = "img2img_output.png";
 			std::string posPrompt = "", negPrompt = "";
 			float clipSkip = 2.0f, cfg = 7.0f, guidance = 2.0f, eta = 0.0f;
-			int latentWidth = inputComp.width, latentHeight = inputComp.height;
+			int latentWidth = 512, latentHeight = 512;
 			int steps = 20, seed = -1, batchSize = 1;
 			float denoiseStrength = 0.75f;
 			sample_method_t sample_method = EULER;
+			int* skipLayers = nullptr;
+			size_t skipLayersCount = 0;
+			float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
 
 			// Extract parameters from components array in metadata
-			std::cout << "Extracting parameters from metadata..." << std::endl;
 			if (metadata.contains("components") && metadata["components"].is_array()) {
 				for (const auto& comp : metadata["components"]) {
+					// Input image path
+					if (comp.contains("InputImage")) {
+						auto inputImage = comp["InputImage"];
+						if (inputImage.contains("filePath") && !inputImage["filePath"].is_null() && !inputImage["filePath"].get<std::string>().empty())
+							inputImagePath = inputImage["filePath"];
+					}
+
+					// Mask image path (for inpainting)
+					if (comp.contains("MaskImage")) {
+						auto maskImage = comp["MaskImage"];
+						if (maskImage.contains("filePath") && !maskImage["filePath"].is_null() && !maskImage["filePath"].get<std::string>().empty())
+							maskImagePath = maskImage["filePath"];
+					}
+
+					// Output path settings
+					if (comp.contains("OutputImage") || comp.contains("Image")) {
+						auto outImage = comp.contains("OutputImage") ? comp["OutputImage"] : comp["Image"];
+						if (outImage.contains("filePath") && !outImage["filePath"].is_null() && !outImage["filePath"].get<std::string>().empty())
+							outputPath = outImage["filePath"];
+						if (outImage.contains("fileName") && !outImage["fileName"].is_null() && !outImage["fileName"].get<std::string>().empty())
+							outputFilename = outImage["fileName"];
+					}
+
 					// Prompt component
 					if (comp.contains("Prompt")) {
 						auto prompt = comp["Prompt"];
-						if (prompt.contains("posPrompt"))
+						if (prompt.contains("posPrompt") && !prompt["posPrompt"].is_null())
 							posPrompt = prompt["posPrompt"];
-						if (prompt.contains("negPrompt"))
+						if (prompt.contains("negPrompt") && !prompt["negPrompt"].is_null())
 							negPrompt = prompt["negPrompt"];
-						std::cout << "Found prompt: " << posPrompt << std::endl;
 					}
 
 					// ClipSkip component
 					if (comp.contains("ClipSkip")) {
 						auto clipSkipComp = comp["ClipSkip"];
-						if (clipSkipComp.contains("clipSkip"))
+						if (clipSkipComp.contains("clipSkip") && !clipSkipComp["clipSkip"].is_null())
 							clipSkip = clipSkipComp["clipSkip"];
 					}
 
 					// Sampler component
 					if (comp.contains("Sampler")) {
 						auto sampler = comp["Sampler"];
-						if (sampler.contains("cfg"))
+						if (sampler.contains("cfg") && !sampler["cfg"].is_null())
 							cfg = sampler["cfg"];
-						if (sampler.contains("steps"))
+						if (sampler.contains("steps") && !sampler["steps"].is_null())
 							steps = sampler["steps"];
-						if (sampler.contains("seed"))
+						if (sampler.contains("seed") && !sampler["seed"].is_null())
 							seed = sampler["seed"];
-						if (sampler.contains("denoise"))
+						if (sampler.contains("denoise") && !sampler["denoise"].is_null())
 							denoiseStrength = sampler["denoise"];
-						if (sampler.contains("current_sample_method"))
+						if (sampler.contains("current_sample_method") && !sampler["current_sample_method"].is_null())
 							sample_method = static_cast<sample_method_t>(sampler["current_sample_method"].get<int>());
 					}
 
 					// Guidance component
 					if (comp.contains("Guidance")) {
 						auto guidanceComp = comp["Guidance"];
-						if (guidanceComp.contains("guidance"))
+						if (guidanceComp.contains("guidance") && !guidanceComp["guidance"].is_null())
 							guidance = guidanceComp["guidance"];
-						if (guidanceComp.contains("eta"))
+						if (guidanceComp.contains("eta") && !guidanceComp["eta"].is_null())
 							eta = guidanceComp["eta"];
 					}
 
 					// Latent component
 					if (comp.contains("Latent")) {
 						auto latent = comp["Latent"];
-						if (latent.contains("latentWidth"))
+						if (latent.contains("latentWidth") && !latent["latentWidth"].is_null())
 							latentWidth = latent["latentWidth"];
-						if (latent.contains("latentHeight"))
+						if (latent.contains("latentHeight") && !latent["latentHeight"].is_null())
 							latentHeight = latent["latentHeight"];
-						if (latent.contains("batchSize"))
+						if (latent.contains("batchSize") && !latent["batchSize"].is_null())
 							batchSize = latent["batchSize"];
+					}
+
+					// Layer Skip component
+					if (comp.contains("LayerSkip")) {
+						auto layerSkip = comp["LayerSkip"];
+						if (layerSkip.contains("slg_scale") && !layerSkip["slg_scale"].is_null())
+							slgScale = layerSkip["slg_scale"];
+						if (layerSkip.contains("skip_layer_start") && !layerSkip["skip_layer_start"].is_null())
+							skipLayerStart = layerSkip["skip_layer_start"];
+						if (layerSkip.contains("skip_layer_end") && !layerSkip["skip_layer_end"].is_null())
+							skipLayerEnd = layerSkip["skip_layer_end"];
 					}
 				}
 			}
 
-			// Prepare input image struct
-			auto* data = Utils::ImageUtils::LoadImageData(inputComp.filePath, inputComp.width, inputComp.height, inputComp.channels);
-			std::cout << "Preparing input image..." << std::endl;
-			sd_image_t init_image = {
-				static_cast<uint32_t>(inputComp.width),
-				static_cast<uint32_t>(inputComp.height),
-				static_cast<uint32_t>(inputComp.channels),
-				reinterpret_cast<uint8_t*>(data)
-			};
+			// Ensure we have a valid input image path
+			if (inputImagePath.empty()) {
+				throw std::runtime_error("No input image path found in metadata");
+			}
 
-			// Prepare empty mask image (can be enhanced later for inpainting)
+			// Load input image
+			int inputWidth, inputHeight, inputChannels;
+			inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3); // Force 4 channels
+			if (!inputData) {
+				throw std::runtime_error("Failed to load input image: " + inputImagePath);
+			}
+
+			std::cout << "Input image loaded: " << inputWidth << "x" << inputHeight << " with "
+				<< inputChannels << " channels (forced to 4)" << std::endl;
+
+			// Create a properly initialized input image struct
+			sd_image_t input_image = { 0 };
+			input_image.width = static_cast<uint32_t>(inputWidth);
+			input_image.height = static_cast<uint32_t>(inputHeight);
+			input_image.channel = 3; // Always use 4 channels
+			input_image.data = inputData;
+
+			// Initialize mask image struct
 			sd_image_t mask_image = { 0 };
 
-			std::cout << "Calling img2img with denoise strength: " << denoiseStrength << std::endl;
+			if (maskImagePath.empty()) {
+				// Create a blank (white) mask of appropriate size
+				size_t maskSize = inputWidth * inputHeight;
+				emptyMaskData = new unsigned char[maskSize];
+				std::memset(emptyMaskData, 255, maskSize); // Fill with 255 (white)
 
-			// Call the img2img function with all parameters
-			sd_image_t* result_image = img2img(
+				mask_image.width = static_cast<uint32_t>(inputWidth);
+				mask_image.height = static_cast<uint32_t>(inputHeight);
+				mask_image.channel = 1; // Masks are single channel
+				mask_image.data = emptyMaskData;
+
+				std::cout << "Created blank mask: " << inputWidth << "x" << inputHeight << std::endl;
+			}
+			else {
+				// Load mask from file
+				int maskWidth, maskHeight, maskChannels;
+				maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1); // Force 1 channel
+
+				if (!maskData) {
+					std::cerr << "Failed to load mask image: " << maskImagePath << ", using blank mask instead" << std::endl;
+
+					// Create blank mask as fallback
+					size_t maskSize = inputWidth * inputHeight;
+					emptyMaskData = new unsigned char[maskSize];
+					std::memset(emptyMaskData, 255, maskSize);
+
+					mask_image.width = static_cast<uint32_t>(inputWidth);
+					mask_image.height = static_cast<uint32_t>(inputHeight);
+					mask_image.channel = 1;
+					mask_image.data = emptyMaskData;
+				}
+				else {
+					mask_image.width = static_cast<uint32_t>(maskWidth);
+					mask_image.height = static_cast<uint32_t>(maskHeight);
+					mask_image.channel = 1;
+					mask_image.data = maskData;
+
+					std::cout << "Mask image loaded: " << maskWidth << "x" << maskHeight
+						<< " with " << maskChannels << " channels (forced to 1)" << std::endl;
+				}
+			}
+
+			// Initialize SD context
+			std::cout << "Initializing Stable Diffusion context..." << std::endl;
+			sd_context = InitializeStableDiffusionContext(metadata);
+			if (!sd_context) {
+				throw std::runtime_error("Failed to initialize Stable Diffusion context!");
+			}
+
+			// Ensure valid seed
+			if (seed < 0) {
+				seed = static_cast<int>(generateRandomSeed());
+				std::cout << "Generated random seed: " << seed << std::endl;
+			}
+
+			// Call img2img with explicit values
+			result_image = img2img(
 				sd_context,
-				init_image,
+				input_image,
 				mask_image,
 				posPrompt.c_str(),
 				negPrompt.c_str(),
-				clipSkip,
+				static_cast<int>(clipSkip),
 				cfg,
 				guidance,
 				eta,
@@ -1071,41 +1143,77 @@ namespace ECS {
 				sample_method,
 				steps,
 				denoiseStrength,
-				seed,
+				static_cast<int64_t>(seed),
 				batchSize,
-				nullptr,  // control_cond
-				0.0f,     // control_strength
-				0.0f,     // style_strength
-				false,    // normalize_input
-				"",       // input_id_images_path
-				nullptr,  // skip_layers
-				0,        // skip_layers_count
-				0.0f,     // slg_scale
-				0.0f,     // skip_layer_start
-				1.0f      // skip_layer_end
+				nullptr, // control_cond
+				0.0f,    // control_strength
+				0.0f,    // style_ratio
+				false,   // normalize_input
+				"",      // input_id_images_path
+				skipLayers,
+				skipLayersCount,
+				slgScale,
+				skipLayerStart,
+				skipLayerEnd
 			);
 
+			// Clean up resources that were passed by value and copied
+			if (inputData) {
+				stbi_image_free(inputData);
+				inputData = nullptr;
+			}
+
+			if (emptyMaskData) {
+				delete[] emptyMaskData;
+				emptyMaskData = nullptr;
+			}
+			else if (maskData) {
+				stbi_image_free(maskData);
+				maskData = nullptr;
+			}
+
+			// Check if we got a result image
 			if (!result_image) {
 				throw std::runtime_error("Failed to generate image!");
 			}
 
-			std::cout << "Image generated successfully. Saving result..." << std::endl;
+			std::cout << "Successfully generated img2img result: "
+				<< result_image->width << "x" << result_image->height
+				<< "x" << result_image->channel << std::endl;
 
-			// Save the generated image with metadata
+			// Save the result image
 			SaveImage(result_image->data, result_image->width, result_image->height,
 				result_image->channel, entityID, metadata);
 
 			// Free the result image
 			free(result_image);
+			result_image = nullptr;
 
-			// Free the SD context
+			// Clean up SD context
 			free_sd_ctx(sd_context);
+			sd_context = nullptr;
 
-			std::cout << "Img2Img inference completed for Entity " << entityID << std::endl;
+			std::cout << "Img2img completed successfully for entity " << entityID << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Exception during img2img inference: " << e.what() << std::endl;
+			std::cerr << "Exception during img2img: " << e.what() << std::endl;
+
+			// Clean up resources
+			if (inputData) {
+				stbi_image_free(inputData);
+			}
+
+			if (emptyMaskData) {
+				delete[] emptyMaskData;
+			}
+			else if (maskData) {
+				stbi_image_free(maskData);
+			}
+
+			if (result_image) {
+				free(result_image);
+			}
 
 			if (sd_context) {
 				free_sd_ctx(sd_context);
