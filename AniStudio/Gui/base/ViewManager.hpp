@@ -8,272 +8,258 @@ using json = nlohmann::json;
 
 namespace GUI {
 
-class ViewManager {
-public:
-    ViewManager() : viewListCount(0) {
-        Reset();
-    }
+	class ViewManager {
+	public:
+		ViewManager() : viewListCount(0) {
+			// Initialize available view IDs
+			for (ViewListID view = 0u; view < MAX_VIEW_COUNT; view++) {
+				availableViews.push(view);
+			}
+		}
 
-    ~ViewManager() = default;
+		~ViewManager() = default;
 
-    void Init() {}
+		void Init() {}
 
-    // Update all view lists
-    void Update(const float deltaT) {
-        for (const auto& viewList : viewArrays) {
-            viewList.second->UpdateViews(deltaT);
-        }
-    }
+		// Update all view lists
+		void Update(const float deltaT) {
+			for (const auto& viewList : viewArrays) {
+				viewList.second->UpdateViews(deltaT);
+			}
+		}
 
-    // Render all views
-    void Render() {
-        for (const auto &viewList : viewArrays) {
-            viewList.second->RenderViews();
-        }
-    }
+		// Render all views
+		void Render() {
+			for (const auto &viewList : viewArrays) {
+				viewList.second->RenderViews();
+			}
+		}
 
-    // Adds a viewlist
-    const ViewListID CreateView() {
-        const ViewListID viewList = availableViews.front();
-        AddViewSignature(viewList);
-        availableViews.pop();
-        viewListCount++;
-        return viewList;
-    }
+		// Adds a viewlist
+		const ViewListID CreateView() {
+			const ViewListID viewList = availableViews.front();
+			AddViewSignature(viewList);
+			availableViews.pop();
+			viewListCount++;
+			return viewList;
+		}
 
-    // Removes a viewlist and all of it's views
-    void DestroyView(const ViewListID viewList) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		// Removes a viewlist and all of its views
+		void DestroyView(const ViewListID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
 
-        // Remove this view's signature
-        viewSignatures.erase(viewList);
+			// Remove this view's signature
+			viewSignatures.erase(viewList);
 
-        // Remove this view from all view arrays
-        for (auto &array : viewArrays) {
-            array.second->Erase(viewList);
-        }
+			// Remove this view from all view arrays
+			for (auto &array : viewArrays) {
+				array.second->Erase(viewList);
+			}
 
-        // Return the ID to the available pool
-        viewListCount--;
-        availableViews.push(viewList);
-    }
+			// Return the ID to the available pool
+			viewListCount--;
+			availableViews.push(viewList);
+		}
 
-    // Adds a view to the viewlist by template class
-    template <typename T>
-    void AddView(const ViewListID viewList, T &&view) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
-        assert(GetViewSignature(viewList)->size() < MAX_VIEW_COUNT && "View count limit reached!");
+		// Adds a view to the viewlist by template class
+		template <typename T>
+		void AddView(const ViewListID viewList, T &&view) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+			assert(GetViewSignature(viewList)->size() < MAX_VIEW_COUNT && "View count limit reached!");
 
-        // Check if view already exists
-        if (HasView<T>(viewList)) {
-            std::cerr << "View with ID " << viewList << " already exists! Skipping AddView." << std::endl;
-            return;
-        }
+			// Check if view already exists
+			if (HasView<T>(viewList)) {
+				std::cerr << "View with ID " << viewList << " already exists! Skipping AddView." << std::endl;
+				return;
+			}
 
-        // Set the view's ID and add it to signatures
-        view.viewID = viewList;
-        GetViewSignature(viewList)->insert(ViewType<T>());
+			// Set the view's ID and add it to signatures
+			view.viewID = viewList;
+			GetViewSignature(viewList)->insert(ViewType<T>());
 
-        // Add to appropriate view list
-        auto viewListPtr = GetViewList<T>();
-        std::cout << "Adding view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
-        viewListPtr->Insert(std::move(view));
-        
-        // Update view count
-        viewListCount++;
-    }
+			// Add to appropriate view list
+			auto viewListPtr = GetViewList<T>();
+			std::cout << "Adding view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
+			viewListPtr->Insert(std::forward<T>(view));
 
-    // Removes a view from the viewlist by template class
-    template <typename T>
-    void RemoveView(const ViewListID viewList) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+			// Note: We don't initialize the view here - it will be initialized separately
+		}
 
-        // Remove from signatures
-        const ViewTypeID viewType = ViewType<T>();
-        GetViewSignature(viewList)->erase(viewType);
+		// Removes a view from the viewlist by template class
+		template <typename T>
+		void RemoveView(const ViewListID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
 
-        // Remove from view list
-        GetViewList<T>()->Erase(viewList);
-    }
+			// Remove from signatures
+			const ViewTypeID viewType = ViewType<T>();
+			GetViewSignature(viewList)->erase(viewType);
 
-    // Returns a designated view type by template class
-    template <typename T>
-    T &GetView(const ViewListID viewList) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
-        return GetViewList<T>()->Get(viewList);
-    }
+			// Remove from view list
+			GetViewList<T>()->Erase(viewList);
+		}
 
-    // Returns true if view is in a view list
-    template <typename T>
-    const bool HasView(const ViewListID viewList) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		// Returns a designated view type by template class
+		template <typename T>
+		T &GetView(const ViewListID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+			return GetViewList<T>()->Get(viewList);
+		}
 
-        auto it = viewSignatures.find(viewList);
-        if (it == viewSignatures.end()) {
-            return false;
-        }
+		// Returns true if view is in a view list
+		template <typename T>
+		const bool HasView(const ViewListID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
 
-        const ViewSignature &signature = *(it->second);
-        const ViewTypeID viewType = ViewType<T>();
-        return (signature.count(viewType) > 0);
-    }
+			auto it = viewSignatures.find(viewList);
+			if (it == viewSignatures.end()) {
+				return false;
+			}
 
-    // Registers a view by string name
-    template <typename T>
-    void RegisterViewType(const std::string &name) {
-        ViewTypeID typeId = ViewType<T>();
-        registeredViews[name] = typeId;
-        std::cout << "Registered view type: " << name << " with ID: " << typeId << std::endl;
-    }
+			const ViewSignature &signature = *(it->second);
+			const ViewTypeID viewType = ViewType<T>();
+			return (signature.count(viewType) > 0);
+		}
 
-    // Returns a designated view type by string name
-    ViewTypeID GetViewType(const std::string &name) const {
-        auto it = registeredViews.find(name);
-        if (it != registeredViews.end()) {
-            return it->second;
-        }
-        throw std::runtime_error("View type not registered: " + name);
-    }
+		// Registers a view by string name
+		template <typename T>
+		void RegisterViewType(const std::string &name) {
+			ViewTypeID typeId = ViewType<T>();
+			registeredViews[name] = typeId;
+			std::cout << "Registered view type: " << name << " with ID: " << typeId << std::endl;
+		}
 
-    // State Management
+		// Returns a designated view type by string name
+		ViewTypeID GetViewType(const std::string &name) const {
+			auto it = registeredViews.find(name);
+			if (it != registeredViews.end()) {
+				return it->second;
+			}
+			throw std::runtime_error("View type not registered: " + name);
+		}
 
-    // Resets to init state
-    void Reset() {
-        // Destroy all views
-        for (auto &viewSignaturePair : viewSignatures) {
-            DestroyView(viewSignaturePair.first);
-        }
-        viewSignatures.clear();
+		// State Management
 
-        // Reset available views queue
-        while (!availableViews.empty()) {
-            availableViews.pop();
-        }
-        for (ViewListID view = 0u; view < MAX_VIEW_COUNT; ++view) {
-            availableViews.push(view);
-        }
+		// Resets to init state
+		void Reset() {
+			// Destroy all views
+			for (auto &viewSignaturePair : viewSignatures) {
+				DestroyView(viewSignaturePair.first);
+			}
+			viewSignatures.clear();
 
-        viewListCount = 0;
-        viewArrays.clear();
-        registeredViews.clear();
-        Init();
-    }
+			// Reset available views queue
+			while (!availableViews.empty()) {
+				availableViews.pop();
+			}
+			for (ViewListID view = 0u; view < MAX_VIEW_COUNT; ++view) {
+				availableViews.push(view);
+			}
 
-    // Return all view IDs
-    std::vector<ViewListID> GetAllViews() const {
-        std::vector<ViewListID> views;
-        for (const auto &pair : viewSignatures) {
-            views.push_back(pair.first);
-        }
-        return views;
-    }
+			viewListCount = 0;
+			viewArrays.clear();
+			registeredViews.clear();
+			Init();
+		}
 
-    // Returns all registered view names and types
-    const std::unordered_map<std::string, ViewTypeID> &GetRegisteredViews() const { return registeredViews; }
+		// Return all view IDs
+		std::vector<ViewListID> GetAllViews() const {
+			std::vector<ViewListID> views;
+			for (const auto &pair : viewSignatures) {
+				views.push_back(pair.first);
+			}
+			return views;
+		}
 
-    // Returns all view list IDs and view signatures
-    const std::map<ViewListID, std::shared_ptr<ViewSignature>> &GetViewSignatures() const { return viewSignatures; }
-    
-    // Adds a view in the view list by type
-    void AddViewByType(const ViewListID viewList, const ViewTypeID viewType) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
-        GetViewSignature(viewList)->insert(viewType);
-    }
+		// Returns all registered view names and types
+		const std::unordered_map<std::string, ViewTypeID> &GetRegisteredViews() const { return registeredViews; }
 
-    // Removes a view in the view list by type
-    void RemoveViewByType(const ViewListID viewList, const ViewTypeID viewType) {
-        assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
-        GetViewSignature(viewList)->erase(viewType);
-    }
+		// Returns all view list IDs and view signatures
+		const std::map<ViewListID, std::shared_ptr<ViewSignature>> &GetViewSignatures() const { return viewSignatures; }
 
-    // Serialization
+		// Adds a view in the view list by type
+		void AddViewByType(const ViewListID viewList, const ViewTypeID viewType) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+			GetViewSignature(viewList)->insert(viewType);
+		}
 
-    // Serialize JSON into view lists
-    json SerializeViewLists() const {
-        json viewListsJson;
-        for (const auto &[viewListID, signature] : viewSignatures) {
-            json viewListJson;
-            viewListJson["ViewListID"] = viewListID;
+		// Removes a view in the view list by type
+		void RemoveViewByType(const ViewListID viewList, const ViewTypeID viewType) {
+			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+			GetViewSignature(viewList)->erase(viewType);
+		}
 
-            json viewsJson;
-            for (const auto &viewTypeID : *signature) {
-                json viewJson;
-                viewJson["ViewTypeID"] = viewTypeID;
+		// Serialization
 
-                // Assuming you have a way to get the view instance and serialize its properties
-                // For example, if you have a method to get the view by type and ID:
-                // BaseView* view = GetViewInstance(viewListID, viewTypeID);
-                // if (view) {
-                //     viewJson["Properties"] = view->SerializeProperties();
-                // }
+		// Serialize JSON into view lists
+		json SerializeViewLists() const {
+			json viewListsJson;
+			for (const auto &[viewListID, signature] : viewSignatures) {
+				json viewListJson;
+				viewListJson["ViewListID"] = viewListID;
 
-                viewsJson.push_back(viewJson);
-            }
-            viewListJson["Views"] = viewsJson;
+				json viewsJson;
+				for (const auto &viewTypeID : *signature) {
+					json viewJson;
+					viewJson["ViewTypeID"] = viewTypeID;
+					viewsJson.push_back(viewJson);
+				}
+				viewListJson["Views"] = viewsJson;
 
-            viewListsJson.push_back(viewListJson);
-        }
-        return viewListsJson;
-    }
+				viewListsJson.push_back(viewListJson);
+			}
+			return viewListsJson;
+		}
 
-    // Deserialize JSON into view lists
-    void DeserializeViewLists(const json &viewListsJson) {
-        for (const auto &viewListJson : viewListsJson) {
-            ViewListID viewListID = viewListJson["ViewListID"];
-            AddViewSignature(viewListID); // Create a new ViewList
+		// Deserialize JSON into view lists
+		void DeserializeViewLists(const json &viewListsJson) {
+			for (const auto &viewListJson : viewListsJson) {
+				ViewListID viewListID = viewListJson["ViewListID"];
+				AddViewSignature(viewListID); // Create a new ViewList
 
-            for (const auto &viewJson : viewListJson["Views"]) {
-                ViewTypeID viewTypeID = viewJson["ViewTypeID"];
-                AddViewByType(viewListID, viewTypeID); // Add the view to the ViewList
+				for (const auto &viewJson : viewListJson["Views"]) {
+					ViewTypeID viewTypeID = viewJson["ViewTypeID"];
+					AddViewByType(viewListID, viewTypeID); // Add the view to the ViewList
+				}
+			}
+		}
 
-                // Deserialize view properties if needed
-                // For example, if you have a method to get the view instance:
-                // BaseView* view = GetViewInstance(viewListID, viewTypeID);
-                // if (view) {
-                //     view->DeserializeProperties(viewJson["Properties"]);
-                // }
-            }
-        }
-    }
+	private:
+		// Adds a new view list
+		template <typename T>
+		void AddViewList() {
+			const ViewTypeID viewType = ViewType<T>();
+			assert(viewArrays.find(viewType) == viewArrays.end() && "ViewList already registered!");
+			viewArrays[viewType] = std::make_shared<ViewList<T>>();
+		}
 
-private:
+		// Returns all view lists
+		template <typename T>
+		std::shared_ptr<ViewList<T>> GetViewList() {
+			const ViewTypeID viewType = ViewType<T>();
+			if (viewArrays.count(viewType) == 0) {
+				AddViewList<T>();
+			}
+			return std::static_pointer_cast<ViewList<T>>(viewArrays.at(viewType));
+		}
 
-    // Adds a new view list
-    template <typename T>
-    void AddViewList() {
-        const ViewTypeID viewType = ViewType<T>();
-        assert(viewArrays.find(viewType) == viewArrays.end() && "ViewList already registered!");
-        viewArrays[viewType] = std::make_shared<ViewList<T>>();
-    }
+		// Adds a new view signature if it doesn't exist
+		void AddViewSignature(const ViewListID viewList) {
+			assert(viewSignatures.find(viewList) == viewSignatures.end() && "Signature already exists");
+			viewSignatures[viewList] = std::make_shared<ViewSignature>();
+		}
 
-    // Returns all view lists
-    template <typename T>
-    std::shared_ptr<ViewList<T>> GetViewList() {
-        const ViewTypeID viewType = ViewType<T>();
-        if (viewArrays.count(viewType) == 0) {
-            AddViewList<T>();
-        }
-        return std::static_pointer_cast<ViewList<T>>(viewArrays.at(viewType));
-    }
+		// Returns view signatures
+		std::shared_ptr<ViewSignature> GetViewSignature(const ViewListID viewList) {
+			assert(viewSignatures.find(viewList) != viewSignatures.end() && "Signature Not Found");
+			return viewSignatures.at(viewList);
+		}
 
-    // Adds a new view signature if it doesn't exist
-    void AddViewSignature(const ViewListID viewList) {
-        assert(viewSignatures.find(viewList) == viewSignatures.end() && "Signature already exists");
-        viewSignatures[viewList] = std::make_shared<ViewSignature>();
-    }
-
-    // Returns view signatures
-    std::shared_ptr<ViewSignature> GetViewSignature(const ViewListID viewList) {
-        assert(viewSignatures.find(viewList) != viewSignatures.end() && "Signature Not Found");
-        return viewSignatures.at(viewList);
-    }
-
-private:
-    ViewListID viewListCount;
-    std::queue<ViewListID> availableViews;
-    std::map<ViewListID, std::shared_ptr<ViewSignature>> viewSignatures;
-    std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
-    std::unordered_map<std::string, ViewTypeID> registeredViews;
-};
+	private:
+		ViewListID viewListCount;
+		std::queue<ViewListID> availableViews;
+		std::map<ViewListID, std::shared_ptr<ViewSignature>> viewSignatures;
+		std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
+		std::unordered_map<std::string, ViewTypeID> registeredViews;
+	};
 
 } // namespace GUI
