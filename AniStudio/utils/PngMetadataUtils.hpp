@@ -181,56 +181,53 @@ namespace Utils {
             return MetadataUtils::LoadMetadataFromPNG(imagePath);
         }
 
-        static std::string CreateUniqueFilename(const std::string& baseFilename,
-            const std::string& directory,
-            const std::string& extension = ".png") {
-            std::filesystem::path directoryPath(directory);
-            std::filesystem::path filename(baseFilename);
+		static std::string CreateUniqueFilename(const std::string& baseFilename,
+			const std::string& directory) {
+			// Create full paths
+			std::filesystem::path directoryPath(directory);
+			std::filesystem::path originalFilePath(baseFilename);
 
-            // Ensure the directory exists
-            if (!std::filesystem::exists(directoryPath)) {
-                std::filesystem::create_directories(directoryPath);
-            }
+			// Extract the base name and extension
+			std::string baseName = originalFilePath.stem().string();
+			std::string extension = originalFilePath.extension().string();
 
-            // Ensure the filename has the correct extension
-            if (filename.extension() != extension) {
-                filename.replace_extension(extension);
-            }
+			// Ensure the directory exists
+			if (!std::filesystem::exists(directoryPath)) {
+				std::filesystem::create_directories(directoryPath);
+			}
 
-            // Find the highest existing index in the directory
-            int highestIndex = 0;
-            for (const auto& entry : std::filesystem::directory_iterator(directoryPath)) {
-                if (entry.path().extension() == extension) {
-                    std::string filenameStr = entry.path().stem().string();
-                    // Check if the filename starts with our base name
-                    if (filenameStr.find(filename.stem().string()) == 0) {
-                        size_t lastDashPos = filenameStr.find_last_of('-');
-                        if (lastDashPos != std::string::npos) {
-                            try {
-                                int index = std::stoi(filenameStr.substr(lastDashPos + 1));
-                                if (index > highestIndex) {
-                                    highestIndex = index;
-                                }
-                            }
-                            catch (const std::invalid_argument&) {
-                                // Skip files that do not have the expected format
-                            }
-                        }
-                    }
-                }
-            }
+			// Find the highest existing index
+			int highestIndex = 0;
+			for (const auto& entry : std::filesystem::directory_iterator(directoryPath)) {
+				if (entry.path().extension().string() == extension) {
+					std::string filename = entry.path().stem().string();
 
-            // Increment the index for the new file
-            highestIndex++;
-            std::ostringstream formattedIndex;
-            formattedIndex << std::setw(5) << std::setfill('0') << highestIndex; // Format with leading zeros
+					if (filename.find(baseName) == 0) {  // Starts with base name
+						size_t dashPos = filename.find_last_of('-');
+						if (dashPos != std::string::npos) {
+							try {
+								int index = std::stoi(filename.substr(dashPos + 1));
+								if (index > highestIndex) {
+									highestIndex = index;
+								}
+							}
+							catch (...) {
+								// Ignore conversion errors
+							}
+						}
+					}
+				}
+			}
 
-            // Generate the new filename
-            std::string newFilename = filename.stem().string() + "-" + formattedIndex.str() + extension;
-            std::filesystem::path fullPath = directoryPath / newFilename;
+			// Create new filename with incremented index
+			highestIndex++;
+			std::ostringstream formattedIndex;
+			formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
 
-            return fullPath.string();
-        }
+			// Construct the final path and return it as string
+			std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
+			return newFilePath.string();
+		}
 
         static nlohmann::json CreateGenerationMetadata(const nlohmann::json& entityData,
             const nlohmann::json& additionalInfo = {}) {

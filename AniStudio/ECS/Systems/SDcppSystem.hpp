@@ -317,28 +317,30 @@ namespace ECS {
 		}
 
 		void ProcessCompletedTask(const EntityID entityID) {
-			if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-				std::cerr << "Entity " << entityID << " missing OutputImageComponent" << std::endl;
-				return;
-			}
-
 			try {
+				if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
+					throw std::runtime_error("Missing OutputImageComponent");
+				}
+
 				if (!mgr.GetEntitiesSignatures().count(entityID)) {
-					std::cerr << "Entity " << entityID << " no longer exists" << std::endl;
-					return;
+					throw std::runtime_error("Entity no longer exists");
 				}
 
 				auto& outputComp = mgr.GetComponent<OutputImageComponent>(entityID);
 
 				if (outputComp.filePath.empty()) {
-					std::cerr << "ProcessCompletedTask: No filepath in OutputImageComponent for entity " << entityID << std::endl;
-					return;
+					throw std::runtime_error("No filepath in OutputImageComponent");
 				}
-				mgr.AddComponent<ImageComponent>(entityID);
+
+				auto& imageComp = mgr.AddComponent<ImageComponent>(entityID);
+
 				auto imageSystem = mgr.GetSystem<ImageSystem>();
 				imageSystem->SetImage(entityID, outputComp.filePath);
 
-				// Clean up entity - remove all components except ImageComponent
+				if (!std::filesystem::exists(imageComp.filePath)) {
+					throw std::runtime_error("Failed to save image!");
+				}
+
 				std::vector<ComponentTypeID> componentTypes = mgr.GetEntityComponents(entityID);
 				for (const auto& componentId : componentTypes) {
 					std::string componentName = mgr.GetComponentNameById(componentId);
@@ -351,12 +353,14 @@ namespace ECS {
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error processing completed task: " << e.what() << std::endl;
+				mgr.DestroyEntity(entityID);
 			}
 		}
 
 		// SD context initialization
-		sd_ctx_t* InitializeStableDiffusionContext(const nlohmann::json& metadata) {
+		sd_ctx_t* SDCPPSystem::InitializeStableDiffusionContext(const nlohmann::json& metadata) {
 			try {
+				std::cout << "metadata: \"" << metadata << "\"" << std::endl;
 				std::string modelPath = "", clipLPath = "", clipGPath = "", t5xxlPath = "";
 				std::string diffusionModelPath = "", vaePath = "", taesdPath = "", controlnetPath = "";
 				std::string loraPath = "", embedPath = "";
@@ -373,7 +377,7 @@ namespace ECS {
 						// Model component
 						if (comp.contains("Model")) {
 							auto model = comp["Model"];
-							if (model.contains("modelPath"))
+							if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty())
 								modelPath = model["modelPath"];
 							else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty())
 								modelPath = Utils::FilePaths::checkpointDir + "/" + model["modelName"].get<std::string>();
@@ -382,7 +386,7 @@ namespace ECS {
 						// ClipL component
 						if (comp.contains("ClipL")) {
 							auto clipL = comp["ClipL"];
-							if (clipL.contains("modelPath"))
+							if (clipL.contains("modelPath") && !clipL["modelPath"].get<std::string>().empty())
 								clipLPath = clipL["modelPath"];
 							else if (clipL.contains("modelName") && !clipL["modelName"].get<std::string>().empty())
 								clipLPath = Utils::FilePaths::encoderDir + "/" + clipL["modelName"].get<std::string>();
@@ -391,7 +395,7 @@ namespace ECS {
 						// ClipG component
 						if (comp.contains("ClipG")) {
 							auto clipG = comp["ClipG"];
-							if (clipG.contains("modelPath"))
+							if (clipG.contains("modelPath") && !clipG["modelPath"].get<std::string>().empty())
 								clipGPath = clipG["modelPath"];
 							else if (clipG.contains("modelName") && !clipG["modelName"].get<std::string>().empty())
 								clipGPath = Utils::FilePaths::encoderDir + "/" + clipG["modelName"].get<std::string>();
@@ -400,7 +404,7 @@ namespace ECS {
 						// T5XXL component
 						if (comp.contains("T5XXL")) {
 							auto t5xxl = comp["T5XXL"];
-							if (t5xxl.contains("modelPath"))
+							if (t5xxl.contains("modelPath") && !t5xxl["modelPath"].get<std::string>().empty())
 								t5xxlPath = t5xxl["modelPath"];
 							else if (t5xxl.contains("modelName") && !t5xxl["modelName"].get<std::string>().empty())
 								t5xxlPath = Utils::FilePaths::encoderDir + "/" + t5xxl["modelName"].get<std::string>();
@@ -409,7 +413,7 @@ namespace ECS {
 						// DiffusionModel component
 						if (comp.contains("DiffusionModel")) {
 							auto diffusion = comp["DiffusionModel"];
-							if (diffusion.contains("modelPath"))
+							if (diffusion.contains("modelPath") && !diffusion["modelPath"].get<std::string>().empty())
 								diffusionModelPath = diffusion["modelPath"];
 							else if (diffusion.contains("modelName") && !diffusion["modelName"].get<std::string>().empty())
 								diffusionModelPath = Utils::FilePaths::unetDir + "/" + diffusion["modelName"].get<std::string>();
@@ -418,7 +422,7 @@ namespace ECS {
 						// Vae component
 						if (comp.contains("Vae")) {
 							auto vae = comp["Vae"];
-							if (vae.contains("modelPath"))
+							if (vae.contains("modelPath") && !vae["modelPath"].get<std::string>().empty())
 								vaePath = vae["modelPath"];
 							else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty())
 								vaePath = Utils::FilePaths::vaeDir + "/" + vae["modelName"].get<std::string>();
@@ -434,7 +438,7 @@ namespace ECS {
 						// Taesd component
 						if (comp.contains("Taesd")) {
 							auto taesd = comp["Taesd"];
-							if (taesd.contains("modelPath"))
+							if (taesd.contains("modelPath") && !taesd["modelPath"].get<std::string>().empty())
 								taesdPath = taesd["modelPath"];
 							else if (taesd.contains("modelName") && !taesd["modelName"].get<std::string>().empty())
 								taesdPath = Utils::FilePaths::vaeDir + "/" + taesd["modelName"].get<std::string>();
@@ -443,7 +447,7 @@ namespace ECS {
 						// Controlnet component
 						if (comp.contains("Controlnet")) {
 							auto controlnet = comp["Controlnet"];
-							if (controlnet.contains("modelPath"))
+							if (controlnet.contains("modelPath") && !controlnet["modelPath"].get<std::string>().empty())
 								controlnetPath = controlnet["modelPath"];
 							else if (controlnet.contains("modelName") && !controlnet["modelName"].get<std::string>().empty())
 								controlnetPath = Utils::FilePaths::controlnetDir + "/" + controlnet["modelName"].get<std::string>();
@@ -452,14 +456,27 @@ namespace ECS {
 						// Lora component
 						if (comp.contains("Lora")) {
 							auto lora = comp["Lora"];
-							if (lora.contains("modelPath"))
+							if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty()) {
 								loraPath = lora["modelPath"];
+							}
+							else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty()) {
+								std::string modelName = lora["modelName"].get<std::string>();
+								loraPath = Utils::FilePaths::loraDir + "/" + modelName;
+							}
+							else {
+								// Default to lora directory if no specific model is specified
+								loraPath = Utils::FilePaths::loraDir;
+							}
+						}
+						else {
+							// Always set loraPath to the directory if the component doesn't exist
+							loraPath = Utils::FilePaths::loraDir;
 						}
 
 						// Embedding component
 						if (comp.contains("EmbeddingComponent")) {
 							auto embed = comp["EmbeddingComponent"];
-							if (embed.contains("modelPath"))
+							if (embed.contains("modelPath") && !embed["modelPath"].get<std::string>().empty())
 								embedPath = embed["modelPath"];
 							else if (embed.contains("modelName") && !embed["modelName"].get<std::string>().empty())
 								embedPath = Utils::FilePaths::embedDir + "/" + embed["modelName"].get<std::string>();
@@ -482,6 +499,19 @@ namespace ECS {
 					}
 				}
 
+				// Log all paths for debugging
+				std::cout << "Initializing SD context with the following paths:" << std::endl;
+				std::cout << "Model: " << modelPath << std::endl;
+				std::cout << "ClipL: " << clipLPath << std::endl;
+				std::cout << "ClipG: " << clipGPath << std::endl;
+				std::cout << "T5XXL: " << t5xxlPath << std::endl;
+				std::cout << "DiffusionModel: " << diffusionModelPath << std::endl;
+				std::cout << "Vae: " << vaePath << std::endl;
+				std::cout << "Taesd: " << taesdPath << std::endl;
+				std::cout << "Controlnet: " << controlnetPath << std::endl;
+				std::cout << "Lora: " << loraPath << std::endl;
+				std::cout << "Embedding: " << embedPath << std::endl;
+
 				// Initialize SD context with parsed metadata
 				return new_sd_ctx(
 					modelPath.c_str(),
@@ -492,7 +522,7 @@ namespace ECS {
 					vaePath.c_str(),
 					taesdPath.c_str(),
 					controlnetPath.c_str(),
-					Utils::FilePaths::loraDir.c_str(),
+					loraPath.c_str(),
 					embedPath.c_str(),
 					"",  // placeholder_token_text
 					vae_decode_only,
@@ -513,7 +543,6 @@ namespace ECS {
 				return nullptr;
 			}
 		}
-
 		// Generate image based on metadata
 		sd_image_t* GenerateImage(sd_ctx_t* context, const nlohmann::json& metadata) {
 			std::string posPrompt = "", negPrompt = "";
@@ -622,73 +651,41 @@ namespace ECS {
 		}
 
 		// Save image with metadata
-		void SaveImage(const unsigned char* data, int width, int height, int channels, EntityID entityID, const nlohmann::json& metadata) {
+		void SDCPPSystem::SaveImage(const unsigned char* data, int width, int height, int channels,
+			EntityID entityID, const nlohmann::json& metadata) {
 			try {
-				// Make sure entity has OutputImageComponent
-				if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-					// Add it if it doesn't exist yet
-					mgr.AddComponent<OutputImageComponent>(entityID);
+				// Extract output path and filename from metadata
+				std::string outputPath = Utils::FilePaths::defaultProjectPath;
+				std::string outputFilename = "output.png";
+
+				// Find OutputImage or Image component in metadata
+				if (metadata.contains("components") && metadata["components"].is_array()) {
+					for (const auto& comp : metadata["components"]) {
+						if (comp.contains("OutputImage") || comp.contains("Image")) {
+							auto outImage = comp.contains("OutputImage") ? comp["OutputImage"] : comp["Image"];
+							if (outImage.contains("filePath") && !outImage["filePath"].is_null()
+								&& !outImage["filePath"].get<std::string>().empty()) {
+								outputPath = outImage["filePath"].get<std::string>();
+							}
+							if (outImage.contains("fileName") && !outImage["fileName"].is_null()
+								&& !outImage["fileName"].get<std::string>().empty()) {
+								outputFilename = outImage["fileName"].get<std::string>();
+							}
+							break;
+						}
+					}
 				}
 
-				OutputImageComponent& outputComp = mgr.GetComponent<OutputImageComponent>(entityID);
-
-				// Free any existing image data
-				if (outputComp.imageData) {
-					Utils::ImageUtils::FreeImageData(outputComp.imageData);
-					outputComp.imageData = nullptr;
+				// Save file
+				if (!Utils::ImageUtils::SaveImage(
+					outputPath, width, height, channels, data)) {
+					std::cerr << "Failed to save image: " << outputPath << std::endl;
 				}
 
-				// Allocate and copy the image data
-				size_t dataSize = width * height * channels;
-				outputComp.imageData = (unsigned char*)malloc(dataSize);
-				if (!outputComp.imageData) {
-					std::cerr << "Failed to allocate memory for image data" << std::endl;
-					return;
-				}
-				memcpy(outputComp.imageData, data, dataSize);
+				// Save metadata to the PNG
+				Utils::PngMetadata::WriteMetadataToPNG(outputPath, metadata);
 
-				// Update image component properties
-				outputComp.width = width;
-				outputComp.height = height;
-				outputComp.channels = channels;
-
-				// Create a path for the filename and ensure .png extension
-				std::filesystem::path filename(outputComp.fileName);
-				if (filename.extension() != ".png") {
-					filename.replace_extension(".png");
-					outputComp.fileName = filename.string();
-				}
-
-				// Use PngMetadata utility to get a unique filename
-				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-					outputComp.fileName,
-					outputComp.filePath,
-					".png"
-				);
-
-				// Update the component with the new path
-				std::filesystem::path fullPath(uniqueFilePath);
-				outputComp.fileName = fullPath.filename().string();
-				outputComp.filePath = uniqueFilePath;
-
-				// Save the image
-				bool saved = Utils::ImageUtils::SaveImage(
-					uniqueFilePath,
-					width,
-					height,
-					channels,
-					data
-				);
-
-				if (!saved) {
-					std::cerr << "Failed to save image: " << uniqueFilePath << std::endl;
-					return;
-				}
-
-				// Write metadata to PNG
-				Utils::PngMetadata::WriteMetadataToPNG(uniqueFilePath, metadata, "AniStudio");
-
-				std::cout << "Image saved successfully: \"" << uniqueFilePath << "\"" << std::endl;
+				std::cout << "Image saved successfully: \"" << outputPath << "\"" << std::endl;
 			}
 			catch (const std::filesystem::filesystem_error& e) {
 				std::cerr << "Error creating directory: " << e.what() << '\n';
@@ -764,7 +761,7 @@ namespace ECS {
 
 			try {
 				bool success = system->RunImg2Img(entityID, metadata);
-				if(!success)
+				if (!success)
 					throw std::runtime_error("Failed to generate image!");
 
 				markDone();
@@ -931,7 +928,6 @@ namespace ECS {
 		}
 	}
 
-	// First, let's add a method to SDCPPSystem that handles both input and mask images
 	inline bool SDCPPSystem::RunImg2Img(EntityID entityID, const nlohmann::json& metadata) {
 		sd_ctx_t* sd_context = nullptr;
 		unsigned char* inputData = nullptr;
@@ -1225,52 +1221,153 @@ namespace ECS {
 
 	inline bool SDCPPSystem::RunUpscaling(EntityID entityID, const nlohmann::json& metadata) {
 		upscaler_ctx_t* upscaler_context = nullptr;
+		unsigned char* inputData = nullptr;
+
 		try {
 			std::cout << "Starting upscaling for Entity " << entityID << std::endl;
 
-			std::string modelPath;
-			uint32_t upscaleFactor = 2;
+			// Extract parameters from metadata
+			std::string inputImagePath = "";
+			std::string modelPath = Utils::FilePaths::upscaleDir;
+			std::string outputPath = Utils::FilePaths::defaultProjectPath;
+			std::string outputFilename = "upscale_AniStudio.png";
+			uint32_t upscaleFactor = 4;
 			bool preserveAspectRatio = true;
 			int n_threads = 4;
 
-			// Input image component
-			if (!mgr.HasComponent<InputImageComponent>(entityID)) {
-				return false;
-			}
-			auto& inputComp = mgr.GetComponent<InputImageComponent>(entityID);
+			// Debug logging for metadata
+			std::cout << "Upscaling metadata:" << std::endl;
+			std::cout << metadata.dump(2) << std::endl;
 
-			// Extract parameters from metadata
+			// Parse metadata to extract parameters
 			if (metadata.contains("components") && metadata["components"].is_array()) {
 				for (const auto& comp : metadata["components"]) {
-					// Esrgan component (upscaler model)
-					if (comp.contains("Esrgan")) {
-						auto esrgan = comp["Esrgan"];
-						if (esrgan.contains("modelPath"))
-							modelPath = esrgan["modelPath"];
-						else if (esrgan.contains("modelName") && !esrgan["modelName"].get<std::string>().empty())
-							modelPath = Utils::FilePaths::upscaleDir + "/" + esrgan["modelName"].get<std::string>();
+					// Input image path - handle the nested structure
+					if (comp.contains("InputImage")) {
+						nlohmann::json inputImageData;
 
-						if (esrgan.contains("upscaleFactor"))
-							upscaleFactor = esrgan["upscaleFactor"];
+						// Handle different possible structures
+						if (comp["InputImage"].contains("InputImage")) {
+							// Double nested case
+							inputImageData = comp["InputImage"]["InputImage"];
+						}
+						else {
+							// Single nested case
+							inputImageData = comp["InputImage"];
+						}
 
-						if (esrgan.contains("preserveAspectRatio"))
-							preserveAspectRatio = esrgan["preserveAspectRatio"];
+						if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null()
+							&& !inputImageData["filePath"].get<std::string>().empty()) {
+							inputImagePath = inputImageData["filePath"].get<std::string>();
+							std::cout << "Found input path: " << inputImagePath << std::endl;
+						}
 					}
 
+					// Output settings - handle the nested structure
+					if (comp.contains("OutputImage")) {
+						nlohmann::json outputImageData;
 
+						// Handle different possible structures
+						if (comp["OutputImage"].contains("OutputImage")) {
+							// Double nested case
+							outputImageData = comp["OutputImage"]["OutputImage"];
+						}
+						else {
+							// Single nested case
+							outputImageData = comp["OutputImage"];
+						}
 
-					// Sampler component for threads count
+						if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null()
+							&& !outputImageData["filePath"].get<std::string>().empty()) {
+							outputPath = outputImageData["filePath"].get<std::string>();
+							std::cout << "Found output path: " << outputPath << std::endl;
+						}
+
+						if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null()
+							&& !outputImageData["fileName"].get<std::string>().empty()) {
+							outputFilename = outputImageData["fileName"].get<std::string>();
+							std::cout << "Found output filename: " << outputFilename << std::endl;
+						}
+					}
+
+					// Esrgan component - handle the nested structure
+					if (comp.contains("Esrgan")) {
+						nlohmann::json esrganData;
+
+						// Handle different possible structures
+						if (comp["Esrgan"].contains("Esrgan")) {
+							// Double nested case
+							esrganData = comp["Esrgan"]["Esrgan"];
+						}
+						else {
+							// Single nested case
+							esrganData = comp["Esrgan"];
+						}
+
+						if (esrganData.contains("modelPath") && !esrganData["modelPath"].is_null()
+							&& !esrganData["modelPath"].get<std::string>().empty()) {
+							modelPath = esrganData["modelPath"];
+						}
+						else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null()
+							&& !esrganData["modelName"].get<std::string>().empty()) {
+							std::string modelName = esrganData["modelName"].get<std::string>();
+							modelPath = (std::filesystem::path(Utils::FilePaths::upscaleDir) / modelName).string();
+						}
+
+						if (esrganData.contains("upscaleFactor"))
+							upscaleFactor = esrganData["upscaleFactor"];
+
+						if (esrganData.contains("preserveAspectRatio"))
+							preserveAspectRatio = esrganData["preserveAspectRatio"];
+					}
+
+					// Sampler component - handle the nested structure
 					if (comp.contains("Sampler")) {
-						if (comp["Sampler"].contains("n_threads"))
-							n_threads = comp["Sampler"]["n_threads"];
+						nlohmann::json samplerData;
+
+						// Handle different possible structures
+						if (comp["Sampler"].contains("Sampler")) {
+							// Double nested case
+							samplerData = comp["Sampler"]["Sampler"];
+						}
+						else {
+							// Single nested case
+							samplerData = comp["Sampler"];
+						}
+
+						if (samplerData.contains("n_threads"))
+							n_threads = samplerData["n_threads"];
 					}
 				}
 			}
 
 			// Validate parameters
+			if (inputImagePath.empty()) {
+				throw std::runtime_error("Input image path is empty!");
+			}
+
 			if (modelPath.empty()) {
 				throw std::runtime_error("ESRGAN model path is empty!");
 			}
+
+			// Load input image
+			int inputWidth, inputHeight, inputChannels;
+			std::cout << "Loading input image from: " << inputImagePath << std::endl;
+			inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 0);
+			if (!inputData) {
+				std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
+					(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+				throw std::runtime_error(error);
+			}
+
+			std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
+				<< " with " << inputChannels << " channels" << std::endl;
+
+			// Create output path
+			std::filesystem::path outputDir(outputPath);
+			std::filesystem::path outputFile(outputFilename);
+			std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+				outputFile.string(), outputDir.string());
 
 			// Initialize upscaler context
 			upscaler_context = new_upscaler_ctx(modelPath.c_str(), n_threads);
@@ -1278,29 +1375,64 @@ namespace ECS {
 				throw std::runtime_error("Failed to initialize upscaler context!");
 			}
 
-			// Create input image
+			// Create input image struct
 			sd_image_t input_image = {
-				static_cast<uint32_t>(inputComp.width),
-				static_cast<uint32_t>(inputComp.height),
-				static_cast<uint32_t>(inputComp.channels),
-				inputComp.imageData
+				static_cast<uint32_t>(inputWidth),
+				static_cast<uint32_t>(inputHeight),
+				static_cast<uint32_t>(inputChannels),
+				inputData
 			};
 
 			// Perform upscaling
 			sd_image_t upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
+			if (!upscaled_image.data) {
+				throw std::runtime_error("Upscaling failed - no output image produced");
+			}
+
+			std::cout << "Upscaling successful, saving output to: " << uniqueFilePath << std::endl;
+
+			// Update metadata with correct output path before saving
+			nlohmann::json updatedMetadata = metadata;
+			for (auto& comp : updatedMetadata["components"]) {
+				if (comp.contains("OutputImage")) {
+					if (comp["OutputImage"].contains("OutputImage")) {
+						comp["OutputImage"]["OutputImage"]["filePath"] = uniqueFilePath;
+					}
+					else {
+						comp["OutputImage"]["filePath"] = uniqueFilePath;
+					}
+				}
+			}
 
 			// Save the upscaled image
 			SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
-				upscaled_image.channel, entityID, metadata);
+				upscaled_image.channel, entityID, updatedMetadata);
+
+			// Cleanup resources
+			if (inputData) {
+				stbi_image_free(inputData);
+				inputData = nullptr;
+			}
+
+			// Free the upscaled image if needed
+			if (upscaled_image.data) {
+				free(upscaled_image.data);
+			}
 
 			// Cleanup upscaler context
 			free_upscaler_ctx(upscaler_context);
+			upscaler_context = nullptr;
 
 			std::cout << "Upscaling completed for Entity " << entityID << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "Exception during upscaling: " << e.what() << std::endl;
+
+			// Clean up resources
+			if (inputData) {
+				stbi_image_free(inputData);
+			}
 
 			if (upscaler_context) {
 				free_upscaler_ctx(upscaler_context);
@@ -1309,5 +1441,4 @@ namespace ECS {
 			return false;
 		}
 	}
-
 } // namespace ECS

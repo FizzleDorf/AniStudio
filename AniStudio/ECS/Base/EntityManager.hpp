@@ -256,7 +256,7 @@ namespace ECS {
 			return ComponentTypeRegistry::IsNameRegistered(name);
 		}
 
-		nlohmann::json SerializeEntity(const EntityID entity) {
+		nlohmann::json EntityManager::SerializeEntity(const EntityID entity) {
 			nlohmann::json entityJson;
 
 			entityJson["ID"] = entity;
@@ -269,7 +269,19 @@ namespace ECS {
 					nlohmann::json componentJson;
 					std::string componentName = GetComponentNameById(componentId);
 					if (componentName != "Unknown") {
-						componentJson[componentName] = baseComponent->Serialize();
+						// Extract the inner content from the component's serialization
+						nlohmann::json serialized = baseComponent->Serialize();
+
+						// Check if the serialized data has the component name as a key
+						if (serialized.contains(componentName)) {
+							// Use the inner content to avoid double nesting
+							componentJson[componentName] = serialized[componentName];
+						}
+						else {
+							// Use as-is if not nested
+							componentJson[componentName] = serialized;
+						}
+
 						entityJson["components"].push_back(componentJson);
 					}
 				}

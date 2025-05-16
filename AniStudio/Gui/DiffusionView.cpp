@@ -167,9 +167,6 @@ namespace GUI {
 		}
 	}
 
-	static char fileName[256] = "AniStudio"; // Buffer for file name
-	static char outputDir[256] = "";         // Buffer for output directory
-
 	void DiffusionView::RenderFilePath(const EntityID entity) {
     if (!mgr.HasComponent<OutputImageComponent>(entity)) {
         return;
@@ -193,8 +190,6 @@ namespace GUI {
     
     // File extension selector
     const char* extensions[] = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp" };
-    static int currentExtensionIndex = 0;
-    static std::string currentExtension = ".png"; // Default extension
     
     if (ImGui::BeginTable("Extension", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
@@ -238,7 +233,7 @@ namespace GUI {
         ImGui::SameLine();
         if (ImGui::Button("R##w9")) {
             imageComp.fileName = "AniStudio";
-            imageComp.filePath = Utils::FilePaths::defaultProjectPath + "\\" + "AniStudio" + currentExtension;
+            imageComp.filePath = Utils::FilePaths::defaultProjectPath;
         }
         
         ImGui::TableNextColumn();
@@ -519,8 +514,11 @@ namespace GUI {
 	//}
 
 	void DiffusionView::HandleT2IEvent() {
+
 		std::cout << "Adding new entity..." << std::endl;
+
 		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
+
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
 			mgr.DestroyEntity(newEntity);
@@ -532,15 +530,46 @@ namespace GUI {
 			mgr.DestroyEntity(newEntity);
 			return;
 		}
-			
-		mgr.GetComponent<OutputImageComponent>(newEntity) = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
+
+		auto& srcOutputComp = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
+		auto& destOutputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+
+		// Make sure we have a valid directory path
+		if (srcOutputComp.filePath.empty()) {
+			srcOutputComp.filePath = Utils::FilePaths::defaultProjectPath;
+		}
+
+		// Create the directory if it doesn't exist
+		std::filesystem::create_directories(srcOutputComp.filePath);
+
+		// Make sure we have a valid filename with extension
+		std::string filename = srcOutputComp.fileName;
+		if (filename.empty()) {
+			filename = "AniStudio.png";
+		}
+		else {
+			std::filesystem::path filePath(filename);
+			if (filePath.extension().empty()) {
+				filePath.replace_extension(".png");
+				filename = filePath.string();
+			}
+		}
+
+		// Generate a unique filename for this specific generation
+		std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+			filename, srcOutputComp.filePath);
+
+		// Update the new entity's output component with the unique path
+		destOutputComp.fileName = std::filesystem::path(uniqueFilePath).filename().string();
+		destOutputComp.filePath = uniqueFilePath;
 
 		// Queue event
 		Event event;
 		event.entityID = newEntity;
 		event.type = EventType::InferenceRequest;
 		ANI::Events::Ref().QueueEvent(event);
-		std::cout << "Inference request queued for entity: " << newEntity << std::endl;
+		std::cout << "Inference request queued for entity: " << newEntity
+			<< " with output path: " << uniqueFilePath << std::endl;
 	}
 
 	void DiffusionView::HandleI2IEvent() {
@@ -565,8 +594,39 @@ namespace GUI {
 			return;
 		}
 
-		mgr.GetComponent<OutputImageComponent>(newEntity) = mgr.GetComponent<OutputImageComponent>(img2imgEntity);
 		mgr.GetComponent<InputImageComponent>(newEntity) = mgr.GetComponent<InputImageComponent>(img2imgEntity);
+		
+		auto& srcOutputComp = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
+		auto& destOutputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+
+		// Make sure we have a valid directory path
+		if (srcOutputComp.filePath.empty()) {
+			srcOutputComp.filePath = Utils::FilePaths::defaultProjectPath;
+		}
+
+		// Create the directory if it doesn't exist
+		std::filesystem::create_directories(srcOutputComp.filePath);
+
+		// Make sure we have a valid filename with extension
+		std::string filename = srcOutputComp.fileName;
+		if (filename.empty()) {
+			filename = "AniStudio.png";
+		}
+		else {
+			std::filesystem::path filePath(filename);
+			if (filePath.extension().empty()) {
+				filePath.replace_extension(".png");
+				filename = filePath.string();
+			}
+		}
+
+		// Generate a unique filename for this specific generation
+		std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+			filename, srcOutputComp.filePath);
+
+		// Update the new entity's output component with the unique path
+		destOutputComp.fileName = std::filesystem::path(uniqueFilePath).filename().string();
+		destOutputComp.filePath = uniqueFilePath;
 
 		// Queue event
 		Event event;
@@ -1001,6 +1061,8 @@ namespace GUI {
 					// seedControl->activate();
 				}
 			}
+
+			ImGui::Separator();
 
 			if (isPaused) {
 				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {

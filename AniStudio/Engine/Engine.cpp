@@ -104,6 +104,7 @@ void Engine::Init() {
     viewManager.RegisterViewType<SequencerView>("SequencerView");
     viewManager.RegisterViewType<PluginView>("PluginView");
     viewManager.RegisterViewType<NodeView>("NodeView");
+	viewManager.RegisterViewType<UpscaleView>("UpscaleView");
 
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
@@ -116,6 +117,7 @@ void Engine::Init() {
     mgr.RegisterComponentName<PromptComponent>("Prompt");
     mgr.RegisterComponentName<SamplerComponent>("Sampler");
     mgr.RegisterComponentName<GuidanceComponent>("Guidance");
+	mgr.RegisterComponentName<EsrganComponent>("Esrgan");
     mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
     mgr.RegisterComponentName<VaeComponent>("Vae");
     mgr.RegisterComponentName<ImageComponent>("Image");
@@ -132,12 +134,16 @@ void Engine::Init() {
     // Create a NodeView instance
     /*auto nodeViewID = viewManager.CreateView();
     viewManager.AddView<NodeView>(nodeViewID, NodeView(mgr));
-    viewManager.GetView<NodeView>(nodeViewID).Init();*/
+    viewManager.GetView<NodeView>(nodeViewID).Init();*/	
 
-    auto diffusionViewID = viewManager.CreateView();
+	const auto upscaleViewID = viewManager.CreateView();
+	viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(mgr));
+
+    const auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
     viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
 
+	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
 }

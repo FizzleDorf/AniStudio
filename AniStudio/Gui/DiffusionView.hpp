@@ -62,6 +62,12 @@ namespace GUI {
         // Entity IDs for the two modes
         EntityID txt2imgEntity = 0;
         EntityID img2imgEntity = 0;
+
+		char fileName[256] = "AniStudio"; // Buffer for file name
+		char outputDir[256] = "";         // Buffer for output directory
+
+		int currentExtensionIndex = 0;
+		std::string currentExtension = ".png"; // Default extension
     };
 
 } // namespace GUI

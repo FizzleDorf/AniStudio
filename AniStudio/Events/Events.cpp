@@ -166,18 +166,19 @@ void Events::ProcessEvents() {
             break;
         }
 
-        case EventType::UpscaleRequest: {
-            std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
+		case EventType::UpscaleRequest: {
+			std::cout << "Handling Upscale request for Entity ID: " << event.entityID << '\n';
 
-            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-            if (sdcppSystem) {
-                std::cout << "UpscaleSystem is registered." << std::endl;
-                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
-            } else {
-                std::cerr << "UpscaleSystem is not registered." << std::endl;
-            }
-            break;
-        }
+			auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			if (sdcppSystem) {
+				std::cout << "SDCPPSystem is registered, queueing upscale task." << std::endl;
+				sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
+			}
+			else {
+				std::cerr << "SDCPPSystem is not registered, cannot process upscale request." << std::endl;
+			}
+			break;
+		}
 
         case EventType::ConvertToGGUF: {
             std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
