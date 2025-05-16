@@ -531,6 +531,7 @@ namespace GUI {
 			return;
 		}
 
+		// Get references to source and destination output image comps
 		auto& srcOutputComp = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
 		auto& destOutputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 
@@ -543,33 +544,18 @@ namespace GUI {
 		std::filesystem::create_directories(srcOutputComp.filePath);
 
 		// Make sure we have a valid filename with extension
-		std::string filename = srcOutputComp.fileName;
-		if (filename.empty()) {
-			filename = "AniStudio.png";
-		}
-		else {
-			std::filesystem::path filePath(filename);
-			if (filePath.extension().empty()) {
-				filePath.replace_extension(".png");
-				filename = filePath.string();
-			}
+		if (srcOutputComp.fileName.empty()) {
+			srcOutputComp.fileName = "AniStudio.png";
 		}
 
-		// Generate a unique filename for this specific generation
-		std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-			filename, srcOutputComp.filePath);
-
-		// Update the new entity's output component with the unique path
-		destOutputComp.fileName = std::filesystem::path(uniqueFilePath).filename().string();
-		destOutputComp.filePath = uniqueFilePath;
+		// Copy the source output comp to the destination output comp
+		destOutputComp = srcOutputComp;
 
 		// Queue event
 		Event event;
 		event.entityID = newEntity;
 		event.type = EventType::InferenceRequest;
 		ANI::Events::Ref().QueueEvent(event);
-		std::cout << "Inference request queued for entity: " << newEntity
-			<< " with output path: " << uniqueFilePath << std::endl;
 	}
 
 	void DiffusionView::HandleI2IEvent() {
@@ -596,6 +582,7 @@ namespace GUI {
 
 		mgr.GetComponent<InputImageComponent>(newEntity) = mgr.GetComponent<InputImageComponent>(img2imgEntity);
 		
+		// Get references to source and destination output image comps
 		auto& srcOutputComp = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
 		auto& destOutputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 
@@ -608,25 +595,12 @@ namespace GUI {
 		std::filesystem::create_directories(srcOutputComp.filePath);
 
 		// Make sure we have a valid filename with extension
-		std::string filename = srcOutputComp.fileName;
-		if (filename.empty()) {
-			filename = "AniStudio.png";
-		}
-		else {
-			std::filesystem::path filePath(filename);
-			if (filePath.extension().empty()) {
-				filePath.replace_extension(".png");
-				filename = filePath.string();
-			}
+		if (srcOutputComp.fileName.empty()) {
+			srcOutputComp.fileName = "AniStudio.png";
 		}
 
-		// Generate a unique filename for this specific generation
-		std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-			filename, srcOutputComp.filePath);
-
-		// Update the new entity's output component with the unique path
-		destOutputComp.fileName = std::filesystem::path(uniqueFilePath).filename().string();
-		destOutputComp.filePath = uniqueFilePath;
+		// Copy the source output comp to the destination output comp
+		destOutputComp = srcOutputComp;
 
 		// Queue event
 		Event event;
