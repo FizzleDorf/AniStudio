@@ -5,6 +5,7 @@
 #include <SDcppSystem.hpp>
 #include "ImGuiFileDialog.h"
 #include "stable-diffusion.h"
+
 using namespace ECS;
 
 struct ProgressData {
@@ -54,11 +55,11 @@ namespace GUI {
 
     private:
         // Tab state
-        bool isFilenameChanged = false;
+        bool isFilenameChanged = true;
         bool isPaused = false;
         int numQueues = 1;
         bool isTxt2ImgMode = true; // Tracks which tab is active
-
+		
         // Entity IDs for the two modes
         EntityID txt2imgEntity = 0;
         EntityID img2imgEntity = 0;

@@ -191,6 +191,16 @@ namespace Utils {
 			std::string baseName = originalFilePath.stem().string();
 			std::string extension = originalFilePath.extension().string();
 
+			// Ensure the extension starts with a dot
+			if (!extension.empty() && extension[0] != '.') {
+				extension = "." + extension;
+			}
+
+			// Default to .png if no extension provided
+			if (extension.empty()) {
+				extension = ".png";
+			}
+
 			// Ensure the directory exists
 			if (!std::filesystem::exists(directoryPath)) {
 				std::filesystem::create_directories(directoryPath);

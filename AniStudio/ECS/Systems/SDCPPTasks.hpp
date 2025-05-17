@@ -8,25 +8,26 @@ namespace ECS {
 	// Base class for SDCPP tasks
 	class SDCPPTask : public Utils::Task {
 	public:
-		SDCPPTask(const nlohmann::json& metadata)
-			: metadata(metadata) {}
+		SDCPPTask(const nlohmann::json& metadata, std::string fullPath)
+			: metadata(metadata), fullPath(fullPath) {}
 
 		virtual ~SDCPPTask() = default;
 
 	protected:
 		nlohmann::json metadata;
+		std::string fullPath;
 	};
 
 	// Task for text-to-image generation
 	class InferenceTask : public SDCPPTask {
 	public:
-		InferenceTask(const nlohmann::json& metadata)
-			: SDCPPTask(metadata) {} // Fix: Initialize base class properly
+		InferenceTask(const nlohmann::json& metadata, std::string fullPath)
+			: SDCPPTask(metadata, fullPath) {} // Fix: Initialize base class properly
 
 		void execute() override {
 			if (isCancelled()) return;
 			try {
-				bool success = Utils::SDCPPUtils::RunInference(metadata);
+				bool success = Utils::SDCPPUtils::RunInference(metadata, fullPath);
 				if (!success) {
 					throw std::runtime_error("Inference task failed");
 				}
@@ -44,7 +45,7 @@ namespace ECS {
 	class ConvertTask : public SDCPPTask {
 	public:
 		ConvertTask(const nlohmann::json& metadata)
-			: SDCPPTask(metadata) {}
+			: SDCPPTask(metadata, "") {}
 
 		void execute() override {
 			if (isCancelled()) return;
@@ -66,14 +67,14 @@ namespace ECS {
 	// Task for image-to-image generation
 	class Img2ImgTask : public SDCPPTask {
 	public:
-		Img2ImgTask(const nlohmann::json& metadata)
-			: SDCPPTask(metadata) {}
+		Img2ImgTask(const nlohmann::json& metadata, std::string fullPath)
+			: SDCPPTask(metadata, fullPath) {}
 
 		void execute() override {
 			if (isCancelled()) return;
 			try {
 				// Call the utility function to handle img2img
-				bool success = Utils::SDCPPUtils::RunImg2Img(metadata);
+				bool success = Utils::SDCPPUtils::RunImg2Img(metadata, fullPath);
 				if (!success) {
 					throw std::runtime_error("Img2img task failed");
 				}
@@ -90,15 +91,15 @@ namespace ECS {
 	// Task for upscaling images
 	class UpscalingTask : public SDCPPTask {
 	public:
-		UpscalingTask(const nlohmann::json& metadata)
-			: SDCPPTask(metadata) {}
+		UpscalingTask(const nlohmann::json& metadata, std::string fullPath)
+			: SDCPPTask(metadata, fullPath) {}
 
 		void execute() override {
 			if (isCancelled()) return;
 
 			try {
 				// Call the utility function to handle upscaling
-				bool success = Utils::SDCPPUtils::RunUpscaling(metadata);
+				bool success = Utils::SDCPPUtils::RunUpscaling(metadata, fullPath);
 				if (!success) {
 					throw std::runtime_error("Upscaling task failed");
 				}

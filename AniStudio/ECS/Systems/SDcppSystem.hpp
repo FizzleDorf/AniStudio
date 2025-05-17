@@ -35,6 +35,7 @@ namespace ECS {
 			EntityID entityID = 0;
 			bool processing = false;
 			nlohmann::json metadata = nlohmann::json();
+			std::string fullPath = "";
 			std::shared_ptr<Utils::Task> task;
 			TaskType taskType;
 		};
@@ -201,61 +202,66 @@ namespace ECS {
 		std::mutex queueMutex;
 
 		// Helper methods to create tasks
-		std::shared_ptr<Utils::Task> CreateInferenceTask(const EntityID entityID, const nlohmann::json& metadata) {
-			return std::make_shared<InferenceTask>(metadata);
+		std::shared_ptr<Utils::Task> CreateInferenceTask(const EntityID entityID, const nlohmann::json& metadata, std::string fullPath) {
+			return std::make_shared<InferenceTask>(metadata, fullPath);
 		}
 
 		std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID, const nlohmann::json& metadata) {
 			return std::make_shared<ConvertTask>(metadata);
 		}
 
-		std::shared_ptr<Utils::Task> CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata) {
-			return std::make_shared<Img2ImgTask>(metadata);
+		std::shared_ptr<Utils::Task> CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata, std::string fullPath) {
+			return std::make_shared<Img2ImgTask>(metadata, fullPath);
 		}
 
-		std::shared_ptr<Utils::Task> CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata) {
-			return std::make_shared<UpscalingTask>(metadata);
+		std::shared_ptr<Utils::Task> CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata, std::string fullPath) {
+			return std::make_shared<UpscalingTask>(metadata, fullPath);
 		}
 
 		// Queue processing methods
 		void ProcessQueues() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 
-			// If paused, don't process any new tasks
 			if (pauseWorker) {
 				return;
 			}
 
-			// Process task queue
-			for (auto& item : taskQueue) {
-				if (!item.processing && activeTasks < 1) {
-					// Create a task based on the task type
-					switch (item.taskType) {
-					case TaskType::Inference:
-						item.task = CreateInferenceTask(item.entityID, item.metadata);
-						break;
-					case TaskType::Conversion:
-						item.task = CreateConversionTask(item.entityID, item.metadata);
-						break;
-					case TaskType::Img2Img:
-						item.task = CreateImg2ImgTask(item.entityID, item.metadata);
-						break;
-					case TaskType::Upscaling:
-						item.task = CreateUpscalingTask(item.entityID, item.metadata);
-						break;
-					default:
-						continue;
-					}
+			if (taskQueue.empty()) {
+				return;
+			}
 
-					item.processing = true;
-					activeTasks++;
+			auto& item = taskQueue.front();
 
-					// Add to thread pool
-					threadPool.addTask(item.task);
-
-					// Only start one task per update
-					break;
+			// Process only if it's not already processing and we have capacity
+			if (!item.processing && activeTasks < 1) {
+				// Create a task based on the task type
+				if (mgr.HasComponent<OutputImageComponent>(item.entityID))
+				{
+					auto& output = mgr.GetComponent<OutputImageComponent>(item.entityID);
+					item.fullPath = Utils::PngMetadata::CreateUniqueFilename(output.fileName, output.filePath);
 				}
+				switch (item.taskType) {
+				case TaskType::Inference:
+					item.task = CreateInferenceTask(item.entityID, item.metadata, item.fullPath);
+					break;
+				case TaskType::Conversion:
+					item.task = CreateConversionTask(item.entityID, item.metadata);
+					break;
+				case TaskType::Img2Img:
+					item.task = CreateImg2ImgTask(item.entityID, item.metadata, item.fullPath);
+					break;
+				case TaskType::Upscaling:
+					item.task = CreateUpscalingTask(item.entityID, item.metadata, item.fullPath);
+					break;
+				default:
+					return; // Invalid task type, don't process
+				}
+
+				item.processing = true;
+				activeTasks++;
+
+				// Add to thread pool
+				threadPool.addTask(item.task);
 			}
 		}
 
@@ -273,12 +279,8 @@ namespace ECS {
 
 					// Decrease active tasks count and remove from queue
 					activeTasks--;
-					it = taskQueue.erase(it);
-
-					// Release the lock temporarily to avoid potential deadlocks
-					lock.unlock();
 					ProcessCompletedTask(entityID);
-					lock.lock();
+					it = taskQueue.erase(it);
 				}
 				else {
 					++it;
@@ -320,7 +322,7 @@ namespace ECS {
 				}
 
 				// Load the image data through the ImageSystem
-				imageSystem->SetImage(entityID, outputComp.filePath);
+				imageSystem->SetImage(entityID, taskQueue.front().fullPath);
 
 				if (!std::filesystem::exists(outputComp.filePath)) {
 					throw std::runtime_error("Failed to find output image file!");

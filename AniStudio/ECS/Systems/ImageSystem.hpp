@@ -18,7 +18,7 @@ namespace ECS {
 	class ImageSystem : public BaseSystem {
 	public:
 		// Callback function types
-		/*using ImageCallback = std::function<void(EntityID)>;*/
+		using ImageCallback = std::function<void(EntityID)>;
 
 		ImageSystem(EntityManager& entityMgr)
 			: BaseSystem(entityMgr) { // Use 2 threads for image operations
@@ -48,8 +48,16 @@ namespace ECS {
 			}
 		}
 
-		void Update(const float deltaT) override {
-			ProcessPendingDeletions();
+		// TODO: async the image IO and join in the update
+		void Update(const float deltaT) override {}
+
+		// Register callbacks for image events
+		void RegisterImageAddedCallback(const ImageCallback& callback) {
+			imageAddedCallbacks.push_back(callback);
+		}
+
+		void RegisterImageRemovedCallback(const ImageCallback& callback) {
+			imageRemovedCallbacks.push_back(callback);
 		}
 
 		// Set image filepath and load it
@@ -75,9 +83,27 @@ namespace ECS {
 				}
 
 				LoadImage(imageComp);
+				NotifyImageAdded(entity);
 			}
 		}
 
+		// Remove an image entity
+		void RemoveImage(const EntityID entity) {
+			if (mgr.HasComponent<ImageComponent>(entity)) {
+				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+
+				// Unload image
+				if (imageComp.textureID != 0) {
+					UnloadImage(imageComp);
+				}
+
+				// Notify before removing
+				NotifyImageRemoved(entity);
+
+				// Remove the entity
+				mgr.DestroyEntity(entity);
+			}
+		}
 
 		// Get a list of all entities with an ImageComponent
 		std::vector<EntityID> GetAllImageEntities() const {
@@ -92,30 +118,19 @@ namespace ECS {
 
 	private:
 
-		// Process pending texture deletions (must be called on main thread)
-		void ProcessPendingDeletions() {
-			std::lock_guard<std::mutex> lock(pendingDeletionMutex);
+		std::vector<ImageCallback> imageAddedCallbacks;
+		std::vector<ImageCallback> imageRemovedCallbacks;
 
-			while (!pendingDeletions.empty()) {
-				auto& pending = pendingDeletions.front();
+		// Notify image callbacks
+		void NotifyImageAdded(EntityID entity) {
+			for (const auto& callback : imageAddedCallbacks) {
+				callback(entity);
+			}
+		}
 
-				if (mgr.HasComponent<ImageComponent>(pending.entityID)) {
-					auto& imageComp = mgr.GetComponent<ImageComponent>(pending.entityID);
-
-					// Delete texture if it matches the pending one
-					if (imageComp.textureID == pending.textureID) {
-						Utils::ImageUtils::DeleteTexture(imageComp.textureID);
-						imageComp.textureID = 0;
-						imageComp.width = 0;
-						imageComp.height = 0;
-						imageComp.channels = 0;
-
-						// Notify
-						// NotifyImageRemoved(pending.entityID);
-					}
-				}
-
-				pendingDeletions.pop();
+		void NotifyImageRemoved(EntityID entity) {
+			for (const auto& callback : imageRemovedCallbacks) {
+				callback(entity);
 			}
 		}
 
@@ -158,15 +173,5 @@ namespace ECS {
 				imageComp.channels = 0;
 			}
 		}
-
-		// Structure for pending texture deletion
-		struct PendingDeletion {
-			EntityID entityID;
-			GLuint textureID;
-		};
-
-		// Queue for pending texture deletions (must be processed on main thread)
-		std::mutex pendingDeletionMutex;
-		std::queue<PendingDeletion> pendingDeletions;
 	};
 } // namespace ECS

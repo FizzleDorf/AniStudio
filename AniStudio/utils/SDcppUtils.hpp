@@ -13,7 +13,6 @@ namespace Utils {
 
 	class SDCPPUtils {
 	public:
-		
 
 		// Generate a random seed using STDDefaultRNG from sdcpp
 		static uint64_t generateRandomSeed() {
@@ -332,7 +331,7 @@ namespace Utils {
 
 		// Implementations of core methods for generation
 
-		static bool RunInference(const nlohmann::json& metadata) {
+		static bool RunInference(const nlohmann::json& metadata, std::string fullPath) {
 			sd_ctx_t* sd_context = nullptr;
 			try {
 				// Initialize Stable Diffusion context
@@ -349,7 +348,7 @@ namespace Utils {
 				}
 
 				// Save the generated image
-				SaveImage(image->data, image->width, image->height, image->channel, metadata);
+				SaveImage(image->data, image->width, image->height, image->channel, metadata, fullPath);
 
 				// Cleanup
 				free(image);
@@ -430,7 +429,7 @@ namespace Utils {
 			}
 		}
 
-		static bool RunImg2Img(const nlohmann::json& metadata) {
+		static bool RunImg2Img(const nlohmann::json& metadata, std::string fullPath) {
 			sd_ctx_t* sd_context = nullptr;
 			unsigned char* inputData = nullptr;
 			unsigned char* maskData = nullptr;
@@ -550,7 +549,9 @@ namespace Utils {
 
 				// Load input image
 				int inputWidth, inputHeight, inputChannels;
+
 				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3); // Force 4 channels
+
 				if (!inputData) {
 					throw std::runtime_error("Failed to load input image: " + inputImagePath);
 				}
@@ -679,7 +680,7 @@ namespace Utils {
 
 				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
-					result_image->channel, metadata);
+					result_image->channel, metadata, fullPath);
 
 				// Free the result image
 				free(result_image);
@@ -718,7 +719,7 @@ namespace Utils {
 			}
 		}
 
-		static bool RunUpscaling(const nlohmann::json& metadata) {
+		static bool RunUpscaling(const nlohmann::json& metadata, std::string fullPath) {
 			upscaler_ctx_t* upscaler_context = nullptr;
 			unsigned char* inputData = nullptr;
 
@@ -772,7 +773,7 @@ namespace Utils {
 						// Esrgan component
 						if (comp.contains("Esrgan")) {
 							nlohmann::json esrganData;
-								esrganData = comp["Esrgan"];
+							esrganData = comp["Esrgan"];
 
 
 							if (esrganData.contains("modelPath") && !esrganData["modelPath"].is_null()
@@ -795,7 +796,7 @@ namespace Utils {
 						// Sampler component
 						if (comp.contains("Sampler")) {
 							nlohmann::json samplerData;
-								samplerData = comp["Sampler"];
+							samplerData = comp["Sampler"];
 
 							if (samplerData.contains("n_threads"))
 								n_threads = samplerData["n_threads"];
@@ -868,7 +869,7 @@ namespace Utils {
 
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
-					upscaled_image.channel, updatedMetadata);
+					upscaled_image.channel, metadata, fullPath);
 
 				// Cleanup resources
 				if (inputData) {
@@ -904,40 +905,19 @@ namespace Utils {
 		}
 
 		static void SaveImage(const unsigned char* data, int width, int height, int channels,
-			const nlohmann::json& metadata) {
+			const nlohmann::json& metadata, std::string fullPath) {
 			try {
-				// Extract output path and filename from metadata
-				std::string outputPath = Utils::FilePaths::defaultProjectPath;
-				std::string outputFilename = "output.png";
-
-				// Find OutputImage or Image component in metadata
-				if (metadata.contains("components") && metadata["components"].is_array()) {
-					for (const auto& comp : metadata["components"]) {
-						if (comp.contains("OutputImage") || comp.contains("Image")) {
-							auto outImage = comp.contains("OutputImage") ? comp["OutputImage"] : comp["Image"];
-							if (outImage.contains("filePath") && !outImage["filePath"].is_null()
-								&& !outImage["filePath"].get<std::string>().empty()) {
-								outputPath = outImage["filePath"].get<std::string>();
-							}
-							if (outImage.contains("fileName") && !outImage["fileName"].is_null()
-								&& !outImage["fileName"].get<std::string>().empty()) {
-								outputFilename = outImage["fileName"].get<std::string>();
-							}
-							break;
-						}
-					}
-				}
 
 				// Save file
 				if (!Utils::ImageUtils::SaveImage(
-					outputPath, width, height, channels, data)) {
-					std::cerr << "Failed to save image: " << outputPath << std::endl;
+					fullPath, width, height, channels, data)) {
+					std::cerr << "Failed to save image: " << fullPath << std::endl;
 				}
 
 				// Save metadata to the PNG
-				Utils::PngMetadata::WriteMetadataToPNG(outputPath, metadata);
+				Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
 
-				std::cout << "Image saved successfully: \"" << outputPath << "\"" << std::endl;
+				std::cout << "Image saved successfully: \"" << fullPath << "\"" << std::endl;
 			}
 			catch (const std::filesystem::filesystem_error& e) {
 				std::cerr << "Error creating directory: " << e.what() << '\n';
