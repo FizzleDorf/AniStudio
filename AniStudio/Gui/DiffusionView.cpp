@@ -354,6 +354,8 @@ namespace GUI {
 
 			ImGui::SameLine();
 			if (ImGui::Button("X##clear_img")) {
+				std::lock_guard<std::mutex> lock(Utils::stbi_mutex);
+
 				// Clear image
 				if (imageComp.imageData) {
 					Utils::ImageUtils::FreeImageData(imageComp.imageData);
@@ -1055,11 +1057,11 @@ namespace GUI {
 				}
 			}
 
-			/*if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
+			if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
 				Event event;
 				event.type = EventType::StopCurrentTask;
 				ANI::Events::Ref().QueueEvent(event);
-			}*/
+			}
 
 			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
 				Event event;

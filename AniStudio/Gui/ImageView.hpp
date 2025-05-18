@@ -21,7 +21,9 @@ namespace GUI {
 			offsetY(0.0f)
 		{
 			viewName = "ImageView";
+		}
 
+		void Init() override {
 			// Ensure ImageSystem is registered
 			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 			if (!imageSystem) {
@@ -29,46 +31,17 @@ namespace GUI {
 				imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 			}
 
-			// Since there seems to be an issue with the callback registration,
-			// we'll implement a polling approach in our Update method instead
-			// to check for changes to the image collection
-		}
+			// Register callbacks to update the view when images change
+			// We're registering these in Init instead of constructor to ensure everything is properly initialized
+			if (imageSystem) {
+				imageSystem->RegisterImageAddedCallback(std::bind(&ImageView::HandleImageAdded, this, std::placeholders::_1));
+				imageSystem->RegisterImageRemovedCallback(std::bind(&ImageView::HandleImageRemoved, this, std::placeholders::_1));
+			}
 
-		void Init() override {
 			// Try to select first image if nothing is selected
 			if (selectedEntityID == 0) {
 				auto imageEntities = GetImageEntities();
 				if (!imageEntities.empty()) {
-					selectedEntityID = imageEntities[0];
-					imgIndex = 0;
-				}
-			}
-		}
-
-		void Update(const float deltaT) override {
-			// Check if the selected entity still exists and has an ImageComponent
-			if (selectedEntityID != 0) {
-				if (!mgr.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
-					// The selected entity has been removed or no longer has an image component
-					// Find a new entity to select
-					auto imageEntities = GetImageEntities();
-					if (imageEntities.empty()) {
-						// No images available
-						selectedEntityID = 0;
-						imgIndex = 0;
-					}
-					else {
-						// Select the first image
-						selectedEntityID = imageEntities[0];
-						imgIndex = 0;
-					}
-				}
-			}
-			else {
-				// No entity selected, check if any are available
-				auto imageEntities = GetImageEntities();
-				if (!imageEntities.empty()) {
-					// Select the first image
 					selectedEntityID = imageEntities[0];
 					imgIndex = 0;
 				}
@@ -161,7 +134,13 @@ namespace GUI {
 		}
 
 		~ImageView() {
-			// Nothing to clean up - ImageSystem handles resource cleanup
+			// Unregister callbacks if possible to prevent accessing deleted object
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (imageSystem) {
+				// We would need a way to unregister callbacks here
+				// This would require the ImageSystem to have a method to remove callbacks
+				// For now, we'll rely on the system not calling callbacks on deleted views
+			}
 		}
 
 	private:
@@ -206,6 +185,7 @@ namespace GUI {
 		// Callback handlers
 		void HandleImageAdded(ECS::EntityID entityID) {
 			// Set the newly added image as the selected one
+			imageEntities = GetImageEntities();
 			selectedEntityID = entityID;
 			imgIndex = GetCurrentImageIndex();
 
@@ -214,10 +194,10 @@ namespace GUI {
 		}
 
 		void HandleImageRemoved(ECS::EntityID entityID) {
+			imageEntities = GetImageEntities();
 			// Check if the removed entity was the selected one
 			if (selectedEntityID == entityID) {
 				// Get current image list
-				auto imageEntities = GetImageEntities();
 
 				if (imageEntities.empty()) {
 					// No images left
@@ -246,8 +226,6 @@ namespace GUI {
 		}
 
 		void RenderSelector() {
-			auto imageEntities = GetImageEntities();
-
 			if (imageEntities.empty()) {
 				ImGui::Text("No images loaded.");
 				return;
@@ -299,7 +277,9 @@ namespace GUI {
 		void RenderHistory() {
 			ImGui::Begin("History", &showHistory);
 
-			auto imageEntities = GetImageEntities();
+			if (ImGui::Button("Refresh")) {
+				imageEntities = GetImageEntities();
+			}
 
 			if (imageEntities.empty()) {
 				ImGui::Text("No images available.");
@@ -501,12 +481,6 @@ namespace GUI {
 				// Load the image directly - this will also trigger the callback
 				imageSystem->SetImage(entity, filePath);
 			}
-
-			// If we loaded at least one image, select the last one
-			if (lastEntity != 0) {
-				selectedEntityID = lastEntity;
-				imgIndex = GetCurrentImageIndex();
-			}
 		}
 
 		void SaveSelectedImage() {
@@ -555,43 +529,11 @@ namespace GUI {
 		void RemoveSelectedImage() {
 			if (selectedEntityID == 0) return;
 
-			// Save the current index for selection after removal
-			int currentIndex = imgIndex;
-
-			// Remove component and entity directly
-			if (mgr.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
-				auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
-
-				// Free image data and texture
-				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
-				}
-
-				// Remove the entity
-				mgr.DestroyEntity(selectedEntityID);
-
-				// Update selection
-				auto imageEntities = GetImageEntities();
-				if (imageEntities.empty()) {
-					// No images left
-					selectedEntityID = 0;
-					imgIndex = 0;
-				}
-				else {
-					// Try to select an entity at the same index
-					if (currentIndex >= static_cast<int>(imageEntities.size())) {
-						currentIndex = static_cast<int>(imageEntities.size() - 1);
-					}
-
-					if (currentIndex >= 0 && currentIndex < static_cast<int>(imageEntities.size())) {
-						selectedEntityID = imageEntities[currentIndex];
-						imgIndex = currentIndex;
-					}
-					else {
-						selectedEntityID = 0;
-						imgIndex = 0;
-					}
-				}
+			// Get the image system
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (imageSystem) {
+				// Remove via the system to trigger callbacks properly
+				imageSystem->RemoveImage(selectedEntityID);
 			}
 		}
 
@@ -618,6 +560,8 @@ namespace GUI {
 
 			return truncated;
 		}
+		private:
+			std::vector<ECS::EntityID> imageEntities;
 	};
 
 } // namespace GUI

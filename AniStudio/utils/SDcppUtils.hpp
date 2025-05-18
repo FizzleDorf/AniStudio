@@ -10,6 +10,7 @@ namespace Utils {
 	static std::random_device rd;
 	static STDDefaultRNG rng;
 	static bool initialized = false;
+	static std::mutex stbi_mutex;
 
 	class SDCPPUtils {
 	public:
@@ -333,6 +334,8 @@ namespace Utils {
 
 		static bool RunInference(const nlohmann::json& metadata, std::string fullPath) {
 			sd_ctx_t* sd_context = nullptr;
+			sd_image_t* image = nullptr;
+
 			try {
 				// Initialize Stable Diffusion context
 				std::cout << "Initializing SD context..." << std::endl;
@@ -342,7 +345,7 @@ namespace Utils {
 				}
 
 				// Generate image
-				sd_image_t* image = GenerateImage(sd_context, metadata);
+				image = GenerateImage(sd_context, metadata);
 				if (!image) {
 					throw std::runtime_error("Failed to generate image!");
 				}
@@ -351,21 +354,35 @@ namespace Utils {
 				SaveImage(image->data, image->width, image->height, image->channel, metadata, fullPath);
 
 				// Cleanup
-				free(image);
-				free_sd_ctx(sd_context);
+				if (image) {
+					free(image);
+					image = nullptr;
+				}
+
+				if (sd_context) {
+					free_sd_ctx(sd_context);
+					sd_context = nullptr;
+				}
 
 				return true;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during inference: " << e.what() << std::endl;
 
+				// Clean up resources
+				if (image) {
+					free(image);
+					image = nullptr;
+				}
+
 				if (sd_context) {
 					free_sd_ctx(sd_context);
+					sd_context = nullptr;
 				}
+
 				return false;
 			}
 		}
-
 		static bool ConvertToGGUF(const nlohmann::json& metadata) {
 			try {
 				std::string inputPath, vaePath;
@@ -549,8 +566,11 @@ namespace Utils {
 
 				// Load input image
 				int inputWidth, inputHeight, inputChannels;
-
-				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3); // Force 4 channels
+				{
+					std::lock_guard<std::mutex> lock(stbi_mutex); // Lock during image loading
+					inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight,
+						&inputChannels, 3); // Force 3 channels
+				}
 
 				if (!inputData) {
 					throw std::runtime_error("Failed to load input image: " + inputImagePath);
@@ -585,7 +605,11 @@ namespace Utils {
 				else {
 					// Load mask from file
 					int maskWidth, maskHeight, maskChannels;
-					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1); // Force 1 channel
+					{
+						std::lock_guard<std::mutex> lock(stbi_mutex); // Lock during mask loading
+						maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight,
+							&maskChannels, 1); // Force 1 channel
+					}
 
 					if (!maskData) {
 						std::cerr << "Failed to load mask image: " << maskImagePath << ", using blank mask instead" << std::endl;
@@ -655,18 +679,23 @@ namespace Utils {
 				);
 
 				// Clean up resources that were passed by value and copied
-				if (inputData) {
-					stbi_image_free(inputData);
-					inputData = nullptr;
+				   // Clean up input data - PROTECT WITH MUTEX
+				{
+					std::lock_guard<std::mutex> lock(stbi_mutex);
+					if (inputData) {
+						stbi_image_free(inputData);
+						inputData = nullptr;
+					}
+
+					if (maskData) {
+						stbi_image_free(maskData);
+						maskData = nullptr;
+					}
 				}
 
 				if (emptyMaskData) {
 					delete[] emptyMaskData;
 					emptyMaskData = nullptr;
-				}
-				else if (maskData) {
-					stbi_image_free(maskData);
-					maskData = nullptr;
 				}
 
 				// Check if we got a result image
@@ -682,13 +711,31 @@ namespace Utils {
 				SaveImage(result_image->data, result_image->width, result_image->height,
 					result_image->channel, metadata, fullPath);
 
-				// Free the result image
-				free(result_image);
-				result_image = nullptr;
+				// Clean up resources
+				if (inputData) {
+					free(inputData);
+					inputData = nullptr;
+				}
 
-				// Clean up SD context
-				free_sd_ctx(sd_context);
-				sd_context = nullptr;
+				if (emptyMaskData) {
+					delete[] emptyMaskData;
+					emptyMaskData = nullptr;
+				}
+
+				if (maskData) {
+					free(maskData);
+					maskData = nullptr;
+				}
+
+				if (result_image) {
+					free(result_image);
+					result_image = nullptr;
+				}
+
+				if (sd_context) {
+					free_sd_ctx(sd_context);
+					sd_context = nullptr;
+				}
 
 				return true;
 			}
@@ -696,15 +743,21 @@ namespace Utils {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
 				// Clean up resources
-				if (inputData) {
-					stbi_image_free(inputData);
+				{
+					std::lock_guard<std::mutex> lock(stbi_mutex);
+					if (inputData) {
+						stbi_image_free(inputData);
+						inputData = nullptr;
+					}
+
+					if (maskData) {
+						stbi_image_free(maskData);
+						maskData = nullptr;
+					}
 				}
 
 				if (emptyMaskData) {
 					delete[] emptyMaskData;
-				}
-				else if (maskData) {
-					stbi_image_free(maskData);
 				}
 
 				if (result_image) {
@@ -894,10 +947,12 @@ namespace Utils {
 				// Clean up resources
 				if (inputData) {
 					stbi_image_free(inputData);
+					inputData = nullptr;
 				}
 
 				if (upscaler_context) {
 					free_upscaler_ctx(upscaler_context);
+					upscaler_context = nullptr;
 				}
 
 				return false;

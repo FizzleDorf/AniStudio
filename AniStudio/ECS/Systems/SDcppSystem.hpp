@@ -79,6 +79,7 @@ namespace ECS {
 
 			try {
 				// Create queue item
+				std::lock_guard<std::mutex> lock(queueMutex);
 				QueueItem item;
 				item.entityID = entityID;
 				item.processing = false;
@@ -103,8 +104,6 @@ namespace ECS {
 				item.metadata = mgr.SerializeEntity(entityID);
 				std::cout << "Successfully serialized entity " << entityID << std::endl;
 
-				// Lock and add to queue
-				std::lock_guard<std::mutex> lock(queueMutex);
 				taskQueue.push_back(item);
 
 				std::cout << "Entity " << entityID << " queued for processing. New queue size: " << taskQueue.size() << std::endl;
@@ -152,21 +151,42 @@ namespace ECS {
 
 		void StopCurrentTask() {
 			std::lock_guard<std::mutex> lock(queueMutex);
-			for (auto& item : taskQueue) {
-				if (item.processing && item.task) {
-					item.task->cancel();
-				}
-			}
+			// TODO: check between steps to cancel
 		}
 
 		void ClearQueue() {
 			std::lock_guard<std::mutex> lock(queueMutex);
+			if (taskQueue.empty()) {
+				return;
+			}
+			// First cancel any active tasks
+			for (auto& item : taskQueue) {
+				if (item.task) {
+					item.task->cancel();
+				}
+			}
 
-			// Remove all non-processing tasks and destroy their entities
+			// Get reference to ImageSystem if available
+			auto imageSystem = mgr.GetSystem<ImageSystem>();
+
+			// Clear non-processing tasks
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
 				if (!it->processing) {
-					mgr.DestroyEntity(it->entityID);
+					EntityID entityId = it->entityID;
 					it = taskQueue.erase(it);
+
+					try {
+						// Use ImageSystem to properly remove image if applicable
+						if (imageSystem && mgr.HasComponent<ImageComponent>(entityId)) {
+							imageSystem->RemoveImage(entityId);
+						}
+						else if (mgr.GetEntitiesSignatures().count(entityId)) {
+							mgr.DestroyEntity(entityId);
+						}
+					}
+					catch (const std::exception& e) {
+						std::cerr << "Error in ClearQueue: " << e.what() << std::endl;
+					}
 				}
 				else {
 					++it;
@@ -277,9 +297,13 @@ namespace ECS {
 					// Store the entity ID before erasing the item
 					EntityID entityID = it->entityID;
 
-					// Decrease active tasks count and remove from queue
+					// Decrease active tasks count
 					activeTasks--;
+
+					// Process the completed task before erasing
 					ProcessCompletedTask(entityID);
+
+					// Now erase the item
 					it = taskQueue.erase(it);
 				}
 				else {
@@ -290,42 +314,52 @@ namespace ECS {
 
 		void ProcessCompletedTask(const EntityID entityID) {
 			try {
-				if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-					throw std::runtime_error("Missing OutputImageComponent");
+				if (!mgr.GetEntitiesSignatures().count(entityID)) {
+					std::cerr << "Entity no longer exists: " << entityID << std::endl;
+					return;
 				}
 
-				if (!mgr.GetEntitiesSignatures().count(entityID)) {
-					throw std::runtime_error("Entity no longer exists");
+				if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
+					std::cerr << "Missing OutputImageComponent for entity: " << entityID << std::endl;
+					return;
 				}
 
 				auto& outputComp = mgr.GetComponent<OutputImageComponent>(entityID);
 
 				if (outputComp.filePath.empty()) {
-					throw std::runtime_error("No filepath in OutputImageComponent");
+					std::cerr << "No filepath in OutputImageComponent for entity: " << entityID << std::endl;
+					return;
 				}
 
 				auto imageSystem = mgr.GetSystem<ImageSystem>();
 				if (!imageSystem) {
-					throw std::runtime_error("ImageSystem not found");
+					std::cerr << "ImageSystem not found" << std::endl;
+					return;
 				}
 
 				// Create/update Image component
 				if (!mgr.HasComponent<ImageComponent>(entityID)) {
 					auto& imageComp = mgr.AddComponent<ImageComponent>(entityID);
-					imageComp.filePath = outputComp.filePath;
-					imageComp.fileName = std::filesystem::path(outputComp.filePath).filename().string();
+					// The ImageSystem::SetImage will handle initializing and loading
+				}
+
+				// Use the ImageSystem to set the image path and load it
+				// This will handle cleaning up any existing image data
+				std::string fullPath = "";
+				if (!taskQueue.empty() && taskQueue.front().entityID == entityID) {
+					fullPath = taskQueue.front().fullPath;
 				}
 				else {
-					auto& imageComp = mgr.GetComponent<ImageComponent>(entityID);
-					imageComp.filePath = outputComp.filePath;
-					imageComp.fileName = std::filesystem::path(outputComp.filePath).filename().string();
+					fullPath = outputComp.filePath;
 				}
 
-				// Load the image data through the ImageSystem
-				imageSystem->SetImage(entityID, taskQueue.front().fullPath);
-
-				if (!std::filesystem::exists(outputComp.filePath)) {
-					throw std::runtime_error("Failed to find output image file!");
+				if (std::filesystem::exists(fullPath)) {
+					imageSystem->SetImage(entityID, fullPath);
+					std::cout << "Image loaded successfully for entity " << entityID << std::endl;
+				}
+				else {
+					std::cerr << "Failed to find output image file: " << fullPath << std::endl;
+					return;
 				}
 
 				// Clean up unnecessary components, leaving only the ImageComponent
@@ -333,6 +367,8 @@ namespace ECS {
 				for (const auto& componentId : componentTypes) {
 					std::string componentName = mgr.GetComponentNameById(componentId);
 					if (componentName != "Image") {
+						// Note: We don't need to manually clean up image data here 
+						// because the ImageSystem did that in SetImage
 						mgr.RemoveComponentById(entityID, componentId);
 					}
 				}
@@ -341,9 +377,21 @@ namespace ECS {
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error processing completed task: " << e.what() << std::endl;
-				mgr.DestroyEntity(entityID);
+				try {
+					// Get an ImageSystem reference if available
+					auto imageSystem = mgr.GetSystem<ImageSystem>();
+					if (imageSystem) {
+						// Use ImageSystem::RemoveImage which properly cleans up the image resources
+						imageSystem->RemoveImage(entityID);
+					}
+					else {
+						mgr.DestroyEntity(entityID);
+					}
+				}
+				catch (const std::exception& e2) {
+					std::cerr << "Error destroying entity: " << e2.what() << std::endl;
+				}
 			}
-		}
-	};
+		}	};
 
 } // namespace ECS

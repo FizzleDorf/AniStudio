@@ -41,7 +41,7 @@ namespace Utils {
         }
 
         ~ThreadPool() {
-            shutdown();
+            Shutdown();
         }
 
         void addTask(std::shared_ptr<Task> task) {
@@ -61,7 +61,7 @@ namespace Utils {
             return tasks.size();
         }
 
-        void shutdown() {
+        void Shutdown() {
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 stop = true;
