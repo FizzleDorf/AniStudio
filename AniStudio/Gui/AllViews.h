@@ -14,3 +14,4 @@
 #include "ViewListManagerView.hpp"
 #include "NodeView.hpp"
 #include "UpscaleView.hpp"
+#include "VideoView.hpp"

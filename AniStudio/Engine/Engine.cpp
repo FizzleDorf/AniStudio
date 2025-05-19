@@ -105,6 +105,7 @@ void Engine::Init() {
     viewManager.RegisterViewType<PluginView>("PluginView");
     viewManager.RegisterViewType<NodeView>("NodeView");
 	viewManager.RegisterViewType<UpscaleView>("UpscaleView");
+	viewManager.RegisterViewType<VideoView>("VideoView");
 
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
@@ -126,10 +127,14 @@ void Engine::Init() {
     mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
     mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
     mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
+	mgr.RegisterComponentName<VideoComponent>("Video");
+	mgr.RegisterComponentName<InputVideoComponent>("InputVideo");
+	mgr.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 
     // Register core systems
     mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();    
+	mgr.RegisterSystem<VideoSystem>();
 
     // Create a NodeView instance
     /*auto nodeViewID = viewManager.CreateView();
@@ -138,12 +143,16 @@ void Engine::Init() {
 
 	const auto upscaleViewID = viewManager.CreateView();
 	viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(mgr));
+	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
+
+	const auto videoViewID = viewManager.CreateView();
+	viewManager.AddView<VideoView>(videoViewID, VideoView(mgr));
+	viewManager.GetView<VideoView>(videoViewID).Init();
 
     const auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
     viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
 
-	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
 }

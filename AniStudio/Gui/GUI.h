@@ -5,5 +5,3 @@
 #include "Base/ViewList.hpp"
 #include "Base/ViewManager.hpp"
 #include "Base/ViewTypes.hpp"
-
-

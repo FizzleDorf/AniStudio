@@ -109,6 +109,7 @@ if(BUILD_ANISTUDIO)
     find_package(ZLIB REQUIRED)
     find_package(PNG REQUIRED)
     find_package(exiv2 CONFIG REQUIRED)
+	find_package(FFmpeg REQUIRED)
 
     # Set PCH file
     set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -197,6 +198,10 @@ if(BUILD_ANISTUDIO)
         PNG::PNG
         Vulkan::Vulkan
         exiv2::exiv2
+		ffmpeg::avcodec
+		ffmpeg::avformat
+		ffmpeg::avutil
+		ffmpeg::swscale
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
