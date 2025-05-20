@@ -1,3 +1,4 @@
+
 #ifndef VIDEOVIEW_HPP
 #define VIDEOVIEW_HPP
 
@@ -6,7 +7,6 @@
 #include "VideoSystem.hpp"
 #include "../Events/Events.hpp"
 #include <pch.h>
-#include "ImSequencer.h"
 
 namespace GUI {
 
@@ -15,50 +15,44 @@ namespace GUI {
 		VideoView(ECS::EntityManager& entityMgr)
 			: BaseView(entityMgr),
 			selectedEntityID(0),
-			showControls(true),
+			videoIndex(0),
+			showHistory(true),
 			zoom(1.0f),
 			offsetX(0.0f),
 			offsetY(0.0f),
-			currentFrame(0),
-			firstFrame(0),
-			expanded(true),
-			selectedEntry(0)
+			isPlaying(false),
+			playbackSpeed(1.0f)
 		{
 			viewName = "VideoView";
 		}
 
 		void Init() override {
+			// Ensure VideoSystem is registered
 			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
 			if (!videoSystem) {
 				mgr.RegisterSystem<ECS::VideoSystem>();
 				videoSystem = mgr.GetSystem<ECS::VideoSystem>();
 			}
 
+			// Register callbacks to update the view when videos change
 			if (videoSystem) {
-				videoSystem->RegisterVideoAddedCallback([this](ECS::EntityID entityID) {
-					HandleVideoAdded(entityID);
-				});
-
-				videoSystem->RegisterVideoRemovedCallback([this](ECS::EntityID entityID) {
-					HandleVideoRemoved(entityID);
-				});
+				videoSystem->RegisterVideoAddedCallback(std::bind(&VideoView::HandleVideoAdded, this, std::placeholders::_1));
+				videoSystem->RegisterVideoRemovedCallback(std::bind(&VideoView::HandleVideoRemoved, this, std::placeholders::_1));
 			}
 
-			// Initialize with the first video if any exist
+			// Try to select first video if nothing is selected
 			if (selectedEntityID == 0) {
-				auto videoEntities = GetVideoEntities();
+				videoEntities = GetVideoEntities();
 				if (!videoEntities.empty()) {
 					selectedEntityID = videoEntities[0];
+					videoIndex = 0;
 				}
 			}
 		}
 
-		void Update(const float deltaT) override {
-			// Update current frame from video component if playing
-			if (selectedEntityID != 0 && mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-				auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
-				currentFrame = videoComp.currentFrame;
-			}
+		void Update(float deltaT) override {
+			// Update the video entities list to ensure we have the latest data
+			videoEntities = GetVideoEntities();
 		}
 
 		void Render() override {
@@ -69,45 +63,57 @@ namespace GUI {
 			if (selectedEntityID != 0 && mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
 				const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
 				ImGui::Text("File: %s", videoComp.fileName.c_str());
-				ImGui::Text("Dimensions: %dx%d", videoComp.width, videoComp.height);
-				ImGui::Text("FPS: %.2f, Frames: %d", videoComp.fps, videoComp.frameCount);
-				ImGui::Text("Current Frame: %d/%d", videoComp.currentFrame, videoComp.frameCount - 1);
+				ImGui::Text("Dimensions: %dx%d, FPS: %.2f, Frames: %d",
+					videoComp.width, videoComp.height, videoComp.fps, videoComp.frameCount);
+				ImGui::Text("Current Frame: %d / %d", videoComp.currentFrame, videoComp.frameCount);
 				ImGui::Separator();
 			}
 
 			RenderSelector();
 
-			if (ImGui::Button("Load Video")) {
+			if (ImGui::Button("Load Video(s)")) {
 				IGFD::FileDialogConfig config;
 				config.path = ".";
-				ImGuiFileDialog::Instance()->OpenDialog("LoadVideoDialog", "Choose Video",
-					"Video files{.mp4,.avi,.mov,.mkv,.webm}{.mp4,.avi,.mov,.mkv,.webm}", config);
+				// Enable multiple selection
+				config.countSelectionMax = 0; // 0 means infinite selections
+				ImGuiFileDialog::Instance()->OpenDialog("LoadVideoDialog", "Choose Video(s)",
+					filters, config);
 			}
 
-			if (ImGuiFileDialog::Instance()->Display("LoadVideoDialog")) {
+			if (ImGuiFileDialog::Instance()->Display("LoadVideoDialog", 32, ImVec2(700, 400))) {
 				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-					LoadVideo(filePath);
+					// Get multiple selections
+					std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
+
+					std::vector<std::string> filePaths;
+					for (const auto&[fileName, filePath] : selection) {
+						filePaths.push_back(filePath);
+					}
+
+					LoadVideos(filePaths);
 				}
 				ImGuiFileDialog::Instance()->Close();
 			}
 
 			ImGui::SameLine();
+
 			if (selectedEntityID != 0 && ImGui::Button("Remove Video")) {
 				RemoveSelectedVideo();
 			}
 
+			// Option to show/hide history panel
 			ImGui::SameLine();
-			ImGui::Checkbox("Show Controls", &showControls);
+			ImGui::Checkbox("Show History", &showHistory);
 
-			// Video controls
-			if (showControls && selectedEntityID != 0) {
-				RenderVideoControls();
+			// Video playback controls
+			RenderPlaybackControls();
+
+			if (showHistory) {
+				RenderHistory();
 			}
 
 			ImGui::Separator();
 
-			// Main video display
 			if (ImGui::BeginChild("VideoViewerChild", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) {
 				RenderSelectedVideo();
 				ImGui::EndChild();
@@ -117,85 +123,199 @@ namespace GUI {
 		}
 
 		~VideoView() {
-			// Unregister callbacks if needed
+			// Unregister callbacks if possible to prevent accessing deleted object
+			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+			if (videoSystem) {
+				// We would need a way to unregister callbacks here
+				// This would require the VideoSystem to have a method to remove callbacks
+				// For now, we'll rely on the system not calling callbacks on deleted views
+			}
 		}
 
 	private:
 		ECS::EntityID selectedEntityID;
-		bool showControls;
+		int videoIndex;
+		bool showHistory;
+		std::vector<ECS::EntityID> videoEntities;
+
+		// Video playback state
+		bool isPlaying;
+		float playbackSpeed;
+
+		// Values for zoom and panning
 		float zoom;
 		float offsetX;
 		float offsetY;
 
-		// Sequencer state
-		int currentFrame;
-		int firstFrame;
-		int sequenceOptions;
-		bool expanded;
-		int selectedEntry;
+		// File filters
+		const char* filters = "Video files{.mp4,.avi,.mkv,.mov,.webm}"
+			".mp4,.avi,.mkv,.mov,.webm"
+			"{.mp4},MP4"
+			"{.avi},AVI"
+			"{.mkv},MKV"
+			"{.mov},MOV"
+			"{.webm},WEBM";
 
+		// Get current list of video entities directly from the VideoSystem
 		std::vector<ECS::EntityID> GetVideoEntities() const {
 			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
 			if (videoSystem) {
 				return videoSystem->GetAllVideoEntities();
 			}
-			return {};
+			return {}; // Empty vector if no system or no entities
 		}
 
+		// Get the index of the currently selected video
+		int GetCurrentVideoIndex() const {
+			if (selectedEntityID == 0) return -1;
+
+			auto videoEntities = GetVideoEntities();
+			auto it = std::find(videoEntities.begin(), videoEntities.end(), selectedEntityID);
+			if (it != videoEntities.end()) {
+				return static_cast<int>(std::distance(videoEntities.begin(), it));
+			}
+			return -1; // Not found
+		}
+
+		// Callback handlers
 		void HandleVideoAdded(ECS::EntityID entityID) {
+			// Set the newly added video as the selected one
+			videoEntities = GetVideoEntities();
 			selectedEntityID = entityID;
-			std::cout << "New video added and selected: EntityID=" << entityID << std::endl;
+			videoIndex = GetCurrentVideoIndex();
+
+			// Log the operation
+			std::cout << "New video added and selected: EntityID=" << entityID << ", Index=" << videoIndex << std::endl;
 		}
 
 		void HandleVideoRemoved(ECS::EntityID entityID) {
+			videoEntities = GetVideoEntities();
+			// Check if the removed entity was the selected one
 			if (selectedEntityID == entityID) {
-				auto videoEntities = GetVideoEntities();
-				if (!videoEntities.empty()) {
-					selectedEntityID = videoEntities[0];
+				// Get current video list
+				if (videoEntities.empty()) {
+					// No videos left
+					selectedEntityID = 0;
+					videoIndex = 0;
+					std::cout << "Selected video was removed. No videos remaining." << std::endl;
 				}
 				else {
-					selectedEntityID = 0;
+					// Try to keep the same index if possible
+					if (videoIndex >= static_cast<int>(videoEntities.size())) {
+						videoIndex = static_cast<int>(videoEntities.size() - 1);
+					}
+
+					// Set the new selected entity
+					selectedEntityID = videoEntities[videoIndex];
+					// Pause the previously playing video if any
+					PauseAllVideos();
+					std::cout << "Selected video was removed. New selection: EntityID="
+						<< selectedEntityID << ", Index=" << videoIndex << std::endl;
 				}
+			}
+			else {
+				// If a different video was removed, we need to update the videoIndex
+				// since the overall collection has changed
+				videoIndex = GetCurrentVideoIndex();
+				std::cout << "Video removed: EntityID=" << entityID << ". Current selection updated to index: " << videoIndex << std::endl;
 			}
 		}
 
 		void RenderSelector() {
-			auto videoEntities = GetVideoEntities();
 			if (videoEntities.empty()) {
 				ImGui::Text("No videos loaded.");
 				return;
 			}
 
-			// Create a dropdown selector for videos
-			if (ImGui::BeginCombo("##VideoSelector",
-				selectedEntityID != 0 ?
-				mgr.GetComponent<ECS::VideoComponent>(selectedEntityID).fileName.c_str() : "Select Video")) {
-
-				for (auto entity : videoEntities) {
-					if (!mgr.HasComponent<ECS::VideoComponent>(entity)) continue;
-
-					const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(entity);
-					bool isSelected = (entity == selectedEntityID);
-
-					if (ImGui::Selectable(videoComp.fileName.c_str(), isSelected)) {
-						selectedEntityID = entity;
-						currentFrame = videoComp.currentFrame;
-					}
-
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
-					}
+			// Navigation buttons
+			if (ImGui::Button("First")) {
+				if (!videoEntities.empty()) {
+					videoIndex = 0;
+					selectedEntityID = videoEntities[videoIndex];
+					// Pause the previously playing video if any
+					PauseAllVideos();
 				}
-				ImGui::EndCombo();
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Previous")) {
+				if (!videoEntities.empty()) {
+					videoIndex = (videoIndex - 1 + static_cast<int>(videoEntities.size())) % static_cast<int>(videoEntities.size());
+					selectedEntityID = videoEntities[videoIndex];
+					// Pause the previously playing video if any
+					PauseAllVideos();
+				}
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Next")) {
+				if (!videoEntities.empty()) {
+					videoIndex = (videoIndex + 1) % static_cast<int>(videoEntities.size());
+					selectedEntityID = videoEntities[videoIndex];
+					// Pause the previously playing video if any
+					PauseAllVideos();
+				}
+			}
+
+			ImGui::SameLine();
+
+			if (ImGui::Button("Last")) {
+				if (!videoEntities.empty()) {
+					// Fix potential size_t to int conversion warning
+					videoIndex = static_cast<int>(videoEntities.size() - 1);
+					selectedEntityID = videoEntities[videoIndex];
+					// Pause the previously playing video if any
+					PauseAllVideos();
+				}
+			}
+
+			ImGui::SameLine();
+
+			// Video index selection
+			if (ImGui::InputInt("Current Video", &videoIndex)) {
+				if (videoEntities.empty()) {
+					videoIndex = 0;
+					return;
+				}
+
+				// Fix potential size_t to int conversion warning
+				const int size = static_cast<int>(videoEntities.size());
+				if (size == 1) {
+					videoIndex = 0;
+				}
+				else {
+					if (videoIndex < 0) {
+						videoIndex = size - 1;
+					}
+					videoIndex = (videoIndex % size + size) % size;
+				}
+
+				selectedEntityID = videoEntities[videoIndex];
+				// Pause the previously playing video if any
+				PauseAllVideos();
 			}
 		}
 
-		void RenderVideoControls() {
-			if (!mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) return;
+		void RenderPlaybackControls() {
+			ImGui::Separator();
+
+			if (selectedEntityID == 0 || !mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+				ImGui::Text("No video selected.");
+				return;
+			}
 
 			auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
-			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-			if (!videoSystem) return;
+
+			// Current frame slider
+			int currentFrame = videoComp.currentFrame;
+			if (ImGui::SliderInt("Frame", &currentFrame, 0, videoComp.frameCount - 1)) {
+				auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+				if (videoSystem) {
+					videoSystem->SeekToFrame(videoComp, currentFrame);
+				}
+			}
 
 			// Play/Pause button
 			if (ImGui::Button(videoComp.isPlaying ? "Pause" : "Play")) {
@@ -207,33 +327,122 @@ namespace GUI {
 			// Stop button
 			if (ImGui::Button("Stop")) {
 				videoComp.isPlaying = false;
-				videoSystem->SeekToFrame(videoComp, 0);
+				auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+				if (videoSystem) {
+					videoSystem->SeekToFrame(videoComp, 0);
+				}
 			}
 
 			ImGui::SameLine();
 
-			// Frame navigation
-			if (ImGui::Button("<<")) {
-				int newFrame = std::max(0, videoComp.currentFrame - 1);
-				videoSystem->SeekToFrame(videoComp, newFrame);
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button(">>")) {
-				int newFrame = std::min(videoComp.frameCount - 1, videoComp.currentFrame + 1);
-				videoSystem->SeekToFrame(videoComp, newFrame);
-			}
+			// Loop checkbox
+			ImGui::Checkbox("Loop", &videoComp.looping);
 
 			ImGui::SameLine();
 
-			// Frame slider
-			int frame = videoComp.currentFrame;
-			if (ImGui::SliderInt("Frame", &frame, 0, videoComp.frameCount - 1, "%d")) {
-				videoSystem->SeekToFrame(videoComp, frame);
+			// Playback speed slider
+			if (ImGui::SliderFloat("Speed", &videoComp.playbackSpeed, 0.1f, 2.0f, "%.1fx")) {
+				// The VideoSystem will handle the speed change
 			}
 
-			// Playback speed
-			ImGui::SliderFloat("Speed", &videoComp.playbackSpeed, 0.1f, 5.0f, "%.1f");
+			ImGui::Separator();
+		}
+
+		void RenderHistory() {
+			ImGui::Begin("Video History", &showHistory);
+
+			if (ImGui::Button("Refresh")) {
+				videoEntities = GetVideoEntities();
+			}
+
+			if (videoEntities.empty()) {
+				ImGui::Text("No videos available.");
+				ImGui::End();
+				return;
+			}
+
+			// Track the total width of buttons in the current row
+			float currentRowWidth = 0.0f;
+
+			// Create scrollable history panel
+			for (size_t i = 0; i < videoEntities.size(); ++i) {
+				ECS::EntityID entityID = videoEntities[i];
+
+				if (!mgr.HasComponent<ECS::VideoComponent>(entityID)) {
+					continue;
+				}
+
+				const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(entityID);
+				ImGui::BeginGroup();
+
+				// Highlight the selected video
+				if (static_cast<int>(i) == videoIndex) {
+					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+				}
+
+				// Calculate video dimensions for the thumbnail
+				float aspectRatio = static_cast<float>(videoComp.width) / static_cast<float>(videoComp.height);
+				ImVec2 maxSize(128.0f, 128.0f);
+				ImVec2 imageSize;
+
+				if (aspectRatio > 1.0f) {
+					imageSize = ImVec2(maxSize.x, maxSize.x / aspectRatio);
+				}
+				else {
+					imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
+				}
+
+				// Display the filename and details
+				ImGui::Text("%zu: %s", i, TruncateFilename(videoComp.fileName, imageSize.x).c_str());
+				ImGui::Text("%.0f fps, %d frames", videoComp.fps, videoComp.frameCount);
+
+				if (static_cast<int>(i) == videoIndex) {
+					ImGui::PopStyleColor();
+				}
+
+				// Make the video thumbnail clickable
+				if (videoComp.currentTexture != 0) {
+					if (ImGui::ImageButton(("##vid" + std::to_string(i)).c_str(),
+						reinterpret_cast<void*>(static_cast<intptr_t>(videoComp.currentTexture)),
+						imageSize,
+						ImVec2(0, 1),  // Top-left with Y flipped
+						ImVec2(1, 0)   // Bottom-right with Y flipped
+					)) {
+						videoIndex = static_cast<int>(i);
+						selectedEntityID = entityID;
+						// Pause all videos when switching
+						PauseAllVideos();
+					}
+				}
+				else {
+					// Fallback if no texture
+					if (ImGui::Button(("Select##" + std::to_string(i)).c_str(), imageSize)) {
+						videoIndex = static_cast<int>(i);
+						selectedEntityID = entityID;
+						// Pause all videos when switching
+						PauseAllVideos();
+					}
+				}
+
+				ImGui::EndGroup();
+
+				float buttonWidth = imageSize.x + ImGui::GetStyle().ItemSpacing.x;
+				currentRowWidth += buttonWidth;
+
+				if (i < videoEntities.size() - 1) {
+					float nextButtonWidth = std::min(maxSize.x, maxSize.y * aspectRatio) + ImGui::GetStyle().ItemSpacing.x;
+
+					if (currentRowWidth + nextButtonWidth > ImGui::GetContentRegionAvail().x) {
+						ImGui::NewLine();
+						currentRowWidth = 0.0f;
+					}
+					else {
+						ImGui::SameLine();
+					}
+				}
+			}
+
+			ImGui::End();
 		}
 
 		void RenderSelectedVideo() {
@@ -242,63 +451,165 @@ namespace GUI {
 				return;
 			}
 
-			auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+			const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
 
-			if (videoComp.currentTexture == 0) {
-				ImGui::Text("Loading video...");
-				return;
+			// Handle zooming with mouse wheel when child window is hovered
+			if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
+				float newZoom = zoom + ImGui::GetIO().MouseWheel * 0.1f;
+				SetZoom(newZoom);
 			}
 
-			// Calculate display size while maintaining aspect ratio
-			float aspect = static_cast<float>(videoComp.width) / videoComp.height;
-			float availWidth = ImGui::GetContentRegionAvail().x;
-			float displayWidth = availWidth;
-			float displayHeight = displayWidth / aspect;
+			// Calculate the window padding
+			const ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
+			const ImVec2 windowPos = ImGui::GetWindowPos();
+			const ImVec2 windowSize = ImGui::GetWindowSize();
+			const ImVec2 contentPos = ImVec2(windowPos.x + windowPadding.x, windowPos.y + windowPadding.y);
 
-			// Adjust if height exceeds available space
-			float availHeight = ImGui::GetContentRegionAvail().y;
-			if (displayHeight > availHeight) {
-				displayHeight = availHeight;
-				displayWidth = displayHeight * aspect;
+			// Calculate video size and position
+			ImVec2 imageSize = ImVec2(videoComp.width * zoom, videoComp.height * zoom);
+
+			// Center the image when zoomed out
+			if (zoom <= 1.0f) {
+				offsetX = (windowSize.x - imageSize.x) * 0.5f;
+				offsetY = (windowSize.y - imageSize.y) * 0.5f;
 			}
 
-			// Center the video in available space
-			float offsetX = (availWidth - displayWidth) * 0.5f;
-			if (offsetX > 0) {
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offsetX);
+			ImVec2 imagePos = ImVec2(offsetX + windowPadding.x, offsetY + windowPadding.y);
+
+			// Draw grid before the video
+			DrawGrid(videoComp.width, videoComp.height);
+
+			// Set cursor position and render video frame
+			ImGui::SetCursorPos(imagePos);
+			if (videoComp.currentTexture != 0) {
+				// Display the frame directly as it is in the texture
+				ImGui::Image((void*)(intptr_t)videoComp.currentTexture, 
+					imageSize,
+					ImVec2(0, 1),  // Top-left with Y flipped
+					ImVec2(1, 0)   // Bottom-right with Y flipped
+				);
+
+				// Handle panning only when the video is hovered and zoomed in
+				if (zoom > 1.0f && ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+					offsetX += ImGui::GetIO().MouseDelta.x;
+					offsetY += ImGui::GetIO().MouseDelta.y;
+				}
+			}
+			else {
+				ImGui::Text("No video frame available.");
 			}
 
-			// Render the video frame with proper orientation
-			ImGui::Image(
-				reinterpret_cast<void*>(static_cast<intptr_t>(videoComp.currentTexture)),
-				ImVec2(displayWidth, displayHeight),
-				ImVec2(0, 1),  // Bottom-left UV
-				ImVec2(1, 0)   // Top-right UV (flipped vertically)
-			);
+			// Ensure the content size is set to accommodate the video
+			ImGui::SetCursorPos(ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y));
 		}
 
-		void LoadVideo(const std::string& filePath) {
+		void DrawGrid(int videoWidth, int videoHeight) {
+			ImDrawList* draw_list = ImGui::GetWindowDrawList();
+			const float gridStep = 100.0f * zoom;
+
+			const ImVec2 windowPos = ImGui::GetWindowPos();
+			const ImVec2 windowSize = ImGui::GetWindowSize();
+			const ImVec2 contentMin = windowPos;
+			const ImVec2 contentMax = ImVec2(windowPos.x + windowSize.x, windowPos.y + windowSize.y);
+
+			// Calculate grid start positions
+			float startX = contentMin.x - fmodf(ImGui::GetScrollX(), gridStep);
+			float startY = contentMin.y - fmodf(ImGui::GetScrollY(), gridStep);
+
+			// Draw vertical grid lines
+			for (float x = startX; x < contentMax.x; x += gridStep) {
+				draw_list->AddLine(ImVec2(x, contentMin.y), ImVec2(x, contentMax.y), IM_COL32(255, 255, 255, 50));
+			}
+
+			// Draw horizontal grid lines
+			for (float y = startY; y < contentMax.y; y += gridStep) {
+				draw_list->AddLine(ImVec2(contentMin.x, y), ImVec2(contentMax.x, y), IM_COL32(255, 255, 255, 50));
+			}
+		}
+
+		void SetZoom(float newZoom) {
+			// Limit zoom level to a reasonable range
+			zoom = std::clamp(newZoom, 0.1f, 5.0f);
+		}
+
+		void LoadVideos(const std::vector<std::string>& filePaths) {
+			// Debug output first
+			std::cout << "Selected files to load:" << std::endl;
+			for (const auto& filePath : filePaths) {
+				std::cout << "  - " << filePath << std::endl;
+			}
+
+			// Get VideoSystem
 			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
 			if (!videoSystem) {
 				std::cerr << "Error: VideoSystem not found!" << std::endl;
 				return;
 			}
 
-			ECS::EntityID entity = mgr.AddNewEntity();
-			mgr.AddComponent<ECS::VideoComponent>(entity);
-			videoSystem->SetVideo(entity, filePath);
+			// Create entities and load videos directly
+			ECS::EntityID lastEntity = 0;
+			for (const auto& filePath : filePaths) {
+				if (filePath.empty()) {
+					continue; // Skip empty paths
+				}
+
+				// Create entity with component
+				ECS::EntityID entity = mgr.AddNewEntity();
+				lastEntity = entity; // Keep track of the last entity loaded
+
+				mgr.AddComponent<ECS::VideoComponent>(entity);
+
+				// Load the video directly - this will also trigger the callback
+				videoSystem->SetVideo(entity, filePath);
+			}
 		}
 
 		void RemoveSelectedVideo() {
 			if (selectedEntityID == 0) return;
 
+			// Get the video system
 			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
 			if (videoSystem) {
+				// Remove via the system to trigger callbacks properly
 				videoSystem->RemoveVideo(selectedEntityID);
 			}
+		}
+
+		// Helper function to pause all videos
+		void PauseAllVideos() {
+			for (auto entityID : videoEntities) {
+				if (mgr.HasComponent<ECS::VideoComponent>(entityID)) {
+					auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(entityID);
+					videoComp.isPlaying = false;
+				}
+			}
+		}
+
+		// Truncate the filename to fit the width of the video
+		std::string TruncateFilename(const std::string& filename, float maxTextWidth) {
+			float textWidth = ImGui::CalcTextSize(filename.c_str()).x;
+
+			if (textWidth <= maxTextWidth) {
+				return filename;
+			}
+
+			std::string truncated = "...";
+			float ellipsisWidth = ImGui::CalcTextSize(truncated.c_str()).x;
+
+			for (int i = static_cast<int>(filename.length()) - 1; i >= 0; --i) {
+				truncated.insert(3, 1, filename[i]);
+				float newWidth = ImGui::CalcTextSize(truncated.c_str()).x;
+
+				if (newWidth > maxTextWidth) {
+					truncated.erase(3, 1);
+					return truncated;
+				}
+			}
+
+			return truncated;
 		}
 	};
 
 } // namespace GUI
 
-#endif // VIDEO_VIEW_HPP
+#endif // VIDEOVIEW_HPP

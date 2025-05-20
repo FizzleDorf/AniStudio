@@ -1,6 +1,5 @@
 #pragma once
 
-// Include all view headers here for consistent access
 #include "ConvertView.hpp"
 #include "DebugView.hpp"
 #include "DiffusionView.hpp"
@@ -15,3 +14,4 @@
 #include "NodeView.hpp"
 #include "UpscaleView.hpp"
 #include "VideoView.hpp"
+#include "VideoSequencerView.hpp"

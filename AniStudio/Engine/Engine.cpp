@@ -106,7 +106,8 @@ void Engine::Init() {
     viewManager.RegisterViewType<NodeView>("NodeView");
 	viewManager.RegisterViewType<UpscaleView>("UpscaleView");
 	viewManager.RegisterViewType<VideoView>("VideoView");
-
+	viewManager.RegisterViewType<VideoView>("VideoSequencerView");
+	
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
     mgr.RegisterComponentName<ClipLComponent>("ClipL");
@@ -146,8 +147,10 @@ void Engine::Init() {
 	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
 
 	const auto videoViewID = viewManager.CreateView();
+	viewManager.AddView<VideoSequencerView>(videoViewID, VideoSequencerView(mgr));
 	viewManager.AddView<VideoView>(videoViewID, VideoView(mgr));
 	viewManager.GetView<VideoView>(videoViewID).Init();
+	viewManager.GetView<VideoSequencerView>(videoViewID).Init();
 
     const auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
