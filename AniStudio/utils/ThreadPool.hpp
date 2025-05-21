@@ -9,111 +9,163 @@
 #include <queue>
 #include <thread>
 #include <vector>
+#include <type_traits>
 
 namespace Utils {
 
-    // Base Task class with cancellation support
-    class Task {
-    public:
-        Task() : cancelled(false), done(false) {}
-        virtual ~Task() = default;
+	class ThreadPool {
+	public:
+		// Constructor: initialize the thread pool with hardware concurrency by default
+		ThreadPool(size_t numThreads = 0) : stop(false), activeThreads(0) {
+			size_t threadCount = numThreads > 0 ? numThreads : std::thread::hardware_concurrency();
+			startThreads(threadCount);
+		}
 
-        virtual void execute() = 0;
+		// Destructor: clean shutdown
+		~ThreadPool() {
+			{
+				std::unique_lock<std::mutex> lock(queueMutex);
+				stop = true;
+			}
+			condition.notify_all();
 
-        void cancel() { cancelled = true; }
-        bool isCancelled() const { return cancelled; }
-        bool isDone() const { return done; }
+			for (auto& worker : workers) {
+				if (worker.joinable()) {
+					worker.join();
+				}
+			}
+		}
 
-    protected:
-        void markDone() { done = true; }
+		// Delete copy and move constructors/assignments
+		ThreadPool(const ThreadPool&) = delete;
+		ThreadPool& operator=(const ThreadPool&) = delete;
+		ThreadPool(ThreadPool&&) = delete;
+		ThreadPool& operator=(ThreadPool&&) = delete;
 
-    private:
-        std::atomic<bool> cancelled;
-        std::atomic<bool> done;
-    };
+		// Submit a function with args and get a future for the result
+		template<typename F, typename... Args>
+		auto submit(F&& f, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>> {
+			using ReturnType = std::invoke_result_t<F, Args...>;
 
-    // Thread Pool for managing worker threads
-    class ThreadPool {
-    public:
-        ThreadPool(size_t numThreads = 0) {
-            size_t threadCount = numThreads > 0 ? numThreads : std::thread::hardware_concurrency();
-            startThreads(threadCount);
-        }
+			// Create a shared pointer to a packaged task
+			auto task = std::make_shared<std::packaged_task<ReturnType()>>(
+				std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+				);
 
-        ~ThreadPool() {
-            Shutdown();
-        }
+			// Get the future before we move the task
+			std::future<ReturnType> result = task->get_future();
 
-        void addTask(std::shared_ptr<Task> task) {
-            {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                tasks.push(task);
-            }
-            condition.notify_one();
-        }
+			// Add task to the queue
+			{
+				std::unique_lock<std::mutex> lock(queueMutex);
 
-        size_t size() const {
-            return workers.size();
-        }
+				// Don't allow enqueueing after stopping the pool
+				if (stop) {
+					throw std::runtime_error("Cannot enqueue task on stopped ThreadPool");
+				}
 
-        size_t getQueueSize() const {
-            std::unique_lock<std::mutex> lock(queueMutex);
-            return tasks.size();
-        }
+				// Wrap the packaged task in a void function
+				tasks.emplace([task]() { (*task)(); });
+			}
 
-        void Shutdown() {
-            {
-                std::unique_lock<std::mutex> lock(queueMutex);
-                stop = true;
-            }
+			// Notify a waiting thread
+			condition.notify_one();
+			return result;
+		}
 
-            condition.notify_all();
+		// Size accessor
+		size_t size() const {
+			return workers.size();
+		}
 
-            for (auto& worker : workers) {
-                if (worker.joinable()) {
-                    worker.join();
-                }
-            }
+		// Queue size accessor
+		size_t getQueueSize() const {
+			std::unique_lock<std::mutex> lock(queueMutex);
+			return tasks.size();
+		}
 
-            workers.clear();
-        }
+		// Number of active threads
+		size_t getActiveCount() const {
+			return activeThreads;
+		}
 
-    private:
-        void startThreads(size_t numThreads) {
-            stop = false;
-            for (size_t i = 0; i < numThreads; ++i) {
-                workers.emplace_back([this] {
-                    while (true) {
-                        std::shared_ptr<Task> task;
+		// Wait for all currently running tasks to complete
+		void waitForTasks() {
+			std::unique_lock<std::mutex> lock(queueMutex);
+			completionCondition.wait(lock, [this]() {
+				return (activeThreads == 0) && tasks.empty();
+			});
+		}
 
-                        {
-                            std::unique_lock<std::mutex> lock(queueMutex);
-                            condition.wait(lock, [this] {
-                                return stop || !tasks.empty();
-                                });
+	private:
+		void startThreads(size_t numThreads) {
+			for (size_t i = 0; i < numThreads; ++i) {
+				workers.emplace_back([this] {
+					while (true) {
+						std::function<void()> task;
 
-                            if (stop && tasks.empty()) {
-                                return;
-                            }
+						{
+							std::unique_lock<std::mutex> lock(queueMutex);
 
-                            task = tasks.front();
-                            tasks.pop();
-                        }
+							// Wait for a task or stop signal
+							condition.wait(lock, [this] {
+								return stop || !tasks.empty();
+							});
 
-                        if (task && !task->isCancelled()) {
-                            task->execute();
-                        }
-                    }
-                    });
-            }
-        }
+							// Exit if stopped and no more tasks
+							if (stop && tasks.empty()) {
+								return;
+							}
 
-        std::vector<std::thread> workers;
-        std::queue<std::shared_ptr<Task>> tasks;
+							// Get the next task
+							if (!tasks.empty()) {
+								task = std::move(tasks.front());
+								tasks.pop();
+								++activeThreads;
+							}
+						}
 
-        mutable std::mutex queueMutex;
-        std::condition_variable condition;
-        bool stop;
-    };
+						// Execute the task
+						if (task) {
+							try {
+								task();
+							}
+							catch (const std::exception& e) {
+								// Log exception but don't crash the thread
+								std::cerr << "Exception in thread pool task: " << e.what() << std::endl;
+							}
+							catch (...) {
+								std::cerr << "Unknown exception in thread pool task" << std::endl;
+							}
+
+							// Decrement active count and notify waiters
+							{
+								std::unique_lock<std::mutex> lock(queueMutex);
+								--activeThreads;
+								if (tasks.empty() && activeThreads == 0) {
+									completionCondition.notify_all();
+								}
+							}
+						}
+					}
+				});
+			}
+		}
+
+		// Thread workers
+		std::vector<std::thread> workers;
+
+		// Task queue
+		std::queue<std::function<void()>> tasks;
+
+		// Synchronization
+		mutable std::mutex queueMutex;
+		std::condition_variable condition;
+		std::condition_variable completionCondition;
+
+		// Status flags
+		bool stop;
+		std::atomic<size_t> activeThreads;
+	};
 
 } // namespace Utils

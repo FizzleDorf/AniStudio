@@ -7,7 +7,6 @@
 #include "ImageSystem.hpp"
 #include "SDCPPComponents.h"
 #include "SDcppUtils.hpp"
-#include "SDCPPTasks.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
@@ -20,6 +19,9 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <optional>
+#include <future>
+#include <thread>
 
 namespace ECS {
 	class SDCPPSystem : public BaseSystem {
@@ -31,42 +33,99 @@ namespace ECS {
 			Upscaling
 		};
 
+		// Simplified queue item for public interface
 		struct QueueItem {
 			EntityID entityID = 0;
 			bool processing = false;
-			nlohmann::json metadata = nlohmann::json();
-			std::string fullPath = "";
-			std::shared_ptr<Utils::Task> task;
 			TaskType taskType;
+
+			// Default constructor
+			QueueItem() = default;
+
+			// Copy constructor
+			QueueItem(const QueueItem& other) = default;
+
+			// Assignment operator
+			QueueItem& operator=(const QueueItem& other) = default;
 		};
 
-		// Constructor
-		SDCPPSystem(EntityManager& entityMgr, size_t numThreads = 0)
-			: BaseSystem(entityMgr),
-			threadPool(numThreads > 0 ? numThreads : std::thread::hardware_concurrency() / 2) {
+		// Internal tracking structure with futures and metadata
+		struct TaskData {
+			EntityID entityID = 0;
+			bool processing = false;
+			TaskType taskType;
+			nlohmann::json metadata;
+			std::string fullPath;
+			std::future<bool> result;
+
+			// Default constructor
+			TaskData() = default;
+
+			// Move constructor
+			TaskData(TaskData&& other) noexcept
+				: entityID(other.entityID)
+				, processing(other.processing)
+				, taskType(other.taskType)
+				, metadata(std::move(other.metadata))
+				, fullPath(std::move(other.fullPath))
+				, result(std::move(other.result)) {}
+
+			// Move assignment operator
+			TaskData& operator=(TaskData&& other) noexcept {
+				if (this != &other) {
+					entityID = other.entityID;
+					processing = other.processing;
+					taskType = other.taskType;
+					metadata = std::move(other.metadata);
+					fullPath = std::move(other.fullPath);
+					result = std::move(other.result);
+				}
+				return *this;
+			}
+
+			// Delete copy operations since std::future is not copyable
+			TaskData(const TaskData&) = delete;
+			TaskData& operator=(const TaskData&) = delete;
+		};
+
+		// Constructor - Use single thread for diffusion tasks
+		SDCPPSystem(EntityManager& entityMgr)
+			: BaseSystem(entityMgr)
+			, threadPool(1)  // Only 1 thread for sequential processing
+			, pauseWorker(false)
+			, hasActiveTask(false) {
 			sysName = "SDCPPSystem";
 			AddComponentSignature<LatentComponent>();
 			AddComponentSignature<OutputImageComponent>();
 			AddComponentSignature<InputImageComponent>();
-
-			activeTasks = 0;
 		}
 
 		// Destructor
 		~SDCPPSystem() {
-			std::unique_lock<std::mutex> lock(queueMutex);
-
-			// Cancel all tasks
-			for (auto& item : taskQueue) {
-				if (item.task) {
-					item.task->cancel();
-				}
+			// Signal shutdown and wait for all tasks to complete
+			{
+				std::lock_guard<std::mutex> lock(queueMutex);
+				shuttingDown = true;
+				pauseWorker = true;
 			}
 
-			lock.unlock();
+			// Try to terminate the active task if it exists
+			TerminateActiveTask();
 
-			// Give tasks time to gracefully terminate
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			// Wait for all threads to complete their current work (with timeout)
+			auto future = std::async(std::launch::async, [this]() {
+				threadPool.waitForTasks();
+			});
+
+			if (future.wait_for(std::chrono::seconds(5)) == std::future_status::timeout) {
+				std::cerr << "Warning: Thread pool did not shut down cleanly within timeout" << std::endl;
+			}
+
+			// Clean up any remaining entities
+			{
+				std::lock_guard<std::mutex> lock(queueMutex);
+				ClearQueueInternal();
+			}
 		}
 
 		// Public methods
@@ -78,12 +137,19 @@ namespace ECS {
 			}
 
 			try {
-				// Create queue item
 				std::lock_guard<std::mutex> lock(queueMutex);
-				QueueItem item;
-				item.entityID = entityID;
-				item.processing = false;
-				item.taskType = taskType;
+
+				// Don't accept new tasks during shutdown
+				if (shuttingDown) {
+					std::cerr << "Cannot queue task during shutdown" << std::endl;
+					return;
+				}
+
+				// Create task data
+				TaskData taskData;
+				taskData.entityID = entityID;
+				taskData.processing = false;
+				taskData.taskType = taskType;
 
 				// Check if we need to generate a random seed
 				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
@@ -101,12 +167,13 @@ namespace ECS {
 				}
 
 				// Serialize entity to metadata
-				item.metadata = mgr.SerializeEntity(entityID);
+				taskData.metadata = mgr.SerializeEntity(entityID);
 				std::cout << "Successfully serialized entity " << entityID << std::endl;
 
-				taskQueue.push_back(item);
+				// Add to internal task list
+				taskQueue.push_back(std::move(taskData));
 
-				std::cout << "Entity " << entityID << " queued for processing. New queue size: " << taskQueue.size() << std::endl;
+				std::cout << "Entity " << entityID << " queued for processing. Queue position: " << taskQueue.size() << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception in QueueTask: " << e.what() << std::endl;
@@ -117,18 +184,33 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
-			// Process queues - start any pending tasks
+			// Don't process if shutting down
+			if (shuttingDown) {
+				return;
+			}
+
+			// Process queues - start next task if no task is currently running
 			ProcessQueues();
 
-			// Update status of running tasks
+			// Update status of running task
 			CheckTaskCompletion();
 		}
 
 		void RemoveFromQueue(const size_t index) {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			if (index < taskQueue.size() && !taskQueue[index].processing) {
-				mgr.DestroyEntity(taskQueue[index].entityID);
+				EntityID entityID = taskQueue[index].entityID;
 				taskQueue.erase(taskQueue.begin() + index);
+
+				// Clean up the entity
+				try {
+					if (mgr.GetEntitiesSignatures().count(entityID)) {
+						mgr.DestroyEntity(entityID);
+					}
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Error destroying entity in RemoveFromQueue: " << e.what() << std::endl;
+				}
 			}
 		}
 
@@ -139,37 +221,110 @@ namespace ECS {
 			if (taskQueue[fromIndex].processing)
 				return;
 
-			QueueItem item = taskQueue[fromIndex];
+			// Use move semantics for efficiency
+			TaskData task = std::move(taskQueue[fromIndex]);
 			taskQueue.erase(taskQueue.begin() + fromIndex);
-			taskQueue.insert(taskQueue.begin() + toIndex, item);
+			taskQueue.insert(taskQueue.begin() + toIndex, std::move(task));
 		}
 
+		// Return copyable queue items for UI display
 		std::vector<QueueItem> GetQueueSnapshot() {
 			std::lock_guard<std::mutex> lock(queueMutex);
-			return taskQueue;
+			std::vector<QueueItem> result;
+			result.reserve(taskQueue.size());
+
+			for (const auto& task : taskQueue) {
+				QueueItem item;
+				item.entityID = task.entityID;
+				item.processing = task.processing;
+				item.taskType = task.taskType;
+				result.push_back(item);
+			}
+
+			return result;
 		}
 
 		void StopCurrentTask() {
 			std::lock_guard<std::mutex> lock(queueMutex);
-			// TODO: check between steps to cancel
+
+			if (hasActiveTask && activeThreadId != std::thread::id{}) {
+				std::cout << "Attempting to terminate active task on thread: " << activeThreadId << std::endl;
+
+				// Note: In a real implementation, you would need platform-specific code
+				// to terminate the thread. This is generally not recommended and dangerous.
+				// For now, we'll just log and set a flag for the task to check.
+				terminateFlag = true;
+
+				// Alternative: Could implement a cancellation token system in SDcppUtils
+				std::cout << "StopCurrentTask called - thread termination not safely implementable" << std::endl;
+				std::cout << "Consider implementing cancellation checks in stable-diffusion.cpp" << std::endl;
+			}
+			else {
+				std::cout << "No active task to terminate" << std::endl;
+			}
 		}
 
 		void ClearQueue() {
 			std::lock_guard<std::mutex> lock(queueMutex);
+			ClearQueueInternal();
+		}
+
+		void PauseWorker() {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			pauseWorker = true;
+			std::cout << "Worker paused. Current task will continue but no new tasks will be started." << std::endl;
+		}
+
+		void ResumeWorker() {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			pauseWorker = false;
+			std::cout << "Worker resumed. New tasks will now be processed." << std::endl;
+		}
+
+		// Thread pool stats
+		size_t GetNumThreads() const { return threadPool.size(); }
+		size_t GetQueuedTaskCount() const { return threadPool.getQueueSize(); }
+		size_t GetActiveTaskCount() const { return threadPool.getActiveCount(); }
+
+		// New methods for single-threaded processing
+		bool HasActiveTask() const {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			return hasActiveTask;
+		}
+
+		std::thread::id GetActiveThreadId() const {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			return activeThreadId;
+		}
+
+		size_t GetQueueSize() const {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			return taskQueue.size();
+		}
+
+	private:
+		// Private member variables
+		Utils::ThreadPool threadPool;
+		std::vector<TaskData> taskQueue;
+		std::atomic<bool> pauseWorker;
+		std::atomic<bool> shuttingDown{ false };
+		std::atomic<bool> terminateFlag{ false };
+		mutable std::mutex queueMutex;
+
+		// Single task tracking
+		bool hasActiveTask{ false };
+		std::thread::id activeThreadId{};
+
+		// Internal queue clearing (must be called with lock held)
+		void ClearQueueInternal() {
 			if (taskQueue.empty()) {
 				return;
-			}
-			// First cancel any active tasks
-			for (auto& item : taskQueue) {
-				if (item.task) {
-					item.task->cancel();
-				}
 			}
 
 			// Get reference to ImageSystem if available
 			auto imageSystem = mgr.GetSystem<ImageSystem>();
 
-			// Clear non-processing tasks
+			// Clear non-processing tasks 
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
 				if (!it->processing) {
 					EntityID entityId = it->entityID;
@@ -185,7 +340,7 @@ namespace ECS {
 						}
 					}
 					catch (const std::exception& e) {
-						std::cerr << "Error in ClearQueue: " << e.what() << std::endl;
+						std::cerr << "Error in ClearQueueInternal: " << e.what() << std::endl;
 					}
 				}
 				else {
@@ -194,55 +349,97 @@ namespace ECS {
 			}
 		}
 
-		void PauseWorker() {
+		void TerminateActiveTask() {
 			std::lock_guard<std::mutex> lock(queueMutex);
-			pauseWorker = true;
-
-			std::cout << "Worker paused. Tasks will continue running but no new tasks will be started." << std::endl;
+			if (hasActiveTask) {
+				terminateFlag = true;
+				std::cout << "Termination flag set for active task" << std::endl;
+			}
 		}
 
-		void ResumeWorker() {
-			std::lock_guard<std::mutex> lock(queueMutex);
-			pauseWorker = false;
+		// Task wrapper that captures thread ID and sets active task status
+		template<typename Func, typename... Args>
+		auto CreateTaskWrapper(EntityID entityID, Func&& func, Args&&... args) {
+			return[this, entityID, func = std::forward<Func>(func), args...]() -> bool {
+				// Set thread tracking info
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					hasActiveTask = true;
+					activeThreadId = std::this_thread::get_id();
+					terminateFlag = false;
+				}
 
-			std::cout << "Worker resumed. New tasks will now be processed." << std::endl;
+				std::cout << "Task started for entity " << entityID << " on thread " << std::this_thread::get_id() << std::endl;
+
+				bool result = false;
+				try {
+					// Call the actual function
+					result = func(args...);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Exception in task wrapper: " << e.what() << std::endl;
+				}
+
+				// Clear thread tracking info
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					hasActiveTask = false;
+					activeThreadId = std::thread::id{};
+					terminateFlag = false;
+				}
+
+				std::cout << "Task completed for entity " << entityID << " with result: " << (result ? "success" : "failure") << std::endl;
+
+				return result;
+			};
 		}
 
-		// Thread pool stats
-		size_t GetNumThreads() const { return threadPool.size(); }
-		size_t GetQueuedTaskCount() const { return threadPool.getQueueSize(); }
-		size_t GetActiveTaskCount() const { return activeTasks; }
-
-	private:
-		// Private member variables
-		Utils::ThreadPool threadPool;
-		std::atomic<size_t> activeTasks;
-		std::vector<QueueItem> taskQueue;
-		std::atomic<bool> pauseWorker{ false };
-		std::mutex queueMutex;
-
-		// Helper methods to create tasks
-		std::shared_ptr<Utils::Task> CreateInferenceTask(const EntityID entityID, const nlohmann::json& metadata, std::string fullPath) {
-			return std::make_shared<InferenceTask>(metadata, fullPath);
+		// Static task functions
+		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath) {
+			try {
+				return Utils::SDCPPUtils::RunInference(metadata, fullPath);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception during inference: " << e.what() << std::endl;
+				return false;
+			}
 		}
 
-		std::shared_ptr<Utils::Task> CreateConversionTask(EntityID entityID, const nlohmann::json& metadata) {
-			return std::make_shared<ConvertTask>(metadata);
+		static bool RunConversion(const nlohmann::json& metadata) {
+			try {
+				return Utils::SDCPPUtils::ConvertToGGUF(metadata);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception during conversion: " << e.what() << std::endl;
+				return false;
+			}
 		}
 
-		std::shared_ptr<Utils::Task> CreateImg2ImgTask(EntityID entityID, const nlohmann::json& metadata, std::string fullPath) {
-			return std::make_shared<Img2ImgTask>(metadata, fullPath);
+		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath) {
+			try {
+				return Utils::SDCPPUtils::RunImg2Img(metadata, fullPath);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception during img2img: " << e.what() << std::endl;
+				return false;
+			}
 		}
 
-		std::shared_ptr<Utils::Task> CreateUpscalingTask(EntityID entityID, const nlohmann::json& metadata, std::string fullPath) {
-			return std::make_shared<UpscalingTask>(metadata, fullPath);
+		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath) {
+			try {
+				return Utils::SDCPPUtils::RunUpscaling(metadata, fullPath);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception during upscaling: " << e.what() << std::endl;
+				return false;
+			}
 		}
 
 		// Queue processing methods
 		void ProcessQueues() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 
-			if (pauseWorker) {
+			if (pauseWorker || shuttingDown) {
 				return;
 			}
 
@@ -250,38 +447,72 @@ namespace ECS {
 				return;
 			}
 
-			auto& item = taskQueue.front();
+			// Only start a new task if no task is currently active
+			if (hasActiveTask) {
+				return;
+			}
 
-			// Process only if it's not already processing and we have capacity
-			if (!item.processing && activeTasks < 1) {
-				// Create a task based on the task type
-				if (mgr.HasComponent<OutputImageComponent>(item.entityID))
-				{
-					auto& output = mgr.GetComponent<OutputImageComponent>(item.entityID);
-					item.fullPath = Utils::PngMetadata::CreateUniqueFilename(output.fileName, output.filePath);
+			// Find the first non-processing item
+			for (auto& task : taskQueue) {
+				if (!task.processing) {
+					// Prepare the output path
+					if (mgr.HasComponent<OutputImageComponent>(task.entityID)) {
+						auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
+						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(output.fileName, output.filePath);
+					}
+
+					// Submit appropriate function based on task type using wrapper
+					try {
+						switch (task.taskType) {
+						case TaskType::Inference:
+							task.result = threadPool.submit(
+								CreateTaskWrapper(task.entityID, RunInference, task.metadata, task.fullPath)
+							);
+							break;
+
+						case TaskType::Conversion:
+							task.result = threadPool.submit(
+								CreateTaskWrapper(task.entityID, RunConversion, task.metadata)
+							);
+							break;
+
+						case TaskType::Img2Img:
+							task.result = threadPool.submit(
+								CreateTaskWrapper(task.entityID, RunImg2Img, task.metadata, task.fullPath)
+							);
+							break;
+
+						case TaskType::Upscaling:
+							task.result = threadPool.submit(
+								CreateTaskWrapper(task.entityID, RunUpscaling, task.metadata, task.fullPath)
+							);
+							break;
+
+						default:
+							std::cerr << "Unknown task type: " << static_cast<int>(task.taskType) << std::endl;
+							continue;
+						}
+
+						// Mark as processing and exit loop (only one task at a time)
+						task.processing = true;
+						std::cout << "Started processing task for entity " << task.entityID << std::endl;
+						break;
+					}
+					catch (const std::exception& e) {
+						std::cerr << "Failed to submit task: " << e.what() << std::endl;
+						// Remove the failed task
+						auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
+							[&task](const TaskData& t) { return t.entityID == task.entityID; });
+						if (it != taskQueue.end()) {
+							EntityID entityID = it->entityID;
+							taskQueue.erase(it);
+							if (mgr.GetEntitiesSignatures().count(entityID)) {
+								mgr.DestroyEntity(entityID);
+							}
+						}
+						break;
+					}
 				}
-				switch (item.taskType) {
-				case TaskType::Inference:
-					item.task = CreateInferenceTask(item.entityID, item.metadata, item.fullPath);
-					break;
-				case TaskType::Conversion:
-					item.task = CreateConversionTask(item.entityID, item.metadata);
-					break;
-				case TaskType::Img2Img:
-					item.task = CreateImg2ImgTask(item.entityID, item.metadata, item.fullPath);
-					break;
-				case TaskType::Upscaling:
-					item.task = CreateUpscalingTask(item.entityID, item.metadata, item.fullPath);
-					break;
-				default:
-					return; // Invalid task type, don't process
-				}
-
-				item.processing = true;
-				activeTasks++;
-
-				// Add to thread pool
-				threadPool.addTask(item.task);
 			}
 		}
 
@@ -293,66 +524,83 @@ namespace ECS {
 			std::unique_lock<std::mutex> lock(queueMutex);
 
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-				if (it->processing && it->task && it->task->isDone()) {
-					// Store the entity ID before erasing the item
-					EntityID entityID = it->entityID;
+				// Check if this task is processing and has a valid future
+				if (it->processing && it->result.valid()) {
+					// Check if the future is ready without blocking
+					auto status = it->result.wait_for(std::chrono::milliseconds(0));
 
-					// Decrease active tasks count
-					activeTasks--;
+					if (status == std::future_status::ready) {
+						// Store the entity ID and path before erasing
+						EntityID entityID = it->entityID;
+						std::string fullPath = it->fullPath;
+						bool success = false;
 
-					// Process the completed task before erasing
-					ProcessCompletedTask(entityID);
+						try {
+							// Get the result
+							success = it->result.get();
+						}
+						catch (const std::exception& e) {
+							std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
+						}
 
-					// Now erase the item
-					it = taskQueue.erase(it);
+						// Process the completed task
+						if (success) {
+							// Must unlock since ProcessCompletedTask may acquire locks
+							lock.unlock();
+							ProcessCompletedTask(entityID, fullPath);
+							lock.lock();
+						}
+						else {
+							std::cerr << "Task failed for entity " << entityID << std::endl;
+
+							// Clean up any files that might have been created
+							if (std::filesystem::exists(fullPath)) {
+								try {
+									std::filesystem::remove(fullPath);
+								}
+								catch (const std::exception& e) {
+									std::cerr << "Failed to remove partial file: " << e.what() << std::endl;
+								}
+							}
+						}
+
+						// Remove the completed task - this will allow the next task to start
+						it = taskQueue.erase(it);
+
+						std::cout << "Task completed. Remaining queue size: " << taskQueue.size() << std::endl;
+					}
+					else {
+						// Task still running
+						++it;
+					}
 				}
 				else {
+					// Task not processing or no valid future
 					++it;
 				}
 			}
 		}
 
-		void ProcessCompletedTask(const EntityID entityID) {
+		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath) {
 			try {
 				if (!mgr.GetEntitiesSignatures().count(entityID)) {
 					std::cerr << "Entity no longer exists: " << entityID << std::endl;
 					return;
 				}
 
-				if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-					std::cerr << "Missing OutputImageComponent for entity: " << entityID << std::endl;
-					return;
-				}
-
-				auto& outputComp = mgr.GetComponent<OutputImageComponent>(entityID);
-
-				if (outputComp.filePath.empty()) {
-					std::cerr << "No filepath in OutputImageComponent for entity: " << entityID << std::endl;
-					return;
-				}
-
+				// Process the completed task
 				auto imageSystem = mgr.GetSystem<ImageSystem>();
 				if (!imageSystem) {
 					std::cerr << "ImageSystem not found" << std::endl;
 					return;
 				}
 
-				// Create/update Image component
+				// Create/update Image component if needed
 				if (!mgr.HasComponent<ImageComponent>(entityID)) {
-					auto& imageComp = mgr.AddComponent<ImageComponent>(entityID);
-					// The ImageSystem::SetImage will handle initializing and loading
+					mgr.AddComponent<ImageComponent>(entityID);
 				}
 
-				// Use the ImageSystem to set the image path and load it
-				// This will handle cleaning up any existing image data
-				std::string fullPath = "";
-				if (!taskQueue.empty() && taskQueue.front().entityID == entityID) {
-					fullPath = taskQueue.front().fullPath;
-				}
-				else {
-					fullPath = outputComp.filePath;
-				}
-
+				// Use ImageSystem to load the generated image
 				if (std::filesystem::exists(fullPath)) {
 					imageSystem->SetImage(entityID, fullPath);
 					std::cout << "Image loaded successfully for entity " << entityID << std::endl;
@@ -362,13 +610,11 @@ namespace ECS {
 					return;
 				}
 
-				// Clean up unnecessary components, leaving only the ImageComponent
+				// Clean up unnecessary components, keeping only Image component
 				std::vector<ComponentTypeID> componentTypes = mgr.GetEntityComponents(entityID);
 				for (const auto& componentId : componentTypes) {
 					std::string componentName = mgr.GetComponentNameById(componentId);
 					if (componentName != "Image") {
-						// Note: We don't need to manually clean up image data here 
-						// because the ImageSystem did that in SetImage
 						mgr.RemoveComponentById(entityID, componentId);
 					}
 				}
@@ -377,14 +623,14 @@ namespace ECS {
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error processing completed task: " << e.what() << std::endl;
+
+				// Try to clean up on error
 				try {
-					// Get an ImageSystem reference if available
 					auto imageSystem = mgr.GetSystem<ImageSystem>();
-					if (imageSystem) {
-						// Use ImageSystem::RemoveImage which properly cleans up the image resources
+					if (imageSystem && mgr.HasComponent<ImageComponent>(entityID)) {
 						imageSystem->RemoveImage(entityID);
 					}
-					else {
+					else if (mgr.GetEntitiesSignatures().count(entityID)) {
 						mgr.DestroyEntity(entityID);
 					}
 				}
@@ -392,6 +638,6 @@ namespace ECS {
 					std::cerr << "Error destroying entity: " << e2.what() << std::endl;
 				}
 			}
-		}	};
-
+		}
+	};
 } // namespace ECS
