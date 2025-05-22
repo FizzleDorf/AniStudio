@@ -1,4 +1,6 @@
-#Building and Installing from Source
+# Building and Installing from Source
+
+*Disclaimer: builds were only tested with MSVC*
 
 ## Requirements
 
