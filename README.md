@@ -1,7 +1,7 @@
-![Preview](assets/Preview.jpg)
-
 # Anistudio
 An executable editor for image and video diffusion generation and editing projects written in C/C++ by utilizing [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) backend.
+
+![Preview](assets/Preview.JPG)
 
 ## Features
 - Entity Component System for modular development with low technical debt
@@ -10,6 +10,11 @@ An executable editor for image and video diffusion generation and editing projec
 - Cross-platform (Windows, Linux)
 - Included UI editor for ease of development
 - Extremely lightweight compared to alternatives
+
+---
+*Disclaimer: the application still has some threading issues so until those get sorted, releases will not be made. please build from source*
+
+[How to build from Source](docs/Installation.md)
 
 ---
 
