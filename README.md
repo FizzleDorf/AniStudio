@@ -18,11 +18,12 @@ An executable editor for image and video diffusion generation and editing projec
 
 ---
 
-##TODO:
+## TODO:
 - mainly fix critical issues
 - hot reload plugin manager
 - python interop
-- separate sdcpp into a separate build to reduce build build/compile times
+- separate sdcpp into a lib
+- fork sdcpp for more frequent updates
 - reduce bad allocations
 
 ## License
