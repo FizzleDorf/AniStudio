@@ -18,11 +18,12 @@ An executable editor for image and video diffusion generation and editing projec
 
 ---
 
-##TODO:
+## TODO:
 - mainly fix critical issues
 - hot reload plugin manager
 - python interop
-- separate sdcpp into a separate build to reduce build build/compile times
+- separate sdcpp into a lib
+- fork sdcpp for more frequent updates
 - reduce bad allocations
 
 ## License
@@ -46,4 +47,4 @@ For more details, see the [LICENSE-COMMERCIAL.txt](LICENSE-COMMERCIAL.txt) file 
 
 
 ## Purpose
-I created this application to leverage C/C++ for a highly modular and parallelized system capable of loading, inferencing, and training machine learning models, all within a unified UI. Existing UI solutions often rely on external tools for refining or editing, or suffer from runtime performance issues due to JavaScript, TypeScript, or techstack limitations resulting in inconsistent rendering, slow loading, and cache misses. AniStudio is designed to maintain consistent performance under heavy loads, allowing users to multitask traditional media creation with AI-assisted workflows, all in one seamless application with the freedom of C/C++.
+I created this application to leverage C/C++ for a highly modular and parallelized system capable of loading, inferencing, and training machine learning models, all within a unified UI. Existing UI solutions often rely on external tools for refining or editing, or suffer from runtime performance issues due to techstack limitations resulting in inconsistent rendering, slow loading, and cache misses. AniStudio is designed to maintain consistent performance under heavy loads, allowing users to multitask traditional media creation with AI-assistance, all in one seamless application with the freedom of C/C++.
