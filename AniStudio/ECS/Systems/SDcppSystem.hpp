@@ -91,7 +91,6 @@ namespace ECS {
 		// Constructor - Use single thread for diffusion tasks
 		SDCPPSystem(EntityManager& entityMgr)
 			: BaseSystem(entityMgr)
-			, threadPool(1)  // Only 1 thread for sequential processing
 			, pauseWorker(false)
 			, hasActiveTask(false) {
 			sysName = "SDCPPSystem";
@@ -112,13 +111,16 @@ namespace ECS {
 			// Try to terminate the active task if it exists
 			TerminateActiveTask();
 
-			// Wait for all threads to complete their current work (with timeout)
-			auto future = std::async(std::launch::async, [this]() {
-				threadPool.waitForTasks();
+			// Get the diffusion pool and wait for tasks to complete
+			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
+
+			// Wait for diffusion tasks to complete (with timeout)
+			auto future = std::async(std::launch::async, [&diffusionPool]() {
+				diffusionPool.waitForTasks();
 			});
 
 			if (future.wait_for(std::chrono::seconds(5)) == std::future_status::timeout) {
-				std::cerr << "Warning: Thread pool did not shut down cleanly within timeout" << std::endl;
+				std::cerr << "Warning: Diffusion pool did not shut down cleanly within timeout" << std::endl;
 			}
 
 			// Clean up any remaining entities
@@ -249,15 +251,7 @@ namespace ECS {
 
 			if (hasActiveTask && activeThreadId != std::thread::id{}) {
 				std::cout << "Attempting to terminate active task on thread: " << activeThreadId << std::endl;
-
-				// Note: In a real implementation, you would need platform-specific code
-				// to terminate the thread. This is generally not recommended and dangerous.
-				// For now, we'll just log and set a flag for the task to check.
-				terminateFlag = true;
-
-				// Alternative: Could implement a cancellation token system in SDcppUtils
-				std::cout << "StopCurrentTask called - thread termination not safely implementable" << std::endl;
-				std::cout << "Consider implementing cancellation checks in stable-diffusion.cpp" << std::endl;
+				// TODO: needs logic in new sdcpp implementation
 			}
 			else {
 				std::cout << "No active task to terminate" << std::endl;
@@ -282,9 +276,17 @@ namespace ECS {
 		}
 
 		// Thread pool stats
-		size_t GetNumThreads() const { return threadPool.size(); }
-		size_t GetQueuedTaskCount() const { return threadPool.getQueueSize(); }
-		size_t GetActiveTaskCount() const { return threadPool.getActiveCount(); }
+		size_t GetNumThreads() const {
+			return Utils::ThreadPoolManager::getInstance().getDiffusionPool().size();
+		}
+
+		size_t GetQueuedTaskCount() const {
+			return Utils::ThreadPoolManager::getInstance().getDiffusionPool().getQueueSize();
+		}
+
+		size_t GetActiveTaskCount() const {
+			return Utils::ThreadPoolManager::getInstance().getDiffusionPool().getActiveCount();
+		}
 
 		// New methods for single-threaded processing
 		bool HasActiveTask() const {
@@ -304,12 +306,15 @@ namespace ECS {
 
 	private:
 		// Private member variables
-		Utils::ThreadPool threadPool;
 		std::vector<TaskData> taskQueue;
 		std::atomic<bool> pauseWorker;
 		std::atomic<bool> shuttingDown{ false };
 		std::atomic<bool> terminateFlag{ false };
 		mutable std::mutex queueMutex;
+
+		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
+			return Utils::ThreadPoolManager::getInstance().getStats();
+		}
 
 		// Single task tracking
 		bool hasActiveTask{ false };
@@ -452,6 +457,9 @@ namespace ECS {
 				return;
 			}
 
+			// Get the diffusion thread pool
+			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
+
 			// Find the first non-processing item
 			for (auto& task : taskQueue) {
 				if (!task.processing) {
@@ -465,25 +473,25 @@ namespace ECS {
 					try {
 						switch (task.taskType) {
 						case TaskType::Inference:
-							task.result = threadPool.submit(
+							task.result = diffusionPool.submit(
 								CreateTaskWrapper(task.entityID, RunInference, task.metadata, task.fullPath)
 							);
 							break;
 
 						case TaskType::Conversion:
-							task.result = threadPool.submit(
+							task.result = diffusionPool.submit(
 								CreateTaskWrapper(task.entityID, RunConversion, task.metadata)
 							);
 							break;
 
 						case TaskType::Img2Img:
-							task.result = threadPool.submit(
+							task.result = diffusionPool.submit(
 								CreateTaskWrapper(task.entityID, RunImg2Img, task.metadata, task.fullPath)
 							);
 							break;
 
 						case TaskType::Upscaling:
-							task.result = threadPool.submit(
+							task.result = diffusionPool.submit(
 								CreateTaskWrapper(task.entityID, RunUpscaling, task.metadata, task.fullPath)
 							);
 							break;

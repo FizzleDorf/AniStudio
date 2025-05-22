@@ -10,6 +10,7 @@
 #include <thread>
 #include <vector>
 #include <type_traits>
+#include <iostream>
 
 namespace Utils {
 
@@ -166,6 +167,104 @@ namespace Utils {
 		// Status flags
 		bool stop;
 		std::atomic<size_t> activeThreads;
+	};
+
+	// Singleton ThreadPool Manager
+	class ThreadPoolManager {
+	public:
+		enum class PoolType {
+			DIFFUSION,    // For AI diffusion tasks (single threaded)
+			IO,          // For file I/O operations 
+			GENERAL      // For general background tasks
+		};
+
+		// Get singleton instance
+		static ThreadPoolManager& getInstance() {
+			static ThreadPoolManager instance;
+			return instance;
+		}
+
+		// Get a specific thread pool
+		ThreadPool& getPool(PoolType type) {
+			switch (type) {
+			case PoolType::DIFFUSION:
+				return *diffusionPool;
+			case PoolType::IO:
+				return *ioPool;
+			case PoolType::GENERAL:
+				return *generalPool;
+			default:
+				throw std::invalid_argument("Unknown pool type");
+			}
+		}
+
+		// Convenience methods for each pool
+		ThreadPool& getDiffusionPool() { return *diffusionPool; }
+		ThreadPool& getIOPool() { return *ioPool; }
+		ThreadPool& getGeneralPool() { return *generalPool; }
+
+		// Get stats for all pools
+		struct PoolStats {
+			size_t diffusionActive;
+			size_t diffusionQueued;
+			size_t ioActive;
+			size_t ioQueued;
+			size_t generalActive;
+			size_t generalQueued;
+		};
+
+		PoolStats getStats() const {
+			return {
+				diffusionPool->getActiveCount(),
+				diffusionPool->getQueueSize(),
+				ioPool->getActiveCount(),
+				ioPool->getQueueSize(),
+				generalPool->getActiveCount(),
+				generalPool->getQueueSize()
+			};
+		}
+
+		// Shutdown all pools gracefully
+		void shutdown() {
+			std::cout << "Shutting down ThreadPoolManager..." << std::endl;
+
+			// Wait for all pools to complete their tasks
+			diffusionPool->waitForTasks();
+			ioPool->waitForTasks();
+			generalPool->waitForTasks();
+
+			std::cout << "All thread pools shut down successfully." << std::endl;
+		}
+
+		// Delete copy and move operations for singleton
+		ThreadPoolManager(const ThreadPoolManager&) = delete;
+		ThreadPoolManager& operator=(const ThreadPoolManager&) = delete;
+		ThreadPoolManager(ThreadPoolManager&&) = delete;
+		ThreadPoolManager& operator=(ThreadPoolManager&&) = delete;
+
+	private:
+		// Private constructor for singleton
+		ThreadPoolManager() {
+			// Initialize pools with appropriate thread counts
+			diffusionPool = std::make_unique<ThreadPool>(1);  // Single thread for diffusion
+			ioPool = std::make_unique<ThreadPool>(2);         // 2 threads for I/O
+			generalPool = std::make_unique<ThreadPool>(std::max(2u, std::thread::hardware_concurrency()/2)); // Rest for general use
+
+			std::cout << "ThreadPoolManager initialized with:" << std::endl;
+			std::cout << "  Diffusion pool: " << diffusionPool->size() << " threads" << std::endl;
+			std::cout << "  I/O pool: " << ioPool->size() << " threads" << std::endl;
+			std::cout << "  General pool: " << generalPool->size() << " threads" << std::endl;
+		}
+
+		// Destructor
+		~ThreadPoolManager() {
+			shutdown();
+		}
+
+		// Thread pools
+		std::unique_ptr<ThreadPool> diffusionPool;
+		std::unique_ptr<ThreadPool> ioPool;
+		std::unique_ptr<ThreadPool> generalPool;
 	};
 
 } // namespace Utils
