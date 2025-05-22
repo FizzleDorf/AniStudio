@@ -1,0 +1,52 @@
+{
+  "name": "anistudio",
+  "version": "0.1.0",
+  "description": "AniStudio media creation tool",
+  "dependencies": [
+    {
+      "name": "opencv",
+      "version>=": "4.5.5"
+    },
+    {
+      "name": "glfw3",
+      "version>=": "3.4"
+    },
+    {
+      "name": "glew",
+      "version>=": "2.1.0"
+    },
+    {
+      "name": "zlib",
+      "version>=": "1.2.11"
+    },
+    {
+      "name": "libpng",
+      "version>=": "1.6.44"
+    },
+    {
+      "name": "exiv2",
+      "version>=": "0.28.1"
+    },
+    {
+      "name": "ffmpeg",
+      "version>=": "4.4.4",
+      "features": ["avcodec", "avformat", "avutil", "swscale"]
+    },
+    "vulkan",
+    "pkgconf"
+  ],
+  "features": {
+    "cuda": {
+      "description": "Enable CUDA support",
+      "dependencies": [
+        "cuda"
+      ]
+    }
+  },
+  "overrides": [
+    {
+      "name": "opencv",
+      "version": "4.5.5"
+    }
+  ]
+}
