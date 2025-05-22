@@ -1,3 +1,23 @@
+/*
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
+ */
+
 #pragma once
 
 #include "BaseSystem.hpp"
@@ -18,7 +38,7 @@ namespace ECS {
 	class ImageSystem : public BaseSystem {
 	public:
 		// Callback function types
-		/*using ImageCallback = std::function<void(EntityID)>;*/
+		using ImageCallback = std::function<void(EntityID)>;
 
 		ImageSystem(EntityManager& entityMgr)
 			: BaseSystem(entityMgr) { // Use 2 threads for image operations
@@ -48,8 +68,16 @@ namespace ECS {
 			}
 		}
 
-		void Update(const float deltaT) override {
-			ProcessPendingDeletions();
+		// TODO: async the image IO and join in the update
+		void Update(const float deltaT) override {}
+
+		// Register callbacks for image events
+		void RegisterImageAddedCallback(const ImageCallback& callback) {
+			imageAddedCallbacks.push_back(callback);
+		}
+
+		void RegisterImageRemovedCallback(const ImageCallback& callback) {
+			imageRemovedCallbacks.push_back(callback);
 		}
 
 		// Set image filepath and load it
@@ -75,9 +103,27 @@ namespace ECS {
 				}
 
 				LoadImage(imageComp);
+				NotifyImageAdded(entity);
 			}
 		}
 
+		// Remove an image entity
+		void RemoveImage(const EntityID entity) {
+			if (mgr.HasComponent<ImageComponent>(entity)) {
+				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+
+				// Unload image
+				if (imageComp.textureID != 0) {
+					UnloadImage(imageComp);
+				}
+
+				// Notify before removing
+				NotifyImageRemoved(entity);
+
+				// Remove the entity
+				mgr.DestroyEntity(entity);
+			}
+		}
 
 		// Get a list of all entities with an ImageComponent
 		std::vector<EntityID> GetAllImageEntities() const {
@@ -92,30 +138,19 @@ namespace ECS {
 
 	private:
 
-		// Process pending texture deletions (must be called on main thread)
-		void ProcessPendingDeletions() {
-			std::lock_guard<std::mutex> lock(pendingDeletionMutex);
+		std::vector<ImageCallback> imageAddedCallbacks;
+		std::vector<ImageCallback> imageRemovedCallbacks;
 
-			while (!pendingDeletions.empty()) {
-				auto& pending = pendingDeletions.front();
+		// Notify image callbacks
+		void NotifyImageAdded(EntityID entity) {
+			for (const auto& callback : imageAddedCallbacks) {
+				callback(entity);
+			}
+		}
 
-				if (mgr.HasComponent<ImageComponent>(pending.entityID)) {
-					auto& imageComp = mgr.GetComponent<ImageComponent>(pending.entityID);
-
-					// Delete texture if it matches the pending one
-					if (imageComp.textureID == pending.textureID) {
-						Utils::ImageUtils::DeleteTexture(imageComp.textureID);
-						imageComp.textureID = 0;
-						imageComp.width = 0;
-						imageComp.height = 0;
-						imageComp.channels = 0;
-
-						// Notify
-						// NotifyImageRemoved(pending.entityID);
-					}
-				}
-
-				pendingDeletions.pop();
+		void NotifyImageRemoved(EntityID entity) {
+			for (const auto& callback : imageRemovedCallbacks) {
+				callback(entity);
 			}
 		}
 
@@ -158,15 +193,5 @@ namespace ECS {
 				imageComp.channels = 0;
 			}
 		}
-
-		// Structure for pending texture deletion
-		struct PendingDeletion {
-			EntityID entityID;
-			GLuint textureID;
-		};
-
-		// Queue for pending texture deletions (must be processed on main thread)
-		std::mutex pendingDeletionMutex;
-		std::queue<PendingDeletion> pendingDeletions;
 	};
 } // namespace ECS

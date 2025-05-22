@@ -360,7 +360,7 @@ namespace UISchema {
                         else if (widgetType == "input_float" && std::holds_alternative<float*>(propVariant)) {
                             float* value = std::get<float*>(propVariant);
                             ImGuiInputTextFlags flags = GetInputTextFlags(propSchema);
-                            if (ImGui::InputFloat("##value", value, 0.0f, 0.0f, "%.3f", flags)) {
+                            if (ImGui::InputFloat("##value", value, 0.05f, 1.0f, "%.3f", flags)) {
                                 modified = true;
                             }
                         }

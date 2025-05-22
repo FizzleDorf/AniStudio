@@ -1,7 +1,27 @@
+/*
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
+ */
+
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "filepaths.hpp"
+#include "FilePaths.hpp"
 #include <string>
 
 namespace ECS {
@@ -13,31 +33,36 @@ namespace ECS {
         std::string modelName = "";
         bool isModelLoaded = false;
 
-        nlohmann::json Serialize() const override {
-            return { {compName, {{"modelName", modelName}}} };
-        }
+		virtual nlohmann::json Serialize() const override {
+			return { {compName, {
+				{"modelName", modelName},
+				{"modelPath", modelPath}
+			}} };
+		}
 
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
+		virtual void Deserialize(const nlohmann::json& j) override {
+			nlohmann::json componentData;
 
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+			else {
+				for (auto it = j.begin(); it != j.end(); ++it) {
+					if (it.key() == compName) {
+						componentData = it.value();
+						break;
+					}
+				}
+				if (componentData.empty()) {
+					componentData = j;
+				}
+			}
 
-            if (componentData.contains("modelName"))
-                modelName = componentData["modelName"];
-        }
+			if (componentData.contains("modelName"))
+				modelName = componentData["modelName"];
+			if (componentData.contains("modelPath"))
+				modelPath = componentData["modelPath"];
+		}
     };
 
     // Packaged Checkpoint loader (sd1.5 and sdxl with vae and encoders)
@@ -50,31 +75,6 @@ namespace ECS {
                 isModelLoaded = other.isModelLoaded;
             }
             return *this;
-        }
-
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.checkpointDir + "\\" + modelName;
-            }
         }
     };
 
@@ -89,30 +89,6 @@ namespace ECS {
             }
             return *this;
         }
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.unetDir + "\\" + modelName;
-            }
-        }
     };
 
     // Clip G Encoder
@@ -125,31 +101,6 @@ namespace ECS {
                 isModelLoaded = other.isModelLoaded;
             }
             return *this;
-        }
-
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.encoderDir + "\\" + modelName;
-            }
         }
     };
 
@@ -164,30 +115,6 @@ namespace ECS {
             }
             return *this;
         }
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.encoderDir + "\\" + modelName;
-            }
-        }
     };
 
     // T5 Encoder
@@ -200,30 +127,6 @@ namespace ECS {
                 isModelLoaded = other.isModelLoaded;
             }
             return *this;
-        }
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.encoderDir + "\\" + modelName;
-            }
         }
     };
 
@@ -286,7 +189,7 @@ namespace ECS {
                 vae_decode_only = componentData["vae_decode_only"].get<bool>();
 
             if (!modelName.empty() && modelPath.empty())
-                modelPath = filePaths.vaeDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::vaeDir + "\\" + modelName;
         }
     };
 
@@ -300,34 +203,6 @@ namespace ECS {
                 isModelLoaded = other.isModelLoaded;
             }
             return *this;
-        }
-        nlohmann::json Serialize() const override {
-            return { {compName, {{"modelName", modelName}}} };
-        }
-
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.vaeDir + "\\" + modelName;
-            }
         }
     };
 
@@ -351,6 +226,7 @@ namespace ECS {
             return { {compName, {
                 {"modelName", modelName},
                 {"loraStrength", loraStrength},
+				{"modelPath",modelPath},
                 {"loraClipStrength", loraClipStrength}
             }} };
         }
@@ -380,7 +256,7 @@ namespace ECS {
             if (componentData.contains("loraClipStrength"))
                 loraClipStrength = componentData["loraClipStrength"];
             if (!modelName.empty())
-                modelPath = filePaths.loraDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::loraDir + "\\" + modelName;
         }
     };
 
@@ -407,6 +283,7 @@ namespace ECS {
         nlohmann::json Serialize() const override {
             return { {compName, {
                 {"modelName", modelName},
+				{"modelPath",modelPath},
                 {"cnStrength", cnStrength},
                 {"applyStart", applyStart},
                 {"applyEnd", applyEnd}
@@ -434,6 +311,8 @@ namespace ECS {
 
             if (componentData.contains("modelName"))
                 modelName = componentData["modelName"];
+			if (componentData.contains("modelPath"))
+				modelPath = componentData["modelPath"];
             if (componentData.contains("cnStrength"))
                 cnStrength = componentData["cnStrength"];
             if (componentData.contains("applyStart"))
@@ -441,7 +320,7 @@ namespace ECS {
             if (componentData.contains("applyEnd"))
                 applyEnd = componentData["applyEnd"];
             if (!modelName.empty())
-                modelPath = filePaths.controlnetDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::controlnetDir + "\\" + modelName;
         }
     };
 
@@ -464,6 +343,7 @@ namespace ECS {
         nlohmann::json Serialize() const override {
             return { {compName, {
                 {"modelName", modelName},
+				{"modelPath", modelPath},
                 {"upscaleFactor", upscaleFactor},
                 {"preserveAspectRatio",preserveAspectRatio}
             }} };
@@ -488,12 +368,14 @@ namespace ECS {
 
             if (componentData.contains("modelName"))
                 modelName = componentData["modelName"];
+			if (componentData.contains("modelPath"))
+				modelPath = componentData["modelPath"];
             if (componentData.contains("upscaleFactor"))
                 upscaleFactor = componentData["upscaleFactor"];
             if (componentData.contains("preserveAspectRatio"))
                 preserveAspectRatio = componentData["preserveAspectRatio"].get<bool>();
             if (!modelName.empty())
-                modelPath = filePaths.upscaleDir + "\\" + modelName;
+                modelPath = Utils::FilePaths::upscaleDir + "\\" + modelName;
         }
     };
 
@@ -508,31 +390,6 @@ namespace ECS {
             }
             return *this;
         }
-
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.embedDir + "\\" + modelName;
-            }
-        }
     };
 
     // Packaged Checkpoint loader (sd1.5 and sdxl with vae and encoders)
@@ -545,31 +402,6 @@ namespace ECS {
                 isModelLoaded = other.isModelLoaded;
             }
             return *this;
-        }
-
-        void Deserialize(const nlohmann::json& j) override {
-            nlohmann::json componentData;
-
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
-
-            if (componentData.contains("modelName")) {
-                modelName = componentData["modelName"];
-                if (!modelName.empty())
-                    modelPath = filePaths.checkpointDir + "\\" + modelName;
-            }
         }
     };
 

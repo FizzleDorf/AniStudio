@@ -19,7 +19,7 @@ fpsSum(0.0), frameCount(0), timeElapsed(0.0) {
 }
 
 Engine::~Engine() {
-    // std::string relativePath = filePaths.dataPath + "/imgui.ini";
+    // std::string relativePath = Utils::FilePaths::dataPath + "/imgui.ini";
     // std::string iniFilePath = std::filesystem::absolute(relativePath).string();
     // ImGui::SaveIniSettingsToDisk(iniFilePath.c_str());
     ImGui_ImplOpenGL3_Shutdown();
@@ -32,7 +32,7 @@ Engine::~Engine() {
 void Engine::Quit() { run = false; }
 
 void Engine::Init() {
-    filePaths.LoadFilePathDefaults();
+	Utils::FilePaths::LoadFilePathDefaults();
     if (!glfwInit()) {
         throw std::runtime_error("Failed to initialize GLFW");
     }
@@ -60,7 +60,7 @@ void Engine::Init() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
-    iniFilePath = std::filesystem::absolute(filePaths.ImguiStatePath).string();
+    iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
     // ImGui::LoadIniSettingsFromDisk(iniFilePath.c_str());
 
     ImGuiIO &io = ImGui::GetIO();
@@ -83,7 +83,7 @@ void Engine::Init() {
     ImGui_ImplOpenGL3_Init("#version 330");
 
     // Initialize managers
-    filePaths.Init();
+	Utils::FilePaths::Init();
 	pluginManager.Init();
     
     // Invalidate ID 0 for all entities and viewlists
@@ -104,7 +104,10 @@ void Engine::Init() {
     viewManager.RegisterViewType<SequencerView>("SequencerView");
     viewManager.RegisterViewType<PluginView>("PluginView");
     viewManager.RegisterViewType<NodeView>("NodeView");
-
+	viewManager.RegisterViewType<UpscaleView>("UpscaleView");
+	viewManager.RegisterViewType<VideoView>("VideoView");
+	viewManager.RegisterViewType<VideoView>("VideoSequencerView");
+	
     // Register Component Names
     mgr.RegisterComponentName<ModelComponent>("Model");
     mgr.RegisterComponentName<ClipLComponent>("ClipL");
@@ -116,6 +119,7 @@ void Engine::Init() {
     mgr.RegisterComponentName<PromptComponent>("Prompt");
     mgr.RegisterComponentName<SamplerComponent>("Sampler");
     mgr.RegisterComponentName<GuidanceComponent>("Guidance");
+	mgr.RegisterComponentName<EsrganComponent>("Esrgan");
     mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
     mgr.RegisterComponentName<VaeComponent>("Vae");
     mgr.RegisterComponentName<ImageComponent>("Image");
@@ -124,26 +128,36 @@ void Engine::Init() {
     mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
     mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
     mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
+	mgr.RegisterComponentName<VideoComponent>("Video");
+	mgr.RegisterComponentName<InputVideoComponent>("InputVideo");
+	mgr.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 
     // Register core systems
     mgr.RegisterSystem<SDCPPSystem>();
     mgr.RegisterSystem<ImageSystem>();    
+	mgr.RegisterSystem<VideoSystem>();
 
     // Create a NodeView instance
     /*auto nodeViewID = viewManager.CreateView();
     viewManager.AddView<NodeView>(nodeViewID, NodeView(mgr));
-    viewManager.GetView<NodeView>(nodeViewID).Init();*/
+    viewManager.GetView<NodeView>(nodeViewID).Init();*/	
 
-    auto diffusionViewID = viewManager.CreateView();
+	const auto upscaleViewID = viewManager.CreateView();
+	viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(mgr));
+	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
+
+	const auto videoViewID = viewManager.CreateView();
+	viewManager.AddView<VideoSequencerView>(videoViewID, VideoSequencerView(mgr));
+	viewManager.AddView<VideoView>(videoViewID, VideoView(mgr));
+	viewManager.GetView<VideoView>(videoViewID).Init();
+	viewManager.GetView<VideoSequencerView>(videoViewID).Init();
+
+    const auto diffusionViewID = viewManager.CreateView();
     viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
     viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
 
     viewManager.GetView<DiffusionView>(diffusionViewID).Init();
     viewManager.GetView<ImageView>(diffusionViewID).Init();
-
-	auto pluginViewID = viewManager.CreateView();
-	viewManager.AddView<PluginView>(pluginViewID, PluginView(mgr, pluginManager));
-	viewManager.GetView<PluginView>(pluginViewID).Init();
 }
 
 void Engine::Update(const float deltaT) {

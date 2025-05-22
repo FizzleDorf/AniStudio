@@ -1,5 +1,6 @@
 #include "Events.hpp"
 #include "AllViews.h"
+#include "PluginManager.hpp"
 #include <iostream>
 
 namespace ANI {
@@ -25,6 +26,7 @@ void Events::Poll() {
 static size_t debugID = 0;
 static size_t settingsID = 0;
 static size_t viewsID = 0;
+static size_t pluginsID = 0;
 
 // Handle events based on its EventType
 void Events::ProcessEvents() {
@@ -117,6 +119,25 @@ void Events::ProcessEvents() {
             }
             break;
         }
+		case EventType::OpenPlugins: {
+			auto &vMgr = Core.GetViewManager();
+			auto id = vMgr.CreateView();
+			vMgr.AddView<PluginView>(id, PluginView(Core.GetEntityManager(), Core.GetPluginManager()));
+			vMgr.GetView<PluginView>(id).Init();
+			pluginsID = id;
+			break;
+		}
+
+		case EventType::ClosePlugins: {
+			auto &vMgr = Core.GetViewManager();
+			auto views = vMgr.GetAllViews();
+			for (auto view : views) {
+				if (vMgr.HasView<PluginView>(pluginsID)) {
+					vMgr.DestroyView(pluginsID);
+				}
+			}
+			break;
+		}
 
         case EventType::InferenceRequest: {
             std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
@@ -145,18 +166,19 @@ void Events::ProcessEvents() {
             break;
         }
 
-        case EventType::UpscaleRequest: {
-            std::cout << "Handling Upscale event for Entity ID: " << event.entityID << '\n';
+		case EventType::UpscaleRequest: {
+			std::cout << "Handling Upscale request for Entity ID: " << event.entityID << '\n';
 
-            auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-            if (sdcppSystem) {
-                std::cout << "UpscaleSystem is registered." << std::endl;
-                sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
-            } else {
-                std::cerr << "UpscaleSystem is not registered." << std::endl;
-            }
-            break;
-        }
+			auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			if (sdcppSystem) {
+				std::cout << "SDCPPSystem is registered, queueing upscale task." << std::endl;
+				sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
+			}
+			else {
+				std::cerr << "SDCPPSystem is not registered, cannot process upscale request." << std::endl;
+			}
+			break;
+		}
 
         case EventType::ConvertToGGUF: {
             std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
@@ -205,40 +227,40 @@ void Events::ProcessEvents() {
         case EventType::SaveImageEvent: {
             std::cout << "Handling SaveImage event for Entity ID: " << event.entityID << " to path: " << '\n';
 
-            /*auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             if (imageSystem) {
-                imageSystem->QueueSaveImage(event.entityID);
+                //imageSystem->QueueSaveImage(event.entityID);
             }
             else {
                 std::cerr << "ImageSystem is not registered." << std::endl;
             }
-            break;*/
+            break;
         }
 
         case EventType::LoadImageEvent: {
             std::cout << "Handling LoadImage event for Entity ID: " << event.entityID << " from path: " << '\n';
 
-            /*auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             if (imageSystem) {
-                imageSystem->QueueLoadImage(event.entityID);
+                //imageSystem->QueueLoadImage(event.entityID);
             }
             else {
                 std::cerr << "ImageSystem is not registered." << std::endl;
             }
-            break;*/
+            break;
         }
 
         case EventType::RemoveImageEvent: {
             std::cout << "Handling RemoveImage event for Entity ID: " << event.entityID << '\n';
 
-            /*auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
+            auto imageSystem = Core.GetEntityManager().GetSystem<ECS::ImageSystem>();
             if (imageSystem) {
-                imageSystem->QueueRemoveImage(event.entityID);
+                //imageSystem->QueueRemoveImage(event.entityID);
             }
             else {
                 std::cerr << "ImageSystem is not registered." << std::endl;
             }
-            break;*/
+            break;
         }
         default:
             std::cerr << "Unknown event type" << std::endl; // Use cerr for errors

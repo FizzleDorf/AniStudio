@@ -6,6 +6,7 @@ namespace GUI {
     static bool debugWindowOpen = false;
     static bool convertWindowOpen = false;
     static bool viewsWindowOpen = false;
+	static bool pluginsWindowOpen = false;
 
     void ShowMenuBar(GLFWwindow* window) {
         if (ImGui::BeginMainMenuBar()) {
@@ -66,6 +67,13 @@ namespace GUI {
                     event.type = debugWindowOpen ? ANI::EventType::OpenDebug : ANI::EventType::CloseDebug;
                     ANI::Events::Ref().QueueEvent(event);
                 }
+
+				ImGui::Separator();
+				if (ImGui::MenuItem("Plugins", nullptr, &pluginsWindowOpen)) {
+					ANI::Event event;
+					event.type = pluginsWindowOpen ? ANI::EventType::OpenPlugins : ANI::EventType::ClosePlugins;
+					ANI::Events::Ref().QueueEvent(event);
+				}
                 ImGui::EndMenu();
             }
 

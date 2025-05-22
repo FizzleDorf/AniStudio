@@ -1,3 +1,23 @@
+/*
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
+ */
+
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 
@@ -24,6 +44,20 @@ namespace GUI {
 		}
 
 		void Init() override {
+			// Ensure ImageSystem is registered
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (!imageSystem) {
+				mgr.RegisterSystem<ECS::ImageSystem>();
+				imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			}
+
+			// Register callbacks to update the view when images change
+			// We're registering these in Init instead of constructor to ensure everything is properly initialized
+			if (imageSystem) {
+				imageSystem->RegisterImageAddedCallback(std::bind(&ImageView::HandleImageAdded, this, std::placeholders::_1));
+				imageSystem->RegisterImageRemovedCallback(std::bind(&ImageView::HandleImageRemoved, this, std::placeholders::_1));
+			}
+
 			// Try to select first image if nothing is selected
 			if (selectedEntityID == 0) {
 				auto imageEntities = GetImageEntities();
@@ -51,7 +85,7 @@ namespace GUI {
 			if (ImGui::Button("Load Image(s)")) {
 				IGFD::FileDialogConfig config;
 				config.path = ".";
-
+				// Enable multiple selection
 				config.countSelectionMax = 0; // 0 means infinite selections
 				ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)",
 					filters, config);
@@ -63,7 +97,7 @@ namespace GUI {
 					std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
 
 					std::vector<std::string> filePaths;
-					for (const auto& [fileName, filePath] : selection) {
+					for (const auto&[fileName, filePath] : selection) {
 						filePaths.push_back(filePath);
 					}
 
@@ -120,7 +154,13 @@ namespace GUI {
 		}
 
 		~ImageView() {
-			// Nothing to clean up - ImageSystem handles resource cleanup
+			// Unregister callbacks if possible to prevent accessing deleted object
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (imageSystem) {
+				// We would need a way to unregister callbacks here
+				// This would require the ImageSystem to have a method to remove callbacks
+				// For now, we'll rely on the system not calling callbacks on deleted views
+			}
 		}
 
 	private:
@@ -162,9 +202,50 @@ namespace GUI {
 			return -1; // Not found
 		}
 
-		void RenderSelector() {
-			auto imageEntities = GetImageEntities();
+		// Callback handlers
+		void HandleImageAdded(ECS::EntityID entityID) {
+			// Set the newly added image as the selected one
+			imageEntities = GetImageEntities();
+			selectedEntityID = entityID;
+			imgIndex = GetCurrentImageIndex();
 
+			// Log the operation
+			std::cout << "New image added and selected: EntityID=" << entityID << ", Index=" << imgIndex << std::endl;
+		}
+
+		void HandleImageRemoved(ECS::EntityID entityID) {
+			imageEntities = GetImageEntities();
+			// Check if the removed entity was the selected one
+			if (selectedEntityID == entityID) {
+				// Get current image list
+
+				if (imageEntities.empty()) {
+					// No images left
+					selectedEntityID = 0;
+					imgIndex = 0;
+					std::cout << "Selected image was removed. No images remaining." << std::endl;
+				}
+				else {
+					// Try to keep the same index if possible
+					if (imgIndex >= static_cast<int>(imageEntities.size())) {
+						imgIndex = static_cast<int>(imageEntities.size() - 1);
+					}
+
+					// Set the new selected entity
+					selectedEntityID = imageEntities[imgIndex];
+					std::cout << "Selected image was removed. New selection: EntityID="
+						<< selectedEntityID << ", Index=" << imgIndex << std::endl;
+				}
+			}
+			else {
+				// If a different image was removed, we need to update the imgIndex
+				// since the overall collection has changed
+				imgIndex = GetCurrentImageIndex();
+				std::cout << "Image removed: EntityID=" << entityID << ". Current selection updated to index: " << imgIndex << std::endl;
+			}
+		}
+
+		void RenderSelector() {
 			if (imageEntities.empty()) {
 				ImGui::Text("No images loaded.");
 				return;
@@ -182,6 +263,7 @@ namespace GUI {
 
 			if (ImGui::Button("Last")) {
 				if (!imageEntities.empty()) {
+					// Fix potential size_t to int conversion warning
 					imgIndex = static_cast<int>(imageEntities.size() - 1);
 					selectedEntityID = imageEntities[imgIndex];
 				}
@@ -196,7 +278,8 @@ namespace GUI {
 					return;
 				}
 
-				const int size = imageEntities.size();
+				// Fix potential size_t to int conversion warning
+				const int size = static_cast<int>(imageEntities.size());
 				if (size == 1) {
 					imgIndex = 0;
 				}
@@ -214,7 +297,9 @@ namespace GUI {
 		void RenderHistory() {
 			ImGui::Begin("History", &showHistory);
 
-			auto imageEntities = GetImageEntities();
+			if (ImGui::Button("Refresh")) {
+				imageEntities = GetImageEntities();
+			}
 
 			if (imageEntities.empty()) {
 				ImGui::Text("No images available.");
@@ -237,7 +322,7 @@ namespace GUI {
 				if (imageComp.textureID != 0) {
 					ImGui::BeginGroup();
 
-					// Highlight the selected image
+					// Highlight the selected image - Fix size_t to int comparison
 					if (static_cast<int>(i) == imgIndex) {
 						ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
 					}
@@ -254,8 +339,8 @@ namespace GUI {
 						imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
 					}
 
-					// Display the filename
-					ImGui::Text("%zu: %s", i, TruncateFilename(imageComp.fileName,imageSize.x).c_str());
+					// Display the filename - use size_t for index formatting
+					ImGui::Text("%zu: %s", i, TruncateFilename(imageComp.fileName, imageSize.x).c_str());
 
 					if (static_cast<int>(i) == imgIndex) {
 						ImGui::PopStyleColor();
@@ -266,6 +351,7 @@ namespace GUI {
 						if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
 							reinterpret_cast<void*>(static_cast<intptr_t>(imageComp.textureID)),
 							imageSize)) {
+							// Fix potential size_t to int conversion warning
 							imgIndex = static_cast<int>(i);
 							selectedEntityID = entityID;
 						}
@@ -273,6 +359,7 @@ namespace GUI {
 					else {
 						// Fallback if no texture
 						if (ImGui::Button(("Select##" + std::to_string(i)).c_str(), imageSize)) {
+							// Fix potential size_t to int conversion warning
 							imgIndex = static_cast<int>(i);
 							selectedEntityID = entityID;
 						}
@@ -399,6 +486,7 @@ namespace GUI {
 			}
 
 			// Create entities and load images directly
+			ECS::EntityID lastEntity = 0;
 			for (const auto& filePath : filePaths) {
 				if (filePath.empty()) {
 					continue; // Skip empty paths
@@ -406,14 +494,11 @@ namespace GUI {
 
 				// Create entity with component
 				ECS::EntityID entity = mgr.AddNewEntity();
-				auto& imageComp = mgr.AddComponent<ECS::ImageComponent>(entity);
+				lastEntity = entity; // Keep track of the last entity loaded
 
-				// Set file info
-				imageComp.filePath = filePath;
-				std::filesystem::path path(filePath);
-				imageComp.fileName = path.filename().string();
+				mgr.AddComponent<ECS::ImageComponent>(entity);
 
-				// Load the image directly
+				// Load the image directly - this will also trigger the callback
 				imageSystem->SetImage(entity, filePath);
 			}
 		}
@@ -424,34 +509,52 @@ namespace GUI {
 			// Use existing filepath
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			// Queue save operation via event
-			ANI::Event event;
-			event.type = ANI::EventType::SaveImageEvent;
-			event.entityID = selectedEntityID;
-			ANI::Events::Ref().QueueEvent(event);
+			// Save directly via ImageSystem instead of using events
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (imageSystem) {
+				Utils::ImageUtils::SaveImage(
+					imageComp.filePath,
+					imageComp.width,
+					imageComp.height,
+					imageComp.channels,
+					imageComp.imageData
+				);
+				std::cout << "Image saved to: " << imageComp.filePath << std::endl;
+			}
 		}
 
 		void SaveSelectedImageAs(const std::string& filePath) {
 			if (selectedEntityID == 0) return;
 
-			// Queue save operation via event
-			ANI::Event event;
-			event.type = ANI::EventType::SaveImageEvent;
-			event.entityID = selectedEntityID;
-			ANI::Events::Ref().QueueEvent(event);
+			// Get the image component
+			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+
+			// Save directly via ImageUtils
+			bool success = Utils::ImageUtils::SaveImage(
+				filePath,
+				imageComp.width,
+				imageComp.height,
+				imageComp.channels,
+				imageComp.imageData
+			);
+
+			if (success) {
+				std::cout << "Image saved to: " << filePath << std::endl;
+			}
+			else {
+				std::cerr << "Failed to save image to: " << filePath << std::endl;
+			}
 		}
 
 		void RemoveSelectedImage() {
 			if (selectedEntityID == 0) return;
 
-			// Queue remove operation via event
-			ANI::Event event;
-			event.type = ANI::EventType::RemoveImageEvent;
-			event.entityID = selectedEntityID;
-			ANI::Events::Ref().QueueEvent(event);
-
-			// Reset selection
-			selectedEntityID = 0;
+			// Get the image system
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (imageSystem) {
+				// Remove via the system to trigger callbacks properly
+				imageSystem->RemoveImage(selectedEntityID);
+			}
 		}
 
 		// Truncate the filename to fit the width of the image
@@ -465,8 +568,7 @@ namespace GUI {
 			std::string truncated = "...";
 			float ellipsisWidth = ImGui::CalcTextSize(truncated.c_str()).x;
 
-			for (int i = filename.length() - 1; i >= 0; --i) {
-				
+			for (int i = static_cast<int>(filename.length()) - 1; i >= 0; --i) {
 				truncated.insert(3, 1, filename[i]);
 				float newWidth = ImGui::CalcTextSize(truncated.c_str()).x;
 
@@ -478,6 +580,8 @@ namespace GUI {
 
 			return truncated;
 		}
+		private:
+			std::vector<ECS::EntityID> imageEntities;
 	};
 
 } // namespace GUI

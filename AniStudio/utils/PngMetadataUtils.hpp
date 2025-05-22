@@ -1,3 +1,23 @@
+/*
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
+ */
+
 #pragma once
 
 #include <string>
@@ -181,56 +201,63 @@ namespace Utils {
             return MetadataUtils::LoadMetadataFromPNG(imagePath);
         }
 
-        static std::string CreateUniqueFilename(const std::string& baseFilename,
-            const std::string& directory,
-            const std::string& extension = ".png") {
-            std::filesystem::path directoryPath(directory);
-            std::filesystem::path filename(baseFilename);
+		static std::string CreateUniqueFilename(const std::string& baseFilename,
+			const std::string& directory) {
+			// Create full paths
+			std::filesystem::path directoryPath(directory);
+			std::filesystem::path originalFilePath(baseFilename);
 
-            // Ensure the directory exists
-            if (!std::filesystem::exists(directoryPath)) {
-                std::filesystem::create_directories(directoryPath);
-            }
+			// Extract the base name and extension
+			std::string baseName = originalFilePath.stem().string();
+			std::string extension = originalFilePath.extension().string();
 
-            // Ensure the filename has the correct extension
-            if (filename.extension() != extension) {
-                filename.replace_extension(extension);
-            }
+			// Ensure the extension starts with a dot
+			if (!extension.empty() && extension[0] != '.') {
+				extension = "." + extension;
+			}
 
-            // Find the highest existing index in the directory
-            int highestIndex = 0;
-            for (const auto& entry : std::filesystem::directory_iterator(directoryPath)) {
-                if (entry.path().extension() == extension) {
-                    std::string filenameStr = entry.path().stem().string();
-                    // Check if the filename starts with our base name
-                    if (filenameStr.find(filename.stem().string()) == 0) {
-                        size_t lastDashPos = filenameStr.find_last_of('-');
-                        if (lastDashPos != std::string::npos) {
-                            try {
-                                int index = std::stoi(filenameStr.substr(lastDashPos + 1));
-                                if (index > highestIndex) {
-                                    highestIndex = index;
-                                }
-                            }
-                            catch (const std::invalid_argument&) {
-                                // Skip files that do not have the expected format
-                            }
-                        }
-                    }
-                }
-            }
+			// Default to .png if no extension provided
+			if (extension.empty()) {
+				extension = ".png";
+			}
 
-            // Increment the index for the new file
-            highestIndex++;
-            std::ostringstream formattedIndex;
-            formattedIndex << std::setw(5) << std::setfill('0') << highestIndex; // Format with leading zeros
+			// Ensure the directory exists
+			if (!std::filesystem::exists(directoryPath)) {
+				std::filesystem::create_directories(directoryPath);
+			}
 
-            // Generate the new filename
-            std::string newFilename = filename.stem().string() + "-" + formattedIndex.str() + extension;
-            std::filesystem::path fullPath = directoryPath / newFilename;
+			// Find the highest existing index
+			int highestIndex = 0;
+			for (const auto& entry : std::filesystem::directory_iterator(directoryPath)) {
+				if (entry.path().extension().string() == extension) {
+					std::string filename = entry.path().stem().string();
 
-            return fullPath.string();
-        }
+					if (filename.find(baseName) == 0) {  // Starts with base name
+						size_t dashPos = filename.find_last_of('-');
+						if (dashPos != std::string::npos) {
+							try {
+								int index = std::stoi(filename.substr(dashPos + 1));
+								if (index > highestIndex) {
+									highestIndex = index;
+								}
+							}
+							catch (...) {
+								// Ignore conversion errors
+							}
+						}
+					}
+				}
+			}
+
+			// Create new filename with incremented index
+			highestIndex++;
+			std::ostringstream formattedIndex;
+			formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
+
+			// Construct the final path and return it as string
+			std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
+			return newFilePath.string();
+		}
 
         static nlohmann::json CreateGenerationMetadata(const nlohmann::json& entityData,
             const nlohmann::json& additionalInfo = {}) {

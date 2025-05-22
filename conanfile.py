@@ -33,6 +33,7 @@ class AniStudio(ConanFile):
         self.requires("zlib/1.2.11")
         self.requires("libpng/1.6.44")
         self.requires("exiv2/0.28.1")
+        self.requires("ffmpeg/4.4.4")
 
         # Platform-specific OpenGL requirements
         if self.settings.os == "Windows":
