@@ -1,7 +1,10 @@
+*Note: this is not the definative ToA, all requests for a commercial license are written on a case to case basis during this time.
+for more info, please contact legal@kframe.ai.
+
 COMMERCIAL LICENSE AGREEMENT
 This Commercial License Agreement ("Agreement") is entered into as of 2025-02-28 by and between:
 
-FizzleDorf (AnimAnon) ("Licensor") and
+FizzleDorf (AnimAnon) and Kframe LTD ("Licensor") and
 
 The Licensee ("You" or "Licensee"), the individual or entity purchasing a commercial license.
 
@@ -33,7 +36,7 @@ Remove or alter any copyright, trademark, or proprietary notices in the Software
 3.2. Licensee does not acquire any ownership rights in the Software, except for the license granted under this Agreement.
 
 4. Fees and Payment
-4.1. The license fee for the Software shall be determined through email contact with Licensor at 1fizzledorf@gmail.com.
+4.1. The license fee for the Software shall be determined through email contact with Licensor at legal@kframe.ai.
 4.2. Payment terms, including due dates and methods, will be specified in the invoice provided by Licensor.
 
 5. Warranty and Liability
@@ -53,4 +56,4 @@ This Agreement constitutes the entire understanding between the parties with res
 9. Contact Information
 For inquiries about this Agreement or to purchase a commercial license, please contact:
 
-Email: 1fizzledorf@gmail.com
+Email: legal@kframe.ai
