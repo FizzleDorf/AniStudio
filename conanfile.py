@@ -21,11 +21,6 @@ class AniStudio(ConanFile):
         "with_cuda": False
     }
 
-    # Build requirements
-    tool_requires = (
-
-    )
-
     def requirements(self):
         # Core dependencies from your conanfile.txt
         self.requires("opencv/4.5.5")
@@ -55,9 +50,6 @@ class AniStudio(ConanFile):
         # Force C++17 for both host and build contexts
         if self.settings.compiler.get_safe("cppstd"):
             self.settings.compiler.cppstd = "17"
-        self.options["cmake"].with_openssl = False
-        self.tools_requires["cmake"].skip = True
-
 
     def validate(self):
         if self.settings.compiler.get_safe("cppstd"):
