@@ -21,9 +21,9 @@
 #ifndef ENGINE_HPP
 #define ENGINE_HPP
 
-#include "Base/ViewManager.hpp"
 #include "ECS.h"
 #include "GUI.h"
+#include "../Gui/Base/ViewManager.hpp"
 #include "../Plugins/PluginManager.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
