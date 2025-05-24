@@ -22,7 +22,6 @@
 #define ENGINE_HPP
 
 #include "ECS.h"
-#include "GUI.h"
 #include "../Gui/Base/ViewManager.hpp"
 #include "../Plugins/PluginManager.hpp"
 #include <GL/glew.h>
