@@ -1,6 +1,7 @@
 from conan import ConanFile
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps
 from conan.tools.files import copy
+from conan.errors import ConanInvalidConfiguration
 import os
 
 class AniStudio(ConanFile):
@@ -22,7 +23,7 @@ class AniStudio(ConanFile):
 
     # Build requirements
     tool_requires = (
-        "cmake/3.25.1",
+
     )
 
     def requirements(self):
@@ -51,6 +52,17 @@ class AniStudio(ConanFile):
     def configure(self):
         if self.options.shared:
             self.options.rm_safe("fPIC")
+        # Force C++17 for both host and build contexts
+        if self.settings.compiler.get_safe("cppstd"):
+            self.settings.compiler.cppstd = "17"
+        self.options["cmake"].with_openssl = False
+        self.tools_requires["cmake"].skip = True
+
+
+    def validate(self):
+        if self.settings.compiler.get_safe("cppstd"):
+            if str(self.settings.compiler.cppstd) < "17":
+                raise ConanInvalidConfiguration("C++17 or higher is required")
 
     def layout(self):
         self.folders.source = "."
@@ -62,8 +74,11 @@ class AniStudio(ConanFile):
         tc = CMakeToolchain(self)
         
         # Add custom definitions
+        tc.variables["CMAKE_CXX_STANDARD"] = "17"
+        tc.variables["CMAKE_CXX_STANDARD_REQUIRED"] = "ON"
+        tc.variables["CMAKE_CXX_EXTENSIONS"] = "OFF"
         tc.variables["WITH_CUDA"] = self.options.with_cuda
-            
+
         tc.generate()
         
         # Generate CMake dependency files
