@@ -30,7 +30,7 @@
 
 class SettingsView : public BaseView {
 public:
-    SettingsView(EntityManager &mgr) : BaseView(mgr) { viewName = "Settings View";}
+    SettingsView(ECS::EntityManager &mgr) : BaseView(mgr) { viewName = "Settings View";}
     ~SettingsView() {}
 
     void Render() override;

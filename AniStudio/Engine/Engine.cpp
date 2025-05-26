@@ -1,12 +1,11 @@
 #include "Engine.hpp"
 #include "PluginManager.hpp"
-#include "AllViews.h"
 #include <filesystem>
 #include <iostream>
 
 using namespace ECS;
 using namespace GUI;
-using namespace Plugin;
+// using namespace Plugin;
 
 namespace ANI {
     static std::string iniFilePath;
@@ -84,7 +83,7 @@ void Engine::Init() {
 
     // Initialize managers
 	Utils::FilePaths::Init();
-	pluginManager.Init();
+	// pluginManager.Init();
     
     // Invalidate ID 0 for all entities and viewlists
     const EntityID temp = mgr.AddNewEntity();
@@ -176,7 +175,7 @@ void Engine::Update(const float deltaT) {
     // Update managers
     mgr.Update(deltaT);
     viewManager.Update(deltaT);
-	pluginManager.Update(deltaT);
+	// pluginManager.Update(deltaT);
 }
 
 void Engine::Draw() {
