@@ -20,6 +20,6 @@
 
 #pragma once
 
-#include "SDCPPSystem.hpp"
+#include "SDcppSystem.hpp"
 #include "ImageSystem.hpp"
 #include "NodegraphSystem.hpp"

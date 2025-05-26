@@ -276,7 +276,7 @@ namespace ECS {
 			return ComponentTypeRegistry::IsNameRegistered(name);
 		}
 
-		nlohmann::json EntityManager::SerializeEntity(const EntityID entity) {
+		nlohmann::json SerializeEntity(const EntityID entity) {
 			nlohmann::json entityJson;
 
 			entityJson["ID"] = entity;

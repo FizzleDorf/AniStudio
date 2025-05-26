@@ -126,9 +126,21 @@ if(BUILD_ANISTUDIO)
     )
 
     # Source files
-    file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/GUI/*.cpp)
+    file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Gui/*.cpp)
     file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/*.cpp)
     file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/utils/*.cpp)
+    # ist(APPEND GUI_SOURCES
+    #    AniStudio/Gui/DebugView.cpp
+    #    AniStudio/Gui/SettingsView.cpp
+    #    AniStudio/Gui/UpscaleView.cpp
+    #    AniStudio/Gui/DiffusionView.cpp
+    #    AniStudio/Gui/MenuBar.cpp
+    #    AniStudio/Gui/ConvertView.cpp
+    # 
+    message(STATUS "GUI_SOURCES found: ${GUI_SOURCES}")
+    foreach(file ${GUI_SOURCES})
+        message(STATUS "  Found GUI file: ${file}")
+    endforeach()
 
     # Main executable
     add_executable(${PROJECT_NAME}
