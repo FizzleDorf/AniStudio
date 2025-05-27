@@ -164,8 +164,8 @@ sudo apt install clang clang-format lldb
 run the scripts in this order:
 
 ```
-.\install.bat
-.\build.bat
+.\install.sh
+.\build.sh
 ```
 *note: the script builds with the vulkan backend by default*
 
