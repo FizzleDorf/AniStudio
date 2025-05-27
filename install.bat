@@ -8,16 +8,21 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: Check if virtual environment exists
-if exist venv (
-    echo Virtual environment already exists.
+:: Create build directory if it doesn't exist
+if not exist build (
+    mkdir build
+)
+
+:: Check if virtual environment exists in build directory
+if exist build\venv (
+    echo Virtual environment already exists in build directory.
 ) else (
-    echo Creating virtual environment...
-    python -m venv venv
+    echo Creating virtual environment in build directory...
+    python -m venv build\venv
 )
 
 :: Activate virtual environment
-call venv\Scripts\activate
+call build\venv\Scripts\activate
 
 :: Upgrade pip
 python -m pip install --upgrade pip
@@ -30,7 +35,6 @@ conan profile detect --force
 
 :: Run Conan install
 conan install . --build=missing -s compiler.cppstd=17
-cd ..
 
 echo Installation completed successfully.
 echo To build the project, run 'build.bat'

@@ -96,6 +96,8 @@ if(BUILD_ANISTUDIO)
     find_package(PNG REQUIRED)
     find_package(exiv2 CONFIG REQUIRED)
     find_package(FFmpeg REQUIRED)
+	
+	include_directories(${GLFW_INCLUDE_DIRS})
 
     # Shader files
     set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
@@ -112,7 +114,9 @@ if(BUILD_ANISTUDIO)
     add_subdirectory(external/imgui_filedialog)
     add_subdirectory(external/ImJSchema)
     add_subdirectory(external/ImGuizmo)
-
+	
+	# For external/imgui directory
+	target_include_directories(ImGui PRIVATE ${GLFW_INCLUDE_DIRS})
     add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
 
     # Include directories
@@ -146,14 +150,7 @@ if(BUILD_ANISTUDIO)
     file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Gui/*.cpp)
     file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/*.cpp)
     file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/utils/*.cpp)
-    # ist(APPEND GUI_SOURCES
-    #    AniStudio/Gui/DebugView.cpp
-    #    AniStudio/Gui/SettingsView.cpp
-    #    AniStudio/Gui/UpscaleView.cpp
-    #    AniStudio/Gui/DiffusionView.cpp
-    #    AniStudio/Gui/MenuBar.cpp
-    #    AniStudio/Gui/ConvertView.cpp
-    # 
+
     message(STATUS "GUI_SOURCES found: ${GUI_SOURCES}")
     foreach(file ${GUI_SOURCES})
         message(STATUS "  Found GUI file: ${file}")
