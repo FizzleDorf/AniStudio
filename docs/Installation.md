@@ -1,6 +1,6 @@
 # Building and Installing from Source
 
-*Disclaimer: builds were only tested with MSVC*
+*Disclaimer: builds were only tested with MSVC for windows and Gcc for Linux*
 
 ## Requirements
 
