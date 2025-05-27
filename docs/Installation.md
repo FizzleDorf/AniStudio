@@ -120,8 +120,8 @@ the .exe will be located in `./build/bin` directory.
 run the scripts in this order:
 
 ```
-.\install.bat
-.\build.bat
+install.bat
+build.bat
 ```
 *note: the script builds with the vulkan backend by default*
 
@@ -164,8 +164,8 @@ sudo apt install clang clang-format lldb
 run the scripts in this order:
 
 ```
-.\install.bat
-.\build.bat
+./install.sh
+./build.sh
 ```
 *note: the script builds with the vulkan backend by default*
 
@@ -181,8 +181,8 @@ to build with CMake from the command line, enter the following while pathed in t
 *note: the command with no backend flags builds with the CPU backend by default, see the supported flags later in the instructions*
 ```
 cd build
-cmake ..
-cmake --build .
+cmake .. -DCMAKE_BUILD_TYPE=Release 
+cmake --build . --config Release
 ```
 
 ## Main Build Options
@@ -212,8 +212,8 @@ for launching with a vulkan backend with flash attention, the build command woul
 ```
 mkdir build
 cd build
-cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON
-cmake --build .
+cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release 
+cmake --build . --config Release
 ```
 *note: this build command works for both Windows and Linux*
 
