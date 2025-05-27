@@ -1,83 +1,57 @@
 cmake_minimum_required(VERSION 3.12)
 
-# Build options
+# Cross-platform system includes
+if(UNIX AND NOT APPLE)  # Linux
+    list(APPEND CMAKE_MODULE_PATH "/usr/share/cmake/Modules")
+    if(EXISTS "/usr/include")
+        include_directories(SYSTEM /usr/include)
+    endif()
+    if(EXISTS "/usr/include/x86_64-linux-gnu")
+        include_directories(SYSTEM /usr/include/x86_64-linux-gnu)
+    endif()
+elseif(WIN32)
+    # On Windows, let CMake find system includes automatically
+    # Only add specific paths if absolutely necessary
+    if(DEFINED ENV{INCLUDE} AND NOT "$ENV{INCLUDE}" STREQUAL "")
+        include_directories(SYSTEM $ENV{INCLUDE})
+    endif()
+endif()
+
 option(BUILD_ANISTUDIO "Build the AniStudio application" ON)
 option(BUILD_PLUGINS "Build AniStudio plugins" ON)
 
 set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
-    file(MAKE_DIRECTORY ${PLUGINS_DIR})
+file(MAKE_DIRECTORY ${PLUGINS_DIR})
 
-# Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED On)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Set the target compiler explicitly for all configurations
-if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /arch:AVX2") # Adjust for target architecture
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64") # For 64-bit architecture
-endif()
-
-# Set the target architecture explicitly for all configurations
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
-    set(CMAKE_SIZEOF_VOID_P 8) # Ensure 64-bit
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686")
-    set(CMAKE_SIZEOF_VOID_P 4) # Ensure 32-bit
-endif()
-
-if (WIN32)
+if(WIN32)
     add_definitions(-DNOMINMAX)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# Get Conan dependencies
+# Include Conan toolchain
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
     message(STATUS "Conan toolchain not found, installing dependencies...")
     
-    # First, check if Conan is available
-    execute_process(
-        COMMAND conan --version
-        RESULT_VARIABLE CONAN_CHECK
-        OUTPUT_VARIABLE CONAN_VERSION
-        ERROR_VARIABLE CONAN_ERROR
-    )
-    
-    if(NOT CONAN_CHECK EQUAL 0)
-        message(FATAL_ERROR 
-            "Conan is not available. Please install it with:\n"
-            "pip install conan\n"
-            "Error: ${CONAN_ERROR}"
-        )
+    find_program(CONAN_CMD conan)
+    if(NOT CONAN_CMD)
+        message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
     endif()
     
-    message(STATUS "Found Conan: ${CONAN_VERSION}")
-    
-    # Run Conan install with detailed output
     execute_process(
-        COMMAND conan install "${CMAKE_SOURCE_DIR}" 
+        COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}" 
                 --output-folder="${CMAKE_BINARY_DIR}" 
                 --build=missing
         RESULT_VARIABLE CONAN_RESULT
-        OUTPUT_VARIABLE CONAN_OUTPUT
-        ERROR_VARIABLE CONAN_ERROR
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
     
     if(NOT CONAN_RESULT EQUAL 0)
-        message(FATAL_ERROR 
-            "Failed to install Conan dependencies\n"
-            "Output: ${CONAN_OUTPUT}\n"
-            "Error: ${CONAN_ERROR}"
-        )
-    endif()
-    
-    if(NOT EXISTS "${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake")
-        message(FATAL_ERROR 
-            "Conan install succeeded but toolchain file not found.\n"
-            "Expected: ${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake\n"
-            "Conan output: ${CONAN_OUTPUT}"
-        )
+        message(FATAL_ERROR "Conan install failed!")
     endif()
     
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
@@ -85,23 +59,35 @@ endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
-project(AniStudio CXX)
+project(AniStudio LANGUAGES CXX)
 
+# Set binary output directories - ensures consistent placement across platforms
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
+
+# For libraries
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
+
+# For static libraries and import libraries on Windows
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
 if(BUILD_ANISTUDIO)
-	# Create data directories in build folder and copy defaults
-	set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
-	set(DEFAULTS_DIR "${DATA_DIR}/defaults")
-	file(MAKE_DIRECTORY ${DATA_DIR})
-	file(MAKE_DIRECTORY ${DEFAULTS_DIR})
-	
-	# Copy the data/defaults directory and its contents
-	file(COPY "${CMAKE_SOURCE_DIR}/data/defaults/" 
-	     DESTINATION "${DEFAULTS_DIR}"
-	     PATTERN "*")
-	
-	message(STATUS "Copied data/defaults to ${DEFAULTS_DIR}")
 
-    # Required packages for AniStudio
+    # Data directory setup
+    set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
+    set(DEFAULTS_DIR "${DATA_DIR}/defaults")
+    file(MAKE_DIRECTORY ${DATA_DIR})
+    file(MAKE_DIRECTORY ${DEFAULTS_DIR})
+    file(COPY "${CMAKE_SOURCE_DIR}/data/defaults/" DESTINATION "${DEFAULTS_DIR}")
+    message(STATUS "Copied data/defaults to ${DEFAULTS_DIR}")
+
+    # Find required packages
     find_package(Vulkan REQUIRED)
     find_package(OpenCV REQUIRED)
     find_package(glew REQUIRED)
@@ -109,18 +95,17 @@ if(BUILD_ANISTUDIO)
     find_package(ZLIB REQUIRED)
     find_package(PNG REQUIRED)
     find_package(exiv2 CONFIG REQUIRED)
-	find_package(FFmpeg REQUIRED)
+    find_package(FFmpeg REQUIRED)
+	
+	include_directories(${GLFW_INCLUDE_DIRS})
 
-    # Set PCH file
+    # Shader files
     set(PCH_FILE "${CMAKE_SOURCE_DIR}/AniStudio/pch.h")
-
-    # Define the shader source directory
-    set(SHADER_DIR "${CMAKE_SOURCE_DIR}/Anistudio/shaders")
-
-    # Copy the shaders to the build directory
+    set(SHADER_DIR "${CMAKE_SOURCE_DIR}/AniStudio/shaders")
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
     file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
 
-    # External libraries
+    # Add external dependencies
     add_subdirectory(external/stable-diffusion.cpp)
     add_subdirectory(external/imgui)
     add_subdirectory(external/imgui_nodes)
@@ -129,7 +114,9 @@ if(BUILD_ANISTUDIO)
     add_subdirectory(external/imgui_filedialog)
     add_subdirectory(external/ImJSchema)
     add_subdirectory(external/ImGuizmo)
-
+	
+	# For external/imgui directory
+	target_include_directories(ImGui PRIVATE ${GLFW_INCLUDE_DIRS})
     add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
 
     # Include directories
@@ -159,54 +146,66 @@ if(BUILD_ANISTUDIO)
         ${Vulkan_INCLUDE_DIR}
     )
 
-    # Find all source files
-    file(GLOB GUI_SOURCES AniStudio/GUI/*.cpp)
-    file(GLOB SYSTEM_SOURCES AniStudio/ECS/Systems/*.cpp)
-    file(GLOB UTILS_SOURCES AniStudio/utils/*.cpp)
+    # Source files
+    file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Gui/*.cpp)
+    file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/*.cpp)
+    file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/utils/*.cpp)
 
-    # Add main executable
+    message(STATUS "GUI_SOURCES found: ${GUI_SOURCES}")
+    foreach(file ${GUI_SOURCES})
+        message(STATUS "  Found GUI file: ${file}")
+    endforeach()
+
+    # Main executable
     add_executable(${PROJECT_NAME}
-        AniStudio/main.cpp
-        AniStudio/pch.cpp
-        AniStudio/Engine/Engine.cpp
-        AniStudio/Events/Events.cpp
-        AniStudio/Timer/Timer.cpp
-		AniStudio/Plugins/PluginManager.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/main.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/pch.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/Engine/Engine.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/Events/Events.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/PluginManager.cpp
         ${GUI_SOURCES}
         ${SYSTEM_SOURCES}
         ${UTILS_SOURCES}
     )
 
-    set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE FALSE)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        WIN32_EXECUTABLE FALSE
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+
+    # Link directories and libraries
     link_directories(${CONAN_LIB_DIRS})
 
-    # Link libraries
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        ${CONAN_LIBS}   
+        ${CONAN_LIBS}
         stable-diffusion
         ImGui
         ImGui_Nodes
         ImNodeFlow
         ImJSchema
         stb_image
-        ImGuiFileDialog 
+        ImGuiFileDialog
         ImGuizmo
-        opencv::opencv 
+        opencv::opencv
         glfw
-        GLEW::GLEW 
+        GLEW::GLEW
         ZLIB::ZLIB
         PNG::PNG
         Vulkan::Vulkan
         exiv2::exiv2
-		ffmpeg::avcodec
-		ffmpeg::avformat
-		ffmpeg::avutil
-		ffmpeg::swscale
+        ffmpeg::avcodec
+        ffmpeg::avformat
+        ffmpeg::avutil
+        ffmpeg::swscale
     )
 
+    # Precompiled headers
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
 
-	# Create an interface library for the core ECS functionality
+    # Core library interface
     add_library(AniStudioCore INTERFACE)
     target_include_directories(AniStudioCore INTERFACE
         ${CMAKE_SOURCE_DIR}/AniStudio
@@ -218,37 +217,27 @@ if(BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     )
     
-    # Export ECS symbols for plugins
     if(WIN32)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE 
-            ANI_CORE_API=__declspec\(dllexport\)
-        )
-        target_compile_definitions(AniStudioCore INTERFACE
-            ANI_CORE_API=__declspec\(dllimport\)
-        )
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_CORE_API=__declspec(dllexport))
+        target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=__declspec(dllimport))
     else()
         target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_CORE_API=)
         target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=)
     endif()
-
-
 endif()
 
-# Build plugins if enabled
+# Plugins configuration
 if(BUILD_PLUGINS)
-    # Add API definition for plugin exports
     if(WIN32)
-        add_definitions(-DPLUGIN_API=__declspec\(dllexport\))
+        add_definitions(-DPLUGIN_API=__declspec(dllexport))
     else()
         add_definitions(-DPLUGIN_API=)
     endif()
     
-    # Only include headers needed for plugins
     if(NOT BUILD_ANISTUDIO)
         add_subdirectory(external/stb_image)
         add_subdirectory(external/stable-diffusion.cpp)
         
-        # Create the core interface in standalone plugin mode
         add_library(AniStudioCore INTERFACE)
         target_include_directories(AniStudioCore INTERFACE
             ${CMAKE_SOURCE_DIR}/AniStudio
@@ -261,9 +250,7 @@ if(BUILD_PLUGINS)
             ${CMAKE_SOURCE_DIR}/external/imgui
         )
         if(WIN32)
-            target_compile_definitions(AniStudioCore INTERFACE
-                ANI_CORE_API=__declspec\(dllimport\)
-            )
+            target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=__declspec(dllimport))
         else()
             target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=)
         endif()

@@ -39,7 +39,6 @@ public:
     ViewList() = default;
     ~ViewList() = default;
 
-    template <typename T>
     void Insert(T &&view) {
         // Print ID before any operations
         std::cout << "Attempting to add view with ID: " << view.GetID() << std::endl;
