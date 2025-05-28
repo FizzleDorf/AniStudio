@@ -699,7 +699,6 @@ namespace Utils {
 				);
 
 				// Clean up resources that were passed by value and copied
-				   // Clean up input data - PROTECT WITH MUTEX
 				{
 					std::lock_guard<std::mutex> lock(stbi_mutex);
 					if (inputData) {
@@ -943,6 +942,8 @@ namespace Utils {
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
 					upscaled_image.channel, metadata, fullPath);
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
 
 				// Cleanup resources
 				if (inputData) {
