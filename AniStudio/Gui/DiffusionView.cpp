@@ -354,25 +354,22 @@ namespace GUI {
 
 			ImGui::SameLine();
 			if (ImGui::Button("X##clear_img")) {
-				std::lock_guard<std::mutex> lock(Utils::stbi_mutex);
-
-				// Clear image
-				if (imageComp.imageData) {
-					Utils::ImageUtils::FreeImageData(imageComp.imageData);
-					imageComp.imageData = nullptr;
+				// Get ImageSystem to handle async cleanup
+				auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+				if (imageSystem) {
+					imageSystem->RemoveImage(entity);
+					// Re-add the component since RemoveImage destroys the entity
+					mgr.AddComponent<InputImageComponent>(entity);
 				}
-				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
-					imageComp.textureID = 0;
-				}
-				imageComp.fileName = "";
-				imageComp.filePath = "";
-				imageComp.width = 0;
-				imageComp.height = 0;
 			}
 
 			ImGui::TableNextColumn();
-			ImGui::Text("%s", imageComp.fileName.c_str());
+			if (imageComp.fileName.empty()) {
+				ImGui::Text("No image loaded");
+			}
+			else {
+				ImGui::Text("%s", imageComp.fileName.c_str());
+			}
 
 			ImGui::EndTable();
 		}
@@ -381,33 +378,11 @@ namespace GUI {
 		if (ImGuiFileDialog::Instance()->Display("LoadInputImageDialog", 32, ImVec2(700, 400))) {
 			if (ImGuiFileDialog::Instance()->IsOk()) {
 				std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 
-				// Clean up previous image data if it exists
-				if (imageComp.imageData) {
-					Utils::ImageUtils::FreeImageData(imageComp.imageData);
-					imageComp.imageData = nullptr;
-				}
-				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
-					imageComp.textureID = 0;
-				}
-
-				// Load new image
-				int width, height, channels;
-				imageComp.imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
-
-				if (imageComp.imageData) {
-					// Update component data
-					imageComp.width = width;
-					imageComp.height = height;
-					imageComp.channels = channels;
-					imageComp.fileName = fileName;
-					imageComp.filePath = filePath;
-
-					// Generate texture for preview
-					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
-						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
+				// Use ImageSystem for async loading
+				auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+				if (imageSystem) {
+					imageSystem->SetImage(entity, filePath);
 				}
 			}
 			ImGuiFileDialog::Instance()->Close();
@@ -429,11 +404,9 @@ namespace GUI {
 
 			ImVec2 imageSize;
 			if (aspectRatio > 1.0f) {
-				// Image is wider than tall
 				imageSize = ImVec2(availWidth, availWidth / aspectRatio);
 			}
 			else {
-				// Image is taller than wide or square
 				imageSize = ImVec2(availWidth * aspectRatio, availWidth);
 			}
 
@@ -457,8 +430,14 @@ namespace GUI {
 		}
 		else {
 			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
-			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-				"No image loaded. Click the '...' button to select an input image.");
+			if (imageComp.fileName.empty()) {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+					"No image loaded. Click the '...' button to select an input image.");
+			}
+			else {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+					"Loading image: %s", imageComp.fileName.c_str());
+			}
 			ImGui::EndChild();
 		}
 
