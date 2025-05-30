@@ -1,5 +1,5 @@
 #include "Events.hpp"
-#include "AllViews.h"
+#include "../Gui/AllViews.h"
 #include "PluginManager.hpp"
 #include <iostream>
 
@@ -120,22 +120,22 @@ void Events::ProcessEvents() {
             break;
         }
 		case EventType::OpenPlugins: {
-			auto &vMgr = Core.GetViewManager();
-			auto id = vMgr.CreateView();
-			vMgr.AddView<PluginView>(id, PluginView(Core.GetEntityManager(), Core.GetPluginManager()));
-			vMgr.GetView<PluginView>(id).Init();
-			pluginsID = id;
+			// auto &vMgr = Core.GetViewManager();
+			// auto id = vMgr.CreateView();
+			// vMgr.AddView<PluginView>(id, PluginView(Core.GetEntityManager(), Core.GetPluginManager()));
+			// vMgr.GetView<PluginView>(id).Init();
+			// pluginsID = id;
 			break;
 		}
 
 		case EventType::ClosePlugins: {
-			auto &vMgr = Core.GetViewManager();
-			auto views = vMgr.GetAllViews();
-			for (auto view : views) {
-				if (vMgr.HasView<PluginView>(pluginsID)) {
-					vMgr.DestroyView(pluginsID);
-				}
-			}
+			// auto &vMgr = Core.GetViewManager();
+			// auto views = vMgr.GetAllViews();
+			// for (auto view : views) {
+			// 	if (vMgr.HasView<PluginView>(pluginsID)) {
+			// 		vMgr.DestroyView(pluginsID);
+			// 	}
+			// }
 			break;
 		}
 

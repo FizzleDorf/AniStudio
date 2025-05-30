@@ -1,6 +1,6 @@
 # Building and Installing from Source
 
-*Disclaimer: builds were only tested with MSVC*
+*Disclaimer: builds were only tested with MSVC for windows and Gcc for Linux*
 
 ## Requirements
 
@@ -16,7 +16,11 @@
 
 - **CMake >= 3.20**  
   - Download from [here](https://cmake.org/download/).  
-  - Verify with `cmake --version`.  
+  - Verify with `cmake --version`.
+    
+- **Visual Studio 2022 (2015 at least)**
+  -  Download from [here](https://visualstudio.microsoft.com/).
+  -  make sure you install the MSVC build tools
 
 ### **Ubuntu/Debian**
 - **Vulkan**  
@@ -100,7 +104,7 @@
 
 ---
 
-## Install
+## Clone
 *cloning, installing and building will take a while. speeding up the build process using repo options is in the TODO*
 ```
 git clone https://github.com/Fizzledorf/AniStudio.git
@@ -108,41 +112,81 @@ cd AniStudio
 git submodule update --init --recursive
 
 ```
+## Install Conan Package Manager
+
 ### Windows
-After building, the .exe will be located in `./build/release` directory.
-```
-.\install.bat
-.\build.bat
-```
-You can also build manually and specify which backend and featured you want to use (see manually building for details).
+.bat files have been made to assist installing conan and building from source
+the .exe will be located in `./build/bin` directory.
+run the scripts in this order:
 
+```
+install.bat
+build.bat
+```
+*note: the script builds with the vulkan backend by default*
 
-### Unix
-After building, the .exe will be located in `./build/release` directory.
+to install conan requirements from the command line, enter the following while pathed in the root:
+*note: installing to a venv or conda environment is optional, this is the only required package*
+```
+pip install conan
+conan profile detect --force
+conan install . --build=missing -s compiler.cppstd=17
+```
+
+to build with CMake from the command line, enter the following while pathed in the root:
+*note: the command with no backend flags builds with the CPU backend by default, see the supported flags later in the instructions*
+
+```
+cd build
+cmake ..
+cmake --build .
+```
+
+### Linux
+.sh files have been made to assist installing conan and building from source
+the .exe will be located in `./build/bin` directory.
+
+#### Compilers
+*You may need to make sure your compiler is up to date*
+
+##### for gcc (Ubuntu/Debian)
+```
+sudo apt update
+sudo apt install gcc g++
+```
+
+##### Clang (Ubuntu/Debian)
+```
+sudo apt update
+sudo apt install clang clang-format lldb
+```
+
+run the scripts in this order:
 
 ```
 ./install.sh
 ./build.sh
 ```
-You can also build manually and specify which backend and featured you want to use (see manually building for details).
+*note: the script builds with the vulkan backend by default*
 
-### Manual Building
-
-The first thing you need is the app requirements.
-
-Next you will need Conan installed to a python virtual environment (venv) in the source code root:
-*optional*
+to install conan requirements from the command line, enter the following while pathed in the root:
+*note: installing to a venv or conda environment is optional, this is the only required package*
 ```
-python -m venv venv
-```
-*make sure you activate the script before installation*
-
-```
-  pip install conan
-  conan install . --build=missing -s compiler.cppstd=17
+pip3 install conan
+conan profile detect --force
+conan install . --build=missing -s compiler.cppstd=17
 ```
 
-### Main Build Options
+to build with CMake from the command line, enter the following while pathed in the root:
+*note: the command with no backend flags builds with the CPU backend by default, see the supported flags later in the instructions*
+```
+cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release 
+cmake --build . --config Release
+```
+
+## Main Build Options
+
 | Command Flag             | Description                                                                     |
 |--------------------------|---------------------------------------------------------------------------------|
 | ```-DBUILD_ANISTUDIO=ON```| Configures and builds the main AniStudio Project                               |
@@ -165,18 +209,14 @@ for building with different inference backends, you need to use the appropriate 
 
 #### Example
 for launching with a vulkan backend with flash attention, the build command would look like:
+```
+mkdir build
+cd build
+cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release 
+cmake --build . --config Release
+```
+*note: this build command works for both Windows and Linux*
 
-Windows:
-```
-mkdir build
-cd build
-cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release
-```
-Linux:
-```
-mkdir build
-cd build
-cmake .. -DSD_VULKAN=ON -DSD_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release
-```
+## Issues with Installing, Building or Compiling
+Plese leave a detailed report in an Issue. When writing an issue for this, please include any error messages and the conan profile that was used.
+You can see the profile using ```conan profile detect --force```

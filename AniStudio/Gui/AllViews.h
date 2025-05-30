@@ -18,7 +18,8 @@
  * For commercial license iformation, please contact legal@kframe.ai.
  */
 
-#pragma once
+#ifndef ALLVIEWS_HPP
+#define ALLVIEWS_HPP
 
 #include "ConvertView.hpp"
 #include "DebugView.hpp"
@@ -35,3 +36,5 @@
 #include "UpscaleView.hpp"
 #include "VideoView.hpp"
 #include "VideoSequencerView.hpp"
+
+#endif

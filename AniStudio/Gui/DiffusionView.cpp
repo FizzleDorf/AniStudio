@@ -345,7 +345,7 @@ namespace GUI {
 			ImGui::Text("Input Image");
 
 			ImGui::TableNextColumn();
-			if (ImGui::Button("...##load_img")) {
+			if (ImGui::Button("...##load_img123")) {
 				IGFD::FileDialogConfig config;
 				config.path = Utils::FilePaths::defaultProjectPath;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadInputImageDialog", "Choose Image",
@@ -353,9 +353,7 @@ namespace GUI {
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("X##clear_img")) {
-				std::lock_guard<std::mutex> lock(Utils::stbi_mutex);
-
+			if (ImGui::Button("X##clear_img123")) {
 				// Clear image
 				if (imageComp.imageData) {
 					Utils::ImageUtils::FreeImageData(imageComp.imageData);
@@ -408,6 +406,15 @@ namespace GUI {
 					// Generate texture for preview
 					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
+
+					// Update output filename based on input
+					if (mgr.HasComponent<OutputImageComponent>(entity)) {
+						auto& outputComp = mgr.GetComponent<OutputImageComponent>(entity);
+						std::filesystem::path inputPath(fileName);
+						std::filesystem::path stem = inputPath.stem();
+						outputComp.fileName = stem.string() + "_upscaled.png";
+						isFilenameChanged = true;
+					}
 				}
 			}
 			ImGuiFileDialog::Instance()->Close();
@@ -417,43 +424,53 @@ namespace GUI {
 		ImGui::Separator();
 
 		if (imageComp.textureID != 0 && imageComp.width > 0 && imageComp.height > 0) {
-			// Display image info
 			ImGui::Text("Image dimensions: %d x %d", imageComp.width, imageComp.height);
 
-			// Create a child window for the image preview with border
 			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
 
-			// Calculate image size to maintain aspect ratio
 			float availWidth = ImGui::GetContentRegionAvail().x;
 			float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
 
 			ImVec2 imageSize;
 			if (aspectRatio > 1.0f) {
-				// Image is wider than tall
 				imageSize = ImVec2(availWidth, availWidth / aspectRatio);
 			}
 			else {
-				// Image is taller than wide or square
 				imageSize = ImVec2(availWidth * aspectRatio, availWidth);
 			}
 
-			// Limit height to available space
 			float availHeight = ImGui::GetContentRegionAvail().y;
 			if (imageSize.y > availHeight) {
 				imageSize.y = availHeight;
 				imageSize.x = availHeight * aspectRatio;
 			}
 
-			// Center the image horizontally
 			float xOffset = (availWidth - imageSize.x) * 0.5f;
 			if (xOffset > 0) {
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
 			}
 
-			// Draw the image
 			ImGui::Image((void*)(intptr_t)imageComp.textureID, imageSize);
 
 			ImGui::EndChild();
+
+			// Show estimated output dimensions
+			if (mgr.HasComponent<EsrganComponent>(entity)) {
+				auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+				int outWidth = imageComp.width * esrganComp.upscaleFactor;
+				int outHeight = imageComp.height * esrganComp.upscaleFactor;
+				ImGui::Text("Estimated output: %d x %d", outWidth, outHeight);
+
+				// Add option to use image dimensions for latent size
+				if (ImGui::Button("Use image dimensions for output")) {
+					if (mgr.HasComponent<LatentComponent>(entity)) {
+						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+						// Make dimensions divisible by 8 (required for stable diffusion)
+						latentComp.latentWidth = (imageComp.width / 8) * 8;
+						latentComp.latentHeight = (imageComp.height / 8) * 8;
+					}
+				}
+			}
 		}
 		else {
 			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
@@ -461,20 +478,8 @@ namespace GUI {
 				"No image loaded. Click the '...' button to select an input image.");
 			ImGui::EndChild();
 		}
-
-		// Additional image processing options
-		if (imageComp.textureID != 0) {
-			if (ImGui::Button("Use image dimensions for latent size")) {
-				if (mgr.HasComponent<LatentComponent>(entity)) {
-					auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
-					// Make dimensions divisible by 8 (required for stable diffusion)
-					latentComp.latentWidth = (imageComp.width / 8) * 8;
-					latentComp.latentHeight = (imageComp.height / 8) * 8;
-				}
-			}
-		}
 	}
-
+	
 	void DiffusionView::RenderPrompts(const EntityID entity) {
 
 		if (!mgr.HasComponent<PromptComponent>(entity)) {

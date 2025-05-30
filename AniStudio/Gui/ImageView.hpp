@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #ifndef IMAGEVIEW_HPP
@@ -52,7 +52,6 @@ namespace GUI {
 			}
 
 			// Register callbacks to update the view when images change
-			// We're registering these in Init instead of constructor to ensure everything is properly initialized
 			if (imageSystem) {
 				imageSystem->RegisterImageAddedCallback(std::bind(&ImageView::HandleImageAdded, this, std::placeholders::_1));
 				imageSystem->RegisterImageRemovedCallback(std::bind(&ImageView::HandleImageRemoved, this, std::placeholders::_1));
@@ -485,7 +484,7 @@ namespace GUI {
 				return;
 			}
 
-			// Create entities and load images directly
+			// Create entities and start async loading
 			ECS::EntityID lastEntity = 0;
 			for (const auto& filePath : filePaths) {
 				if (filePath.empty()) {
@@ -494,11 +493,11 @@ namespace GUI {
 
 				// Create entity with component
 				ECS::EntityID entity = mgr.AddNewEntity();
-				lastEntity = entity; // Keep track of the last entity loaded
+				lastEntity = entity;
 
 				mgr.AddComponent<ECS::ImageComponent>(entity);
 
-				// Load the image directly - this will also trigger the callback
+				// Start async load - this will trigger the callback when complete
 				imageSystem->SetImage(entity, filePath);
 			}
 		}

@@ -20,10 +20,10 @@
 
 #pragma once
 #include "ECS.h"
-#include "GUI.h"
+#include "../Gui/GUI.h"
 #include "../Engine/Engine.hpp"
 #include <systems.h>
-#include "filepaths.hpp"
+#include "FilePaths.hpp"
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>

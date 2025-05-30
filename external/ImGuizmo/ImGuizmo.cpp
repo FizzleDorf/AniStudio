@@ -666,9 +666,8 @@ namespace IMGUIZMO_NAMESPACE
 
    struct Context
    {
-      Context() : mbUsing(false), mbEnable(true), mbUsingBounds(false)
+      Context() : mbUsing(false), mbUsingViewManipulate(false), mbEnable(true), mIsViewManipulatorHovered(false), mbUsingBounds(false)
       {
-		  mIDStack.push_back(-1);
       }
 
       ImDrawList* mDrawList;
@@ -703,9 +702,11 @@ namespace IMGUIZMO_NAMESPACE
       vec_t mRelativeOrigin;
 
       bool mbUsing;
+      bool mbUsingViewManipulate;
       bool mbEnable;
       bool mbMouseOver;
       bool mReversed; // reversed projection matrix
+      bool mIsViewManipulatorHovered;
 
       // translation
       vec_t mTranslationPlan;
@@ -759,6 +760,7 @@ namespace IMGUIZMO_NAMESPACE
       // check to not have multiple gizmo highlighted at the same time
       bool mbOverGizmoHotspot = false;
 
+      ImGuiWindow* mAlternativeWindow = nullptr;
       ImVector<ImGuiID> mIDStack;
       ImGuiID mEditingID = -1;
       OPERATION mOperation = OPERATION(-1);
@@ -766,7 +768,14 @@ namespace IMGUIZMO_NAMESPACE
       bool mAllowAxisFlip = true;
       float mGizmoSizeClipSpace = 0.1f;
 
-      inline ImGuiID GetCurrentID() {return mIDStack.back();}
+      inline ImGuiID GetCurrentID()
+      {
+         if (mIDStack.empty())
+         {
+            mIDStack.push_back(-1);
+         }
+         return mIDStack.back();
+      }
    };
 
    static Context gContext;
@@ -935,6 +944,8 @@ namespace IMGUIZMO_NAMESPACE
       ImGuiWindow* window = ImGui::FindWindowByName(gContext.mDrawList->_OwnerName);
       if (g.HoveredWindow == window)   // Mouse hovering drawlist window
          return true;
+      if (gContext.mAlternativeWindow != nullptr && g.HoveredWindow == gContext.mAlternativeWindow)
+         return true;
       if (g.HoveredWindow != NULL)     // Any other window is hovered
          return false;
       if (ImGui::IsMouseHoveringRect(window->InnerRect.Min, window->InnerRect.Max, false))   // Hovering drawlist window rect, while no other window is hovered (for _NoInputs windows)
@@ -996,6 +1007,16 @@ namespace IMGUIZMO_NAMESPACE
    bool IsUsing()
    {
       return (gContext.mbUsing && (gContext.GetCurrentID() == gContext.mEditingID)) || gContext.mbUsingBounds;
+   }
+
+   bool IsUsingViewManipulate()
+   {
+      return gContext.mbUsingViewManipulate;
+   }
+
+   bool IsViewManipulateHovered()
+   {
+      return gContext.mIsViewManipulatorHovered;
    }
 
    bool IsUsingAny()
@@ -1085,7 +1106,6 @@ namespace IMGUIZMO_NAMESPACE
       // compute scale from the size of camera right vector projected on screen at the matrix position
       vec_t pointRight = viewInverse.v.right;
       pointRight.TransformPoint(gContext.mViewProjection);
-      gContext.mScreenFactor = gContext.mGizmoSizeClipSpace / (pointRight.x / pointRight.w - gContext.mMVP.v.position.x / gContext.mMVP.v.position.w);
 
       vec_t rightViewInverse = viewInverse.v.right;
       rightViewInverse.TransformVector(gContext.mModelInverse);
@@ -1159,7 +1179,7 @@ namespace IMGUIZMO_NAMESPACE
 
          // Apply axis mask to axes and planes
          belowAxisLimit = gContext.mBelowAxisLimit[axisIndex] && ((1<<axisIndex)&gContext.mAxisMask);
-         belowPlaneLimit = gContext.mBelowPlaneLimit[axisIndex] && (((1<<axisIndex)&gContext.mAxisMask) && !(gContext.mAxisMask & (gContext.mAxisMask - 1)) || !gContext.mAxisMask);
+         belowPlaneLimit = gContext.mBelowPlaneLimit[axisIndex] && (((1<<axisIndex) == gContext.mAxisMask) || !gContext.mAxisMask);
 
          dirAxis *= gContext.mAxisFactor[axisIndex];
          dirPlaneX *= gContext.mAxisFactor[(axisIndex + 1) % 3];
@@ -1191,7 +1211,7 @@ namespace IMGUIZMO_NAMESPACE
 
          float paraSurf = GetParallelogram(makeVect(0.f, 0.f, 0.f), dirPlaneX * gContext.mScreenFactor, dirPlaneY * gContext.mScreenFactor);
          // Apply axis mask to axes and planes
-         belowPlaneLimit = (paraSurf > gContext.mAxisLimit) && (((1<<axisIndex)&gContext.mAxisMask) && !(gContext.mAxisMask & (gContext.mAxisMask - 1)) || !gContext.mAxisMask);
+         belowPlaneLimit = (paraSurf > gContext.mAxisLimit) && (((1<<axisIndex) == gContext.mAxisMask) || !gContext.mAxisMask);
          belowAxisLimit = (axisLengthInClipSpace > gContext.mPlaneLimit) && !((1<<axisIndex)&gContext.mAxisMask);
 
          // and store values
@@ -1251,7 +1271,7 @@ namespace IMGUIZMO_NAMESPACE
       }
       ImDrawList* drawList = gContext.mDrawList;
 
-      bool isMultipleAxesMasked = gContext.mAxisMask & (gContext.mAxisMask - 1);
+      bool isMultipleAxesMasked = (gContext.mAxisMask & (gContext.mAxisMask - 1)) != 0;
       bool isNoAxesMasked = !gContext.mAxisMask;
 
       // colors
@@ -1282,7 +1302,7 @@ namespace IMGUIZMO_NAMESPACE
             continue;
          }
 
-         bool isAxisMasked = (1 << (2 - axis)) & gContext.mAxisMask;
+         bool isAxisMasked = ((1 << (2 - axis)) & gContext.mAxisMask) != 0;
 
          if ((!isAxisMasked || isMultipleAxesMasked) && !isNoAxesMasked)
          {
@@ -1924,7 +1944,7 @@ namespace IMGUIZMO_NAMESPACE
          {
             continue;
          }
-         bool isAxisMasked = (1 << i) & gContext.mAxisMask;
+         bool isAxisMasked = ((1 << i) & gContext.mAxisMask) != 0;
 
          vec_t dirPlaneX, dirPlaneY, dirAxis;
          bool belowAxisLimit, belowPlaneLimit;
@@ -1998,7 +2018,7 @@ namespace IMGUIZMO_NAMESPACE
       }
 
       bool isNoAxesMasked = !gContext.mAxisMask;
-      bool isMultipleAxesMasked = gContext.mAxisMask & (gContext.mAxisMask - 1);
+      bool isMultipleAxesMasked = (gContext.mAxisMask & (gContext.mAxisMask - 1)) != 0;
 
       ImGuiIO& io = ImGui::GetIO();
       int type = MT_NONE;
@@ -2023,7 +2043,7 @@ namespace IMGUIZMO_NAMESPACE
          {
             continue;
          }
-         bool isAxisMasked = (1 << i) & gContext.mAxisMask;
+         bool isAxisMasked = ((1 << i) & gContext.mAxisMask) != 0;
          // pickup plan
          vec_t pickupPlan = BuildPlan(gContext.mModel.v.position, planNormals[i]);
 
@@ -2065,7 +2085,7 @@ namespace IMGUIZMO_NAMESPACE
       }
 
       bool isNoAxesMasked = !gContext.mAxisMask;
-      bool isMultipleAxesMasked = gContext.mAxisMask & (gContext.mAxisMask - 1);
+      bool isMultipleAxesMasked = (gContext.mAxisMask & (gContext.mAxisMask - 1)) != 0;
 
       ImGuiIO& io = ImGui::GetIO();
       int type = MT_NONE;
@@ -2083,7 +2103,7 @@ namespace IMGUIZMO_NAMESPACE
       // compute
       for (int i = 0; i < 3 && type == MT_NONE; i++)
       {
-         bool isAxisMasked = (1 << i) & gContext.mAxisMask;
+         bool isAxisMasked = ((1 << i) & gContext.mAxisMask) != 0;
          vec_t dirPlaneX, dirPlaneY, dirAxis;
          bool belowAxisLimit, belowPlaneLimit;
          ComputeTripodAxisAndVisibility(i, dirAxis, dirPlaneX, dirPlaneY, belowAxisLimit, belowPlaneLimit);
@@ -2527,14 +2547,23 @@ namespace IMGUIZMO_NAMESPACE
       mat.v.position.Set(translation[0], translation[1], translation[2], 1.f);
    }
 
+   void SetAlternativeWindow(ImGuiWindow* window)
+   {
+      gContext.mAlternativeWindow = window;
+   }
+
    void SetID(int id)
    {
+      if (gContext.mIDStack.empty())
+      {
+         gContext.mIDStack.push_back(-1);
+      }
       gContext.mIDStack.back() = id;
    }
 
    ImGuiID GetID(const char* str, const char* str_end)
    {
-      ImGuiID seed = gContext.mIDStack.back();
+      ImGuiID seed = gContext.GetCurrentID();
       ImGuiID id = ImHashStr(str, str_end ? (str_end - str) : 0, seed);
       return id;
    }
@@ -2546,14 +2575,14 @@ namespace IMGUIZMO_NAMESPACE
 
    ImGuiID GetID(const void* ptr)
    {
-      ImGuiID seed = gContext.mIDStack.back();
+      ImGuiID seed = gContext.GetCurrentID();
       ImGuiID id = ImHashData(&ptr, sizeof(void*), seed);
       return id;
    }
 
    ImGuiID GetID(int n)
    {
-      ImGuiID seed = gContext.mIDStack.back();
+      ImGuiID seed = gContext.GetCurrentID();
       ImGuiID id = ImHashData(&n, sizeof(n), seed);
       return id;
    }
@@ -2612,7 +2641,7 @@ namespace IMGUIZMO_NAMESPACE
    {
       const ImGuiIO& io = ImGui::GetIO();
 
-      float radius = sqrtf((ImLengthSqr(worldToPos({ position[0], position[1], position[2] }, gContext.mViewProjection) - io.MousePos)));
+      float radius = sqrtf((ImLengthSqr(worldToPos({ position[0], position[1], position[2], 0.0f }, gContext.mViewProjection) - io.MousePos)));
       return radius < pixelRadius;
    }
 
@@ -2893,7 +2922,6 @@ namespace IMGUIZMO_NAMESPACE
    {
       static bool isDraging = false;
       static bool isClicking = false;
-      static bool isInside = false;
       static vec_t interpolationUp;
       static vec_t interpolationDir;
       static int interpolationFrames = 0;
@@ -3006,7 +3034,7 @@ namespace IMGUIZMO_NAMESPACE
                if (iPass)
                {
                   ImU32 directionColor = GetColorU32(DIRECTION_X + normalIndex);
-                  gContext.mDrawList->AddConvexPolyFilled(faceCoordsScreen, 4, (directionColor | IM_COL32(0x80, 0x80, 0x80, 0x80)) | (isInside ? IM_COL32(0x08, 0x08, 0x08, 0) : 0));
+                  gContext.mDrawList->AddConvexPolyFilled(faceCoordsScreen, 4, (directionColor | IM_COL32(0x80, 0x80, 0x80, 0x80)) | (gContext.mIsViewManipulatorHovered ? IM_COL32(0x08, 0x08, 0x08, 0) : 0));
                   if (boxes[boxCoordInt])
                   {
                      gContext.mDrawList->AddConvexPolyFilled(faceCoordsScreen, 4, IM_COL32(0xF0, 0xA0, 0x60, 0x80));
@@ -3035,7 +3063,7 @@ namespace IMGUIZMO_NAMESPACE
          vec_t newEye = camTarget + newDir * length;
          LookAt(&newEye.x, &camTarget.x, &newUp.x, view);
       }
-      isInside = gContext.mbMouseOver && ImRect(position, position + size).Contains(io.MousePos);
+      gContext.mIsViewManipulatorHovered = gContext.mbMouseOver && ImRect(position, position + size).Contains(io.MousePos);
 
       if (io.MouseDown[0] && (fabsf(io.MouseDelta[0]) || fabsf(io.MouseDelta[1])) && isClicking)
       {
@@ -3106,6 +3134,15 @@ namespace IMGUIZMO_NAMESPACE
 
          vec_t newEye = camTarget + newDir * length;
          LookAt(&newEye.x, &camTarget.x, &referenceUp.x, view);
+      }
+
+      gContext.mbUsingViewManipulate = (interpolationFrames != 0) || isDraging;
+      if (isClicking || gContext.mbUsingViewManipulate || gContext.mIsViewManipulatorHovered) {
+#if IMGUI_VERSION_NUM >= 18723
+         ImGui::SetNextFrameWantCaptureMouse(true);
+#else
+         ImGui::CaptureMouseFromApp();
+#endif
       }
 
       // restore view/projection because it was used to compute ray

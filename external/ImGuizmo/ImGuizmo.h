@@ -39,9 +39,9 @@
 // - display rotation/translation/scale infos in local/world space and not only local
 // - finish local/world matrix application
 // - OPERATION as bitmask
-// 
+//
 // -------------------------------------------------------------------------------------------
-// Example 
+// Example
 #if 0
 void EditTransform(const Camera& camera, matrix_t& matrix)
 {
@@ -115,6 +115,8 @@ void EditTransform(const Camera& camera, matrix_t& matrix)
 #define IMGUIZMO_NAMESPACE ImGuizmo
 #endif
 
+struct ImGuiWindow;
+
 namespace IMGUIZMO_NAMESPACE
 {
    // call inside your own window and before Manipulate() in order to draw gizmo to that window.
@@ -135,6 +137,11 @@ namespace IMGUIZMO_NAMESPACE
 
    // return true if mouse IsOver or if the gizmo is in moving state
    IMGUI_API bool IsUsing();
+
+   // return true if the view gizmo is in moving state
+   IMGUI_API bool IsUsingViewManipulate();
+   // only check if your mouse is over the view manipulator - no matter whether it's active or not
+   IMGUI_API bool IsViewManipulateHovered();
 
    // return true if any gizmo is in moving state
    IMGUI_API bool IsUsingAny();
@@ -167,7 +174,7 @@ namespace IMGUIZMO_NAMESPACE
    IMGUI_API void DrawGrid(const float* view, const float* projection, const float* matrix, const float gridSize);
 
    // call it when you want a gizmo
-   // Needs view and projection matrices. 
+   // Needs view and projection matrices.
    // matrix parameter is the source matrix (where will be gizmo be drawn) and might be transformed by the function. Return deltaMatrix is optional
    // translation is applied in world space
    enum OPERATION
@@ -215,6 +222,8 @@ namespace IMGUIZMO_NAMESPACE
 
    // use this version if you did not call Manipulate before and you are just using ViewManipulate
    IMGUI_API void ViewManipulate(float* view, const float* projection, OPERATION operation, MODE mode, float* matrix, float length, ImVec2 position, ImVec2 size, ImU32 backgroundColor);
+
+   IMGUI_API void SetAlternativeWindow(ImGuiWindow* window);
 
    [[deprecated("Use PushID/PopID instead.")]]
    IMGUI_API void SetID(int id);

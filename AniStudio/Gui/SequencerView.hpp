@@ -39,7 +39,7 @@ struct Track {
 class SequencerView : public ImSequencer::SequenceInterface, public BaseView {
 public:
     SequencerView(ECS::EntityManager &entityMgr);
-
+    ~SequencerView() = default;
     // Sequencer control
     void Play();
     void Pause();
