@@ -466,6 +466,8 @@ namespace Utils {
 			}
 		}
 
+		// Complete replacement for RunImg2Img method in SDcppUtils.hpp
+		// Complete replacement for RunImg2Img method in SDcppUtils.hpp
 		static bool RunImg2Img(const nlohmann::json& metadata, std::string fullPath) {
 			sd_ctx_t* sd_context = nullptr;
 			unsigned char* inputData = nullptr;
@@ -584,26 +586,26 @@ namespace Utils {
 					throw std::runtime_error("No input image path found in metadata");
 				}
 
-				// Load input image
+				// Load input image - ALWAYS load fresh from disk to avoid pointer issues
 				int inputWidth, inputHeight, inputChannels;
 				{
-					std::lock_guard<std::mutex> lock(stbi_mutex); // Lock during image loading
+					std::lock_guard<std::mutex> lock(stbi_mutex);
 					inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight,
 						&inputChannels, 3); // Force 3 channels
 				}
 
 				if (!inputData) {
-					throw std::runtime_error("Failed to load input image: " + inputImagePath);
+					throw std::runtime_error("Failed to load input image from path: " + inputImagePath);
 				}
 
-				std::cout << "Input image loaded: " << inputWidth << "x" << inputHeight << " with "
-					<< inputChannels << " channels:" << inputChannels << std::endl;
+				std::cout << "Input image loaded from disk: " << inputWidth << "x" << inputHeight
+					<< " with " << inputChannels << " channels from: " << inputImagePath << std::endl;
 
 				// Create a properly initialized input image struct
 				sd_image_t input_image = { 0 };
 				input_image.width = static_cast<uint32_t>(inputWidth);
 				input_image.height = static_cast<uint32_t>(inputHeight);
-				input_image.channel = 3; // Always use 4 channels
+				input_image.channel = 3;
 				input_image.data = inputData;
 
 				// Initialize mask image struct
@@ -626,7 +628,7 @@ namespace Utils {
 					// Load mask from file
 					int maskWidth, maskHeight, maskChannels;
 					{
-						std::lock_guard<std::mutex> lock(stbi_mutex); // Lock during mask loading
+						std::lock_guard<std::mutex> lock(stbi_mutex);
 						maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight,
 							&maskChannels, 1); // Force 1 channel
 					}
@@ -698,7 +700,20 @@ namespace Utils {
 					skipLayerEnd
 				);
 
-				// Clean up resources that were passed by value and copied
+				// Check if we got a result image
+				if (!result_image) {
+					throw std::runtime_error("Failed to generate image!");
+				}
+
+				std::cout << "Successfully generated img2img result: "
+					<< result_image->width << "x" << result_image->height
+					<< "x" << result_image->channel << std::endl;
+
+				// Save the result image
+				SaveImage(result_image->data, result_image->width, result_image->height,
+					result_image->channel, metadata, fullPath);
+
+				// Clean up resources - use proper RAII pattern
 				{
 					std::lock_guard<std::mutex> lock(stbi_mutex);
 					if (inputData) {
@@ -715,35 +730,6 @@ namespace Utils {
 				if (emptyMaskData) {
 					delete[] emptyMaskData;
 					emptyMaskData = nullptr;
-				}
-
-				// Check if we got a result image
-				if (!result_image) {
-					throw std::runtime_error("Failed to generate image!");
-				}
-
-				std::cout << "Successfully generated img2img result: "
-					<< result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << std::endl;
-
-				// Save the result image
-				SaveImage(result_image->data, result_image->width, result_image->height,
-					result_image->channel, metadata, fullPath);
-
-				// Clean up resources
-				if (inputData) {
-					free(inputData);
-					inputData = nullptr;
-				}
-
-				if (emptyMaskData) {
-					delete[] emptyMaskData;
-					emptyMaskData = nullptr;
-				}
-
-				if (maskData) {
-					free(maskData);
-					maskData = nullptr;
 				}
 
 				if (result_image) {
@@ -761,7 +747,7 @@ namespace Utils {
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
-				// Clean up resources
+				// Clean up resources in exception handler
 				{
 					std::lock_guard<std::mutex> lock(stbi_mutex);
 					if (inputData) {
@@ -777,14 +763,17 @@ namespace Utils {
 
 				if (emptyMaskData) {
 					delete[] emptyMaskData;
+					emptyMaskData = nullptr;
 				}
 
 				if (result_image) {
 					free(result_image);
+					result_image = nullptr;
 				}
 
 				if (sd_context) {
 					free_sd_ctx(sd_context);
+					sd_context = nullptr;
 				}
 
 				return false;

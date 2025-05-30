@@ -345,7 +345,7 @@ namespace GUI {
 			ImGui::Text("Input Image");
 
 			ImGui::TableNextColumn();
-			if (ImGui::Button("...##load_img")) {
+			if (ImGui::Button("...##load_img123")) {
 				IGFD::FileDialogConfig config;
 				config.path = Utils::FilePaths::defaultProjectPath;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadInputImageDialog", "Choose Image",
@@ -353,23 +353,24 @@ namespace GUI {
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("X##clear_img")) {
-				// Get ImageSystem to handle async cleanup
-				auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-				if (imageSystem) {
-					imageSystem->RemoveImage(entity);
-					// Re-add the component since RemoveImage destroys the entity
-					mgr.AddComponent<InputImageComponent>(entity);
+			if (ImGui::Button("X##clear_img123")) {
+				// Clear image
+				if (imageComp.imageData) {
+					Utils::ImageUtils::FreeImageData(imageComp.imageData);
+					imageComp.imageData = nullptr;
 				}
+				if (imageComp.textureID != 0) {
+					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					imageComp.textureID = 0;
+				}
+				imageComp.fileName = "";
+				imageComp.filePath = "";
+				imageComp.width = 0;
+				imageComp.height = 0;
 			}
 
 			ImGui::TableNextColumn();
-			if (imageComp.fileName.empty()) {
-				ImGui::Text("No image loaded");
-			}
-			else {
-				ImGui::Text("%s", imageComp.fileName.c_str());
-			}
+			ImGui::Text("%s", imageComp.fileName.c_str());
 
 			ImGui::EndTable();
 		}
@@ -378,11 +379,42 @@ namespace GUI {
 		if (ImGuiFileDialog::Instance()->Display("LoadInputImageDialog", 32, ImVec2(700, 400))) {
 			if (ImGuiFileDialog::Instance()->IsOk()) {
 				std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 
-				// Use ImageSystem for async loading
-				auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-				if (imageSystem) {
-					imageSystem->SetImage(entity, filePath);
+				// Clean up previous image data if it exists
+				if (imageComp.imageData) {
+					Utils::ImageUtils::FreeImageData(imageComp.imageData);
+					imageComp.imageData = nullptr;
+				}
+				if (imageComp.textureID != 0) {
+					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					imageComp.textureID = 0;
+				}
+
+				// Load new image
+				int width, height, channels;
+				imageComp.imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
+
+				if (imageComp.imageData) {
+					// Update component data
+					imageComp.width = width;
+					imageComp.height = height;
+					imageComp.channels = channels;
+					imageComp.fileName = fileName;
+					imageComp.filePath = filePath;
+
+					// Generate texture for preview
+					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
+						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
+
+					// Update output filename based on input
+					if (mgr.HasComponent<OutputImageComponent>(entity)) {
+						auto& outputComp = mgr.GetComponent<OutputImageComponent>(entity);
+						std::filesystem::path inputPath(fileName);
+						std::filesystem::path stem = inputPath.stem();
+						outputComp.fileName = stem.string() + "_upscaled.png";
+						isFilenameChanged = true;
+					}
 				}
 			}
 			ImGuiFileDialog::Instance()->Close();
@@ -392,13 +424,10 @@ namespace GUI {
 		ImGui::Separator();
 
 		if (imageComp.textureID != 0 && imageComp.width > 0 && imageComp.height > 0) {
-			// Display image info
 			ImGui::Text("Image dimensions: %d x %d", imageComp.width, imageComp.height);
 
-			// Create a child window for the image preview with border
 			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
 
-			// Calculate image size to maintain aspect ratio
 			float availWidth = ImGui::GetContentRegionAvail().x;
 			float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
 
@@ -410,50 +439,47 @@ namespace GUI {
 				imageSize = ImVec2(availWidth * aspectRatio, availWidth);
 			}
 
-			// Limit height to available space
 			float availHeight = ImGui::GetContentRegionAvail().y;
 			if (imageSize.y > availHeight) {
 				imageSize.y = availHeight;
 				imageSize.x = availHeight * aspectRatio;
 			}
 
-			// Center the image horizontally
 			float xOffset = (availWidth - imageSize.x) * 0.5f;
 			if (xOffset > 0) {
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
 			}
 
-			// Draw the image
 			ImGui::Image((void*)(intptr_t)imageComp.textureID, imageSize);
 
 			ImGui::EndChild();
-		}
-		else {
-			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
-			if (imageComp.fileName.empty()) {
-				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-					"No image loaded. Click the '...' button to select an input image.");
-			}
-			else {
-				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-					"Loading image: %s", imageComp.fileName.c_str());
-			}
-			ImGui::EndChild();
-		}
 
-		// Additional image processing options
-		if (imageComp.textureID != 0) {
-			if (ImGui::Button("Use image dimensions for latent size")) {
-				if (mgr.HasComponent<LatentComponent>(entity)) {
-					auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
-					// Make dimensions divisible by 8 (required for stable diffusion)
-					latentComp.latentWidth = (imageComp.width / 8) * 8;
-					latentComp.latentHeight = (imageComp.height / 8) * 8;
+			// Show estimated output dimensions
+			if (mgr.HasComponent<EsrganComponent>(entity)) {
+				auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+				int outWidth = imageComp.width * esrganComp.upscaleFactor;
+				int outHeight = imageComp.height * esrganComp.upscaleFactor;
+				ImGui::Text("Estimated output: %d x %d", outWidth, outHeight);
+
+				// Add option to use image dimensions for latent size
+				if (ImGui::Button("Use image dimensions for output")) {
+					if (mgr.HasComponent<LatentComponent>(entity)) {
+						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+						// Make dimensions divisible by 8 (required for stable diffusion)
+						latentComp.latentWidth = (imageComp.width / 8) * 8;
+						latentComp.latentHeight = (imageComp.height / 8) * 8;
+					}
 				}
 			}
 		}
+		else {
+			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
+			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+				"No image loaded. Click the '...' button to select an input image.");
+			ImGui::EndChild();
+		}
 	}
-
+	
 	void DiffusionView::RenderPrompts(const EntityID entity) {
 
 		if (!mgr.HasComponent<PromptComponent>(entity)) {

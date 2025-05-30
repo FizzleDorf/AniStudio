@@ -120,12 +120,19 @@ namespace ECS {
 		}
 
 		void SetImage(const EntityID entity, const std::string& filePath) {
+			// Handle both regular ImageComponent and InputImageComponent
 			if (mgr.HasComponent<ImageComponent>(entity)) {
 				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
 				// Unload current image if any
 				if (imageComp.textureID != 0) {
 					UnloadImage(imageComp);
+				}
+
+				// Clear input image data if this is an InputImageComponent
+				if (mgr.HasComponent<InputImageComponent>(entity)) {
+					auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+					inputComp.ClearImageData();
 				}
 
 				// Start async loading
@@ -139,6 +146,12 @@ namespace ECS {
 
 				// Cancel any pending load
 				CancelPendingLoad(entity);
+
+				// Clear input image data if this is an InputImageComponent
+				if (mgr.HasComponent<InputImageComponent>(entity)) {
+					auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+					inputComp.ClearImageData();
+				}
 
 				if (imageComp.textureID != 0) {
 					UnloadImage(imageComp);
@@ -213,7 +226,7 @@ namespace ECS {
 							auto& imageComp = mgr.GetComponent<ImageComponent>(it->entityID);
 
 							if (result.success) {
-								// Update component on main thread
+								// Update base ImageComponent properties on main thread
 								imageComp.width = result.width;
 								imageComp.height = result.height;
 								imageComp.channels = result.channels;
@@ -224,13 +237,27 @@ namespace ECS {
 								imageComp.textureID = Utils::ImageUtils::GenerateTexture(
 									result.width, result.height, result.channels, result.data);
 
-								// Store image data in component for InputImageComponent
+								// CRITICAL FIX: Update InputImageComponent if present
 								if (mgr.HasComponent<InputImageComponent>(it->entityID)) {
 									auto& inputComp = mgr.GetComponent<InputImageComponent>(it->entityID);
-									inputComp.imageData = result.data; // Transfer ownership
+
+									// Update InputImageComponent properties
+									inputComp.width = result.width;
+									inputComp.height = result.height;
+									inputComp.channels = result.channels;
+									inputComp.fileName = result.fileName;
+									inputComp.filePath = result.filePath;
+									inputComp.textureID = imageComp.textureID; // Share the same texture
+
+									// Store image data safely in InputImageComponent
+									inputComp.SetImageData(result.data, result.width, result.height, result.channels);
+									// Don't free result.data here - ownership transferred to InputImageComponent
+
+									std::cout << "Updated InputImageComponent: " << result.fileName << " ("
+										<< result.width << "x" << result.height << ")" << std::endl;
 								}
 								else {
-									// Free data if not needed
+									// Free data if not needed by InputImageComponent
 									Utils::ImageUtils::FreeImageData(result.data);
 								}
 
