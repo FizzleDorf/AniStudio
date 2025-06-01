@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Check for Python installation
-if ! command -v python &> /dev/null; then
+if ! command -v python3 &> /dev/null; then
     echo "Python is not installed or not in PATH. Please install Python and try again."
     exit 1
 fi
