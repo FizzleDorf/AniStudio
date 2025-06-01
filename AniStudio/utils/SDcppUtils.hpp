@@ -30,7 +30,6 @@ namespace Utils {
 	static std::random_device rd;
 	static STDDefaultRNG rng;
 	static bool initialized = false;
-	static std::mutex stbi_mutex;
 
 	class SDCPPUtils {
 	public:
