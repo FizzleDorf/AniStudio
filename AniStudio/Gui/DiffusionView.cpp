@@ -398,15 +398,6 @@ namespace GUI {
 					// Generate texture for preview using OpenGLUtils
 					imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-
-					// Update output filename based on input
-					if (mgr.HasComponent<OutputImageComponent>(entity)) {
-						auto& outputComp = mgr.GetComponent<OutputImageComponent>(entity);
-						std::filesystem::path inputPath(fileName);
-						std::filesystem::path stem = inputPath.stem();
-						outputComp.fileName = stem.string() + "_upscaled.png";
-						isFilenameChanged = true;
-					}
 				}
 			}
 			ImGuiFileDialog::Instance()->Close();
@@ -516,7 +507,7 @@ namespace GUI {
 
 		std::cout << "Adding new entity..." << std::endl;
 
-		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
+		EntityID newEntity = mgr.CloneEntity(txt2imgEntity);
 
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
@@ -559,7 +550,7 @@ namespace GUI {
 
 	void DiffusionView::HandleI2IEvent() {
 		std::cout << "Adding new entity..." << std::endl;
-		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(img2imgEntity));
+		EntityID newEntity = mgr.CloneEntity(img2imgEntity);
 		
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
@@ -607,17 +598,6 @@ namespace GUI {
 		event.type = EventType::Img2ImgRequest;
 		ANI::Events::Ref().QueueEvent(event);
 		std::cout << "Img2Img request queued for entity: " << newEntity << std::endl;
-	}
-
-	void DiffusionView::HandleUpscaleEvent() {
-		Event event;
-		EntityID newEntity = mgr.AddNewEntity();
-
-		std::cout << "Initialized entity with ID: " << newEntity << "\n";
-
-		event.entityID = newEntity;
-		event.type = EventType::InferenceRequest;
-		ANI::Events::Ref().QueueEvent(event);
 	}
 
 	void DiffusionView::RenderOther(const EntityID entity) {

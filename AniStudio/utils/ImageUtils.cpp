@@ -1,6 +1,6 @@
 #include "ImageUtils.hpp"
 
 namespace Utils {
-	// This mutex is shared across ImageUtils and SDcppUtils for thread-safe stb_image operations
+	// This mutex is shared
 	std::mutex stbi_mutex;
 }

@@ -2,7 +2,8 @@
 #include "../Events/Events.hpp"
 #include "Constants.hpp"
 #include "ImageUtils.hpp"
-#include "OpenGLUtils.hpp"  // Add this include
+#include "ImageSystem.hpp"
+#include "OpenGLUtils.hpp"
 #include <filesystem>
 
 using namespace ECS;
@@ -114,6 +115,7 @@ namespace GUI {
 			if (ImGui::Button("X##clear_img123")) {
 				// Clear image using the InputImageComponent's built-in method
 				imageComp.ClearImageData();
+
 				if (imageComp.textureID != 0) {
 					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
 					imageComp.textureID = 0;
@@ -136,8 +138,8 @@ namespace GUI {
 				std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
 				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 
-				// Clean up previous image data if it exists
-				imageComp.ClearImageData();  // Use the built-in method
+				// Clear image using the InputImageComponent's built-in method
+				imageComp.ClearImageData();
 				if (imageComp.textureID != 0) {
 					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
 					imageComp.textureID = 0;
@@ -156,15 +158,6 @@ namespace GUI {
 					// Generate texture for preview using OpenGLUtils
 					imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-
-					// Update output filename based on input
-					if (mgr.HasComponent<OutputImageComponent>(entity)) {
-						auto& outputComp = mgr.GetComponent<OutputImageComponent>(entity);
-						std::filesystem::path inputPath(fileName);
-						std::filesystem::path stem = inputPath.stem();
-						outputComp.fileName = stem.string() + "_upscaled.png";
-						isFilenameChanged = true;
-					}
 				}
 			}
 			ImGuiFileDialog::Instance()->Close();

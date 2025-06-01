@@ -77,6 +77,7 @@ namespace ECS {
 			nlohmann::json metadata;
 			std::string fullPath;
 			std::future<bool> result;
+			bool isClonedEntity = false;
 
 			// Default constructor
 			TaskData() = default;
@@ -88,7 +89,8 @@ namespace ECS {
 				, taskType(other.taskType)
 				, metadata(std::move(other.metadata))
 				, fullPath(std::move(other.fullPath))
-				, result(std::move(other.result)) {}
+				, result(std::move(other.result))
+				, isClonedEntity(other.isClonedEntity) {}
 
 			// Move assignment operator
 			TaskData& operator=(TaskData&& other) noexcept {
@@ -99,6 +101,7 @@ namespace ECS {
 					metadata = std::move(other.metadata);
 					fullPath = std::move(other.fullPath);
 					result = std::move(other.result);
+					isClonedEntity = other.isClonedEntity;
 				}
 				return *this;
 			}
@@ -168,17 +171,25 @@ namespace ECS {
 					return;
 				}
 
+				// Create a cloned entity for processing to preserve original
+				EntityID clonedEntity = CloneEntityForProcessing(entityID);
+				if (clonedEntity == 0) {
+					std::cerr << "Failed to clone entity " << entityID << " for processing" << std::endl;
+					return;
+				}
+
 				// Create task data
 				TaskData taskData;
-				taskData.entityID = entityID;
+				taskData.entityID = clonedEntity;  // Use cloned entity
 				taskData.processing = false;
 				taskData.taskType = taskType;
+				taskData.isClonedEntity = true;
 
 				// Check if we need to generate a random seed
 				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
-					// Access the sampler component
-					if (mgr.HasComponent<SamplerComponent>(entityID)) {
-						auto& samplerComp = mgr.GetComponent<SamplerComponent>(entityID);
+
+					if (mgr.HasComponent<SamplerComponent>(clonedEntity)) {
+						auto& samplerComp = mgr.GetComponent<SamplerComponent>(clonedEntity);
 
 						// Generate random seed if needed
 						if (samplerComp.seed < 0) {
@@ -190,13 +201,13 @@ namespace ECS {
 				}
 
 				// Serialize entity to metadata
-				taskData.metadata = mgr.SerializeEntity(entityID);
-				std::cout << "Successfully serialized entity " << entityID << std::endl;
+				taskData.metadata = mgr.SerializeEntity(clonedEntity);
+				std::cout << "Successfully serialized cloned entity " << clonedEntity << " (original: " << entityID << ")" << std::endl;
 
 				// Add to internal task list
 				taskQueue.push_back(std::move(taskData));
 
-				std::cout << "Entity " << entityID << " queued for processing. Queue position: " << taskQueue.size() << std::endl;
+				std::cout << "Entity " << clonedEntity << " (cloned from " << entityID << ") queued for processing. Queue position: " << taskQueue.size() << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception in QueueTask: " << e.what() << std::endl;
@@ -207,7 +218,7 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
-			
+
 			if (shuttingDown) {
 				return;
 			}
@@ -281,7 +292,6 @@ namespace ECS {
 			}
 		}
 
-		// PROPER ClearQueue - just set a flag, don't do the work immediately
 		void ClearQueue() {
 			std::cout << "Queue clear requested" << std::endl;
 			clearRequested = true;
@@ -312,7 +322,6 @@ namespace ECS {
 			return Utils::ThreadPoolManager::getInstance().getDiffusionPool().getActiveCount();
 		}
 
-		// New methods for single-threaded processing
 		bool HasActiveTask() const {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			return hasActiveTask;
@@ -345,6 +354,56 @@ namespace ECS {
 		// Single task tracking
 		bool hasActiveTask{ false };
 		std::thread::id activeThreadId{};
+
+		// Clone entity for processing to preserve original input images
+		EntityID CloneEntityForProcessing(const EntityID originalEntity) {
+			try {
+				// Serialize the original entity
+				nlohmann::json entityData = mgr.SerializeEntity(originalEntity);
+
+				// Create a new entity from the serialized data
+				EntityID clonedEntity = mgr.DeserializeEntity(entityData);
+
+				if (clonedEntity == 0) {
+					std::cerr << "Failed to deserialize cloned entity" << std::endl;
+					return 0;
+				}
+
+				// Special handling for InputImageComponent to preserve image data
+				if (mgr.HasComponent<InputImageComponent>(originalEntity) &&
+					mgr.HasComponent<InputImageComponent>(clonedEntity)) {
+
+					auto& originalInput = mgr.GetComponent<InputImageComponent>(originalEntity);
+					auto& clonedInput = mgr.GetComponent<InputImageComponent>(clonedEntity);
+
+					// Deep copy the image data if it exists
+					if (originalInput.ownedImageData && originalInput.width > 0 &&
+						originalInput.height > 0 && originalInput.channels > 0) {
+
+						size_t dataSize = originalInput.width * originalInput.height * originalInput.channels;
+						unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+
+						if (newData) {
+							memcpy(newData, originalInput.ownedImageData.get(), dataSize);
+							clonedInput.SetImageData(newData, originalInput.width,
+								originalInput.height, originalInput.channels);
+
+							std::cout << "Copied image data for cloned entity " << clonedEntity << std::endl;
+						}
+						else {
+							std::cerr << "Failed to allocate memory for image data copy" << std::endl;
+						}
+					}
+				}
+
+				std::cout << "Successfully cloned entity " << originalEntity << " to " << clonedEntity << std::endl;
+				return clonedEntity;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception cloning entity " << originalEntity << ": " << e.what() << std::endl;
+				return 0;
+			}
+		}
 
 		// The actual clearing logic - called from Update when it's safe
 		void HandleClearRequest() {
@@ -391,13 +450,9 @@ namespace ECS {
 
 				try {
 					if (mgr.GetEntitiesSignatures().count(entityID)) {
-						if (imageSystem && mgr.HasComponent<ImageComponent>(entityID)) {
-							imageSystem->RemoveImage(entityID);
-						}
-						else {
-							mgr.DestroyEntity(entityID);
-						}
-						std::cout << "Cleaned up entity " << entityID << std::endl;
+						// Always destroy cloned entities completely - they are temporary
+						mgr.DestroyEntity(entityID);
+						std::cout << "Cleaned up cloned entity " << entityID << std::endl;
 					}
 					it = entitiesNeedingCleanup.erase(it);
 					cleaned++;
@@ -598,7 +653,7 @@ namespace ECS {
 						auto status = it->result.wait_for(std::chrono::milliseconds(0));
 
 						if (status == std::future_status::ready) {
-							
+
 							EntityID entityID = it->entityID;
 							std::string fullPath = it->fullPath;
 							bool success = false;

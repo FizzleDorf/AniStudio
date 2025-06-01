@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license in formation, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -49,7 +49,7 @@ namespace Utils {
 			return data;
 		}
 
-		// Free image data (THREAD-SAFE)
+		// Free image data
 		static void FreeImageData(unsigned char* data) {
 			if (data) {
 				std::lock_guard<std::mutex> lock(stbi_mutex);
@@ -57,7 +57,7 @@ namespace Utils {
 			}
 		}
 
-		// Create a copy of image data (THREAD-SAFE)
+		// Create a copy of image data
 		static unsigned char* CopyImageData(const unsigned char* src, int width, int height, int channels) {
 			if (!src) return nullptr;
 

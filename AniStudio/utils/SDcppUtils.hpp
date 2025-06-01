@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -36,6 +36,7 @@ namespace Utils {
 	public:
 
 		// Generate a random seed using STDDefaultRNG from sdcpp
+		// TODO: move this to a util
 		static uint64_t generateRandomSeed() {
 			// Seed the RNG with a random device if not already seeded
 			if (!initialized) {
@@ -474,7 +475,7 @@ namespace Utils {
 			sd_image_t* result_image = nullptr;
 
 			try {
-				// Extract parameters from metadata - SAME PATTERN AS UPSCALING
+				// Extract parameters from metadata
 				std::string inputImagePath = "";
 				std::string maskImagePath = "";
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
@@ -489,17 +490,16 @@ namespace Utils {
 				size_t skipLayersCount = 0;
 				float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
 
-				// Debug logging for metadata - SAME AS UPSCALING
+				// Debug logging for metadata
 				std::cout << "Img2Img metadata:" << std::endl;
 				std::cout << metadata.dump(2) << std::endl;
 
-				// Parse metadata to extract parameters - EXACT SAME PATTERN AS UPSCALING
+				// Parse metadata to extract parameters
 				if (metadata.contains("components") && metadata["components"].is_array()) {
 					for (const auto& comp : metadata["components"]) {
-						// Input image path - SAME AS UPSCALING
+						// Input image path
 						if (comp.contains("InputImage")) {
-							nlohmann::json inputImageData;
-							inputImageData = comp["InputImage"];
+							nlohmann::json inputImageData = comp["InputImage"];
 
 							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null()
 								&& !inputImageData["filePath"].get<std::string>().empty()) {
@@ -510,8 +510,7 @@ namespace Utils {
 
 						// Mask image path (additional for img2img)
 						if (comp.contains("MaskImage")) {
-							nlohmann::json maskImageData;
-							maskImageData = comp["MaskImage"];
+							nlohmann::json maskImageData = comp["MaskImage"];
 
 							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null()
 								&& !maskImageData["filePath"].get<std::string>().empty()) {
@@ -520,10 +519,9 @@ namespace Utils {
 							}
 						}
 
-						// Output settings - SAME AS UPSCALING
+						// Output settings
 						if (comp.contains("OutputImage")) {
-							nlohmann::json outputImageData;
-							outputImageData = comp["OutputImage"];
+							nlohmann::json outputImageData = comp["OutputImage"];
 
 							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null()
 								&& !outputImageData["filePath"].get<std::string>().empty()) {
@@ -540,8 +538,7 @@ namespace Utils {
 
 						// Prompt component
 						if (comp.contains("Prompt")) {
-							nlohmann::json promptData;
-							promptData = comp["Prompt"];
+							nlohmann::json promptData = comp["Prompt"];
 
 							if (promptData.contains("posPrompt") && !promptData["posPrompt"].is_null())
 								posPrompt = promptData["posPrompt"].get<std::string>();
@@ -551,8 +548,7 @@ namespace Utils {
 
 						// ClipSkip component
 						if (comp.contains("ClipSkip")) {
-							nlohmann::json clipSkipData;
-							clipSkipData = comp["ClipSkip"];
+							nlohmann::json clipSkipData = comp["ClipSkip"];
 
 							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
 								clipSkip = clipSkipData["clipSkip"].get<float>();
@@ -560,8 +556,7 @@ namespace Utils {
 
 						// Sampler component
 						if (comp.contains("Sampler")) {
-							nlohmann::json samplerData;
-							samplerData = comp["Sampler"];
+							nlohmann::json samplerData = comp["Sampler"];
 
 							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
 								cfg = samplerData["cfg"].get<float>();
@@ -577,8 +572,7 @@ namespace Utils {
 
 						// Guidance component
 						if (comp.contains("Guidance")) {
-							nlohmann::json guidanceData;
-							guidanceData = comp["Guidance"];
+							nlohmann::json guidanceData = comp["Guidance"];
 
 							if (guidanceData.contains("guidance") && !guidanceData["guidance"].is_null())
 								guidance = guidanceData["guidance"].get<float>();
@@ -588,8 +582,7 @@ namespace Utils {
 
 						// Latent component
 						if (comp.contains("Latent")) {
-							nlohmann::json latentData;
-							latentData = comp["Latent"];
+							nlohmann::json latentData = comp["Latent"];
 
 							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
 								latentWidth = latentData["latentWidth"].get<int>();
@@ -601,8 +594,7 @@ namespace Utils {
 
 						// Layer Skip component
 						if (comp.contains("LayerSkip")) {
-							nlohmann::json layerSkipData;
-							layerSkipData = comp["LayerSkip"];
+							nlohmann::json layerSkipData = comp["LayerSkip"];
 
 							if (layerSkipData.contains("slg_scale") && !layerSkipData["slg_scale"].is_null())
 								slgScale = layerSkipData["slg_scale"].get<float>();
@@ -614,23 +606,38 @@ namespace Utils {
 					}
 				}
 
-				// Validate parameters - SAME AS UPSCALING
+				// Validate parameters
 				if (inputImagePath.empty()) {
 					throw std::runtime_error("Input image path is empty!");
 				}
 
-				// Load input image - EXACT SAME PATTERN AS UPSCALING
+				// Check if input image file exists
+				if (!std::filesystem::exists(inputImagePath)) {
+					throw std::runtime_error("Input image file does not exist: " + inputImagePath);
+				}
+
+				// Load input image
 				int inputWidth, inputHeight, inputChannels;
 				std::cout << "Loading input image from: " << inputImagePath << std::endl;
-				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 0);
+
+				// Force 3 channels (RGB) for consistency with stable-diffusion
+				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
 				if (!inputData) {
 					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
 						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
 					throw std::runtime_error(error);
 				}
 
+				// Force channels to 3 since we requested RGB
+				inputChannels = 3;
+
 				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
-					<< " with " << inputChannels << " channels" << std::endl;
+					<< " with " << inputChannels << " channels (forced RGB)" << std::endl;
+
+				// Validate image dimensions
+				if (inputWidth <= 0 || inputHeight <= 0) {
+					throw std::runtime_error("Invalid input image dimensions: " + std::to_string(inputWidth) + "x" + std::to_string(inputHeight));
+				}
 
 				// Create output path - SAME AS UPSCALING
 				std::filesystem::path outputDir(outputPath);
@@ -645,43 +652,47 @@ namespace Utils {
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
 
-				// Create input image struct - SAME AS UPSCALING
+				// Create input image struct - FORCE RGB FORMAT
 				sd_image_t input_image = {
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
-					static_cast<uint32_t>(inputChannels),
+					3,  // FORCE 3 channels (RGB)
 					inputData
 				};
 
-				// Initialize mask image struct
+				// Initialize mask image struct - IMPROVED MASK HANDLING
 				sd_image_t mask_image = { 0 };
 
 				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath)) {
-					// Create a blank (white) mask of appropriate size
+					std::cout << "No valid mask provided, creating blank white mask" << std::endl;
+
+					// Create a blank WHITE mask (255 = keep original, 0 = replace with generated)
 					size_t maskSize = inputWidth * inputHeight;
 					emptyMaskData = new unsigned char[maskSize];
-					std::memset(emptyMaskData, 255, maskSize); // Fill with 255 (white)
+					std::memset(emptyMaskData, 255, maskSize); // WHITE mask = change whole image
 
 					mask_image.width = static_cast<uint32_t>(inputWidth);
 					mask_image.height = static_cast<uint32_t>(inputHeight);
 					mask_image.channel = 1; // Masks are single channel
 					mask_image.data = emptyMaskData;
 
-					std::cout << "Created blank mask: " << inputWidth << "x" << inputHeight << std::endl;
+					std::cout << "Created white mask: " << inputWidth << "x" << inputHeight << std::endl;
 				}
 				else {
-					// Load mask from file
+					// Load mask from file - FORCE GRAYSCALE
 					int maskWidth, maskHeight, maskChannels;
 					std::cout << "Loading mask image from: " << maskImagePath << std::endl;
-					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1); // Force 1 channel
+
+					// FORCE 1 channel (grayscale) for mask
+					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1);
 
 					if (!maskData) {
-						std::cerr << "Failed to load mask image: " << maskImagePath << ", using blank mask instead" << std::endl;
+						std::cerr << "Failed to load mask image: " << maskImagePath << ", using white mask instead" << std::endl;
 
-						// Create blank mask as fallback
+						// Create white mask as fallback
 						size_t maskSize = inputWidth * inputHeight;
 						emptyMaskData = new unsigned char[maskSize];
-						std::memset(emptyMaskData, 255, maskSize);
+						std::memset(emptyMaskData, 255, maskSize); // WHITE mask
 
 						mask_image.width = static_cast<uint32_t>(inputWidth);
 						mask_image.height = static_cast<uint32_t>(inputHeight);
@@ -689,21 +700,54 @@ namespace Utils {
 						mask_image.data = emptyMaskData;
 					}
 					else {
-						mask_image.width = static_cast<uint32_t>(maskWidth);
-						mask_image.height = static_cast<uint32_t>(maskHeight);
-						mask_image.channel = 1;
-						mask_image.data = maskData;
+						// Validate mask dimensions match input image
+						if (maskWidth != inputWidth || maskHeight != inputHeight) {
+							std::cout << "Warning: Mask dimensions (" << maskWidth << "x" << maskHeight
+								<< ") don't match input image (" << inputWidth << "x" << inputHeight
+								<< "), using white mask instead" << std::endl;
 
-						std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
-							<< " with " << maskChannels << " channels (forced to 1)" << std::endl;
+							// Free the loaded mask and create a white one
+							stbi_image_free(maskData);
+							maskData = nullptr;
+
+							size_t maskSize = inputWidth * inputHeight;
+							emptyMaskData = new unsigned char[maskSize];
+							std::memset(emptyMaskData, 255, maskSize);
+
+							mask_image.width = static_cast<uint32_t>(inputWidth);
+							mask_image.height = static_cast<uint32_t>(inputHeight);
+							mask_image.channel = 1;
+							mask_image.data = emptyMaskData;
+						}
+						else {
+							mask_image.width = static_cast<uint32_t>(maskWidth);
+							mask_image.height = static_cast<uint32_t>(maskHeight);
+							mask_image.channel = 1; // Force single channel
+							mask_image.data = maskData;
+
+							std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
+								<< " with 1 channel (grayscale)" << std::endl;
+						}
 					}
 				}
 
-				// Ensure valid seed - SAME AS UPSCALING PATTERN
+				// Ensure valid seed
 				if (seed < 0) {
 					seed = static_cast<int>(generateRandomSeed());
 					std::cout << "Generated random seed: " << seed << std::endl;
 				}
+
+				// Validate parameters before calling img2img
+				std::cout << "img2img parameters:" << std::endl;
+				std::cout << "  Positive prompt: \"" << posPrompt << "\"" << std::endl;
+				std::cout << "  Negative prompt: \"" << negPrompt << "\"" << std::endl;
+				std::cout << "  Clip skip: " << clipSkip << std::endl;
+				std::cout << "  CFG: " << cfg << std::endl;
+				std::cout << "  Guidance: " << guidance << std::endl;
+				std::cout << "  Steps: " << steps << std::endl;
+				std::cout << "  Seed: " << seed << std::endl;
+				std::cout << "  Denoise: " << denoiseStrength << std::endl;
+				std::cout << "  Dimensions: " << latentWidth << "x" << latentHeight << std::endl;
 
 				// Perform img2img - using the same pattern as upscaling
 				std::cout << "Calling img2img..." << std::endl;
@@ -740,27 +784,20 @@ namespace Utils {
 					throw std::runtime_error("img2img failed - no output image produced");
 				}
 
-				std::cout << "img2img successful, saving output to: " << uniqueFilePath << std::endl;
-
-				// Update metadata with correct output path before saving - SAME AS UPSCALING
-				nlohmann::json updatedMetadata = metadata;
-				for (auto& comp : updatedMetadata["components"]) {
-					if (comp.contains("OutputImage")) {
-						if (comp["OutputImage"].contains("OutputImage")) {
-							comp["OutputImage"]["OutputImage"]["filePath"] = uniqueFilePath;
-						}
-						else {
-							comp["OutputImage"]["filePath"] = uniqueFilePath;
-						}
-					}
+				if (!result_image->data) {
+					free(result_image);
+					throw std::runtime_error("img2img produced invalid image data");
 				}
 
-				// Save the result image - SAME AS UPSCALING
+				std::cout << "img2img successful: " << result_image->width << "x" << result_image->height
+					<< "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
+
+				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
 					result_image->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-				// Cleanup resources - EXACT SAME PATTERN AS UPSCALING
+				// Cleanup resources
 				if (inputData) {
 					stbi_image_free(inputData);
 					inputData = nullptr;
@@ -776,21 +813,22 @@ namespace Utils {
 					emptyMaskData = nullptr;
 				}
 
-				// Free the result image if needed
 				if (result_image) {
 					free(result_image);
+					result_image = nullptr;
 				}
 
-				// Cleanup SD context
-				free_sd_ctx(sd_context);
-				sd_context = nullptr;
+				if (sd_context) {
+					free_sd_ctx(sd_context);
+					sd_context = nullptr;
+				}
 
 				return true;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
-				// Clean up resources - EXACT SAME PATTERN AS UPSCALING
+				// Clean up resources
 				if (inputData) {
 					stbi_image_free(inputData);
 					inputData = nullptr;
