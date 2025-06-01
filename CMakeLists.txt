@@ -60,7 +60,7 @@ endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
-project(AniStudio LANGUAGES CXX)
+project(AniStudio LANGUAGES CXX VERSION 0.1.01)
 
 # Set binary output directories - ensures consistent placement across platforms
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

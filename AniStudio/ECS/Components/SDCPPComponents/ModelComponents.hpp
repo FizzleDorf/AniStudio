@@ -133,7 +133,7 @@ namespace ECS {
     // Vae Loader (Overrides Model Component Vae)
     struct VaeComponent : public BaseModelComponent {
         VaeComponent() { compName = "Vae"; }
-        bool isTiled = false;
+        bool isTiled = true;
         bool keep_vae_on_cpu = false;
         bool vae_decode_only = false;
 
