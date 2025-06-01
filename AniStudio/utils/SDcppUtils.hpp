@@ -466,8 +466,6 @@ namespace Utils {
 			}
 		}
 
-		// Complete replacement for RunImg2Img method in SDcppUtils.hpp
-		// Complete replacement for RunImg2Img method in SDcppUtils.hpp
 		static bool RunImg2Img(const nlohmann::json& metadata, std::string fullPath) {
 			sd_ctx_t* sd_context = nullptr;
 			unsigned char* inputData = nullptr;
@@ -476,7 +474,7 @@ namespace Utils {
 			sd_image_t* result_image = nullptr;
 
 			try {
-				// Extract parameters from metadata
+				// Extract parameters from metadata - SAME PATTERN AS UPSCALING
 				std::string inputImagePath = "";
 				std::string maskImagePath = "";
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
@@ -491,127 +489,174 @@ namespace Utils {
 				size_t skipLayersCount = 0;
 				float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
 
-				// Extract parameters from components array in metadata
+				// Debug logging for metadata - SAME AS UPSCALING
+				std::cout << "Img2Img metadata:" << std::endl;
+				std::cout << metadata.dump(2) << std::endl;
+
+				// Parse metadata to extract parameters - EXACT SAME PATTERN AS UPSCALING
 				if (metadata.contains("components") && metadata["components"].is_array()) {
 					for (const auto& comp : metadata["components"]) {
-						// Input image path
+						// Input image path - SAME AS UPSCALING
 						if (comp.contains("InputImage")) {
-							auto inputImage = comp["InputImage"];
-							if (inputImage.contains("filePath") && !inputImage["filePath"].is_null() && !inputImage["filePath"].get<std::string>().empty())
-								inputImagePath = inputImage["filePath"];
+							nlohmann::json inputImageData;
+							inputImageData = comp["InputImage"];
+
+							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null()
+								&& !inputImageData["filePath"].get<std::string>().empty()) {
+								inputImagePath = inputImageData["filePath"].get<std::string>();
+								std::cout << "Found input path: " << inputImagePath << std::endl;
+							}
 						}
 
-						// Mask image path (for inpainting)
+						// Mask image path (additional for img2img)
 						if (comp.contains("MaskImage")) {
-							auto maskImage = comp["MaskImage"];
-							if (maskImage.contains("filePath") && !maskImage["filePath"].is_null() && !maskImage["filePath"].get<std::string>().empty())
-								maskImagePath = maskImage["filePath"];
+							nlohmann::json maskImageData;
+							maskImageData = comp["MaskImage"];
+
+							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null()
+								&& !maskImageData["filePath"].get<std::string>().empty()) {
+								maskImagePath = maskImageData["filePath"].get<std::string>();
+								std::cout << "Found mask path: " << maskImagePath << std::endl;
+							}
 						}
 
-						// Output path settings
-						if (comp.contains("OutputImage") || comp.contains("Image")) {
-							auto outImage = comp.contains("OutputImage") ? comp["OutputImage"] : comp["Image"];
-							if (outImage.contains("filePath") && !outImage["filePath"].is_null() && !outImage["filePath"].get<std::string>().empty())
-								outputPath = outImage["filePath"];
-							if (outImage.contains("fileName") && !outImage["fileName"].is_null() && !outImage["fileName"].get<std::string>().empty())
-								outputFilename = outImage["fileName"];
+						// Output settings - SAME AS UPSCALING
+						if (comp.contains("OutputImage")) {
+							nlohmann::json outputImageData;
+							outputImageData = comp["OutputImage"];
+
+							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null()
+								&& !outputImageData["filePath"].get<std::string>().empty()) {
+								outputPath = outputImageData["filePath"].get<std::string>();
+								std::cout << "Found output path: " << outputPath << std::endl;
+							}
+
+							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null()
+								&& !outputImageData["fileName"].get<std::string>().empty()) {
+								outputFilename = outputImageData["fileName"].get<std::string>();
+								std::cout << "Found output filename: " << outputFilename << std::endl;
+							}
 						}
 
 						// Prompt component
 						if (comp.contains("Prompt")) {
-							auto prompt = comp["Prompt"];
-							if (prompt.contains("posPrompt") && !prompt["posPrompt"].is_null())
-								posPrompt = prompt["posPrompt"];
-							if (prompt.contains("negPrompt") && !prompt["negPrompt"].is_null())
-								negPrompt = prompt["negPrompt"];
+							nlohmann::json promptData;
+							promptData = comp["Prompt"];
+
+							if (promptData.contains("posPrompt") && !promptData["posPrompt"].is_null())
+								posPrompt = promptData["posPrompt"].get<std::string>();
+							if (promptData.contains("negPrompt") && !promptData["negPrompt"].is_null())
+								negPrompt = promptData["negPrompt"].get<std::string>();
 						}
 
 						// ClipSkip component
 						if (comp.contains("ClipSkip")) {
-							auto clipSkipComp = comp["ClipSkip"];
-							if (clipSkipComp.contains("clipSkip") && !clipSkipComp["clipSkip"].is_null())
-								clipSkip = clipSkipComp["clipSkip"];
+							nlohmann::json clipSkipData;
+							clipSkipData = comp["ClipSkip"];
+
+							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
+								clipSkip = clipSkipData["clipSkip"].get<float>();
 						}
 
 						// Sampler component
 						if (comp.contains("Sampler")) {
-							auto sampler = comp["Sampler"];
-							if (sampler.contains("cfg") && !sampler["cfg"].is_null())
-								cfg = sampler["cfg"];
-							if (sampler.contains("steps") && !sampler["steps"].is_null())
-								steps = sampler["steps"];
-							if (sampler.contains("seed") && !sampler["seed"].is_null())
-								seed = sampler["seed"];
-							if (sampler.contains("denoise") && !sampler["denoise"].is_null())
-								denoiseStrength = sampler["denoise"];
-							if (sampler.contains("current_sample_method") && !sampler["current_sample_method"].is_null())
-								sample_method = static_cast<sample_method_t>(sampler["current_sample_method"].get<int>());
+							nlohmann::json samplerData;
+							samplerData = comp["Sampler"];
+
+							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
+								cfg = samplerData["cfg"].get<float>();
+							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
+								steps = samplerData["steps"].get<int>();
+							if (samplerData.contains("seed") && !samplerData["seed"].is_null())
+								seed = samplerData["seed"].get<int>();
+							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
+								denoiseStrength = samplerData["denoise"].get<float>();
+							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
+								sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
 						}
 
 						// Guidance component
 						if (comp.contains("Guidance")) {
-							auto guidanceComp = comp["Guidance"];
-							if (guidanceComp.contains("guidance") && !guidanceComp["guidance"].is_null())
-								guidance = guidanceComp["guidance"];
-							if (guidanceComp.contains("eta") && !guidanceComp["eta"].is_null())
-								eta = guidanceComp["eta"];
+							nlohmann::json guidanceData;
+							guidanceData = comp["Guidance"];
+
+							if (guidanceData.contains("guidance") && !guidanceData["guidance"].is_null())
+								guidance = guidanceData["guidance"].get<float>();
+							if (guidanceData.contains("eta") && !guidanceData["eta"].is_null())
+								eta = guidanceData["eta"].get<float>();
 						}
 
 						// Latent component
 						if (comp.contains("Latent")) {
-							auto latent = comp["Latent"];
-							if (latent.contains("latentWidth") && !latent["latentWidth"].is_null())
-								latentWidth = latent["latentWidth"];
-							if (latent.contains("latentHeight") && !latent["latentHeight"].is_null())
-								latentHeight = latent["latentHeight"];
-							if (latent.contains("batchSize") && !latent["batchSize"].is_null())
-								batchSize = latent["batchSize"];
+							nlohmann::json latentData;
+							latentData = comp["Latent"];
+
+							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
+								latentWidth = latentData["latentWidth"].get<int>();
+							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
+								latentHeight = latentData["latentHeight"].get<int>();
+							if (latentData.contains("batchSize") && !latentData["batchSize"].is_null())
+								batchSize = latentData["batchSize"].get<int>();
 						}
 
 						// Layer Skip component
 						if (comp.contains("LayerSkip")) {
-							auto layerSkip = comp["LayerSkip"];
-							if (layerSkip.contains("slg_scale") && !layerSkip["slg_scale"].is_null())
-								slgScale = layerSkip["slg_scale"];
-							if (layerSkip.contains("skip_layer_start") && !layerSkip["skip_layer_start"].is_null())
-								skipLayerStart = layerSkip["skip_layer_start"];
-							if (layerSkip.contains("skip_layer_end") && !layerSkip["skip_layer_end"].is_null())
-								skipLayerEnd = layerSkip["skip_layer_end"];
+							nlohmann::json layerSkipData;
+							layerSkipData = comp["LayerSkip"];
+
+							if (layerSkipData.contains("slg_scale") && !layerSkipData["slg_scale"].is_null())
+								slgScale = layerSkipData["slg_scale"].get<float>();
+							if (layerSkipData.contains("skip_layer_start") && !layerSkipData["skip_layer_start"].is_null())
+								skipLayerStart = layerSkipData["skip_layer_start"].get<float>();
+							if (layerSkipData.contains("skip_layer_end") && !layerSkipData["skip_layer_end"].is_null())
+								skipLayerEnd = layerSkipData["skip_layer_end"].get<float>();
 						}
 					}
 				}
 
-				// Ensure we have a valid input image path
+				// Validate parameters - SAME AS UPSCALING
 				if (inputImagePath.empty()) {
-					throw std::runtime_error("No input image path found in metadata");
+					throw std::runtime_error("Input image path is empty!");
 				}
 
-				// Load input image - ALWAYS load fresh from disk to avoid pointer issues
+				// Load input image - EXACT SAME PATTERN AS UPSCALING
 				int inputWidth, inputHeight, inputChannels;
-				{
-					std::lock_guard<std::mutex> lock(stbi_mutex);
-					inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight,
-						&inputChannels, 3); // Force 3 channels
-				}
-
+				std::cout << "Loading input image from: " << inputImagePath << std::endl;
+				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 0);
 				if (!inputData) {
-					throw std::runtime_error("Failed to load input image from path: " + inputImagePath);
+					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
+						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+					throw std::runtime_error(error);
 				}
 
-				std::cout << "Input image loaded from disk: " << inputWidth << "x" << inputHeight
-					<< " with " << inputChannels << " channels from: " << inputImagePath << std::endl;
+				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
+					<< " with " << inputChannels << " channels" << std::endl;
 
-				// Create a properly initialized input image struct
-				sd_image_t input_image = { 0 };
-				input_image.width = static_cast<uint32_t>(inputWidth);
-				input_image.height = static_cast<uint32_t>(inputHeight);
-				input_image.channel = 3;
-				input_image.data = inputData;
+				// Create output path - SAME AS UPSCALING
+				std::filesystem::path outputDir(outputPath);
+				std::filesystem::path outputFile(outputFilename);
+				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+					outputFile.string(), outputDir.string());
+
+				// Initialize SD context - SAME AS UPSCALING PATTERN
+				std::cout << "Initializing Stable Diffusion context..." << std::endl;
+				sd_context = InitializeStableDiffusionContext(metadata);
+				if (!sd_context) {
+					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
+				}
+
+				// Create input image struct - SAME AS UPSCALING
+				sd_image_t input_image = {
+					static_cast<uint32_t>(inputWidth),
+					static_cast<uint32_t>(inputHeight),
+					static_cast<uint32_t>(inputChannels),
+					inputData
+				};
 
 				// Initialize mask image struct
 				sd_image_t mask_image = { 0 };
 
-				if (maskImagePath.empty()) {
+				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath)) {
 					// Create a blank (white) mask of appropriate size
 					size_t maskSize = inputWidth * inputHeight;
 					emptyMaskData = new unsigned char[maskSize];
@@ -627,11 +672,8 @@ namespace Utils {
 				else {
 					// Load mask from file
 					int maskWidth, maskHeight, maskChannels;
-					{
-						std::lock_guard<std::mutex> lock(stbi_mutex);
-						maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight,
-							&maskChannels, 1); // Force 1 channel
-					}
+					std::cout << "Loading mask image from: " << maskImagePath << std::endl;
+					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1); // Force 1 channel
 
 					if (!maskData) {
 						std::cerr << "Failed to load mask image: " << maskImagePath << ", using blank mask instead" << std::endl;
@@ -652,25 +694,19 @@ namespace Utils {
 						mask_image.channel = 1;
 						mask_image.data = maskData;
 
-						std::cout << "Mask image loaded: " << maskWidth << "x" << maskHeight
+						std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
 							<< " with " << maskChannels << " channels (forced to 1)" << std::endl;
 					}
 				}
 
-				// Initialize SD context
-				std::cout << "Initializing Stable Diffusion context..." << std::endl;
-				sd_context = InitializeStableDiffusionContext(metadata);
-				if (!sd_context) {
-					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
-				}
-
-				// Ensure valid seed
+				// Ensure valid seed - SAME AS UPSCALING PATTERN
 				if (seed < 0) {
 					seed = static_cast<int>(generateRandomSeed());
 					std::cout << "Generated random seed: " << seed << std::endl;
 				}
 
-				// Call img2img with explicit values
+				// Perform img2img - using the same pattern as upscaling
+				std::cout << "Calling img2img..." << std::endl;
 				result_image = img2img(
 					sd_context,
 					input_image,
@@ -700,31 +736,39 @@ namespace Utils {
 					skipLayerEnd
 				);
 
-				// Check if we got a result image
 				if (!result_image) {
-					throw std::runtime_error("Failed to generate image!");
+					throw std::runtime_error("img2img failed - no output image produced");
 				}
 
-				std::cout << "Successfully generated img2img result: "
-					<< result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << std::endl;
+				std::cout << "img2img successful, saving output to: " << uniqueFilePath << std::endl;
 
-				// Save the result image
+				// Update metadata with correct output path before saving - SAME AS UPSCALING
+				nlohmann::json updatedMetadata = metadata;
+				for (auto& comp : updatedMetadata["components"]) {
+					if (comp.contains("OutputImage")) {
+						if (comp["OutputImage"].contains("OutputImage")) {
+							comp["OutputImage"]["OutputImage"]["filePath"] = uniqueFilePath;
+						}
+						else {
+							comp["OutputImage"]["filePath"] = uniqueFilePath;
+						}
+					}
+				}
+
+				// Save the result image - SAME AS UPSCALING
 				SaveImage(result_image->data, result_image->width, result_image->height,
 					result_image->channel, metadata, fullPath);
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-				// Clean up resources - use proper RAII pattern
-				{
-					std::lock_guard<std::mutex> lock(stbi_mutex);
-					if (inputData) {
-						stbi_image_free(inputData);
-						inputData = nullptr;
-					}
+				// Cleanup resources - EXACT SAME PATTERN AS UPSCALING
+				if (inputData) {
+					stbi_image_free(inputData);
+					inputData = nullptr;
+				}
 
-					if (maskData) {
-						stbi_image_free(maskData);
-						maskData = nullptr;
-					}
+				if (maskData) {
+					stbi_image_free(maskData);
+					maskData = nullptr;
 				}
 
 				if (emptyMaskData) {
@@ -732,33 +776,29 @@ namespace Utils {
 					emptyMaskData = nullptr;
 				}
 
+				// Free the result image if needed
 				if (result_image) {
 					free(result_image);
-					result_image = nullptr;
 				}
 
-				if (sd_context) {
-					free_sd_ctx(sd_context);
-					sd_context = nullptr;
-				}
+				// Cleanup SD context
+				free_sd_ctx(sd_context);
+				sd_context = nullptr;
 
 				return true;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
-				// Clean up resources in exception handler
-				{
-					std::lock_guard<std::mutex> lock(stbi_mutex);
-					if (inputData) {
-						stbi_image_free(inputData);
-						inputData = nullptr;
-					}
+				// Clean up resources - EXACT SAME PATTERN AS UPSCALING
+				if (inputData) {
+					stbi_image_free(inputData);
+					inputData = nullptr;
+				}
 
-					if (maskData) {
-						stbi_image_free(maskData);
-						maskData = nullptr;
-					}
+				if (maskData) {
+					stbi_image_free(maskData);
+					maskData = nullptr;
 				}
 
 				if (emptyMaskData) {
