@@ -360,7 +360,7 @@ namespace GUI {
 					imageComp.imageData = nullptr;
 				}
 				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
 					imageComp.textureID = 0;
 				}
 				imageComp.fileName = "";
@@ -387,7 +387,7 @@ namespace GUI {
 					imageComp.imageData = nullptr;
 				}
 				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
 					imageComp.textureID = 0;
 				}
 
@@ -404,7 +404,7 @@ namespace GUI {
 					imageComp.filePath = filePath;
 
 					// Generate texture for preview
-					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
+					imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
 
 					// Update output filename based on input

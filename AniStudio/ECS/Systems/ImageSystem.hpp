@@ -25,6 +25,7 @@
 #include "ImageComponent.hpp"
 #include "ThreadPool.hpp"
 #include "ImageUtils.hpp"
+#include "OpenGLUtils.hpp"
 #include <GL/glew.h>
 #include <memory>
 #include <functional>
@@ -233,8 +234,8 @@ namespace ECS {
 								imageComp.fileName = result.fileName;
 								imageComp.filePath = result.filePath;
 
-								// Create OpenGL texture on main thread
-								imageComp.textureID = Utils::ImageUtils::GenerateTexture(
+								// Create OpenGL texture on main thread using OpenGLUtils
+								imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 									result.width, result.height, result.channels, result.data);
 
 								// CRITICAL FIX: Update InputImageComponent if present
@@ -312,7 +313,7 @@ namespace ECS {
 
 		void UnloadImage(ImageComponent& imageComp) {
 			if (imageComp.textureID != 0) {
-				Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+				Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
 				imageComp.textureID = 0;
 				imageComp.width = 0;
 				imageComp.height = 0;
