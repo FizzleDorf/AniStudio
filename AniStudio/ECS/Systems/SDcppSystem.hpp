@@ -77,6 +77,7 @@ namespace ECS {
 			nlohmann::json metadata;
 			std::string fullPath;
 			std::future<bool> result;
+			bool isClonedEntity = false;
 
 			// Default constructor
 			TaskData() = default;
@@ -88,7 +89,8 @@ namespace ECS {
 				, taskType(other.taskType)
 				, metadata(std::move(other.metadata))
 				, fullPath(std::move(other.fullPath))
-				, result(std::move(other.result)) {}
+				, result(std::move(other.result))
+				, isClonedEntity(other.isClonedEntity) {}
 
 			// Move assignment operator
 			TaskData& operator=(TaskData&& other) noexcept {
@@ -99,6 +101,7 @@ namespace ECS {
 					metadata = std::move(other.metadata);
 					fullPath = std::move(other.fullPath);
 					result = std::move(other.result);
+					isClonedEntity = other.isClonedEntity;
 				}
 				return *this;
 			}
@@ -112,7 +115,8 @@ namespace ECS {
 		SDCPPSystem(EntityManager& entityMgr)
 			: BaseSystem(entityMgr)
 			, pauseWorker(false)
-			, hasActiveTask(false) {
+			, hasActiveTask(false)
+			, clearRequested(false) {
 			sysName = "SDCPPSystem";
 			AddComponentSignature<LatentComponent>();
 			AddComponentSignature<OutputImageComponent>();
@@ -146,7 +150,7 @@ namespace ECS {
 			// Clean up any remaining entities
 			{
 				std::lock_guard<std::mutex> lock(queueMutex);
-				ClearQueueInternal();
+				HandleClearRequestInternal();
 			}
 		}
 
@@ -167,17 +171,25 @@ namespace ECS {
 					return;
 				}
 
+				// Create a cloned entity for processing to preserve original
+				EntityID clonedEntity = CloneEntityForProcessing(entityID);
+				if (clonedEntity == 0) {
+					std::cerr << "Failed to clone entity " << entityID << " for processing" << std::endl;
+					return;
+				}
+
 				// Create task data
 				TaskData taskData;
-				taskData.entityID = entityID;
+				taskData.entityID = clonedEntity;  // Use cloned entity
 				taskData.processing = false;
 				taskData.taskType = taskType;
+				taskData.isClonedEntity = true;
 
 				// Check if we need to generate a random seed
 				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
-					// Access the sampler component
-					if (mgr.HasComponent<SamplerComponent>(entityID)) {
-						auto& samplerComp = mgr.GetComponent<SamplerComponent>(entityID);
+
+					if (mgr.HasComponent<SamplerComponent>(clonedEntity)) {
+						auto& samplerComp = mgr.GetComponent<SamplerComponent>(clonedEntity);
 
 						// Generate random seed if needed
 						if (samplerComp.seed < 0) {
@@ -189,13 +201,13 @@ namespace ECS {
 				}
 
 				// Serialize entity to metadata
-				taskData.metadata = mgr.SerializeEntity(entityID);
-				std::cout << "Successfully serialized entity " << entityID << std::endl;
+				taskData.metadata = mgr.SerializeEntity(clonedEntity);
+				std::cout << "Successfully serialized cloned entity " << clonedEntity << " (original: " << entityID << ")" << std::endl;
 
 				// Add to internal task list
 				taskQueue.push_back(std::move(taskData));
 
-				std::cout << "Entity " << entityID << " queued for processing. Queue position: " << taskQueue.size() << std::endl;
+				std::cout << "Entity " << clonedEntity << " (cloned from " << entityID << ") queued for processing. Queue position: " << taskQueue.size() << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception in QueueTask: " << e.what() << std::endl;
@@ -206,9 +218,15 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
-			// Don't process if shutting down
+
 			if (shuttingDown) {
 				return;
+			}
+
+			// Handle clear request at the beginning of update cycle
+			if (clearRequested) {
+				HandleClearRequest();
+				clearRequested = false;
 			}
 
 			// Process queues - start next task if no task is currently running
@@ -216,6 +234,9 @@ namespace ECS {
 
 			// Update status of running task
 			CheckTaskCompletion();
+
+			// Handle deferred entity cleanup
+			HandleDeferredCleanup();
 		}
 
 		void RemoveFromQueue(const size_t index) {
@@ -224,15 +245,8 @@ namespace ECS {
 				EntityID entityID = taskQueue[index].entityID;
 				taskQueue.erase(taskQueue.begin() + index);
 
-				// Clean up the entity
-				try {
-					if (mgr.GetEntitiesSignatures().count(entityID)) {
-						mgr.DestroyEntity(entityID);
-					}
-				}
-				catch (const std::exception& e) {
-					std::cerr << "Error destroying entity in RemoveFromQueue: " << e.what() << std::endl;
-				}
+				// Add to deferred cleanup list instead of destroying immediately
+				entitiesNeedingCleanup.push_back(entityID);
 			}
 		}
 
@@ -279,8 +293,8 @@ namespace ECS {
 		}
 
 		void ClearQueue() {
-			std::lock_guard<std::mutex> lock(queueMutex);
-			ClearQueueInternal();
+			std::cout << "Queue clear requested" << std::endl;
+			clearRequested = true;
 		}
 
 		void PauseWorker() {
@@ -308,7 +322,6 @@ namespace ECS {
 			return Utils::ThreadPoolManager::getInstance().getDiffusionPool().getActiveCount();
 		}
 
-		// New methods for single-threaded processing
 		bool HasActiveTask() const {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			return hasActiveTask;
@@ -330,6 +343,8 @@ namespace ECS {
 		std::atomic<bool> pauseWorker;
 		std::atomic<bool> shuttingDown{ false };
 		std::atomic<bool> terminateFlag{ false };
+		std::atomic<bool> clearRequested{ false };
+		std::vector<EntityID> entitiesNeedingCleanup;
 		mutable std::mutex queueMutex;
 
 		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
@@ -340,37 +355,118 @@ namespace ECS {
 		bool hasActiveTask{ false };
 		std::thread::id activeThreadId{};
 
-		// Internal queue clearing (must be called with lock held)
-		void ClearQueueInternal() {
-			if (taskQueue.empty()) {
+		// Clone entity for processing to preserve original input images
+		EntityID CloneEntityForProcessing(const EntityID originalEntity) {
+			try {
+				// Serialize the original entity
+				nlohmann::json entityData = mgr.SerializeEntity(originalEntity);
+
+				// Create a new entity from the serialized data
+				EntityID clonedEntity = mgr.DeserializeEntity(entityData);
+
+				if (clonedEntity == 0) {
+					std::cerr << "Failed to deserialize cloned entity" << std::endl;
+					return 0;
+				}
+
+				// Special handling for InputImageComponent to preserve image data
+				if (mgr.HasComponent<InputImageComponent>(originalEntity) &&
+					mgr.HasComponent<InputImageComponent>(clonedEntity)) {
+
+					auto& originalInput = mgr.GetComponent<InputImageComponent>(originalEntity);
+					auto& clonedInput = mgr.GetComponent<InputImageComponent>(clonedEntity);
+
+					// Deep copy the image data if it exists
+					if (originalInput.ownedImageData && originalInput.width > 0 &&
+						originalInput.height > 0 && originalInput.channels > 0) {
+
+						size_t dataSize = originalInput.width * originalInput.height * originalInput.channels;
+						unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+
+						if (newData) {
+							memcpy(newData, originalInput.ownedImageData.get(), dataSize);
+							clonedInput.SetImageData(newData, originalInput.width,
+								originalInput.height, originalInput.channels);
+
+							std::cout << "Copied image data for cloned entity " << clonedEntity << std::endl;
+						}
+						else {
+							std::cerr << "Failed to allocate memory for image data copy" << std::endl;
+						}
+					}
+				}
+
+				std::cout << "Successfully cloned entity " << originalEntity << " to " << clonedEntity << std::endl;
+				return clonedEntity;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception cloning entity " << originalEntity << ": " << e.what() << std::endl;
+				return 0;
+			}
+		}
+
+		// The actual clearing logic - called from Update when it's safe
+		void HandleClearRequest() {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			HandleClearRequestInternal();
+		}
+
+		void HandleClearRequestInternal() {
+			std::cout << "Clearing queue with " << taskQueue.size() << " items" << std::endl;
+
+			// Collect entities from non-processing tasks
+			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
+				if (!it->processing) {
+					EntityID entityID = it->entityID;
+					entitiesNeedingCleanup.push_back(entityID);
+					it = taskQueue.erase(it);
+					std::cout << "Queued entity " << entityID << " for cleanup" << std::endl;
+				}
+				else {
+					std::cout << "Keeping processing task for entity " << it->entityID << std::endl;
+					++it;
+				}
+			}
+
+			std::cout << "Queue cleared. " << taskQueue.size() << " items remaining (processing)" << std::endl;
+		}
+
+		// Handle deferred entity cleanup
+		void HandleDeferredCleanup() {
+			if (entitiesNeedingCleanup.empty()) {
 				return;
 			}
 
-			// Get reference to ImageSystem if available
 			auto imageSystem = mgr.GetSystem<ImageSystem>();
 
-			// Clear non-processing tasks 
-			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-				if (!it->processing) {
-					EntityID entityId = it->entityID;
-					it = taskQueue.erase(it);
+			// Process a few entities per frame to avoid hitches
+			int maxCleanupPerFrame = 5;
+			int cleaned = 0;
 
-					try {
-						// Use ImageSystem to properly remove image if applicable
-						if (imageSystem && mgr.HasComponent<ImageComponent>(entityId)) {
-							imageSystem->RemoveImage(entityId);
-						}
-						else if (mgr.GetEntitiesSignatures().count(entityId)) {
-							mgr.DestroyEntity(entityId);
-						}
+			for (auto it = entitiesNeedingCleanup.begin();
+				it != entitiesNeedingCleanup.end() && cleaned < maxCleanupPerFrame;) {
+
+				EntityID entityID = *it;
+
+				try {
+					if (mgr.GetEntitiesSignatures().count(entityID)) {
+						// Always destroy cloned entities completely - they are temporary
+						mgr.DestroyEntity(entityID);
+						std::cout << "Cleaned up cloned entity " << entityID << std::endl;
 					}
-					catch (const std::exception& e) {
-						std::cerr << "Error in ClearQueueInternal: " << e.what() << std::endl;
-					}
+					it = entitiesNeedingCleanup.erase(it);
+					cleaned++;
 				}
-				else {
-					++it;
+				catch (const std::exception& e) {
+					std::cerr << "Error in deferred cleanup: " << e.what() << std::endl;
+					it = entitiesNeedingCleanup.erase(it);
+					cleaned++;
 				}
+			}
+
+			if (cleaned > 0) {
+				std::cout << "Deferred cleanup: processed " << cleaned << " entities, "
+					<< entitiesNeedingCleanup.size() << " remaining" << std::endl;
 			}
 		}
 
@@ -472,12 +568,10 @@ namespace ECS {
 				return;
 			}
 
-			// Only start a new task if no task is currently active
 			if (hasActiveTask) {
 				return;
 			}
 
-			// Get the diffusion thread pool
 			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
 
 			// Find the first non-processing item
@@ -528,15 +622,13 @@ namespace ECS {
 					}
 					catch (const std::exception& e) {
 						std::cerr << "Failed to submit task: " << e.what() << std::endl;
+						// Add to cleanup list for failed task
+						entitiesNeedingCleanup.push_back(task.entityID);
 						// Remove the failed task
 						auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
 							[&task](const TaskData& t) { return t.entityID == task.entityID; });
 						if (it != taskQueue.end()) {
-							EntityID entityID = it->entityID;
 							taskQueue.erase(it);
-							if (mgr.GetEntitiesSignatures().count(entityID)) {
-								mgr.DestroyEntity(entityID);
-							}
 						}
 						break;
 					}
@@ -549,121 +641,117 @@ namespace ECS {
 				return;
 			}
 
-			std::unique_lock<std::mutex> lock(queueMutex);
+			std::vector<std::pair<EntityID, std::string>> completedTasks;
 
-			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-				// Check if this task is processing and has a valid future
-				if (it->processing && it->result.valid()) {
-					// Check if the future is ready without blocking
-					auto status = it->result.wait_for(std::chrono::milliseconds(0));
+			{
+				std::unique_lock<std::mutex> lock(queueMutex);
 
-					if (status == std::future_status::ready) {
-						// Store the entity ID and path before erasing
-						EntityID entityID = it->entityID;
-						std::string fullPath = it->fullPath;
-						bool success = false;
+				for (auto it = taskQueue.begin(); it != taskQueue.end();) {
+					// Check if this task is processing and has a valid future
+					if (it->processing && it->result.valid()) {
+						// Check if the future is ready without blocking
+						auto status = it->result.wait_for(std::chrono::milliseconds(0));
 
-						try {
-							// Get the result
-							success = it->result.get();
-						}
-						catch (const std::exception& e) {
-							std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
-						}
+						if (status == std::future_status::ready) {
 
-						// Process the completed task
-						if (success) {
-							// Must unlock since ProcessCompletedTask may acquire locks
-							lock.unlock();
-							ProcessCompletedTask(entityID, fullPath);
-							lock.lock();
+							EntityID entityID = it->entityID;
+							std::string fullPath = it->fullPath;
+							bool success = false;
+
+							try {
+								success = it->result.get();
+							}
+							catch (const std::exception& e) {
+								std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
+							}
+
+							// Process the completed task
+							if (success) {
+								completedTasks.emplace_back(entityID, fullPath);
+							}
+							else {
+								std::cerr << "Task failed for entity " << entityID << std::endl;
+
+								// Clean up any files that might have been created
+								if (std::filesystem::exists(fullPath)) {
+									try {
+										std::filesystem::remove(fullPath);
+									}
+									catch (const std::exception& e) {
+										std::cerr << "Failed to remove partial file: " << e.what() << std::endl;
+									}
+								}
+								// Add failed entity to cleanup list
+								entitiesNeedingCleanup.push_back(entityID);
+							}
+
+							// Remove the completed task - this will allow the next task to start
+							it = taskQueue.erase(it);
+
+							std::cout << "Task completed. Remaining queue size: " << taskQueue.size() << std::endl;
 						}
 						else {
-							std::cerr << "Task failed for entity " << entityID << std::endl;
-
-							// Clean up any files that might have been created
-							if (std::filesystem::exists(fullPath)) {
-								try {
-									std::filesystem::remove(fullPath);
-								}
-								catch (const std::exception& e) {
-									std::cerr << "Failed to remove partial file: " << e.what() << std::endl;
-								}
-							}
+							// Task still running
+							++it;
 						}
-
-						// Remove the completed task - this will allow the next task to start
-						it = taskQueue.erase(it);
-
-						std::cout << "Task completed. Remaining queue size: " << taskQueue.size() << std::endl;
 					}
 					else {
-						// Task still running
+						// Task not processing or no valid future
 						++it;
 					}
 				}
-				else {
-					// Task not processing or no valid future
-					++it;
-				}
+			} // Lock released here
+
+			// Process completed tasks WITHOUT holding the lock
+			for (const auto&[entityID, fullPath] : completedTasks) {
+				ProcessCompletedTask(entityID, fullPath);
 			}
 		}
 
 		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath) {
 			try {
+
+				if (shuttingDown) {
+					return;
+				}
+
 				if (!mgr.GetEntitiesSignatures().count(entityID)) {
 					std::cerr << "Entity no longer exists: " << entityID << std::endl;
 					return;
 				}
 
-				// Process the completed task
+				if (!std::filesystem::exists(fullPath)) {
+					std::cerr << "Output file not found: " << fullPath << std::endl;
+					return;
+				}
+
 				auto imageSystem = mgr.GetSystem<ImageSystem>();
 				if (!imageSystem) {
 					std::cerr << "ImageSystem not found" << std::endl;
 					return;
 				}
 
-				// Create/update Image component if needed
 				if (!mgr.HasComponent<ImageComponent>(entityID)) {
 					mgr.AddComponent<ImageComponent>(entityID);
 				}
 
-				// Use ImageSystem to load the generated image
-				if (std::filesystem::exists(fullPath)) {
-					imageSystem->SetImage(entityID, fullPath);
-					std::cout << "Image loaded successfully for entity " << entityID << std::endl;
-				}
-				else {
-					std::cerr << "Failed to find output image file: " << fullPath << std::endl;
-					return;
-				}
-
-				// Clean up unnecessary components, keeping only Image component
-				std::vector<ComponentTypeID> componentTypes = mgr.GetEntityComponents(entityID);
-				for (const auto& componentId : componentTypes) {
-					std::string componentName = mgr.GetComponentNameById(componentId);
-					if (componentName != "Image") {
-						mgr.RemoveComponentById(entityID, componentId);
-					}
-				}
+				// Load the image
+				imageSystem->SetImage(entityID, fullPath);
+				std::cout << "Image loaded successfully for entity " << entityID << std::endl;
 
 				std::cout << "Successfully processed completed task for entity " << entityID << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error processing completed task: " << e.what() << std::endl;
+				entitiesNeedingCleanup.push_back(entityID);
 
-				// Try to clean up on error
 				try {
-					auto imageSystem = mgr.GetSystem<ImageSystem>();
-					if (imageSystem && mgr.HasComponent<ImageComponent>(entityID)) {
-						imageSystem->RemoveImage(entityID);
-					}
-					else if (mgr.GetEntitiesSignatures().count(entityID)) {
-						mgr.DestroyEntity(entityID);
+					if (std::filesystem::exists(fullPath)) {
+						std::filesystem::remove(fullPath);
 					}
 				}
-				catch (const std::exception& e2) {
-					std::cerr << "Error destroying entity: " << e2.what() << std::endl;
+				catch (...) {
+					// Ignore file cleanup errors
 				}
 			}
 		}

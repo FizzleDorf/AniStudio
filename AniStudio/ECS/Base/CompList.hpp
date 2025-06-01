@@ -22,49 +22,66 @@
 
 #include "Types.hpp"
 #include "pch.h"
+#include <deque>  // CHANGED: Use deque instead of vector to prevent iterator invalidation
 
 namespace ECS {
 
-class ICompList {
-public:
-    ICompList() = default;
-    virtual ~ICompList() = default;
-    virtual void Erase(const EntityID entity) {}
-};
+	class ICompList {
+	public:
+		ICompList() = default;
+		virtual ~ICompList() = default;
+		virtual void Erase(const EntityID entity) {}
+		virtual void Reserve(size_t capacity) {}  // Added for potential optimization
+	};
 
-template <typename T>
-class CompList : public ICompList {
-public:
-    CompList() = default;
-    ~CompList() = default;
+	template <typename T>
+	class CompList : public ICompList {
+	public:
+		CompList() = default;
+		~CompList() = default;
 
-    void Insert(const T &component) {
-        auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == component.GetID(); });
-        if (comp == data.end()) {
-            data.push_back(component);
-            std::cout << "Component added! ID: " << component.GetID() 
-                      << ", Type ID: " << CompType<T>() << std::endl;
-        } else {
-            std::cout << "Component already Exists! ID: " << component.GetID() << std::endl;
-        }
-    }
+		void Insert(const T &component) {
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == component.GetID(); });
+			if (comp == data.end()) {
+				// FIXED: Using deque prevents iterator/reference invalidation
+				data.push_back(component);
+				std::cout << "Component added! ID: " << component.GetID()
+					<< ", Type ID: " << CompType<T>() << std::endl;
+			}
+			else {
+				std::cout << "Component already Exists! ID: " << component.GetID() << std::endl;
+			}
+		}
 
-    T &Get(const EntityID entity) {
-        auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
-        assert(comp != data.end() && "Component doesn't exist!");
-        return *comp;
-    }
+		T &Get(const EntityID entity) {
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
+			assert(comp != data.end() && "Component doesn't exist!");
+			return *comp;
+		}
 
-    void Erase(const EntityID entity) override final {
-        auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
-        if (comp != data.end()) {
-            data.erase(comp);
-            std::cout << "Component Erased! ID: " << entity << ", Type ID: " << CompType<T>() << std::endl;
-        } else {
-            std::cout << "No Entity Found with ID: " << entity << ", Type ID: " << CompType<T>() << std::endl;
-        }
-    }
+		void Erase(const EntityID entity) override final {
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
+			if (comp != data.end()) {
+				data.erase(comp);
+				std::cout << "Component Erased! ID: " << entity << ", Type ID: " << CompType<T>() << std::endl;
+			}
+			else {
+				std::cout << "No Entity Found with ID: " << entity << ", Type ID: " << CompType<T>() << std::endl;
+			}
+		}
 
-    std::vector<T> data;
-};
+		// Optional: Provide access to size for debugging
+		size_t Size() const {
+			return data.size();
+		}
+
+		// Optional: Clear all components (for debugging/testing)
+		void Clear() {
+			data.clear();
+		}
+
+		// CHANGED: Using std::deque instead of std::vector
+		// std::deque NEVER invalidates references/iterators to existing elements when adding new elements
+		std::deque<T> data;
+	};
 } // namespace ECS

@@ -25,8 +25,10 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <string>
-namespace Utils {
-	struct FilePaths {
+namespace Utils
+{
+	struct FilePaths
+	{
 		inline static std::string dataPath = "../data/defaults";
 		inline static std::string ImguiStatePath = "../data/defaults/imgui.ini";
 		inline static std::string virtualEnvPath = "";
@@ -49,15 +51,18 @@ namespace Utils {
 		inline static std::string controlnetDir = "";
 		inline static std::string upscaleDir = "";
 
-		static void Init() {
+		static void Init()
+		{
 			LoadFilePathDefaults();
-			if (lastOpenProjectPath.empty()) {
+			if (lastOpenProjectPath.empty())
+			{
 				std::filesystem::path newProjectPath = "../projects/new_project";
 				std::filesystem::create_directories(newProjectPath);
 				defaultProjectPath = std::filesystem::absolute(newProjectPath).string();
 				SaveFilepathDefaults();
 			}
-			if (defaultModelRootPath.empty()) {
+			if (defaultModelRootPath.empty())
+			{
 				std::filesystem::path newModelPath = "../models";
 				std::filesystem::create_directories(newModelPath);
 				defaultModelRootPath = std::filesystem::absolute(newModelPath).string();
@@ -66,7 +71,8 @@ namespace Utils {
 			}
 		}
 
-		static void SaveFilepathDefaults() {
+		static void SaveFilepathDefaults()
+		{
 			// Create the data directory if it does not exist
 			std::filesystem::create_directories("..\\data\\defaults");
 
@@ -87,16 +93,19 @@ namespace Utils {
 
 			// Write JSON to file
 			std::ofstream file("..\\data\\defaults\\paths.json");
-			if (file.is_open()) {
+			if (file.is_open())
+			{
 				file << json.dump(4); // Pretty print with 4 spaces
 				file.close();
 			}
 		}
 
-		static void LoadFilePathDefaults() {
+		static void LoadFilePathDefaults()
+		{
 			// Open JSON file
 			std::ifstream file("..\\data\\defaults\\paths.json");
-			if (file.is_open()) {
+			if (file.is_open())
+			{
 				// Parse the JSON file
 				nlohmann::json json;
 				file >> json;
@@ -130,32 +139,34 @@ namespace Utils {
 			}
 		}
 
-		static void SetByModelRoot() {
-			std::filesystem::path newModelPath = defaultModelRootPath + "\\checkpoints";
+		static void SetByModelRoot()
+		{
+			// Use forward slashes for cross-platform compatibility
+			std::filesystem::path newModelPath = defaultModelRootPath + "/checkpoints";
 			std::filesystem::create_directories(newModelPath);
 			checkpointDir = newModelPath.string();
 
-			newModelPath = defaultModelRootPath + "\\clip";
+			newModelPath = defaultModelRootPath + "/clip";
 			std::filesystem::create_directories(newModelPath);
 			encoderDir = newModelPath.string();
 
-			newModelPath = defaultModelRootPath + "\\vae";
+			newModelPath = defaultModelRootPath + "/vae";
 			std::filesystem::create_directories(newModelPath);
 			vaeDir = newModelPath.string();
 
-			newModelPath = defaultModelRootPath + "\\unet";
+			newModelPath = defaultModelRootPath + "/unet";
 			std::filesystem::create_directories(newModelPath);
 			unetDir = newModelPath.string();
 
-			newModelPath = defaultModelRootPath + "\\loras";
+			newModelPath = defaultModelRootPath + "/loras";
 			std::filesystem::create_directories(newModelPath);
 			loraDir = newModelPath.string();
 
-			newModelPath = defaultModelRootPath + "\\controlnet";
+			newModelPath = defaultModelRootPath + "/controlnet";
 			std::filesystem::create_directories(newModelPath);
 			controlnetDir = newModelPath.string();
 
-			newModelPath = defaultModelRootPath + "\\upscale_models";
+			newModelPath = defaultModelRootPath + "/upscale_models";
 			std::filesystem::create_directories(newModelPath);
 			upscaleDir = newModelPath.string();
 		}

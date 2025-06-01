@@ -18,44 +18,4 @@
  * For commercial license iformation, please contact legal@kframe.ai.
  */
 
-#pragma once
-#include "../Events/Events.hpp"
-#include "ECS.h"
-#include "ViewTypes.hpp"
-#include <imgui.h>
-#include <nlohmann/json.hpp>
-#include <string>
-
-namespace GUI {
-class BaseView {
-public:
-    std::string viewName = "Base_View";
-    BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr) {}
-    virtual ~BaseView() {}
-
-    inline const ViewListID GetID() const { return viewID; }
-
-    virtual void Init() {}
-    virtual void Update(const float deltaT) {}
-    virtual void Render() = 0;
-    virtual void HandleInput(int key, int action) {}
-
-    virtual nlohmann::json Serialize() const {
-        nlohmann::json j;
-        j["viewName"] = viewName;
-        return j;
-    }
-
-    virtual void Deserialize(const nlohmann::json &j) {
-        if (j.contains("viewName"))
-            viewName = j["viewName"];
-    }
-
-protected:
-    ECS::EntityManager &mgr;
-
-private:
-    friend class ViewManager;
-    ViewListID viewID;
-};
-} // namespace GUI
+// TODO: this will be the header for linking once critical issues are solved

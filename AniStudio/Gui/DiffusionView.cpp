@@ -345,7 +345,7 @@ namespace GUI {
 			ImGui::Text("Input Image");
 
 			ImGui::TableNextColumn();
-			if (ImGui::Button("...##load_img")) {
+			if (ImGui::Button("...##load_img123")) {
 				IGFD::FileDialogConfig config;
 				config.path = Utils::FilePaths::defaultProjectPath;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadInputImageDialog", "Choose Image",
@@ -353,16 +353,11 @@ namespace GUI {
 			}
 
 			ImGui::SameLine();
-			if (ImGui::Button("X##clear_img")) {
-				std::lock_guard<std::mutex> lock(Utils::stbi_mutex);
-
-				// Clear image
-				if (imageComp.imageData) {
-					Utils::ImageUtils::FreeImageData(imageComp.imageData);
-					imageComp.imageData = nullptr;
-				}
+			if (ImGui::Button("X##clear_img123")) {
+				// Clear image using the InputImageComponent's built-in method
+				imageComp.ClearImageData();
 				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
 					imageComp.textureID = 0;
 				}
 				imageComp.fileName = "";
@@ -384,29 +379,24 @@ namespace GUI {
 				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 
 				// Clean up previous image data if it exists
-				if (imageComp.imageData) {
-					Utils::ImageUtils::FreeImageData(imageComp.imageData);
-					imageComp.imageData = nullptr;
-				}
+				imageComp.ClearImageData();  // Use the built-in method
 				if (imageComp.textureID != 0) {
-					Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
 					imageComp.textureID = 0;
 				}
 
 				// Load new image
 				int width, height, channels;
-				imageComp.imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
+				unsigned char* imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
 
-				if (imageComp.imageData) {
-					// Update component data
-					imageComp.width = width;
-					imageComp.height = height;
-					imageComp.channels = channels;
+				if (imageData) {
+					// Update component data using the safe method
+					imageComp.SetImageData(imageData, width, height, channels);
 					imageComp.fileName = fileName;
 					imageComp.filePath = filePath;
 
-					// Generate texture for preview
-					imageComp.textureID = Utils::ImageUtils::GenerateTexture(
+					// Generate texture for preview using OpenGLUtils
+					imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
 				}
 			}
@@ -417,43 +407,53 @@ namespace GUI {
 		ImGui::Separator();
 
 		if (imageComp.textureID != 0 && imageComp.width > 0 && imageComp.height > 0) {
-			// Display image info
 			ImGui::Text("Image dimensions: %d x %d", imageComp.width, imageComp.height);
 
-			// Create a child window for the image preview with border
 			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
 
-			// Calculate image size to maintain aspect ratio
 			float availWidth = ImGui::GetContentRegionAvail().x;
 			float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
 
 			ImVec2 imageSize;
 			if (aspectRatio > 1.0f) {
-				// Image is wider than tall
 				imageSize = ImVec2(availWidth, availWidth / aspectRatio);
 			}
 			else {
-				// Image is taller than wide or square
 				imageSize = ImVec2(availWidth * aspectRatio, availWidth);
 			}
 
-			// Limit height to available space
 			float availHeight = ImGui::GetContentRegionAvail().y;
 			if (imageSize.y > availHeight) {
 				imageSize.y = availHeight;
 				imageSize.x = availHeight * aspectRatio;
 			}
 
-			// Center the image horizontally
 			float xOffset = (availWidth - imageSize.x) * 0.5f;
 			if (xOffset > 0) {
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
 			}
 
-			// Draw the image
 			ImGui::Image((void*)(intptr_t)imageComp.textureID, imageSize);
 
 			ImGui::EndChild();
+
+			// Show estimated output dimensions
+			if (mgr.HasComponent<EsrganComponent>(entity)) {
+				auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+				int outWidth = imageComp.width * esrganComp.upscaleFactor;
+				int outHeight = imageComp.height * esrganComp.upscaleFactor;
+				ImGui::Text("Estimated output: %d x %d", outWidth, outHeight);
+
+				// Add option to use image dimensions for latent size
+				if (ImGui::Button("Use image dimensions for output")) {
+					if (mgr.HasComponent<LatentComponent>(entity)) {
+						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+						// Make dimensions divisible by 8 (required for stable diffusion)
+						latentComp.latentWidth = (imageComp.width / 8) * 8;
+						latentComp.latentHeight = (imageComp.height / 8) * 8;
+					}
+				}
+			}
 		}
 		else {
 			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
@@ -461,20 +461,8 @@ namespace GUI {
 				"No image loaded. Click the '...' button to select an input image.");
 			ImGui::EndChild();
 		}
-
-		// Additional image processing options
-		if (imageComp.textureID != 0) {
-			if (ImGui::Button("Use image dimensions for latent size")) {
-				if (mgr.HasComponent<LatentComponent>(entity)) {
-					auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
-					// Make dimensions divisible by 8 (required for stable diffusion)
-					latentComp.latentWidth = (imageComp.width / 8) * 8;
-					latentComp.latentHeight = (imageComp.height / 8) * 8;
-				}
-			}
-		}
 	}
-
+	
 	void DiffusionView::RenderPrompts(const EntityID entity) {
 
 		if (!mgr.HasComponent<PromptComponent>(entity)) {
@@ -519,7 +507,7 @@ namespace GUI {
 
 		std::cout << "Adding new entity..." << std::endl;
 
-		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(txt2imgEntity));
+		EntityID newEntity = mgr.CloneEntity(txt2imgEntity);
 
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
@@ -562,7 +550,7 @@ namespace GUI {
 
 	void DiffusionView::HandleI2IEvent() {
 		std::cout << "Adding new entity..." << std::endl;
-		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(img2imgEntity));
+		EntityID newEntity = mgr.CloneEntity(img2imgEntity);
 		
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
@@ -610,17 +598,6 @@ namespace GUI {
 		event.type = EventType::Img2ImgRequest;
 		ANI::Events::Ref().QueueEvent(event);
 		std::cout << "Img2Img request queued for entity: " << newEntity << std::endl;
-	}
-
-	void DiffusionView::HandleUpscaleEvent() {
-		Event event;
-		EntityID newEntity = mgr.AddNewEntity();
-
-		std::cout << "Initialized entity with ID: " << newEntity << "\n";
-
-		event.entityID = newEntity;
-		event.type = EventType::InferenceRequest;
-		ANI::Events::Ref().QueueEvent(event);
 	}
 
 	void DiffusionView::RenderOther(const EntityID entity) {

@@ -25,6 +25,7 @@
 #include "ImageComponent.hpp"
 #include "ThreadPool.hpp"
 #include "ImageUtils.hpp"
+#include "OpenGLUtils.hpp"
 #include <GL/glew.h>
 #include <memory>
 #include <functional>
@@ -32,19 +33,56 @@
 #include <stb_image_write.h>
 #include <queue>
 #include <mutex>
+#include <future>
 
 namespace ECS {
 
 	class ImageSystem : public BaseSystem {
 	public:
-		// Callback function types
 		using ImageCallback = std::function<void(EntityID)>;
 
-		ImageSystem(EntityManager& entityMgr)
-			: BaseSystem(entityMgr) { // Use 2 threads for image operations
-			sysName = "ImageSystem";
+		struct LoadResult {
+			bool success = false;
+			unsigned char* data = nullptr;
+			int width = 0;
+			int height = 0;
+			int channels = 0;
+			std::string fileName;
+			std::string filePath;
+		};
 
-			// Define which components this system operates on
+		struct LoadingTask {
+			EntityID entityID;
+			std::string filePath;
+			std::future<LoadResult> future;
+
+			// Default constructor
+			LoadingTask() = default;
+
+			// Move constructor
+			LoadingTask(LoadingTask&& other) noexcept
+				: entityID(other.entityID)
+				, filePath(std::move(other.filePath))
+				, future(std::move(other.future)) {}
+
+			// Move assignment
+			LoadingTask& operator=(LoadingTask&& other) noexcept {
+				if (this != &other) {
+					entityID = other.entityID;
+					filePath = std::move(other.filePath);
+					future = std::move(other.future);
+				}
+				return *this;
+			}
+
+			// Delete copy operations
+			LoadingTask(const LoadingTask&) = delete;
+			LoadingTask& operator=(const LoadingTask&) = delete;
+		};
+
+		ImageSystem(EntityManager& entityMgr)
+			: BaseSystem(entityMgr) {
+			sysName = "ImageSystem";
 			AddComponentSignature<ImageComponent>();
 		}
 
@@ -63,15 +101,17 @@ namespace ECS {
 			for (auto entity : entities) {
 				if (mgr.HasComponent<ImageComponent>(entity)) {
 					auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-					LoadImage(imageComp);
+					if (!imageComp.filePath.empty()) {
+						LoadImageAsync(entity, imageComp.filePath);
+					}
 				}
 			}
 		}
 
-		// TODO: async the image IO and join in the update
-		void Update(const float deltaT) override {}
+		void Update(const float deltaT) override {
+			ProcessCompletedLoads();
+		}
 
-		// Register callbacks for image events
 		void RegisterImageAddedCallback(const ImageCallback& callback) {
 			imageAddedCallbacks.push_back(callback);
 		}
@@ -80,8 +120,8 @@ namespace ECS {
 			imageRemovedCallbacks.push_back(callback);
 		}
 
-		// Set image filepath and load it
 		void SetImage(const EntityID entity, const std::string& filePath) {
+			// Handle both regular ImageComponent and InputImageComponent
 			if (mgr.HasComponent<ImageComponent>(entity)) {
 				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
@@ -90,42 +130,39 @@ namespace ECS {
 					UnloadImage(imageComp);
 				}
 
-				// Set new path and load
-				imageComp.filePath = filePath;
-
-				// Extract filename from path
-				size_t lastSlash = filePath.find_last_of("/\\");
-				if (lastSlash != std::string::npos) {
-					imageComp.fileName = filePath.substr(lastSlash + 1);
-				}
-				else {
-					imageComp.fileName = filePath;
+				// Clear input image data if this is an InputImageComponent
+				if (mgr.HasComponent<InputImageComponent>(entity)) {
+					auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+					inputComp.ClearImageData();
 				}
 
-				LoadImage(imageComp);
-				NotifyImageAdded(entity);
+				// Start async loading
+				LoadImageAsync(entity, filePath);
 			}
 		}
 
-		// Remove an image entity
 		void RemoveImage(const EntityID entity) {
 			if (mgr.HasComponent<ImageComponent>(entity)) {
 				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
-				// Unload image
+				// Cancel any pending load
+				CancelPendingLoad(entity);
+
+				// Clear input image data if this is an InputImageComponent
+				if (mgr.HasComponent<InputImageComponent>(entity)) {
+					auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+					inputComp.ClearImageData();
+				}
+
 				if (imageComp.textureID != 0) {
 					UnloadImage(imageComp);
 				}
 
-				// Notify before removing
 				NotifyImageRemoved(entity);
-
-				// Remove the entity
 				mgr.DestroyEntity(entity);
 			}
 		}
 
-		// Get a list of all entities with an ImageComponent
 		std::vector<EntityID> GetAllImageEntities() const {
 			std::vector<EntityID> result;
 			for (auto entity : entities) {
@@ -137,11 +174,131 @@ namespace ECS {
 		}
 
 	private:
-
 		std::vector<ImageCallback> imageAddedCallbacks;
 		std::vector<ImageCallback> imageRemovedCallbacks;
+		std::vector<LoadingTask> pendingLoads;
+		std::mutex loadMutex;
 
-		// Notify image callbacks
+		void LoadImageAsync(EntityID entity, const std::string& filePath) {
+			auto& ioPool = Utils::ThreadPoolManager::getInstance().getIOPool();
+
+			// Create async task
+			auto future = ioPool.submit([filePath]() -> LoadResult {
+				LoadResult result;
+				result.filePath = filePath;
+
+				// Extract filename
+				size_t lastSlash = filePath.find_last_of("/\\");
+				if (lastSlash != std::string::npos) {
+					result.fileName = filePath.substr(lastSlash + 1);
+				}
+				else {
+					result.fileName = filePath;
+				}
+
+				// Load image data on I/O thread
+				result.data = Utils::ImageUtils::LoadImageData(filePath, result.width, result.height, result.channels);
+				result.success = (result.data != nullptr);
+
+				return result;
+			});
+
+			// Store the task using emplace_back
+			std::lock_guard<std::mutex> lock(loadMutex);
+			LoadingTask task;
+			task.entityID = entity;
+			task.filePath = filePath;
+			task.future = std::move(future);
+			pendingLoads.push_back(std::move(task));
+		}
+
+		void ProcessCompletedLoads() {
+			std::lock_guard<std::mutex> lock(loadMutex);
+
+			for (auto it = pendingLoads.begin(); it != pendingLoads.end();) {
+				if (it->future.valid() &&
+					it->future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+
+					try {
+						LoadResult result = it->future.get();
+
+						// Check if entity still exists
+						if (mgr.HasComponent<ImageComponent>(it->entityID)) {
+							auto& imageComp = mgr.GetComponent<ImageComponent>(it->entityID);
+
+							if (result.success) {
+								// Update base ImageComponent properties on main thread
+								imageComp.width = result.width;
+								imageComp.height = result.height;
+								imageComp.channels = result.channels;
+								imageComp.fileName = result.fileName;
+								imageComp.filePath = result.filePath;
+
+								// Create OpenGL texture on main thread using OpenGLUtils
+								imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
+									result.width, result.height, result.channels, result.data);
+
+								// CRITICAL FIX: Update InputImageComponent if present
+								if (mgr.HasComponent<InputImageComponent>(it->entityID)) {
+									auto& inputComp = mgr.GetComponent<InputImageComponent>(it->entityID);
+
+									// Update InputImageComponent properties
+									inputComp.width = result.width;
+									inputComp.height = result.height;
+									inputComp.channels = result.channels;
+									inputComp.fileName = result.fileName;
+									inputComp.filePath = result.filePath;
+									inputComp.textureID = imageComp.textureID; // Share the same texture
+
+									// Store image data safely in InputImageComponent
+									inputComp.SetImageData(result.data, result.width, result.height, result.channels);
+									// Don't free result.data here - ownership transferred to InputImageComponent
+
+									std::cout << "Updated InputImageComponent: " << result.fileName << " ("
+										<< result.width << "x" << result.height << ")" << std::endl;
+								}
+								else {
+									// Free data if not needed by InputImageComponent
+									Utils::ImageUtils::FreeImageData(result.data);
+								}
+
+								std::cout << "Async loaded image: " << result.filePath << " ("
+									<< result.width << "x" << result.height << ")" << std::endl;
+
+								NotifyImageAdded(it->entityID);
+							}
+							else {
+								std::cerr << "Failed to async load image: " << result.filePath << std::endl;
+							}
+						}
+						else {
+							// Entity was destroyed while loading
+							if (result.data) {
+								Utils::ImageUtils::FreeImageData(result.data);
+							}
+						}
+					}
+					catch (const std::exception& e) {
+						std::cerr << "Exception in async image loading: " << e.what() << std::endl;
+					}
+
+					// Remove completed task
+					it = pendingLoads.erase(it);
+				}
+				else {
+					++it;
+				}
+			}
+		}
+
+		void CancelPendingLoad(EntityID entity) {
+			std::lock_guard<std::mutex> lock(loadMutex);
+			pendingLoads.erase(
+				std::remove_if(pendingLoads.begin(), pendingLoads.end(),
+					[entity](const LoadingTask& task) { return task.entityID == entity; }),
+				pendingLoads.end());
+		}
+
 		void NotifyImageAdded(EntityID entity) {
 			for (const auto& callback : imageAddedCallbacks) {
 				callback(entity);
@@ -154,39 +311,9 @@ namespace ECS {
 			}
 		}
 
-		// Load an image synchronously (used by Start and SetImage)
-		void LoadImage(ImageComponent& imageComp) {
-			if (imageComp.filePath.empty()) {
-				return;
-			}
-
-			// Load image data
-			int width, height, channels;
-			unsigned char* data = Utils::ImageUtils::LoadImageData(imageComp.filePath, width, height, channels);
-
-			if (data) {
-				// Store image dimensions
-				imageComp.width = width;
-				imageComp.height = height;
-				imageComp.channels = channels;
-
-				// Create OpenGL texture
-				imageComp.textureID = Utils::ImageUtils::GenerateTexture(width, height, channels, data);
-
-				// Free image data
-				Utils::ImageUtils::FreeImageData(data);
-
-				std::cout << "Loaded image: " << imageComp.filePath << " (" << width << "x" << height << ")" << std::endl;
-			}
-			else {
-				std::cerr << "Failed to load image: " << imageComp.filePath << std::endl;
-			}
-		}
-
-		// Unload an image
 		void UnloadImage(ImageComponent& imageComp) {
 			if (imageComp.textureID != 0) {
-				Utils::ImageUtils::DeleteTexture(imageComp.textureID);
+				Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
 				imageComp.textureID = 0;
 				imageComp.width = 0;
 				imageComp.height = 0;

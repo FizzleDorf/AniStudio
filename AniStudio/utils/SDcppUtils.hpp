@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -30,12 +30,12 @@ namespace Utils {
 	static std::random_device rd;
 	static STDDefaultRNG rng;
 	static bool initialized = false;
-	static std::mutex stbi_mutex;
 
 	class SDCPPUtils {
 	public:
 
 		// Generate a random seed using STDDefaultRNG from sdcpp
+		// TODO: move this to a util
 		static uint64_t generateRandomSeed() {
 			// Seed the RNG with a random device if not already seeded
 			if (!initialized) {
@@ -489,155 +489,209 @@ namespace Utils {
 				size_t skipLayersCount = 0;
 				float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
 
-				// Extract parameters from components array in metadata
+				// Debug logging for metadata
+				std::cout << "Img2Img metadata:" << std::endl;
+				std::cout << metadata.dump(2) << std::endl;
+
+				// Parse metadata to extract parameters
 				if (metadata.contains("components") && metadata["components"].is_array()) {
 					for (const auto& comp : metadata["components"]) {
 						// Input image path
 						if (comp.contains("InputImage")) {
-							auto inputImage = comp["InputImage"];
-							if (inputImage.contains("filePath") && !inputImage["filePath"].is_null() && !inputImage["filePath"].get<std::string>().empty())
-								inputImagePath = inputImage["filePath"];
+							nlohmann::json inputImageData = comp["InputImage"];
+
+							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null()
+								&& !inputImageData["filePath"].get<std::string>().empty()) {
+								inputImagePath = inputImageData["filePath"].get<std::string>();
+								std::cout << "Found input path: " << inputImagePath << std::endl;
+							}
 						}
 
-						// Mask image path (for inpainting)
+						// Mask image path (additional for img2img)
 						if (comp.contains("MaskImage")) {
-							auto maskImage = comp["MaskImage"];
-							if (maskImage.contains("filePath") && !maskImage["filePath"].is_null() && !maskImage["filePath"].get<std::string>().empty())
-								maskImagePath = maskImage["filePath"];
+							nlohmann::json maskImageData = comp["MaskImage"];
+
+							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null()
+								&& !maskImageData["filePath"].get<std::string>().empty()) {
+								maskImagePath = maskImageData["filePath"].get<std::string>();
+								std::cout << "Found mask path: " << maskImagePath << std::endl;
+							}
 						}
 
-						// Output path settings
-						if (comp.contains("OutputImage") || comp.contains("Image")) {
-							auto outImage = comp.contains("OutputImage") ? comp["OutputImage"] : comp["Image"];
-							if (outImage.contains("filePath") && !outImage["filePath"].is_null() && !outImage["filePath"].get<std::string>().empty())
-								outputPath = outImage["filePath"];
-							if (outImage.contains("fileName") && !outImage["fileName"].is_null() && !outImage["fileName"].get<std::string>().empty())
-								outputFilename = outImage["fileName"];
+						// Output settings
+						if (comp.contains("OutputImage")) {
+							nlohmann::json outputImageData = comp["OutputImage"];
+
+							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null()
+								&& !outputImageData["filePath"].get<std::string>().empty()) {
+								outputPath = outputImageData["filePath"].get<std::string>();
+								std::cout << "Found output path: " << outputPath << std::endl;
+							}
+
+							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null()
+								&& !outputImageData["fileName"].get<std::string>().empty()) {
+								outputFilename = outputImageData["fileName"].get<std::string>();
+								std::cout << "Found output filename: " << outputFilename << std::endl;
+							}
 						}
 
 						// Prompt component
 						if (comp.contains("Prompt")) {
-							auto prompt = comp["Prompt"];
-							if (prompt.contains("posPrompt") && !prompt["posPrompt"].is_null())
-								posPrompt = prompt["posPrompt"];
-							if (prompt.contains("negPrompt") && !prompt["negPrompt"].is_null())
-								negPrompt = prompt["negPrompt"];
+							nlohmann::json promptData = comp["Prompt"];
+
+							if (promptData.contains("posPrompt") && !promptData["posPrompt"].is_null())
+								posPrompt = promptData["posPrompt"].get<std::string>();
+							if (promptData.contains("negPrompt") && !promptData["negPrompt"].is_null())
+								negPrompt = promptData["negPrompt"].get<std::string>();
 						}
 
 						// ClipSkip component
 						if (comp.contains("ClipSkip")) {
-							auto clipSkipComp = comp["ClipSkip"];
-							if (clipSkipComp.contains("clipSkip") && !clipSkipComp["clipSkip"].is_null())
-								clipSkip = clipSkipComp["clipSkip"];
+							nlohmann::json clipSkipData = comp["ClipSkip"];
+
+							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
+								clipSkip = clipSkipData["clipSkip"].get<float>();
 						}
 
 						// Sampler component
 						if (comp.contains("Sampler")) {
-							auto sampler = comp["Sampler"];
-							if (sampler.contains("cfg") && !sampler["cfg"].is_null())
-								cfg = sampler["cfg"];
-							if (sampler.contains("steps") && !sampler["steps"].is_null())
-								steps = sampler["steps"];
-							if (sampler.contains("seed") && !sampler["seed"].is_null())
-								seed = sampler["seed"];
-							if (sampler.contains("denoise") && !sampler["denoise"].is_null())
-								denoiseStrength = sampler["denoise"];
-							if (sampler.contains("current_sample_method") && !sampler["current_sample_method"].is_null())
-								sample_method = static_cast<sample_method_t>(sampler["current_sample_method"].get<int>());
+							nlohmann::json samplerData = comp["Sampler"];
+
+							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
+								cfg = samplerData["cfg"].get<float>();
+							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
+								steps = samplerData["steps"].get<int>();
+							if (samplerData.contains("seed") && !samplerData["seed"].is_null())
+								seed = samplerData["seed"].get<int>();
+							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
+								denoiseStrength = samplerData["denoise"].get<float>();
+							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
+								sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
 						}
 
 						// Guidance component
 						if (comp.contains("Guidance")) {
-							auto guidanceComp = comp["Guidance"];
-							if (guidanceComp.contains("guidance") && !guidanceComp["guidance"].is_null())
-								guidance = guidanceComp["guidance"];
-							if (guidanceComp.contains("eta") && !guidanceComp["eta"].is_null())
-								eta = guidanceComp["eta"];
+							nlohmann::json guidanceData = comp["Guidance"];
+
+							if (guidanceData.contains("guidance") && !guidanceData["guidance"].is_null())
+								guidance = guidanceData["guidance"].get<float>();
+							if (guidanceData.contains("eta") && !guidanceData["eta"].is_null())
+								eta = guidanceData["eta"].get<float>();
 						}
 
 						// Latent component
 						if (comp.contains("Latent")) {
-							auto latent = comp["Latent"];
-							if (latent.contains("latentWidth") && !latent["latentWidth"].is_null())
-								latentWidth = latent["latentWidth"];
-							if (latent.contains("latentHeight") && !latent["latentHeight"].is_null())
-								latentHeight = latent["latentHeight"];
-							if (latent.contains("batchSize") && !latent["batchSize"].is_null())
-								batchSize = latent["batchSize"];
+							nlohmann::json latentData = comp["Latent"];
+
+							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
+								latentWidth = latentData["latentWidth"].get<int>();
+							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
+								latentHeight = latentData["latentHeight"].get<int>();
+							if (latentData.contains("batchSize") && !latentData["batchSize"].is_null())
+								batchSize = latentData["batchSize"].get<int>();
 						}
 
 						// Layer Skip component
 						if (comp.contains("LayerSkip")) {
-							auto layerSkip = comp["LayerSkip"];
-							if (layerSkip.contains("slg_scale") && !layerSkip["slg_scale"].is_null())
-								slgScale = layerSkip["slg_scale"];
-							if (layerSkip.contains("skip_layer_start") && !layerSkip["skip_layer_start"].is_null())
-								skipLayerStart = layerSkip["skip_layer_start"];
-							if (layerSkip.contains("skip_layer_end") && !layerSkip["skip_layer_end"].is_null())
-								skipLayerEnd = layerSkip["skip_layer_end"];
+							nlohmann::json layerSkipData = comp["LayerSkip"];
+
+							if (layerSkipData.contains("slg_scale") && !layerSkipData["slg_scale"].is_null())
+								slgScale = layerSkipData["slg_scale"].get<float>();
+							if (layerSkipData.contains("skip_layer_start") && !layerSkipData["skip_layer_start"].is_null())
+								skipLayerStart = layerSkipData["skip_layer_start"].get<float>();
+							if (layerSkipData.contains("skip_layer_end") && !layerSkipData["skip_layer_end"].is_null())
+								skipLayerEnd = layerSkipData["skip_layer_end"].get<float>();
 						}
 					}
 				}
 
-				// Ensure we have a valid input image path
+				// Validate parameters
 				if (inputImagePath.empty()) {
-					throw std::runtime_error("No input image path found in metadata");
+					throw std::runtime_error("Input image path is empty!");
+				}
+
+				// Check if input image file exists
+				if (!std::filesystem::exists(inputImagePath)) {
+					throw std::runtime_error("Input image file does not exist: " + inputImagePath);
 				}
 
 				// Load input image
 				int inputWidth, inputHeight, inputChannels;
-				{
-					std::lock_guard<std::mutex> lock(stbi_mutex); // Lock during image loading
-					inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight,
-						&inputChannels, 3); // Force 3 channels
-				}
+				std::cout << "Loading input image from: " << inputImagePath << std::endl;
 
+				// Force 3 channels (RGB) for consistency with stable-diffusion
+				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
 				if (!inputData) {
-					throw std::runtime_error("Failed to load input image: " + inputImagePath);
+					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
+						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+					throw std::runtime_error(error);
 				}
 
-				std::cout << "Input image loaded: " << inputWidth << "x" << inputHeight << " with "
-					<< inputChannels << " channels:" << inputChannels << std::endl;
+				// Force channels to 3 since we requested RGB
+				inputChannels = 3;
 
-				// Create a properly initialized input image struct
-				sd_image_t input_image = { 0 };
-				input_image.width = static_cast<uint32_t>(inputWidth);
-				input_image.height = static_cast<uint32_t>(inputHeight);
-				input_image.channel = 3; // Always use 4 channels
-				input_image.data = inputData;
+				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
+					<< " with " << inputChannels << " channels (forced RGB)" << std::endl;
 
-				// Initialize mask image struct
+				// Validate image dimensions
+				if (inputWidth <= 0 || inputHeight <= 0) {
+					throw std::runtime_error("Invalid input image dimensions: " + std::to_string(inputWidth) + "x" + std::to_string(inputHeight));
+				}
+
+				// Create output path - SAME AS UPSCALING
+				std::filesystem::path outputDir(outputPath);
+				std::filesystem::path outputFile(outputFilename);
+				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+					outputFile.string(), outputDir.string());
+
+				// Initialize SD context - SAME AS UPSCALING PATTERN
+				std::cout << "Initializing Stable Diffusion context..." << std::endl;
+				sd_context = InitializeStableDiffusionContext(metadata);
+				if (!sd_context) {
+					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
+				}
+
+				// Create input image struct - FORCE RGB FORMAT
+				sd_image_t input_image = {
+					static_cast<uint32_t>(inputWidth),
+					static_cast<uint32_t>(inputHeight),
+					3,  // FORCE 3 channels (RGB)
+					inputData
+				};
+
+				// Initialize mask image struct - IMPROVED MASK HANDLING
 				sd_image_t mask_image = { 0 };
 
-				if (maskImagePath.empty()) {
-					// Create a blank (white) mask of appropriate size
+				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath)) {
+					std::cout << "No valid mask provided, creating blank white mask" << std::endl;
+
+					// Create a blank WHITE mask (255 = keep original, 0 = replace with generated)
 					size_t maskSize = inputWidth * inputHeight;
 					emptyMaskData = new unsigned char[maskSize];
-					std::memset(emptyMaskData, 255, maskSize); // Fill with 255 (white)
+					std::memset(emptyMaskData, 255, maskSize); // WHITE mask = change whole image
 
 					mask_image.width = static_cast<uint32_t>(inputWidth);
 					mask_image.height = static_cast<uint32_t>(inputHeight);
 					mask_image.channel = 1; // Masks are single channel
 					mask_image.data = emptyMaskData;
 
-					std::cout << "Created blank mask: " << inputWidth << "x" << inputHeight << std::endl;
+					std::cout << "Created white mask: " << inputWidth << "x" << inputHeight << std::endl;
 				}
 				else {
-					// Load mask from file
+					// Load mask from file - FORCE GRAYSCALE
 					int maskWidth, maskHeight, maskChannels;
-					{
-						std::lock_guard<std::mutex> lock(stbi_mutex); // Lock during mask loading
-						maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight,
-							&maskChannels, 1); // Force 1 channel
-					}
+					std::cout << "Loading mask image from: " << maskImagePath << std::endl;
+
+					// FORCE 1 channel (grayscale) for mask
+					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1);
 
 					if (!maskData) {
-						std::cerr << "Failed to load mask image: " << maskImagePath << ", using blank mask instead" << std::endl;
+						std::cerr << "Failed to load mask image: " << maskImagePath << ", using white mask instead" << std::endl;
 
-						// Create blank mask as fallback
+						// Create white mask as fallback
 						size_t maskSize = inputWidth * inputHeight;
 						emptyMaskData = new unsigned char[maskSize];
-						std::memset(emptyMaskData, 255, maskSize);
+						std::memset(emptyMaskData, 255, maskSize); // WHITE mask
 
 						mask_image.width = static_cast<uint32_t>(inputWidth);
 						mask_image.height = static_cast<uint32_t>(inputHeight);
@@ -645,21 +699,35 @@ namespace Utils {
 						mask_image.data = emptyMaskData;
 					}
 					else {
-						mask_image.width = static_cast<uint32_t>(maskWidth);
-						mask_image.height = static_cast<uint32_t>(maskHeight);
-						mask_image.channel = 1;
-						mask_image.data = maskData;
+						// Validate mask dimensions match input image
+						if (maskWidth != inputWidth || maskHeight != inputHeight) {
+							std::cout << "Warning: Mask dimensions (" << maskWidth << "x" << maskHeight
+								<< ") don't match input image (" << inputWidth << "x" << inputHeight
+								<< "), using white mask instead" << std::endl;
 
-						std::cout << "Mask image loaded: " << maskWidth << "x" << maskHeight
-							<< " with " << maskChannels << " channels (forced to 1)" << std::endl;
+							// Free the loaded mask and create a white one
+							stbi_image_free(maskData);
+							maskData = nullptr;
+
+							size_t maskSize = inputWidth * inputHeight;
+							emptyMaskData = new unsigned char[maskSize];
+							std::memset(emptyMaskData, 255, maskSize);
+
+							mask_image.width = static_cast<uint32_t>(inputWidth);
+							mask_image.height = static_cast<uint32_t>(inputHeight);
+							mask_image.channel = 1;
+							mask_image.data = emptyMaskData;
+						}
+						else {
+							mask_image.width = static_cast<uint32_t>(maskWidth);
+							mask_image.height = static_cast<uint32_t>(maskHeight);
+							mask_image.channel = 1; // Force single channel
+							mask_image.data = maskData;
+
+							std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
+								<< " with 1 channel (grayscale)" << std::endl;
+						}
 					}
-				}
-
-				// Initialize SD context
-				std::cout << "Initializing Stable Diffusion context..." << std::endl;
-				sd_context = InitializeStableDiffusionContext(metadata);
-				if (!sd_context) {
-					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
 
 				// Ensure valid seed
@@ -668,7 +736,20 @@ namespace Utils {
 					std::cout << "Generated random seed: " << seed << std::endl;
 				}
 
-				// Call img2img with explicit values
+				// Validate parameters before calling img2img
+				std::cout << "img2img parameters:" << std::endl;
+				std::cout << "  Positive prompt: \"" << posPrompt << "\"" << std::endl;
+				std::cout << "  Negative prompt: \"" << negPrompt << "\"" << std::endl;
+				std::cout << "  Clip skip: " << clipSkip << std::endl;
+				std::cout << "  CFG: " << cfg << std::endl;
+				std::cout << "  Guidance: " << guidance << std::endl;
+				std::cout << "  Steps: " << steps << std::endl;
+				std::cout << "  Seed: " << seed << std::endl;
+				std::cout << "  Denoise: " << denoiseStrength << std::endl;
+				std::cout << "  Dimensions: " << latentWidth << "x" << latentHeight << std::endl;
+
+				// Perform img2img - using the same pattern as upscaling
+				std::cout << "Calling img2img..." << std::endl;
 				result_image = img2img(
 					sd_context,
 					input_image,
@@ -698,53 +779,37 @@ namespace Utils {
 					skipLayerEnd
 				);
 
-				// Clean up resources that were passed by value and copied
-				   // Clean up input data - PROTECT WITH MUTEX
-				{
-					std::lock_guard<std::mutex> lock(stbi_mutex);
-					if (inputData) {
-						stbi_image_free(inputData);
-						inputData = nullptr;
-					}
-
-					if (maskData) {
-						stbi_image_free(maskData);
-						maskData = nullptr;
-					}
-				}
-
-				if (emptyMaskData) {
-					delete[] emptyMaskData;
-					emptyMaskData = nullptr;
-				}
-
-				// Check if we got a result image
 				if (!result_image) {
-					throw std::runtime_error("Failed to generate image!");
+					throw std::runtime_error("img2img failed - no output image produced");
 				}
 
-				std::cout << "Successfully generated img2img result: "
-					<< result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << std::endl;
+				if (!result_image->data) {
+					free(result_image);
+					throw std::runtime_error("img2img produced invalid image data");
+				}
+
+				std::cout << "img2img successful: " << result_image->width << "x" << result_image->height
+					<< "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
 
 				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
 					result_image->channel, metadata, fullPath);
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-				// Clean up resources
+				// Cleanup resources
 				if (inputData) {
-					free(inputData);
+					stbi_image_free(inputData);
 					inputData = nullptr;
+				}
+
+				if (maskData) {
+					stbi_image_free(maskData);
+					maskData = nullptr;
 				}
 
 				if (emptyMaskData) {
 					delete[] emptyMaskData;
 					emptyMaskData = nullptr;
-				}
-
-				if (maskData) {
-					free(maskData);
-					maskData = nullptr;
 				}
 
 				if (result_image) {
@@ -763,29 +828,29 @@ namespace Utils {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
 				// Clean up resources
-				{
-					std::lock_guard<std::mutex> lock(stbi_mutex);
-					if (inputData) {
-						stbi_image_free(inputData);
-						inputData = nullptr;
-					}
+				if (inputData) {
+					stbi_image_free(inputData);
+					inputData = nullptr;
+				}
 
-					if (maskData) {
-						stbi_image_free(maskData);
-						maskData = nullptr;
-					}
+				if (maskData) {
+					stbi_image_free(maskData);
+					maskData = nullptr;
 				}
 
 				if (emptyMaskData) {
 					delete[] emptyMaskData;
+					emptyMaskData = nullptr;
 				}
 
 				if (result_image) {
 					free(result_image);
+					result_image = nullptr;
 				}
 
 				if (sd_context) {
 					free_sd_ctx(sd_context);
+					sd_context = nullptr;
 				}
 
 				return false;
@@ -943,6 +1008,8 @@ namespace Utils {
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
 					upscaled_image.channel, metadata, fullPath);
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
 
 				// Cleanup resources
 				if (inputData) {
