@@ -2,15 +2,7 @@ cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0091 NEW)
 
 # Cross-platform system includes
-if(UNIX AND NOT APPLE)  # Linux
-    list(APPEND CMAKE_MODULE_PATH "/usr/share/cmake/Modules")
-    if(EXISTS "/usr/include")
-        include_directories(SYSTEM /usr/include)
-    endif()
-    if(EXISTS "/usr/include/x86_64-linux-gnu")
-        include_directories(SYSTEM /usr/include/x86_64-linux-gnu)
-    endif()
-elseif(WIN32)
+if(WIN32)
     # On Windows, let CMake find system includes automatically
     # Only add specific paths if absolutely necessary
     if(DEFINED ENV{INCLUDE} AND NOT "$ENV{INCLUDE}" STREQUAL "")
@@ -43,6 +35,9 @@ if(NOT CONAN_TOOLCHAIN)
         message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
     endif()
     
+	set(CMAKE_SKIP_BUILD_RPATH FALSE)
+	set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+
     execute_process(
         COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}" 
                 --output-folder="${CMAKE_BINARY_DIR}" 
@@ -61,6 +56,9 @@ endif()
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 project(AniStudio LANGUAGES CXX VERSION 0.1.01)
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Set binary output directories - ensures consistent placement across platforms
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -78,6 +76,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
+
+
 if(BUILD_ANISTUDIO)
 
     # Data directory setup

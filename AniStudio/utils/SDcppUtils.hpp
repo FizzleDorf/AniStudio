@@ -736,18 +736,6 @@ namespace Utils {
 					std::cout << "Generated random seed: " << seed << std::endl;
 				}
 
-				// Validate parameters before calling img2img
-				std::cout << "img2img parameters:" << std::endl;
-				std::cout << "  Positive prompt: \"" << posPrompt << "\"" << std::endl;
-				std::cout << "  Negative prompt: \"" << negPrompt << "\"" << std::endl;
-				std::cout << "  Clip skip: " << clipSkip << std::endl;
-				std::cout << "  CFG: " << cfg << std::endl;
-				std::cout << "  Guidance: " << guidance << std::endl;
-				std::cout << "  Steps: " << steps << std::endl;
-				std::cout << "  Seed: " << seed << std::endl;
-				std::cout << "  Denoise: " << denoiseStrength << std::endl;
-				std::cout << "  Dimensions: " << latentWidth << "x" << latentHeight << std::endl;
-
 				// Perform img2img - using the same pattern as upscaling
 				std::cout << "Calling img2img..." << std::endl;
 				result_image = img2img(
