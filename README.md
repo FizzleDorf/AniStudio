@@ -12,9 +12,11 @@ An executable editor for image and video diffusion generation and editing projec
 - Extremely lightweight compared to alternatives
 
 ---
-*Disclaimer: the application still has some threading issues so until those get sorted, releases will not be made. please build from source*
+*Disclaimer: the application still has some threading issues*
 
-[How to build from Source](docs/Installation.md)
+Binary builds will be released under the [Releases](https://github.com/FizzleDorf/AniStudio/releases).
+
+Otherwise you can [build from Source](docs/Installation.md).
 
 ---
 
