@@ -1,20 +1,17 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0091 NEW)
 
-# Cross-platform system includes
-if(UNIX AND NOT APPLE)  # Linux
-    list(APPEND CMAKE_MODULE_PATH "/usr/share/cmake/Modules")
-    if(EXISTS "/usr/include")
-        include_directories(SYSTEM /usr/include)
-    endif()
-    if(EXISTS "/usr/include/x86_64-linux-gnu")
-        include_directories(SYSTEM /usr/include/x86_64-linux-gnu)
-    endif()
-elseif(WIN32)
-    # On Windows, let CMake find system includes automatically
-    # Only add specific paths if absolutely necessary
-    if(DEFINED ENV{INCLUDE} AND NOT "$ENV{INCLUDE}" STREQUAL "")
-        include_directories(SYSTEM $ENV{INCLUDE})
+project(AniStudio)
+
+if(SD_CUDA)
+    enable_language(CUDA)
+    set(CUDA_ARCHITECTURES "89" CACHE STRING "Override for RTX 4090" FORCE)
+    add_definitions(-DSD_USE_CUDA)
+    
+    # Find CUDA toolkit
+    find_package(CUDAToolkit REQUIRED)
+    if(NOT CUDAToolkit_FOUND)
+        message(FATAL_ERROR "CUDA toolkit not found!")
     endif()
 endif()
 
@@ -43,6 +40,9 @@ if(NOT CONAN_TOOLCHAIN)
         message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
     endif()
     
+	set(CMAKE_SKIP_BUILD_RPATH FALSE)
+	set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
+
     execute_process(
         COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}" 
                 --output-folder="${CMAKE_BINARY_DIR}" 
@@ -60,7 +60,12 @@ endif()
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
-project(AniStudio LANGUAGES CXX VERSION 0.1.01)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CUDA_ARCHITECTURES "89" CACHE STRING "Override for RTX 4090" FORCE)  # SM89 = Ampere
+
+set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
 # Set binary output directories - ensures consistent placement across platforms
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -78,6 +83,8 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
+
+
 if(BUILD_ANISTUDIO)
 
     # Data directory setup
@@ -179,6 +186,11 @@ if(BUILD_ANISTUDIO)
 
     # Link directories and libraries
     link_directories(${CONAN_LIB_DIRS})
+
+	if(SD_CUDA)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE SD_USE_CUDA)
+		target_link_libraries(${PROJECT_NAME} PRIVATE CUDA::cudart)
+	endif()
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
         ${CONAN_LIBS}
