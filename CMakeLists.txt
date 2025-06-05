@@ -109,6 +109,7 @@ if(BUILD_ANISTUDIO)
     set(SHADER_DIR "${CMAKE_SOURCE_DIR}/AniStudio/shaders")
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
     file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
+	message(STATUS "Copied shaders to ${SHADER_DIR}")
 
     # Add external dependencies
     add_subdirectory(external/stable-diffusion.cpp)
@@ -155,6 +156,7 @@ if(BUILD_ANISTUDIO)
     file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Gui/*.cpp)
     file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/*.cpp)
     file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/utils/*.cpp)
+    file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/*.cpp)
 
     message(STATUS "GUI_SOURCES found: ${GUI_SOURCES}")
     foreach(file ${GUI_SOURCES})
@@ -168,10 +170,10 @@ if(BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/AniStudio/Engine/Engine.cpp
         ${CMAKE_SOURCE_DIR}/AniStudio/Events/Events.cpp
         ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
-        ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/PluginManager.cpp
         ${GUI_SOURCES}
         ${SYSTEM_SOURCES}
         ${UTILS_SOURCES}
+        ${PLUGIN_SOURCES}
     )
 
     set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -215,56 +217,136 @@ if(BUILD_ANISTUDIO)
     # Precompiled headers
     target_precompile_headers(${PROJECT_NAME} PRIVATE ${PCH_FILE})
 
-    # Core library interface
-    add_library(AniStudioCore INTERFACE)
-    target_include_directories(AniStudioCore INTERFACE
+    # Symbol export/import definitions for main executable
+    if(WIN32)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE "ANI_CORE_API=__declspec(dllexport)")
+    else()
+        target_compile_definitions(${PROJECT_NAME} PRIVATE "ANI_CORE_API=")
+    endif()
+
+    # Core library for plugins - STATIC library with all plugin-required sources
+    add_library(AniStudioCore STATIC
+        ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/BasePlugin.cpp
+        ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/PluginRegistry.cpp
+        # Add core ECS and GUI sources that plugins need
+        ${SYSTEM_SOURCES}
+        ${UTILS_SOURCES}
+    )
+
+    target_include_directories(AniStudioCore PUBLIC
         ${CMAKE_SOURCE_DIR}/AniStudio
         ${CMAKE_SOURCE_DIR}/AniStudio/ECS
         ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
+        ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
         ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
         ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
+        ${CMAKE_SOURCE_DIR}/AniStudio/utils
         ${CMAKE_SOURCE_DIR}/external/imgui
         ${CMAKE_SOURCE_DIR}/external/nlohmann_json
+        ${CMAKE_SOURCE_DIR}/external/stb_image
+        ${CMAKE_SOURCE_DIR}/external/glm
     )
-    
+
+    # Link required libraries to AniStudioCore
+    target_link_libraries(AniStudioCore PUBLIC
+        ImGui
+        ImGuiFileDialog
+        stb_image
+        ${CONAN_LIBS}
+    )
+
+    # Symbol export/import definitions for static library
     if(WIN32)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_CORE_API=__declspec(dllexport))
-        target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=__declspec(dllimport))
+        target_compile_definitions(AniStudioCore PUBLIC "ANI_CORE_API=" "PLUGIN_API=__declspec(dllexport)")
     else()
-        target_compile_definitions(${PROJECT_NAME} PRIVATE ANI_CORE_API=)
-        target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=)
+        target_compile_definitions(AniStudioCore PUBLIC "ANI_CORE_API=" "PLUGIN_API=__attribute__((visibility(\"default\")))")
     endif()
+
+    # Set proper output directories for AniStudioCore
+    set_target_properties(AniStudioCore PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+        ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib
+        ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib
+        ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib
+        ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib
+    )
+
+    # Ensure AniStudioCore has the same compile features
+    target_compile_features(AniStudioCore PUBLIC cxx_std_17)
+
 endif()
 
 # Plugins configuration
 if(BUILD_PLUGINS)
+    # Set plugin compilation definitions properly
     if(WIN32)
-        add_definitions(-DPLUGIN_API=__declspec(dllexport))
+        # For Windows, ensure plugins can export symbols
+        set(PLUGIN_COMPILE_DEFINITIONS 
+            "PLUGIN_API=__declspec(dllexport)"
+            "ANI_CORE_API="
+        )
     else()
-        add_definitions(-DPLUGIN_API=)
+        # For Linux/Mac
+        set(PLUGIN_COMPILE_DEFINITIONS 
+            "PLUGIN_API=__attribute__((visibility(\"default\")))"
+            "ANI_CORE_API="
+        )
     endif()
     
     if(NOT BUILD_ANISTUDIO)
+        # Standalone plugin build - create minimal AniStudioCore
         add_subdirectory(external/stb_image)
         add_subdirectory(external/stable-diffusion.cpp)
+        add_subdirectory(external/imgui)
         
-        add_library(AniStudioCore INTERFACE)
-        target_include_directories(AniStudioCore INTERFACE
+        file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/*.cpp)
+        file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/utils/*.cpp)
+        
+        add_library(AniStudioCore STATIC
+            ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/BasePlugin.cpp
+            ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/PluginRegistry.cpp
+            ${SYSTEM_SOURCES}
+            ${UTILS_SOURCES}
+        )
+        
+        target_include_directories(AniStudioCore PUBLIC
             ${CMAKE_SOURCE_DIR}/AniStudio
             ${CMAKE_SOURCE_DIR}/AniStudio/ECS
             ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
+            ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
+            ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
+            ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
+            ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
+            ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
             ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
             ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
+            ${CMAKE_SOURCE_DIR}/AniStudio/utils
             ${CMAKE_SOURCE_DIR}/external/nlohmann_json
             ${CMAKE_SOURCE_DIR}/external/stb_image
             ${CMAKE_SOURCE_DIR}/external/imgui
+            ${CMAKE_SOURCE_DIR}/external/glm
         )
-        if(WIN32)
-            target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=__declspec(dllimport))
-        else()
-            target_compile_definitions(AniStudioCore INTERFACE ANI_CORE_API=)
-        endif()
+        
+        target_link_libraries(AniStudioCore PUBLIC
+            ImGui
+            stb_image
+        )
+        
+        # Apply the same plugin definitions to standalone AniStudioCore
+        target_compile_definitions(AniStudioCore PUBLIC ${PLUGIN_COMPILE_DEFINITIONS})
+        
+        target_compile_features(AniStudioCore PUBLIC cxx_std_17)
+    else()
+        # When building with main app, ensure AniStudioCore has plugin definitions
+        target_compile_definitions(AniStudioCore PUBLIC ${PLUGIN_COMPILE_DEFINITIONS})
     endif()
+    
+    # Pass plugin definitions to the plugins subdirectory
+    set(ANISTUDIO_PLUGIN_DEFINITIONS ${PLUGIN_COMPILE_DEFINITIONS} PARENT_SCOPE)
     
     add_subdirectory(plugins)
 endif()

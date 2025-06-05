@@ -27,8 +27,7 @@ cd build
 
 :: Configure with CMake (only build AniStudio)
 cmake .. -DSD_VULKAN=ON ^
-         -DBUILD_PLUGINS=OFF ^
-         -DBUILD_ANISTUDIO=ON
+         -DBUILD_PLUGINS=ON 
 
 :: Build the project
 cmake --build . --config Release

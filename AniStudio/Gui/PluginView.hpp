@@ -10,107 +10,229 @@
 
  * This file is part of AniStudio.
  * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
  */
 
-// PluginView.hpp
 #pragma once
 
 #include "Base/BaseView.hpp"
-// #include "PluginManager.hpp"
+#include "PluginManager.hpp"
+#include "ImGuiFileDialog.h"
+#include <imgui.h>
+#include <string>
+#include <vector>
 
 namespace GUI {
 
 	class PluginView : public BaseView {
 	public:
-		PluginView(ECS::EntityManager& entityMgr) //, Plugin::PluginManager& pluginMgr)
-			: BaseView(entityMgr){ //, pluginManager(pluginMgr) {
+		PluginView(ECS::EntityManager& entityMgr, Plugin::PluginManager& pluginMgr)
+			: BaseView(entityMgr), pluginManager(pluginMgr) {
 			viewName = "Plugin Manager";
 		}
 
 		~PluginView() = default;
 
+		void Init() override {
+			// Initialize any resources needed for the plugin view
+		}
+
 		void Render() override {
-			// ImGui::Begin(viewName.c_str());
+			ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+			if (ImGui::Begin("Plugin Manager")) {
+				RenderToolbar();
+				ImGui::Separator();
+				RenderPluginList();
+				ImGui::Separator();
+				RenderPluginDetails();
+			}
+			ImGui::End();
 
-			// // Display plugin info
-			// ImGui::Text("Loaded Plugins:");
-			// ImGui::Separator();
-
-			// auto plugins = pluginManager.GetLoadedPlugins();
-
-			// if (plugins.empty()) {
-			// 	ImGui::TextColored(ImVec4(1, 1, 0, 1), "No plugins loaded");
-			// }
-			// else {
-			// 	if (ImGui::BeginTable("PluginsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-			// 		ImGui::TableSetupColumn("Name");
-			// 		ImGui::TableSetupColumn("Version");
-			// 		ImGui::TableSetupColumn("Description");
-			// 		ImGui::TableSetupColumn("Actions");
-			// 		ImGui::TableHeadersRow();
-
-			// 		for (const auto& name : plugins) {
-			// 			Plugin::IPlugin* plugin = pluginManager.GetPlugin(name);
-			// 			if (!plugin) continue;
-
-			// 			ImGui::TableNextRow();
-
-			// 			// Name
-			// 			ImGui::TableNextColumn();
-			// 			ImGui::TextWrapped("%s", plugin->GetName().c_str());
-
-			// 			// Version
-			// 			ImGui::TableNextColumn();
-			// 			ImGui::TextWrapped("%s", plugin->GetVersion().c_str());
-
-			// 			// Description
-			// 			ImGui::TableNextColumn();
-			// 			ImGui::TextWrapped("%s", plugin->GetDescription().c_str());
-
-			// 			// Actions
-			// 			ImGui::TableNextColumn();
-			// 			if (ImGui::Button(("Reload##" + name).c_str())) {
-			// 				std::string path = pluginManager.GetPluginPath(name);
-			// 				pluginManager.UnloadPlugin(name);
-			// 				pluginManager.LoadPlugin(path);
-			// 			}
-
-			// 			ImGui::SameLine();
-
-			// 			if (ImGui::Button(("Unload##" + name).c_str())) {
-			// 				pluginManager.UnloadPlugin(name);
-			// 			}
-			// 		}
-
-			// 		ImGui::EndTable();
-			// 	}
-			// }
-
-			// ImGui::Separator();
-
-			// // Button to scan for new plugins
-			// if (ImGui::Button("Scan for Plugins")) {
-			// 	pluginManager.ScanForPlugins();
-			// }
-
-			// ImGui::SameLine();
-
-			// // Button to reload all plugins
-			// if (ImGui::Button("Reload All Plugins")) {
-			// 	pluginManager.HotReloadPlugins();
-			// }
-
-			// ImGui::End();
+			// Handle file dialog
+			HandleFileDialog();
 		}
 
 	private:
-		// Plugin::PluginManager& pluginManager;
+		Plugin::PluginManager& pluginManager;
+		std::string selectedPlugin;
+		char pluginPathBuffer[512] = "";
+
+		void RenderToolbar() {
+			if (ImGui::Button("Load Plugin...")) {
+				IGFD::FileDialogConfig config;
+				config.path = Utils::FilePaths::pluginPath;
+				ImGuiFileDialog::Instance()->OpenDialog(
+					"LoadPluginDialog",
+					"Choose Plugin",
+#ifdef _WIN32
+					".dll",
+#else
+					".so",
+#endif
+					config
+				);
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Scan Plugin Directory")) {
+				pluginManager.ScanPluginDirectory(Utils::FilePaths::pluginPath);
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("Reload All Plugins")) {
+				pluginManager.ReloadAllPlugins();
+			}
+
+			ImGui::SameLine();
+			if (!selectedPlugin.empty()) {
+				if (ImGui::Button("Unload Selected")) {
+					pluginManager.UnloadPlugin(selectedPlugin);
+					selectedPlugin.clear();
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Reload Selected")) {
+					pluginManager.ReloadPlugin(selectedPlugin);
+				}
+			}
+		}
+
+		void RenderPluginList() {
+			ImGui::Text("Loaded Plugins (%zu):", pluginManager.GetLoadedPluginCount());
+
+			if (ImGui::BeginTable("PluginTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+				ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+				ImGui::TableSetupColumn("Version", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+				ImGui::TableSetupColumn("Description", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+				ImGui::TableHeadersRow();
+
+				auto pluginNames = pluginManager.GetLoadedPluginNames();
+				for (const auto& name : pluginNames) {
+					const auto* pluginInfo = pluginManager.GetPluginInfo(name);
+					if (!pluginInfo) continue;
+
+					ImGui::TableNextRow();
+
+					// Name column
+					ImGui::TableNextColumn();
+					bool isSelected = (selectedPlugin == name);
+					if (ImGui::Selectable(name.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns)) {
+						selectedPlugin = isSelected ? "" : name;
+					}
+
+					// Version column
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", pluginInfo->version.c_str());
+
+					// Description column
+					ImGui::TableNextColumn();
+					ImGui::Text("%s", pluginInfo->description.c_str());
+
+					// Actions column
+					ImGui::TableNextColumn();
+					ImGui::PushID(name.c_str());
+
+					if (ImGui::SmallButton("Reload")) {
+						pluginManager.ReloadPlugin(name);
+					}
+
+					ImGui::SameLine();
+					if (ImGui::SmallButton("Unload")) {
+						pluginManager.UnloadPlugin(name);
+						if (selectedPlugin == name) {
+							selectedPlugin.clear();
+						}
+					}
+
+					ImGui::PopID();
+				}
+
+				ImGui::EndTable();
+			}
+		}
+
+		void RenderPluginDetails() {
+			if (selectedPlugin.empty()) {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Select a plugin to view details");
+				return;
+			}
+
+			const auto* pluginInfo = pluginManager.GetPluginInfo(selectedPlugin);
+			if (!pluginInfo) {
+				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Plugin information not available");
+				return;
+			}
+
+			ImGui::Text("Plugin Details:");
+			ImGui::Separator();
+
+			if (ImGui::BeginTable("DetailsTable", 2, ImGuiTableFlags_Borders)) {
+				ImGui::TableSetupColumn("Property", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+				ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("Name:");
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", pluginInfo->name.c_str());
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("Version:");
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", pluginInfo->version.c_str());
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("Description:");
+				ImGui::TableNextColumn();
+				ImGui::TextWrapped("%s", pluginInfo->description.c_str());
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("File Path:");
+				ImGui::TableNextColumn();
+				ImGui::TextWrapped("%s", pluginInfo->filePath.c_str());
+
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("Status:");
+				ImGui::TableNextColumn();
+				if (pluginInfo->initialized) {
+					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Initialized");
+				}
+				else {
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Not Initialized");
+				}
+
+				ImGui::EndTable();
+			}
+
+			// Plugin settings UI if available
+			if (pluginInfo->plugin && pluginInfo->plugin->HasSettingsUI()) {
+				ImGui::Spacing();
+				ImGui::Text("Plugin Settings:");
+				ImGui::Separator();
+
+				try {
+					pluginInfo->plugin->RenderSettingsUI();
+				}
+				catch (const std::exception& e) {
+					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f),
+						"Error rendering plugin settings: %s", e.what());
+				}
+			}
+		}
+
+		void HandleFileDialog() {
+			if (ImGuiFileDialog::Instance()->Display("LoadPluginDialog", 32, ImVec2(700, 400))) {
+				if (ImGuiFileDialog::Instance()->IsOk()) {
+					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+					pluginManager.LoadPlugin(filePath);
+				}
+				ImGuiFileDialog::Instance()->Close();
+			}
+		}
 	};
 
 } // namespace GUI
