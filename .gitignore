@@ -71,3 +71,6 @@ venv/
 
 # Assets
 assets/
+
+# Releases Directory
+release/

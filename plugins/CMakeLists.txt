@@ -1,48 +1,96 @@
+# Plugin CMakeLists.txt for AniStudio
 cmake_minimum_required(VERSION 3.12)
 
-# Common settings for all plugins
+# Set C++ standard to match AniStudio
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED On)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Define plugin build macro
-macro(add_plugin name)
-    # Add a library target
-    add_library(${name} SHARED ${ARGN})
+# Set output directory for plugins
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins)
+
+# Function to create a plugin
+function(add_anistudio_plugin PLUGIN_NAME)
+    set(PLUGIN_SOURCES ${ARGN})
     
-    # Link against AniStudio core
-    target_link_libraries(${name} PRIVATE 
-        AniStudioCore
-        glfw
-        GLEW::GLEW
-        ImGui
+    # Create the plugin as a shared library
+    add_library(${PLUGIN_NAME} SHARED ${PLUGIN_SOURCES})
+    
+    # Ensure AniStudioCore is built first
+    add_dependencies(${PLUGIN_NAME} AniStudioCore)
+    
+    # Link with AniStudioCore static library
+    target_link_libraries(${PLUGIN_NAME} PRIVATE AniStudioCore)
+    
+    # Set plugin-specific properties
+    set_target_properties(${PLUGIN_NAME} PROPERTIES
+        PREFIX ""  # Remove lib prefix on Unix systems
+        SUFFIX ${CMAKE_SHARED_LIBRARY_SUFFIX}
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        # Set output directory for plugins
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
+        LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/plugins
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/plugins
+        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/plugins
+        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/plugins
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/plugins
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/plugins
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/plugins
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/plugins
     )
     
-    # Set output directory
-    set_target_properties(${name} PROPERTIES 
-        LIBRARY_OUTPUT_DIRECTORY "${PLUGINS_DIR}"
-        RUNTIME_OUTPUT_DIRECTORY "${PLUGINS_DIR}"
-    )
-    
-    # Define platform-specific output name
+    # Platform-specific settings
     if(WIN32)
-        set_target_properties(${name} PROPERTIES SUFFIX ".dll")
+        target_compile_definitions(${PLUGIN_NAME} PRIVATE
+            "ANI_CORE_API="
+            "PLUGIN_API=__declspec(dllexport)"
+        )
+        # Ensure proper symbol export on Windows
+        set_target_properties(${PLUGIN_NAME} PROPERTIES
+            WINDOWS_EXPORT_ALL_SYMBOLS OFF  # We want explicit exports only
+        )
     else()
-        set_target_properties(${name} PROPERTIES 
-            SUFFIX ".so"
-            PREFIX "lib"
+        target_compile_definitions(${PLUGIN_NAME} PRIVATE 
+            "ANI_CORE_API="
+            "PLUGIN_API=__attribute__((visibility(\"default\")))"
+        )
+        # Set visibility for Linux/Mac
+        set_target_properties(${PLUGIN_NAME} PROPERTIES
+            CXX_VISIBILITY_PRESET hidden
         )
     endif()
-endmacro()
+    
+    message(STATUS "Configured plugin: ${PLUGIN_NAME}")
+endfunction()
 
-# Auto-discover and include all subdirectories with a CMakeLists.txt file
-file(GLOB plugin_dirs RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *)
-foreach(plugin ${plugin_dirs})
-    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${plugin})
-        if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${plugin}/CMakeLists.txt)
-            message(STATUS "Found plugin: ${plugin}")
-            add_subdirectory(${plugin})
-        endif()
-    endif()
-endforeach()
+# Example plugin - FIXED: Use the correct filename
+add_anistudio_plugin(ExamplePlugin
+    ExamplePlugin.cpp
+)
+
+# Create a target to build all plugins
+add_custom_target(all_plugins)
+
+# Add dependencies for plugins that exist
+if(TARGET ExamplePlugin)
+    add_dependencies(all_plugins ExamplePlugin)
+endif()
+
+# Install targets for existing plugins
+set(PLUGIN_TARGETS "")
+
+if(TARGET ExamplePlugin)
+    list(APPEND PLUGIN_TARGETS ExamplePlugin)
+endif()
+
+# Install plugins to the correct directory
+if(PLUGIN_TARGETS)
+    install(TARGETS ${PLUGIN_TARGETS}
+        LIBRARY DESTINATION plugins
+        RUNTIME DESTINATION plugins
+    )
+endif()

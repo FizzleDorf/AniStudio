@@ -24,7 +24,7 @@
 #include "ECS.h"
 #include "../Gui/GUI.h"
 #include "../Gui/AllViews.h"
-#include "../Plugins/PluginManager.hpp"
+#include "../Plugins/PluginManager.hpp"  // Keep this include
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -33,7 +33,7 @@
 
 using namespace ECS;
 using namespace GUI;
-// using namespace Plugin;
+using namespace Plugin;
 
 namespace ANI {
 
@@ -57,7 +57,7 @@ namespace ANI {
 		// Dependency accessors
 		EntityManager &GetEntityManager() { return mgr; }
 		ViewManager &GetViewManager() { return viewManager; }
-		// PluginManager &GetPluginManager() { return pluginManager; }
+		PluginManager &GetPluginManager() { return pluginManager; }
 		GLFWwindow *Window() const { return window; }
 		bool Run() const { return run; }
 
@@ -67,7 +67,7 @@ namespace ANI {
 		// Core dependencies
 		EntityManager mgr;
 		ViewManager viewManager;
-		// PluginManager pluginManager{ mgr, viewManager };
+		PluginManager pluginManager{ mgr, viewManager };
 		bool run;
 		GLFWwindow *window;
 		int videoWidth;

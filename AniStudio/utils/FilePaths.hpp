@@ -74,7 +74,7 @@ namespace Utils
 		static void SaveFilepathDefaults()
 		{
 			// Create the data directory if it does not exist
-			std::filesystem::create_directories("..\\data\\defaults");
+			std::filesystem::create_directories("../data/defaults");
 
 			// Create a JSON object to store paths
 			nlohmann::json json;
