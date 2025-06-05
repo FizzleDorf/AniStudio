@@ -23,6 +23,9 @@
 
 namespace Plugin {
 
+	// Forward declaration
+	class BasePlugin;
+
 	// Registry for managing plugin-registered components, systems, and views
 	class PluginRegistry {
 	public:
@@ -35,11 +38,11 @@ namespace Plugin {
 		// Component creator function type
 		using ComponentCreator = std::function<void(ECS::EntityID)>;
 
+		// Plugin creation factory function type
+		using PluginCreator = std::function<BasePlugin*()>;
+
 		// Initialize the registry with references to managers
-		static void Initialize(ECS::EntityManager* entityMgr, GUI::ViewManager* viewMgr) {
-			s_entityManager = entityMgr;
-			s_viewManager = viewMgr;
-		}
+		static void Initialize(ECS::EntityManager* entityMgr, GUI::ViewManager* viewMgr);
 
 		// Component registration
 		template<typename T>
@@ -122,15 +125,24 @@ namespace Plugin {
 			}
 		}
 
-		// Create an entity with specified components
-		static ECS::EntityID CreateEntity() {
-			if (!s_entityManager) {
-				std::cerr << "PluginRegistry: EntityManager not initialized!" << std::endl;
-				return 0;
+		// Plugin registration (for auto-registration at startup)
+		static void RegisterPlugin(const std::string& name, PluginCreator creator) {
+			if (s_pluginCreators.find(name) != s_pluginCreators.end()) {
+				std::cerr << "PluginRegistry: Plugin " << name << " already registered!" << std::endl;
+				return;
 			}
 
-			return s_entityManager->AddNewEntity();
+			s_pluginCreators[name] = creator;
+			std::cout << "PluginRegistry: Registered plugin creator: " << name << std::endl;
 		}
+
+		// Get all registered plugin creators
+		static const std::unordered_map<std::string, PluginCreator>& GetPluginCreators() {
+			return s_pluginCreators;
+		}
+
+		// Create an entity with specified components
+		static ECS::EntityID CreateEntity();
 
 		// Add component to entity by name
 		template<typename T>
@@ -150,45 +162,26 @@ namespace Plugin {
 		}
 
 		// Get registered component names
-		static std::vector<std::string> GetRegisteredComponents() {
-			if (!s_entityManager) {
-				return {};
-			}
-
-			return s_entityManager->GetAllRegisteredComponentNames();
-		}
+		static std::vector<std::string> GetRegisteredComponents();
 
 		// Utility functions for plugins
-		static ECS::EntityManager* GetEntityManager() {
-			return s_entityManager;
-		}
-
-		static GUI::ViewManager* GetViewManager() {
-			return s_viewManager;
-		}
+		static ECS::EntityManager* GetEntityManager();
+		static GUI::ViewManager* GetViewManager();
 
 		// Plugin cleanup - remove all registered items from a specific plugin
-		static void CleanupPlugin(const std::string& pluginName) {
-			// This would be used to track and cleanup plugin-specific registrations
-			// For now, we'll just log the cleanup
-			std::cout << "PluginRegistry: Cleaning up plugin: " << pluginName << std::endl;
-		}
+		static void CleanupPlugin(const std::string& pluginName);
 
 	private:
 		static ECS::EntityManager* s_entityManager;
 		static GUI::ViewManager* s_viewManager;
+
+		// Storage for plugin creators (for auto-registration)
+		static std::unordered_map<std::string, PluginCreator> s_pluginCreators;
 
 		// Storage for plugin-specific registrations (for cleanup)
 		static std::unordered_map<std::string, std::vector<std::string>> s_pluginComponents;
 		static std::unordered_map<std::string, std::vector<std::string>> s_pluginSystems;
 		static std::unordered_map<std::string, std::vector<std::string>> s_pluginViews;
 	};
-
-	// Static member definitions (these go in the .cpp file)
-	inline ECS::EntityManager* PluginRegistry::s_entityManager = nullptr;
-	inline GUI::ViewManager* PluginRegistry::s_viewManager = nullptr;
-	inline std::unordered_map<std::string, std::vector<std::string>> PluginRegistry::s_pluginComponents;
-	inline std::unordered_map<std::string, std::vector<std::string>> PluginRegistry::s_pluginSystems;
-	inline std::unordered_map<std::string, std::vector<std::string>> PluginRegistry::s_pluginViews;
 
 } // namespace Plugin

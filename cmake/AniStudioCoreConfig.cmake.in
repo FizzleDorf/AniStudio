@@ -1,0 +1,131 @@
+# AniStudioCoreConfig.cmake - CMake package config for AniStudioCore
+
+# Try to include the targets file (install directory case)
+set(TARGETS_FILE "${CMAKE_CURRENT_LIST_DIR}/AniStudioCoreTargets.cmake")
+if(EXISTS "${TARGETS_FILE}")
+    include("${TARGETS_FILE}")
+    message(STATUS "Loaded AniStudioCore targets from install directory")
+else()
+    # Build directory case - create imported target manually
+    message(STATUS "AniStudioCore targets file not found, creating manual import target")
+    
+    # Find the library file
+    set(LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../lib")
+    if(WIN32)
+        set(LIB_FILE "${LIB_DIR}/AniStudioCore.lib")
+    else()
+        set(LIB_FILE "${LIB_DIR}/libAniStudioCore.a")
+    endif()
+    
+    if(EXISTS "${LIB_FILE}")
+        # Create imported target manually
+        add_library(AniStudioCore::AniStudioCore STATIC IMPORTED)
+        set_target_properties(AniStudioCore::AniStudioCore PROPERTIES
+            IMPORTED_LOCATION "${LIB_FILE}"
+        )
+        
+        # Set include directories for build directory
+        set(SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../../AniStudio")
+        set(EXT_DIR "${CMAKE_CURRENT_LIST_DIR}/../../../../external")
+        
+        # Include directories that plugins need
+        set(ANISTUDIO_INCLUDE_DIRS
+            "${SRC_DIR}"
+            "${SRC_DIR}/ECS"
+            "${SRC_DIR}/ECS/Base"
+            "${SRC_DIR}/ECS/Systems"
+            "${SRC_DIR}/ECS/Components"
+            "${SRC_DIR}/ECS/Components/SDCPPComponents"
+            "${SRC_DIR}/ECS/Components/ImageComponents"
+            "${SRC_DIR}/ECS/Components/VideoComponents"
+            "${SRC_DIR}/GUI"
+            "${SRC_DIR}/GUI/Base"
+            "${SRC_DIR}/Plugins"
+            "${SRC_DIR}/utils"
+            "${EXT_DIR}/nlohmann_json"
+            "${EXT_DIR}/imgui"
+            "${EXT_DIR}/glm"
+            "${EXT_DIR}/stable-diffusion.cpp"
+        )
+        
+        set_target_properties(AniStudioCore::AniStudioCore PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${ANISTUDIO_INCLUDE_DIRS}"
+        )
+        
+        message(STATUS "Created AniStudioCore target from build directory")
+        message(STATUS "Library location: ${LIB_FILE}")
+    else()
+        message(FATAL_ERROR "AniStudioCore library not found at ${LIB_FILE}")
+    endif()
+endif()
+
+# Verify that the targets exist
+if(NOT TARGET AniStudioCore::AniStudioCore)
+    message(FATAL_ERROR "Expected target AniStudioCore::AniStudioCore not found!")
+endif()
+
+# Set up include directories and other variables that plugins might need
+get_target_property(ANISTUDIO_INCLUDE_DIRS AniStudioCore::AniStudioCore INTERFACE_INCLUDE_DIRECTORIES)
+
+# Plugin helper variables
+set(ANISTUDIO_PLUGIN_DIR "plugins" CACHE PATH "Directory where plugins should be installed")
+set(ANISTUDIO_VERSION "1.0.0")
+
+# Helper function for plugins to set up their targets properly
+function(anistudio_configure_plugin target_name)
+    # Set standard properties for AniStudio plugins
+    set_target_properties(${target_name} PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        POSITION_INDEPENDENT_CODE ON
+    )
+    
+    # Platform-specific plugin setup
+    if(WIN32)
+        # Windows DLL setup
+        set_target_properties(${target_name} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${ANISTUDIO_PLUGIN_DIR}
+            RUNTIME_OUTPUT_DIRECTORY_DEBUG ${ANISTUDIO_PLUGIN_DIR}
+            RUNTIME_OUTPUT_DIRECTORY_RELEASE ${ANISTUDIO_PLUGIN_DIR}
+        )
+        
+        target_compile_definitions(${target_name} PRIVATE
+            "PLUGIN_API=__declspec(dllexport)"
+            "ANI_CORE_API="
+        )
+    else()
+        # Linux/Mac shared library setup  
+        set_target_properties(${target_name} PROPERTIES
+            LIBRARY_OUTPUT_DIRECTORY ${ANISTUDIO_PLUGIN_DIR}
+            LIBRARY_OUTPUT_DIRECTORY_DEBUG ${ANISTUDIO_PLUGIN_DIR}
+            LIBRARY_OUTPUT_DIRECTORY_RELEASE ${ANISTUDIO_PLUGIN_DIR}
+        )
+        
+        target_compile_definitions(${target_name} PRIVATE
+            "PLUGIN_API=__attribute__((visibility(\"default\")))"
+            "ANI_CORE_API="
+        )
+    endif()
+    
+    # Disable precompiled headers for plugins to avoid conflicts
+    set_target_properties(${target_name} PROPERTIES
+        DISABLE_PRECOMPILE_HEADERS ON
+    )
+    
+    # Force disable PCH on MSVC
+    if(MSVC)
+        target_compile_options(${target_name} PRIVATE "/Y-")
+    endif()
+    
+    # Link to AniStudioCore
+    target_link_libraries(${target_name} PRIVATE AniStudioCore::AniStudioCore)
+endfunction()
+
+# Provide information about the installation
+message(STATUS "Found AniStudioCore version ${ANISTUDIO_VERSION}")
+if(ANISTUDIO_INCLUDE_DIRS)
+    message(STATUS "AniStudioCore include directories found: ${ANISTUDIO_INCLUDE_DIRS}")
+endif()
+
+set(AniStudioCore_FOUND TRUE)

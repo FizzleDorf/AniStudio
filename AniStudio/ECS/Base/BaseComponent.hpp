@@ -26,6 +26,9 @@
 #include <variant>
 #include <string>
 
+struct ImVec2;
+struct ImVec4;
+
 namespace UISchema {
     // Forward declaration of PropertyVariant
     using PropertyVariant = std::variant<

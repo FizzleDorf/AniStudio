@@ -83,7 +83,7 @@ void Engine::Init() {
 
     // Initialize managers
 	Utils::FilePaths::Init();
-	pluginManager.Init();
+	// pluginManager.Init();
     
     // Invalidate ID 0 for all entities and viewlists
     const EntityID temp = mgr.AddNewEntity();
