@@ -14,12 +14,26 @@
 
 #pragma once
 
-#include "ECS.h"
-#include "GUI.h"
+ // Forward declarations only - no includes to break circular dependencies
+namespace ECS {
+	class EntityManager;
+	class BaseSystem;
+	struct BaseComponent;
+	using EntityID = size_t;
+}
+
+namespace GUI {
+	class ViewManager;
+	class BaseView;
+	using ViewListID = size_t;
+}
+
 #include <functional>
 #include <unordered_map>
 #include <memory>
 #include <iostream>
+#include <vector>
+#include <string>
 
 namespace Plugin {
 
@@ -42,19 +56,24 @@ namespace Plugin {
 		using PluginCreator = std::function<BasePlugin*()>;
 
 		// Initialize the registry with references to managers
+		// Now takes pointers by reference to ensure we're working with the same instances
 		static void Initialize(ECS::EntityManager* entityMgr, GUI::ViewManager* viewMgr);
 
-		// Component registration
+		// Set managers directly (for plugins to use the host's managers)
+		static void SetManagers(ECS::EntityManager* entityMgr, GUI::ViewManager* viewMgr);
+
+		// Component registration - now requires managers to be passed in
 		template<typename T>
-		static void RegisterComponent(const std::string& name) {
-			if (!s_entityManager) {
-				std::cerr << "PluginRegistry: EntityManager not initialized!" << std::endl;
+		static void RegisterComponent(const std::string& name, ECS::EntityManager* entityMgr = nullptr) {
+			ECS::EntityManager* mgr = entityMgr ? entityMgr : GetEntityManager();
+			if (!mgr) {
+				std::cerr << "PluginRegistry: EntityManager not available for component registration!" << std::endl;
 				return;
 			}
 
 			try {
 				// Register with the entity manager's component system
-				s_entityManager->RegisterComponentName<T>(name);
+				mgr->RegisterComponentName<T>(name);
 
 				std::cout << "PluginRegistry: Registered component: " << name << std::endl;
 			}
@@ -64,16 +83,17 @@ namespace Plugin {
 			}
 		}
 
-		// System registration
+		// System registration - now requires managers to be passed in
 		template<typename T>
-		static void RegisterSystem() {
-			if (!s_entityManager) {
-				std::cerr << "PluginRegistry: EntityManager not initialized!" << std::endl;
+		static void RegisterSystem(ECS::EntityManager* entityMgr = nullptr) {
+			ECS::EntityManager* mgr = entityMgr ? entityMgr : GetEntityManager();
+			if (!mgr) {
+				std::cerr << "PluginRegistry: EntityManager not available for system registration!" << std::endl;
 				return;
 			}
 
 			try {
-				s_entityManager->RegisterSystem<T>();
+				mgr->RegisterSystem<T>();
 
 				std::cout << "PluginRegistry: Registered system: " << typeid(T).name() << std::endl;
 			}
@@ -83,16 +103,17 @@ namespace Plugin {
 			}
 		}
 
-		// View registration
+		// View registration - now requires managers to be passed in
 		template<typename T>
-		static void RegisterView(const std::string& name) {
-			if (!s_viewManager) {
-				std::cerr << "PluginRegistry: ViewManager not initialized!" << std::endl;
+		static void RegisterView(const std::string& name, GUI::ViewManager* viewMgr = nullptr) {
+			GUI::ViewManager* mgr = viewMgr ? viewMgr : GetViewManager();
+			if (!mgr) {
+				std::cerr << "PluginRegistry: ViewManager not available for view registration!" << std::endl;
 				return;
 			}
 
 			try {
-				s_viewManager->RegisterViewType<T>(name);
+				mgr->RegisterViewType<T>(name);
 
 				std::cout << "PluginRegistry: Registered view: " << name << std::endl;
 			}
@@ -102,18 +123,24 @@ namespace Plugin {
 			}
 		}
 
-		// Create and register a view instance
+		// Create and register a view instance - now requires managers to be passed in
 		template<typename T>
-		static GUI::ViewListID CreateView(const std::string& name) {
-			if (!s_viewManager || !s_entityManager) {
-				std::cerr << "PluginRegistry: Managers not initialized!" << std::endl;
+		static GUI::ViewListID CreateView(const std::string& name,
+			ECS::EntityManager* entityMgr = nullptr,
+			GUI::ViewManager* viewMgr = nullptr) {
+			ECS::EntityManager* eMgr = entityMgr ? entityMgr : GetEntityManager();
+			GUI::ViewManager* vMgr = viewMgr ? viewMgr : GetViewManager();
+
+			if (!vMgr || !eMgr) {
+				std::cerr << "PluginRegistry: Managers not available for view creation! EntityMgr: "
+					<< eMgr << ", ViewMgr: " << vMgr << std::endl;
 				return 0;
 			}
 
 			try {
-				auto viewID = s_viewManager->CreateView();
-				s_viewManager->AddView<T>(viewID, T(*s_entityManager));
-				s_viewManager->GetView<T>(viewID).Init();
+				auto viewID = vMgr->CreateView();
+				vMgr->AddView<T>(viewID, T(*eMgr));
+				vMgr->GetView<T>(viewID).Init();
 
 				std::cout << "PluginRegistry: Created view instance: " << name << std::endl;
 				return viewID;
@@ -142,18 +169,19 @@ namespace Plugin {
 		}
 
 		// Create an entity with specified components
-		static ECS::EntityID CreateEntity();
+		static ECS::EntityID CreateEntity(ECS::EntityManager* entityMgr = nullptr);
 
 		// Add component to entity by name
 		template<typename T>
-		static void AddComponentToEntity(ECS::EntityID entityID) {
-			if (!s_entityManager) {
-				std::cerr << "PluginRegistry: EntityManager not initialized!" << std::endl;
+		static void AddComponentToEntity(ECS::EntityID entityID, ECS::EntityManager* entityMgr = nullptr) {
+			ECS::EntityManager* mgr = entityMgr ? entityMgr : GetEntityManager();
+			if (!mgr) {
+				std::cerr << "PluginRegistry: EntityManager not available!" << std::endl;
 				return;
 			}
 
 			try {
-				s_entityManager->AddComponent<T>(entityID);
+				mgr->AddComponent<T>(entityID);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "PluginRegistry: Failed to add component to entity " << entityID
@@ -162,9 +190,9 @@ namespace Plugin {
 		}
 
 		// Get registered component names
-		static std::vector<std::string> GetRegisteredComponents();
+		static std::vector<std::string> GetRegisteredComponents(ECS::EntityManager* entityMgr = nullptr);
 
-		// Utility functions for plugins
+		// Utility functions for plugins - these will use the callback system
 		static ECS::EntityManager* GetEntityManager();
 		static GUI::ViewManager* GetViewManager();
 
@@ -172,6 +200,7 @@ namespace Plugin {
 		static void CleanupPlugin(const std::string& pluginName);
 
 	private:
+		// Local static storage for this binary's instance
 		static ECS::EntityManager* s_entityManager;
 		static GUI::ViewManager* s_viewManager;
 
@@ -183,5 +212,9 @@ namespace Plugin {
 		static std::unordered_map<std::string, std::vector<std::string>> s_pluginSystems;
 		static std::unordered_map<std::string, std::vector<std::string>> s_pluginViews;
 	};
+
+	// Helper functions for cross-binary manager access
+	ECS::EntityManager* GetHostEntityManagerViaPointer();
+	GUI::ViewManager* GetHostViewManagerViaPointer();
 
 } // namespace Plugin

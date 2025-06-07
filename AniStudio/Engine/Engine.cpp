@@ -1,5 +1,8 @@
 #include "Engine.hpp"
 #include "PluginManager.hpp"
+#include "PluginRegistry.hpp"
+#include "PluginInterface.hpp"
+#include "PluginAPI.hpp"
 #include <filesystem>
 #include <iostream>
 
@@ -32,131 +35,127 @@ void Engine::Quit() { run = false; }
 
 void Engine::Init() {
 	Utils::FilePaths::LoadFilePathDefaults();
-    if (!glfwInit()) {
-        throw std::runtime_error("Failed to initialize GLFW");
-    }
+	if (!glfwInit()) {
+		throw std::runtime_error("Failed to initialize GLFW");
+	}
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-    window = glfwCreateWindow(videoWidth, videoHeight, "AniStudio", nullptr, nullptr);
-    if (!window) {
-        throw std::runtime_error("Failed to create GLFW window");
-    }
+	window = glfwCreateWindow(videoWidth, videoHeight, "AniStudio", nullptr, nullptr);
+	if (!window) {
+		throw std::runtime_error("Failed to create GLFW window");
+	}
 
-    glfwMakeContextCurrent(window);
-    glfwSetWindowCloseCallback(window, WindowCloseCallback);
-    glfwSwapInterval(1); // Enable vsync
+	glfwMakeContextCurrent(window);
+	glfwSetWindowCloseCallback(window, WindowCloseCallback);
+	glfwSwapInterval(1);
 
-    if (glewInit() != GLEW_OK) {
-        throw std::runtime_error("Failed to initialize GLEW");
-    }
-    glViewport(0, 0, videoWidth, videoHeight);
-    
-    // Initialize ImGui
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
+	if (glewInit() != GLEW_OK) {
+		throw std::runtime_error("Failed to initialize GLEW");
+	}
+	glViewport(0, 0, videoWidth, videoHeight);
 
-    iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
-    // ImGui::LoadIniSettingsFromDisk(iniFilePath.c_str());
+	// Initialize ImGui
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
 
-    ImGuiIO &io = ImGui::GetIO();
-    io.IniFilename = iniFilePath.c_str();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+	iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
 
-    ImGui::StyleColorsDark();
-    ImGuiStyle &style = ImGui::GetStyle();
-    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-        style.WindowRounding = 0.0f;
-        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-    }
+	ImGuiIO &io = ImGui::GetIO();
+	io.IniFilename = iniFilePath.c_str();
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-    LoadStyleFromFile(style, "../data/defaults/style.json");
+	ImGui::StyleColorsDark();
+	ImGuiStyle &style = ImGui::GetStyle();
+	if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+		style.WindowRounding = 0.0f;
+		style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+	}
 
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init("#version 330");
+	LoadStyleFromFile(style, "../data/defaults/style.json");
 
-    // Initialize managers
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 330");
+
+	// Initialize FilePaths
 	Utils::FilePaths::Init();
-	// pluginManager.Init();
-    
-    // Invalidate ID 0 for all entities and viewlists
-    const EntityID temp = mgr.AddNewEntity();
-    mgr.DestroyEntity(temp);
-    auto tempView = viewManager.CreateView();
-    viewManager.DestroyView(tempView);
 
-    // TODO: move registers to other file
-    // Register Views
-    viewManager.RegisterViewType<DebugView>("DebugView");
-    viewManager.RegisterViewType<SettingsView>("SettingsView");
-    viewManager.RegisterViewType<DiffusionView>("DiffusionView");
-    viewManager.RegisterViewType<ImageView>("ImageView");
-    viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
-    viewManager.RegisterViewType<ConvertView>("ConvertView");
-    viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
-    viewManager.RegisterViewType<SequencerView>("SequencerView");
-    viewManager.RegisterViewType<PluginView>("PluginView");
-    viewManager.RegisterViewType<NodeView>("NodeView");
+	// Invalidate ID 0 for all entities and viewlists
+	const EntityID temp = mgr.AddNewEntity();
+	mgr.DestroyEntity(temp);
+	auto tempView = viewManager.CreateView();
+	viewManager.DestroyView(tempView);
+
+	// Register Views
+	viewManager.RegisterViewType<DebugView>("DebugView");
+	viewManager.RegisterViewType<SettingsView>("SettingsView");
+	viewManager.RegisterViewType<DiffusionView>("DiffusionView");
+	viewManager.RegisterViewType<ImageView>("ImageView");
+	viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
+	viewManager.RegisterViewType<ConvertView>("ConvertView");
+	viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
+	viewManager.RegisterViewType<SequencerView>("SequencerView");
+	viewManager.RegisterViewType<PluginView>("PluginView");
+	viewManager.RegisterViewType<NodeView>("NodeView");
 	viewManager.RegisterViewType<UpscaleView>("UpscaleView");
 	viewManager.RegisterViewType<VideoView>("VideoView");
 	viewManager.RegisterViewType<VideoView>("VideoSequencerView");
-	
-    // Register Component Names
-    mgr.RegisterComponentName<ModelComponent>("Model");
-    mgr.RegisterComponentName<ClipLComponent>("ClipL");
-    mgr.RegisterComponentName<ClipGComponent>("ClipG");
-    mgr.RegisterComponentName<T5XXLComponent>("T5XXL");
-    mgr.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
-    mgr.RegisterComponentName<LatentComponent>("Latent");
-    mgr.RegisterComponentName<LoraComponent>("Lora");
-    mgr.RegisterComponentName<PromptComponent>("Prompt");
-    mgr.RegisterComponentName<SamplerComponent>("Sampler");
-    mgr.RegisterComponentName<GuidanceComponent>("Guidance");
+
+	// Register Component Names
+	mgr.RegisterComponentName<ModelComponent>("Model");
+	mgr.RegisterComponentName<ClipLComponent>("ClipL");
+	mgr.RegisterComponentName<ClipGComponent>("ClipG");
+	mgr.RegisterComponentName<T5XXLComponent>("T5XXL");
+	mgr.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
+	mgr.RegisterComponentName<LatentComponent>("Latent");
+	mgr.RegisterComponentName<LoraComponent>("Lora");
+	mgr.RegisterComponentName<PromptComponent>("Prompt");
+	mgr.RegisterComponentName<SamplerComponent>("Sampler");
+	mgr.RegisterComponentName<GuidanceComponent>("Guidance");
 	mgr.RegisterComponentName<EsrganComponent>("Esrgan");
-    mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
-    mgr.RegisterComponentName<VaeComponent>("Vae");
-    mgr.RegisterComponentName<ImageComponent>("Image");
-    mgr.RegisterComponentName<InputImageComponent>("InputImage");
-    mgr.RegisterComponentName<OutputImageComponent>("OutputImage");
-    mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
-    mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
-    mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
+	mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
+	mgr.RegisterComponentName<VaeComponent>("Vae");
+	mgr.RegisterComponentName<ImageComponent>("Image");
+	mgr.RegisterComponentName<InputImageComponent>("InputImage");
+	mgr.RegisterComponentName<OutputImageComponent>("OutputImage");
+	mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
+	mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
+	mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
 	mgr.RegisterComponentName<VideoComponent>("Video");
 	mgr.RegisterComponentName<InputVideoComponent>("InputVideo");
 	mgr.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 
-    // Register core systems
-    mgr.RegisterSystem<SDCPPSystem>();
-    mgr.RegisterSystem<ImageSystem>();    
+	// Register core systems
+	mgr.RegisterSystem<SDCPPSystem>();
+	mgr.RegisterSystem<ImageSystem>();
 	mgr.RegisterSystem<VideoSystem>();
-
-    // Create a NodeView instance
-    /*auto nodeViewID = viewManager.CreateView();
-    viewManager.AddView<NodeView>(nodeViewID, NodeView(mgr));
-    viewManager.GetView<NodeView>(nodeViewID).Init();*/	
 
 	const auto upscaleViewID = viewManager.CreateView();
 	viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(mgr));
 	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
 
 	const auto videoViewID = viewManager.CreateView();
-	// viewManager.AddView<VideoSequencerView>(videoViewID, VideoSequencerView(mgr));
 	viewManager.AddView<VideoView>(videoViewID, VideoView(mgr));
 	viewManager.GetView<VideoView>(videoViewID).Init();
-	// viewManager.GetView<VideoSequencerView>(videoViewID).Init();
 
-    const auto diffusionViewID = viewManager.CreateView();
-    viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
-    viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
+	const auto diffusionViewID = viewManager.CreateView();
+	viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(mgr));
+	viewManager.AddView<ImageView>(diffusionViewID, ImageView(mgr));
 
-    viewManager.GetView<DiffusionView>(diffusionViewID).Init();
-    viewManager.GetView<ImageView>(diffusionViewID).Init();
+	viewManager.GetView<DiffusionView>(diffusionViewID).Init();
+	viewManager.GetView<ImageView>(diffusionViewID).Init();
+
+	const auto pluginViewID = viewManager.CreateView();
+	viewManager.AddView<PluginView>(pluginViewID, PluginView(mgr, pluginManager));
+	viewManager.GetView<PluginView>(pluginViewID).Init();
+
+	pluginManager.Init();
 }
 
 void Engine::Update(const float deltaT) {
@@ -179,25 +178,79 @@ void Engine::Update(const float deltaT) {
 }
 
 void Engine::Draw() {
-    ImGui_ImplOpenGL3_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
 
-    ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
+	ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
-    // Render Views before ImGui's Render
-    ShowMenuBar(window);
-    viewManager.Render();
+	try {
+		ShowMenuBar(window);
+		viewManager.Render();
+	}
+	catch (const std::exception& e) {
+		std::cerr << "RENDER CRASH: " << e.what() << std::endl;
+		if (ImGui::Begin("RENDER ERROR")) {
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Render Error: %s", e.what());
+		}
+		ImGui::End();
+	}
+	catch (...) {
+		std::cerr << "UNKNOWN RENDER CRASH" << std::endl;
+		if (ImGui::Begin("RENDER ERROR")) {
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Unknown render error");
+		}
+		ImGui::End();
+	}
 
-    ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-    if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-        ImGui::UpdatePlatformWindows();
-        ImGui::RenderPlatformWindowsDefault();
-    }
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+	}
 
-    glfwSwapBuffers(window);
+	glfwSwapBuffers(window);
+}
+
+// Plugin interface functions - exported by the main executable
+extern "C" {
+	ANI_CORE_API ECS::EntityManager* GetHostEntityManager() {
+		return &Core.GetEntityManager();
+	}
+
+	ANI_CORE_API GUI::ViewManager* GetHostViewManager() {
+		return &Core.GetViewManager();
+	}
+
+	ANI_CORE_API ImGuiContext* GetHostImGuiContext() {
+		return ImGui::GetCurrentContext();
+	}
+
+	ANI_CORE_API ImGuiMemAllocFunc GetHostImGuiAllocFunc() {
+		ImGuiMemAllocFunc allocFunc;
+		ImGuiMemFreeFunc freeFunc;
+		void* userData;
+		ImGui::GetAllocatorFunctions(&allocFunc, &freeFunc, &userData);
+		return allocFunc;
+	}
+
+	ANI_CORE_API ImGuiMemFreeFunc GetHostImGuiFreeFunc() {
+		ImGuiMemAllocFunc allocFunc;
+		ImGuiMemFreeFunc freeFunc;
+		void* userData;
+		ImGui::GetAllocatorFunctions(&allocFunc, &freeFunc, &userData);
+		return freeFunc;
+	}
+
+	ANI_CORE_API void* GetHostImGuiUserData() {
+		ImGuiMemAllocFunc allocFunc;
+		ImGuiMemFreeFunc freeFunc;
+		void* userData;
+		ImGui::GetAllocatorFunctions(&allocFunc, &freeFunc, &userData);
+		return userData;
+	}
 }
 
 } // namespace ANI

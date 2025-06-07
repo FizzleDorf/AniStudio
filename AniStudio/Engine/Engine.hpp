@@ -24,7 +24,7 @@
 #include "ECS.h"
 #include "../Gui/GUI.h"
 #include "../Gui/AllViews.h"
-#include "../Plugins/PluginManager.hpp"  // Keep this include
+#include "../Plugins/PluginManager.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>

@@ -1,168 +1,286 @@
+/*
+	Fixed PluginView.cpp - Properly handles plugin loading/unloading without crashing
+*/
+
 #include "PluginView.hpp"
-#include <iostream>
-#include <filesystem>
-#include <iomanip>
-#include <sstream>
+#include "../Events/Events.hpp"
+#include <imgui.h>
+#include <algorithm>
 
 namespace GUI {
 
 	PluginView::PluginView(ECS::EntityManager& entityMgr, Plugin::PluginManager& pluginMgr)
 		: BaseView(entityMgr), pluginManager(pluginMgr) {
-		viewName = "Plugin Manager";
+		viewName = "PluginView";
+	}
 
-		// Initialize with default plugin directory
-		std::string defaultDir = "./plugins";
-		strncpy(watchDirectoryBuffer, defaultDir.c_str(), sizeof(watchDirectoryBuffer) - 1);
-		watchDirectoryBuffer[sizeof(watchDirectoryBuffer) - 1] = '\0';
+	PluginView::~PluginView() {
+		// Clear callbacks to prevent calling into a destroyed object
+		pluginManager.SetLoadCallback(nullptr);
+		pluginManager.SetUnloadCallback(nullptr);
 	}
 
 	void PluginView::Init() {
-		// Set up callbacks
-		pluginManager.SetLoadCallback([this](const std::string& name, bool success) {
-			OnPluginLoaded(name, success);
+		std::cout << "PluginView initialized" << std::endl;
+
+		// Set up callbacks for plugin events with proper safety checks
+		pluginManager.SetLoadCallback([this](const std::string& name, bool isReload) {
+			try {
+				// Check if this object is still valid by checking a member
+				if (this && !viewName.empty()) {
+					OnPluginLoaded(name, isReload);
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception in load callback: " << e.what() << std::endl;
+			}
+			catch (...) {
+				std::cerr << "Unknown exception in load callback" << std::endl;
+			}
 		});
 
 		pluginManager.SetUnloadCallback([this](const std::string& name) {
-			OnPluginUnloaded(name);
+			try {
+				// Check if this object is still valid by checking a member
+				if (this && !viewName.empty()) {
+					OnPluginUnloaded(name);
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception in unload callback: " << e.what() << std::endl;
+			}
+			catch (...) {
+				std::cerr << "Unknown exception in unload callback" << std::endl;
+			}
 		});
 
-		// Start hot reload if directory exists
-		if (std::filesystem::exists(watchDirectoryBuffer)) {
-			pluginManager.StartHotReload(watchDirectoryBuffer, std::chrono::milliseconds(hotReloadInterval));
-		}
-
-		std::cout << "PluginView initialized" << std::endl;
-	}
-
-	void PluginView::Update(const float deltaT) {
-		// Update statistics
-		lastStats = pluginManager.GetStats();
+		// Initial scan of plugins
+		RefreshPluginList();
 	}
 
 	void PluginView::Render() {
-		ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-
 		if (ImGui::Begin("Plugin Manager")) {
-			// Main tab bar
-			if (ImGui::BeginTabBar("PluginTabs")) {
+			// Plugin directory controls
+			RenderDirectoryControls();
 
-				// Plugin List Tab
-				if (ImGui::BeginTabItem("Plugins")) {
-					RenderPluginList();
-					ImGui::EndTabItem();
-				}
+			ImGui::Separator();
 
-				// Hot Reload Tab
-				if (ImGui::BeginTabItem("Hot Reload")) {
-					RenderHotReloadControls();
-					ImGui::EndTabItem();
-				}
+			// Hot reload controls
+			RenderHotReloadControls();
 
-				// Statistics Tab
-				if (ImGui::BeginTabItem("Statistics")) {
-					RenderPluginStatistics();
-					ImGui::EndTabItem();
-				}
+			ImGui::Separator();
 
-				ImGui::EndTabBar();
-			}
+			// Plugin statistics
+			RenderPluginStats();
 
-			// Plugin details popup
-			if (showPluginDetails) {
-				RenderPluginDetails();
-			}
+			ImGui::Separator();
 
-			// File dialog for loading plugins
-			if (ImGuiFileDialog::Instance()->Display("LoadPluginDialog", 32, ImVec2(700, 400))) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					LoadPluginFromDialog();
-				}
-				ImGuiFileDialog::Instance()->Close();
-			}
+			// Plugin list
+			RenderPluginList();
+
+			ImGui::Separator();
+
+			// Plugin details (if one is selected)
+			RenderPluginDetails();
 		}
 		ImGui::End();
 	}
 
+	void PluginView::Update(const float deltaT) {
+		// Update plugin manager
+		pluginManager.Update(deltaT);
+
+		// Periodically refresh the plugin list
+		refreshTimer += deltaT;
+		if (refreshTimer >= 2.0f) { // Refresh every 2 seconds
+			RefreshPluginList();
+			refreshTimer = 0.0f;
+		}
+	}
+
+	void PluginView::RefreshPluginList() {
+		try {
+			pluginManager.RefreshPluginDirectory();
+			cachedPluginInfo = pluginManager.GetAllPluginInfo();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error refreshing plugin list: " << e.what() << std::endl;
+		}
+	}
+
+	void PluginView::OnPluginLoaded(const std::string& name, bool isReload) {
+		std::cout << "PluginView load callback called for: " << name << std::endl;
+
+		// Add to loaded plugins list if not already there
+		if (std::find(loadedPlugins.begin(), loadedPlugins.end(), name) == loadedPlugins.end()) {
+			loadedPlugins.push_back(name);
+		}
+
+		// Update cached info
+		RefreshPluginList();
+
+		// Show notification
+		std::string message = isReload ? "Reloaded: " + name : "Loaded: " + name;
+		notifications.push_back({ message, ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 3.0f });
+
+		std::cout << "Plugin " << name << " was loaded" << std::endl;
+	}
+
+	void PluginView::OnPluginUnloaded(const std::string& name) {
+		std::cout << "PluginView unload callback called for: " << name << std::endl;
+
+		// Remove from loaded plugins list
+		loadedPlugins.erase(
+			std::remove(loadedPlugins.begin(), loadedPlugins.end(), name),
+			loadedPlugins.end()
+		);
+
+		// Update cached info
+		RefreshPluginList();
+
+		// Show notification
+		notifications.push_back({ "Unloaded: " + name, ImVec4(1.0f, 0.5f, 0.0f, 1.0f), 3.0f });
+
+		// Clear selection if this plugin was selected
+		if (selectedPlugin == name) {
+			selectedPlugin.clear();
+		}
+
+		std::cout << "Plugin " << name << " was unloaded" << std::endl;
+	}
+
+	void PluginView::RenderDirectoryControls() {
+		ImGui::Text("Plugin Directory: %s", pluginManager.GetWatchDirectory().c_str());
+
+		if (ImGui::Button("Refresh Directory")) {
+			RefreshPluginList();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Open Directory")) {
+			// Platform-specific code to open file explorer
+#ifdef _WIN32
+			std::string command = "explorer \"" + pluginManager.GetWatchDirectory() + "\"";
+			system(command.c_str());
+#elif defined(__APPLE__)
+			std::string command = "open \"" + pluginManager.GetWatchDirectory() + "\"";
+			system(command.c_str());
+#else
+			std::string command = "xdg-open \"" + pluginManager.GetWatchDirectory() + "\"";
+			system(command.c_str());
+#endif
+		}
+	}
+
+	void PluginView::RenderHotReloadControls() {
+		bool hotReloadActive = pluginManager.IsHotReloadActive();
+
+		if (hotReloadActive) {
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Hot Reload: Active");
+			if (ImGui::Button("Stop Hot Reload")) {
+				pluginManager.StopHotReload();
+			}
+		}
+		else {
+			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Hot Reload: Inactive");
+			if (ImGui::Button("Start Hot Reload")) {
+				pluginManager.StartHotReload(pluginManager.GetWatchDirectory());
+			}
+		}
+	}
+
+	void PluginView::RenderPluginStats() {
+		auto stats = pluginManager.GetStats();
+
+		ImGui::Text("Total Plugins: %zu", stats.totalPlugins);
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Loaded: %zu", stats.loadedPlugins);
+		ImGui::SameLine();
+		if (stats.errorPlugins > 0) {
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Errors: %zu", stats.errorPlugins);
+		}
+		else {
+			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Errors: 0");
+		}
+	}
+
 	void PluginView::RenderPluginList() {
-		// Load controls
-		RenderLoadControls();
+		ImGui::Text("Available Plugins:");
 
-		ImGui::Separator();
-
-		// Plugin table
-		if (ImGui::BeginTable("PluginTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable |
-			ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY)) {
-
-			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 80);
-			ImGui::TableSetupColumn("Version", ImGuiTableColumnFlags_WidthFixed, 80);
-			ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 120);
+		if (ImGui::BeginTable("PluginsTable", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg)) {
+			ImGui::TableSetupColumn("Name");
+			ImGui::TableSetupColumn("Status");
+			ImGui::TableSetupColumn("Version");
+			ImGui::TableSetupColumn("Actions");
 			ImGui::TableHeadersRow();
 
-			auto plugins = pluginManager.GetAllPluginInfo();
-
-			for (const auto& plugin : plugins) {
+			for (const auto& plugin : cachedPluginInfo) {
 				ImGui::TableNextRow();
 
-				// Name
+				// Name column
 				ImGui::TableNextColumn();
-				if (ImGui::Selectable(plugin.name.c_str(), selectedPlugin == plugin.name,
-					ImGuiSelectableFlags_SpanAllColumns)) {
+				if (ImGui::Selectable(plugin.name.c_str(), selectedPlugin == plugin.name, ImGuiSelectableFlags_SpanAllColumns)) {
 					selectedPlugin = plugin.name;
 				}
 
-				// Double-click to show details
-				if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
-					showPluginDetails = true;
+				// Status column
+				ImGui::TableNextColumn();
+				if (plugin.hasError) {
+					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error");
+				}
+				else if (plugin.isLoaded) {
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Loaded");
+				}
+				else {
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Unloaded");
 				}
 
-				// Status
-				ImGui::TableNextColumn();
-				ImVec4 statusColor = GetStatusColor(plugin);
-				ImGui::TextColored(statusColor, "%s", GetStatusText(plugin));
-
-				// Version
+				// Version column
 				ImGui::TableNextColumn();
 				if (plugin.getVersionFunc && plugin.isLoaded) {
 					ImGui::Text("%s", plugin.getVersionFunc());
 				}
 				else {
-					ImGui::TextDisabled("N/A");
+					ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Unknown");
 				}
 
-				// Path
+				// Actions column
 				ImGui::TableNextColumn();
-				std::filesystem::path p(plugin.path);
-				std::string shortPath = p.filename().string();
-				ImGui::Text("%s", shortPath.c_str());
-				if (ImGui::IsItemHovered()) {
-					ImGui::SetTooltip("%s", plugin.path.c_str());
-				}
 
-				// Actions
-				ImGui::TableNextColumn();
 				ImGui::PushID(plugin.name.c_str());
 
 				if (plugin.isLoaded) {
-					if (ImGui::SmallButton("Unload")) {
-						pluginManager.UnloadPlugin(plugin.name);
+					if (ImGui::Button("Unload")) {
+						try {
+							pluginManager.UnloadPlugin(plugin.name);
+						}
+						catch (const std::exception& e) {
+							notifications.push_back({ "Error unloading " + plugin.name + ": " + e.what(),
+								ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 5.0f });
+						}
 					}
 					ImGui::SameLine();
-					if (ImGui::SmallButton("Reload")) {
-						pluginManager.ReloadPlugin(plugin.name);
+					if (ImGui::Button("Reload")) {
+						try {
+							pluginManager.ReloadPlugin(plugin.name);
+						}
+						catch (const std::exception& e) {
+							notifications.push_back({ "Error reloading " + plugin.name + ": " + e.what(),
+								ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 5.0f });
+						}
 					}
 				}
 				else {
-					if (ImGui::SmallButton("Load")) {
-						pluginManager.LoadPlugin(plugin.path);
+					if (ImGui::Button("Load")) {
+						try {
+							std::cout << "Plugin load initiated successfully" << std::endl;
+							pluginManager.LoadPlugin(plugin.path);
+						}
+						catch (const std::exception& e) {
+							notifications.push_back({ "Error loading " + plugin.name + ": " + e.what(),
+								ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 5.0f });
+						}
 					}
-				}
-
-				ImGui::SameLine();
-				if (ImGui::SmallButton("Details")) {
-					selectedPlugin = plugin.name;
-					showPluginDetails = true;
 				}
 
 				ImGui::PopID();
@@ -171,306 +289,104 @@ namespace GUI {
 			ImGui::EndTable();
 		}
 
-		// Context menu
-		if (ImGui::BeginPopupContextWindow()) {
-			if (ImGui::MenuItem("Refresh Directory")) {
-				pluginManager.RefreshPluginDirectory();
-			}
-			if (ImGui::MenuItem("Unload All")) {
-				pluginManager.UnloadAllPlugins();
-			}
-			ImGui::EndPopup();
-		}
+		// Render notifications
+		RenderNotifications();
 	}
 
 	void PluginView::RenderPluginDetails() {
-		ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_FirstUseEver);
+		if (selectedPlugin.empty()) {
+			return;
+		}
 
-		if (ImGui::Begin("Plugin Details", &showPluginDetails)) {
-			auto* info = pluginManager.GetPluginInfo(selectedPlugin);
-			if (!info) {
-				ImGui::Text("Plugin not found: %s", selectedPlugin.c_str());
+		auto* pluginInfo = pluginManager.GetPluginInfo(selectedPlugin);
+		if (!pluginInfo) {
+			return;
+		}
+
+		ImGui::Text("Plugin Details: %s", selectedPlugin.c_str());
+
+		if (ImGui::BeginTable("DetailsTable", 2, ImGuiTableFlags_Borders)) {
+			ImGui::TableSetupColumn("Property");
+			ImGui::TableSetupColumn("Value");
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text("Path");
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", pluginInfo->path.c_str());
+
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			ImGui::Text("Status");
+			ImGui::TableNextColumn();
+			if (pluginInfo->hasError) {
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", pluginInfo->errorMessage.c_str());
+			}
+			else if (pluginInfo->isLoaded) {
+				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Loaded");
 			}
 			else {
-				// Basic info
-				ImGui::Text("Name: %s", info->name.c_str());
-				ImGui::Text("Path: %s", info->path.c_str());
-
-				if (info->getNameFunc && info->isLoaded) {
-					ImGui::Text("Display Name: %s", info->getNameFunc());
-				}
-
-				if (info->getVersionFunc && info->isLoaded) {
-					ImGui::Text("Version: %s", info->getVersionFunc());
-				}
-
-				// Status
-				ImVec4 statusColor = GetStatusColor(*info);
-				ImGui::TextColored(statusColor, "Status: %s", GetStatusText(*info));
-
-				if (info->hasError) {
-					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error: %s", info->errorMessage.c_str());
-				}
-
-				// File info
-				if (std::filesystem::exists(info->path)) {
-					auto fileSize = std::filesystem::file_size(info->path);
-					ImGui::Text("File Size: %s", FormatFileSize(fileSize).c_str());
-
-					auto writeTime = std::filesystem::last_write_time(info->path);
-					auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-						writeTime - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
-					auto cftime = std::chrono::system_clock::to_time_t(sctp);
-					ImGui::Text("Last Modified: %s", std::ctime(&cftime));
-				}
-
-				ImGui::Separator();
-
-				// Actions
-				if (info->isLoaded) {
-					if (ImGui::Button("Unload")) {
-						pluginManager.UnloadPlugin(info->name);
-						showPluginDetails = false;
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Reload")) {
-						pluginManager.ReloadPlugin(info->name);
-					}
-				}
-				else {
-					if (ImGui::Button("Load")) {
-						pluginManager.LoadPlugin(info->path);
-					}
-				}
-
-				ImGui::SameLine();
-				if (ImGui::Button("Close")) {
-					showPluginDetails = false;
-				}
+				ImGui::Text("Unloaded");
 			}
+
+			if (pluginInfo->isLoaded && pluginInfo->getNameFunc) {
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("Plugin Name");
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", pluginInfo->getNameFunc());
+			}
+
+			if (pluginInfo->isLoaded && pluginInfo->getVersionFunc) {
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::Text("Version");
+				ImGui::TableNextColumn();
+				ImGui::Text("%s", pluginInfo->getVersionFunc());
+			}
+
+			ImGui::EndTable();
 		}
-		ImGui::End();
 	}
 
-	void PluginView::RenderHotReloadControls() {
-		// Hot reload status
-		bool hotReloadActive = pluginManager.IsHotReloadActive();
-		ImGui::Text("Hot Reload Status: %s", hotReloadActive ? "Active" : "Inactive");
-
-		ImGui::Separator();
-
-		// Watch directory
-		ImGui::Text("Watch Directory:");
-		ImGui::SameLine();
-		if (ImGui::InputText("##WatchDir", watchDirectoryBuffer, sizeof(watchDirectoryBuffer))) {
-			// Directory changed
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Browse##WatchDir")) {
-			IGFD::FileDialogConfig config;
-			config.path = watchDirectoryBuffer;
-			ImGuiFileDialog::Instance()->OpenDialog("ChooseWatchDir", "Choose Watch Directory", nullptr, config);
-		}
-
-		// Check interval
-		ImGui::Text("Check Interval (ms):");
-		ImGui::SameLine();
-		ImGui::SliderInt("##Interval", &hotReloadInterval, 100, 5000);
-
-		// Auto-load new plugins
-		ImGui::Checkbox("Auto-load new plugins", &autoLoadNewPlugins);
-
-		ImGui::Separator();
-
-		// Controls
-		if (hotReloadActive) {
-			if (ImGui::Button("Stop Hot Reload")) {
-				pluginManager.StopHotReload();
+	void PluginView::RenderNotifications() {
+		// Update and render notifications
+		for (auto it = notifications.begin(); it != notifications.end();) {
+			it->timeRemaining -= ImGui::GetIO().DeltaTime;
+			if (it->timeRemaining <= 0.0f) {
+				it = notifications.erase(it);
 			}
-			ImGui::SameLine();
-			if (ImGui::Button("Restart with New Settings")) {
-				pluginManager.StopHotReload();
-				pluginManager.StartHotReload(watchDirectoryBuffer, std::chrono::milliseconds(hotReloadInterval));
-			}
-		}
-		else {
-			if (ImGui::Button("Start Hot Reload")) {
-				pluginManager.StartHotReload(watchDirectoryBuffer, std::chrono::milliseconds(hotReloadInterval));
+			else {
+				++it;
 			}
 		}
 
-		ImGui::SameLine();
-		if (ImGui::Button("Refresh Directory")) {
-			pluginManager.RefreshPluginDirectory();
-		}
-
-		// Directory browser dialog
-		if (ImGuiFileDialog::Instance()->Display("ChooseWatchDir", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
-				strncpy(watchDirectoryBuffer, selectedDir.c_str(), sizeof(watchDirectoryBuffer) - 1);
-				watchDirectoryBuffer[sizeof(watchDirectoryBuffer) - 1] = '\0';
+		// Render active notifications
+		if (!notifications.empty()) {
+			ImGui::Separator();
+			ImGui::Text("Notifications:");
+			for (const auto& notification : notifications) {
+				ImGui::TextColored(notification.color, "%s", notification.message.c_str());
 			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-	}
-
-	void PluginView::RenderPluginStatistics() {
-		ImGui::Text("Plugin Statistics");
-		ImGui::Separator();
-
-		// Basic stats
-		ImGui::Text("Total Plugins: %zu", lastStats.totalPlugins);
-		ImGui::Text("Loaded Plugins: %zu", lastStats.loadedPlugins);
-		ImGui::Text("Error Plugins: %zu", lastStats.errorPlugins);
-		ImGui::Text("Hot Reload Interval: %s", FormatDuration(lastStats.lastCheckTime).c_str());
-
-		// Progress bars
-		if (lastStats.totalPlugins > 0) {
-			float loadedRatio = static_cast<float>(lastStats.loadedPlugins) / lastStats.totalPlugins;
-			ImGui::Text("Load Success Rate:");
-			ImGui::ProgressBar(loadedRatio, ImVec2(-1, 0), "");
-			ImGui::SameLine();
-			ImGui::Text("%.1f%%", loadedRatio * 100.0f);
-		}
-
-		ImGui::Separator();
-
-		// Plugin list with details
-		ImGui::Text("Plugin Details:");
-
-		auto plugins = pluginManager.GetAllPluginInfo();
-		for (const auto& plugin : plugins) {
-			ImGui::BulletText("%s", plugin.name.c_str());
-			ImGui::Indent();
-			ImGui::Text("Status: %s", GetStatusText(plugin));
-			if (plugin.hasError) {
-				ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Error: %s", plugin.errorMessage.c_str());
-			}
-			ImGui::Unindent();
-		}
-	}
-
-	void PluginView::RenderLoadControls() {
-		if (ImGui::Button("Load Plugin")) {
-			IGFD::FileDialogConfig config;
-			config.path = watchDirectoryBuffer;
-#ifdef _WIN32
-			ImGuiFileDialog::Instance()->OpenDialog("LoadPluginDialog", "Load Plugin", ".dll", config);
-#else
-			ImGuiFileDialog::Instance()->OpenDialog("LoadPluginDialog", "Load Plugin", ".so", config);
-#endif
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Unload All")) {
-			pluginManager.UnloadAllPlugins();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Refresh")) {
-			pluginManager.RefreshPluginDirectory();
-		}
-	}
-
-	void PluginView::LoadPluginFromDialog() {
-		std::string pluginPath = ImGuiFileDialog::Instance()->GetFilePathName();
-		if (!pluginPath.empty()) {
-			pluginManager.LoadPlugin(pluginPath);
-		}
-	}
-
-	void PluginView::RefreshPluginList() {
-		pluginManager.RefreshPluginDirectory();
-	}
-
-	const char* PluginView::GetStatusText(const Plugin::PluginManager::PluginInfo& info) {
-		if (info.hasError) {
-			return "Error";
-		}
-		else if (info.isLoaded) {
-			return "Loaded";
-		}
-		else {
-			return "Unloaded";
-		}
-	}
-
-	ImVec4 PluginView::GetStatusColor(const Plugin::PluginManager::PluginInfo& info) {
-		if (info.hasError) {
-			return ImVec4(1.0f, 0.3f, 0.3f, 1.0f); // Red
-		}
-		else if (info.isLoaded) {
-			return ImVec4(0.3f, 1.0f, 0.3f, 1.0f); // Green
-		}
-		else {
-			return ImVec4(0.7f, 0.7f, 0.7f, 1.0f); // Gray
-		}
-	}
-
-	std::string PluginView::FormatFileSize(size_t bytes) {
-		const char* units[] = { "B", "KB", "MB", "GB" };
-		int unit = 0;
-		double size = static_cast<double>(bytes);
-
-		while (size >= 1024.0 && unit < 3) {
-			size /= 1024.0;
-			unit++;
-		}
-
-		std::ostringstream oss;
-		oss << std::fixed << std::setprecision(1) << size << " " << units[unit];
-		return oss.str();
-	}
-
-	std::string PluginView::FormatDuration(std::chrono::milliseconds ms) {
-		auto count = ms.count();
-		if (count < 1000) {
-			return std::to_string(count) + "ms";
-		}
-		else {
-			return std::to_string(count / 1000) + "s";
-		}
-	}
-
-	void PluginView::OnPluginLoaded(const std::string& name, bool success) {
-		std::cout << "Plugin " << name << (success ? " loaded successfully" : " failed to load") << std::endl;
-	}
-
-	void PluginView::OnPluginUnloaded(const std::string& name) {
-		std::cout << "Plugin " << name << " unloaded" << std::endl;
-
-		// Clear selection if the unloaded plugin was selected
-		if (selectedPlugin == name) {
-			selectedPlugin.clear();
-			showPluginDetails = false;
 		}
 	}
 
 	nlohmann::json PluginView::Serialize() const {
-		nlohmann::json j = BaseView::Serialize();
-		j["watchDirectory"] = std::string(watchDirectoryBuffer);
-		j["hotReloadInterval"] = hotReloadInterval;
-		j["autoLoadNewPlugins"] = autoLoadNewPlugins;
+		nlohmann::json j;
+		j["viewName"] = viewName;
+		j["selectedPlugin"] = selectedPlugin;
+		j["loadedPlugins"] = loadedPlugins;
 		return j;
 	}
 
 	void PluginView::Deserialize(const nlohmann::json& j) {
 		BaseView::Deserialize(j);
 
-		if (j.contains("watchDirectory")) {
-			std::string dir = j["watchDirectory"];
-			strncpy(watchDirectoryBuffer, dir.c_str(), sizeof(watchDirectoryBuffer) - 1);
-			watchDirectoryBuffer[sizeof(watchDirectoryBuffer) - 1] = '\0';
-		}
+		if (j.contains("selectedPlugin"))
+			selectedPlugin = j["selectedPlugin"];
 
-		if (j.contains("hotReloadInterval")) {
-			hotReloadInterval = j["hotReloadInterval"];
-		}
-
-		if (j.contains("autoLoadNewPlugins")) {
-			autoLoadNewPlugins = j["autoLoadNewPlugins"];
-		}
+		if (j.contains("loadedPlugins"))
+			loadedPlugins = j["loadedPlugins"];
 	}
 
 } // namespace GUI

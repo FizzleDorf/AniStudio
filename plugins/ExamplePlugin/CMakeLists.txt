@@ -58,10 +58,10 @@ if(WIN32)
     )
     
     target_compile_definitions(${PROJECT_NAME} PRIVATE
-        "PLUGIN_API=__declspec(dllexport)"
-        "ANI_CORE_API="
-        "_CRT_SECURE_NO_WARNINGS"  # Disable strcpy warnings
-    )
+		"PLUGIN_EXPORTS"
+		"ANI_CORE_API="
+		"_CRT_SECURE_NO_WARNINGS"
+)
 else()
     # Linux/Mac shared library setup  
     set_target_properties(${PROJECT_NAME} PROPERTIES

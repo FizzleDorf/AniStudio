@@ -1,6 +1,8 @@
 #pragma once
 
 #include "BasePlugin.hpp"
+#include "PluginRegistry.hpp"
+#include "PluginInterface.hpp"
 #include "PluginAPI.hpp"
 #include <string>
 #include <vector>
@@ -38,20 +40,19 @@ namespace GUI {
 
 namespace Plugin {
 
-	/**
-	 * Manages loading, unloading, and hot-reloading of plugins
-	 * Supports dependency resolution and error handling
-	 */
 	class PluginManager {
 	public:
 		// Plugin loading callbacks
 		using LoadCallback = std::function<void(const std::string&, bool)>;
 		using UnloadCallback = std::function<void(const std::string&)>;
 
+		void Init();
+
 		// Plugin information structure
 		struct PluginInfo {
 			std::string name;
 			std::string path;
+			std::string tempPath; // For hot reload temporary copies
 			bool isLoaded = false;
 			bool hasError = false;
 			std::string errorMessage;
@@ -157,8 +158,9 @@ namespace Plugin {
 		std::filesystem::file_time_type GetFileWriteTime(const std::string& path);
 		std::string GetLastSystemError();
 
-		// File management for hot reload
-		void CopyPluginForReload(const std::string& originalPath, std::string& tempPath);
+		// CRITICAL FIX: File management for hot reload
+		bool IsFileInUse(const std::string& filePath);
+		std::string CreateTempCopy(const std::string& originalPath);
 		void CleanupTempFile(const std::string& tempPath);
 	};
 

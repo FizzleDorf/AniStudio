@@ -66,8 +66,21 @@ namespace Plugin {
 		bool IsInitialized() const { return initialized; }
 		void SetInitialized(bool state) { initialized = state; }
 
+		// Protected access to managers (set during initialization)
+		ECS::EntityManager* GetEntityManager() const { return entityManager; }
+		GUI::ViewManager* GetViewManager() const { return viewManager; }
+
+	public:
+		// Internal method for PluginManager to set managers (must be public for cross-DLL access)
+		void SetManagers(ECS::EntityManager* eMgr, GUI::ViewManager* vMgr) {
+			entityManager = eMgr;
+			viewManager = vMgr;
+		}
+
 	private:
 		bool initialized = false;
+		ECS::EntityManager* entityManager = nullptr;
+		GUI::ViewManager* viewManager = nullptr;
 	};
 
 } // namespace Plugin

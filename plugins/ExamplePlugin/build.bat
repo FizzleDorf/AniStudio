@@ -1,103 +1,164 @@
 @echo off
-setlocal EnableDelayedExpansion
+setlocal enabledelayedexpansion
 
-REM ExamplePlugin build script
-REM Usage: build.bat [anistudio_build_dir] [build_type]
+REM Build script for AniStudio plugins
+REM This script builds plugins against the AniStudio core library
 
-set ANISTUDIO_BUILD_DIR=%1
-set BUILD_TYPE=%2
+echo === Building ExamplePlugin ===
 
-REM Default values
-if "%ANISTUDIO_BUILD_DIR%"=="" set ANISTUDIO_BUILD_DIR=..\..\build
-if "%BUILD_TYPE%"=="" set BUILD_TYPE=Release
+REM Get paths relative to this script - FIXED PATH CALCULATION
+set "SCRIPT_DIR=%~dp0"
+REM Remove trailing backslash
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 
-REM Get absolute paths
-for %%I in ("%ANISTUDIO_BUILD_DIR%") do set ANISTUDIO_BUILD_DIR=%%~fI
-for %%I in ("%~dp0") do set SCRIPT_DIR=%%~fI
-set SCRIPT_DIR=%SCRIPT_DIR:~0,-1%
+REM Calculate AniStudio root (go up two levels from plugins/ExamplePlugin)
+for %%I in ("%SCRIPT_DIR%\..\..\") do set "ANISTUDIO_ROOT=%%~fI"
+REM Remove trailing backslash
+set "ANISTUDIO_ROOT=%ANISTUDIO_ROOT:~0,-1%"
 
-echo === ExamplePlugin Build Script ===
-echo Plugin directory: %SCRIPT_DIR%
-echo AniStudio build dir: %ANISTUDIO_BUILD_DIR%
-echo Build type: %BUILD_TYPE%
+set "ANISTUDIO_BUILD=%ANISTUDIO_ROOT%\build"
+set "PLUGIN_SOURCE=%SCRIPT_DIR%"
+set "PLUGIN_BUILD=%ANISTUDIO_BUILD%\plugins\ExamplePlugin"
+set "PLUGIN_OUTPUT=%ANISTUDIO_BUILD%\plugins"
+
+echo AniStudio root: %ANISTUDIO_ROOT%
+echo AniStudio build: %ANISTUDIO_BUILD%
+echo Plugin source: %PLUGIN_SOURCE%
+echo Plugin build: %PLUGIN_BUILD%
+echo Plugin output: %PLUGIN_OUTPUT%
 echo.
 
-REM Check if AniStudio is built
-if not exist "%ANISTUDIO_BUILD_DIR%\lib\AniStudioCore.lib" (
-    echo Error: AniStudioCore library not found in '%ANISTUDIO_BUILD_DIR%\lib\'
-    echo Please build AniStudio first!
-    echo Expected file: %ANISTUDIO_BUILD_DIR%\lib\AniStudioCore.lib
-    exit /b 1
-)
+REM Check if AniStudio has been built by looking for key files
+set "BUILD_VALID=1"
 
-REM Check if CMake config exists (try install directory first, then build directory)
-if exist "%ANISTUDIO_BUILD_DIR%\install\lib\cmake\AniStudioCore\AniStudioCoreConfig.cmake" (
-    echo Found AniStudioCore config in install directory
-) else if exist "%ANISTUDIO_BUILD_DIR%\lib\cmake\AniStudioCore\AniStudioCoreConfig.cmake" (
-    echo Found AniStudioCore config in build directory
+echo === Checking AniStudio Build Status ===
+
+if not exist "%ANISTUDIO_BUILD%" (
+    echo ERROR: Build directory does not exist: %ANISTUDIO_BUILD%
+    set "BUILD_VALID=0"
 ) else (
-    echo Error: AniStudioCore CMake config not found!
-    echo Checked:
-    echo   %ANISTUDIO_BUILD_DIR%\install\lib\cmake\AniStudioCore\AniStudioCoreConfig.cmake
-    echo   %ANISTUDIO_BUILD_DIR%\lib\cmake\AniStudioCore\AniStudioCoreConfig.cmake
-    echo Please run 'cmake --install . --prefix ./install' from the AniStudio build directory
+    echo ? Build directory exists
+)
+
+if not exist "%ANISTUDIO_BUILD%\conan\conan_toolchain.cmake" (
+    echo ERROR: Conan toolchain not found: %ANISTUDIO_BUILD%\conan\conan_toolchain.cmake
+    set "BUILD_VALID=0"
+) else (
+    echo ? Conan toolchain found
+)
+
+if not exist "%ANISTUDIO_BUILD%\lib\AniStudioCore.lib" (
+    echo ERROR: AniStudioCore library not found: %ANISTUDIO_BUILD%\lib\AniStudioCore.lib
+    set "BUILD_VALID=0"
+) else (
+    echo ? AniStudioCore library found
+)
+
+if not exist "%ANISTUDIO_BUILD%\lib\ImGui.lib" (
+    echo ERROR: ImGui library not found: %ANISTUDIO_BUILD%\lib\ImGui.lib
+    set "BUILD_VALID=0"
+) else (
+    echo ? ImGui library found
+)
+
+if not exist "%ANISTUDIO_BUILD%\bin\AniStudio.exe" (
+    echo ERROR: AniStudio executable not found: %ANISTUDIO_BUILD%\bin\AniStudio.exe
+    set "BUILD_VALID=0"
+) else (
+    echo ? AniStudio executable found
+)
+
+if "!BUILD_VALID!"=="0" (
+    echo.
+    echo ERROR: AniStudio build verification failed
+    echo.
+    echo Make sure you have built AniStudio first by running:
+    echo   cd "%ANISTUDIO_ROOT%"
+    echo   cmake --build build --config Release
+    echo.
+    echo Current build directory contents:
+    if exist "%ANISTUDIO_BUILD%" (
+        dir "%ANISTUDIO_BUILD%" /b
+    ) else (
+        echo   Build directory does not exist
+    )
+    echo.
+    pause
     exit /b 1
 )
 
-REM Create build directory
-set BUILD_DIR=%SCRIPT_DIR%\build
-if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+echo ? All required AniStudio components found
 
-echo Cleaning previous build...
-if exist "%BUILD_DIR%\*" (
-    del /q "%BUILD_DIR%\*" >nul 2>&1
-    for /d %%i in ("%BUILD_DIR%\*") do rmdir /s /q "%%i" >nul 2>&1
-)
+REM Create plugin build directory
+if not exist "%PLUGIN_BUILD%" mkdir "%PLUGIN_BUILD%"
+if not exist "%PLUGIN_OUTPUT%" mkdir "%PLUGIN_OUTPUT%"
 
-REM Configure CMake
-echo Configuring CMake...
-cmake -B "%BUILD_DIR%" ^
-    -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
-    -DANISTUDIO_BUILD_DIR="%ANISTUDIO_BUILD_DIR%" ^
-    -DANISTUDIO_PLUGIN_DIR="%ANISTUDIO_BUILD_DIR%\plugins" ^
-    "%SCRIPT_DIR%"
+REM Configure the plugin
+echo.
+echo === Configuring Plugin ===
+cd /d "%PLUGIN_BUILD%"
+
+cmake "%PLUGIN_SOURCE%" ^
+    -DANISTUDIO_BUILD_DIR="%ANISTUDIO_BUILD%" ^
+    -DANISTUDIO_PLUGIN_DIR="%PLUGIN_OUTPUT%" ^
+    -DCMAKE_BUILD_TYPE=Release
 
 if errorlevel 1 (
-    echo Error: CMake configuration failed!
+    echo ERROR: Plugin configuration failed
+    echo.
+    echo CMake configuration output above may contain details about the error.
+    echo.
+    pause
     exit /b 1
 )
+
+echo ? Plugin configured successfully
 
 REM Build the plugin
-echo Building ExamplePlugin...
-cmake --build "%BUILD_DIR%" --config %BUILD_TYPE%
+echo.
+echo === Building Plugin ===
+cmake --build . --config Release
 
 if errorlevel 1 (
-    echo Error: Plugin build failed!
+    echo ERROR: Plugin build failed
+    echo.
+    echo Build output above may contain details about the error.
+    echo.
+    pause
     exit /b 1
 )
 
 echo.
-echo === Build Successful ===
-set OUTPUT_DIR=%ANISTUDIO_BUILD_DIR%\plugins
+echo === Build Complete ===
+echo.
 
-REM List the built plugin file
-if exist "%OUTPUT_DIR%\ExamplePlugin.dll" (
-    echo Built: %OUTPUT_DIR%\ExamplePlugin.dll
-    dir "%OUTPUT_DIR%\ExamplePlugin.dll"
+REM Check if the plugin was built successfully
+if exist "%PLUGIN_OUTPUT%\ExamplePlugin.dll" (
+    echo ? Plugin built successfully!
+    echo.
+    echo Plugin details:
+    dir "%PLUGIN_OUTPUT%\ExamplePlugin.dll"
+    echo.
+    echo To use this plugin:
+    echo 1. Start AniStudio from: %ANISTUDIO_BUILD%\bin\AniStudio.exe
+    echo 2. The plugin should be automatically loaded from: %PLUGIN_OUTPUT%
+    echo 3. Look for "ExampleView" in the AniStudio interface
+    echo 4. Check the plugin manager to verify it loaded successfully
 ) else (
-    echo Warning: Plugin file not found in expected location: %OUTPUT_DIR%
-    echo Checking build directory for plugin files...
-    dir /b /s "%BUILD_DIR%\*.dll" 2>nul | findstr /i "ExamplePlugin"
-    if errorlevel 1 (
-        echo No ExamplePlugin.dll found in build directory
-        dir /b /s "%BUILD_DIR%\*.dll" 2>nul
+    echo ERROR: Plugin DLL was not created
+    echo.
+    echo Expected location: %PLUGIN_OUTPUT%\ExamplePlugin.dll
+    echo.
+    echo Contents of plugin output directory:
+    if exist "%PLUGIN_OUTPUT%" (
+        dir "%PLUGIN_OUTPUT%" /b
+    ) else (
+        echo   Plugin output directory does not exist
     )
+    echo.
+    pause
+    exit /b 1
 )
 
 echo.
-echo To use this plugin:
-echo 1. Start AniStudio
-echo 2. The plugin should be automatically loaded from: %OUTPUT_DIR%
-echo 3. Check the plugin manager to verify it loaded successfully
-
-endlocal
+pause

@@ -232,6 +232,7 @@ target_precompile_headers(AniStudioCore PUBLIC AniStudio/pch.h)
 # Export definitions for AniStudioCore
 if(WIN32)
     target_compile_definitions(AniStudioCore PUBLIC 
+        "ANI_CORE_EXPORTS"
         "ANI_CORE_API="
         "PLUGIN_API="
     )
@@ -279,6 +280,7 @@ if(BUILD_ANISTUDIO)
     # Symbol export definitions for main executable
     if(WIN32)
         target_compile_definitions(${PROJECT_NAME} PRIVATE 
+            "ANI_CORE_EXPORTS"
             "ANI_CORE_API=__declspec(dllexport)"
         )
     else()

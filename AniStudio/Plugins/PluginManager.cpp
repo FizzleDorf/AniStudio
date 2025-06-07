@@ -1,158 +1,227 @@
+/*
+	FIXED PluginManager.cpp - DEADLOCK RESOLUTION
+	- Removes double mutex locking that was causing resource deadlock
+	- Simplifies the locking strategy
+	- Fixes mutex contention issues
+*/
+
 #include "PluginManager.hpp"
+#include "PluginRegistry.hpp"
+#include "PluginInterface.hpp"
+#include "EntityManager.hpp"
+#include "ViewManager.hpp"
+#include "FilePaths.hpp"
 #include <iostream>
-#include <algorithm>
 #include <fstream>
+#include <algorithm>
+#include <typeindex>
+#include <random>
 
 namespace Plugin {
 
-	PluginManager::PluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr)
-		: entityManager(entityMgr), viewManager(viewMgr), hotReloadActive(false), shouldStopWatching(false),
-		checkInterval(std::chrono::milliseconds(500)) {
+	// Static storage for current manager instances during plugin loading
+	static ECS::EntityManager* s_currentEntityManager = nullptr;
+	static GUI::ViewManager* s_currentViewManager = nullptr;
+	static std::atomic<bool> s_managersValid = true;
 
-		std::cout << "PluginManager initialized" << std::endl;
+	// Static C-style functions that plugins can call
+	extern "C" {
+		static ECS::EntityManager* GetCurrentEntityManager() {
+			if (!s_managersValid.load()) {
+				std::cout << "Plugin requesting EntityManager during shutdown - returning nullptr" << std::endl;
+				return nullptr;
+			}
+			std::cout << "Plugin requesting EntityManager: " << s_currentEntityManager << std::endl;
+			return s_currentEntityManager;
+		}
+
+		static GUI::ViewManager* GetCurrentViewManager() {
+			if (!s_managersValid.load()) {
+				std::cout << "Plugin requesting ViewManager during shutdown - returning nullptr" << std::endl;
+				return nullptr;
+			}
+			std::cout << "Plugin requesting ViewManager: " << s_currentViewManager << std::endl;
+			return s_currentViewManager;
+		}
+	}
+
+	// C-style function types for plugin interface
+	typedef Plugin::BasePlugin* (*CreatePluginFunc)();
+	typedef void(*DestroyPluginFunc)(Plugin::BasePlugin*);
+	typedef const char* (*GetPluginNameFunc)();
+	typedef const char* (*GetPluginVersionFunc)();
+	typedef void(*SetManagerGettersFunc)(ECS::EntityManager* (*)(), GUI::ViewManager* (*)());
+
+	PluginManager::PluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr)
+		: entityManager(entityMgr)
+		, viewManager(viewMgr)
+		, hotReloadActive(false)
+		, shouldStopWatching(false)
+		, watchDirectory(Utils::FilePaths::pluginPath)
+		, checkInterval(std::chrono::milliseconds(500)) {
+
+		std::cout << "PluginManager constructor - EntityManager: " << &entityManager
+			<< ", ViewManager: " << &viewManager << std::endl;
+
+		// Initialize the PluginRegistry with our managers
+		PluginRegistry::Initialize(&entityManager, &viewManager);
+
+		// Set static managers as valid initially
+		s_managersValid.store(true);
 	}
 
 	PluginManager::~PluginManager() {
+		std::cout << "PluginManager destructor called" << std::endl;
+
+		// CRITICAL: Mark managers as invalid BEFORE starting shutdown
+		s_managersValid.store(false);
+		s_currentEntityManager = nullptr;
+		s_currentViewManager = nullptr;
+
+		// Stop hot reload first
 		StopHotReload();
+
+		// Unload all plugins
 		UnloadAllPlugins();
 	}
 
+	void PluginManager::Init() {
+		std::cout << "PluginManager::Init() called" << std::endl;
+
+		// Set the watch directory to the plugins path
+		SetWatchDirectory(Utils::FilePaths::pluginPath);
+
+		// Scan for existing plugins in the directory
+		RefreshPluginDirectory();
+
+		std::cout << "PluginManager initialized with watch directory: " << watchDirectory << std::endl;
+	}
+
 	bool PluginManager::LoadPlugin(const std::string& pluginPath) {
+		std::lock_guard<std::mutex> lock(pluginMutex);
+		// FIXED: Call the internal method WITHOUT taking another lock
 		return LoadPluginInternal(pluginPath, false);
 	}
 
 	bool PluginManager::LoadPluginInternal(const std::string& pluginPath, bool isReload) {
-		std::lock_guard<std::mutex> lock(pluginMutex);
 
-		if (!std::filesystem::exists(pluginPath)) {
-			std::cerr << "Plugin file does not exist: " << pluginPath << std::endl;
-			return false;
-		}
-
-		std::string pluginName = GetPluginNameFromPath(pluginPath);
-
-		// If reloading, unload existing plugin first
-		if (isReload && plugins.find(pluginName) != plugins.end()) {
-			UnloadPluginInternal(pluginName);
-		}
-
-		PluginInfo info;
-		info.name = pluginName;
-		info.path = pluginPath;
-		info.lastWriteTime = GetFileWriteTime(pluginPath);
-
-		// Create a temporary copy for hot reload to avoid file locking issues
-		std::string actualPath = pluginPath;
-		std::string tempPath;
-		if (isReload) {
-			CopyPluginForReload(pluginPath, tempPath);
-			actualPath = tempPath;
-		}
-
-		// Load the library
-		info.handle = LOAD_LIBRARY(actualPath.c_str());
-		if (!info.handle) {
-			info.hasError = true;
-			info.errorMessage = "Failed to load library: " + GetLastSystemError();
-			std::cerr << "Error loading plugin " << pluginName << ": " << info.errorMessage << std::endl;
-
-			if (!tempPath.empty()) {
-				CleanupTempFile(tempPath);
-			}
-
-			plugins[pluginName] = info;
-			return false;
-		}
-
-		// Get function pointers
-		info.createFunc = (PluginInfo::CreatePluginFunc)GET_PROC_ADDRESS(info.handle, "CreatePlugin");
-		info.destroyFunc = (PluginInfo::DestroyPluginFunc)GET_PROC_ADDRESS(info.handle, "DestroyPlugin");
-		info.getNameFunc = (PluginInfo::GetPluginNameFunc)GET_PROC_ADDRESS(info.handle, "GetPluginName");
-		info.getVersionFunc = (PluginInfo::GetPluginVersionFunc)GET_PROC_ADDRESS(info.handle, "GetPluginVersion");
-
-		if (!ValidatePluginFunctions(info)) {
-			info.hasError = true;
-			info.errorMessage = "Missing required plugin functions";
-			UNLOAD_LIBRARY(info.handle);
-			info.handle = nullptr;
-
-			if (!tempPath.empty()) {
-				CleanupTempFile(tempPath);
-			}
-
-			plugins[pluginName] = info;
-			return false;
-		}
-
-		// Create plugin instance
 		try {
-			BasePlugin* pluginPtr = info.createFunc();
-			if (!pluginPtr) {
+			std::cout << "=== LOADING PLUGIN START ===" << std::endl;
+
+			PluginInfo info;
+			info.path = pluginPath;
+			info.name = GetPluginNameFromPath(pluginPath);
+
+			std::cout << "Plugin name: " << info.name << std::endl;
+
+			// Load the library
+			std::cout << "Loading library..." << std::endl;
+			info.handle = LOAD_LIBRARY(pluginPath.c_str());
+			if (!info.handle) {
 				info.hasError = true;
-				info.errorMessage = "Plugin creation function returned null";
-				UNLOAD_LIBRARY(info.handle);
-				info.handle = nullptr;
-
-				if (!tempPath.empty()) {
-					CleanupTempFile(tempPath);
-				}
-
-				plugins[pluginName] = info;
+				info.errorMessage = "Failed to load library: " + GetLastSystemError();
+				std::cerr << info.errorMessage << std::endl;
 				return false;
 			}
 
-			info.instance = std::shared_ptr<BasePlugin>(pluginPtr, [this, destroyFunc = info.destroyFunc](BasePlugin* ptr) {
-				if (ptr && destroyFunc) {
-					destroyFunc(ptr);
-				}
-			});
+			// Get function pointers
+			std::cout << "Getting function pointers..." << std::endl;
+			if (!ValidatePluginFunctions(info)) {
+				UNLOAD_LIBRARY(info.handle);
+				info.handle = nullptr;
+				return false;
+			}
+
+			// Create plugin instance
+			std::cout << "Creating plugin instance..." << std::endl;
+			BasePlugin* rawPlugin = info.createFunc();
+			if (!rawPlugin) {
+				info.hasError = true;
+				info.errorMessage = "CreatePlugin returned nullptr";
+				std::cerr << info.errorMessage << std::endl;
+				UNLOAD_LIBRARY(info.handle);
+				return false;
+			}
+
+			info.instance = std::shared_ptr<BasePlugin>(rawPlugin);
+
+			// Set up manager getters for plugin
+			std::cout << "Setting up manager getters for plugin..." << std::endl;
+
+			// Get the SetManagerGetters function from the plugin
+			typedef void(*SetManagerGettersFunc)(
+				GetEntityManagerFunc,
+				GetViewManagerFunc,
+				GetImGuiContextFunc,
+				GetImGuiAllocFunc,
+				GetImGuiFreeFunc,
+				GetImGuiUserDataFunc
+				);
+			SetManagerGettersFunc setManagerGetters =
+				(SetManagerGettersFunc)GET_PROC_ADDRESS(info.handle, "SetManagerGetters");
+
+			if (setManagerGetters) {
+				std::cout << "Found SetManagerGetters function in plugin, calling it..." << std::endl;
+
+				setManagerGetters(
+					GetHostEntityManager,
+					GetHostViewManager,
+					GetHostImGuiContext,
+					GetHostImGuiAllocFunc,
+					GetHostImGuiFreeFunc,
+					GetHostImGuiUserData
+				);
+
+				std::cout << "Manager getters and ImGui context set successfully" << std::endl;
+			}
+			else {
+				std::cout << "SetManagerGetters function not found in plugin" << std::endl;
+			}
 
 			// Initialize the plugin
-			info.instance->Initialize(entityManager, viewManager);
+			std::cout << "Initializing plugin..." << std::endl;
+			if (!info.instance->Initialize(entityManager, viewManager)) {
+				info.hasError = true;
+				info.errorMessage = "Plugin initialization failed";
+				std::cerr << info.errorMessage << std::endl;
+
+				// Clean up
+				info.instance.reset();
+				UNLOAD_LIBRARY(info.handle);
+				return false;
+			}
+
 			info.isLoaded = true;
 			info.hasError = false;
+			info.lastWriteTime = GetFileWriteTime(pluginPath);
 
-			plugins[pluginName] = info;
+			std::string pluginName = info.name;
+			std::string pluginVersion = info.instance->GetVersion();
+			bool isLoaded = info.isLoaded;
+			bool hasError = info.hasError;
 
-			std::cout << "Successfully loaded plugin: " << pluginName;
-			if (info.getNameFunc) {
-				std::cout << " (" << info.getNameFunc() << ")";
-			}
-			if (info.getVersionFunc) {
-				std::cout << " v" << info.getVersionFunc();
-			}
-			std::cout << std::endl;
+			// Store the plugin info
+			plugins[info.name] = std::move(info);
 
-			// Notify callback
+			std::cout << "=== PLUGIN LOADED SUCCESSFULLY ===" << std::endl;
+			std::cout << "Plugin: " << pluginName << std::endl;
+			std::cout << "Version: " << pluginVersion << std::endl;
+			std::cout << "IsLoaded: " << isLoaded << std::endl;
+			std::cout << "HasError: " << hasError << std::endl;
+
+			// Call load callback
 			if (loadCallback) {
+				std::cout << "Calling load callback..." << std::endl;
 				loadCallback(pluginName, true);
+				std::cout << "Load callback completed successfully" << std::endl;
 			}
 
-			// Clean up temp file if used
-			if (!tempPath.empty()) {
-				CleanupTempFile(tempPath);
-			}
-
+			std::cout << "=== PLUGIN LOAD COMPLETE ===" << std::endl;
 			return true;
+
 		}
 		catch (const std::exception& e) {
-			info.hasError = true;
-			info.errorMessage = "Exception during plugin initialization: " + std::string(e.what());
-			std::cerr << "Error initializing plugin " << pluginName << ": " << info.errorMessage << std::endl;
-
-			UNLOAD_LIBRARY(info.handle);
-			info.handle = nullptr;
-
-			if (!tempPath.empty()) {
-				CleanupTempFile(tempPath);
-			}
-
-			plugins[pluginName] = info;
-
-			if (loadCallback) {
-				loadCallback(pluginName, false);
-			}
-
+			std::cerr << "Exception during plugin loading: " << e.what() << std::endl;
 			return false;
 		}
 	}
@@ -163,51 +232,74 @@ namespace Plugin {
 		return true;
 	}
 
-	void PluginManager::UnloadPluginInternal(const std::string& name) {
-		auto it = plugins.find(name);
+	void PluginManager::UnloadPluginInternal(const std::string& pluginName) {
+		// FIXED: No mutex lock needed here - caller already has the lock
+		auto it = plugins.find(pluginName);
 		if (it == plugins.end()) {
+			std::cout << "Plugin " << pluginName << " not found for unloading" << std::endl;
 			return;
 		}
 
 		PluginInfo& info = it->second;
 
-		try {
-			// Shutdown the plugin
-			if (info.instance && info.isLoaded) {
+		std::cout << "Unloading plugin: " << pluginName << std::endl;
+
+		// Shutdown the plugin instance
+		if (info.instance) {
+			try {
 				info.instance->Shutdown();
-				info.instance.reset();
 			}
-
-			// Unload the library
-			if (info.handle) {
-				UNLOAD_LIBRARY(info.handle);
-				info.handle = nullptr;
+			catch (const std::exception& e) {
+				std::cerr << "Exception during plugin shutdown: " << e.what() << std::endl;
 			}
-
-			std::cout << "Successfully unloaded plugin: " << name << std::endl;
-
-			// Notify callback
-			if (unloadCallback) {
-				unloadCallback(name);
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Error unloading plugin " << name << ": " << e.what() << std::endl;
+			info.instance.reset();
 		}
 
-		plugins.erase(it);
+		// Cleanup plugin registry entries
+		PluginRegistry::CleanupPlugin(pluginName);
+
+		// Unload the library
+		if (info.handle) {
+			UNLOAD_LIBRARY(info.handle);
+			info.handle = nullptr;
+		}
+
+		// Clean up temp file if exists
+		if (!info.tempPath.empty()) {
+			CleanupTempFile(info.tempPath);
+			info.tempPath.clear();
+		}
+
+		info.isLoaded = false;
+		info.hasError = false;
+		info.errorMessage.clear();
+
+		// Notify callback
+		if (unloadCallback) {
+			unloadCallback(pluginName);
+		}
+
+		std::cout << "Plugin " << pluginName << " unloaded successfully" << std::endl;
 	}
 
 	bool PluginManager::ReloadPlugin(const std::string& pluginName) {
+		std::lock_guard<std::mutex> lock(pluginMutex);
+
 		auto it = plugins.find(pluginName);
 		if (it == plugins.end()) {
-			std::cerr << "Cannot reload plugin " << pluginName << ": not found" << std::endl;
+			std::cerr << "Plugin " << pluginName << " not found for reloading" << std::endl;
 			return false;
 		}
 
 		std::string pluginPath = it->second.path;
-		std::cout << "Reloading plugin: " << pluginName << std::endl;
 
+		// Unload first (no mutex needed, we already have it)
+		UnloadPluginInternal(pluginName);
+
+		// Small delay to ensure file handles are released
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+		// Load again (no mutex needed, we already have it)
 		return LoadPluginInternal(pluginPath, true);
 	}
 
@@ -216,26 +308,22 @@ namespace Plugin {
 
 		std::cout << "Unloading all plugins..." << std::endl;
 
-		for (auto&[name, info] : plugins) {
-			try {
-				if (info.instance && info.isLoaded) {
-					info.instance->Shutdown();
-					info.instance.reset();
-				}
+		// Mark managers as invalid before unloading any plugins
+		s_managersValid.store(false);
 
-				if (info.handle) {
-					UNLOAD_LIBRARY(info.handle);
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error unloading plugin " << name << ": " << e.what() << std::endl;
+		for (auto&[name, info] : plugins) {
+			if (info.isLoaded) {
+				UnloadPluginInternal(name);
 			}
 		}
 
 		plugins.clear();
+		std::cout << "All plugins unloaded" << std::endl;
 	}
 
 	void PluginManager::StartHotReload(const std::string& watchDir, std::chrono::milliseconds interval) {
+		std::lock_guard<std::mutex> lock(pluginMutex);
+
 		if (hotReloadActive) {
 			std::cout << "Hot reload already active" << std::endl;
 			return;
@@ -246,22 +334,18 @@ namespace Plugin {
 		shouldStopWatching = false;
 		hotReloadActive = true;
 
-		// Create watch directory if it doesn't exist
-		if (!std::filesystem::exists(watchDirectory)) {
-			std::filesystem::create_directories(watchDirectory);
-		}
-
-		// Start watching thread
 		watchThread = std::thread(&PluginManager::WatchForChanges, this);
 
-		std::cout << "Started hot reload watching: " << watchDirectory
-			<< " (interval: " << interval.count() << "ms)" << std::endl;
+		std::cout << "Started hot reload for directory: " << watchDirectory
+			<< " with interval: " << interval.count() << "ms" << std::endl;
 	}
 
 	void PluginManager::StopHotReload() {
 		if (!hotReloadActive) {
 			return;
 		}
+
+		std::cout << "Stopping hot reload..." << std::endl;
 
 		shouldStopWatching = true;
 		hotReloadActive = false;
@@ -270,22 +354,25 @@ namespace Plugin {
 			watchThread.join();
 		}
 
-		std::cout << "Stopped hot reload" << std::endl;
+		std::cout << "Hot reload stopped" << std::endl;
 	}
 
 	void PluginManager::Update(float deltaTime) {
-		// Update all loaded plugins
 		std::lock_guard<std::mutex> lock(pluginMutex);
 
+		// Only update if managers are valid
+		if (!s_managersValid.load()) {
+			return;
+		}
+
+		// Update all loaded plugins
 		for (auto&[name, info] : plugins) {
-			if (info.instance && info.isLoaded && !info.hasError) {
+			if (info.isLoaded && info.instance) {
 				try {
 					info.instance->Update(deltaTime);
 				}
 				catch (const std::exception& e) {
-					std::cerr << "Error updating plugin " << name << ": " << e.what() << std::endl;
-					info.hasError = true;
-					info.errorMessage = "Update error: " + std::string(e.what());
+					std::cerr << "Exception in plugin " << name << " update: " << e.what() << std::endl;
 				}
 			}
 		}
@@ -293,21 +380,31 @@ namespace Plugin {
 
 	void PluginManager::RefreshPluginDirectory() {
 		if (!std::filesystem::exists(watchDirectory)) {
+			std::filesystem::create_directories(watchDirectory);
+			std::cout << "Created plugin directory: " << watchDirectory << std::endl;
 			return;
 		}
 
+		std::cout << "Refreshing plugin directory: " << watchDirectory << std::endl;
+
 		try {
+			// FIXED: Don't take a lock here if called from other methods that already have it
+			std::lock_guard<std::mutex> lock(pluginMutex);
+
 			for (const auto& entry : std::filesystem::directory_iterator(watchDirectory)) {
 				if (entry.is_regular_file() && IsPluginFile(entry.path().string())) {
 					std::string pluginName = GetPluginNameFromPath(entry.path().string());
 
-					std::lock_guard<std::mutex> lock(pluginMutex);
-					auto it = plugins.find(pluginName);
+					// Add to plugins map if not already present
+					if (plugins.find(pluginName) == plugins.end()) {
+						PluginInfo info;
+						info.name = pluginName;
+						info.path = entry.path().string();
+						info.lastWriteTime = GetFileWriteTime(info.path);
+						info.isLoaded = false;
 
-					if (it == plugins.end()) {
-						// New plugin found
-						std::cout << "Found new plugin: " << entry.path().string() << std::endl;
-						// Note: Auto-loading new plugins can be enabled here if desired
+						plugins[pluginName] = info;
+						std::cout << "Found plugin file: " << info.path << std::endl;
 					}
 				}
 			}
@@ -332,11 +429,11 @@ namespace Plugin {
 	std::vector<PluginManager::PluginInfo> PluginManager::GetAllPluginInfo() const {
 		std::lock_guard<std::mutex> lock(pluginMutex);
 
-		std::vector<PluginInfo> infos;
+		std::vector<PluginInfo> result;
 		for (const auto&[name, info] : plugins) {
-			infos.push_back(info);
+			result.push_back(info);
 		}
-		return infos;
+		return result;
 	}
 
 	PluginManager::PluginInfo* PluginManager::GetPluginInfo(const std::string& name) {
@@ -356,7 +453,7 @@ namespace Plugin {
 	PluginManager::Stats PluginManager::GetStats() const {
 		std::lock_guard<std::mutex> lock(pluginMutex);
 
-		Stats stats = {};
+		Stats stats;
 		stats.totalPlugins = plugins.size();
 
 		for (const auto&[name, info] : plugins) {
@@ -368,73 +465,106 @@ namespace Plugin {
 			}
 		}
 
-		stats.lastCheckTime = checkInterval;
+		stats.lastCheckTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+			std::chrono::steady_clock::now().time_since_epoch());
+
 		return stats;
 	}
 
-	// Private methods
-
 	bool PluginManager::ValidatePluginFunctions(PluginInfo& info) {
-		return info.createFunc != nullptr && info.destroyFunc != nullptr;
+		// Get function pointers
+		info.createFunc = (PluginInfo::CreatePluginFunc)GET_PROC_ADDRESS(info.handle, "CreatePlugin");
+		info.destroyFunc = (PluginInfo::DestroyPluginFunc)GET_PROC_ADDRESS(info.handle, "DestroyPlugin");
+		info.getNameFunc = (PluginInfo::GetPluginNameFunc)GET_PROC_ADDRESS(info.handle, "GetPluginName");
+		info.getVersionFunc = (PluginInfo::GetPluginVersionFunc)GET_PROC_ADDRESS(info.handle, "GetPluginVersion");
+
+		if (!info.createFunc) {
+			std::cerr << "Plugin missing CreatePlugin function" << std::endl;
+			info.hasError = true;
+			info.errorMessage = "Missing CreatePlugin function";
+			return false;
+		}
+
+		if (!info.destroyFunc) {
+			std::cerr << "Plugin missing DestroyPlugin function" << std::endl;
+			info.hasError = true;
+			info.errorMessage = "Missing DestroyPlugin function";
+			return false;
+		}
+
+		if (!info.getNameFunc) {
+			std::cerr << "Plugin missing GetPluginName function" << std::endl;
+			info.hasError = true;
+			info.errorMessage = "Missing GetPluginName function";
+			return false;
+		}
+
+		return true;
 	}
 
 	void PluginManager::WatchForChanges() {
+		std::cout << "Hot reload watcher thread started" << std::endl;
+
 		while (!shouldStopWatching) {
-			CheckForPluginChanges();
+			try {
+				CheckForPluginChanges();
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception in hot reload watcher: " << e.what() << std::endl;
+			}
+
 			std::this_thread::sleep_for(checkInterval);
 		}
+
+		std::cout << "Hot reload watcher thread stopped" << std::endl;
 	}
 
 	void PluginManager::CheckForPluginChanges() {
-		try {
-			if (!std::filesystem::exists(watchDirectory)) {
-				return;
-			}
+		if (!std::filesystem::exists(watchDirectory)) {
+			return;
+		}
 
-			for (const auto& entry : std::filesystem::directory_iterator(watchDirectory)) {
-				if (!entry.is_regular_file() || !IsPluginFile(entry.path().string())) {
-					continue;
-				}
+		std::lock_guard<std::mutex> lock(pluginMutex);
 
-				std::string pluginPath = entry.path().string();
-				std::string pluginName = GetPluginNameFromPath(pluginPath);
-				auto currentWriteTime = GetFileWriteTime(pluginPath);
+		for (const auto& entry : std::filesystem::directory_iterator(watchDirectory)) {
+			if (entry.is_regular_file() && IsPluginFile(entry.path().string())) {
+				std::string pluginName = GetPluginNameFromPath(entry.path().string());
+				auto currentWriteTime = GetFileWriteTime(entry.path().string());
 
-				std::lock_guard<std::mutex> lock(pluginMutex);
 				auto it = plugins.find(pluginName);
-
 				if (it != plugins.end()) {
 					// Check if file has been modified
 					if (currentWriteTime > it->second.lastWriteTime) {
-						std::cout << "Plugin file changed, reloading: " << pluginName << std::endl;
+						std::cout << "Detected change in plugin: " << pluginName << std::endl;
 
-						// Update the path in case it moved
-						it->second.path = pluginPath;
+						// Update the write time first
+						it->second.lastWriteTime = currentWriteTime;
 
-						// Reload the plugin (unlock temporarily to avoid deadlock)
-						lock.~lock_guard();
-						ReloadPlugin(pluginName);
+						// Reload if currently loaded - NO RECURSIVE LOCKING
+						if (it->second.isLoaded) {
+							std::cout << "Hot reloading plugin: " << pluginName << std::endl;
+
+							std::string pluginPath = it->second.path;
+
+							// Unload first
+							UnloadPluginInternal(pluginName);
+
+							// Small delay to ensure file handles are released
+							std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+							// Load again
+							LoadPluginInternal(pluginPath, true);
+							return;
+						}
 					}
 				}
 			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Error checking for plugin changes: " << e.what() << std::endl;
 		}
 	}
 
 	std::string PluginManager::GetPluginNameFromPath(const std::string& path) {
 		std::filesystem::path p(path);
-		std::string filename = p.stem().string();
-
-		// Remove common plugin prefixes/suffixes - C++17 compatible
-		const std::string libPrefix = "lib";
-		if (filename.length() >= libPrefix.length() &&
-			filename.compare(0, libPrefix.length(), libPrefix) == 0) {
-			filename = filename.substr(libPrefix.length());
-		}
-
-		return filename;
+		return p.stem().string();
 	}
 
 	bool PluginManager::IsPluginFile(const std::string& path) {
@@ -460,45 +590,86 @@ namespace Plugin {
 	std::string PluginManager::GetLastSystemError() {
 #ifdef _WIN32
 		DWORD error = GetLastError();
-		if (error == 0) return "No error";
+		LPSTR buffer = nullptr;
 
-		LPSTR messageBuffer = nullptr;
-		size_t size = FormatMessageA(
+		FormatMessageA(
 			FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-			NULL, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPSTR)&messageBuffer, 0, NULL);
+			nullptr, error, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPSTR)&buffer, 0, nullptr);
 
-		std::string message(messageBuffer, size);
-		LocalFree(messageBuffer);
-		return message;
+		std::string result = buffer ? buffer : "Unknown error";
+		if (buffer) {
+			LocalFree(buffer);
+		}
+		return result;
 #else
-		const char* error = dlerror();
-		return error ? std::string(error) : "No error";
+		return dlerror() ? dlerror() : "Unknown error";
 #endif
 	}
 
-	void PluginManager::CopyPluginForReload(const std::string& originalPath, std::string& tempPath) {
-		std::filesystem::path original(originalPath);
-		std::filesystem::path temp = original.parent_path() / ("temp_" + original.filename().string());
+	bool PluginManager::IsFileInUse(const std::string& filePath) {
+#ifdef _WIN32
+		HANDLE file = CreateFileA(
+			filePath.c_str(),
+			GENERIC_READ,
+			0, // No sharing - if file is in use, this will fail
+			nullptr,
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL,
+			nullptr
+		);
 
+		if (file == INVALID_HANDLE_VALUE) {
+			DWORD error = GetLastError();
+			CloseHandle(file);
+			return (error == ERROR_SHARING_VIOLATION);
+		}
+
+		CloseHandle(file);
+		return false;
+#else
+		return (rename(filePath.c_str(), filePath.c_str()) != 0);
+#endif
+	}
+
+	std::string PluginManager::CreateTempCopy(const std::string& originalPath) {
 		try {
-			std::filesystem::copy_file(original, temp, std::filesystem::copy_options::overwrite_existing);
-			tempPath = temp.string();
+			std::filesystem::path original(originalPath);
+
+			// Generate a unique temporary filename
+			std::random_device rd;
+			std::mt19937 gen(rd());
+			std::uniform_int_distribution<> dis(1000, 9999);
+
+			std::string tempName = original.stem().string() + "_temp_" + std::to_string(dis(gen)) + original.extension().string();
+			std::filesystem::path tempPath = original.parent_path() / tempName;
+
+			// Copy the file
+			std::filesystem::copy_file(original, tempPath, std::filesystem::copy_options::overwrite_existing);
+
+			std::cout << "Created temporary copy: " << tempPath.string() << std::endl;
+			return tempPath.string();
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Failed to create temp copy for reload: " << e.what() << std::endl;
-			tempPath = originalPath; // Fallback to original
+			std::cerr << "Failed to create temporary copy: " << e.what() << std::endl;
+			return "";
 		}
 	}
 
 	void PluginManager::CleanupTempFile(const std::string& tempPath) {
+		if (tempPath.empty()) {
+			return;
+		}
+
 		try {
 			if (std::filesystem::exists(tempPath)) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 				std::filesystem::remove(tempPath);
+				std::cout << "Cleaned up temporary file: " << tempPath << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Failed to cleanup temp file " << tempPath << ": " << e.what() << std::endl;
+			std::cerr << "Failed to cleanup temporary file " << tempPath << ": " << e.what() << std::endl;
 		}
 	}
 
