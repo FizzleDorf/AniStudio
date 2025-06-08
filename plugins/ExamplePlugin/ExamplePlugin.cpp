@@ -1,5 +1,9 @@
 /*
-	FIXED ExamplePlugin.cpp with Unified SetManagerGetters Interface
+	FIXED ExamplePlugin.cpp with Proper ImGui Cleanup using ImGuiContextManager
+	- Uses existing ImGuiContextManager infrastructure
+	- Adds proper ImGui window cleanup on plugin shutdown
+	- Prevents duplicate rendering after reload
+	- Fixes ImGui state persistence issues
 */
 
 #include "BasePlugin.hpp"
@@ -9,6 +13,7 @@
 #include "ViewManager.hpp"
 #include "PluginRegistry.hpp"
 #include "PluginInterface.hpp"
+#include "PluginImGuiHelper.hpp"
 #include <imgui.h>
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -24,6 +29,9 @@ static void* (*g_getHostUserData)() = nullptr;
 static std::atomic<bool> g_managersValid{ false };
 static std::atomic<bool> g_contextValid{ false };
 static std::atomic<bool> g_shutdownInProgress{ false };
+
+// CRITICAL: Track our plugin state for cleanup
+static std::atomic<bool> g_pluginInitialized{ false };
 
 // Helper functions
 ECS::EntityManager* GetHostEntityManagerSafe() {
@@ -51,27 +59,34 @@ bool EnsureImGuiContext() {
 		return false;
 	}
 
-	if (g_getHostImGuiContext) {
-		ImGuiContext* hostContext = g_getHostImGuiContext();
-		if (hostContext && hostContext != ImGui::GetCurrentContext()) {
-			ImGui::SetCurrentContext(hostContext);
+	// Use the ImGuiContextManager for proper context handling
+	return Plugin::ImGuiContextManager::EnsureContext();
+}
 
-			// Set allocator functions if available
-			if (g_getHostAllocFunc && g_getHostFreeFunc && g_getHostUserData) {
-				ImGuiMemAllocFunc allocFunc = g_getHostAllocFunc();
-				ImGuiMemFreeFunc freeFunc = g_getHostFreeFunc();
-				void* userData = g_getHostUserData();
-
-				if (allocFunc && freeFunc) {
-					ImGui::SetAllocatorFunctions(allocFunc, freeFunc, userData);
-				}
-			}
-
-			return true;
-		}
-		return hostContext != nullptr;
+// CRITICAL: ImGui cleanup function using the proper context manager
+void CleanupPluginImGuiState() {
+	if (!Plugin::ImGuiContextManager::IsContextValid()) {
+		std::cout << "No ImGui context available for cleanup" << std::endl;
+		return;
 	}
-	return false;
+
+	std::cout << "Cleaning up plugin ImGui state..." << std::endl;
+
+	// Use the context manager's safe wrapper for cleanup operations
+	Plugin::ImGuiContextManager::SafeImGuiCall([]() {
+		// Only use the most basic public API functions
+		// Clear keyboard focus (this is the safest and most effective)
+		ImGui::SetKeyboardFocusHere(-1);
+
+		// Clear focus multiple times to ensure it sticks
+		for (int i = 0; i < 5; i++) {
+			ImGui::SetKeyboardFocusHere(-1);
+		}
+
+		return true; // Return something for the template
+	});
+
+	std::cout << "Plugin ImGui state cleanup complete" << std::endl;
 }
 
 // UNIFIED plugin entry point with all parameters
@@ -100,12 +115,18 @@ extern "C" PLUGIN_API void SetManagerGetters(
 	// Call the Plugin namespace function to set up PluginRegistry
 	Plugin::SetManagerGetters(entityGetter, viewGetter, contextGetter, allocGetter, freeGetter, userDataGetter);
 
-	// Immediately set the ImGui context
-	if (EnsureImGuiContext()) {
-		std::cout << "Plugin ImGui context successfully set from host" << std::endl;
+	// CRITICAL: Set up the ImGuiContextManager with the host context
+	if (contextGetter) {
+		ImGuiContext* context = contextGetter();
+		ImGuiMemAllocFunc allocFunc = allocGetter ? allocGetter() : nullptr;
+		ImGuiMemFreeFunc freeFunc = freeGetter ? freeGetter() : nullptr;
+		void* userData = userDataGetter ? userDataGetter() : nullptr;
+
+		Plugin::ImGuiContextManager::SetSharedContext(context, allocFunc, freeFunc, userData);
+		std::cout << "Plugin ImGui context manager initialized successfully" << std::endl;
 	}
 	else {
-		std::cout << "Warning: Failed to set plugin ImGui context" << std::endl;
+		std::cout << "Warning: No ImGui context getter provided" << std::endl;
 	}
 
 	std::cout << "SetManagerGetters called in plugin with unified interface - COMPLETE" << std::endl;
@@ -150,6 +171,7 @@ namespace ExamplePlugin {
 		bool isInitialized = false;
 		bool cleanedUp = false;
 		int renderCount = 0;
+		std::string windowName = "Example Plugin View###ExamplePluginWindow";
 
 	public:
 		ExampleView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
@@ -165,6 +187,11 @@ namespace ExamplePlugin {
 		void SafeCleanup() {
 			if (cleanedUp) return;
 			cleanedUp = true;
+
+			std::cout << "ExampleView::SafeCleanup() called" << std::endl;
+
+			// CRITICAL: Clean up ImGui state FIRST using the context manager
+			CleanupPluginImGuiState();
 
 			if (!g_shutdownInProgress.load() && g_managersValid.load()) {
 				try {
@@ -209,8 +236,8 @@ namespace ExamplePlugin {
 		void Render() override {
 			renderCount++;
 
-			// CRITICAL: Ensure ImGui context before any ImGui calls
-			if (!EnsureImGuiContext()) {
+			// CRITICAL: Use the ImGuiContextManager for safe rendering
+			if (!Plugin::ImGuiContextManager::IsContextValid()) {
 				if (renderCount % 60 == 0) {
 					std::cout << "ExampleView::Render - No ImGui context available (render #" << renderCount << ")" << std::endl;
 				}
@@ -221,112 +248,115 @@ namespace ExamplePlugin {
 				return;
 			}
 
-			// Now we can safely use ImGui functions
-			bool windowOpen = true;
-			if (ImGui::Begin("Example Plugin View###ExamplePluginWindow", &windowOpen)) {
-				ImGui::Text("=== EXAMPLE PLUGIN VIEW ===");
-				ImGui::Text("ImGui Context: %p", ImGui::GetCurrentContext());
-				ImGui::Text("Render Count: %d", renderCount);
+			// Use the safe wrapper for all ImGui operations
+			Plugin::ImGuiContextManager::SafeImGuiCall([this]() {
+				bool windowOpen = true;
+				if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
+					ImGui::Text("=== EXAMPLE PLUGIN VIEW ===");
+					ImGui::Text("ImGui Context: %p", ImGui::GetCurrentContext());
+					ImGui::Text("Render Count: %d", renderCount);
 
-				if (!isInitialized) {
-					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Plugin not properly initialized!");
-					ImGui::End();
-					return;
-				}
+					if (!isInitialized) {
+						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Plugin not properly initialized!");
+						ImGui::End();
+						return true;
+					}
 
-				auto* hostMgr = GetHostEntityManagerSafe();
-				if (!hostMgr) {
-					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Host EntityManager not available!");
-					ImGui::End();
-					return;
-				}
+					auto* hostMgr = GetHostEntityManagerSafe();
+					if (!hostMgr) {
+						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Host EntityManager not available!");
+						ImGui::End();
+						return true;
+					}
 
-				ImGui::Text("Host EntityManager: %p", hostMgr);
-				ImGui::Text("Plugin EntityManager: %p", &mgr);
-				ImGui::Separator();
+					ImGui::Text("Host EntityManager: %p", hostMgr);
+					ImGui::Text("Plugin EntityManager: %p", &mgr);
+					ImGui::Separator();
 
-				ImGui::Text("Test Entity ID: %zu", testEntity);
+					ImGui::Text("Test Entity ID: %zu", testEntity);
 
-				if (testEntity != 0 && hostMgr->GetEntitiesSignatures().count(testEntity)) {
-					if (hostMgr->HasComponent<ExampleComponent>(testEntity)) {
-						auto& comp = hostMgr->GetComponent<ExampleComponent>(testEntity);
-						ImGui::Text("Counter value: %d", comp.counter);
+					if (testEntity != 0 && hostMgr->GetEntitiesSignatures().count(testEntity)) {
+						if (hostMgr->HasComponent<ExampleComponent>(testEntity)) {
+							auto& comp = hostMgr->GetComponent<ExampleComponent>(testEntity);
+							ImGui::Text("Counter value: %d", comp.counter);
 
-						if (ImGui::Button("Increment Counter")) {
-							comp.counter++;
-							std::cout << "Incremented counter to: " << comp.counter << std::endl;
+							if (ImGui::Button("Increment Counter")) {
+								comp.counter++;
+								std::cout << "Incremented counter to: " << comp.counter << std::endl;
+							}
+
+							ImGui::SameLine();
+							if (ImGui::Button("Reset Counter")) {
+								comp.counter = 0;
+							}
+
+							ImGui::SameLine();
+							if (ImGui::Button("Add 10")) {
+								comp.counter += 10;
+							}
 						}
-
-						ImGui::SameLine();
-						if (ImGui::Button("Reset Counter")) {
-							comp.counter = 0;
-						}
-
-						ImGui::SameLine();
-						if (ImGui::Button("Add 10")) {
-							comp.counter += 10;
+						else {
+							ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Test entity missing ExampleComponent!");
 						}
 					}
 					else {
-						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Test entity missing ExampleComponent!");
-					}
-				}
-				else {
-					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Test entity not found!");
-				}
-
-				ImGui::Separator();
-
-				ImGui::Spacing();
-				if (ImGui::Button("Create New Entity with ExampleComponent")) {
-					try {
-						ECS::EntityID newEntity = hostMgr->AddNewEntity();
-						hostMgr->AddComponent<ExampleComponent>(newEntity);
-						auto& comp = hostMgr->GetComponent<ExampleComponent>(newEntity);
-						comp.counter = 100;
-						std::cout << "Created new entity " << newEntity << " with ExampleComponent" << std::endl;
-					}
-					catch (const std::exception& e) {
-						std::cerr << "Error creating entity: " << e.what() << std::endl;
-					}
-				}
-
-				// Show all entities with ExampleComponent
-				ImGui::Separator();
-				ImGui::Text("All entities with ExampleComponent:");
-
-				auto entities = hostMgr->GetAllEntities();
-				int exampleCompCount = 0;
-				for (auto entity : entities) {
-					if (hostMgr->GetEntitiesSignatures().count(entity) == 0) {
-						continue;
+						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Test entity not found!");
 					}
 
-					if (hostMgr->HasComponent<ExampleComponent>(entity)) {
-						exampleCompCount++;
-						auto& exampleComp = hostMgr->GetComponent<ExampleComponent>(entity);
+					ImGui::Separator();
 
-						ImGui::Text("Entity ID: %zu, Counter: %d", entity, exampleComp.counter);
-
-						ImGui::PushID(static_cast<int>(entity));
-						if (ImGui::Button("Reset")) {
-							exampleComp.counter = 0;
+					ImGui::Spacing();
+					if (ImGui::Button("Create New Entity with ExampleComponent")) {
+						try {
+							ECS::EntityID newEntity = hostMgr->AddNewEntity();
+							hostMgr->AddComponent<ExampleComponent>(newEntity);
+							auto& comp = hostMgr->GetComponent<ExampleComponent>(newEntity);
+							comp.counter = 100;
+							std::cout << "Created new entity " << newEntity << " with ExampleComponent" << std::endl;
 						}
-						ImGui::SameLine();
-						if (ImGui::Button("+1")) {
-							exampleComp.counter++;
+						catch (const std::exception& e) {
+							std::cerr << "Error creating entity: " << e.what() << std::endl;
 						}
-						ImGui::SameLine();
-						if (ImGui::Button("-1")) {
-							exampleComp.counter--;
-						}
-						ImGui::PopID();
 					}
-				}
 
-				ImGui::Text("Total entities with ExampleComponent: %d", exampleCompCount);
-			}
-			ImGui::End();
+					// Show all entities with ExampleComponent
+					ImGui::Separator();
+					ImGui::Text("All entities with ExampleComponent:");
+
+					auto entities = hostMgr->GetAllEntities();
+					int exampleCompCount = 0;
+					for (auto entity : entities) {
+						if (hostMgr->GetEntitiesSignatures().count(entity) == 0) {
+							continue;
+						}
+
+						if (hostMgr->HasComponent<ExampleComponent>(entity)) {
+							exampleCompCount++;
+							auto& exampleComp = hostMgr->GetComponent<ExampleComponent>(entity);
+
+							ImGui::Text("Entity ID: %zu, Counter: %d", entity, exampleComp.counter);
+
+							ImGui::PushID(static_cast<int>(entity));
+							if (ImGui::Button("Reset")) {
+								exampleComp.counter = 0;
+							}
+							ImGui::SameLine();
+							if (ImGui::Button("+1")) {
+								exampleComp.counter++;
+							}
+							ImGui::SameLine();
+							if (ImGui::Button("-1")) {
+								exampleComp.counter--;
+							}
+							ImGui::PopID();
+						}
+					}
+
+					ImGui::Text("Total entities with ExampleComponent: %d", exampleCompCount);
+				}
+				ImGui::End();
+				return true;
+			});
 		}
 
 		void Update(const float deltaT) override {
@@ -340,7 +370,7 @@ class ExamplePluginImpl : public Plugin::BasePlugin {
 private:
 	std::string m_name = "ExamplePlugin";
 	std::string m_version = "1.0.0";
-	std::string m_description = "A fixed example plugin with proper ImGui context sharing";
+	std::string m_description = "A fixed example plugin with proper ImGui context sharing and cleanup";
 	GUI::ViewListID m_viewID = 0;
 	bool m_initialized = false;
 
@@ -373,7 +403,7 @@ public:
 			std::cout << "Got host managers - EM: " << hostEM << ", VM: " << hostVM << std::endl;
 
 			// Verify ImGui context is available
-			if (!EnsureImGuiContext()) {
+			if (!Plugin::ImGuiContextManager::IsContextValid()) {
 				std::cerr << "WARNING: ImGui context not available during plugin initialization" << std::endl;
 			}
 
@@ -402,6 +432,7 @@ public:
 
 			SetInitialized(true);
 			m_initialized = true;
+			g_pluginInitialized.store(true);
 
 			std::cout << "=== EXAMPLE PLUGIN INITIALIZED SUCCESSFULLY ===" << std::endl;
 			return true;
@@ -418,6 +449,10 @@ public:
 		try {
 			std::cout << "=== SHUTTING DOWN EXAMPLE PLUGIN ===" << std::endl;
 			g_shutdownInProgress.store(true);
+			g_pluginInitialized.store(false);
+
+			// CRITICAL: Clean up ImGui state BEFORE destroying views
+			CleanupPluginImGuiState();
 
 			if (m_viewID != 0 && g_managersValid.load()) {
 				auto* hostVM = GetHostViewManagerSafe();
@@ -478,6 +513,13 @@ extern "C" PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin) {
 		if (plugin) {
 			g_managersValid.store(false);
 			g_shutdownInProgress.store(true);
+
+			// CRITICAL: Final ImGui cleanup before plugin destruction
+			CleanupPluginImGuiState();
+
+			// CRITICAL: Clean up the ImGuiContextManager
+			Plugin::ImGuiContextManager::Cleanup();
+
 			delete plugin;
 			std::cout << "Plugin deleted successfully" << std::endl;
 		}
