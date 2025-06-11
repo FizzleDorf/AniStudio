@@ -43,6 +43,12 @@ namespace UISchema {
 	using PropertyVariant = std::variant<bool*, int*, float*, double*, std::string*, ImVec2*, ImVec4*, std::vector<std::string>*>;
 	using PropertyMap = std::unordered_map<std::string, PropertyVariant>;
 
+	// Window state management for separate windows
+	static std::unordered_map<std::string, bool>& GetWindowStates() {
+		static std::unordered_map<std::string, bool> windowStates;
+		return windowStates;
+	}
+
 	// Forward declarations
 	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties);
 	static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
@@ -52,6 +58,7 @@ namespace UISchema {
 	static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
 		const nlohmann::json& propSchema, const PropertyMap& allProperties);
 	static void SetupTableColumns(const nlohmann::json& tableSchema, int columns);
+	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties);
 
 	// Main rendering functions
 	static bool RenderSchema(const nlohmann::json& schema, PropertyMap& properties) {
@@ -68,7 +75,11 @@ namespace UISchema {
 			ImGui::Separator();
 		}
 
-		if (schema.contains("ui:table") && schema["ui:table"].is_object()) {
+		// NEW: Check if this schema should create separate windows
+		if (schema.contains("ui:separate_windows") && schema["ui:separate_windows"].get<bool>()) {
+			modified = RenderSeparateWindows(schema, properties);
+		}
+		else if (schema.contains("ui:table") && schema["ui:table"].is_object()) {
 			modified = RenderTable(schema, properties);
 		}
 		else if (schema.contains("properties") && schema["properties"].is_object()) {
@@ -76,6 +87,126 @@ namespace UISchema {
 		}
 
 		PopStyleFromSchema(schema);
+		return modified;
+	}
+
+	// NEW: Handle separate window rendering - COMPLETELY SELF-CONTAINED
+	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties) {
+		bool modified = false;
+		auto& windowStates = GetWindowStates();
+
+		if (!schema.contains("properties") || !schema["properties"].is_object()) {
+			return false;
+		}
+
+		std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
+
+		for (const auto& propName : propertyOrder) {
+			if (schema["properties"].contains(propName)) {
+				const auto& propSchema = schema["properties"][propName];
+
+				// Check if this property should have its own window
+				if (propSchema.contains("ui:window") && propSchema["ui:window"].get<bool>()) {
+
+					if (properties.find(propName) == properties.end()) {
+						ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Property not found: %s", propName.c_str());
+						continue;
+					}
+
+					// Get window name
+					std::string windowName = propName;
+					if (propSchema.contains("ui:window_name") && propSchema["ui:window_name"].is_string()) {
+						windowName = propSchema["ui:window_name"].get<std::string>();
+					}
+
+					// Create unique window ID
+					uintptr_t propAddress = 0;
+					if (std::holds_alternative<std::string*>(properties[propName])) {
+						propAddress = reinterpret_cast<uintptr_t>(std::get<std::string*>(properties[propName]));
+					}
+					std::string windowId = windowName + "##" + std::to_string(propAddress);
+
+					// Initialize window state
+					if (windowStates.find(windowId) == windowStates.end()) {
+						windowStates[windowId] = false;
+					}
+
+					// Render button to open window
+					std::string buttonLabel = "Open " + windowName + " Editor";
+					if (ImGui::Button(buttonLabel.c_str())) {
+						windowStates[windowId] = true;
+					}
+
+					// Show status
+					ImGui::SameLine();
+					if (std::holds_alternative<std::string*>(properties[propName])) {
+						std::string* strPtr = std::get<std::string*>(properties[propName]);
+						ImGui::Text("(%zu chars)", strPtr->length());
+					}
+
+					// RENDER THE WINDOW IMMEDIATELY IF IT SHOULD BE SHOWN
+					if (windowStates[windowId]) {
+						bool& showWindow = windowStates[windowId];
+
+						if (ImGui::Begin(windowId.c_str(), &showWindow, ImGuiWindowFlags_MenuBar)) {
+							// Menu bar
+							if (ImGui::BeginMenuBar()) {
+								if (ImGui::BeginMenu("File")) {
+									if (ImGui::MenuItem("Clear")) {
+										if (std::holds_alternative<std::string*>(properties[propName])) {
+											std::string* strPtr = std::get<std::string*>(properties[propName]);
+											strPtr->clear();
+											modified = true;
+										}
+									}
+									ImGui::EndMenu();
+								}
+								if (ImGui::BeginMenu("Edit")) {
+									if (ImGui::MenuItem("Focus")) {
+										UISchema::StringWidgets::ClearFocus();
+										// Focus will be handled by the widget itself
+									}
+									ImGui::EndMenu();
+								}
+								ImGui::EndMenuBar();
+							}
+
+							// Render the actual widget
+							std::string widgetType = GetWidgetType(propSchema);
+							PropertyVariant& propVariant = properties[propName];
+
+							try {
+								if (RenderPropertyWidget("##" + propName, widgetType, propVariant, propSchema, properties)) {
+									modified = true;
+								}
+							}
+							catch (const std::exception& e) {
+								ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+									"Error rendering property %s: %s", propName.c_str(), e.what());
+							}
+						}
+						ImGui::End();
+					}
+				}
+				else {
+					// Regular property rendering for properties without ui:window
+					std::string widgetType = GetWidgetType(propSchema);
+					std::string label = GetPropertyLabel(propName, propSchema);
+					PropertyVariant& propVariant = properties[propName];
+
+					try {
+						if (RenderPropertyWidget(label, widgetType, propVariant, propSchema, properties)) {
+							modified = true;
+						}
+					}
+					catch (const std::exception& e) {
+						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+							"Error rendering property %s: %s", propName.c_str(), e.what());
+					}
+				}
+			}
+		}
+
 		return modified;
 	}
 
@@ -241,50 +372,44 @@ namespace UISchema {
 	}
 
 	/*
-	// Example usage for a prompt component:
-	// Define your schema (usually loaded from a file)
+	// Example usage for a prompt component with separate windows:
+	// The UISchema handles EVERYTHING automatically - no additional calls needed!
+
 	nlohmann::json promptSchema = {
 		{"title", "Prompt Settings"},
 		{"type", "object"},
 		{"propertyOrder", {"posPrompt", "negPrompt"}},
-		{"ui:table", {
-			{"columns", 2},
-			{"flags", ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp},
-			{"columnSetup", {
-				{"Param", {ImGuiTableColumnFlags_WidthFixed, 52.0f}},
-				{"Value", {ImGuiTableColumnFlags_WidthStretch, 0.0f}}
-			}}
-		}},
+		{"ui:separate_windows", true},  // Enable separate window mode
 		{"properties", {
 			{"posPrompt", {
 				{"type", "string"},
 				{"title", "Positive"},
-				{"ui:widget", "textarea"},
-				{"ui:flags", ImGuiInputTextFlags_AllowTabInput},
+				{"ui:widget", "zep_editor_toolbar"},
+				{"ui:window", true},  // Create separate window
+				{"ui:window_name", "Positive"},  // Window name
 				{"ui:options", {
-					{"rows", 8}
+					{"width", 800.0f},
+					{"height", 400.0f}
 				}}
 			}},
 			{"negPrompt", {
 				{"type", "string"},
 				{"title", "Negative"},
-				{"ui:widget", "textarea"},
-				{"ui:flags", ImGuiInputTextFlags_AllowTabInput},
+				{"ui:widget", "zep_editor_toolbar"},
+				{"ui:window", true},  // Create separate window
+				{"ui:window_name", "Negative"},  // Window name
 				{"ui:options", {
-					{"rows", 8}
+					{"width", 800.0f},
+					{"height", 300.0f}
 				}}
 			}}
 		}}
 	};
 
-	// Map your component variables to property pointers
-	UISchema::PropertyMap promptProps = {
-		{"posPrompt", &promptComponent.posPrompt},
-		{"negPrompt", &promptComponent.negPrompt}
-	};
-
-	// Render the UI from the schema
-	bool modified = UISchema::RenderSchema(promptSchema, promptProps);
+	// Usage in your view - THAT'S IT! UISchema handles everything:
+	auto promptProps = promptComponent.GetPropertyMap();
+	UISchema::RenderSchema(promptSchema, promptProps);
+	// ^ This shows buttons AND automatically renders "Positive" and "Negative" windows!
 	*/
 
 } // namespace UISchema
