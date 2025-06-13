@@ -91,6 +91,7 @@ namespace UISchema {
 	}
 
 	// NEW: Handle separate window rendering - COMPLETELY SELF-CONTAINED
+	// NEW: Handle separate window rendering - COMPLETELY SELF-CONTAINED
 	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties) {
 		bool modified = false;
 		auto& windowStates = GetWindowStates();
@@ -131,11 +132,9 @@ namespace UISchema {
 						windowStates[windowId] = false;
 					}
 
-					// Render button to open window
-					std::string buttonLabel = "Open " + windowName + " Editor";
-					if (ImGui::Button(buttonLabel.c_str())) {
-						windowStates[windowId] = true;
-					}
+					// Render checkbox to toggle window
+					std::string checkboxLabel = windowName + " Editor";
+					ImGui::Checkbox(checkboxLabel.c_str(), &windowStates[windowId]);
 
 					// Show status
 					ImGui::SameLine();
@@ -148,30 +147,8 @@ namespace UISchema {
 					if (windowStates[windowId]) {
 						bool& showWindow = windowStates[windowId];
 
-						if (ImGui::Begin(windowId.c_str(), &showWindow, ImGuiWindowFlags_MenuBar)) {
-							// Menu bar
-							if (ImGui::BeginMenuBar()) {
-								if (ImGui::BeginMenu("File")) {
-									if (ImGui::MenuItem("Clear")) {
-										if (std::holds_alternative<std::string*>(properties[propName])) {
-											std::string* strPtr = std::get<std::string*>(properties[propName]);
-											strPtr->clear();
-											modified = true;
-										}
-									}
-									ImGui::EndMenu();
-								}
-								if (ImGui::BeginMenu("Edit")) {
-									if (ImGui::MenuItem("Focus")) {
-										UISchema::StringWidgets::ClearFocus();
-										// Focus will be handled by the widget itself
-									}
-									ImGui::EndMenu();
-								}
-								ImGui::EndMenuBar();
-							}
+						if (ImGui::Begin(windowId.c_str(), &showWindow)) {
 
-							// Render the actual widget
 							std::string widgetType = GetWidgetType(propSchema);
 							PropertyVariant& propVariant = properties[propName];
 

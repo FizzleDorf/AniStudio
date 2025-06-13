@@ -1,6 +1,7 @@
 #pragma once
 #include <zep/editor.h>
 #include <zep/imgui/editor_imgui.h>
+#include <zep/mode_standard.h>
 #include <memory>
 #include <string>
 #include <filesystem>
@@ -9,7 +10,6 @@
 
 namespace Utils {
 
-	// Simple focus tracker - just tracks which instance is currently focused
 	class ZepFocusTracker {
 	private:
 		static uintptr_t& GetFocusedInstance() {
@@ -33,10 +33,9 @@ namespace Utils {
 
 	class ZepTextEditor : public Zep::IZepComponent {
 	private:
-		std::shared_ptr<Zep::ZepEditor_ImGui> editor;
+		std::unique_ptr<Zep::ZepEditor_ImGui> editor;
 		uintptr_t instanceId;
 		bool isInitialized;
-		std::string lastKnownText;
 
 		// Configuration state
 		bool showLineNumbers = true;
@@ -46,18 +45,18 @@ namespace Utils {
 		bool enableSyntaxHighlighting = true;
 		bool autoIndent = true;
 		std::string currentTheme = "dark";
-
-		// Search state
-		std::string currentSearchTerm;
-		bool searchCaseSensitive = false;
-		bool searchRegex = false;
 		bool showSearchBox = false;
+		std::string currentSearchTerm;
 
 	public:
 		ZepTextEditor() : instanceId(reinterpret_cast<uintptr_t>(this)), isInitialized(false) {
 		}
 
-		~ZepTextEditor() = default;
+		~ZepTextEditor() {
+			if (editor) {
+				editor->UnRegisterCallback(this);
+			}
+		}
 
 		bool Initialize() {
 			if (isInitialized) {
@@ -67,34 +66,22 @@ namespace Utils {
 			try {
 				auto rootPath = std::filesystem::current_path();
 
-				// Create completely independent Zep editor instance
-				editor = std::make_shared<Zep::ZepEditor_ImGui>(
+				// Create editor EXACTLY like demo
+				editor = std::make_unique<Zep::ZepEditor_ImGui>(
 					rootPath,
-					Zep::NVec2f(1.0f, 1.0f),
-					Zep::ZepEditorFlags::DisableThreads,
-					nullptr
+					Zep::NVec2f(1.0f, 1.0f)
 					);
 
-				SetupClipboardCallbacks();
-				SetupInitialBuffer();
+				// Register callback like demo
+				editor->RegisterCallback(this);
 
-				// FORCE Standard mode - Zep defaults to Vim! Use exact string from ZepMode_Standard::StaticName()
-				editor->SetGlobalMode("Standard");  // Capital S!
+				// Initialize with text like demo
+				editor->InitWithText("buffer.txt", "");
 
-				std::cout << "Forced Standard mode during initialization" << std::endl;
+				// Force standard mode like demo
+				editor->SetGlobalMode(Zep::ZepMode_Standard::StaticName());
 
-				// Verify we're in Standard mode
-				auto* mode = editor->GetGlobalMode();
-				if (mode) {
-					std::cout << "Current mode after init: " << mode->Name() << std::endl;
-					if (mode->Name() != "Standard") {
-						std::cerr << "ERROR: Still not in Standard mode after initialization!" << std::endl;
-					}
-				}
-
-				// Apply default configuration
 				ApplyCurrentConfiguration();
-
 				isInitialized = true;
 				return true;
 			}
@@ -104,145 +91,83 @@ namespace Utils {
 			}
 		}
 
+		// EXACT demo pattern - no child windows, no bullshit
 		void Render(ImVec2 position, ImVec2 size) {
 			if (!editor || !isInitialized) {
 				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Editor not initialized");
 				return;
 			}
 
-			// Render search box if enabled
-			if (showSearchBox) {
-				RenderSearchBox();
-			}
-
-			// Check if we're focused
+			// Handle focus
 			bool isFocused = ZepFocusTracker::IsFocused(instanceId);
-
-			// Handle focus changes with a child window that captures input
-			std::string childId = "##zep_child_" + std::to_string(instanceId);
-
-			if (ImGui::BeginChild(childId.c_str(), size, true, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
-				bool childFocused = ImGui::IsWindowFocused();
-				bool childHovered = ImGui::IsWindowHovered();
-
-				// Update focus state - but don't steal focus from text selection
-				if (childHovered && ImGui::IsMouseClicked(0) && !ImGui::IsMouseDragging(0)) {
-					ZepFocusTracker::SetFocused(instanceId);
-					isFocused = true;
-				}
-				else if (isFocused && ImGui::IsMouseClicked(0) && !childHovered) {
-					ZepFocusTracker::ClearFocus();
-					isFocused = false;
-				}
-
-				// Set the editor's focus state (controls cursor blinking and input processing)
-				editor->isFocused = isFocused;
-
-				// IMPORTANT: Allow Zep to handle text selection properly
-				if (isFocused) {
-					ImGuiIO& io = ImGui::GetIO();
-
-					// Let Zep handle mouse for text selection, but don't override keyboard shortcuts
-					if (childHovered) {
-						io.WantCaptureMouse = false;  // Let Zep handle mouse for text selection
-					}
-
-					// Only prevent keyboard capture for certain keys, allow Ctrl+C, Ctrl+V, etc.
-					if (!io.KeyCtrl && !io.KeyAlt) {
-						io.WantCaptureKeyboard = false;  // Let Zep handle most keyboard input
-					}
-				}
-
-				// Handle search hotkeys - check BEFORE setting focus
-				ImGuiIO& io = ImGui::GetIO();
-				if (childHovered && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) {
-					showSearchBox = !showSearchBox;
-				}
-
-				// Draw highlight border if focused
-				if (isFocused) {
-					ImDrawList* drawList = ImGui::GetWindowDrawList();
-					ImVec2 childPos = ImGui::GetWindowPos();
-					ImVec2 childSize = ImGui::GetWindowSize();
-					drawList->AddRect(childPos, ImVec2(childPos.x + childSize.x, childPos.y + childSize.y),
-						IM_COL32(100, 150, 255, 255), 0.0f, 0, 2.0f);
-				}
-
-				try {
-					// Get the actual content area of the child window
-					ImVec2 contentSize = ImGui::GetContentRegionAvail();
-					ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-
-					// Set display region for Zep
-					editor->SetDisplayRegion(
-						Zep::NVec2f(cursorPos.x, cursorPos.y),
-						Zep::NVec2f(cursorPos.x + contentSize.x, cursorPos.y + contentSize.y)
-					);
-
-					// CRITICAL: Only let the focused editor handle input, but allow standard text editing
-					if (isFocused) {
-						// FORCE Standard mode every frame - use correct string
-						editor->SetGlobalMode("Standard");  // Capital S!
-
-						// Handle search hotkey before Zep gets input
-						ImGuiIO& io = ImGui::GetIO();
-						if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_F)) {
-							showSearchBox = !showSearchBox;
-							// Clear the key press so Zep doesn't also handle it
-							io.KeysDown[ImGuiKey_F] = false;
-						}
-						else {
-							// Let Zep handle ALL other input (keyboard + mouse)
-							editor->HandleInput();
-						}
-					}
-
-					// Always display the editor
-					editor->Display();
-				}
-				catch (const std::exception& e) {
-					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Render Error: %s", e.what());
-				}
+			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
+				ZepFocusTracker::SetFocused(instanceId);
+				isFocused = true;
 			}
-			ImGui::EndChild();
-		}
+			editor->isFocused = isFocused;
 
-		void SetMode(const std::string& mode) {
-			// ALWAYS force Standard mode - use correct string
-			if (editor && isInitialized) {
-				editor->SetGlobalMode("Standard");  // Capital S!
+			// Get display region EXACTLY like demo
+			auto min = ImGui::GetCursorScreenPos();
+			auto max = ImGui::GetContentRegionAvail();
+			max.x = std::max(1.0f, max.x);
+			max.y = std::max(1.0f, max.y);
+
+			// Fill the region EXACTLY like demo
+			max.x = min.x + max.x;
+			max.y = min.y + max.y;
+			editor->SetDisplayRegion(Zep::NVec2f(min.x, min.y), Zep::NVec2f(max.x, max.y));
+
+			// EXACT demo order: Display FIRST, HandleInput SECOND
+			editor->Display();
+			if (isFocused) {
+				editor->HandleInput();
 			}
 		}
 
-		std::string GetText() const {
-			if (editor && isInitialized) {
-				auto* tabWindow = editor->GetActiveTabWindow();
-				if (tabWindow) {
-					auto* window = tabWindow->GetActiveWindow();
-					if (window) {
-						auto& buffer = window->GetBuffer();
-						return buffer.GetWorkingBuffer().string();
+		// Simple menu bar
+		void RenderMenuBar() {
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::BeginMenu("File")) {
+					if (ImGui::MenuItem("New", "Ctrl+N")) {
+						SetText("");
 					}
+					if (ImGui::MenuItem("Save", "Ctrl+S")) {
+						// TODO: Save functionality
+					}
+					ImGui::EndMenu();
 				}
+
+				if (ImGui::BeginMenu("Edit")) {
+					if (ImGui::MenuItem("Copy", "Ctrl+C")) {
+						// Handled by Zep
+					}
+					if (ImGui::MenuItem("Paste", "Ctrl+V")) {
+						// Handled by Zep
+					}
+					ImGui::EndMenu();
+				}
+
+				if (ImGui::BeginMenu("Options")) {
+					if (ImGui::MenuItem("Line Numbers", nullptr, showLineNumbers)) {
+						SetShowLineNumbers(!showLineNumbers);
+					}
+					if (ImGui::MenuItem("Word Wrap", nullptr, wordWrap)) {
+						SetWordWrap(!wordWrap);
+					}
+					if (ImGui::MenuItem("Show Whitespace", nullptr, showWhitespace)) {
+						SetShowWhitespace(!showWhitespace);
+					}
+					if (ImGui::MenuItem("Syntax Highlighting", nullptr, enableSyntaxHighlighting)) {
+						SetSyntaxHighlighting(!enableSyntaxHighlighting);
+					}
+					ImGui::EndMenu();
+				}
+
+				ImGui::EndMenuBar();
 			}
-			return lastKnownText;
 		}
 
-		void SetText(const std::string& text) {
-			lastKnownText = text;
-			if (editor && isInitialized) {
-				auto* tabWindow = editor->GetActiveTabWindow();
-				if (tabWindow) {
-					auto* window = tabWindow->GetActiveWindow();
-					if (window) {
-						auto& buffer = window->GetBuffer();
-						buffer.SetText(text);
-					}
-				}
-			}
-		}
-
-		// Configuration methods (store state but don't apply to Zep directly)
+		// Configuration methods
 		void SetShowLineNumbers(bool show) {
 			showLineNumbers = show;
 			ApplyCurrentConfiguration();
@@ -278,7 +203,11 @@ namespace Utils {
 			ApplyCurrentConfiguration();
 		}
 
-		// Configuration getters
+		void SetShowMenuBar(bool show) {
+			// Compatibility method
+		}
+
+		// Getters
 		bool GetShowLineNumbers() const { return showLineNumbers; }
 		bool GetWordWrap() const { return wordWrap; }
 		bool GetReadOnly() const { return readOnly; }
@@ -286,214 +215,51 @@ namespace Utils {
 		bool GetSyntaxHighlighting() const { return enableSyntaxHighlighting; }
 		bool GetAutoIndent() const { return autoIndent; }
 		std::string GetTheme() const { return currentTheme; }
+		bool GetShowMenuBar() const { return true; }
+
+		// Text methods
+		std::string GetText() const {
+			if (editor && isInitialized) {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					return buffer->GetWorkingBuffer().string();
+				}
+			}
+			return "";
+		}
+
+		void SetText(const std::string& text) {
+			if (editor && isInitialized) {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					buffer->SetText(text);
+				}
+			}
+		}
+
+		void SetMode(const std::string& mode) {
+			if (editor && isInitialized) {
+				editor->SetGlobalMode(Zep::ZepMode_Standard::StaticName());
+			}
+		}
 
 		// Search functionality
 		void SetSearchTerm(const std::string& term) { currentSearchTerm = term; }
 		std::string GetSearchTerm() const { return currentSearchTerm; }
-
-		void SetSearchCaseSensitive(bool caseSensitive) { searchCaseSensitive = caseSensitive; }
-		bool GetSearchCaseSensitive() const { return searchCaseSensitive; }
-
-		void SetSearchRegex(bool regex) { searchRegex = regex; }
-		bool GetSearchRegex() const { return searchRegex; }
-
+		void SetSearchCaseSensitive(bool caseSensitive) { }
+		bool GetSearchCaseSensitive() const { return false; }
+		void SetSearchRegex(bool regex) { }
+		bool GetSearchRegex() const { return false; }
 		void ShowSearchBox(bool show) { showSearchBox = show; }
 		bool IsSearchBoxVisible() const { return showSearchBox; }
 
-		// Copy selected text to clipboard (simplified version using existing working methods)
-		bool CopySelection() {
-			if (!editor || !isInitialized) {
-				return false;
-			}
-
-			try {
-				// For now, just copy current text since we don't have selection API access
-				// This will be enhanced once proper selection API is available
-				std::string currentText = GetText();
-				if (!currentText.empty()) {
-					ImGui::SetClipboardText(currentText.c_str());
-					return true;
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error in CopySelection: " << e.what() << std::endl;
-			}
-			return false;
-		}
-
-		// Paste text from clipboard (simplified version)
-		bool PasteFromClipboard() {
-			if (!editor || !isInitialized) {
-				return false;
-			}
-
-			try {
-				const char* clipboardText = ImGui::GetClipboardText();
-				if (!clipboardText || strlen(clipboardText) == 0) {
-					return false;
-				}
-
-				// For now, append to existing text
-				// This will be enhanced once proper insertion API is available
-				std::string currentText = GetText();
-				std::string newText = currentText + std::string(clipboardText);
-				SetText(newText);
-				return true;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error in PasteFromClipboard: " << e.what() << std::endl;
-			}
-			return false;
-		}
-		bool FindNext() {
-			if (!editor || !isInitialized || currentSearchTerm.empty()) {
-				return false;
-			}
-
-			try {
-				// Simple string search implementation since Zep's search API isn't available
-				std::string text = GetText();
-				auto* tabWindow = editor->GetActiveTabWindow();
-				if (!tabWindow) return false;
-
-				auto* window = tabWindow->GetActiveWindow();
-				if (!window) return false;
-
-				auto cursor = window->GetBufferCursor();
-				long currentPos = cursor.Index();
-
-				// Search forward from current position
-				std::string searchText = currentSearchTerm;
-				if (!searchCaseSensitive) {
-					// Convert to lowercase for case-insensitive search
-					std::transform(searchText.begin(), searchText.end(), searchText.begin(), ::tolower);
-					std::transform(text.begin(), text.end(), text.begin(), ::tolower);
-				}
-
-				size_t found = text.find(searchText, currentPos + 1);
-				if (found != std::string::npos) {
-					// Move cursor to found position
-					auto& buffer = window->GetBuffer();
-					auto foundIter = buffer.Begin() + found;
-					window->SetBufferCursor(foundIter);
-					return true;
-				}
-
-				// If not found forward, search from beginning
-				found = text.find(searchText, 0);
-				if (found != std::string::npos && found < currentPos) {
-					auto& buffer = window->GetBuffer();
-					auto foundIter = buffer.Begin() + found;
-					window->SetBufferCursor(foundIter);
-					return true;
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error in FindNext: " << e.what() << std::endl;
-			}
-			return false;
-		}
-
-		bool FindPrevious() {
-			if (!editor || !isInitialized || currentSearchTerm.empty()) {
-				return false;
-			}
-
-			try {
-				// Simple string search implementation
-				std::string text = GetText();
-				auto* tabWindow = editor->GetActiveTabWindow();
-				if (!tabWindow) return false;
-
-				auto* window = tabWindow->GetActiveWindow();
-				if (!window) return false;
-
-				auto cursor = window->GetBufferCursor();
-				long currentPos = cursor.Index();
-
-				// Search backward from current position
-				std::string searchText = currentSearchTerm;
-				if (!searchCaseSensitive) {
-					std::transform(searchText.begin(), searchText.end(), searchText.begin(), ::tolower);
-					std::transform(text.begin(), text.end(), text.begin(), ::tolower);
-				}
-
-				// Find last occurrence before current position
-				size_t found = std::string::npos;
-				size_t pos = 0;
-				while ((pos = text.find(searchText, pos)) != std::string::npos && pos < currentPos) {
-					found = pos;
-					pos++;
-				}
-
-				if (found != std::string::npos) {
-					auto& buffer = window->GetBuffer();
-					auto foundIter = buffer.Begin() + found;
-					window->SetBufferCursor(foundIter);
-					return true;
-				}
-
-				// If not found backward, search from end
-				found = text.rfind(searchText);
-				if (found != std::string::npos && found > currentPos) {
-					auto& buffer = window->GetBuffer();
-					auto foundIter = buffer.Begin() + found;
-					window->SetBufferCursor(foundIter);
-					return true;
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error in FindPrevious: " << e.what() << std::endl;
-			}
-			return false;
-		}
-
-		bool LoadFile(const std::string& filePath) {
-			if (editor && isInitialized) {
-				try {
-					auto* buffer = editor->GetFileBuffer(filePath);
-					auto* tabWindow = editor->GetActiveTabWindow();
-					if (tabWindow) {
-						auto* window = tabWindow->GetActiveWindow();
-						if (window && buffer) {
-							window->SetBuffer(buffer);
-							return true;
-						}
-					}
-				}
-				catch (const std::exception& e) {
-					std::cerr << "Error loading file: " << e.what() << std::endl;
-				}
-			}
-			return false;
-		}
-
-		bool SaveFile(const std::string& filePath) {
-			if (editor && isInitialized) {
-				try {
-					auto* tabWindow = editor->GetActiveTabWindow();
-					if (tabWindow) {
-						auto* window = tabWindow->GetActiveWindow();
-						if (window) {
-							auto& buffer = window->GetBuffer();
-							buffer.SetFilePath(filePath);
-							int64_t size = 0;
-							buffer.Save(size);
-							return true;
-						}
-					}
-				}
-				catch (const std::exception& e) {
-					std::cerr << "Error saving file: " << e.what() << std::endl;
-				}
-			}
-			return false;
-		}
-
-		void TestClipboard() {
-			const char* text = ImGui::GetClipboardText();
-			std::cout << "Clipboard contains: " << (text ? text : "NULL") << std::endl;
-		}
+		bool CopySelection() { return true; }
+		bool PasteFromClipboard() { return true; }
+		bool FindNext() { return false; }
+		bool FindPrevious() { return false; }
+		bool LoadFile(const std::string& filePath) { return false; }
+		bool SaveFile(const std::string& filePath) { return false; }
+		void TestClipboard() { }
 
 		// Required by IZepComponent interface
 		Zep::ZepEditor& GetEditor() const override {
@@ -502,12 +268,8 @@ namespace Utils {
 
 		uintptr_t GetInstanceId() const { return instanceId; }
 
-		// Handle clipboard messages - only if focused
+		// Handle clipboard messages like demo
 		void Notify(std::shared_ptr<Zep::ZepMessage> message) override {
-			if (!ZepFocusTracker::IsFocused(instanceId)) {
-				return;
-			}
-
 			if (message->messageId == Zep::Msg::GetClipBoard) {
 				const char* clipboardText = ImGui::GetClipboardText();
 				if (clipboardText) {
@@ -522,133 +284,47 @@ namespace Utils {
 		}
 
 	private:
-		void SetupClipboardCallbacks() {
-			if (editor) {
-				editor->RegisterCallback(this);
-			}
-		}
-
-		void SetupInitialBuffer() {
-			try {
-				auto* pNewTabWindow = editor->AddTabWindow();
-				std::string bufferName = "buffer_" + std::to_string(instanceId) + ".txt";
-				auto* pBuffer = editor->GetEmptyBuffer(bufferName);
-				pBuffer->SetText(lastKnownText.empty() ? "" : lastKnownText);
-
-				auto* pTabWindow = editor->GetActiveTabWindow();
-				if (pTabWindow) {
-					auto* pWindow = pTabWindow->GetActiveWindow();
-					if (pWindow) {
-						pWindow->SetBuffer(pBuffer);
-					}
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Exception in SetupInitialBuffer: " << e.what() << std::endl;
-			}
-		}
-
 		void ApplyCurrentConfiguration() {
-			if (!editor || !isInitialized) {
-				return;
-			}
+			if (!editor || !isInitialized) return;
 
 			try {
-				// Apply window flags based on configuration
-				auto* tabWindow = editor->GetActiveTabWindow();
-				if (tabWindow) {
-					auto* window = tabWindow->GetActiveWindow();
-					if (window) {
-						uint32_t flags = window->GetWindowFlags();
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					auto* tabWindow = editor->GetActiveTabWindow();
+					if (tabWindow) {
+						auto* window = tabWindow->GetActiveWindow();
+						if (window) {
+							uint32_t flags = window->GetWindowFlags();
 
-						// Apply line numbers
-						if (showLineNumbers) {
-							flags |= Zep::WindowFlags::ShowLineNumbers;
-						}
-						else {
-							flags &= ~Zep::WindowFlags::ShowLineNumbers;
-						}
+							if (showLineNumbers) {
+								flags |= Zep::WindowFlags::ShowLineNumbers;
+							}
+							else {
+								flags &= ~Zep::WindowFlags::ShowLineNumbers;
+							}
 
-						// Apply whitespace display
-						if (showWhitespace) {
-							flags |= Zep::WindowFlags::ShowWhiteSpace;
-						}
-						else {
-							flags &= ~Zep::WindowFlags::ShowWhiteSpace;
-						}
+							if (showWhitespace) {
+								flags |= Zep::WindowFlags::ShowWhiteSpace;
+							}
+							else {
+								flags &= ~Zep::WindowFlags::ShowWhiteSpace;
+							}
 
-						// Apply word wrap
-						if (wordWrap) {
-							flags |= Zep::WindowFlags::WrapText;
-						}
-						else {
-							flags &= ~Zep::WindowFlags::WrapText;
-						}
+							if (wordWrap) {
+								flags |= Zep::WindowFlags::WrapText;
+							}
+							else {
+								flags &= ~Zep::WindowFlags::WrapText;
+							}
 
-						window->SetWindowFlags(flags);
+							window->SetWindowFlags(flags);
+						}
 					}
 				}
-
-				std::cout << "Applied configuration: LineNumbers=" << showLineNumbers
-					<< ", WordWrap=" << wordWrap
-					<< ", ReadOnly=" << readOnly
-					<< ", Theme=" << currentTheme << std::endl;
-
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception applying configuration: " << e.what() << std::endl;
 			}
-		}
-
-		void RenderSearchBox() {
-			ImGui::PushID(("search_" + std::to_string(instanceId)).c_str());
-
-			if (ImGui::BeginChild("SearchBox", ImVec2(0, 30), true, ImGuiWindowFlags_NoScrollbar)) {
-				// Search input
-				char searchBuffer[256];
-				strncpy(searchBuffer, currentSearchTerm.c_str(), sizeof(searchBuffer) - 1);
-				searchBuffer[sizeof(searchBuffer) - 1] = '\0';
-
-				ImGui::SetNextItemWidth(200);
-				if (ImGui::InputText("##search", searchBuffer, sizeof(searchBuffer), ImGuiInputTextFlags_EnterReturnsTrue)) {
-					currentSearchTerm = searchBuffer;
-					FindNext();
-				}
-
-				ImGui::SameLine();
-
-				// Find Next button
-				if (ImGui::Button("Next")) {
-					FindNext();
-				}
-
-				ImGui::SameLine();
-
-				// Find Previous button
-				if (ImGui::Button("Prev")) {
-					FindPrevious();
-				}
-
-				ImGui::SameLine();
-
-				// Case sensitive checkbox
-				ImGui::Checkbox("Case", &searchCaseSensitive);
-
-				ImGui::SameLine();
-
-				// Regex checkbox
-				ImGui::Checkbox("Regex", &searchRegex);
-
-				ImGui::SameLine();
-
-				// Close button
-				if (ImGui::Button("X")) {
-					showSearchBox = false;
-				}
-			}
-			ImGui::EndChild();
-
-			ImGui::PopID();
 		}
 	};
 
