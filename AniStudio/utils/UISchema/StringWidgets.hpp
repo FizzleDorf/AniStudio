@@ -126,16 +126,12 @@ namespace UISchema {
 
 				std::string childId = "ZepEditor##" + std::to_string(uniqueKey);
 
-				if (ImGui::BeginChild(childId.c_str(), availableSize, true)) {
-					// Render menu bar
 					editor->RenderMenuBar();
 
 					// Render editor in remaining space - EXACT demo pattern
 					ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 					ImVec2 contentSize = ImGui::GetContentRegionAvail();
 					editor->Render(cursorPos, contentSize);
-				}
-				ImGui::EndChild();
 			}
 			else {
 				// No menu bar - render editor directly like demo

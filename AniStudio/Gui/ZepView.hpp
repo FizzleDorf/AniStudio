@@ -27,8 +27,6 @@ namespace GUI {
 
 		void Render() override {
 			if (ImGui::Begin(viewName.c_str())) {
-				// Control buttons
-				RenderControls();
 
 				// Get the available content region for the editor
 				ImVec2 contentSize = ImGui::GetContentRegionAvail();
@@ -66,29 +64,6 @@ namespace GUI {
 
 	private:
 		std::unique_ptr<Utils::ZepTextEditor> textEditor;
-
-		void RenderControls() {
-			// Mode switching buttons
-			if (ImGui::Button("Standard Mode")) {
-				textEditor->SetMode("Standard");
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Vim Mode")) {
-				textEditor->SetMode("Vim");
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Test Clipboard")) {
-				textEditor->TestClipboard();
-			}
-
-			// File operations
-			ImGui::SameLine();
-			if (ImGui::Button("Clear Text")) {
-				textEditor->SetText("");
-			}
-
-			ImGui::Separator();
-		}
 
 		void RenderHelpText() {
 			// Position help text at the bottom
