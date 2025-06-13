@@ -45,7 +45,8 @@ namespace ECS {
 						{"ui:window", true},  // Create separate window for this property
 						{"ui:window_name", "Positive Prompt"},  // Window name
 						{"ui:options", {
-							{"maxLength", 8192}
+							{"maxLength", 8192},
+							{"showMenuBar", true}
 						}}
 					}},
 					{"negPrompt", {
@@ -55,7 +56,8 @@ namespace ECS {
 						{"ui:window", true},  // Create separate window for this property
 						{"ui:window_name", "Negative Prompt"},  // Window name
 						{"ui:options", {
-							{"maxLength", 8192}
+							{"maxLength", 8192},
+							{"showMenuBar", true}
 						}}
 					}}
 				}}

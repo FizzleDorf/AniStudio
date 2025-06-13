@@ -100,7 +100,7 @@ namespace UISchema {
 			return changed;
 		}
 
-		// SIMPLE Zep editor - EXACT demo pattern
+		// Zep editor - ACTUALLY FUCKING FIXED VERSION
 		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			auto editor = GetOrCreateEditor(value);
 			if (!editor) {
@@ -118,27 +118,84 @@ namespace UISchema {
 
 			bool modified = false;
 
-			// If menu bar enabled, create child window with menu bar
+			// Get the available content size
+			ImVec2 contentSize = ImGui::GetContentRegionAvail();
+			if (contentSize.x < 100) contentSize.x = 100;
+			if (contentSize.y < 100) contentSize.y = 100;
+
+			std::string childId = "ZepEditor##" + std::to_string(uniqueKey);
+
+			// Create child window with proper flags for menu bar
+			ImGuiWindowFlags childFlags = ImGuiWindowFlags_None;
 			if (config.showMenuBar) {
-				ImVec2 availableSize = ImGui::GetContentRegionAvail();
-				if (availableSize.x < 100) availableSize.x = 100;
-				if (availableSize.y < 100) availableSize.y = 100;
-
-				std::string childId = "ZepEditor##" + std::to_string(uniqueKey);
-
-					editor->RenderMenuBar();
-
-					// Render editor in remaining space - EXACT demo pattern
-					ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-					ImVec2 contentSize = ImGui::GetContentRegionAvail();
-					editor->Render(cursorPos, contentSize);
+				childFlags |= ImGuiWindowFlags_MenuBar;
 			}
-			else {
-				// No menu bar - render editor directly like demo
+
+			// Use BeginChild with the menu bar flag
+			if (ImGui::BeginChild(childId.c_str(), contentSize, true, childFlags)) {
+
+				// Render menu bar if enabled - this must be first
+				if (config.showMenuBar) {
+					if (ImGui::BeginMenuBar()) {
+						if (ImGui::BeginMenu("File")) {
+							if (ImGui::MenuItem("New", "Ctrl+N")) {
+								editor->SetText("");
+								*value = "";
+								modified = true;
+							}
+							if (ImGui::MenuItem("Save", "Ctrl+S")) {
+								// TODO: Save functionality
+							}
+							ImGui::EndMenu();
+						}
+
+						if (ImGui::BeginMenu("Options")) {
+							bool lineNumbers = config.showLineNumbers;
+							if (ImGui::MenuItem("Line Numbers", nullptr, &lineNumbers)) {
+								config.showLineNumbers = lineNumbers;
+								ApplyConfig(editor, config);
+							}
+
+							bool wordWrap = config.wordWrap;
+							if (ImGui::MenuItem("Word Wrap", nullptr, &wordWrap)) {
+								config.wordWrap = wordWrap;
+								ApplyConfig(editor, config);
+							}
+
+							bool showWhitespace = config.showWhitespace;
+							if (ImGui::MenuItem("Show Whitespace", nullptr, &showWhitespace)) {
+								config.showWhitespace = showWhitespace;
+								ApplyConfig(editor, config);
+							}
+
+							bool syntaxHighlighting = config.enableSyntaxHighlighting;
+							if (ImGui::MenuItem("Syntax Highlighting", nullptr, &syntaxHighlighting)) {
+								config.enableSyntaxHighlighting = syntaxHighlighting;
+								ApplyConfig(editor, config);
+							}
+							ImGui::EndMenu();
+						}
+
+						ImGui::EndMenuBar();
+					}
+				}
+
+				// NOW USE THE EXISTING RENDER METHOD FROM ZepTextEditor
+				// Get the current cursor position and available size
 				ImVec2 cursorPos = ImGui::GetCursorScreenPos();
 				ImVec2 availableSize = ImGui::GetContentRegionAvail();
+
+				// Make sure we have minimum size
+				availableSize.x = std::max(50.0f, availableSize.x);
+				availableSize.y = std::max(50.0f, availableSize.y);
+
+				// Use the existing Render method that actually works
 				editor->Render(cursorPos, availableSize);
+
+				// Advance the cursor to consume the space
+				ImGui::Dummy(availableSize);
 			}
+			ImGui::EndChild();
 
 			// Check if content changed
 			std::string currentText = editor->GetText();

@@ -66,7 +66,6 @@ namespace Utils {
 			try {
 				auto rootPath = std::filesystem::current_path();
 
-				// Create editor EXACTLY like demo
 				editor = std::make_unique<Zep::ZepEditor_ImGui>(
 					rootPath,
 					Zep::NVec2f(1.0f, 1.0f)
@@ -133,16 +132,6 @@ namespace Utils {
 					}
 					if (ImGui::MenuItem("Save", "Ctrl+S")) {
 						// TODO: Save functionality
-					}
-					ImGui::EndMenu();
-				}
-
-				if (ImGui::BeginMenu("Edit")) {
-					if (ImGui::MenuItem("Copy", "Ctrl+C")) {
-						// Handled by Zep
-					}
-					if (ImGui::MenuItem("Paste", "Ctrl+V")) {
-						// Handled by Zep
 					}
 					ImGui::EndMenu();
 				}
@@ -268,7 +257,7 @@ namespace Utils {
 
 		uintptr_t GetInstanceId() const { return instanceId; }
 
-		// Handle clipboard messages like demo
+		// Handle clipboard messages
 		void Notify(std::shared_ptr<Zep::ZepMessage> message) override {
 			if (message->messageId == Zep::Msg::GetClipBoard) {
 				const char* clipboardText = ImGui::GetClipboardText();
