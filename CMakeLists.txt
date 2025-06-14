@@ -117,6 +117,13 @@ add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImJSchema)
 add_subdirectory(external/ImGuizmo)
 
+set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
+set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE) 
+set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
+set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)
+
+add_subdirectory(external/zep)
+
 # For external/imgui directory
 target_include_directories(ImGui PRIVATE ${GLFW_INCLUDE_DIRS})
 add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
@@ -143,6 +150,7 @@ set(ANISTUDIO_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
+	${CMAKE_SOURCE_DIR}/external/zep/include
     ${Vulkan_INCLUDE_DIR}
 )
 
@@ -171,6 +179,7 @@ set(ANISTUDIO_LINK_LIBS
     ffmpeg::avformat
     ffmpeg::avutil
     ffmpeg::swscale
+	Zep::Zep
 )
 
 # ============================================================================

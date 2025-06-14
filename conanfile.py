@@ -32,6 +32,9 @@ class AniStudio(ConanFile):
         self.requires("libpng/1.6.44")
         self.requires("exiv2/0.28.1")
         self.requires("ffmpeg/4.4.4")
+        
+        # zep dependencies
+        self.requires("spdlog/1.11.0")
 
         if self.settings.os == "Windows":
             self.requires("opengl/system")

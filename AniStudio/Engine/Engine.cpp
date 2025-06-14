@@ -106,6 +106,7 @@ void Engine::Init() {
 	viewManager.RegisterViewType<UpscaleView>("UpscaleView");
 	viewManager.RegisterViewType<VideoView>("VideoView");
 	viewManager.RegisterViewType<VideoView>("VideoSequencerView");
+	viewManager.RegisterViewType<ZepView>("ZepView");
 
 	// Register Component Names
 	mgr.RegisterComponentName<ModelComponent>("Model");
@@ -139,6 +140,10 @@ void Engine::Init() {
 	const auto upscaleViewID = viewManager.CreateView();
 	viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(mgr));
 	viewManager.GetView<UpscaleView>(upscaleViewID).Init();
+	
+	const auto zepViewID = viewManager.CreateView();
+	viewManager.AddView<ZepView>(zepViewID, ZepView(mgr));
+	viewManager.GetView<ZepView>(zepViewID).Init();
 
 	const auto videoViewID = viewManager.CreateView();
 	viewManager.AddView<VideoView>(videoViewID, VideoView(mgr));

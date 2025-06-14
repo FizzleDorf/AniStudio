@@ -18,23 +18,32 @@
  * For commercial license information, please contact legal@kframe.ai.
  */
 
-#ifndef ALLVIEWS_HPP
-#define ALLVIEWS_HPP
+#pragma once
 
-#include "ConvertView.hpp"
-#include "DebugView.hpp"
-#include "DiffusionView.hpp"
-#include "ImageView.hpp"
-#include "MenuBar.hpp"
-#include "NodeGraphView.hpp"
-#include "PluginView.hpp"
-#include "SequencerView.hpp"
-#include "SettingsView.hpp"
-#include "UpscaleView.hpp"
-#include "ViewListManagerView.hpp"
-#include "NodeView.hpp"
-#include "UpscaleView.hpp"
-#include "VideoView.hpp"
-#include "VideoSequencerView.hpp"
-#include "ZepView.hpp"
-#endif
+#include <imgui.h>
+#include <nlohmann/json.hpp>
+#include <string>
+#include <iostream>
+
+namespace UISchema {
+
+	static const std::string DEFAULT_BOOL_WIDGET = "checkbox";
+
+	class BoolWidgets {
+	public:
+		static bool RenderCheckbox(const std::string& label, bool* value, const nlohmann::json& options = {}) {
+			return ImGui::Checkbox(label.c_str(), value);
+		}
+
+		static bool Render(const std::string& label, bool* value, const std::string& widgetType, const nlohmann::json& schema) {
+			if (widgetType == "checkbox") {
+				return RenderCheckbox(label, value, schema);
+			}
+			else {
+				std::cerr << "Unknown widget type '" << widgetType << "' for bool property, defaulting to checkbox" << std::endl;
+				return RenderCheckbox(label, value, schema);
+			}
+		}
+	};
+
+} // namespace UISchema
