@@ -41,7 +41,7 @@ namespace ECS {
 					{"posPrompt", {
 						{"type", "string"},
 						{"title", "Positive"},
-						{"ui:widget", "zep_editor"},  // Use Zep editor in standard mode only
+						{"ui:widget", "zep_editor"},  // Use Zep editor with full functionality
 						{"ui:window", true},  // Create separate window for this property
 						{"ui:window_name", "Positive Prompt"},  // Window name
 						{"ui:options", {
@@ -52,7 +52,7 @@ namespace ECS {
 					{"negPrompt", {
 						{"type", "string"},
 						{"title", "Negative"},
-						{"ui:widget", "zep_editor"},  // Use Zep editor in standard mode only
+						{"ui:widget", "zep_editor"},  // Use Zep editor with full functionality
 						{"ui:window", true},  // Create separate window for this property
 						{"ui:window_name", "Negative Prompt"},  // Window name
 						{"ui:options", {
@@ -115,13 +115,11 @@ namespace ECS {
 
 			if (componentData.contains("posPrompt")) {
 				posPrompt = componentData["posPrompt"].get<std::string>();
-				// Update the Zep editor content if it exists
 				UISchema::StringWidgets::UpdateEditorContent(&posPrompt);
 			}
 
 			if (componentData.contains("negPrompt")) {
 				negPrompt = componentData["negPrompt"].get<std::string>();
-				// Update the Zep editor content if it exists
 				UISchema::StringWidgets::UpdateEditorContent(&negPrompt);
 			}
 		}

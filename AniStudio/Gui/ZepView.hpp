@@ -57,8 +57,7 @@ namespace GUI {
 				if (contentSize.x < 100) contentSize.x = 100;
 				if (contentSize.y < 100) contentSize.y = 100;
 
-				// Render the text editor
-				textEditor->Render(editorPos, contentSize);
+				textEditor->Render(editorPos, contentSize, true);  // true = create child window with menu bar
 			}
 			ImGui::End();
 		}

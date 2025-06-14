@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <iostream>
 #include "UISchemaUtils.hpp"
@@ -34,10 +35,10 @@ namespace UISchema {
 
 	static const std::string DEFAULT_STRING_WIDGET = "input_text";
 
-	// Simple config struct
+	// Enhanced config struct with vim mode support
 	struct ZepEditorConfig {
 		bool showLineNumbers = true;
-		bool wordWrap = false;
+		bool wordWrap = true;
 		bool readOnly = false;
 		bool showWhitespace = false;
 		bool enableSyntaxHighlighting = true;
@@ -45,10 +46,12 @@ namespace UISchema {
 		bool showSearch = false;
 		bool showMenuBar = true;
 		std::string theme = "dark";
+		std::string mode = "standard";  // "standard" or "vim"
+		float fontSize = 14.0f;
 	};
 
 	class StringWidgets {
-	private:
+	public:
 		// Simple editor map
 		static std::unordered_map<uintptr_t, std::shared_ptr<Utils::ZepTextEditor>>& GetEditorMap() {
 			static std::unordered_map<uintptr_t, std::shared_ptr<Utils::ZepTextEditor>> editorMap;
@@ -61,7 +64,7 @@ namespace UISchema {
 			return configMap;
 		}
 
-		// Create editor - SIMPLE
+		// Create editor
 		static std::shared_ptr<Utils::ZepTextEditor> GetOrCreateEditor(std::string* value) {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
@@ -85,7 +88,7 @@ namespace UISchema {
 			return it->second;
 		}
 
-		// Apply config - SIMPLE
+		// Apply config - SIMPLIFIED
 		static void ApplyConfig(std::shared_ptr<Utils::ZepTextEditor> editor, const ZepEditorConfig& config) {
 			if (!editor) return;
 
@@ -97,9 +100,30 @@ namespace UISchema {
 			editor->SetAutoIndent(config.autoIndent);
 			editor->SetTheme(config.theme);
 			editor->ShowSearchBox(config.showSearch);
+			editor->SetFontSize(config.fontSize);
+			editor->SetMode(config.mode);
+			editor->SetShowMenuBar(config.showMenuBar);
 		}
 
-	public:
+		// Parse schema options into config
+		static ZepEditorConfig ParseSchemaOptions(const nlohmann::json& options) {
+			ZepEditorConfig config;
+
+			config.showLineNumbers = GetSchemaValue<bool>(options, "showLineNumbers", config.showLineNumbers);
+			config.wordWrap = GetSchemaValue<bool>(options, "wordWrap", config.wordWrap);
+			config.readOnly = GetSchemaValue<bool>(options, "readOnly", config.readOnly);
+			config.showWhitespace = GetSchemaValue<bool>(options, "showWhitespace", config.showWhitespace);
+			config.enableSyntaxHighlighting = GetSchemaValue<bool>(options, "enableSyntaxHighlighting", config.enableSyntaxHighlighting);
+			config.autoIndent = GetSchemaValue<bool>(options, "autoIndent", config.autoIndent);
+			config.showSearch = GetSchemaValue<bool>(options, "showSearch", config.showSearch);
+			config.showMenuBar = GetSchemaValue<bool>(options, "showMenuBar", config.showMenuBar);
+			config.theme = GetSchemaValue<std::string>(options, "theme", config.theme);
+			config.mode = GetSchemaValue<std::string>(options, "mode", config.mode);
+			config.fontSize = GetSchemaValue<float>(options, "fontSize", config.fontSize);
+
+			return config;
+		}
+
 		static bool RenderInputText(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
 			size_t bufferSize = GetSchemaValue<size_t>(options, "maxLength", 1024);
@@ -116,7 +140,13 @@ namespace UISchema {
 			return changed;
 		}
 
-		// Zep editor
+		// Track which editors have been configured from schema
+		static std::unordered_set<uintptr_t>& GetConfiguredEditors() {
+			static std::unordered_set<uintptr_t> configuredEditors;
+			return configuredEditors;
+		}
+
+		// ZepUtils handles child window creation
 		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			auto editor = GetOrCreateEditor(value);
 			if (!editor) {
@@ -125,89 +155,26 @@ namespace UISchema {
 			}
 
 			auto& configMap = GetConfigMap();
+			auto& configuredEditors = GetConfiguredEditors();
 			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
-			ZepEditorConfig& config = configMap[uniqueKey];
 
-			// Apply schema options
-			config.showMenuBar = GetSchemaValue<bool>(options, "showMenuBar", config.showMenuBar);
-			ApplyConfig(editor, config);
+			// ONLY apply schema config ONCE when editor is first created
+			if (configuredEditors.find(uniqueKey) == configuredEditors.end()) {
+				ZepEditorConfig schemaConfig = ParseSchemaOptions(options);
+				configMap[uniqueKey] = schemaConfig;  // Set initial config from schema
+				ApplyConfig(editor, schemaConfig);
+				configuredEditors.insert(uniqueKey);  // Mark as configured
+			}
 
 			bool modified = false;
 
-			// Get the available content size
+			// Get available content size
 			ImVec2 contentSize = ImGui::GetContentRegionAvail();
 			if (contentSize.x < 100) contentSize.x = 100;
 			if (contentSize.y < 100) contentSize.y = 100;
 
-			std::string childId = "ZepEditor##" + std::to_string(uniqueKey);
-
-			// Create child window with proper flags for menu bar
-			ImGuiWindowFlags childFlags = ImGuiWindowFlags_None;
-			if (config.showMenuBar) {
-				childFlags |= ImGuiWindowFlags_MenuBar;
-			}
-
-			if (ImGui::BeginChild(childId.c_str(), contentSize, true, childFlags)) {
-
-				// Render menu bar if enabled - this must be first
-				if (config.showMenuBar) {
-					if (ImGui::BeginMenuBar()) {
-						if (ImGui::BeginMenu("File")) {
-							if (ImGui::MenuItem("New", "Ctrl+N")) {
-								editor->SetText("");
-								*value = "";
-								modified = true;
-							}
-							if (ImGui::MenuItem("Save", "Ctrl+S")) {
-								// TODO: Save functionality
-							}
-							ImGui::EndMenu();
-						}
-
-						if (ImGui::BeginMenu("Options")) {
-							bool lineNumbers = config.showLineNumbers;
-							if (ImGui::MenuItem("Line Numbers", nullptr, &lineNumbers)) {
-								config.showLineNumbers = lineNumbers;
-								ApplyConfig(editor, config);
-							}
-
-							bool wordWrap = config.wordWrap;
-							if (ImGui::MenuItem("Word Wrap", nullptr, &wordWrap)) {
-								config.wordWrap = wordWrap;
-								ApplyConfig(editor, config);
-							}
-
-							bool showWhitespace = config.showWhitespace;
-							if (ImGui::MenuItem("Show Whitespace", nullptr, &showWhitespace)) {
-								config.showWhitespace = showWhitespace;
-								ApplyConfig(editor, config);
-							}
-
-							bool syntaxHighlighting = config.enableSyntaxHighlighting;
-							if (ImGui::MenuItem("Syntax Highlighting", nullptr, &syntaxHighlighting)) {
-								config.enableSyntaxHighlighting = syntaxHighlighting;
-								ApplyConfig(editor, config);
-							}
-							ImGui::EndMenu();
-						}
-
-						ImGui::EndMenuBar();
-					}
-				}
-
-				// Get the current cursor position and available size
-				ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-				ImVec2 availableSize = ImGui::GetContentRegionAvail();
-
-				availableSize.x = std::max(50.0f, availableSize.x);
-				availableSize.y = std::max(50.0f, availableSize.y);
-
-				editor->Render(cursorPos, availableSize);
-
-				// Advance the cursor to consume the space
-				ImGui::Dummy(availableSize);
-			}
-			ImGui::EndChild();
+			// Let ZepUtils handle child window creation, menu bar, focus, etc.
+			editor->Render(ImVec2(0, 0), contentSize, true);  // true = create child window
 
 			// Check if content changed
 			std::string currentText = editor->GetText();
@@ -219,12 +186,31 @@ namespace UISchema {
 			return modified;
 		}
 
+		// Separate widget types for different modes
+		static bool RenderZepEditorVim(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+			nlohmann::json vimOptions = options;
+			vimOptions["mode"] = "vim";
+			return RenderZepEditor(label, value, vimOptions);
+		}
+
+		static bool RenderZepEditorStandard(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+			nlohmann::json standardOptions = options;
+			standardOptions["mode"] = "standard";
+			return RenderZepEditor(label, value, standardOptions);
+		}
+
 		static bool Render(const std::string& label, std::string* value, const std::string& widgetType, const nlohmann::json& schema) {
 			if (widgetType == "input_text") {
 				return RenderInputText(label, value, schema);
 			}
 			else if (widgetType == "zep_editor" || widgetType == "dynamic_textarea") {
 				return RenderZepEditor(label, value, schema);
+			}
+			else if (widgetType == "zep_editor_vim") {
+				return RenderZepEditorVim(label, value, schema);
+			}
+			else if (widgetType == "zep_editor_standard") {
+				return RenderZepEditorStandard(label, value, schema);
 			}
 			else {
 				return RenderInputText(label, value, schema);
