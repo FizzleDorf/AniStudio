@@ -507,7 +507,7 @@ namespace Utils {
 	private:
 		// Load default buffer from data/defaults/buffer.txt
 		void LoadDefaultBuffer() {
-			std::filesystem::path defaultPath = std::filesystem::current_path() / "data" / "defaults" / "buffer.txt";
+			std::filesystem::path defaultPath = std::filesystem::current_path() / ".." / "data" / "defaults" / "buffer.txt";
 
 			try {
 				// Ensure the directory exists
