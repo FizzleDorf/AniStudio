@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #ifndef FILEPATHS_HPP
@@ -74,7 +74,7 @@ namespace Utils
 		static void SaveFilepathDefaults()
 		{
 			// Create the data directory if it does not exist
-			std::filesystem::create_directories("..\\data\\defaults");
+			std::filesystem::create_directories("../data/defaults");
 
 			// Create a JSON object to store paths
 			nlohmann::json json;

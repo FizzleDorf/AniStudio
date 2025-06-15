@@ -27,7 +27,8 @@ mkdir -p build
 cd build
 
 # Configure with CMake (only build AniStudio)
-cmake .. -DCMAKE_BUILD_TYPE=Release \
+cmake .. -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
+         -DCMAKE_BUILD_TYPE=Release \
          -DSD_VULKAN=ON \
          -DBUILD_PLUGINS=OFF \
          -DBUILD_ANISTUDIO=ON

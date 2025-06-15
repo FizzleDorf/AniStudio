@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #ifndef ENGINE_HPP
@@ -33,7 +33,7 @@
 
 using namespace ECS;
 using namespace GUI;
-// using namespace Plugin;
+using namespace Plugin;
 
 namespace ANI {
 
@@ -57,7 +57,7 @@ namespace ANI {
 		// Dependency accessors
 		EntityManager &GetEntityManager() { return mgr; }
 		ViewManager &GetViewManager() { return viewManager; }
-		// PluginManager &GetPluginManager() { return pluginManager; }
+		PluginManager &GetPluginManager() { return pluginManager; }
 		GLFWwindow *Window() const { return window; }
 		bool Run() const { return run; }
 
@@ -67,7 +67,7 @@ namespace ANI {
 		// Core dependencies
 		EntityManager mgr;
 		ViewManager viewManager;
-		// PluginManager pluginManager{ mgr, viewManager };
+		PluginManager pluginManager{ mgr, viewManager };
 		bool run;
 		GLFWwindow *window;
 		int videoWidth;
