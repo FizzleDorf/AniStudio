@@ -23,6 +23,7 @@
 #include <zep/imgui/editor_imgui.h>
 #include <zep/mode_standard.h>
 #include <zep/mode_vim.h>
+#include <zep/theme.h>
 #include <memory>
 #include <string>
 #include <filesystem>
@@ -31,6 +32,8 @@
 #include <regex>
 #include <algorithm>
 #include <vector>
+#include <fstream>
+#include <ImGuiFileDialog.h>
 
 namespace Utils {
 
@@ -82,8 +85,8 @@ namespace Utils {
 				// Register callback
 				editor->RegisterCallback(this);
 
-				// Initialize with text
-				editor->InitWithText("buffer.txt", "");
+				// Initialize with default buffer from data/defaults/buffer.txt
+				LoadDefaultBuffer();
 
 				// Force standard mode by default
 				editor->SetGlobalMode(Zep::ZepMode_Standard::StaticName());
@@ -130,6 +133,9 @@ namespace Utils {
 				// ZepView path - no child window, render directly
 				RenderEditor();
 			}
+
+			// Handle file dialogs
+			HandleFileDialogs();
 		}
 
 		// Configuration methods
@@ -145,7 +151,6 @@ namespace Utils {
 
 		void SetReadOnly(bool readonly) {
 			readOnly = readonly;
-			ApplyCurrentConfiguration();
 		}
 
 		void SetShowWhitespace(bool show) {
@@ -160,12 +165,13 @@ namespace Utils {
 
 		void SetAutoIndent(bool enable) {
 			autoIndent = enable;
-			ApplyCurrentConfiguration();
 		}
 
 		void SetTheme(const std::string& theme) {
-			currentTheme = theme;
-			ApplyCurrentConfiguration();
+			if (currentTheme != theme) {
+				currentTheme = theme;
+				ApplyTheme();
+			}
 		}
 
 		void SetMode(const std::string& mode) {
@@ -211,6 +217,33 @@ namespace Utils {
 			}
 		}
 
+		// Set the file type for syntax highlighting
+		void SetFileType(const std::string& extension) {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					currentFileType = extension;
+					std::string filename = "buffer" + (extension.front() == '.' ? extension : "." + extension);
+					buffer->SetFilePath(std::filesystem::path(filename));
+
+					if (enableSyntaxHighlighting) {
+						editor->RequestRefresh();
+						ApplySyntaxHighlighting();
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error setting file type: " << e.what() << std::endl;
+			}
+		}
+
+		// Get the current file type
+		std::string GetFileType() const {
+			return currentFileType;
+		}
+
 		// Getters
 		bool GetShowLineNumbers() const { return showLineNumbers; }
 		bool GetWordWrap() const { return wordWrap; }
@@ -239,19 +272,134 @@ namespace Utils {
 				auto* buffer = editor->GetActiveBuffer();
 				if (buffer) {
 					buffer->SetText(text);
+					ApplySyntaxHighlighting();
 				}
 			}
 		}
 
 		// File operations
 		bool LoadFile(const std::string& filePath) {
-			// TODO: Implement
+			if (editor && isInitialized) {
+				try {
+					auto* buffer = editor->GetActiveBuffer();
+					if (buffer) {
+						buffer->Load(std::filesystem::path(filePath));
+
+						// Auto-detect file type from extension
+						std::filesystem::path path(filePath);
+						if (path.has_extension()) {
+							currentFileType = path.extension().string();
+						}
+
+						ApplySyntaxHighlighting();
+						currentFilePath = filePath;
+						return true;
+					}
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Error loading file: " << e.what() << std::endl;
+				}
+			}
 			return false;
 		}
 
-		bool SaveFile(const std::string& filePath) {
-			// TODO: Implement
+		// Create a new file with the specified path
+		bool CreateNewFile(const std::string& filePath) {
+			if (editor && isInitialized) {
+				try {
+					// Clear the editor content
+					auto* buffer = editor->GetActiveBuffer();
+					if (buffer) {
+						buffer->SetText("");
+
+						// Set the file path and detect file type
+						std::filesystem::path path(filePath);
+						currentFilePath = filePath;
+
+						if (path.has_extension()) {
+							currentFileType = path.extension().string();
+							SetFileType(currentFileType);
+						}
+						else {
+							SetFileType(".txt"); // Default to plain text
+						}
+
+						// Create the directory if it doesn't exist
+						std::filesystem::create_directories(path.parent_path());
+
+						// Create the empty file
+						std::ofstream file(filePath);
+						if (file.is_open()) {
+							file.close();
+							std::cout << "Created new file: " << filePath << std::endl;
+							return true;
+						}
+						else {
+							std::cerr << "Failed to create file: " << filePath << std::endl;
+							return false;
+						}
+					}
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Error creating new file: " << e.what() << std::endl;
+				}
+			}
 			return false;
+		}
+
+		bool SaveFile(const std::string& filePath = "") {
+			if (editor && isInitialized) {
+				try {
+					auto* buffer = editor->GetActiveBuffer();
+					if (buffer) {
+						std::string pathToUse = filePath.empty() ? currentFilePath : filePath;
+						if (pathToUse.empty()) {
+							// No path specified, need to open save dialog
+							OpenSaveDialog();
+							return false; // Will save when dialog completes
+						}
+
+						buffer->SetFilePath(std::filesystem::path(pathToUse));
+						int64_t size;
+						bool result = buffer->Save(size);
+						if (result) {
+							currentFilePath = pathToUse;
+						}
+						return result;
+					}
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Error saving file: " << e.what() << std::endl;
+				}
+			}
+			return false;
+		}
+
+		// Create a new file
+		void NewFile() {
+			IGFD::FileDialogConfig config;
+			config.path = "data/defaults";
+			ImGuiFileDialog::Instance()->OpenDialog("NewTextFileDialog", "Create New File",
+				".txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf",
+				config);
+		}
+
+		// Open file dialog
+		void OpenLoadDialog() {
+			IGFD::FileDialogConfig config;
+			config.path = "data/defaults";
+			ImGuiFileDialog::Instance()->OpenDialog("LoadTextFileDialog", "Load Text File",
+				".*,.txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf",
+				config);
+		}
+
+		// Open save dialog
+		void OpenSaveDialog() {
+			IGFD::FileDialogConfig config;
+			config.path = "data/defaults";
+			ImGuiFileDialog::Instance()->OpenDialog("SaveTextFileDialog", "Save Text File",
+				".txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf",
+				config);
 		}
 
 		// Search functionality
@@ -282,12 +430,19 @@ namespace Utils {
 
 		void ShowSearchBox(bool show) {
 			showSearchBox = show;
+			if (show) {
+				searchBoxJustOpened = true;
+			}
 			if (!show) {
 				ClearSearch();
 			}
 		}
 
 		bool IsSearchBoxVisible() const { return showSearchBox; }
+
+		void ToggleSearchBox() {
+			ShowSearchBox(!showSearchBox);
+		}
 
 		bool FindNext() {
 			if (searchResults.empty()) return false;
@@ -350,6 +505,163 @@ namespace Utils {
 		}
 
 	private:
+		// Load default buffer from data/defaults/buffer.txt
+		void LoadDefaultBuffer() {
+			std::filesystem::path defaultPath = std::filesystem::current_path() / "data" / "defaults" / "buffer.txt";
+
+			try {
+				// Ensure the directory exists
+				std::filesystem::create_directories(defaultPath.parent_path());
+
+				std::string defaultText;
+				if (std::filesystem::exists(defaultPath)) {
+					// Load from existing file
+					std::ifstream file(defaultPath);
+					if (file.is_open()) {
+						defaultText = std::string((std::istreambuf_iterator<char>(file)),
+							std::istreambuf_iterator<char>());
+						file.close();
+					}
+				}
+				else {
+					// Create default content
+					defaultText = "// Welcome to AniStudio Text Editor\n";
+
+					// Save the default content
+					std::ofstream file(defaultPath);
+					if (file.is_open()) {
+						file << defaultText;
+						file.close();
+					}
+				}
+
+				// Initialize with the default text
+				editor->InitWithText("buffer.txt", defaultText);
+				SetFileType(".txt"); // Default file type
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error loading default buffer: " << e.what() << std::endl;
+				// Fallback to empty buffer
+				editor->InitWithText("buffer.txt", "");
+				SetFileType(".txt");
+			}
+		}
+
+		// Handle file dialogs
+		void HandleFileDialogs() {
+			// Handle new file dialog
+			if (ImGuiFileDialog::Instance()->Display("NewTextFileDialog", 32, ImVec2(700, 400))) {
+				if (ImGuiFileDialog::Instance()->IsOk()) {
+					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+					CreateNewFile(filePath);
+				}
+				ImGuiFileDialog::Instance()->Close();
+			}
+
+			// Handle load dialog
+			if (ImGuiFileDialog::Instance()->Display("LoadTextFileDialog", 32, ImVec2(700, 400))) {
+				if (ImGuiFileDialog::Instance()->IsOk()) {
+					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+					LoadFile(filePath);
+				}
+				ImGuiFileDialog::Instance()->Close();
+			}
+
+			// Handle save dialog
+			if (ImGuiFileDialog::Instance()->Display("SaveTextFileDialog", 32, ImVec2(700, 400))) {
+				if (ImGuiFileDialog::Instance()->IsOk()) {
+					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+					SaveFile(filePath);
+				}
+				ImGuiFileDialog::Instance()->Close();
+			}
+		}
+
+		// Apply theme using Zep's actual theme system
+		void ApplyTheme() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto& theme = editor->GetTheme();
+
+				if (currentTheme == "dark") {
+					// Set dark theme colors
+					theme.SetThemeType(Zep::ThemeType::Dark);
+					theme.SetColor(Zep::ThemeColor::Background, Zep::NVec4f(0.1f, 0.1f, 0.1f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Text, Zep::NVec4f(0.9f, 0.9f, 0.9f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Comment, Zep::NVec4f(0.5f, 0.7f, 0.5f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Keyword, Zep::NVec4f(0.3f, 0.7f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Identifier, Zep::NVec4f(0.8f, 0.8f, 0.8f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Number, Zep::NVec4f(1.0f, 0.7f, 0.3f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::String, Zep::NVec4f(1.0f, 0.8f, 0.5f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::LineNumber, Zep::NVec4f(0.5f, 0.5f, 0.5f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::LineNumberActive, Zep::NVec4f(0.8f, 0.8f, 0.8f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::CursorNormal, Zep::NVec4f(1.0f, 1.0f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::CursorInsert, Zep::NVec4f(1.0f, 1.0f, 1.0f, 1.0f));
+				}
+				else if (currentTheme == "light") {
+					// Set light theme colors
+					theme.SetThemeType(Zep::ThemeType::Light);
+					theme.SetColor(Zep::ThemeColor::Background, Zep::NVec4f(1.0f, 1.0f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Text, Zep::NVec4f(0.0f, 0.0f, 0.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Comment, Zep::NVec4f(0.0f, 0.5f, 0.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Keyword, Zep::NVec4f(0.0f, 0.0f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Identifier, Zep::NVec4f(0.2f, 0.2f, 0.2f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Number, Zep::NVec4f(0.8f, 0.4f, 0.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::String, Zep::NVec4f(0.6f, 0.2f, 0.2f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::LineNumber, Zep::NVec4f(0.6f, 0.6f, 0.6f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::LineNumberActive, Zep::NVec4f(0.2f, 0.2f, 0.2f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::CursorNormal, Zep::NVec4f(0.0f, 0.0f, 0.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::CursorInsert, Zep::NVec4f(0.0f, 0.0f, 0.0f, 1.0f));
+				}
+				else if (currentTheme == "classic") {
+					// Set classic/retro theme colors
+					theme.SetThemeType(Zep::ThemeType::Dark);
+					theme.SetColor(Zep::ThemeColor::Background, Zep::NVec4f(0.0f, 0.0f, 0.3f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Text, Zep::NVec4f(0.9f, 0.9f, 0.9f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Comment, Zep::NVec4f(0.4f, 0.8f, 0.4f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Keyword, Zep::NVec4f(1.0f, 1.0f, 0.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Identifier, Zep::NVec4f(0.8f, 0.8f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::Number, Zep::NVec4f(1.0f, 0.5f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::String, Zep::NVec4f(1.0f, 0.8f, 0.8f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::LineNumber, Zep::NVec4f(0.6f, 0.6f, 0.8f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::LineNumberActive, Zep::NVec4f(1.0f, 1.0f, 1.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::CursorNormal, Zep::NVec4f(1.0f, 1.0f, 0.0f, 1.0f));
+					theme.SetColor(Zep::ThemeColor::CursorInsert, Zep::NVec4f(1.0f, 1.0f, 0.0f, 1.0f));
+				}
+
+				editor->RequestRefresh();
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error applying theme: " << e.what() << std::endl;
+			}
+		}
+
+		// Apply syntax highlighting using Zep's actual API
+		void ApplySyntaxHighlighting() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					if (enableSyntaxHighlighting && !currentFileType.empty()) {
+						// Set file path with the correct extension for syntax detection
+						std::string filename = "buffer" + currentFileType;
+						buffer->SetFilePath(std::filesystem::path(filename));
+						editor->RequestRefresh();
+					}
+					else {
+						// Disable syntax highlighting by using no extension
+						buffer->SetFilePath(std::filesystem::path("buffer"));
+						editor->RequestRefresh();
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error applying syntax highlighting: " << e.what() << std::endl;
+			}
+		}
+
 		// Internal render method that handles the actual editor rendering
 		void RenderEditor() {
 			// Handle focus
@@ -357,6 +669,11 @@ namespace Utils {
 			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
 				ZepFocusTracker::SetFocused(instanceId);
 				isFocused = true;
+			}
+
+			// Handle Ctrl+F hotkey for search toggle (only when editor is focused and search input is not active)
+			if (isFocused && !searchInputFocused && ImGui::IsKeyPressed(ImGuiKey_F) && ImGui::GetIO().KeyCtrl) {
+				ToggleSearchBox();
 			}
 
 			// Handle right-click context menu
@@ -374,9 +691,9 @@ namespace Utils {
 				RenderMenuBar();
 			}
 
-			// Render search box if enabled
+			// Render search panel if enabled (between menu bar and editor)
 			if (showSearchBox) {
-				RenderSearchBox();
+				RenderSearchPanel();
 			}
 
 			editor->isFocused = isFocused;
@@ -396,8 +713,8 @@ namespace Utils {
 			max.y = min.y + max.y;
 			editor->SetDisplayRegion(Zep::NVec2f(min.x, min.y), Zep::NVec2f(max.x, max.y));
 
-			// Handle input capture for hotkeys
-			if (isFocused) {
+			// Handle input capture for hotkeys - but only when search input is not focused
+			if (isFocused && !searchInputFocused) {
 				auto& io = ImGui::GetIO();
 				io.WantCaptureKeyboard = false;
 				io.WantCaptureMouse = false;
@@ -405,55 +722,152 @@ namespace Utils {
 
 			// Render Zep editor
 			editor->Display();
-			if (isFocused) {
+			if (isFocused && !searchInputFocused) {
 				editor->HandleInput();
 			}
 
-			// Restore input capture
-			if (isFocused) {
+			// Restore input capture - but only when search input is not focused
+			if (isFocused && !searchInputFocused) {
 				auto& io = ImGui::GetIO();
 				io.WantCaptureKeyboard = true;
 				io.WantCaptureMouse = true;
 			}
 		}
 
-		// Add search box rendering
-		void RenderSearchBox() {
-			if (ImGui::CollapsingHeader("Search")) {
+		// Search panel rendering
+		void RenderSearchPanel() {
+			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
+
+			float panelHeight = ImGui::GetTextLineHeightWithSpacing() + ImGui::GetStyle().FramePadding.y * 4;
+
+			if (ImGui::BeginChild("SearchPanel", ImVec2(0, panelHeight), true, ImGuiWindowFlags_NoScrollbar)) {
+				ImGui::AlignTextToFramePadding();
+				ImGui::Text("Find:");
+				ImGui::SameLine();
+
 				char searchBuffer[256];
 				std::string currentSearch = GetSearchTerm();
 				strncpy(searchBuffer, currentSearch.c_str(), sizeof(searchBuffer) - 1);
 				searchBuffer[sizeof(searchBuffer) - 1] = '\0';
 
-				if (ImGui::InputText("Find", searchBuffer, sizeof(searchBuffer))) {
+				ImGui::SetNextItemWidth(200.0f);
+
+				if (showSearchBox && searchBoxJustOpened) {
+					ImGui::SetKeyboardFocusHere(0);
+					searchBoxJustOpened = false;
+				}
+
+				bool inputChanged = ImGui::InputText("##SearchInput", searchBuffer, sizeof(searchBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
+				bool searchInputActive = ImGui::IsItemActive();
+
+				searchInputFocused = searchInputActive;
+
+				if (inputChanged) {
 					SetSearchTerm(searchBuffer);
+					if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+						FindNext();
+					}
+				}
+
+				if (!inputChanged && searchBuffer != currentSearch) {
+					SetSearchTerm(searchBuffer);
+				}
+
+				ImGui::SameLine();
+
+				if (ImGui::Button("Prev")) {
+					FindPrevious();
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Find Previous (Shift+F3)");
 				}
 
 				ImGui::SameLine();
 				if (ImGui::Button("Next")) {
 					FindNext();
 				}
-				ImGui::SameLine();
-				if (ImGui::Button("Prev")) {
-					FindPrevious();
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Find Next (F3)");
 				}
 
-				// Show results
+				ImGui::SameLine();
+
+				if (ImGui::Checkbox("Aa", &searchCaseSensitive)) {
+					SetSearchCaseSensitive(searchCaseSensitive);
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Case Sensitive");
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Checkbox("Regex", &searchRegex)) {
+					SetSearchRegex(searchRegex);
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Use Regular Expressions");
+				}
+
+				ImGui::SameLine();
+
 				int resultCount = GetSearchResultCount();
 				int currentIndex = GetCurrentSearchIndex();
 				if (resultCount > 0) {
-					ImGui::Text("Result %d of %d", currentIndex + 1, resultCount);
+					ImGui::Text("%d/%d", currentIndex + 1, resultCount);
+				}
+				else if (!currentSearch.empty()) {
+					ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "No results");
+				}
+
+				ImGui::SameLine();
+				float closeButtonX = ImGui::GetContentRegionAvail().x - 20.0f;
+				if (closeButtonX > 0) {
+					ImGui::SetCursorPosX(ImGui::GetCursorPosX() + closeButtonX);
+				}
+				if (ImGui::Button("X")) {
+					ShowSearchBox(false);
+				}
+				if (ImGui::IsItemHovered()) {
+					ImGui::SetTooltip("Close Search (Escape)");
+				}
+
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !searchInputActive) {
+					ShowSearchBox(false);
+				}
+
+				if (!searchInputActive && ImGui::IsKeyPressed(ImGuiKey_F3)) {
+					if (ImGui::GetIO().KeyShift) {
+						FindPrevious();
+					}
+					else {
+						FindNext();
+					}
 				}
 			}
+			ImGui::EndChild();
+
+			ImGui::PopStyleColor();
+			ImGui::PopStyleVar();
 		}
 
-		// Menu Bar
+		// Enhanced Menu Bar with file operations and syntax highlighting submenu
 		void RenderMenuBar() {
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("File")) {
 					if (ImGui::MenuItem("New", "Ctrl+N")) {
-						SetText("");
+						NewFile();
 					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("Open...", "Ctrl+O")) {
+						OpenLoadDialog();
+					}
+					if (ImGui::MenuItem("Save", "Ctrl+S")) {
+						SaveFile();
+					}
+					if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) {
+						OpenSaveDialog();
+					}
+					ImGui::Separator();
 					if (ImGui::MenuItem("Clear")) {
 						SetText("");
 					}
@@ -513,9 +927,109 @@ namespace Utils {
 					if (ImGui::MenuItem("Syntax Highlighting", nullptr, &enableSyntaxHighlighting)) {
 						ApplyCurrentConfiguration();
 					}
-					if (ImGui::MenuItem("Auto Indent", nullptr, &autoIndent)) {
-						ApplyCurrentConfiguration();
+					ImGui::Separator();
+					if (ImGui::MenuItem("Show Search", "Ctrl+F", &showSearchBox)) {
+						ShowSearchBox(showSearchBox);
+						if (showSearchBox) {
+							searchBoxJustOpened = true;
+						}
 					}
+					ImGui::EndMenu();
+				}
+
+				// Syntax Highlighting submenu
+				if (ImGui::BeginMenu("Syntax")) {
+					// Display current file type
+					ImGui::Text("Current: %s", currentFileType.empty() ? "Plain Text" : currentFileType.c_str());
+					ImGui::Separator();
+
+					// Common file types
+					if (ImGui::MenuItem("Plain Text", nullptr, currentFileType == ".txt")) {
+						SetFileType(".txt");
+					}
+
+					ImGui::Separator();
+					ImGui::Text("Programming Languages:");
+
+					if (ImGui::MenuItem("C/C++", nullptr, currentFileType == ".cpp" || currentFileType == ".c")) {
+						SetFileType(".cpp");
+					}
+					if (ImGui::MenuItem("C/C++ Header", nullptr, currentFileType == ".h" || currentFileType == ".hpp")) {
+						SetFileType(".hpp");
+					}
+					if (ImGui::MenuItem("Python", nullptr, currentFileType == ".py")) {
+						SetFileType(".py");
+					}
+					if (ImGui::MenuItem("JavaScript", nullptr, currentFileType == ".js")) {
+						SetFileType(".js");
+					}
+					if (ImGui::MenuItem("TypeScript", nullptr, currentFileType == ".ts")) {
+						SetFileType(".ts");
+					}
+					if (ImGui::MenuItem("Java", nullptr, currentFileType == ".java")) {
+						SetFileType(".java");
+					}
+					if (ImGui::MenuItem("C#", nullptr, currentFileType == ".cs")) {
+						SetFileType(".cs");
+					}
+					if (ImGui::MenuItem("Rust", nullptr, currentFileType == ".rs")) {
+						SetFileType(".rs");
+					}
+					if (ImGui::MenuItem("Go", nullptr, currentFileType == ".go")) {
+						SetFileType(".go");
+					}
+
+					ImGui::Separator();
+					ImGui::Text("Markup & Config:");
+
+					if (ImGui::MenuItem("JSON", nullptr, currentFileType == ".json")) {
+						SetFileType(".json");
+					}
+					if (ImGui::MenuItem("XML", nullptr, currentFileType == ".xml")) {
+						SetFileType(".xml");
+					}
+					if (ImGui::MenuItem("HTML", nullptr, currentFileType == ".html")) {
+						SetFileType(".html");
+					}
+					if (ImGui::MenuItem("CSS", nullptr, currentFileType == ".css")) {
+						SetFileType(".css");
+					}
+					if (ImGui::MenuItem("Markdown", nullptr, currentFileType == ".md")) {
+						SetFileType(".md");
+					}
+					if (ImGui::MenuItem("YAML", nullptr, currentFileType == ".yml" || currentFileType == ".yaml")) {
+						SetFileType(".yml");
+					}
+					if (ImGui::MenuItem("TOML", nullptr, currentFileType == ".toml")) {
+						SetFileType(".toml");
+					}
+
+					ImGui::Separator();
+					ImGui::Text("Shaders:");
+
+					if (ImGui::MenuItem("GLSL Vertex", nullptr, currentFileType == ".vert")) {
+						SetFileType(".vert");
+					}
+					if (ImGui::MenuItem("GLSL Fragment", nullptr, currentFileType == ".frag")) {
+						SetFileType(".frag");
+					}
+					if (ImGui::MenuItem("HLSL", nullptr, currentFileType == ".hlsl")) {
+						SetFileType(".hlsl");
+					}
+
+					ImGui::Separator();
+					ImGui::Text("Other:");
+
+					if (ImGui::MenuItem("Batch Script", nullptr, currentFileType == ".bat")) {
+						SetFileType(".bat");
+					}
+					if (ImGui::MenuItem("Shell Script", nullptr, currentFileType == ".sh")) {
+						SetFileType(".sh");
+					}
+					if (ImGui::MenuItem("Log File", nullptr, currentFileType == ".log")) {
+						SetFileType(".log");
+					}
+
 					ImGui::EndMenu();
 				}
 
@@ -541,7 +1055,6 @@ namespace Utils {
 					}
 					ImGui::Separator();
 
-					// Font size options
 					ImGui::Text("Font Size:");
 					if (ImGui::MenuItem("Small (12px)", nullptr, currentFontSize == 12.0f)) {
 						SetFontSize(12.0f);
@@ -557,57 +1070,10 @@ namespace Utils {
 					}
 
 					ImGui::Separator();
-					// Custom font size slider
 					float customFontSize = currentFontSize;
 					if (ImGui::SliderFloat("Custom Size", &customFontSize, 8.0f, 24.0f, "%.1f px")) {
 						SetFontSize(customFontSize);
 					}
-					ImGui::EndMenu();
-				}
-
-				if (ImGui::BeginMenu("Search")) {
-					// Search input
-					char searchBuffer[256];
-					std::string currentSearch = GetSearchTerm();
-					strncpy(searchBuffer, currentSearch.c_str(), sizeof(searchBuffer) - 1);
-					searchBuffer[sizeof(searchBuffer) - 1] = '\0';
-
-					if (ImGui::InputText("Find", searchBuffer, sizeof(searchBuffer))) {
-						SetSearchTerm(searchBuffer);
-					}
-
-					// Search options
-					bool caseSensitive = GetSearchCaseSensitive();
-					if (ImGui::Checkbox("Case Sensitive", &caseSensitive)) {
-						SetSearchCaseSensitive(caseSensitive);
-					}
-
-					bool useRegex = GetSearchRegex();
-					if (ImGui::Checkbox("Use Regex", &useRegex)) {
-						SetSearchRegex(useRegex);
-					}
-
-					ImGui::Separator();
-
-					// Search navigation
-					if (ImGui::MenuItem("Find Next", "F3")) {
-						FindNext();
-					}
-
-					if (ImGui::MenuItem("Find Previous", "Shift+F3")) {
-						FindPrevious();
-					}
-
-					// Show search results count
-					int resultCount = GetSearchResultCount();
-					int currentIndex = GetCurrentSearchIndex();
-					if (resultCount > 0) {
-						ImGui::Text("Result %d of %d", currentIndex + 1, resultCount);
-					}
-					else if (!currentSearch.empty()) {
-						ImGui::Text("No results found");
-					}
-
 					ImGui::EndMenu();
 				}
 
@@ -623,7 +1089,6 @@ namespace Utils {
 
 			ImGui::Separator();
 
-			// Quick edit actions
 			if (ImGui::MenuItem("Copy", "Ctrl+C")) {
 				auto* buffer = editor->GetActiveBuffer();
 				if (buffer && buffer->HasSelection()) {
@@ -655,12 +1120,17 @@ namespace Utils {
 
 			ImGui::Separator();
 
-			// Quick toggles
 			if (ImGui::MenuItem("Line Numbers", nullptr, &showLineNumbers)) {
 				ApplyCurrentConfiguration();
 			}
 			if (ImGui::MenuItem("Word Wrap", nullptr, &wordWrap)) {
 				ApplyCurrentConfiguration();
+			}
+			if (ImGui::MenuItem("Show Search", "Ctrl+F", &showSearchBox)) {
+				ShowSearchBox(showSearchBox);
+				if (showSearchBox) {
+					searchBoxJustOpened = true;
+				}
 			}
 		}
 
@@ -700,6 +1170,9 @@ namespace Utils {
 							window->SetWindowFlags(flags);
 						}
 					}
+
+					// Apply syntax highlighting when configuration changes
+					ApplySyntaxHighlighting();
 				}
 			}
 			catch (const std::exception& e) {
@@ -735,7 +1208,6 @@ namespace Utils {
 			std::string searchText = currentSearchTerm;
 			std::string sourceText = text;
 
-			// Convert to lowercase for case-insensitive search
 			if (!searchCaseSensitive) {
 				std::transform(searchText.begin(), searchText.end(), searchText.begin(), ::tolower);
 				std::transform(sourceText.begin(), sourceText.end(), sourceText.begin(), ::tolower);
@@ -744,7 +1216,7 @@ namespace Utils {
 			size_t pos = 0;
 			while ((pos = sourceText.find(searchText, pos)) != std::string::npos) {
 				searchResults.push_back({ pos, pos + searchText.length() });
-				pos += 1; // Move past this match to find overlapping matches
+				pos += 1;
 			}
 		}
 
@@ -779,17 +1251,13 @@ namespace Utils {
 
 			if (editor && isInitialized) {
 				try {
-					// Get the buffer and try to set cursor position
 					auto* buffer = editor->GetActiveBuffer();
 					if (buffer) {
-						// Convert byte position to Zep's iterator system
 						auto startIter = buffer->Begin() + static_cast<long>(result.first);
 						auto endIter = buffer->Begin() + static_cast<long>(result.second);
 
-						// Set cursor to start of match
 						if (auto* window = editor->GetActiveWindow()) {
 							window->SetBufferCursor(startIter);
-							// Set selection using GlyphRange
 							buffer->SetSelection(Zep::GlyphRange(startIter, endIter));
 						}
 					}
@@ -805,7 +1273,6 @@ namespace Utils {
 			currentSearchIndex = -1;
 			currentSearchTerm.clear();
 
-			// Clear any selection
 			if (editor && isInitialized) {
 				auto* buffer = editor->GetActiveBuffer();
 				if (buffer) {
@@ -814,27 +1281,22 @@ namespace Utils {
 			}
 		}
 
-		// Mouse highlighting
 		void HandleMouseSelection() {
 			auto& io = ImGui::GetIO();
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return;
 
-			// Get current mouse position in screen coordinates
 			Zep::NVec2f mousePos = Zep::NVec2f(io.MousePos.x, io.MousePos.y);
 			double currentTime = ImGui::GetTime();
 
-			// Handle mouse clicks
 			if (ImGui::IsMouseClicked(0)) {
 				HandleMouseClick(mousePos, currentTime);
 			}
 
-			// Handle mouse drag - only if we actually started dragging
 			if (ImGui::IsMouseDragging(0, 2.0f) && !isDoubleClickPending && !isTripleClickPending) {
 				HandleMouseDrag(mousePos);
 			}
 
-			// Handle mouse release
 			if (ImGui::IsMouseReleased(0)) {
 				HandleMouseRelease();
 			}
@@ -844,7 +1306,6 @@ namespace Utils {
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return;
 
-			// Check if this is a consecutive click in the same area
 			bool isConsecutiveClick = false;
 			float distance = std::sqrt(
 				(mousePos.x - lastClickPosition.x) * (mousePos.x - lastClickPosition.x) +
@@ -862,33 +1323,27 @@ namespace Utils {
 			lastClickTime = currentTime;
 			lastClickPosition = mousePos;
 
-			// Let Zep handle the mouse click first to get proper cursor positioning
 			if (editor->OnMouseDown(mousePos, Zep::ZepMouseButton::Left)) {
-				// Zep handled the click, now get the updated cursor position
 				auto* window = editor->GetActiveWindow();
 				if (window) {
 					Zep::GlyphIterator clickPos = window->GetBufferCursor();
 
 					switch (consecutiveClicks) {
 					case 1:
-						// Single click - start drag selection or place cursor
 						HandleSingleClick(clickPos);
 						break;
 					case 2:
-						// Double click - select word
 						HandleDoubleClick(clickPos);
 						break;
 					case 3:
 					default:
-						// Triple click - select line
 						HandleTripleClick(clickPos);
-						consecutiveClicks = 3; // Cap at triple click
+						consecutiveClicks = 3;
 						break;
 					}
 				}
 			}
 			else {
-				// Fallback if Zep doesn't handle the click
 				auto* window = editor->GetActiveWindow();
 				if (window) {
 					Zep::GlyphIterator clickPos = GetIteratorFromMousePos(mousePos);
@@ -914,35 +1369,29 @@ namespace Utils {
 			auto* window = editor->GetActiveWindow();
 			if (!window) return;
 
-			// Set cursor position
 			window->SetBufferCursor(clickPos);
 
-			// Clear any existing selection only if we're not starting a potential drag
 			auto* buffer = editor->GetActiveBuffer();
 			if (buffer) {
 				buffer->ClearSelection();
 			}
 
-			// Initialize drag operation
 			dragStartPos = clickPos;
 			dragCurrentPos = clickPos;
-			isDragging = false; // Will be set to true on first mouse move
+			isDragging = false;
 		}
 
 		void HandleDoubleClick(const Zep::GlyphIterator& clickPos) {
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return;
 
-			// Find word boundaries
 			auto wordStart = FindWordStart(clickPos);
 			auto wordEnd = FindWordEnd(clickPos);
 
-			// Select the word
 			if (wordStart != wordEnd) {
 				buffer->SetSelection(Zep::GlyphRange(wordStart, wordEnd));
 			}
 
-			// Set cursor to end of selection
 			auto* window = editor->GetActiveWindow();
 			if (window) {
 				window->SetBufferCursor(wordEnd);
@@ -955,16 +1404,13 @@ namespace Utils {
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return;
 
-			// Find line boundaries
 			auto lineStart = FindLineStart(clickPos);
 			auto lineEnd = FindLineEnd(clickPos);
 
-			// Select the entire line
 			if (lineStart != lineEnd) {
 				buffer->SetSelection(Zep::GlyphRange(lineStart, lineEnd));
 			}
 
-			// Set cursor to end of selection
 			auto* window = editor->GetActiveWindow();
 			if (window) {
 				window->SetBufferCursor(lineEnd);
@@ -975,7 +1421,7 @@ namespace Utils {
 
 		void HandleMouseDrag(const Zep::NVec2f& mousePos) {
 			if (isDoubleClickPending || isTripleClickPending) {
-				return; // Don't drag if we just did a multi-click
+				return;
 			}
 
 			auto* buffer = editor->GetActiveBuffer();
@@ -983,23 +1429,18 @@ namespace Utils {
 
 			isDragging = true;
 
-			// Get current mouse position in buffer coordinates
 			Zep::GlyphIterator currentPos = GetIteratorFromMousePos(mousePos);
 			dragCurrentPos = currentPos;
 
-			// Create selection from drag start to current position
 			Zep::GlyphIterator selStart = dragStartPos;
 			Zep::GlyphIterator selEnd = dragCurrentPos;
 
-			// Ensure selection is in the right order (start should be before end)
 			if (selEnd < selStart) {
 				std::swap(selStart, selEnd);
 			}
 
-			// Always set selection, even if start == end (which clears selection)
 			buffer->SetSelection(Zep::GlyphRange(selStart, selEnd));
 
-			// Set cursor to the actual end position (where the mouse is)
 			auto* window = editor->GetActiveWindow();
 			if (window) {
 				window->SetBufferCursor(dragCurrentPos);
@@ -1012,7 +1453,6 @@ namespace Utils {
 			isTripleClickPending = false;
 		}
 
-		// Helper function to convert mouse position to buffer iterator
 		Zep::GlyphIterator GetIteratorFromMousePos(const Zep::NVec2f& mousePos) {
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return buffer->Begin();
@@ -1020,24 +1460,9 @@ namespace Utils {
 			auto* window = editor->GetActiveWindow();
 			if (!window) return buffer->Begin();
 
-			// Try to use Zep's coordinate conversion if available
 			try {
-				// Get the current cursor position as a fallback
 				auto currentCursor = window->GetBufferCursor();
-
-				// For now, we'll use a simple approach based on relative mouse movement
-				// In a real implementation, you'd want to use Zep's actual coordinate conversion
-
-				// Simple approximation: assume uniform character width
-				// This is not perfect but will work better than just returning cursor position
-				auto textStart = buffer->Begin();
-				auto textEnd = buffer->End();
-
-				// Calculate approximate character position based on mouse
-				// This is a simplified implementation - you may need to enhance this
-				// based on the actual Zep coordinate system
-
-				return currentCursor; // For now, return cursor position
+				return currentCursor;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error converting mouse position: " << e.what() << std::endl;
@@ -1045,14 +1470,12 @@ namespace Utils {
 			}
 		}
 
-		// Word boundary detection - USING SAFE ITERATOR OPERATIONS
 		Zep::GlyphIterator FindWordStart(const Zep::GlyphIterator& pos) {
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return pos;
 
 			auto iter = pos;
 
-			// Move backwards while we're in a word
 			while (iter > buffer->Begin()) {
 				auto prevIter = iter;
 				prevIter.Move(-1);
@@ -1073,7 +1496,6 @@ namespace Utils {
 
 			auto iter = pos;
 
-			// Move forwards while we're in a word
 			while (iter < buffer->End()) {
 				char ch = *iter;
 
@@ -1086,14 +1508,12 @@ namespace Utils {
 			return iter;
 		}
 
-		// Line boundary detection
 		Zep::GlyphIterator FindLineStart(const Zep::GlyphIterator& pos) {
 			auto* buffer = editor->GetActiveBuffer();
 			if (!buffer) return pos;
 
 			auto iter = pos;
 
-			// Move backwards to start of line
 			while (iter > buffer->Begin()) {
 				auto prevIter = iter;
 				prevIter.Move(-1);
@@ -1112,10 +1532,9 @@ namespace Utils {
 
 			auto iter = pos;
 
-			// Move forwards to end of line (including the newline)
 			while (iter < buffer->End()) {
 				if (*iter == '\n') {
-					iter.Move(1); // Include the newline
+					iter.Move(1);
 					break;
 				}
 				iter.Move(1);
@@ -1124,7 +1543,6 @@ namespace Utils {
 			return iter;
 		}
 
-		// Character classification
 		bool IsWordCharacter(char ch) {
 			return std::isalnum(ch) || ch == '_';
 		}
@@ -1145,8 +1563,14 @@ namespace Utils {
 		std::string currentTheme = "dark";
 		std::string currentMode = "standard";
 		bool showSearchBox = false;
+		bool searchBoxJustOpened = false;
+		bool searchInputFocused = false;
 		std::string currentSearchTerm;
 		float currentFontSize = 14.0f;
+
+		// File management
+		std::string currentFileType = ".txt";
+		std::string currentFilePath;
 
 		// Search state
 		bool searchCaseSensitive = false;
@@ -1154,7 +1578,7 @@ namespace Utils {
 		std::vector<std::pair<size_t, size_t>> searchResults;
 		int currentSearchIndex = -1;
 
-		// Mouse selection state - RESTORED
+		// Mouse selection state
 		bool isDragging = false;
 		bool isDoubleClickPending = false;
 		bool isTripleClickPending = false;

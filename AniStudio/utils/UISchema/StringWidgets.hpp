@@ -39,10 +39,10 @@ namespace UISchema {
 	struct ZepEditorConfig {
 		bool showLineNumbers = true;
 		bool wordWrap = true;
-		bool readOnly = false;
+		bool readOnly = false;  // Note: Not fully implemented in Zep
 		bool showWhitespace = false;
 		bool enableSyntaxHighlighting = true;
-		bool autoIndent = true;
+		bool autoIndent = true;  // Note: Handled by mode, not directly configurable
 		bool showSearch = false;
 		bool showMenuBar = true;
 		std::string theme = "dark";
@@ -64,7 +64,13 @@ namespace UISchema {
 			return configMap;
 		}
 
-		// Create editor
+		// Track which editors have been configured from schema
+		static std::unordered_set<uintptr_t>& GetConfiguredEditors() {
+			static std::unordered_set<uintptr_t> configuredEditors;
+			return configuredEditors;
+		}
+
+		// Create or get existing editor
 		static std::shared_ptr<Utils::ZepTextEditor> GetOrCreateEditor(std::string* value) {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
@@ -88,16 +94,14 @@ namespace UISchema {
 			return it->second;
 		}
 
-		// Apply config - SIMPLIFIED
+		// Apply config with proper theme and syntax handling
 		static void ApplyConfig(std::shared_ptr<Utils::ZepTextEditor> editor, const ZepEditorConfig& config) {
 			if (!editor) return;
 
 			editor->SetShowLineNumbers(config.showLineNumbers);
 			editor->SetWordWrap(config.wordWrap);
-			editor->SetReadOnly(config.readOnly);
 			editor->SetShowWhitespace(config.showWhitespace);
 			editor->SetSyntaxHighlighting(config.enableSyntaxHighlighting);
-			editor->SetAutoIndent(config.autoIndent);
 			editor->SetTheme(config.theme);
 			editor->ShowSearchBox(config.showSearch);
 			editor->SetFontSize(config.fontSize);
@@ -124,29 +128,7 @@ namespace UISchema {
 			return config;
 		}
 
-		static bool RenderInputText(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
-			ImGuiInputTextFlags flags = GetInputTextFlags(options);
-			size_t bufferSize = GetSchemaValue<size_t>(options, "maxLength", 1024);
-			if (bufferSize < 1) bufferSize = 1;
-
-			std::vector<char> buffer(bufferSize);
-			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
-			buffer[bufferSize - 1] = '\0';
-
-			bool changed = ImGui::InputText(label.c_str(), buffer.data(), bufferSize, flags);
-			if (changed) {
-				*value = buffer.data();
-			}
-			return changed;
-		}
-
-		// Track which editors have been configured from schema
-		static std::unordered_set<uintptr_t>& GetConfiguredEditors() {
-			static std::unordered_set<uintptr_t> configuredEditors;
-			return configuredEditors;
-		}
-
-		// ZepUtils handles child window creation
+		// Main Zep editor render function
 		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			auto editor = GetOrCreateEditor(value);
 			if (!editor) {
@@ -199,6 +181,94 @@ namespace UISchema {
 			return RenderZepEditor(label, value, standardOptions);
 		}
 
+		// Helper to get InputTextFlags properly
+		static ImGuiInputTextFlags GetInputTextFlags(const nlohmann::json& schema) {
+			ImGuiInputTextFlags flags = ImGuiInputTextFlags_None;
+
+			// Check ui:flags directly
+			if (schema.contains("ui:flags")) {
+				if (schema["ui:flags"].is_number()) {
+					return static_cast<ImGuiInputTextFlags>(schema["ui:flags"].get<int>());
+				}
+				else if (schema["ui:flags"].is_array()) {
+					for (const auto& flag : schema["ui:flags"]) {
+						if (flag.is_number()) {
+							flags |= static_cast<ImGuiInputTextFlags>(flag.get<int>());
+						}
+					}
+				}
+			}
+
+			// Common text flags from schema options
+			if (GetSchemaValue<bool>(schema, "readOnly", false)) {
+				flags |= ImGuiInputTextFlags_ReadOnly;
+			}
+
+			if (GetSchemaValue<bool>(schema, "password", false)) {
+				flags |= ImGuiInputTextFlags_Password;
+			}
+
+			if (GetSchemaValue<bool>(schema, "ui:options.allowTabInput", false)) {
+				flags |= ImGuiInputTextFlags_AllowTabInput;
+			}
+
+			return flags;
+		}
+
+		static bool RenderInputText(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+			// Proper handling of readOnly flag from schema
+			ImGuiInputTextFlags flags = GetInputTextFlags(options);
+
+			size_t bufferSize = GetSchemaValue<size_t>(options, "maxLength", 1024);
+			if (bufferSize < 1) bufferSize = 1;
+
+			std::vector<char> buffer(bufferSize);
+			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
+			buffer[bufferSize - 1] = '\0';
+
+			bool changed = ImGui::InputText(label.c_str(), buffer.data(), bufferSize, flags);
+			if (changed) {
+				*value = buffer.data();
+			}
+			return changed;
+		}
+
+		// Add proper textarea implementation for comparison
+		static bool RenderTextArea(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+			ImGuiInputTextFlags flags = GetInputTextFlags(options);
+
+			// Calculate height based on rows
+			int rows = GetSchemaValue<int>(options, "rows", 5);
+			float lineHeight = ImGui::GetTextLineHeight();
+			float height = lineHeight * rows + ImGui::GetStyle().FramePadding.y * 2.0f;
+
+			// Calculate max buffer size - default or from schema
+			size_t bufferSize = GetSchemaValue<size_t>(options, "maxLength", 4096);
+			if (bufferSize < 1) bufferSize = 1;
+
+			// Create buffer and copy string
+			std::vector<char> buffer(bufferSize);
+			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
+			buffer[bufferSize - 1] = '\0';
+
+			// Render the multiline input widget
+			bool changed = ImGui::InputTextMultiline(
+				label.c_str(),
+				buffer.data(),
+				bufferSize,
+				ImVec2(-FLT_MIN, height),
+				flags
+			);
+
+			// If changed, update the string
+			if (changed) {
+				*value = buffer.data();
+			}
+
+			return changed;
+		}
+
+		// Enhanced render method with proper widget type handling
 		static bool Render(const std::string& label, std::string* value, const std::string& widgetType, const nlohmann::json& schema) {
 			if (widgetType == "input_text") {
 				return RenderInputText(label, value, schema);
@@ -212,7 +282,12 @@ namespace UISchema {
 			else if (widgetType == "zep_editor_standard") {
 				return RenderZepEditorStandard(label, value, schema);
 			}
+			else if (widgetType == "textarea") {
+				// Use regular ImGui textarea for simple multiline input
+				return RenderTextArea(label, value, schema);
+			}
 			else {
+				// Default to input_text for unknown widget types
 				return RenderInputText(label, value, schema);
 			}
 		}
@@ -232,10 +307,12 @@ namespace UISchema {
 		static void CleanupEditor(std::string* value) {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
+			auto& configuredEditors = GetConfiguredEditors();
 			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
 
 			editorMap.erase(uniqueKey);
 			configMap.erase(uniqueKey);
+			configuredEditors.erase(uniqueKey);
 		}
 
 		// Clear focus
@@ -247,6 +324,7 @@ namespace UISchema {
 		static void Cleanup() {
 			GetEditorMap().clear();
 			GetConfigMap().clear();
+			GetConfiguredEditors().clear();
 			Utils::ZepFocusTracker::ClearFocus();
 		}
 	};
