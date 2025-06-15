@@ -8,3 +8,6 @@
     path = external/stable-diffusion.cpp
     url = https://github.com/leejet/stable-diffusion.cpp.git
 
+[submodule "external/zep"]
+	path = external/zep
+	url = https://github.com/Rezonality/zep.git
