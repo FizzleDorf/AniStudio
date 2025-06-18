@@ -131,11 +131,13 @@ void Engine::Init() {
 	mgr.RegisterComponentName<VideoComponent>("Video");
 	mgr.RegisterComponentName<InputVideoComponent>("InputVideo");
 	mgr.RegisterComponentName<OutputVideoComponent>("OutputVideo");
+	mgr.RegisterComponentName<OutputVideoComponent>("Python");
 
 	// Register core systems
 	mgr.RegisterSystem<SDCPPSystem>();
 	mgr.RegisterSystem<ImageSystem>();
 	mgr.RegisterSystem<VideoSystem>();
+	mgr.RegisterSystem<PythonSystem>();
 
 	const auto upscaleViewID = viewManager.CreateView();
 	viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(mgr));

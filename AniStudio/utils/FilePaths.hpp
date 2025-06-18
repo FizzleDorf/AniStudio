@@ -31,9 +31,10 @@ namespace Utils
 	{
 		inline static std::string dataPath = "../data/defaults";
 		inline static std::string ImguiStatePath = "../data/defaults/imgui.ini";
-		inline static std::string virtualEnvPath = "";
+		inline static std::string virtualEnvPath = "../venv";
 		inline static std::string lastOpenProjectPath = "";
 		inline static std::string defaultProjectPath = "";
+		inline static std::string defaultScriptsPath = "../scripts";
 		inline static std::string defaultModelRootPath = "";
 		inline static std::string assetsFolderPath = "";
 		inline static std::string pluginPath = "../plugins";
@@ -69,6 +70,14 @@ namespace Utils
 				SetByModelRoot();
 				SaveFilepathDefaults();
 			}
+
+			// Ensure scripts directory exists
+			std::filesystem::create_directories(defaultScriptsPath);
+
+			// Ensure venv directory path is set
+			if (virtualEnvPath.empty()) {
+				virtualEnvPath = "../venv";
+			}
 		}
 
 		static void SaveFilepathDefaults()
@@ -79,6 +88,7 @@ namespace Utils
 			// Create a JSON object to store paths
 			nlohmann::json json;
 			json["virtualEnvPath"] = virtualEnvPath;
+			json["defaultScriptsPath"] = defaultScriptsPath;
 			json["lastOpenProjectPath"] = lastOpenProjectPath;
 			json["defaultProjectPath"] = defaultProjectPath;
 			json["defaultModelRootPath"] = defaultModelRootPath;
@@ -92,7 +102,7 @@ namespace Utils
 			json["upscaleDir"] = upscaleDir;
 
 			// Write JSON to file
-			std::ofstream file("..\\data\\defaults\\paths.json");
+			std::ofstream file("../data/defaults/paths.json");
 			if (file.is_open())
 			{
 				file << json.dump(4); // Pretty print with 4 spaces
@@ -103,7 +113,7 @@ namespace Utils
 		static void LoadFilePathDefaults()
 		{
 			// Open JSON file
-			std::ifstream file("..\\data\\defaults\\paths.json");
+			std::ifstream file("../data/defaults/paths.json");
 			if (file.is_open())
 			{
 				// Parse the JSON file
@@ -114,6 +124,8 @@ namespace Utils
 				// Update paths from JSON
 				if (json.contains("virtualEnvPath"))
 					virtualEnvPath = json["virtualEnvPath"];
+				if (json.contains("defaultScriptsPath"))
+					defaultScriptsPath = json["defaultScriptsPath"];  // FIXED: was setting virtualEnvPath
 				if (json.contains("lastOpenProjectPath"))
 					lastOpenProjectPath = json["lastOpenProjectPath"];
 				if (json.contains("defaultProjectPath"))

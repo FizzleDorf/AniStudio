@@ -81,13 +81,47 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
 set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
 file(MAKE_DIRECTORY ${PLUGINS_DIR})
 
-# Data directory setup
+# Data directory setup - only copy if files don't exist
 set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
 set(DEFAULTS_DIR "${DATA_DIR}/defaults")
 file(MAKE_DIRECTORY ${DATA_DIR})
 file(MAKE_DIRECTORY ${DEFAULTS_DIR})
-file(COPY "${CMAKE_SOURCE_DIR}/data/defaults/" DESTINATION "${DEFAULTS_DIR}")
-message(STATUS "Copied data/defaults to ${DEFAULTS_DIR}")
+
+# Copy defaults files only if they don't already exist
+file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
+foreach(DEFAULT_FILE ${DEFAULT_FILES})
+    file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/data/defaults" "${DEFAULT_FILE}")
+    set(DEST_FILE "${DEFAULTS_DIR}/${REL_PATH}")
+    
+    if(NOT EXISTS "${DEST_FILE}")
+        get_filename_component(DEST_DIR "${DEST_FILE}" DIRECTORY)
+        file(MAKE_DIRECTORY "${DEST_DIR}")
+        file(COPY "${DEFAULT_FILE}" DESTINATION "${DEST_DIR}")
+        message(STATUS "Copied default file: ${REL_PATH}")
+    else()
+        message(STATUS "Skipping existing file: ${REL_PATH}")
+    endif()
+endforeach()
+
+# Scripts directory setup - copy all scripts
+set(SCRIPTS_DIR "${CMAKE_BINARY_DIR}/scripts")
+file(MAKE_DIRECTORY ${SCRIPTS_DIR})
+
+# Check if scripts directory exists in source
+if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
+    file(GLOB_RECURSE SCRIPT_FILES "${CMAKE_SOURCE_DIR}/scripts/*")
+    foreach(SCRIPT_FILE ${SCRIPT_FILES})
+        file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/scripts" "${SCRIPT_FILE}")
+        set(DEST_FILE "${SCRIPTS_DIR}/${REL_PATH}")
+        
+        get_filename_component(DEST_DIR "${DEST_FILE}" DIRECTORY)
+        file(MAKE_DIRECTORY "${DEST_DIR}")
+        file(COPY "${SCRIPT_FILE}" DESTINATION "${DEST_DIR}")
+    endforeach()
+    message(STATUS "Copied scripts directory to ${SCRIPTS_DIR}")
+else()
+    message(STATUS "No scripts directory found at ${CMAKE_SOURCE_DIR}/scripts")
+endif()
 
 # Find required packages
 find_package(Vulkan REQUIRED)
@@ -98,6 +132,7 @@ find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(FFmpeg REQUIRED)
+find_package(pybind11 REQUIRED)
 
 include_directories(${GLFW_INCLUDE_DIRS})
 
@@ -117,12 +152,21 @@ add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImJSchema)
 add_subdirectory(external/ImGuizmo)
 
+# Only build Zep if needed - configure it properly
 set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
 set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE) 
 set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
 set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)
 
-add_subdirectory(external/zep)
+# Check if Zep directory exists before adding it
+if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
+    add_subdirectory(external/zep)
+    set(ZEP_AVAILABLE TRUE)
+    message(STATUS "Zep text editor found and will be built")
+else()
+    message(WARNING "Zep not found at external/zep - text editor features will be limited")
+    set(ZEP_AVAILABLE FALSE)
+endif()
 
 # For external/imgui directory
 target_include_directories(ImGui PRIVATE ${GLFW_INCLUDE_DIRS})
@@ -144,15 +188,20 @@ set(ANISTUDIO_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
     ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
+    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ScriptComponents
     ${CMAKE_SOURCE_DIR}/external/glm
     ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
     ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
-	${CMAKE_SOURCE_DIR}/external/zep/include
     ${Vulkan_INCLUDE_DIR}
 )
+
+# Add Zep include if available
+if(ZEP_AVAILABLE)
+    list(APPEND ANISTUDIO_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/external/zep/include)
+endif()
 
 # Add the main AniStudio directory first for PCH
 include_directories(${CMAKE_SOURCE_DIR}/AniStudio)
@@ -160,6 +209,7 @@ include_directories(${CMAKE_SOURCE_DIR}/AniStudio)
 # Common link libraries
 set(ANISTUDIO_LINK_LIBS
     ${CONAN_LIBS}
+    pybind11::embed
     stable-diffusion
     ImGui
     ImGui_Nodes
@@ -179,8 +229,12 @@ set(ANISTUDIO_LINK_LIBS
     ffmpeg::avformat
     ffmpeg::avutil
     ffmpeg::swscale
-	Zep::Zep
 )
+
+# Add Zep to link libraries if available
+if(ZEP_AVAILABLE)
+    list(APPEND ANISTUDIO_LINK_LIBS Zep::Zep)
+endif()
 
 # ============================================================================
 # AniStudioCore Static Library
@@ -234,6 +288,11 @@ set_target_properties(AniStudioCore PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib
     EXPORT_NAME AniStudioCore
 )
+
+# Conditional compilation based on Zep availability
+if(ZEP_AVAILABLE)
+    target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
+endif()
 
 # Precompiled headers for AniStudioCore - PUBLIC so plugins can use them too
 target_precompile_headers(AniStudioCore PUBLIC AniStudio/pch.h)

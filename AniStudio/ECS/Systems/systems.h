@@ -23,3 +23,4 @@
 #include "SDcppSystem.hpp"
 #include "ImageSystem.hpp"
 #include "NodegraphSystem.hpp"
+#include "PythonSystem.hpp"

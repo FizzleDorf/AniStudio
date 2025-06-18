@@ -36,6 +36,9 @@ class AniStudio(ConanFile):
         # zep dependencies
         self.requires("spdlog/1.11.0")
 
+        # python
+        self.requires("pybind11/2.13.6")
+
         if self.settings.os == "Windows":
             self.requires("opengl/system")
         elif self.settings.os == "Linux":

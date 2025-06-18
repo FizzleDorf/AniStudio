@@ -22,3 +22,4 @@
 
 #include "SDCPPComponents/SDCPPComponents.h"
 #include "ImageComponents/ImageComponent.hpp"
+#include "ScriptComponents/PythonComponent.hpp"

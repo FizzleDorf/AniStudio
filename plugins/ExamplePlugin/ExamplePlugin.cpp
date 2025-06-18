@@ -1,11 +1,3 @@
-/*
-	FIXED ExamplePlugin.cpp with Proper ImGui Cleanup using ImGuiContextManager
-	- Uses existing ImGuiContextManager infrastructure
-	- Adds proper ImGui window cleanup on plugin shutdown
-	- Prevents duplicate rendering after reload
-	- Fixes ImGui state persistence issues
-*/
-
 #include "BasePlugin.hpp"
 #include "BaseComponent.hpp"
 #include "BaseView.hpp"
