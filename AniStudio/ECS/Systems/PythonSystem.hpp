@@ -54,9 +54,16 @@ namespace ECS {
 		std::mutex pythonMutex;
 
 		std::string GetPythonExecutable(const PythonComponent& comp) {
-			if (comp.useVirtualEnv && !comp.pythonExecutable.empty() &&
-				std::filesystem::exists(comp.pythonExecutable)) {
-				return comp.pythonExecutable;
+			if (comp.useVirtualEnv && !comp.pythonExecutable.empty()) {
+				// Convert relative path to absolute path for Windows compatibility
+				std::filesystem::path pythonPath(comp.pythonExecutable);
+				if (pythonPath.is_relative()) {
+					pythonPath = std::filesystem::absolute(pythonPath);
+				}
+
+				if (std::filesystem::exists(pythonPath)) {
+					return pythonPath.string();
+				}
 			}
 			return "python"; // Fallback to system python
 		}
@@ -89,7 +96,8 @@ namespace ECS {
 			si.dwFlags |= STARTF_USESTDHANDLES;
 			ZeroMemory(&pi, sizeof(pi));
 
-			std::string cmdLine = "cmd /c " + command;
+			// Use the command directly without cmd /c wrapper since we're already formatting it properly
+			std::string cmdLine = command;
 			if (CreateProcessA(NULL, const_cast<char*>(cmdLine.c_str()), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
 				CloseHandle(hStdoutWrite);
 				CloseHandle(hStderrWrite);
@@ -138,6 +146,15 @@ namespace ECS {
 			return { output, error };
 		}
 
+		std::string CreateTempScriptFile(const std::string& script) {
+			// Use std::filesystem for proper path handling
+			std::filesystem::path tempDir = std::filesystem::temp_directory_path();
+			std::filesystem::path tempFile = tempDir / "anistudio_temp_script.py";
+
+			// Convert to string with proper path separators
+			return tempFile.string();
+		}
+
 		void ExecuteScript(const std::string& script, PythonComponent& comp) {
 			std::lock_guard<std::mutex> lock(pythonMutex);
 
@@ -147,21 +164,23 @@ namespace ECS {
 
 				std::string pythonExe = GetPythonExecutable(comp);
 
-				// Create a temporary file for the script
-				std::string tempDir = std::filesystem::temp_directory_path().string();
-				std::string tempFile = tempDir + "/anistudio_temp_script.py";
+				// Create a temporary file for the script using proper path handling
+				std::string tempFile = CreateTempScriptFile(script);
 
 				// Write script to temp file
 				std::ofstream scriptFile(tempFile);
 				if (!scriptFile.is_open()) {
-					comp.error = "Failed to create temporary script file";
+					comp.error = "Failed to create temporary script file: " + tempFile;
 					return;
 				}
 				scriptFile << script;
 				scriptFile.close();
 
-				// Execute the script
-				std::string command = pythonExe + " \"" + tempFile + "\"";
+				// Construct command with proper quoting
+				std::ostringstream commandStream;
+				commandStream << "\"" << pythonExe << "\" \"" << tempFile << "\"";
+				std::string command = commandStream.str();
+
 				std::cout << "Executing command: " << command << std::endl;
 
 				auto[output, error] = RunCommand(command);
@@ -175,8 +194,8 @@ namespace ECS {
 				try {
 					std::filesystem::remove(tempFile);
 				}
-				catch (...) {
-					// Ignore cleanup errors
+				catch (const std::exception& e) {
+					std::cout << "Warning: Failed to remove temporary file: " << e.what() << std::endl;
 				}
 
 				std::cout << "Python script executed successfully" << std::endl;
@@ -208,7 +227,11 @@ namespace ECS {
 				}
 
 				std::string pythonExe = GetPythonExecutable(comp);
-				std::string command = pythonExe + " \"" + filePath + "\"";
+
+				// Construct command with proper quoting
+				std::ostringstream commandStream;
+				commandStream << "\"" << pythonExe << "\" \"" << filePath << "\"";
+				std::string command = commandStream.str();
 
 				std::cout << "Executing file command: " << command << std::endl;
 
