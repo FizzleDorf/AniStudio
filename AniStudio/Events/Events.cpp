@@ -136,7 +136,6 @@ namespace ANI {
 					if (vMgr.HasView<PluginView>(view)) {
 						vMgr.DestroyView(view);
 					}
-					break;
 				}
 				break;
 			}
@@ -146,7 +145,7 @@ namespace ANI {
 				auto id = vMgr.CreateView();
 				vMgr.AddView<HelpView>(id, HelpView(Core.GetEntityManager()));
 				vMgr.GetView<HelpView>(id).Init();
-				size_t helpID = id;
+				helpID = id;
 				break;
 			}
 

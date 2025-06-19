@@ -1,13 +1,27 @@
+// HelpView.cpp
 #include "HelpView.hpp"
 #include "FilePaths.hpp"
 #include <iostream>
 #include <algorithm>
 #include <sstream>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#elif __linux__
+#include <cstdlib>
+#elif __APPLE__
+#include <cstdlib>
+#endif
+
 namespace GUI {
 
 	HelpView::HelpView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
 		viewName = "Help";
+	}
+
+	HelpView::~HelpView() {
+		CleanupImageCache();
 	}
 
 	void HelpView::Init() {
@@ -34,7 +48,7 @@ namespace GUI {
 		documents.clear();
 		documentIndex.clear();
 
-		// Load README from project root
+		// Load README from project root (executable is in build/bin, so go up two levels)
 		std::filesystem::path readmePath = "../README.md";
 		if (std::filesystem::exists(readmePath)) {
 			LoadMarkdownFile(readmePath);
@@ -81,6 +95,7 @@ namespace GUI {
 
 			MarkdownDocument doc;
 			doc.filePath = filePath.string();
+			doc.directory = filePath.parent_path().string();
 
 			// Extract title from filename or first header
 			doc.title = filePath.stem().string();
@@ -143,6 +158,20 @@ namespace GUI {
 				ImGui::Text("Expected locations:");
 				ImGui::BulletText("README.md in project root");
 				ImGui::BulletText("*.md files in docs/ directory");
+
+				// Debug info
+				ImGui::Separator();
+				ImGui::Text("Debug Information:");
+				std::string currentPath = std::filesystem::current_path().string();
+				ImGui::Text("Current working directory: %s", currentPath.c_str());
+
+				std::filesystem::path readmePath = "../README.md";
+				ImGui::Text("Looking for README at: %s", std::filesystem::absolute(readmePath).string().c_str());
+				ImGui::Text("README exists: %s", std::filesystem::exists(readmePath) ? "YES" : "NO");
+
+				std::filesystem::path docsPath = "../docs";
+				ImGui::Text("Looking for docs at: %s", std::filesystem::absolute(docsPath).string().c_str());
+				ImGui::Text("Docs directory exists: %s", std::filesystem::exists(docsPath) ? "YES" : "NO");
 			}
 			else {
 				// Main content area
@@ -215,9 +244,42 @@ namespace GUI {
 			ImGui::Text("Document: %s", doc.title.c_str());
 			ImGui::Separator();
 
-			// Render markdown content
+			// Process markdown content for tables
 			if (doc.isLoaded && !doc.content.empty()) {
-				ImGui::Markdown(doc.content.c_str(), doc.content.length(), markdownConfig);
+				std::string processedContent = doc.content;
+
+				// Simple table detection and conversion
+				// This is a basic implementation - you might want to use a more sophisticated markdown parser
+				std::istringstream stream(processedContent);
+				std::string line;
+				std::string finalContent;
+				bool inTable = false;
+
+				while (std::getline(stream, line)) {
+					// Check if line contains table separators
+					if (line.find('|') != std::string::npos) {
+						if (!inTable) {
+							// Start of table - add some spacing
+							finalContent += "\n";
+							inTable = true;
+						}
+
+						// For now, just render table rows as regular text
+						// You could enhance this to create actual ImGui tables
+						finalContent += line + "\n";
+					}
+					else {
+						if (inTable) {
+							// End of table - add spacing
+							finalContent += "\n";
+							inTable = false;
+						}
+						finalContent += line + "\n";
+					}
+				}
+
+				// Render markdown content
+				ImGui::Markdown(finalContent.c_str(), finalContent.length(), markdownConfig);
 			}
 			else {
 				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to load document content.");
@@ -245,6 +307,113 @@ namespace GUI {
 
 		return lowerTitle.find(lowerFilter) != std::string::npos ||
 			lowerContent.find(lowerFilter) != std::string::npos;
+	}
+
+	void HelpView::CleanupImageCache() {
+		for (auto& pair : imageCache) {
+			if (pair.second.textureID != 0) {
+				Utils::OpenGLUtils::DeleteTexture(pair.second.textureID);
+			}
+		}
+		imageCache.clear();
+	}
+
+	GLuint HelpView::LoadImageForMarkdown(const std::string& imagePath, const std::string& documentDir) {
+		// Check cache first
+		auto it = imageCache.find(imagePath);
+		if (it != imageCache.end()) {
+			return it->second.loaded ? it->second.textureID : 0;
+		}
+
+		// Try to resolve the image path
+		std::filesystem::path fullPath;
+
+		// Check if it's an absolute path
+		if (std::filesystem::path(imagePath).is_absolute()) {
+			fullPath = imagePath;
+		}
+		else {
+			// Try relative to document directory
+			fullPath = std::filesystem::path(documentDir) / imagePath;
+			if (!std::filesystem::exists(fullPath)) {
+				// Try relative to current working directory
+				fullPath = std::filesystem::current_path() / imagePath;
+				if (!std::filesystem::exists(fullPath)) {
+					// Try relative to project root
+					fullPath = std::filesystem::path("..") / imagePath;
+				}
+			}
+		}
+
+		ImageCache cache;
+		cache.loaded = false;
+		cache.textureID = 0;
+
+		if (std::filesystem::exists(fullPath)) {
+			// Load image using your existing ImageUtils
+			int width, height, channels;
+			unsigned char* data = Utils::ImageUtils::LoadImageData(fullPath.string(), width, height, channels);
+
+			if (data) {
+				cache.textureID = Utils::OpenGLUtils::GenerateTexture(width, height, channels, data);
+				cache.width = width;
+				cache.height = height;
+				cache.loaded = (cache.textureID != 0);
+
+				Utils::ImageUtils::FreeImageData(data);
+
+				std::cout << "Loaded image: " << fullPath << " (texture ID: " << cache.textureID << ")" << std::endl;
+			}
+			else {
+				std::cerr << "Failed to load image data: " << fullPath << std::endl;
+			}
+		}
+		else {
+			std::cerr << "Image not found: " << imagePath << " (tried: " << fullPath << ")" << std::endl;
+		}
+
+		// Cache the result (even if failed)
+		imageCache[imagePath] = cache;
+		return cache.loaded ? cache.textureID : 0;
+	}
+
+	void HelpView::OpenExternalLink(const std::string& url) {
+		std::cout << "Opening external link: " << url << std::endl;
+
+#ifdef _WIN32
+		ShellExecuteA(NULL, "open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+#elif __linux__
+		std::string command = "xdg-open " + url;
+		system(command.c_str());
+#elif __APPLE__
+		std::string command = "open " + url;
+		system(command.c_str());
+#else
+		std::cout << "Platform not supported for opening links: " << url << std::endl;
+#endif
+	}
+
+	void HelpView::HandleInternalLink(const std::string& link) {
+		std::cout << "Handling internal link: " << link << std::endl;
+
+		// Try to find document by filename
+		auto it = documentIndex.find(link);
+		if (it != documentIndex.end()) {
+			selectedDocumentIndex = static_cast<int>(it->second);
+			std::cout << "Switched to document: " << documents[selectedDocumentIndex].title << std::endl;
+		}
+		else {
+			// Try to find by title or partial match
+			for (size_t i = 0; i < documents.size(); ++i) {
+				if (documents[i].title.find(link) != std::string::npos ||
+					documents[i].filePath.find(link) != std::string::npos) {
+					selectedDocumentIndex = static_cast<int>(i);
+					std::cout << "Switched to document (partial match): " << documents[selectedDocumentIndex].title << std::endl;
+					return;
+				}
+			}
+			std::cout << "Could not find document for link: " << link << std::endl;
+		}
 	}
 
 	nlohmann::json HelpView::Serialize() const {
@@ -276,51 +445,96 @@ namespace GUI {
 	// Static callback implementations
 	void HelpView::LinkCallback(ImGui::MarkdownLinkCallbackData data) {
 		std::string url(data.link, data.linkLength);
+		HelpView* helpView = static_cast<HelpView*>(data.userData);
 
-		if (!data.isImage) {
+		if (!data.isImage && helpView) {
 			std::cout << "Link clicked: " << url << std::endl;
 
 			// Handle different types of links
-			if (url.find("http://") == 0 || url.find("https://") == 0) {
-				// External web link - you might want to open in browser
-				std::cout << "External link: " << url << std::endl;
-				// On Windows: system(("start " + url).c_str());
-				// On Linux: system(("xdg-open " + url).c_str());
-				// On macOS: system(("open " + url).c_str());
+			if (url.find("http://") == 0 || url.find("https://") == 0 || url.find("www.") == 0) {
+				// External web link
+				helpView->OpenExternalLink(url);
 			}
-			else if (url.find(".md") != std::string::npos) {
-				// Internal markdown link - switch to that document
-				HelpView* helpView = static_cast<HelpView*>(data.userData);
-				if (helpView) {
-					auto it = helpView->documentIndex.find(url);
-					if (it != helpView->documentIndex.end()) {
-						helpView->selectedDocumentIndex = static_cast<int>(it->second);
-					}
+			else if (url.find(".md") != std::string::npos || url.find("#") != std::string::npos) {
+				// Internal markdown link
+				// Remove anchors for now (could be enhanced to support them)
+				size_t anchorPos = url.find('#');
+				if (anchorPos != std::string::npos) {
+					url = url.substr(0, anchorPos);
 				}
+				if (!url.empty()) {
+					helpView->HandleInternalLink(url);
+				}
+			}
+			else {
+				// Try as internal link anyway
+				helpView->HandleInternalLink(url);
 			}
 		}
 	}
 
 	ImGui::MarkdownImageData HelpView::ImageCallback(ImGui::MarkdownLinkCallbackData data) {
-		// Basic image handling - you might want to extend this to load actual images
 		ImGui::MarkdownImageData imageData;
-		imageData.isValid = false; // Set to true when you have actual image loading
+		imageData.isValid = false;
 		imageData.useLinkCallback = false;
-		imageData.user_texture_id = 0; // Set to actual texture ID when available
+		imageData.user_texture_id = 0;
 		imageData.size = ImVec2(100.0f, 100.0f);
 
-		// For now, just show placeholder
-		std::string imagePath(data.link, data.linkLength);
-		std::cout << "Image referenced: " << imagePath << std::endl;
+		HelpView* helpView = static_cast<HelpView*>(data.userData);
+		if (helpView && helpView->selectedDocumentIndex >= 0 &&
+			helpView->selectedDocumentIndex < static_cast<int>(helpView->documents.size())) {
+
+			std::string imagePath(data.link, data.linkLength);
+			const auto& currentDoc = helpView->documents[helpView->selectedDocumentIndex];
+
+			GLuint textureID = helpView->LoadImageForMarkdown(imagePath, currentDoc.directory);
+
+			if (textureID != 0) {
+				// Get cached image info
+				auto it = helpView->imageCache.find(imagePath);
+				if (it != helpView->imageCache.end() && it->second.loaded) {
+					imageData.isValid = true;
+					imageData.user_texture_id = (ImTextureID)(intptr_t)textureID;
+
+					// Set size based on actual image dimensions, but limit max size
+					float maxWidth = 400.0f;
+					float maxHeight = 300.0f;
+					float width = static_cast<float>(it->second.width);
+					float height = static_cast<float>(it->second.height);
+
+					// Scale down if too large
+					if (width > maxWidth || height > maxHeight) {
+						float scaleX = maxWidth / width;
+						float scaleY = maxHeight / height;
+						float scale = std::min(scaleX, scaleY);
+						width *= scale;
+						height *= scale;
+					}
+
+					imageData.size = ImVec2(width, height);
+
+					// Adjust size if it's larger than available content region
+					ImVec2 const contentSize = ImGui::GetContentRegionAvail();
+					if (imageData.size.x > contentSize.x) {
+						float const ratio = imageData.size.y / imageData.size.x;
+						imageData.size.x = contentSize.x;
+						imageData.size.y = contentSize.x * ratio;
+					}
+				}
+			}
+			else {
+				std::cout << "Failed to load image: " << imagePath << std::endl;
+			}
+		}
 
 		return imageData;
 	}
 
 	void HelpView::FormatCallback(const ImGui::MarkdownFormatInfo& markdownFormatInfo, bool start) {
-		// Use the default formatting
+		// Use the default formatting first
 		ImGui::defaultMarkdownFormatCallback(markdownFormatInfo, start);
 
-		// You can add custom formatting here
+		// Add custom formatting
 		switch (markdownFormatInfo.type) {
 		case ImGui::MarkdownFormatType::HEADING:
 			if (markdownFormatInfo.level == 1 && start) {
@@ -333,7 +547,15 @@ namespace GUI {
 			break;
 
 		case ImGui::MarkdownFormatType::EMPHASIS:
-			// Custom emphasis styling could go here
+			// Custom emphasis styling
+			if (markdownFormatInfo.level == 2) { // Strong emphasis (**)
+				if (start) {
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.8f, 1.0f));
+				}
+				else {
+					ImGui::PopStyleColor();
+				}
+			}
 			break;
 
 		default:

@@ -79,7 +79,7 @@ namespace GUI {
             }
 
 			if (ImGui::BeginMenu("Help")) {
-				if (ImGui::MenuItem("Help", nullptr, helpWindowOpen)) {
+				if (ImGui::MenuItem("Help", nullptr, &helpWindowOpen)) {
 					ANI::Event event;
 					event.type = helpWindowOpen ? ANI::EventType::OpenHelp : ANI::EventType::CloseHelp;
 					ANI::Events::Ref().QueueEvent(event);
