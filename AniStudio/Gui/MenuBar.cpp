@@ -7,6 +7,7 @@ namespace GUI {
     static bool convertWindowOpen = false;
     static bool viewsWindowOpen = false;
 	static bool pluginsWindowOpen = false;
+	static bool helpWindowOpen = false;
 
     void ShowMenuBar(GLFWwindow* window) {
         if (ImGui::BeginMainMenuBar()) {
@@ -77,10 +78,14 @@ namespace GUI {
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Help")) {
-                ImGui::MenuItem("About");
-                ImGui::EndMenu();
-            }
+			if (ImGui::BeginMenu("Help")) {
+				if (ImGui::MenuItem("Help", nullptr, helpWindowOpen)) {
+					ANI::Event event;
+					event.type = helpWindowOpen ? ANI::EventType::OpenHelp : ANI::EventType::CloseHelp;
+					ANI::Events::Ref().QueueEvent(event);
+				}
+				ImGui::EndMenu();
+			}
 
             ImGui::EndMainMenuBar();
         }

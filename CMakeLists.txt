@@ -195,6 +195,7 @@ set(ANISTUDIO_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
+	${CMAKE_SOURCE_DIR}/external/imgui_markdown
     ${Vulkan_INCLUDE_DIR}
 )
 

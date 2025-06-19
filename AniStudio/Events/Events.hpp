@@ -47,6 +47,8 @@ enum class EventType {
     CloseViews,
 	OpenPlugins,
 	ClosePlugins,
+	OpenHelp,
+	CloseHelp,
 
     // Diffusion
     InferenceRequest,

@@ -107,6 +107,7 @@ void Engine::Init() {
 	viewManager.RegisterViewType<VideoView>("VideoView");
 	viewManager.RegisterViewType<VideoView>("VideoSequencerView");
 	viewManager.RegisterViewType<ZepView>("ZepView");
+	viewManager.RegisterViewType<HelpView>("HelpView");
 
 	// Register Component Names
 	mgr.RegisterComponentName<ModelComponent>("Model");
