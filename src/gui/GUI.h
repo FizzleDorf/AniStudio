@@ -21,7 +21,7 @@
 //this is just a catch-all header
 #pragma once
 
-#include "Base/BaseView.hpp"
-#include "Base/ViewList.hpp"
-#include "Base/ViewManager.hpp"
-#include "Base/ViewTypes.hpp"
+#include "base/BaseView.hpp"
+#include "base/ViewList.hpp"
+#include "base/ViewManager.hpp"
+#include "base/ViewTypes.hpp"

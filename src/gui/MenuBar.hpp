@@ -21,7 +21,7 @@
 // MenuBar.h
 #pragma once
 #include "GLFW/glfw3.h"
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "pch.h"
 
 namespace GUI {

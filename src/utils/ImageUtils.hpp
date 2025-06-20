@@ -26,6 +26,7 @@
 #include <filesystem>
 #include <iostream>
 #include <chrono>
+#include <cstring>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>

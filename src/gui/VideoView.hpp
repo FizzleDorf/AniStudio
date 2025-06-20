@@ -21,10 +21,10 @@
 #ifndef VIDEOVIEW_HPP
 #define VIDEOVIEW_HPP
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 #include <pch.h>
 
 namespace GUI {

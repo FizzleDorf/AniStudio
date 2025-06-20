@@ -1,5 +1,5 @@
 #include "MenuBar.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 
 namespace GUI {
     static bool settingsWindowOpen = false;

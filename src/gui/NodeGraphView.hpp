@@ -21,7 +21,7 @@
 #ifndef NODEGRAPHVIEW_HPP
 #define NODEGRAPHVIEW_HPP
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include <imgui_node_editor.h>
 #include <string>
 #include <imgui.h>

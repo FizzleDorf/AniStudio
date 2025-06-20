@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "FilePaths.hpp"
 #include <nlohmann/json.hpp>
 #include "ImGuiFileDialog.h"

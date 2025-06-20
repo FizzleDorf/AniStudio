@@ -1,7 +1,7 @@
 // HelpView.hpp
 #pragma once
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "pch.h"
 #include "imgui_markdown.h"
 #include "ImageUtils.hpp"

@@ -28,7 +28,7 @@
 #include "ModelComponents.hpp"
 #include "LatentComponent.hpp"
 #include "filepaths.hpp"
-#include "Events/Events.hpp"
+#include "../events/Events.hpp"
 #include <string>
 #include <functional>
 

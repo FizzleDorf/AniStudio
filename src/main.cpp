@@ -18,9 +18,9 @@
  * For commercial license iformation, please contact legal@kframe.ai.
  */
 
-#include "Engine/Engine.hpp"
-#include "Events/Events.hpp"
-#include "Timer/Timer.hpp"
+#include "engine/Engine.hpp"
+#include "events/Events.hpp"
+#include "timer/Timer.hpp"
 
 int main(int argc, char* argv[]) {
 

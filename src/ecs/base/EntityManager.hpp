@@ -19,6 +19,7 @@
  */
 
 #pragma once
+#include <queue>
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"

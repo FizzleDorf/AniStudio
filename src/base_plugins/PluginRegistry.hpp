@@ -73,7 +73,7 @@ namespace Plugin {
 
 			try {
 				// Register with the entity manager's component system
-				mgr->RegisterComponentName<T>(name);
+				mgr->template RegisterComponentName<T>(name);
 
 				std::cout << "PluginRegistry: Registered component: " << name << std::endl;
 			}
@@ -93,7 +93,7 @@ namespace Plugin {
 			}
 
 			try {
-				mgr->RegisterSystem<T>();
+				mgr->template RegisterSystem<T>();
 
 				std::cout << "PluginRegistry: Registered system: " << typeid(T).name() << std::endl;
 			}
@@ -113,7 +113,7 @@ namespace Plugin {
 			}
 
 			try {
-				mgr->RegisterViewType<T>(name);
+				mgr->template RegisterViewType<T>(name);
 
 				std::cout << "PluginRegistry: Registered view: " << name << std::endl;
 			}
@@ -139,8 +139,8 @@ namespace Plugin {
 
 			try {
 				auto viewID = vMgr->CreateView();
-				vMgr->AddView<T>(viewID, T(*eMgr));
-				vMgr->GetView<T>(viewID).Init();
+				vMgr->template AddView<T>(viewID, T(*eMgr));
+				vMgr->template GetView<T>(viewID).Init();
 
 				std::cout << "PluginRegistry: Created view instance: " << name << std::endl;
 				return viewID;
@@ -181,7 +181,7 @@ namespace Plugin {
 			}
 
 			try {
-				mgr->AddComponent<T>(entityID);
+				mgr->template AddComponent<T>(entityID);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "PluginRegistry: Failed to add component to entity " << entityID

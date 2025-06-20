@@ -21,7 +21,7 @@
 #ifndef SEQUENCER_VIEW_HPP
 #define SEQUENCER_VIEW_HPP
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "pch.h"
 #include <ImSequencer.h>
 #include "ImGuiFileDialog.h"

@@ -1,7 +1,7 @@
 #include "SettingsView.hpp"
 #include "ImGuiFileDialog.h"
 #include "ImGuiFileDialogConfig.h"
-#include "Events/Events.hpp"
+#include "../events/Events.hpp"
 
 using json = nlohmann::json;
 

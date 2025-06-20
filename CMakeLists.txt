@@ -169,10 +169,17 @@ endif()
 
 # For external/imgui directory
 target_include_directories(ImGui PRIVATE ${GLFW_INCLUDE_DIRS})
+
+# Fix OpenGL header conflicts on Linux
+if(UNIX AND NOT APPLE)
+    add_definitions(-DGL_GLEXT_PROTOTYPES)
+    add_definitions(-DGLEW_STATIC)
+endif()
+
 add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
 
-# Common include directories
-set(ANISTUDIO_INCLUDE_DIRS
+# Include directories - single consolidated list
+include_directories(
     ${CONAN_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/base_plugins
@@ -180,7 +187,7 @@ set(ANISTUDIO_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/src/gui
     ${CMAKE_SOURCE_DIR}/src/gui/base
     ${CMAKE_SOURCE_DIR}/src/utils
-	${CMAKE_SOURCE_DIR}/src/gui_utils
+    ${CMAKE_SOURCE_DIR}/src/gui_utils
     ${CMAKE_SOURCE_DIR}/src/ecs
     ${CMAKE_SOURCE_DIR}/src/ecs/base
     ${CMAKE_SOURCE_DIR}/src/ecs/systems
@@ -195,18 +202,133 @@ set(ANISTUDIO_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/external/nlohmann_json
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
-	${CMAKE_SOURCE_DIR}/external/imgui_markdown
-	${CMAKE_SOURCE_DIR}/external/zep/include
+    ${CMAKE_SOURCE_DIR}/external/imgui_markdown
+    ${CMAKE_SOURCE_DIR}/external/zep/include
     ${Vulkan_INCLUDE_DIR}
 )
 
-# Add the main AniStudio directory first for PCH
-include_directories(${CMAKE_SOURCE_DIR}/src)
+# Source files
+file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/src/gui/*.cpp)
+file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/src/ecs/systems/*.cpp)
+file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/utils/*.cpp)
+file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/src/base_plugins/*.cpp)
+file(GLOB_RECURSE EVENT_SOURCES ${CMAKE_SOURCE_DIR}/src/events/*.cpp)
+file(GLOB_RECURSE GUI_UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/gui_utils/*.cpp)
 
-# Common link libraries
-set(ANISTUDIO_LINK_LIBS
+message(STATUS "GUI_SOURCES found: ${GUI_SOURCES}")
+
+if(BUILD_ANISTUDIO)
+    # Main executable with ALL sources
+    add_executable(${PROJECT_NAME}
+        ${CMAKE_SOURCE_DIR}/src/main.cpp
+        ${CMAKE_SOURCE_DIR}/src/pch.cpp
+        ${CMAKE_SOURCE_DIR}/src/engine/Engine.cpp
+        ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
+        ${GUI_SOURCES}
+        ${SYSTEM_SOURCES}
+        ${UTILS_SOURCES}
+        ${PLUGIN_SOURCES}
+        ${EVENT_SOURCES}
+        ${GUI_UTILS_SOURCES}
+    )
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        WIN32_EXECUTABLE FALSE
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+    )
+
+    # Link directories and libraries
+    link_directories(${CONAN_LIB_DIRS})
+
+    if(SD_CUDA)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE SD_USE_CUDA)
+        target_link_libraries(${PROJECT_NAME} PRIVATE CUDA::cudart)
+    endif()
+
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        ${CONAN_LIBS}
+        stable-diffusion
+        ImGui
+        ImGui_Nodes
+        ImNodeFlow
+        ImJSchema
+        ImGuiFileDialog
+        ImGuizmo
+        opencv::opencv
+        glfw
+        GLEW::GLEW
+        ZLIB::ZLIB
+        PNG::PNG
+        Vulkan::Vulkan
+        exiv2::exiv2
+        ffmpeg::avcodec
+        ffmpeg::avformat
+        ffmpeg::avutil
+        ffmpeg::swscale
+        pybind11::embed
+    )
+
+    # Add Zep if available
+    if(ZEP_AVAILABLE)
+        target_link_libraries(${PROJECT_NAME} PRIVATE Zep::Zep)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE ZEP_AVAILABLE)
+    endif()
+
+    # Precompiled headers
+    target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
+
+    # Symbol export/import definitions for main executable
+    if(WIN32)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE "ANI_CORE_API=__declspec(dllexport)")
+    else()
+        target_compile_definitions(${PROJECT_NAME} PRIVATE "ANI_CORE_API=")
+    endif()
+
+    message(STATUS "AniStudio executable configured")
+endif()
+
+# AniStudioCore library for plugins - contains everything needed
+add_library(AniStudioCore STATIC
+    ${CMAKE_SOURCE_DIR}/src/pch.cpp
+    ${GUI_SOURCES}
+    ${SYSTEM_SOURCES}
+    ${UTILS_SOURCES}
+    ${PLUGIN_SOURCES}
+    ${EVENT_SOURCES}
+    ${GUI_UTILS_SOURCES}
+)
+
+target_include_directories(AniStudioCore PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/base_plugins
+    ${CMAKE_SOURCE_DIR}/src/events
+    ${CMAKE_SOURCE_DIR}/src/gui
+    ${CMAKE_SOURCE_DIR}/src/gui/base
+    ${CMAKE_SOURCE_DIR}/src/utils
+    ${CMAKE_SOURCE_DIR}/src/gui_utils
+    ${CMAKE_SOURCE_DIR}/src/ecs
+    ${CMAKE_SOURCE_DIR}/src/ecs/base
+    ${CMAKE_SOURCE_DIR}/src/ecs/systems
+    ${CMAKE_SOURCE_DIR}/src/ecs/components
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/SDCPPComponents
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/ImageComponents
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/VideoComponents
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/ScriptComponents
+    ${CMAKE_SOURCE_DIR}/external/glm
+    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
+    ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
+    ${CMAKE_SOURCE_DIR}/external/nlohmann_json
+    ${CMAKE_SOURCE_DIR}/external/imgui_nodes
+    ${CMAKE_SOURCE_DIR}/external/immvision
+    ${CMAKE_SOURCE_DIR}/external/imgui_markdown
+    ${CMAKE_SOURCE_DIR}/external/zep/include
+)
+
+# Link required libraries to AniStudioCore - PRIVATE so they don't get exported
+target_link_libraries(AniStudioCore PRIVATE
     ${CONAN_LIBS}
-    pybind11::embed
     stable-diffusion
     ImGui
     ImGui_Nodes
@@ -225,213 +347,41 @@ set(ANISTUDIO_LINK_LIBS
     ffmpeg::avformat
     ffmpeg::avutil
     ffmpeg::swscale
+    pybind11::embed
 )
 
-# Add Zep to link libraries if available
+# Add Zep if available
 if(ZEP_AVAILABLE)
-    list(APPEND ANISTUDIO_LINK_LIBS Zep::Zep)
+    target_link_libraries(AniStudioCore PRIVATE Zep::Zep)
+    target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
 endif()
 
-# ============================================================================
-# AniStudioCore Static Library
-# ============================================================================
-
-# Collect all core source files (excluding main.cpp, Timer/, Engine/)
-file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/src/gui/*.cpp)
-file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/src/ecs/systems/*.cpp)
-file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/utils/*.cpp)
-file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/src/base_plugins/*.cpp)
-file(GLOB_RECURSE EVENT_SOURCES ${CMAKE_SOURCE_DIR}/src/events/*.cpp)
-
-# Create AniStudioCore static library
-add_library(AniStudioCore STATIC
-    ${CMAKE_SOURCE_DIR}/src/pch.cpp
-    ${GUI_SOURCES}
-    ${SYSTEM_SOURCES}
-    ${UTILS_SOURCES}
-    ${PLUGIN_SOURCES}
-    ${EVENT_SOURCES}
-)
-
-# Create an alias for the namespaced target
-add_library(AniStudioCore::AniStudioCore ALIAS AniStudioCore)
-
-# Include directories for AniStudioCore
-target_include_directories(AniStudioCore PUBLIC 
-    $<BUILD_INTERFACE:${ANISTUDIO_INCLUDE_DIRS}>
-    $<INSTALL_INTERFACE:include>
-    $<INSTALL_INTERFACE:include/external>
-)
-
-# Link libraries for AniStudioCore
-target_link_libraries(AniStudioCore PUBLIC ${ANISTUDIO_LINK_LIBS})
-
-# Add CUDA support if enabled
 if(SD_CUDA)
     target_compile_definitions(AniStudioCore PUBLIC SD_USE_CUDA)
-    target_link_libraries(AniStudioCore PUBLIC CUDA::cudart)
+    target_link_libraries(AniStudioCore PRIVATE CUDA::cudart)
 endif()
 
-# Set library properties
+# Symbol export/import definitions for static library
+if(WIN32)
+    target_compile_definitions(AniStudioCore PUBLIC "ANI_CORE_API=" "PLUGIN_API=__declspec(dllexport)")
+else()
+    target_compile_definitions(AniStudioCore PUBLIC "ANI_CORE_API=" "PLUGIN_API=__attribute__((visibility(\"default\")))")
+endif()
+
+# Set proper output directories for AniStudioCore
 set_target_properties(AniStudioCore PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib
     ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib
     ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib
-    EXPORT_NAME AniStudioCore
 )
 
-# Conditional compilation based on Zep availability
-if(ZEP_AVAILABLE)
-    target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
-endif()
+# Ensure AniStudioCore has the same compile features
+target_compile_features(AniStudioCore PUBLIC cxx_std_17)
 
-# Precompiled headers for AniStudioCore - PUBLIC so plugins can use them too
-target_precompile_headers(AniStudioCore PUBLIC src/pch.h)
+message(STATUS "AniStudioCore library configured for plugin development")
 
-# Export definitions for AniStudioCore
-if(WIN32)
-    target_compile_definitions(AniStudioCore PUBLIC 
-        "ANI_CORE_EXPORTS"
-        "ANI_CORE_API="
-        "PLUGIN_API="
-    )
-else()
-    target_compile_definitions(AniStudioCore PUBLIC 
-        "ANI_CORE_API="
-        "PLUGIN_API=__attribute__((visibility(\"default\")))"
-    )
-endif()
-
-message(STATUS "AniStudioCore library configured")
-
-# ============================================================================
-# AniStudio Executable (only if BUILD_ANISTUDIO is ON)
-# ============================================================================
-
-if(BUILD_ANISTUDIO)
-    # Main executable - only main.cpp, Engine/, and Timer/
-    add_executable(${PROJECT_NAME}
-        ${CMAKE_SOURCE_DIR}/src/main.cpp
-        ${CMAKE_SOURCE_DIR}/src/engine/Engine.cpp
-        ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
-    )
-
-    # Include directories for main executable
-    target_include_directories(${PROJECT_NAME} PRIVATE 
-        ${CMAKE_SOURCE_DIR}/src/engine
-        ${CMAKE_SOURCE_DIR}/src/timer
-    )
-
-    # Link to AniStudioCore (which provides everything else)
-    target_link_libraries(${PROJECT_NAME} PRIVATE AniStudioCore)
-
-    # PCH for main executable too
-    target_precompile_headers(${PROJECT_NAME} REUSE_FROM AniStudioCore)
-
-    # Set executable properties
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        WIN32_EXECUTABLE FALSE
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-    )
-
-    # Symbol export definitions for main executable
-    if(WIN32)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE 
-            "ANI_CORE_EXPORTS"
-            "ANI_CORE_API=__declspec(dllexport)"
-        )
-    else()
-        target_compile_definitions(${PROJECT_NAME} PRIVATE 
-            "ANI_CORE_API="
-        )
-    endif()
-
-    message(STATUS "AniStudio executable configured")
-endif()
-
-# ============================================================================
-# Install targets for plugin development
-# ============================================================================
-
-# Install AniStudioCore library and headers for plugin development
-install(TARGETS AniStudioCore
-    EXPORT AniStudioCoreTargets
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-    RUNTIME DESTINATION bin
-    INCLUDES DESTINATION include
-)
-
-# Install the export targets
-install(EXPORT AniStudioCoreTargets
-    FILE AniStudioCoreTargets.cmake
-    NAMESPACE AniStudioCore::
-    DESTINATION lib/cmake/AniStudioCore
-)
-
-# Install all public headers needed by plugins
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
-    DESTINATION include/src
-    FILES_MATCHING 
-    PATTERN "*.h"
-    PATTERN "*.hpp"
-    PATTERN "private" EXCLUDE
-    PATTERN "internal" EXCLUDE
-)
-
-# Install external headers needed by plugins
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/external/nlohmann_json/
-    DESTINATION include/external/nlohmann_json
-    FILES_MATCHING PATTERN "*.hpp"
-)
-
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/external/imgui/
-    DESTINATION include/external/imgui
-    FILES_MATCHING PATTERN "*.h"
-)
-
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/external/glm/
-    DESTINATION include/external/glm
-    FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h"
-)
-
-# Install stable-diffusion.cpp headers
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp/
-    DESTINATION include/external/stable-diffusion.cpp
-    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-)
-
-# Create cmake directory if it doesn't exist
-file(MAKE_DIRECTORY ${CMAKE_SOURCE_DIR}/cmake)
-
-# Create a CMake config file for plugins to find AniStudioCore
-include(CMakePackageConfigHelpers)
-
-configure_package_config_file(
-    "${CMAKE_SOURCE_DIR}/cmake/AniStudioCoreConfig.cmake.in"
-    "${CMAKE_BINARY_DIR}/lib/cmake/AniStudioCore/AniStudioCoreConfig.cmake"
-    INSTALL_DESTINATION lib/cmake/AniStudioCore
-    PATH_VARS CMAKE_INSTALL_PREFIX
-)
-
-write_basic_package_version_file(
-    "${CMAKE_BINARY_DIR}/lib/cmake/AniStudioCore/AniStudioCoreConfigVersion.cmake"
-    VERSION 1.0.0
-    COMPATIBILITY SameMajorVersion
-)
-
-install(FILES
-    "${CMAKE_BINARY_DIR}/lib/cmake/AniStudioCore/AniStudioCoreConfig.cmake"
-    "${CMAKE_BINARY_DIR}/lib/cmake/AniStudioCore/AniStudioCoreConfigVersion.cmake"
-    DESTINATION lib/cmake/AniStudioCore
-)
-
+# DON'T INSTALL OR EXPORT - just build the library for local use
 message(STATUS "AniStudio build configuration complete")
-message(STATUS "After building, plugins can be built independently using the installed AniStudioCore library")
+message(STATUS "AniStudioCore built for local plugin development only")

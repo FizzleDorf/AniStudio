@@ -3,7 +3,7 @@
 */
 
 #include "PluginView.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 #include <imgui.h>
 #include <algorithm>
 

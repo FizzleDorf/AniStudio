@@ -18,9 +18,9 @@
  * For commercial license iformation, please contact legal@kframe.ai.
  */
 
-#include "Base/BaseComponent.hpp"
-#include "Base/BaseSystem.hpp"
-#include "Base/CompList.hpp"
-#include "Base/EntityManager.hpp"
-#include "Base/Types.hpp"
-#include "Base/Entity.hpp"
+#include "base/BaseComponent.hpp"
+#include "base/BaseSystem.hpp"
+#include "base/CompList.hpp"
+#include "base/EntityManager.hpp"
+#include "base/Types.hpp"
+#include "base/Entity.hpp"

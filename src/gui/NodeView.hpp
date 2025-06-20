@@ -19,7 +19,7 @@
  */
 
 #pragma once
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "ImNodeFlow.h"
 #include "ECS.h"
 #include <string>

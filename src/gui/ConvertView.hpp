@@ -19,7 +19,6 @@
  */
 
 #pragma once
-#include "Base/BaseView.hpp"
 #include "Constants.hpp"
 #include "ECS.h"
 #include "GUI.h"

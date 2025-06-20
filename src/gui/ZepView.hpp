@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "EntityManager.hpp"
 #include "ZepUtils.hpp"
 #include "PythonComponent.hpp"

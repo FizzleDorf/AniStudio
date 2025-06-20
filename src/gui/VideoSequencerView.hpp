@@ -21,12 +21,12 @@
 #ifndef VIDEO_SEQUENCER_VIEW_HPP
 #define VIDEO_SEQUENCER_VIEW_HPP
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "VideoComponent.hpp"
 #include "ImageComponent.hpp"
 #include "VideoSystem.hpp"
 #include "ImageSystem.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 #include "ImGuizmo.h"
 #include "ImSequencer.h"
 #include "FilePaths.hpp"

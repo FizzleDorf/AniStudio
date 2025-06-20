@@ -42,7 +42,7 @@
 #endif
 
 // Essential third-party libraries
-#include <nlohmann/json.hpp>
+#include "nlohmann/json.hpp"
 
 // OpenGL and graphics
 #include <GL/glew.h>

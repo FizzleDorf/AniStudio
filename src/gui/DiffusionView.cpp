@@ -1,5 +1,5 @@
 #include "DiffusionView.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 #include "Constants.hpp"
 #include "UISchema.hpp"
 #include <exiv2/exiv2.hpp>

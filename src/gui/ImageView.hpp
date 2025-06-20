@@ -21,10 +21,10 @@
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 #include <pch.h>
 
 namespace GUI {

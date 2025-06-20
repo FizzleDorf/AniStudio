@@ -19,7 +19,7 @@
  */
 
 #include "ConvertView.hpp"
-#include "../Events/Events.hpp"
+#include "../events/Events.hpp"
 #include <iostream>
 
 namespace GUI {

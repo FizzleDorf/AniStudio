@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Base/BaseView.hpp"
+#include "GUI.h"
 #include "PluginManager.hpp"
 #include <imgui.h>
 #include <vector>

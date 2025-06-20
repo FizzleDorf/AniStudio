@@ -19,8 +19,7 @@
  */
 
 #pragma once
-#include "Base/BaseView.hpp"
-#include "Base/ViewManager.hpp"
+#include "GUI.h"
 #include "imgui.h"
 #include "pch.h"
 
