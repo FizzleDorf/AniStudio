@@ -19,7 +19,6 @@
  */
 
 #pragma once
-#include "pch.h"
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"

@@ -22,9 +22,9 @@
 #define ENGINE_HPP
 
 #include "ECS.h"
-#include "../Gui/GUI.h"
-#include "../Gui/AllViews.h"
-#include "../Plugins/PluginManager.hpp"
+#include "GUI.h"
+#include "AllViews.h"
+#include "PluginManager.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <imgui.h>

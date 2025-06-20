@@ -21,7 +21,6 @@
 #pragma once
 
 #include "Types.hpp"
-#include "pch.h"
 #include <deque>  // CHANGED: Use deque instead of vector to prevent iterator invalidation
 
 namespace ECS {

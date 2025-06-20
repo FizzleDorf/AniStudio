@@ -27,7 +27,6 @@
 #include "ImageSystem.hpp"
 #include "SDCPPComponents.h"
 #include "SDcppUtils.hpp"
-#include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
 #include "PngMetadataUtils.hpp"

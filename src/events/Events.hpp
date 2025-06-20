@@ -20,8 +20,8 @@
 
 #pragma once
 #include "ECS.h"
-#include "../Gui/GUI.h"
-#include "../Engine/Engine.hpp"
+#include "GUI.h"
+#include "../engine/Engine.hpp"
 #include <systems.h>
 #include "FilePaths.hpp"
 #include <GLFW/glfw3.h>

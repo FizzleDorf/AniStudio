@@ -1,5 +1,5 @@
 #include "Events.hpp"
-#include "../Gui/AllViews.h"
+#include "AllViews.h"
 #include "PluginManager.hpp"
 #include <iostream>
 

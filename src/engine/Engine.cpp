@@ -1,7 +1,4 @@
 #include "Engine.hpp"
-#include "PluginManager.hpp"
-#include "PluginRegistry.hpp"
-#include "PluginInterface.hpp"
 #include "PluginAPI.hpp"
 #include <filesystem>
 #include <iostream>

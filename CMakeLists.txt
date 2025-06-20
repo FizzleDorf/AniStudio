@@ -137,7 +137,7 @@ find_package(pybind11 REQUIRED)
 include_directories(${GLFW_INCLUDE_DIRS})
 
 # Shader files
-set(SHADER_DIR "${CMAKE_SOURCE_DIR}/AniStudio/shaders")
+set(SHADER_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
 file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
 message(STATUS "Copied shaders to ${CMAKE_BINARY_DIR}/shaders")
@@ -175,20 +175,21 @@ add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
 # Common include directories
 set(ANISTUDIO_INCLUDE_DIRS
     ${CONAN_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/AniStudio
-    ${CMAKE_SOURCE_DIR}/AniStudio/Plugins
-    ${CMAKE_SOURCE_DIR}/AniStudio/Events
-    ${CMAKE_SOURCE_DIR}/AniStudio/GUI
-    ${CMAKE_SOURCE_DIR}/AniStudio/GUI/Base
-    ${CMAKE_SOURCE_DIR}/AniStudio/utils
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Base
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/SDCPPComponents
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ImageComponents
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/VideoComponents
-    ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Components/ScriptComponents
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/base_plugins
+    ${CMAKE_SOURCE_DIR}/src/events
+    ${CMAKE_SOURCE_DIR}/src/gui
+    ${CMAKE_SOURCE_DIR}/src/gui/base
+    ${CMAKE_SOURCE_DIR}/src/utils
+	${CMAKE_SOURCE_DIR}/src/gui_utils
+    ${CMAKE_SOURCE_DIR}/src/ecs
+    ${CMAKE_SOURCE_DIR}/src/ecs/base
+    ${CMAKE_SOURCE_DIR}/src/ecs/systems
+    ${CMAKE_SOURCE_DIR}/src/ecs/components
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/SDCPPComponents
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/ImageComponents
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/VideoComponents
+    ${CMAKE_SOURCE_DIR}/src/ecs/components/ScriptComponents
     ${CMAKE_SOURCE_DIR}/external/glm
     ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
     ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
@@ -196,16 +197,12 @@ set(ANISTUDIO_INCLUDE_DIRS
     ${CMAKE_SOURCE_DIR}/external/imgui_nodes
     ${CMAKE_SOURCE_DIR}/external/immvision
 	${CMAKE_SOURCE_DIR}/external/imgui_markdown
+	${CMAKE_SOURCE_DIR}/external/zep/include
     ${Vulkan_INCLUDE_DIR}
 )
 
-# Add Zep include if available
-if(ZEP_AVAILABLE)
-    list(APPEND ANISTUDIO_INCLUDE_DIRS ${CMAKE_SOURCE_DIR}/external/zep/include)
-endif()
-
 # Add the main AniStudio directory first for PCH
-include_directories(${CMAKE_SOURCE_DIR}/AniStudio)
+include_directories(${CMAKE_SOURCE_DIR}/src)
 
 # Common link libraries
 set(ANISTUDIO_LINK_LIBS
@@ -242,15 +239,15 @@ endif()
 # ============================================================================
 
 # Collect all core source files (excluding main.cpp, Timer/, Engine/)
-file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/GUI/*.cpp)
-file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/ECS/Systems/*.cpp)
-file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/utils/*.cpp)
-file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Plugins/*.cpp)
-file(GLOB_RECURSE EVENT_SOURCES ${CMAKE_SOURCE_DIR}/AniStudio/Events/*.cpp)
+file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/src/gui/*.cpp)
+file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/src/ecs/systems/*.cpp)
+file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/utils/*.cpp)
+file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/src/base_plugins/*.cpp)
+file(GLOB_RECURSE EVENT_SOURCES ${CMAKE_SOURCE_DIR}/src/events/*.cpp)
 
 # Create AniStudioCore static library
 add_library(AniStudioCore STATIC
-    ${CMAKE_SOURCE_DIR}/AniStudio/pch.cpp
+    ${CMAKE_SOURCE_DIR}/src/pch.cpp
     ${GUI_SOURCES}
     ${SYSTEM_SOURCES}
     ${UTILS_SOURCES}
@@ -296,7 +293,7 @@ if(ZEP_AVAILABLE)
 endif()
 
 # Precompiled headers for AniStudioCore - PUBLIC so plugins can use them too
-target_precompile_headers(AniStudioCore PUBLIC AniStudio/pch.h)
+target_precompile_headers(AniStudioCore PUBLIC src/pch.h)
 
 # Export definitions for AniStudioCore
 if(WIN32)
@@ -321,15 +318,15 @@ message(STATUS "AniStudioCore library configured")
 if(BUILD_ANISTUDIO)
     # Main executable - only main.cpp, Engine/, and Timer/
     add_executable(${PROJECT_NAME}
-        ${CMAKE_SOURCE_DIR}/AniStudio/main.cpp
-        ${CMAKE_SOURCE_DIR}/AniStudio/Engine/Engine.cpp
-        ${CMAKE_SOURCE_DIR}/AniStudio/Timer/Timer.cpp
+        ${CMAKE_SOURCE_DIR}/src/main.cpp
+        ${CMAKE_SOURCE_DIR}/src/engine/Engine.cpp
+        ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
     )
 
     # Include directories for main executable
     target_include_directories(${PROJECT_NAME} PRIVATE 
-        ${CMAKE_SOURCE_DIR}/AniStudio/Engine
-        ${CMAKE_SOURCE_DIR}/AniStudio/Timer
+        ${CMAKE_SOURCE_DIR}/src/engine
+        ${CMAKE_SOURCE_DIR}/src/timer
     )
 
     # Link to AniStudioCore (which provides everything else)
@@ -382,8 +379,8 @@ install(EXPORT AniStudioCoreTargets
 )
 
 # Install all public headers needed by plugins
-install(DIRECTORY ${CMAKE_SOURCE_DIR}/AniStudio/
-    DESTINATION include/AniStudio
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/src/
+    DESTINATION include/src
     FILES_MATCHING 
     PATTERN "*.h"
     PATTERN "*.hpp"

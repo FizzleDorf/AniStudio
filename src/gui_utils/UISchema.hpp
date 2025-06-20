@@ -28,15 +28,15 @@
 #include <vector>
 #include <iostream>
 
-#include "UISchema/UISchemaUtils.hpp"
-#include "UISchema/BoolWidgets.hpp"
-#include "UISchema/IntWidgets.hpp"
-#include "UISchema/FloatWidgets.hpp"
-#include "UISchema/DoubleWidgets.hpp"
-#include "UISchema/StringWidgets.hpp"
-#include "UISchema/Vec2Widgets.hpp"
-#include "UISchema/Vec4Widgets.hpp"
-#include "UISchema/StringArrayWidgets.hpp"
+#include "ui_schema/UISchemaUtils.hpp"
+#include "ui_schema/BoolWidgets.hpp"
+#include "ui_schema/IntWidgets.hpp"
+#include "ui_schema/FloatWidgets.hpp"
+#include "ui_schema/DoubleWidgets.hpp"
+#include "ui_schema/StringWidgets.hpp"
+#include "ui_schema/Vec2Widgets.hpp"
+#include "ui_schema/Vec4Widgets.hpp"
+#include "ui_schema/StringArrayWidgets.hpp"
 
 namespace UISchema {
 
