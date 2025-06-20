@@ -1,0 +1,98 @@
+{
+  "files": [
+    "README.md"
+  ],
+  "imageSize": 100,
+  "commit": false,
+  "commitConvention": "angular",
+  "contributors": [
+    {
+      "login": "jacobfriedman",
+      "name": "Jacob Friedman",
+      "avatar_url": "https://avatars.githubusercontent.com/u/697310?v=4",
+      "profile": "https://github.com/jacobfriedman",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "FredrikAleksander",
+      "name": "FredrikAleksander",
+      "avatar_url": "https://avatars.githubusercontent.com/u/14351056?v=4",
+      "profile": "https://github.com/FredrikAleksander",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "samhocevar",
+      "name": "Sam Hocevar",
+      "avatar_url": "https://avatars.githubusercontent.com/u/245089?v=4",
+      "profile": "http://sam.hocevar.net/",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "totalgee",
+      "name": "Glen Fraser",
+      "avatar_url": "https://avatars.githubusercontent.com/u/306082?v=4",
+      "profile": "http://glenfraser.com",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "nicolasnoble",
+      "name": "Nicolas Noble",
+      "avatar_url": "https://avatars.githubusercontent.com/u/7281574?v=4",
+      "profile": "https://mastodon.world/@nicolas_noble",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "ABelliqueux",
+      "name": "Schnappy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/1405255?v=4",
+      "profile": "https://schnappy.xyz",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "fezjo",
+      "name": "Jozef Číž",
+      "avatar_url": "https://avatars.githubusercontent.com/u/26350212?v=4",
+      "profile": "https://github.com/fezjo",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "Green-Sky",
+      "name": "Erik Scholz",
+      "avatar_url": "https://avatars.githubusercontent.com/u/2938071?v=4",
+      "profile": "https://github.com/Green-Sky",
+      "contributions": [
+        "code"
+      ]
+    },
+    {
+      "login": "jessp01",
+      "name": "Jesse Portnoy",
+      "avatar_url": "https://avatars.githubusercontent.com/u/5270205?v=4",
+      "profile": "https://packman.io",
+      "contributions": [
+        "code"
+      ]
+    }
+  ],
+  "contributorsPerLine": 7,
+  "skipCi": true,
+  "repoType": "github",
+  "repoHost": "https://github.com",
+  "projectName": "zep",
+  "projectOwner": "Rezonality",
+  "commitType": "docs"
+}

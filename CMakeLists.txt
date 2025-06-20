@@ -147,7 +147,6 @@ add_subdirectory(external/stable-diffusion.cpp)
 add_subdirectory(external/imgui)
 add_subdirectory(external/imgui_nodes)
 add_subdirectory(external/ImNodeFlow)
-# add_subdirectory(external/stb_image)
 add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImJSchema)
 add_subdirectory(external/ImGuizmo)
@@ -213,7 +212,6 @@ set(ANISTUDIO_LINK_LIBS
     ImGui_Nodes
     ImNodeFlow
     ImJSchema
-    # stb_image
     ImGuiFileDialog
     ImGuizmo
     opencv::opencv
