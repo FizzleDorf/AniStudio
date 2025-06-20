@@ -17,8 +17,8 @@ cd build
 # Configure with CMake (only build AniStudio)
 cmake .. -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
          -DCMAKE_BUILD_TYPE=Release \
-         -DSD_VULKAN=ON # \
-         # -GNinja  # Use Ninja instead of Make for faster builds
+         -DSD_CUDA=ON \
+         -GNinja
 
 # Build the project with all cores and skip clean (since we already cleaned)
 cmake --build . --config Release --parallel $(nproc)

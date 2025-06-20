@@ -3,6 +3,7 @@
  * - Ensures plugins use host managers, not their own
  * - Proper fallback to function pointers for cross-DLL access
  * - Debug output to track manager usage
+ * - Added missing function definitions
  */
 
 #include "PluginRegistry.hpp"
@@ -90,6 +91,22 @@ namespace Plugin {
 		// This would be used to track and cleanup plugin-specific registrations
 		// For now, we'll just log the cleanup
 		std::cout << "PluginRegistry: Cleaning up plugin: " << pluginName << std::endl;
+	}
+
+	// MISSING FUNCTION DEFINITIONS - ADD THESE
+	
+	// These are weak symbols that will be overridden by the main application
+	// They provide a way for plugins to access the host's managers
+	__attribute__((weak)) ECS::EntityManager* GetHostEntityManagerViaPointer() {
+		// This should be implemented in the main application
+		// Return nullptr if not implemented (fallback to local static)
+		return nullptr;
+	}
+
+	__attribute__((weak)) GUI::ViewManager* GetHostViewManagerViaPointer() {
+		// This should be implemented in the main application
+		// Return nullptr if not implemented (fallback to local static)
+		return nullptr;
 	}
 
 } // namespace Plugin

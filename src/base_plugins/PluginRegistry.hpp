@@ -14,26 +14,27 @@
 
 #pragma once
 
- // Forward declarations only - no includes to break circular dependencies
-namespace ECS {
-	class EntityManager;
-	class BaseSystem;
-	struct BaseComponent;
-	using EntityID = size_t;
-}
-
-namespace GUI {
-	class ViewManager;
-	class BaseView;
-	using ViewListID = size_t;
-}
-
+#include <cstddef>       // For size_t - CRITICAL
 #include <functional>
 #include <unordered_map>
 #include <memory>
 #include <iostream>
 #include <vector>
 #include <string>
+
+// Forward declarations only - no includes to break circular dependencies
+namespace ECS {
+	class EntityManager;
+	class BaseSystem;
+	struct BaseComponent;
+	using EntityID = size_t;     // Define consistently
+}
+
+namespace GUI {
+	class ViewManager;
+	class BaseView;
+	using ViewListID = size_t;   // Define consistently
+}
 
 namespace Plugin {
 
@@ -213,7 +214,7 @@ namespace Plugin {
 		static std::unordered_map<std::string, std::vector<std::string>> s_pluginViews;
 	};
 
-	// Helper functions for cross-binary manager access
+	// Helper functions for cross-binary manager access - DECLARATIONS
 	ECS::EntityManager* GetHostEntityManagerViaPointer();
 	GUI::ViewManager* GetHostViewManagerViaPointer();
 

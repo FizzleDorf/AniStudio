@@ -4,6 +4,7 @@
 
 #include "PluginView.hpp"
 #include "../events/Events.hpp"
+#include "OpenGLWrapper.hpp"
 #include <imgui.h>
 #include <algorithm>
 

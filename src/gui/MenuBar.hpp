@@ -20,7 +20,6 @@
 
 // MenuBar.h
 #pragma once
-#include "GLFW/glfw3.h"
 #include "GUI.h"
 #include "pch.h"
 

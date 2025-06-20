@@ -22,7 +22,7 @@
 
 #include "BaseComponent.hpp"
 #include "FilePaths.hpp"
-#include <GL/glew.h>
+#include <OpenGLWrapper.hpp>
 #include <opencv2/opencv.hpp>
 #include <string>
 

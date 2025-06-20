@@ -1,9 +1,9 @@
 /*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+        d8888          d8b  .d8888b.  888                  888 d8b
+       d88888          Y8P d88P  Y88b 888                  888 Y8P
+      d88P888              Y88b.      888                  888
+     d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+    d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
@@ -25,27 +25,35 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <iomanip>
+#include <sstream>
+#include <chrono>
 #include <png.h>
 #include <nlohmann/json.hpp>
 #include "MetadataUtils.hpp"
+#include "FilePaths.hpp"
 
-namespace Utils {
+namespace Utils
+{
 
-    class PngMetadata {
+    class PngMetadata
+    {
     public:
-
-        static bool WriteMetadataToPNG(const std::string& imagePath, const nlohmann::json& metadata,
-            const std::string& softwareTag = "AniStudio") {
+        static bool WriteMetadataToPNG(const std::string &imagePath, const nlohmann::json &metadata,
+                                       const std::string &softwareTag = "AniStudio")
+        {
             // Open the PNG file for reading
-            FILE* fp = fopen(imagePath.c_str(), "rb");
-            if (!fp) {
+            FILE *fp = fopen(imagePath.c_str(), "rb");
+            if (!fp)
+            {
                 std::cerr << "Failed to open PNG for reading: " << imagePath << std::endl;
                 return false;
             }
 
             // Verify PNG signature
             unsigned char header[8];
-            if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8)) {
+            if (fread(header, 1, 8, fp) != 8 || png_sig_cmp(header, 0, 8))
+            {
                 std::cerr << "Not a valid PNG file" << std::endl;
                 fclose(fp);
                 return false;
@@ -54,21 +62,24 @@ namespace Utils {
 
             // Initialize PNG read structures
             png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-            if (!png) {
+            if (!png)
+            {
                 std::cerr << "Failed to create PNG read struct" << std::endl;
                 fclose(fp);
                 return false;
             }
 
             png_infop info = png_create_info_struct(png);
-            if (!info) {
+            if (!info)
+            {
                 std::cerr << "Failed to create PNG info struct" << std::endl;
                 png_destroy_read_struct(&png, nullptr, nullptr);
                 fclose(fp);
                 return false;
             }
 
-            if (setjmp(png_jmpbuf(png))) {
+            if (setjmp(png_jmpbuf(png)))
+            {
                 std::cerr << "Error during PNG read initialization" << std::endl;
                 png_destroy_read_struct(&png, &info, nullptr);
                 fclose(fp);
@@ -85,8 +96,9 @@ namespace Utils {
 
             // Create temporary file
             std::string tempFile = imagePath + ".tmp";
-            FILE* out = fopen(tempFile.c_str(), "wb");
-            if (!out) {
+            FILE *out = fopen(tempFile.c_str(), "wb");
+            if (!out)
+            {
                 std::cerr << "Failed to create temporary file" << std::endl;
                 png_destroy_read_struct(&png, &info, nullptr);
                 fclose(fp);
@@ -95,7 +107,8 @@ namespace Utils {
 
             // Initialize PNG write structures
             png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-            if (!pngWrite) {
+            if (!pngWrite)
+            {
                 std::cerr << "Failed to create PNG write struct" << std::endl;
                 fclose(out);
                 png_destroy_read_struct(&png, &info, nullptr);
@@ -104,7 +117,8 @@ namespace Utils {
             }
 
             png_infop infoWrite = png_create_info_struct(pngWrite);
-            if (!infoWrite) {
+            if (!infoWrite)
+            {
                 std::cerr << "Failed to create PNG write info struct" << std::endl;
                 png_destroy_write_struct(&pngWrite, nullptr);
                 fclose(out);
@@ -113,7 +127,8 @@ namespace Utils {
                 return false;
             }
 
-            if (setjmp(png_jmpbuf(pngWrite))) {
+            if (setjmp(png_jmpbuf(pngWrite)))
+            {
                 std::cerr << "Error during PNG write initialization" << std::endl;
                 png_destroy_write_struct(&pngWrite, &infoWrite);
                 fclose(out);
@@ -126,7 +141,7 @@ namespace Utils {
 
             // Copy IHDR
             png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
-                PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+                         PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
             // Set up metadata chunks
             std::string metadataStr = metadata.dump();
@@ -135,8 +150,8 @@ namespace Utils {
             // Parameters text chunk
             png_text paramText;
             paramText.compression = PNG_TEXT_COMPRESSION_NONE;
-            paramText.key = const_cast<char*>("parameters");
-            paramText.text = const_cast<char*>(metadataStr.c_str());
+            paramText.key = const_cast<char *>("parameters");
+            paramText.text = const_cast<char *>(metadataStr.c_str());
             paramText.text_length = metadataStr.length();
             paramText.itxt_length = 0;
             paramText.lang = nullptr;
@@ -146,8 +161,8 @@ namespace Utils {
             // Software identifier
             png_text softwareText;
             softwareText.compression = PNG_TEXT_COMPRESSION_NONE;
-            softwareText.key = const_cast<char*>("Software");
-            softwareText.text = const_cast<char*>(softwareTag.c_str());
+            softwareText.key = const_cast<char *>("Software");
+            softwareText.text = const_cast<char *>(softwareTag.c_str());
             softwareText.text_length = softwareTag.length();
             softwareText.itxt_length = 0;
             softwareText.lang = nullptr;
@@ -162,7 +177,8 @@ namespace Utils {
 
             // Copy image data
             std::vector<png_byte> row(png_get_rowbytes(png, info));
-            for (png_uint_32 y = 0; y < height; y++) {
+            for (png_uint_32 y = 0; y < height; y++)
+            {
                 png_read_row(png, row.data(), nullptr);
                 png_write_row(pngWrite, row.data());
             }
@@ -177,12 +193,14 @@ namespace Utils {
             fclose(fp);
 
             // Replace original with new file
-            try {
+            try
+            {
                 std::filesystem::path originalPath(imagePath);
                 std::filesystem::path tempPath(tempFile);
 
                 // Remove original file
-                if (std::filesystem::exists(originalPath)) {
+                if (std::filesystem::exists(originalPath))
+                {
                     std::filesystem::remove(originalPath);
                 }
 
@@ -191,76 +209,128 @@ namespace Utils {
                 std::cout << "Successfully wrote metadata to PNG: " << imagePath << std::endl;
                 return true;
             }
-            catch (const std::filesystem::filesystem_error& e) {
+            catch (const std::filesystem::filesystem_error &e)
+            {
                 std::cerr << "Error replacing file: " << e.what() << std::endl;
                 return false;
             }
         }
 
-        static nlohmann::json ReadMetadataFromPNG(const std::string& imagePath) {
+        static std::string CreateUniqueFilename(const std::string &baseFilename, const std::string &directory)
+        {
+            try
+            {
+                // Validate inputs
+                std::string validBaseName = baseFilename.empty() ? "AniStudio_output.png" : baseFilename;
+                std::string validDirectory = directory.empty() ? Utils::FilePaths::defaultProjectPath : directory;
+
+                // Ensure directory exists
+                std::filesystem::path directoryPath(validDirectory);
+                if (!directoryPath.is_absolute())
+                {
+                    directoryPath = std::filesystem::path(Utils::FilePaths::defaultProjectPath) / directoryPath;
+                }
+
+                // Create directory if it doesn't exist
+                std::error_code ec;
+                std::filesystem::create_directories(directoryPath, ec);
+                if (ec)
+                {
+                    std::cerr << "Failed to create directory: " << directoryPath.string() << " - " << ec.message() << std::endl;
+                    // Fall back to default project path
+                    directoryPath = Utils::FilePaths::defaultProjectPath;
+                    std::filesystem::create_directories(directoryPath, ec);
+                    if (ec)
+                    {
+                        throw std::runtime_error("Failed to create fallback directory: " + directoryPath.string());
+                    }
+                }
+
+                // Parse the base filename
+                std::filesystem::path originalFilePath(validBaseName);
+                std::string baseName = originalFilePath.stem().string();
+                std::string extension = originalFilePath.extension().string();
+
+                // Ensure extension starts with a dot
+                if (!extension.empty() && extension[0] != '.')
+                {
+                    extension = "." + extension;
+                }
+
+                // Default extension if none provided
+                if (extension.empty())
+                {
+                    extension = ".png";
+                }
+
+                // Check if directory exists after creation
+                if (!std::filesystem::exists(directoryPath))
+                {
+                    throw std::runtime_error("Directory does not exist after creation: " + directoryPath.string());
+                }
+
+                // Find the highest existing index
+                int highestIndex = 0;
+                for (const auto &entry : std::filesystem::directory_iterator(directoryPath))
+                {
+                    if (entry.is_regular_file())
+                    {
+                        std::string entryName = entry.path().stem().string();
+                        std::string entryExt = entry.path().extension().string();
+
+                        // Check if this file matches our base name pattern
+                        if (entryExt == extension)
+                        {
+                            std::string prefix = baseName + "-";
+                            if (entryName.find(prefix) == 0)
+                            {
+                                // Extract the number part
+                                std::string numberPart = entryName.substr(prefix.length());
+                                try
+                                {
+                                    int index = std::stoi(numberPart);
+                                    if (index > highestIndex)
+                                    {
+                                        highestIndex = index;
+                                    }
+                                }
+                                catch (const std::exception &)
+                                {
+                                    // Invalid number, ignore
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Create new filename with incremented index
+                highestIndex++;
+                std::ostringstream formattedIndex;
+                formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
+
+                // Create the full path
+                std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
+
+                return newFilePath.string();
+            }
+            catch (const std::exception &e)
+            {
+                std::cerr << "Error in CreateUniqueFilename: " << e.what() << std::endl;
+                // Return a safe fallback
+                return Utils::FilePaths::defaultProjectPath + "/AniStudio_fallback.png";
+            }
+        }
+
+        // Use MetadataUtils functions to avoid duplication
+        static nlohmann::json ReadMetadataFromPNG(const std::string &imagePath)
+        {
             return MetadataUtils::LoadMetadataFromPNG(imagePath);
         }
 
-		static std::string CreateUniqueFilename(const std::string& baseFilename,
-			const std::string& directory) {
-			// Create full paths
-			std::filesystem::path directoryPath(directory);
-			std::filesystem::path originalFilePath(baseFilename);
-
-			// Extract the base name and extension
-			std::string baseName = originalFilePath.stem().string();
-			std::string extension = originalFilePath.extension().string();
-
-			// Ensure the extension starts with a dot
-			if (!extension.empty() && extension[0] != '.') {
-				extension = "." + extension;
-			}
-
-			// Default to .png if no extension provided
-			if (extension.empty()) {
-				extension = ".png";
-			}
-
-			// Ensure the directory exists
-			if (!std::filesystem::exists(directoryPath)) {
-				std::filesystem::create_directories(directoryPath);
-			}
-
-			// Find the highest existing index
-			int highestIndex = 0;
-			for (const auto& entry : std::filesystem::directory_iterator(directoryPath)) {
-				if (entry.path().extension().string() == extension) {
-					std::string filename = entry.path().stem().string();
-
-					if (filename.find(baseName) == 0) {  // Starts with base name
-						size_t dashPos = filename.find_last_of('-');
-						if (dashPos != std::string::npos) {
-							try {
-								int index = std::stoi(filename.substr(dashPos + 1));
-								if (index > highestIndex) {
-									highestIndex = index;
-								}
-							}
-							catch (...) {
-								// Ignore conversion errors
-							}
-						}
-					}
-				}
-			}
-
-			// Create new filename with incremented index
-			highestIndex++;
-			std::ostringstream formattedIndex;
-			formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
-
-			// Construct the final path and return it as string
-			std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
-			return newFilePath.string();
-		}
-
-        static nlohmann::json CreateGenerationMetadata(const nlohmann::json& entityData,
-            const nlohmann::json& additionalInfo = {}) {
+        static nlohmann::json CreateGenerationMetadata(const nlohmann::json &entityData,
+                                                       const nlohmann::json &additionalInfo = {})
+        {
             return MetadataUtils::CreateGenerationMetadata(entityData, additionalInfo);
         }
     };

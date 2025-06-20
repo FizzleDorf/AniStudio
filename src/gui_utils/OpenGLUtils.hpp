@@ -20,7 +20,7 @@
 
 #pragma once
 
-#include <GL/glew.h>
+#include "OpenGLWrapper.hpp"
 #include <iostream>
 
 namespace Utils {

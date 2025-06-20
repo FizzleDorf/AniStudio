@@ -26,6 +26,10 @@ if(WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
+if(UNIX AND NOT APPLE)
+    set(OpenGL_GL_PREFERENCE GLVND)
+endif()
+
 # Include Conan toolchain
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
@@ -67,27 +71,23 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
 
-# For libraries
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
 
-# For static libraries and import libraries on Windows
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
 
-# Create plugins directory
+# Create directories
 set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
 file(MAKE_DIRECTORY ${PLUGINS_DIR})
 
-# Data directory setup - only copy if files don't exist
 set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
 set(DEFAULTS_DIR "${DATA_DIR}/defaults")
 file(MAKE_DIRECTORY ${DATA_DIR})
 file(MAKE_DIRECTORY ${DEFAULTS_DIR})
 
-# Copy defaults files only if they don't already exist
 file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
 foreach(DEFAULT_FILE ${DEFAULT_FILES})
     file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/data/defaults" "${DEFAULT_FILE}")
@@ -103,11 +103,9 @@ foreach(DEFAULT_FILE ${DEFAULT_FILES})
     endif()
 endforeach()
 
-# Scripts directory setup - copy all scripts
 set(SCRIPTS_DIR "${CMAKE_BINARY_DIR}/scripts")
 file(MAKE_DIRECTORY ${SCRIPTS_DIR})
 
-# Check if scripts directory exists in source
 if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
     file(GLOB_RECURSE SCRIPT_FILES "${CMAKE_SOURCE_DIR}/scripts/*")
     foreach(SCRIPT_FILE ${SCRIPT_FILES})
@@ -151,13 +149,12 @@ add_subdirectory(external/imgui_filedialog)
 add_subdirectory(external/ImJSchema)
 add_subdirectory(external/ImGuizmo)
 
-# Only build Zep if needed - configure it properly
+# Only build Zep if needed
 set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
 set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE) 
 set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
 set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)
 
-# Check if Zep directory exists before adding it
 if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
     add_subdirectory(external/zep)
     set(ZEP_AVAILABLE TRUE)
@@ -167,18 +164,7 @@ else()
     set(ZEP_AVAILABLE FALSE)
 endif()
 
-# For external/imgui directory
-target_include_directories(ImGui PRIVATE ${GLFW_INCLUDE_DIRS})
-
-# Fix OpenGL header conflicts on Linux
-if(UNIX AND NOT APPLE)
-    add_definitions(-DGL_GLEXT_PROTOTYPES)
-    add_definitions(-DGLEW_STATIC)
-endif()
-
-add_compile_definitions(IMGUI_DEFINE_MATH_OPERATORS)
-
-# Include directories - single consolidated list
+# Include directories
 include_directories(
     ${CONAN_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/src
@@ -215,10 +201,7 @@ file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/src/base_plugins/*.cpp)
 file(GLOB_RECURSE EVENT_SOURCES ${CMAKE_SOURCE_DIR}/src/events/*.cpp)
 file(GLOB_RECURSE GUI_UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/gui_utils/*.cpp)
 
-message(STATUS "GUI_SOURCES found: ${GUI_SOURCES}")
-
 if(BUILD_ANISTUDIO)
-    # Main executable with ALL sources
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
         ${CMAKE_SOURCE_DIR}/src/pch.cpp
@@ -239,7 +222,12 @@ if(BUILD_ANISTUDIO)
         CXX_EXTENSIONS OFF
     )
 
-    # Link directories and libraries
+    # SIMPLE OPENGL FIX
+    target_compile_definitions(${PROJECT_NAME} PRIVATE 
+        GLEW_STATIC
+        IMGUI_DEFINE_MATH_OPERATORS
+    )
+    
     link_directories(${CONAN_LIB_DIRS})
 
     if(SD_CUDA)
@@ -270,26 +258,21 @@ if(BUILD_ANISTUDIO)
         pybind11::embed
     )
 
-    # Add Zep if available
     if(ZEP_AVAILABLE)
         target_link_libraries(${PROJECT_NAME} PRIVATE Zep::Zep)
         target_compile_definitions(${PROJECT_NAME} PRIVATE ZEP_AVAILABLE)
     endif()
 
-    # Precompiled headers
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
-    # Symbol export/import definitions for main executable
     if(WIN32)
         target_compile_definitions(${PROJECT_NAME} PRIVATE "ANI_CORE_API=__declspec(dllexport)")
     else()
         target_compile_definitions(${PROJECT_NAME} PRIVATE "ANI_CORE_API=")
     endif()
-
-    message(STATUS "AniStudio executable configured")
 endif()
 
-# AniStudioCore library for plugins - contains everything needed
+# AniStudioCore library
 add_library(AniStudioCore STATIC
     ${CMAKE_SOURCE_DIR}/src/pch.cpp
     ${GUI_SOURCES}
@@ -298,6 +281,12 @@ add_library(AniStudioCore STATIC
     ${PLUGIN_SOURCES}
     ${EVENT_SOURCES}
     ${GUI_UTILS_SOURCES}
+)
+
+# SIMPLE OPENGL FIX FOR CORE TOO
+target_compile_definitions(AniStudioCore PUBLIC 
+    GLEW_STATIC
+    IMGUI_DEFINE_MATH_OPERATORS
 )
 
 target_include_directories(AniStudioCore PRIVATE
@@ -326,7 +315,6 @@ target_include_directories(AniStudioCore PRIVATE
     ${CMAKE_SOURCE_DIR}/external/zep/include
 )
 
-# Link required libraries to AniStudioCore - PRIVATE so they don't get exported
 target_link_libraries(AniStudioCore PRIVATE
     ${CONAN_LIBS}
     stable-diffusion
@@ -350,7 +338,6 @@ target_link_libraries(AniStudioCore PRIVATE
     pybind11::embed
 )
 
-# Add Zep if available
 if(ZEP_AVAILABLE)
     target_link_libraries(AniStudioCore PRIVATE Zep::Zep)
     target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
@@ -361,14 +348,12 @@ if(SD_CUDA)
     target_link_libraries(AniStudioCore PRIVATE CUDA::cudart)
 endif()
 
-# Symbol export/import definitions for static library
 if(WIN32)
     target_compile_definitions(AniStudioCore PUBLIC "ANI_CORE_API=" "PLUGIN_API=__declspec(dllexport)")
 else()
     target_compile_definitions(AniStudioCore PUBLIC "ANI_CORE_API=" "PLUGIN_API=__attribute__((visibility(\"default\")))")
 endif()
 
-# Set proper output directories for AniStudioCore
 set_target_properties(AniStudioCore PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
     ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib
@@ -377,11 +362,6 @@ set_target_properties(AniStudioCore PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib
 )
 
-# Ensure AniStudioCore has the same compile features
 target_compile_features(AniStudioCore PUBLIC cxx_std_17)
 
-message(STATUS "AniStudioCore library configured for plugin development")
-
-# DON'T INSTALL OR EXPORT - just build the library for local use
 message(STATUS "AniStudio build configuration complete")
-message(STATUS "AniStudioCore built for local plugin development only")

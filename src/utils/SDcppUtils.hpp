@@ -26,19 +26,22 @@
 #include <stb_image_write.h>
 #include "pch.h"
 
-namespace Utils {
+namespace Utils
+{
 	static std::random_device rd;
 	static STDDefaultRNG rng;
 	static bool initialized = false;
 
-	class SDCPPUtils {
+	class SDCPPUtils
+	{
 	public:
-
 		// Generate a random seed using STDDefaultRNG from sdcpp
 		// TODO: move this to a util
-		static uint64_t generateRandomSeed() {
+		static uint64_t generateRandomSeed()
+		{
 			// Seed the RNG with a random device if not already seeded
-			if (!initialized) {
+			if (!initialized)
+			{
 				rng.manual_seed(rd());
 				initialized = true;
 			}
@@ -52,8 +55,10 @@ namespace Utils {
 		}
 
 		// SD context initialization
-		static sd_ctx_t* InitializeStableDiffusionContext(const nlohmann::json& metadata) {
-			try {
+		static sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata)
+		{
+			try
+			{
 				std::string modelPath = "", clipLPath = "", clipGPath = "", t5xxlPath = "";
 				std::string diffusionModelPath = "", vaePath = "", taesdPath = "", controlnetPath = "";
 				std::string loraPath = "", embedPath = "";
@@ -65,10 +70,13 @@ namespace Utils {
 				schedule_t scheduler_method = DEFAULT;
 
 				// Extract parameters from components array in metadata
-				if (metadata.contains("components") && metadata["components"].is_array()) {
-					for (const auto& comp : metadata["components"]) {
+				if (metadata.contains("components") && metadata["components"].is_array())
+				{
+					for (const auto &comp : metadata["components"])
+					{
 						// Model component
-						if (comp.contains("Model")) {
+						if (comp.contains("Model"))
+						{
 							auto model = comp["Model"];
 							if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty())
 								modelPath = model["modelPath"];
@@ -77,7 +85,8 @@ namespace Utils {
 						}
 
 						// ClipL component
-						if (comp.contains("ClipL")) {
+						if (comp.contains("ClipL"))
+						{
 							auto clipL = comp["ClipL"];
 							if (clipL.contains("modelPath") && !clipL["modelPath"].get<std::string>().empty())
 								clipLPath = clipL["modelPath"];
@@ -86,7 +95,8 @@ namespace Utils {
 						}
 
 						// ClipG component
-						if (comp.contains("ClipG")) {
+						if (comp.contains("ClipG"))
+						{
 							auto clipG = comp["ClipG"];
 							if (clipG.contains("modelPath") && !clipG["modelPath"].get<std::string>().empty())
 								clipGPath = clipG["modelPath"];
@@ -95,7 +105,8 @@ namespace Utils {
 						}
 
 						// T5XXL component
-						if (comp.contains("T5XXL")) {
+						if (comp.contains("T5XXL"))
+						{
 							auto t5xxl = comp["T5XXL"];
 							if (t5xxl.contains("modelPath") && !t5xxl["modelPath"].get<std::string>().empty())
 								t5xxlPath = t5xxl["modelPath"];
@@ -104,7 +115,8 @@ namespace Utils {
 						}
 
 						// DiffusionModel component
-						if (comp.contains("DiffusionModel")) {
+						if (comp.contains("DiffusionModel"))
+						{
 							auto diffusion = comp["DiffusionModel"];
 							if (diffusion.contains("modelPath") && !diffusion["modelPath"].get<std::string>().empty())
 								diffusionModelPath = diffusion["modelPath"];
@@ -113,7 +125,8 @@ namespace Utils {
 						}
 
 						// Vae component
-						if (comp.contains("Vae")) {
+						if (comp.contains("Vae"))
+						{
 							auto vae = comp["Vae"];
 							if (vae.contains("modelPath") && !vae["modelPath"].get<std::string>().empty())
 								vaePath = vae["modelPath"];
@@ -129,7 +142,8 @@ namespace Utils {
 						}
 
 						// Taesd component
-						if (comp.contains("Taesd")) {
+						if (comp.contains("Taesd"))
+						{
 							auto taesd = comp["Taesd"];
 							if (taesd.contains("modelPath") && !taesd["modelPath"].get<std::string>().empty())
 								taesdPath = taesd["modelPath"];
@@ -138,7 +152,8 @@ namespace Utils {
 						}
 
 						// Controlnet component
-						if (comp.contains("Controlnet")) {
+						if (comp.contains("Controlnet"))
+						{
 							auto controlnet = comp["Controlnet"];
 							if (controlnet.contains("modelPath") && !controlnet["modelPath"].get<std::string>().empty())
 								controlnetPath = controlnet["modelPath"];
@@ -147,27 +162,33 @@ namespace Utils {
 						}
 
 						// Lora component
-						if (comp.contains("Lora")) {
+						if (comp.contains("Lora"))
+						{
 							auto lora = comp["Lora"];
-							if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty()) {
+							if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty())
+							{
 								loraPath = lora["modelPath"];
 							}
-							else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty()) {
+							else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
+							{
 								std::string modelName = lora["modelName"].get<std::string>();
 								loraPath = FilePaths::loraDir + "/" + modelName;
 							}
-							else {
+							else
+							{
 								// Default to lora directory if no specific model is specified
 								loraPath = FilePaths::loraDir;
 							}
 						}
-						else {
+						else
+						{
 							// Always set loraPath to the directory if the component doesn't exist
 							loraPath = FilePaths::loraDir;
 						}
 
 						// Embedding component
-						if (comp.contains("EmbeddingComponent")) {
+						if (comp.contains("EmbeddingComponent"))
+						{
 							auto embed = comp["EmbeddingComponent"];
 							if (embed.contains("modelPath") && !embed["modelPath"].get<std::string>().empty())
 								embedPath = embed["modelPath"];
@@ -176,7 +197,8 @@ namespace Utils {
 						}
 
 						// Sampler component
-						if (comp.contains("Sampler")) {
+						if (comp.contains("Sampler"))
+						{
 							auto sampler = comp["Sampler"];
 							if (sampler.contains("n_threads"))
 								n_threads = sampler["n_threads"];
@@ -217,7 +239,7 @@ namespace Utils {
 					controlnetPath.c_str(),
 					loraPath.c_str(),
 					embedPath.c_str(),
-					"",  // placeholder_token_text
+					"", // placeholder_token_text
 					vae_decode_only,
 					isTiled,
 					free_params_immediately,
@@ -228,30 +250,35 @@ namespace Utils {
 					true,  // shift_text_decoder
 					false, // debug_clip_pos
 					keep_vae_on_cpu,
-					false  // debug_extract_shifts
+					false // debug_extract_shifts
 				);
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception &e)
+			{
 				std::cerr << "Error initializing SD context: " << e.what() << std::endl;
 				return nullptr;
 			}
 		}
 
 		// Generate image based on metadata parameters
-		static sd_image_t* GenerateImage(sd_ctx_t* context, const nlohmann::json& metadata) {
+		static sd_image_t *GenerateImage(sd_ctx_t *context, const nlohmann::json &metadata)
+		{
 			std::string posPrompt = "", negPrompt = "";
 			float clipSkip = 2.0f, cfg = 7.0f, guidance = 2.0f, eta = 0.0f;
 			int latentWidth = 512, latentHeight = 512, steps = 20, seed = -1, batchSize = 1;
 			sample_method_t sample_method = EULER;
-			int* skipLayers = nullptr;
+			int *skipLayers = nullptr;
 			size_t skipLayersCount = 0;
 			float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
 
 			// Extract parameters from components array in metadata
-			if (metadata.contains("components") && metadata["components"].is_array()) {
-				for (const auto& comp : metadata["components"]) {
+			if (metadata.contains("components") && metadata["components"].is_array())
+			{
+				for (const auto &comp : metadata["components"])
+				{
 					// Prompt component
-					if (comp.contains("Prompt")) {
+					if (comp.contains("Prompt"))
+					{
 						auto prompt = comp["Prompt"];
 						if (prompt.contains("posPrompt"))
 							posPrompt = prompt["posPrompt"];
@@ -260,14 +287,16 @@ namespace Utils {
 					}
 
 					// ClipSkip component
-					if (comp.contains("ClipSkip")) {
+					if (comp.contains("ClipSkip"))
+					{
 						auto clipSkipComp = comp["ClipSkip"];
 						if (clipSkipComp.contains("clipSkip"))
 							clipSkip = clipSkipComp["clipSkip"];
 					}
 
 					// Sampler component
-					if (comp.contains("Sampler")) {
+					if (comp.contains("Sampler"))
+					{
 						auto sampler = comp["Sampler"];
 						if (sampler.contains("cfg"))
 							cfg = sampler["cfg"];
@@ -280,7 +309,8 @@ namespace Utils {
 					}
 
 					// Guidance component
-					if (comp.contains("Guidance")) {
+					if (comp.contains("Guidance"))
+					{
 						auto guidanceComp = comp["Guidance"];
 						if (guidanceComp.contains("guidance"))
 							guidance = guidanceComp["guidance"];
@@ -289,7 +319,8 @@ namespace Utils {
 					}
 
 					// Latent component
-					if (comp.contains("Latent")) {
+					if (comp.contains("Latent"))
+					{
 						auto latent = comp["Latent"];
 						if (latent.contains("latentWidth"))
 							latentWidth = latent["latentWidth"];
@@ -300,10 +331,11 @@ namespace Utils {
 					}
 
 					// Skip layers component
-					if (comp.contains("LayerSkip")) {
+					if (comp.contains("LayerSkip"))
+					{
 						auto layerSkip = comp["LayerSkip"];
 						if (layerSkip.contains("skip_layers"))
-							skipLayers = reinterpret_cast<int*>(layerSkip["skip_layers"].get<intptr_t>());
+							skipLayers = reinterpret_cast<int *>(layerSkip["skip_layers"].get<intptr_t>());
 						if (layerSkip.contains("skip_layers_count"))
 							skipLayersCount = layerSkip["skip_layers_count"];
 						if (layerSkip.contains("slg_scale"))
@@ -317,7 +349,8 @@ namespace Utils {
 			}
 
 			// Ensure valid seed
-			if (seed < 0) {
+			if (seed < 0)
+			{
 				seed = static_cast<int>(generateRandomSeed());
 				std::cout << "Generated random seed: " << seed << std::endl;
 			}
@@ -337,36 +370,39 @@ namespace Utils {
 				steps,
 				seed,
 				batchSize,
-				nullptr,  // control_image
-				0.0f,     // control_strength
-				0.0f,     // style_strength
-				false,    // normalize_input
-				"",       // input_id_images_path
+				nullptr, // control_image
+				0.0f,	 // control_strength
+				0.0f,	 // style_strength
+				false,	 // normalize_input
+				"",		 // input_id_images_path
 				skipLayers,
 				skipLayersCount,
 				slgScale,
 				skipLayerStart,
-				skipLayerEnd
-			);
+				skipLayerEnd);
 		}
 
 		// Implementations of core methods for generation
 
-		static bool RunInference(const nlohmann::json& metadata, std::string fullPath) {
-			sd_ctx_t* sd_context = nullptr;
-			sd_image_t* image = nullptr;
+		static bool RunInference(const nlohmann::json &metadata, std::string fullPath)
+		{
+			sd_ctx_t *sd_context = nullptr;
+			sd_image_t *image = nullptr;
 
-			try {
+			try
+			{
 				// Initialize Stable Diffusion context
 				std::cout << "Initializing SD context..." << std::endl;
 				sd_context = InitializeStableDiffusionContext(metadata);
-				if (!sd_context) {
+				if (!sd_context)
+				{
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
 
 				// Generate image
 				image = GenerateImage(sd_context, metadata);
-				if (!image) {
+				if (!image)
+				{
 					throw std::runtime_error("Failed to generate image!");
 				}
 
@@ -374,28 +410,33 @@ namespace Utils {
 				SaveImage(image->data, image->width, image->height, image->channel, metadata, fullPath);
 
 				// Cleanup
-				if (image) {
+				if (image)
+				{
 					free(image);
 					image = nullptr;
 				}
 
-				if (sd_context) {
+				if (sd_context)
+				{
 					free_sd_ctx(sd_context);
 					sd_context = nullptr;
 				}
 
 				return true;
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception &e)
+			{
 				std::cerr << "Exception during inference: " << e.what() << std::endl;
 
 				// Clean up resources
-				if (image) {
+				if (image)
+				{
 					free(image);
 					image = nullptr;
 				}
 
-				if (sd_context) {
+				if (sd_context)
+				{
 					free_sd_ctx(sd_context);
 					sd_context = nullptr;
 				}
@@ -403,27 +444,34 @@ namespace Utils {
 				return false;
 			}
 		}
-		static bool ConvertToGGUF(const nlohmann::json& metadata) {
-			try {
+		static bool ConvertToGGUF(const nlohmann::json &metadata)
+		{
+			try
+			{
 				std::string inputPath, vaePath;
 				sd_type_t type = SD_TYPE_F16;
 
 				// Extract model paths from metadata
-				if (metadata.contains("components") && metadata["components"].is_array()) {
-					for (const auto& comp : metadata["components"]) {
-						if (comp.contains("Model")) {
+				if (metadata.contains("components") && metadata["components"].is_array())
+				{
+					for (const auto &comp : metadata["components"])
+					{
+						if (comp.contains("Model"))
+						{
 							auto model = comp["Model"];
 							if (model.contains("modelPath"))
 								inputPath = model["modelPath"];
 						}
 
-						if (comp.contains("Vae")) {
+						if (comp.contains("Vae"))
+						{
 							auto vae = comp["Vae"];
 							if (vae.contains("modelPath"))
 								vaePath = vae["modelPath"];
 						}
 
-						if (comp.contains("Sampler")) {
+						if (comp.contains("Sampler"))
+						{
 							auto sampler = comp["Sampler"];
 							if (sampler.contains("current_type_method"))
 								type = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
@@ -432,48 +480,55 @@ namespace Utils {
 				}
 
 				// Validate input path
-				if (inputPath.empty()) {
+				if (inputPath.empty())
+				{
 					throw std::runtime_error("Input model path is empty");
 				}
 
 				// Create output path with type suffix
 				std::filesystem::path inPath(inputPath);
 				std::string outPath = inPath.parent_path().string() + "/" +
-					inPath.stem().string() + "_" +
-					std::string(type_method_items[type]) + ".gguf";
+									  inPath.stem().string() + "_" +
+									  std::string(type_method_items[type]) + ".gguf";
 
 				// Perform conversion
 				bool result;
-				if (vaePath.empty()) {
+				if (vaePath.empty())
+				{
 					// Convert without VAE
 					result = convert(inputPath.c_str(), nullptr, outPath.c_str(), type);
 				}
-				else {
+				else
+				{
 					// Convert with VAE
 					result = convert(inputPath.c_str(), vaePath.c_str(), outPath.c_str(), type);
 				}
 
-				if (!result) {
+				if (!result)
+				{
 					throw std::runtime_error("Failed to convert Model: " + inputPath);
 				}
 
 				std::cout << "Successfully converted model to: " << outPath << std::endl;
 				return true;
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception &e)
+			{
 				std::cerr << "Exception during conversion: " << e.what() << std::endl;
 				return false;
 			}
 		}
 
-		static bool RunImg2Img(const nlohmann::json& metadata, std::string fullPath) {
-			sd_ctx_t* sd_context = nullptr;
-			unsigned char* inputData = nullptr;
-			unsigned char* maskData = nullptr;
-			unsigned char* emptyMaskData = nullptr;
-			sd_image_t* result_image = nullptr;
+		static bool RunImg2Img(const nlohmann::json &metadata, std::string fullPath)
+		{
+			sd_ctx_t *sd_context = nullptr;
+			unsigned char *inputData = nullptr;
+			unsigned char *maskData = nullptr;
+			unsigned char *emptyMaskData = nullptr;
+			sd_image_t *result_image = nullptr;
 
-			try {
+			try
+			{
 				// Extract parameters from metadata
 				std::string inputImagePath = "";
 				std::string maskImagePath = "";
@@ -485,7 +540,7 @@ namespace Utils {
 				int steps = 20, seed = -1, batchSize = 1;
 				float denoiseStrength = 0.75f;
 				sample_method_t sample_method = EULER;
-				int* skipLayers = nullptr;
+				int *skipLayers = nullptr;
 				size_t skipLayersCount = 0;
 				float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
 
@@ -494,49 +549,55 @@ namespace Utils {
 				std::cout << metadata.dump(2) << std::endl;
 
 				// Parse metadata to extract parameters
-				if (metadata.contains("components") && metadata["components"].is_array()) {
-					for (const auto& comp : metadata["components"]) {
+				if (metadata.contains("components") && metadata["components"].is_array())
+				{
+					for (const auto &comp : metadata["components"])
+					{
 						// Input image path
-						if (comp.contains("InputImage")) {
+						if (comp.contains("InputImage"))
+						{
 							nlohmann::json inputImageData = comp["InputImage"];
 
-							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null()
-								&& !inputImageData["filePath"].get<std::string>().empty()) {
+							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null() && !inputImageData["filePath"].get<std::string>().empty())
+							{
 								inputImagePath = inputImageData["filePath"].get<std::string>();
 								std::cout << "Found input path: " << inputImagePath << std::endl;
 							}
 						}
 
 						// Mask image path (additional for img2img)
-						if (comp.contains("MaskImage")) {
+						if (comp.contains("MaskImage"))
+						{
 							nlohmann::json maskImageData = comp["MaskImage"];
 
-							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null()
-								&& !maskImageData["filePath"].get<std::string>().empty()) {
+							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null() && !maskImageData["filePath"].get<std::string>().empty())
+							{
 								maskImagePath = maskImageData["filePath"].get<std::string>();
 								std::cout << "Found mask path: " << maskImagePath << std::endl;
 							}
 						}
 
 						// Output settings
-						if (comp.contains("OutputImage")) {
+						if (comp.contains("OutputImage"))
+						{
 							nlohmann::json outputImageData = comp["OutputImage"];
 
-							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null()
-								&& !outputImageData["filePath"].get<std::string>().empty()) {
+							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null() && !outputImageData["filePath"].get<std::string>().empty())
+							{
 								outputPath = outputImageData["filePath"].get<std::string>();
 								std::cout << "Found output path: " << outputPath << std::endl;
 							}
 
-							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null()
-								&& !outputImageData["fileName"].get<std::string>().empty()) {
+							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null() && !outputImageData["fileName"].get<std::string>().empty())
+							{
 								outputFilename = outputImageData["fileName"].get<std::string>();
 								std::cout << "Found output filename: " << outputFilename << std::endl;
 							}
 						}
 
 						// Prompt component
-						if (comp.contains("Prompt")) {
+						if (comp.contains("Prompt"))
+						{
 							nlohmann::json promptData = comp["Prompt"];
 
 							if (promptData.contains("posPrompt") && !promptData["posPrompt"].is_null())
@@ -546,7 +607,8 @@ namespace Utils {
 						}
 
 						// ClipSkip component
-						if (comp.contains("ClipSkip")) {
+						if (comp.contains("ClipSkip"))
+						{
 							nlohmann::json clipSkipData = comp["ClipSkip"];
 
 							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
@@ -554,7 +616,8 @@ namespace Utils {
 						}
 
 						// Sampler component
-						if (comp.contains("Sampler")) {
+						if (comp.contains("Sampler"))
+						{
 							nlohmann::json samplerData = comp["Sampler"];
 
 							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
@@ -570,7 +633,8 @@ namespace Utils {
 						}
 
 						// Guidance component
-						if (comp.contains("Guidance")) {
+						if (comp.contains("Guidance"))
+						{
 							nlohmann::json guidanceData = comp["Guidance"];
 
 							if (guidanceData.contains("guidance") && !guidanceData["guidance"].is_null())
@@ -580,7 +644,8 @@ namespace Utils {
 						}
 
 						// Latent component
-						if (comp.contains("Latent")) {
+						if (comp.contains("Latent"))
+						{
 							nlohmann::json latentData = comp["Latent"];
 
 							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
@@ -592,7 +657,8 @@ namespace Utils {
 						}
 
 						// Layer Skip component
-						if (comp.contains("LayerSkip")) {
+						if (comp.contains("LayerSkip"))
+						{
 							nlohmann::json layerSkipData = comp["LayerSkip"];
 
 							if (layerSkipData.contains("slg_scale") && !layerSkipData["slg_scale"].is_null())
@@ -606,12 +672,14 @@ namespace Utils {
 				}
 
 				// Validate parameters
-				if (inputImagePath.empty()) {
+				if (inputImagePath.empty())
+				{
 					throw std::runtime_error("Input image path is empty!");
 				}
 
 				// Check if input image file exists
-				if (!std::filesystem::exists(inputImagePath)) {
+				if (!std::filesystem::exists(inputImagePath))
+				{
 					throw std::runtime_error("Input image file does not exist: " + inputImagePath);
 				}
 
@@ -621,9 +689,10 @@ namespace Utils {
 
 				// Force 3 channels (RGB) for consistency with stable-diffusion
 				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
-				if (!inputData) {
+				if (!inputData)
+				{
 					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
-						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+										(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
 					throw std::runtime_error(error);
 				}
 
@@ -631,10 +700,11 @@ namespace Utils {
 				inputChannels = 3;
 
 				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
-					<< " with " << inputChannels << " channels (forced RGB)" << std::endl;
+						  << " with " << inputChannels << " channels (forced RGB)" << std::endl;
 
 				// Validate image dimensions
-				if (inputWidth <= 0 || inputHeight <= 0) {
+				if (inputWidth <= 0 || inputHeight <= 0)
+				{
 					throw std::runtime_error("Invalid input image dimensions: " + std::to_string(inputWidth) + "x" + std::to_string(inputHeight));
 				}
 
@@ -647,7 +717,8 @@ namespace Utils {
 				// Initialize SD context - SAME AS UPSCALING PATTERN
 				std::cout << "Initializing Stable Diffusion context..." << std::endl;
 				sd_context = InitializeStableDiffusionContext(metadata);
-				if (!sd_context) {
+				if (!sd_context)
+				{
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
 
@@ -655,14 +726,14 @@ namespace Utils {
 				sd_image_t input_image = {
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
-					3,  // FORCE 3 channels (RGB)
-					inputData
-				};
+					3, // FORCE 3 channels (RGB)
+					inputData};
 
 				// Initialize mask image struct - IMPROVED MASK HANDLING
-				sd_image_t mask_image = { 0 };
+				sd_image_t mask_image = {0};
 
-				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath)) {
+				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath))
+				{
 					std::cout << "No valid mask provided, creating blank white mask" << std::endl;
 
 					// Create a blank WHITE mask (255 = keep original, 0 = replace with generated)
@@ -677,7 +748,8 @@ namespace Utils {
 
 					std::cout << "Created white mask: " << inputWidth << "x" << inputHeight << std::endl;
 				}
-				else {
+				else
+				{
 					// Load mask from file - FORCE GRAYSCALE
 					int maskWidth, maskHeight, maskChannels;
 					std::cout << "Loading mask image from: " << maskImagePath << std::endl;
@@ -685,7 +757,8 @@ namespace Utils {
 					// FORCE 1 channel (grayscale) for mask
 					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1);
 
-					if (!maskData) {
+					if (!maskData)
+					{
 						std::cerr << "Failed to load mask image: " << maskImagePath << ", using white mask instead" << std::endl;
 
 						// Create white mask as fallback
@@ -698,12 +771,14 @@ namespace Utils {
 						mask_image.channel = 1;
 						mask_image.data = emptyMaskData;
 					}
-					else {
+					else
+					{
 						// Validate mask dimensions match input image
-						if (maskWidth != inputWidth || maskHeight != inputHeight) {
+						if (maskWidth != inputWidth || maskHeight != inputHeight)
+						{
 							std::cout << "Warning: Mask dimensions (" << maskWidth << "x" << maskHeight
-								<< ") don't match input image (" << inputWidth << "x" << inputHeight
-								<< "), using white mask instead" << std::endl;
+									  << ") don't match input image (" << inputWidth << "x" << inputHeight
+									  << "), using white mask instead" << std::endl;
 
 							// Free the loaded mask and create a white one
 							stbi_image_free(maskData);
@@ -718,20 +793,22 @@ namespace Utils {
 							mask_image.channel = 1;
 							mask_image.data = emptyMaskData;
 						}
-						else {
+						else
+						{
 							mask_image.width = static_cast<uint32_t>(maskWidth);
 							mask_image.height = static_cast<uint32_t>(maskHeight);
 							mask_image.channel = 1; // Force single channel
 							mask_image.data = maskData;
 
 							std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
-								<< " with 1 channel (grayscale)" << std::endl;
+									  << " with 1 channel (grayscale)" << std::endl;
 						}
 					}
 				}
 
 				// Ensure valid seed
-				if (seed < 0) {
+				if (seed < 0)
+				{
 					seed = static_cast<int>(generateRandomSeed());
 					std::cout << "Generated random seed: " << seed << std::endl;
 				}
@@ -756,87 +833,99 @@ namespace Utils {
 					static_cast<int64_t>(seed),
 					batchSize,
 					nullptr, // control_cond
-					0.0f,    // control_strength
-					0.0f,    // style_ratio
-					false,   // normalize_input
-					"",      // input_id_images_path
+					0.0f,	 // control_strength
+					0.0f,	 // style_ratio
+					false,	 // normalize_input
+					"",		 // input_id_images_path
 					skipLayers,
 					skipLayersCount,
 					slgScale,
 					skipLayerStart,
-					skipLayerEnd
-				);
+					skipLayerEnd);
 
-				if (!result_image) {
+				if (!result_image)
+				{
 					throw std::runtime_error("img2img failed - no output image produced");
 				}
 
-				if (!result_image->data) {
+				if (!result_image->data)
+				{
 					free(result_image);
 					throw std::runtime_error("img2img produced invalid image data");
 				}
 
 				std::cout << "img2img successful: " << result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
+						  << "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
 
 				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
-					result_image->channel, metadata, fullPath);
+						  result_image->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 				// Cleanup resources
-				if (inputData) {
+				if (inputData)
+				{
 					stbi_image_free(inputData);
 					inputData = nullptr;
 				}
 
-				if (maskData) {
+				if (maskData)
+				{
 					stbi_image_free(maskData);
 					maskData = nullptr;
 				}
 
-				if (emptyMaskData) {
+				if (emptyMaskData)
+				{
 					delete[] emptyMaskData;
 					emptyMaskData = nullptr;
 				}
 
-				if (result_image) {
+				if (result_image)
+				{
 					free(result_image);
 					result_image = nullptr;
 				}
 
-				if (sd_context) {
+				if (sd_context)
+				{
 					free_sd_ctx(sd_context);
 					sd_context = nullptr;
 				}
 
 				return true;
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception &e)
+			{
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
 				// Clean up resources
-				if (inputData) {
+				if (inputData)
+				{
 					stbi_image_free(inputData);
 					inputData = nullptr;
 				}
 
-				if (maskData) {
+				if (maskData)
+				{
 					stbi_image_free(maskData);
 					maskData = nullptr;
 				}
 
-				if (emptyMaskData) {
+				if (emptyMaskData)
+				{
 					delete[] emptyMaskData;
 					emptyMaskData = nullptr;
 				}
 
-				if (result_image) {
+				if (result_image)
+				{
 					free(result_image);
 					result_image = nullptr;
 				}
 
-				if (sd_context) {
+				if (sd_context)
+				{
 					free_sd_ctx(sd_context);
 					sd_context = nullptr;
 				}
@@ -845,11 +934,13 @@ namespace Utils {
 			}
 		}
 
-		static bool RunUpscaling(const nlohmann::json& metadata, std::string fullPath) {
-			upscaler_ctx_t* upscaler_context = nullptr;
-			unsigned char* inputData = nullptr;
+		static bool RunUpscaling(const nlohmann::json &metadata, std::string fullPath)
+		{
+			upscaler_ctx_t *upscaler_context = nullptr;
+			unsigned char *inputData = nullptr;
 
-			try {
+			try
+			{
 				// Extract parameters from metadata
 				std::string inputImagePath = "";
 				std::string modelPath = Utils::FilePaths::upscaleDir;
@@ -864,50 +955,54 @@ namespace Utils {
 				std::cout << metadata.dump(2) << std::endl;
 
 				// Parse metadata to extract parameters
-				if (metadata.contains("components") && metadata["components"].is_array()) {
-					for (const auto& comp : metadata["components"]) {
+				if (metadata.contains("components") && metadata["components"].is_array())
+				{
+					for (const auto &comp : metadata["components"])
+					{
 						// Input image path
-						if (comp.contains("InputImage")) {
+						if (comp.contains("InputImage"))
+						{
 							nlohmann::json inputImageData;
 							inputImageData = comp["InputImage"];
 
-							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null()
-								&& !inputImageData["filePath"].get<std::string>().empty()) {
+							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null() && !inputImageData["filePath"].get<std::string>().empty())
+							{
 								inputImagePath = inputImageData["filePath"].get<std::string>();
 								std::cout << "Found input path: " << inputImagePath << std::endl;
 							}
 						}
 
 						// Output settings
-						if (comp.contains("OutputImage")) {
+						if (comp.contains("OutputImage"))
+						{
 							nlohmann::json outputImageData;
 							outputImageData = comp["OutputImage"];
 
-							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null()
-								&& !outputImageData["filePath"].get<std::string>().empty()) {
+							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null() && !outputImageData["filePath"].get<std::string>().empty())
+							{
 								outputPath = outputImageData["filePath"].get<std::string>();
 								std::cout << "Found output path: " << outputPath << std::endl;
 							}
 
-							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null()
-								&& !outputImageData["fileName"].get<std::string>().empty()) {
+							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null() && !outputImageData["fileName"].get<std::string>().empty())
+							{
 								outputFilename = outputImageData["fileName"].get<std::string>();
 								std::cout << "Found output filename: " << outputFilename << std::endl;
 							}
 						}
 
 						// Esrgan component
-						if (comp.contains("Esrgan")) {
+						if (comp.contains("Esrgan"))
+						{
 							nlohmann::json esrganData;
 							esrganData = comp["Esrgan"];
 
-
-							if (esrganData.contains("modelPath") && !esrganData["modelPath"].is_null()
-								&& !esrganData["modelPath"].get<std::string>().empty()) {
+							if (esrganData.contains("modelPath") && !esrganData["modelPath"].is_null() && !esrganData["modelPath"].get<std::string>().empty())
+							{
 								modelPath = esrganData["modelPath"];
 							}
-							else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null()
-								&& !esrganData["modelName"].get<std::string>().empty()) {
+							else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null() && !esrganData["modelName"].get<std::string>().empty())
+							{
 								std::string modelName = esrganData["modelName"].get<std::string>();
 								modelPath = (std::filesystem::path(Utils::FilePaths::upscaleDir) / modelName).string();
 							}
@@ -920,7 +1015,8 @@ namespace Utils {
 						}
 
 						// Sampler component
-						if (comp.contains("Sampler")) {
+						if (comp.contains("Sampler"))
+						{
 							nlohmann::json samplerData;
 							samplerData = comp["Sampler"];
 
@@ -931,11 +1027,13 @@ namespace Utils {
 				}
 
 				// Validate parameters
-				if (inputImagePath.empty()) {
+				if (inputImagePath.empty())
+				{
 					throw std::runtime_error("Input image path is empty!");
 				}
 
-				if (modelPath.empty()) {
+				if (modelPath.empty())
+				{
 					throw std::runtime_error("ESRGAN model path is empty!");
 				}
 
@@ -943,14 +1041,15 @@ namespace Utils {
 				int inputWidth, inputHeight, inputChannels;
 				std::cout << "Loading input image from: " << inputImagePath << std::endl;
 				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 0);
-				if (!inputData) {
+				if (!inputData)
+				{
 					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
-						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+										(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
 					throw std::runtime_error(error);
 				}
 
 				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
-					<< " with " << inputChannels << " channels" << std::endl;
+						  << " with " << inputChannels << " channels" << std::endl;
 
 				// Create output path
 				std::filesystem::path outputDir(outputPath);
@@ -960,7 +1059,8 @@ namespace Utils {
 
 				// Initialize upscaler context
 				upscaler_context = new_upscaler_ctx(modelPath.c_str(), n_threads);
-				if (!upscaler_context) {
+				if (!upscaler_context)
+				{
 					throw std::runtime_error("Failed to initialize upscaler context!");
 				}
 
@@ -969,12 +1069,12 @@ namespace Utils {
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
 					static_cast<uint32_t>(inputChannels),
-					inputData
-				};
+					inputData};
 
 				// Perform upscaling
 				sd_image_t upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
-				if (!upscaled_image.data) {
+				if (!upscaled_image.data)
+				{
 					throw std::runtime_error("Upscaling failed - no output image produced");
 				}
 
@@ -982,12 +1082,16 @@ namespace Utils {
 
 				// Update metadata with correct output path before saving
 				nlohmann::json updatedMetadata = metadata;
-				for (auto& comp : updatedMetadata["components"]) {
-					if (comp.contains("OutputImage")) {
-						if (comp["OutputImage"].contains("OutputImage")) {
+				for (auto &comp : updatedMetadata["components"])
+				{
+					if (comp.contains("OutputImage"))
+					{
+						if (comp["OutputImage"].contains("OutputImage"))
+						{
 							comp["OutputImage"]["OutputImage"]["filePath"] = uniqueFilePath;
 						}
-						else {
+						else
+						{
 							comp["OutputImage"]["filePath"] = uniqueFilePath;
 						}
 					}
@@ -995,18 +1099,19 @@ namespace Utils {
 
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
-					upscaled_image.channel, metadata, fullPath);
+						  upscaled_image.channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-
 				// Cleanup resources
-				if (inputData) {
+				if (inputData)
+				{
 					stbi_image_free(inputData);
 					inputData = nullptr;
 				}
 
 				// Free the upscaled image if needed
-				if (upscaled_image.data) {
+				if (upscaled_image.data)
+				{
 					free(upscaled_image.data);
 				}
 
@@ -1016,16 +1121,19 @@ namespace Utils {
 
 				return true;
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception &e)
+			{
 				std::cerr << "Exception during upscaling: " << e.what() << std::endl;
 
 				// Clean up resources
-				if (inputData) {
+				if (inputData)
+				{
 					stbi_image_free(inputData);
 					inputData = nullptr;
 				}
 
-				if (upscaler_context) {
+				if (upscaler_context)
+				{
 					free_upscaler_ctx(upscaler_context);
 					upscaler_context = nullptr;
 				}
@@ -1033,27 +1141,87 @@ namespace Utils {
 				return false;
 			}
 		}
+		// Replace the SaveImage function in your SDcppUtils.hpp with this corrected version
 
-		static void SaveImage(const unsigned char* data, int width, int height, int channels,
-			const nlohmann::json& metadata, std::string fullPath) {
-			try {
-
-				// Save file
-				if (!Utils::ImageUtils::SaveImage(
-					fullPath, width, height, channels, data)) {
-					std::cerr << "Failed to save image: " << fullPath << std::endl;
+		static void SaveImage(const unsigned char *data, int width, int height, int channels,
+							  const nlohmann::json &metadata, const std::string &fullPath)
+		{
+			try
+			{
+				// Validate input parameters
+				if (!data)
+				{
+					throw std::runtime_error("Image data is null");
 				}
 
-				// Save metadata to the PNG
-				Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+				if (width <= 0 || height <= 0)
+				{
+					throw std::runtime_error("Invalid image dimensions: " + std::to_string(width) + "x" + std::to_string(height));
+				}
 
-				std::cout << "Image saved successfully: \"" << fullPath << "\"" << std::endl;
+				std::string outputPath = fullPath;
+				if (outputPath.empty())
+				{
+					outputPath = Utils::FilePaths::defaultProjectPath + "/AniStudio_output.png";
+					std::cout << "Empty output path, using default: " << outputPath << std::endl;
+				}
+
+				// Ensure the path is absolute and valid
+				std::filesystem::path outputFilePath(outputPath);
+
+				// If path is relative, make it relative to default project path
+				if (outputFilePath.is_relative())
+				{
+					outputFilePath = std::filesystem::path(Utils::FilePaths::defaultProjectPath) / outputFilePath;
+					outputPath = outputFilePath.string();
+				}
+
+				// Ensure parent directory exists
+				std::filesystem::path parentDir = outputFilePath.parent_path();
+				if (!parentDir.empty())
+				{
+					std::error_code ec;
+					std::filesystem::create_directories(parentDir, ec);
+					if (ec)
+					{
+						throw std::runtime_error("Failed to create directory: " + parentDir.string() + " - " + ec.message());
+					}
+				}
+
+				// Validate that the directory is writable
+				if (!std::filesystem::exists(parentDir))
+				{
+					throw std::runtime_error("Directory does not exist after creation: " + parentDir.string());
+				}
+
+				// Save file
+				if (!Utils::ImageUtils::SaveImage(outputPath, width, height, channels, data))
+				{
+					throw std::runtime_error("Failed to save image to: " + outputPath);
+				}
+
+				// Save metadata to the PNG (only if file was saved successfully)
+				try
+				{
+					Utils::PngMetadata::WriteMetadataToPNG(outputPath, metadata);
+				}
+				catch (const std::exception &e)
+				{
+					std::cerr << "Warning: Failed to write metadata to PNG: " << e.what() << std::endl;
+					// Don't throw here, image was saved successfully
+				}
+
+				std::cout << "Image saved successfully: " << outputPath << std::endl;
 			}
-			catch (const std::filesystem::filesystem_error& e) {
-				std::cerr << "Error creating directory: " << e.what() << '\n';
+			catch (const std::filesystem::filesystem_error &e)
+			{
+				std::cerr << "Filesystem error in SaveImage: " << e.what() << std::endl;
+				throw;
 			}
-			catch (const std::exception& e) {
-				std::cerr << "Exception in SaveImage: " << e.what() << '\n';
+			catch (const std::exception &e)
+			{
+				std::cerr << "Exception in SaveImage: " << e.what() << std::endl;
+				throw;
 			}
 		}
 	};

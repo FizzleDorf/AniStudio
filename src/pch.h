@@ -1,6 +1,19 @@
 #pragma once
 
-// Standard library
+// Platform-specific includes
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#include <shellapi.h>
+#endif
+
+// Standard library headers
 #include <iostream>
 #include <memory>
 #include <utility>
@@ -27,44 +40,18 @@
 #include <cassert>
 #include <filesystem>
 #include <variant>
-
-// Platform-specific includes
-#ifdef _WIN32
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#include <commdlg.h>
-#include <shellapi.h>
-#endif
+#include <typeindex>
+#include <type_traits>
 
 // Essential third-party libraries
 #include "nlohmann/json.hpp"
 
-// OpenGL and graphics
-#include <GL/glew.h>
-
-// ImGui - Essential for plugin GUI development
-#include <imgui.h>
-
-// GLM for math
+// Math library
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-// GLFW for window management (only if available)
-#ifdef GLFW_VERSION
-#include <GLFW/glfw3.h>
-#else
-	// Try to include it, but don't fail if not available
-#pragma warning(push)
-#pragma warning(disable: 4996)
-#include <GLFW/glfw3.h>
-#pragma warning(pop)
-#endif
-
-// Common utilities for plugins
+// Common type aliases
 using json = nlohmann::json;
+
+#include "OpenGLWrapper.hpp"
