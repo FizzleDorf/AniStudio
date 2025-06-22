@@ -7,16 +7,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Required parameters from the build script
-if(NOT DEFINED ANISTUDIO_BUILD_DIR)
-    message(FATAL_ERROR "ANISTUDIO_BUILD_DIR must be defined. Use the build script!")
-endif()
-
-if(NOT DEFINED ANISTUDIO_PLUGIN_DIR)
-    message(FATAL_ERROR "ANISTUDIO_PLUGIN_DIR must be defined. Use the build script!")
-endif()
+# FIGURE OUT THE FUCKING PATHS OURSELVES
+get_filename_component(PLUGIN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
+get_filename_component(ANISTUDIO_ROOT "${PLUGIN_SOURCE_DIR}/../.." ABSOLUTE)
+set(ANISTUDIO_BUILD_DIR "${ANISTUDIO_ROOT}/build")
+set(ANISTUDIO_PLUGIN_DIR "${CMAKE_CURRENT_BINARY_DIR}")
 
 message(STATUS "ExamplePlugin configuration:")
+message(STATUS "  Plugin source: ${PLUGIN_SOURCE_DIR}")
+message(STATUS "  AniStudio root: ${ANISTUDIO_ROOT}")
 message(STATUS "  AniStudio build dir: ${ANISTUDIO_BUILD_DIR}")
 message(STATUS "  Plugin output dir: ${ANISTUDIO_PLUGIN_DIR}")
 
@@ -29,148 +28,63 @@ else()
     message(FATAL_ERROR "Conan toolchain not found at: ${CONAN_TOOLCHAIN_FILE}")
 endif()
 
-# Now find packages using Conan's configuration
-find_package(OpenCV REQUIRED)
-find_package(glfw3 REQUIRED)
-find_package(GLEW REQUIRED)
+# Include the AniStudio plugin helper
+set(ANISTUDIO_PLUGIN_CMAKE "${ANISTUDIO_BUILD_DIR}/../cmake/AniStudioPlugin.cmake")
+if(EXISTS "${ANISTUDIO_PLUGIN_CMAKE}")
+    include("${ANISTUDIO_PLUGIN_CMAKE}")
+    message(STATUS "Using AniStudio plugin helper: ${ANISTUDIO_PLUGIN_CMAKE}")
+else()
+    message(FATAL_ERROR "AniStudioPlugin.cmake not found at: ${ANISTUDIO_PLUGIN_CMAKE}")
+endif()
 
 # Create the plugin as a shared library
 add_library(${PROJECT_NAME} SHARED
     ExamplePlugin.cpp
 )
 
-# Set plugin properties
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CXX_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-    CXX_EXTENSIONS OFF
-    POSITION_INDEPENDENT_CODE ON
-)
+# Use the AniStudio plugin setup function to configure everything
+setup_anistudio_plugin(${PROJECT_NAME})
 
-# Platform-specific plugin setup
-if(WIN32)
-    # Windows DLL setup
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${ANISTUDIO_PLUGIN_DIR}
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG ${ANISTUDIO_PLUGIN_DIR}
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE ${ANISTUDIO_PLUGIN_DIR}
-        SUFFIX ".dll"
-    )
-    
-    target_compile_definitions(${PROJECT_NAME} PRIVATE
-		"PLUGIN_EXPORTS"
-		"ANI_CORE_API="
-		"_CRT_SECURE_NO_WARNINGS"
-)
-else()
-    # Linux/Mac shared library setup  
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY ${ANISTUDIO_PLUGIN_DIR}
-        LIBRARY_OUTPUT_DIRECTORY_DEBUG ${ANISTUDIO_PLUGIN_DIR}
-        LIBRARY_OUTPUT_DIRECTORY_RELEASE ${ANISTUDIO_PLUGIN_DIR}
-        PREFIX "lib"
-        SUFFIX ".so"
-    )
-    
-    target_compile_definitions(${PROJECT_NAME} PRIVATE
-        "PLUGIN_API=__attribute__((visibility(\"default\")))"
-        "ANI_CORE_API="
-    )
-endif()
-
-# Add ALL the include directories that the plugin needs
-target_include_directories(${PROJECT_NAME} PRIVATE 
-    ${CONAN_INCLUDE_DIRS}
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS/Base
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS/Systems
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS/Components
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS/Components/SDCPPComponents
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS/Components/ImageComponents
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/ECS/Components/VideoComponents
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/GUI
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/GUI/Base
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/Plugins
-    ${ANISTUDIO_BUILD_DIR}/../AniStudio/utils
+# Add missing ImGui include directory that the helper forgot
+target_include_directories(${PROJECT_NAME} PRIVATE
     ${ANISTUDIO_BUILD_DIR}/../external/imgui
-    ${ANISTUDIO_BUILD_DIR}/../external/nlohmann_json
-    ${ANISTUDIO_BUILD_DIR}/../external/glm
-    ${ANISTUDIO_BUILD_DIR}/../external/stable-diffusion.cpp
+    ${ANISTUDIO_BUILD_DIR}/../external/imgui/backends
 )
 
-# Link to external libraries from the main project build
-# First, try to find the built libraries in the AniStudio build directory
-set(IMGUI_LIB_PATH "${ANISTUDIO_BUILD_DIR}/lib")
-set(IMGUI_BIN_PATH "${ANISTUDIO_BUILD_DIR}/bin")
+# Link to required libraries that the helper is missing
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    ${ANISTUDIO_CORE_LIB}
+    ${IMGUI_LIBRARY}
+)
 
-# Link to the ImGui library built with AniStudio
-if(WIN32)
-    # On Windows, look for the .lib file
-    find_library(IMGUI_LIBRARY 
-        NAMES ImGui
-        PATHS ${IMGUI_LIB_PATH}
-        NO_DEFAULT_PATH
-    )
-    
-    if(IMGUI_LIBRARY)
-        message(STATUS "Found ImGui library: ${IMGUI_LIBRARY}")
-        target_link_libraries(${PROJECT_NAME} PRIVATE ${IMGUI_LIBRARY})
-    else()
-        message(WARNING "ImGui library not found in ${IMGUI_LIB_PATH}")
-    endif()
-else()
-    # On Linux/Mac, look for the .a or .so file
-    find_library(IMGUI_LIBRARY 
-        NAMES ImGui libImGui
-        PATHS ${IMGUI_LIB_PATH}
-        NO_DEFAULT_PATH
-    )
-    
-    if(IMGUI_LIBRARY)
-        message(STATUS "Found ImGui library: ${IMGUI_LIBRARY}")
-        target_link_libraries(${PROJECT_NAME} PRIVATE ${IMGUI_LIBRARY})
-    else()
-        message(WARNING "ImGui library not found in ${IMGUI_LIB_PATH}")
-    endif()
-endif()
-
-# Also try to find other AniStudio libraries
-find_library(ANISTUDIO_CORE_LIBRARY 
-    NAMES AniStudioCore
-    PATHS ${IMGUI_LIB_PATH}
+# Find and link ImGui library manually since the helper failed
+find_library(IMGUI_LIB
+    NAMES ImGui
+    PATHS ${ANISTUDIO_BUILD_DIR}/lib
     NO_DEFAULT_PATH
 )
 
-if(ANISTUDIO_CORE_LIBRARY)
-    message(STATUS "Found AniStudioCore library: ${ANISTUDIO_CORE_LIBRARY}")
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${ANISTUDIO_CORE_LIBRARY})
+if(IMGUI_LIB)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${IMGUI_LIB})
+    message(STATUS "Linked ImGui: ${IMGUI_LIB}")
 else()
-    message(WARNING "AniStudioCore library not found in ${IMGUI_LIB_PATH}")
+    message(FATAL_ERROR "ImGui library not found in ${ANISTUDIO_BUILD_DIR}/lib")
 endif()
 
-# Link Conan libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE 
-    ${CONAN_LIBS}
-    GLEW::GLEW
-    glfw
-    opencv::opencv
+# OVERRIDE: Disable PCH completely for plugins to avoid include path issues
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    DISABLE_PRECOMPILE_HEADERS ON
 )
 
-# Set up PCH after include directories are configured
-set(PCH_FILE "${ANISTUDIO_BUILD_DIR}/../AniStudio/pch.h")
-if(EXISTS "${PCH_FILE}")
-    target_precompile_headers(${PROJECT_NAME} PRIVATE "${PCH_FILE}")
-    message(STATUS "Using PCH file: ${PCH_FILE}")
-else()
-    message(WARNING "PCH file not found at ${PCH_FILE}, building without PCH")
-endif()
+# Clear any PCH that might have been set by the helper function
+set_property(TARGET ${PROJECT_NAME} PROPERTY PRECOMPILE_HEADERS "")
 
-# Debug information
-message(STATUS "ExamplePlugin configured successfully")
-message(STATUS "Output will be: ${ANISTUDIO_PLUGIN_DIR}/${PROJECT_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
-message(STATUS "Looking for libraries in: ${IMGUI_LIB_PATH}")
+# Copy the plugin manifest to the build directory
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/plugin.json
+    ${ANISTUDIO_PLUGIN_DIR}/plugin.json
+    COPYONLY
+)
 
-# Print all found libraries for debugging
-get_target_property(LINKED_LIBS ${PROJECT_NAME} LINK_LIBRARIES)
-message(STATUS "Plugin will link to: ${LINKED_LIBS}")
+message(STATUS "ExamplePlugin configuration complete")
+message(STATUS "Plugin will be built to: ${ANISTUDIO_PLUGIN_DIR}")

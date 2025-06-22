@@ -1,494 +1,26 @@
-#include "BasePlugin.hpp"
-#include "BaseComponent.hpp"
-#include "BaseView.hpp"
-#include "EntityManager.hpp"
-#include "ViewManager.hpp"
-#include "PluginRegistry.hpp"
-#include "PluginInterface.hpp"
-#include "PluginImGuiHelper.hpp"
-#include <imgui.h>
+//============================================================================
+// ExamplePlugin.cpp - WORKING Implementation with Registry Sync
+//============================================================================
+
+#include "ExamplePlugin.hpp"
 #include <iostream>
-#include <nlohmann/json.hpp>
 
-// Global function pointers to host managers and context
-static ECS::EntityManager* (*g_getHostEntityManager)() = nullptr;
-static GUI::ViewManager* (*g_getHostViewManager)() = nullptr;
-static ImGuiContext* (*g_getHostImGuiContext)() = nullptr;
-static ImGuiMemAllocFunc(*g_getHostAllocFunc)() = nullptr;
-static ImGuiMemFreeFunc(*g_getHostFreeFunc)() = nullptr;
-static void* (*g_getHostUserData)() = nullptr;
+// Global storage for host function pointers
+static GetEntityManagerFunc g_getEntityManager = nullptr;
+static GetViewManagerFunc g_getViewManager = nullptr;
+static GetImGuiContextFunc g_getImGuiContext = nullptr;
 
-static std::atomic<bool> g_managersValid{ false };
-static std::atomic<bool> g_contextValid{ false };
-static std::atomic<bool> g_shutdownInProgress{ false };
+// Global storage for host managers (set during initialization)
+static ECS::EntityManager* g_hostEntityManager = nullptr;
+static GUI::ViewManager* g_hostViewManager = nullptr;
 
-// CRITICAL: Track our plugin state for cleanup
-static std::atomic<bool> g_pluginInitialized{ false };
-
-// Helper functions
-ECS::EntityManager* GetHostEntityManagerSafe() {
-	if (g_shutdownInProgress.load() || !g_managersValid.load()) {
-		return nullptr;
-	}
-	if (g_getHostEntityManager) {
-		return g_getHostEntityManager();
-	}
-	return nullptr;
-}
-
-GUI::ViewManager* GetHostViewManagerSafe() {
-	if (g_shutdownInProgress.load() || !g_managersValid.load()) {
-		return nullptr;
-	}
-	if (g_getHostViewManager) {
-		return g_getHostViewManager();
-	}
-	return nullptr;
-}
-
-bool EnsureImGuiContext() {
-	if (g_shutdownInProgress.load() || !g_contextValid.load()) {
-		return false;
-	}
-
-	// Use the ImGuiContextManager for proper context handling
-	return Plugin::ImGuiContextManager::EnsureContext();
-}
-
-// CRITICAL: ImGui cleanup function using the proper context manager
-void CleanupPluginImGuiState() {
-	if (!Plugin::ImGuiContextManager::IsContextValid()) {
-		std::cout << "No ImGui context available for cleanup" << std::endl;
-		return;
-	}
-
-	std::cout << "Cleaning up plugin ImGui state..." << std::endl;
-
-	// Use the context manager's safe wrapper for cleanup operations
-	Plugin::ImGuiContextManager::SafeImGuiCall([]() {
-		// Only use the most basic public API functions
-		// Clear keyboard focus (this is the safest and most effective)
-		ImGui::SetKeyboardFocusHere(-1);
-
-		// Clear focus multiple times to ensure it sticks
-		for (int i = 0; i < 5; i++) {
-			ImGui::SetKeyboardFocusHere(-1);
-		}
-
-		return true; // Return something for the template
-	});
-
-	std::cout << "Plugin ImGui state cleanup complete" << std::endl;
-}
-
-// UNIFIED plugin entry point with all parameters
-extern "C" PLUGIN_API void SetManagerGetters(
-	ECS::EntityManager* (*entityGetter)(),
-	GUI::ViewManager* (*viewGetter)(),
-	ImGuiContext* (*contextGetter)(),
-	ImGuiMemAllocFunc(*allocGetter)(),
-	ImGuiMemFreeFunc(*freeGetter)(),
-	void* (*userDataGetter)()) {
-
-	std::cout << "SetManagerGetters called in plugin with unified interface" << std::endl;
-
-	// Set our custom globals
-	g_getHostEntityManager = entityGetter;
-	g_getHostViewManager = viewGetter;
-	g_getHostImGuiContext = contextGetter;
-	g_getHostAllocFunc = allocGetter;
-	g_getHostFreeFunc = freeGetter;
-	g_getHostUserData = userDataGetter;
-
-	g_managersValid.store(true);
-	g_contextValid.store(contextGetter != nullptr);
-	g_shutdownInProgress.store(false);
-
-	// Call the Plugin namespace function to set up PluginRegistry
-	Plugin::SetManagerGetters(entityGetter, viewGetter, contextGetter, allocGetter, freeGetter, userDataGetter);
-
-	// CRITICAL: Set up the ImGuiContextManager with the host context
-	if (contextGetter) {
-		ImGuiContext* context = contextGetter();
-		ImGuiMemAllocFunc allocFunc = allocGetter ? allocGetter() : nullptr;
-		ImGuiMemFreeFunc freeFunc = freeGetter ? freeGetter() : nullptr;
-		void* userData = userDataGetter ? userDataGetter() : nullptr;
-
-		Plugin::ImGuiContextManager::SetSharedContext(context, allocFunc, freeFunc, userData);
-		std::cout << "Plugin ImGui context manager initialized successfully" << std::endl;
-	}
-	else {
-		std::cout << "Warning: No ImGui context getter provided" << std::endl;
-	}
-
-	std::cout << "SetManagerGetters called in plugin with unified interface - COMPLETE" << std::endl;
-}
-
-namespace ExamplePlugin {
-
-	struct ExampleComponent : public ECS::BaseComponent {
-		int counter = 0;
-
-		ExampleComponent() {
-			compName = "ExampleComponent";
-			compCategory = "Example";
-		}
-
-		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j;
-			j["compName"] = compName;
-			j[compName] = {
-				{"counter", counter}
-			};
-			return j;
-		}
-
-		virtual void Deserialize(const nlohmann::json& j) override {
-			ECS::BaseComponent::Deserialize(j);
-			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-			else {
-				componentData = j;
-			}
-			if (componentData.contains("counter"))
-				counter = componentData["counter"];
-		}
-	};
-
-	class ExampleView : public GUI::BaseView {
-	private:
-		ECS::EntityID testEntity = 0;
-		bool isInitialized = false;
-		bool cleanedUp = false;
-		int renderCount = 0;
-		std::string windowName = "Example Plugin View###ExamplePluginWindow";
-
-	public:
-		ExampleView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
-			viewName = "ExampleView";
-			std::cout << "ExampleView constructor called" << std::endl;
-		}
-
-		~ExampleView() {
-			std::cout << "ExampleView destructor called" << std::endl;
-			SafeCleanup();
-		}
-
-		void SafeCleanup() {
-			if (cleanedUp) return;
-			cleanedUp = true;
-
-			std::cout << "ExampleView::SafeCleanup() called" << std::endl;
-
-			// CRITICAL: Clean up ImGui state FIRST using the context manager
-			CleanupPluginImGuiState();
-
-			if (!g_shutdownInProgress.load() && g_managersValid.load()) {
-				try {
-					auto* hostMgr = GetHostEntityManagerSafe();
-					if (hostMgr && testEntity != 0 && hostMgr->GetEntitiesSignatures().count(testEntity)) {
-						hostMgr->DestroyEntity(testEntity);
-						std::cout << "ExampleView: Cleaned up test entity" << std::endl;
-					}
-				}
-				catch (...) {
-					// Ignore cleanup errors
-				}
-			}
-			testEntity = 0;
-		}
-
-		void Init() override {
-			std::cout << "ExampleView::Init() called" << std::endl;
-
-			try {
-				auto* hostMgr = GetHostEntityManagerSafe();
-				if (!hostMgr) {
-					std::cerr << "ExampleView::Init - no host EntityManager" << std::endl;
-					return;
-				}
-
-				testEntity = hostMgr->AddNewEntity();
-				hostMgr->AddComponent<ExampleComponent>(testEntity);
-
-				auto& comp = hostMgr->GetComponent<ExampleComponent>(testEntity);
-				comp.counter = 42;
-
-				isInitialized = true;
-				std::cout << "ExampleView initialized with entity " << testEntity << std::endl;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error in ExampleView::Init: " << e.what() << std::endl;
-				isInitialized = false;
-			}
-		}
-
-		void Render() override {
-			renderCount++;
-
-			// CRITICAL: Use the ImGuiContextManager for safe rendering
-			if (!Plugin::ImGuiContextManager::IsContextValid()) {
-				if (renderCount % 60 == 0) {
-					std::cout << "ExampleView::Render - No ImGui context available (render #" << renderCount << ")" << std::endl;
-				}
-				return;
-			}
-
-			if (g_shutdownInProgress.load() || !g_managersValid.load()) {
-				return;
-			}
-
-			// Use the safe wrapper for all ImGui operations
-			Plugin::ImGuiContextManager::SafeImGuiCall([this]() {
-				bool windowOpen = true;
-				if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
-					ImGui::Text("=== EXAMPLE PLUGIN VIEW ===");
-					ImGui::Text("ImGui Context: %p", ImGui::GetCurrentContext());
-					ImGui::Text("Render Count: %d", renderCount);
-
-					if (!isInitialized) {
-						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Plugin not properly initialized!");
-						ImGui::End();
-						return true;
-					}
-
-					auto* hostMgr = GetHostEntityManagerSafe();
-					if (!hostMgr) {
-						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Host EntityManager not available!");
-						ImGui::End();
-						return true;
-					}
-
-					ImGui::Text("Host EntityManager: %p", hostMgr);
-					ImGui::Text("Plugin EntityManager: %p", &mgr);
-					ImGui::Separator();
-
-					ImGui::Text("Test Entity ID: %zu", testEntity);
-
-					if (testEntity != 0 && hostMgr->GetEntitiesSignatures().count(testEntity)) {
-						if (hostMgr->HasComponent<ExampleComponent>(testEntity)) {
-							auto& comp = hostMgr->GetComponent<ExampleComponent>(testEntity);
-							ImGui::Text("Counter value: %d", comp.counter);
-
-							if (ImGui::Button("Increment Counter")) {
-								comp.counter++;
-								std::cout << "Incremented counter to: " << comp.counter << std::endl;
-							}
-
-							ImGui::SameLine();
-							if (ImGui::Button("Reset Counter")) {
-								comp.counter = 0;
-							}
-
-							ImGui::SameLine();
-							if (ImGui::Button("Add 10")) {
-								comp.counter += 10;
-							}
-						}
-						else {
-							ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Test entity missing ExampleComponent!");
-						}
-					}
-					else {
-						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Test entity not found!");
-					}
-
-					ImGui::Separator();
-
-					ImGui::Spacing();
-					if (ImGui::Button("Create New Entity with ExampleComponent")) {
-						try {
-							ECS::EntityID newEntity = hostMgr->AddNewEntity();
-							hostMgr->AddComponent<ExampleComponent>(newEntity);
-							auto& comp = hostMgr->GetComponent<ExampleComponent>(newEntity);
-							comp.counter = 100;
-							std::cout << "Created new entity " << newEntity << " with ExampleComponent" << std::endl;
-						}
-						catch (const std::exception& e) {
-							std::cerr << "Error creating entity: " << e.what() << std::endl;
-						}
-					}
-
-					// Show all entities with ExampleComponent
-					ImGui::Separator();
-					ImGui::Text("All entities with ExampleComponent:");
-
-					auto entities = hostMgr->GetAllEntities();
-					int exampleCompCount = 0;
-					for (auto entity : entities) {
-						if (hostMgr->GetEntitiesSignatures().count(entity) == 0) {
-							continue;
-						}
-
-						if (hostMgr->HasComponent<ExampleComponent>(entity)) {
-							exampleCompCount++;
-							auto& exampleComp = hostMgr->GetComponent<ExampleComponent>(entity);
-
-							ImGui::Text("Entity ID: %zu, Counter: %d", entity, exampleComp.counter);
-
-							ImGui::PushID(static_cast<int>(entity));
-							if (ImGui::Button("Reset")) {
-								exampleComp.counter = 0;
-							}
-							ImGui::SameLine();
-							if (ImGui::Button("+1")) {
-								exampleComp.counter++;
-							}
-							ImGui::SameLine();
-							if (ImGui::Button("-1")) {
-								exampleComp.counter--;
-							}
-							ImGui::PopID();
-						}
-					}
-
-					ImGui::Text("Total entities with ExampleComponent: %d", exampleCompCount);
-				}
-				ImGui::End();
-				return true;
-			});
-		}
-
-		void Update(const float deltaT) override {
-			// Update logic here if needed
-		}
-	};
-
-} // namespace ExamplePlugin
-
-class ExamplePluginImpl : public Plugin::BasePlugin {
-private:
-	std::string m_name = "ExamplePlugin";
-	std::string m_version = "1.0.0";
-	std::string m_description = "A fixed example plugin with proper ImGui context sharing and cleanup";
-	GUI::ViewListID m_viewID = 0;
-	bool m_initialized = false;
-
-public:
-	ExamplePluginImpl() {
-		std::cout << "ExamplePluginImpl constructor" << std::endl;
-	}
-
-	~ExamplePluginImpl() override {
-		std::cout << "ExamplePluginImpl destructor" << std::endl;
-		if (m_initialized) {
-			Shutdown();
-		}
-	}
-
-	bool Initialize(ECS::EntityManager& entityManager, GUI::ViewManager& viewManager) override {
-		try {
-			std::cout << "=== INITIALIZING EXAMPLE PLUGIN ===" << std::endl;
-
-			// Get the host managers directly via our function pointers
-			auto* hostEM = GetHostEntityManagerSafe();
-			auto* hostVM = GetHostViewManagerSafe();
-
-			if (!hostEM || !hostVM) {
-				std::cerr << "CRITICAL: Failed to get host managers!" << std::endl;
-				std::cerr << "hostEM: " << hostEM << ", hostVM: " << hostVM << std::endl;
-				return false;
-			}
-
-			std::cout << "Got host managers - EM: " << hostEM << ", VM: " << hostVM << std::endl;
-
-			// Verify ImGui context is available
-			if (!Plugin::ImGuiContextManager::IsContextValid()) {
-				std::cerr << "WARNING: ImGui context not available during plugin initialization" << std::endl;
-			}
-
-			std::cout << "Registering component with host EntityManager..." << std::endl;
-			// Register component with HOST EntityManager directly
-			hostEM->RegisterComponentName<ExamplePlugin::ExampleComponent>("Plugin_ExampleComponent");
-			std::cout << "ExampleComponent registered successfully" << std::endl;
-
-			std::cout << "Registering view with host ViewManager..." << std::endl;
-			// Register view with HOST ViewManager directly
-			hostVM->RegisterViewType<ExamplePlugin::ExampleView>("Plugin_ExampleView");
-			std::cout << "ExampleView registered successfully" << std::endl;
-
-			std::cout << "Creating view with host ViewManager..." << std::endl;
-			// Create view using HOST ViewManager and EntityManager
-			m_viewID = hostVM->CreateView();
-			hostVM->AddView<ExamplePlugin::ExampleView>(m_viewID, ExamplePlugin::ExampleView(*hostEM));
-			hostVM->GetView<ExamplePlugin::ExampleView>(m_viewID).Init();
-
-			if (m_viewID == 0) {
-				std::cerr << "Failed to create ExampleView!" << std::endl;
-				return false;
-			}
-
-			std::cout << "View created with ID: " << m_viewID << std::endl;
-
-			SetInitialized(true);
-			m_initialized = true;
-			g_pluginInitialized.store(true);
-
-			std::cout << "=== EXAMPLE PLUGIN INITIALIZED SUCCESSFULLY ===" << std::endl;
-			return true;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "EXCEPTION in ExamplePlugin::Initialize: " << e.what() << std::endl;
-			return false;
-		}
-	}
-
-	void Shutdown() override {
-		if (!m_initialized) return;
-
-		try {
-			std::cout << "=== SHUTTING DOWN EXAMPLE PLUGIN ===" << std::endl;
-			g_shutdownInProgress.store(true);
-			g_pluginInitialized.store(false);
-
-			// CRITICAL: Clean up ImGui state BEFORE destroying views
-			CleanupPluginImGuiState();
-
-			if (m_viewID != 0 && g_managersValid.load()) {
-				auto* hostVM = GetHostViewManagerSafe();
-				if (hostVM) {
-					try {
-						auto& view = hostVM->GetView<ExamplePlugin::ExampleView>(m_viewID);
-						view.SafeCleanup();
-					}
-					catch (...) {
-						// View might not exist
-					}
-
-					hostVM->DestroyView(m_viewID);
-					m_viewID = 0;
-					std::cout << "ExampleView destroyed" << std::endl;
-				}
-			}
-
-			SetInitialized(false);
-			m_initialized = false;
-			std::cout << "=== EXAMPLE PLUGIN SHUTDOWN COMPLETE ===" << std::endl;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Exception during shutdown: " << e.what() << std::endl;
-		}
-	}
-
-	void Update(float deltaTime) override {
-		if (!g_shutdownInProgress.load() && m_initialized) {
-			// Update logic if needed
-		}
-	}
-
-	const std::string& GetName() const override { return m_name; }
-	const std::string& GetVersion() const override { return m_version; }
-	const std::string& GetDescription() const override { return m_description; }
-	bool HasSettings() const override { return false; }
-	std::vector<std::string> GetDependencies() const override { return {}; }
-};
+// Registry synchronization state
+static bool g_registrySynced = false;
 
 // Plugin entry points
 extern "C" PLUGIN_API Plugin::BasePlugin* CreatePlugin() {
 	try {
-		std::cout << "=== CREATE PLUGIN CALLED ===" << std::endl;
+		std::cout << "=== EXAMPLE PLUGIN CREATE START ===" << std::endl;
 		auto* plugin = new ExamplePluginImpl();
 		std::cout << "ExamplePluginImpl created successfully" << std::endl;
 		return plugin;
@@ -501,20 +33,17 @@ extern "C" PLUGIN_API Plugin::BasePlugin* CreatePlugin() {
 
 extern "C" PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin) {
 	try {
-		std::cout << "=== DESTROY PLUGIN CALLED ===" << std::endl;
+		std::cout << "=== EXAMPLE PLUGIN DESTROY START ===" << std::endl;
 		if (plugin) {
-			g_managersValid.store(false);
-			g_shutdownInProgress.store(true);
-
-			// CRITICAL: Final ImGui cleanup before plugin destruction
-			CleanupPluginImGuiState();
-
-			// CRITICAL: Clean up the ImGuiContextManager
-			Plugin::ImGuiContextManager::Cleanup();
-
 			delete plugin;
 			std::cout << "Plugin deleted successfully" << std::endl;
 		}
+
+		// Clear global references
+		g_hostEntityManager = nullptr;
+		g_hostViewManager = nullptr;
+		g_registrySynced = false;
+
 	}
 	catch (const std::exception& e) {
 		std::cerr << "Exception in DestroyPlugin: " << e.what() << std::endl;
@@ -526,5 +55,328 @@ extern "C" PLUGIN_API const char* GetPluginName() {
 }
 
 extern "C" PLUGIN_API const char* GetPluginVersion() {
-	return "1.0.0";
+	return "2.0.0";
 }
+
+extern "C" PLUGIN_API const char* GetPluginDescription() {
+	return "Example plugin with perfect hot reload support";
+}
+
+extern "C" PLUGIN_API bool GetPluginCanHotReload() {
+	return true;
+}
+
+// CRITICAL: Perfect registry synchronization function
+void SyncWithHostRegistry(ECS::EntityManager* hostMgr) {
+	if (!hostMgr) {
+		std::cerr << "SyncWithHostRegistry: Host EntityManager is null!" << std::endl;
+		return;
+	}
+
+	if (g_registrySynced) {
+		std::cout << "Registry already synced, skipping..." << std::endl;
+		return;
+	}
+
+	std::cout << "=== PERFECT REGISTRY SYNC START ===" << std::endl;
+
+	try {
+		// STEP 1: Get complete host registry state
+		auto hostComponentNames = hostMgr->GetAllRegisteredComponentNames();
+		auto hostSystemNames = hostMgr->GetAllRegisteredSystemNames();
+
+		std::cout << "Host registry state:" << std::endl;
+		std::cout << "  Components: " << hostComponentNames.size() << std::endl;
+		std::cout << "  Systems: " << hostSystemNames.size() << std::endl;
+
+		// STEP 2: Completely reset plugin registries
+		ECS::ComponentTypeRegistry::Reset();
+		ECS::SystemTypeRegistry::Reset();
+
+		std::cout << "Plugin registries reset" << std::endl;
+
+		// STEP 3: Import ALL host component registrations with exact IDs
+		for (const auto& componentName : hostComponentNames) {
+			ECS::ComponentTypeID hostTypeId = hostMgr->GetComponentTypeIdByName(componentName);
+			ECS::ComponentTypeRegistry::ForceRegisterWithId(componentName, hostTypeId);
+			std::cout << "  Synced component: " << componentName << " -> ID " << hostTypeId << std::endl;
+		}
+
+		// STEP 4: Import ALL host system registrations with exact IDs
+		for (const auto& systemName : hostSystemNames) {
+			ECS::SystemTypeID hostTypeId = hostMgr->GetSystemTypeIdByName(systemName);
+			ECS::SystemTypeRegistry::ForceRegisterWithId(systemName, hostTypeId);
+			std::cout << "  Synced system: " << systemName << " -> ID " << hostTypeId << std::endl;
+		}
+
+		// STEP 5: Synchronize next type IDs to prevent conflicts
+		ECS::ComponentTypeID maxCompId = 0;
+		for (const auto& componentName : hostComponentNames) {
+			ECS::ComponentTypeID hostTypeId = hostMgr->GetComponentTypeIdByName(componentName);
+			if (hostTypeId > maxCompId) {
+				maxCompId = hostTypeId;
+			}
+		}
+
+		ECS::SystemTypeID maxSysId = 0;
+		for (const auto& systemName : hostSystemNames) {
+			ECS::SystemTypeID hostTypeId = hostMgr->GetSystemTypeIdByName(systemName);
+			if (hostTypeId > maxSysId) {
+				maxSysId = hostTypeId;
+			}
+		}
+
+		ECS::ComponentTypeRegistry::SetNextTypeID(maxCompId + 1);
+		ECS::SystemTypeRegistry::SetNextTypeID(maxSysId + 1);
+
+		std::cout << "Set plugin component nextTypeID to: " << (maxCompId + 1) << std::endl;
+		std::cout << "Set plugin system nextTypeID to: " << (maxSysId + 1) << std::endl;
+
+		// STEP 6: Verify synchronization
+		std::cout << "=== REGISTRY SYNC VERIFICATION ===" << std::endl;
+		for (const auto& componentName : hostComponentNames) {
+			ECS::ComponentTypeID hostId = hostMgr->GetComponentTypeIdByName(componentName);
+			ECS::ComponentTypeID pluginId = ECS::ComponentTypeRegistry::GetIDByName(componentName);
+
+			if (hostId != pluginId) {
+				std::cerr << "SYNC ERROR: " << componentName
+					<< " - Host ID: " << hostId << ", Plugin ID: " << pluginId << std::endl;
+				return;
+			}
+		}
+
+		g_registrySynced = true;
+		std::cout << "=== REGISTRY SYNC COMPLETE & VERIFIED ===" << std::endl;
+
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Exception during registry sync: " << e.what() << std::endl;
+		g_registrySynced = false;
+	}
+}
+
+// Manager getter setup function
+extern "C" PLUGIN_API void SetManagerGetters(
+	GetEntityManagerFunc entityGetter,
+	GetViewManagerFunc viewGetter,
+	GetImGuiContextFunc contextGetter,
+	GetImGuiAllocFunc allocGetter,
+	GetImGuiFreeFunc freeGetter,
+	GetImGuiUserDataFunc userDataGetter) {
+
+	std::cout << "=== SET MANAGER GETTERS CALLED ===" << std::endl;
+
+	// Store the function pointers
+	g_getEntityManager = entityGetter;
+	g_getViewManager = viewGetter;
+	g_getImGuiContext = contextGetter;
+
+	// Set up ImGui context if provided
+	if (contextGetter) {
+		ImGuiContext* hostContext = contextGetter();
+		if (hostContext) {
+			ImGui::SetCurrentContext(hostContext);
+			std::cout << "ImGui context set successfully" << std::endl;
+		}
+	}
+
+	// CRITICAL: Sync registries immediately when we get access to host managers
+	if (entityGetter) {
+		ECS::EntityManager* hostMgr = entityGetter();
+		if (hostMgr) {
+			SyncWithHostRegistry(hostMgr);
+		}
+	}
+
+	std::cout << "Manager getters stored and registry synced" << std::endl;
+}
+
+// Helper functions for cross-DLL manager access
+namespace Plugin {
+	ECS::EntityManager* GetHostEntityManagerViaPointer() {
+		return g_getEntityManager ? g_getEntityManager() : g_hostEntityManager;
+	}
+
+	GUI::ViewManager* GetHostViewManagerViaPointer() {
+		return g_getViewManager ? g_getViewManager() : g_hostViewManager;
+	}
+
+	ImGuiContext* GetHostImGuiContextViaPointer() {
+		return g_getImGuiContext ? g_getImGuiContext() : nullptr;
+	}
+}
+
+// PLUGIN IMPLEMENTATION
+ExamplePluginImpl::ExamplePluginImpl() {
+	m_name = "ExamplePlugin";
+	m_version = "2.0.0";
+	m_description = "Example plugin with perfect hot reload support";
+	m_initialized = false;
+	m_viewID = 0;
+}
+
+bool ExamplePluginImpl::Initialize(ECS::EntityManager& entityManager, GUI::ViewManager& viewManager) {
+	try {
+		std::cout << "=== EXAMPLE PLUGIN INITIALIZE START ===" << std::endl;
+
+		// Store the host managers
+		g_hostEntityManager = &entityManager;
+		g_hostViewManager = &viewManager;
+
+		// Verify managers are valid
+		if (!&entityManager || !&viewManager) {
+			std::cerr << "ExamplePlugin: Invalid managers passed to Initialize!" << std::endl;
+			return false;
+		}
+
+		std::cout << "Using EntityManager: " << &entityManager << std::endl;
+		std::cout << "Using ViewManager: " << &viewManager << std::endl;
+
+		// Ensure registry is synced
+		if (!g_registrySynced) {
+			std::cout << "Registry not synced yet, syncing now..." << std::endl;
+			SyncWithHostRegistry(&entityManager);
+		}
+
+		if (!g_registrySynced) {
+			std::cerr << "Failed to sync registry!" << std::endl;
+			return false;
+		}
+
+		// CRITICAL: Verify component type registration
+		std::cout << "=== COMPONENT REGISTRATION VERIFICATION ===" << std::endl;
+
+		// Check what our component type would get
+		ECS::ComponentTypeID pluginCompTypeId = ECS::CompType<ExamplePlugin::ExampleComponent>();
+		std::cout << "Plugin CompType<ExampleComponent>() returns: " << pluginCompTypeId << std::endl;
+
+		if (pluginCompTypeId >= ECS::MAX_COMPONENT_COUNT) {
+			std::cerr << "ERROR: Component type got invalid ID!" << std::endl;
+			return false;
+		}
+
+		// Register our component with the HOST's entity manager
+		try {
+			if (!entityManager.IsComponentNameRegistered("ExampleComponent")) {
+				entityManager.RegisterComponentName<ExamplePlugin::ExampleComponent>("ExampleComponent");
+				std::cout << "Component registered successfully with HOST" << std::endl;
+			}
+			else {
+				std::cout << "Component already registered in HOST, skipping" << std::endl;
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Failed to register component with HOST: " << e.what() << std::endl;
+			return false;
+		}
+
+		// CRITICAL: Verify the registration worked correctly
+		ECS::ComponentTypeID hostTypeId = entityManager.GetComponentTypeIdByName("ExampleComponent");
+		ECS::ComponentTypeID currentPluginTypeId = ECS::CompType<ExamplePlugin::ExampleComponent>();
+
+		std::cout << "=== REGISTRATION VERIFICATION ===" << std::endl;
+		std::cout << "Host registry type ID for ExampleComponent: " << hostTypeId << std::endl;
+		std::cout << "Plugin CompType<ExampleComponent>() now returns: " << currentPluginTypeId << std::endl;
+
+		if (hostTypeId != currentPluginTypeId) {
+			std::cerr << "ERROR: Type ID mismatch after registration!" << std::endl;
+			std::cerr << "Host=" << hostTypeId << ", Plugin=" << currentPluginTypeId << std::endl;
+			return false;
+		}
+
+		// Create view
+		try {
+			m_viewID = viewManager.CreateView();
+			if (m_viewID == 0) {
+				std::cerr << "Failed to create view!" << std::endl;
+				return false;
+			}
+
+			ExamplePlugin::ExampleView exampleView(entityManager);
+			viewManager.AddView<ExamplePlugin::ExampleView>(m_viewID, std::move(exampleView));
+			viewManager.GetView<ExamplePlugin::ExampleView>(m_viewID).Init();
+
+			std::cout << "View created successfully with ID: " << m_viewID << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error creating view: " << e.what() << std::endl;
+			return false;
+		}
+
+		SetInitialized(true);
+		m_initialized = true;
+
+		std::cout << "=== EXAMPLE PLUGIN INITIALIZE COMPLETE ===" << std::endl;
+		return true;
+
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Exception during ExamplePlugin initialization: " << e.what() << std::endl;
+		return false;
+	}
+}
+
+void ExamplePluginImpl::Shutdown() {
+	try {
+		std::cout << "=== EXAMPLE PLUGIN SHUTDOWN START ===" << std::endl;
+
+		if (m_initialized && m_viewID != 0) {
+			auto* viewMgr = GetViewManager();
+			if (viewMgr) {
+				try {
+					if (viewMgr->HasView<ExamplePlugin::ExampleView>(m_viewID)) {
+						viewMgr->RemoveView<ExamplePlugin::ExampleView>(m_viewID);
+					}
+					viewMgr->DestroyView(m_viewID);
+					m_viewID = 0;
+					std::cout << "View removed successfully" << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Error removing view: " << e.what() << std::endl;
+				}
+			}
+		}
+
+		SetInitialized(false);
+		m_initialized = false;
+
+		std::cout << "=== EXAMPLE PLUGIN SHUTDOWN COMPLETE ===" << std::endl;
+
+	}
+	catch (const std::exception& e) {
+		std::cerr << "Exception during ExamplePlugin shutdown: " << e.what() << std::endl;
+	}
+}
+
+void ExamplePluginImpl::Update(float deltaTime) {
+	if (m_initialized) {
+		// Plugin update logic here
+	}
+}
+
+void ExamplePluginImpl::SaveState() {
+	std::cout << "ExamplePlugin: Saving state for hot reload..." << std::endl;
+	// Save any state that should persist across reloads
+}
+
+void ExamplePluginImpl::LoadState() {
+	std::cout << "ExamplePlugin: Loading state after hot reload..." << std::endl;
+	// Restore any state that should persist across reloads
+}
+
+void ExamplePluginImpl::OnPreReload() {
+	std::cout << "ExamplePlugin: Preparing for hot reload..." << std::endl;
+	SaveState();
+}
+
+void ExamplePluginImpl::OnPostReload() {
+	std::cout << "ExamplePlugin: Completed hot reload..." << std::endl;
+	LoadState();
+}
+
+const std::string& ExamplePluginImpl::GetName() const { return m_name; }
+const std::string& ExamplePluginImpl::GetVersion() const { return m_version; }
+const std::string& ExamplePluginImpl::GetDescription() const { return m_description; }
+bool ExamplePluginImpl::HasSettings() const { return false; }
+bool ExamplePluginImpl::CanReload() const { return true; }
+std::vector<std::string> ExamplePluginImpl::GetDependencies() const { return {}; }

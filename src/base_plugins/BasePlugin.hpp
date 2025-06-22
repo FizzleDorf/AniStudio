@@ -1,3 +1,7 @@
+//============================================================================
+// BasePlugin.hpp - Base Plugin Interface - CRASH FIXED
+//============================================================================
+
 #pragma once
 
 #include "PluginAPI.hpp"
@@ -52,7 +56,7 @@ namespace Plugin {
 		virtual void SaveState() {}
 		virtual void LoadState() {}
 
-		// Plugin dependencies (optional)
+		// Plugin dependencies (optional) - these should match the manifest
 		virtual std::vector<std::string> GetDependencies() const {
 			return {};
 		}
@@ -67,14 +71,31 @@ namespace Plugin {
 		void SetInitialized(bool state) { initialized = state; }
 
 		// Protected access to managers (set during initialization)
-		ECS::EntityManager* GetEntityManager() const { return entityManager; }
-		GUI::ViewManager* GetViewManager() const { return viewManager; }
+		ECS::EntityManager* GetEntityManager() const {
+			// Return stored pointer - this should be set by SetManagers before Initialize
+			return entityManager;
+		}
+
+		GUI::ViewManager* GetViewManager() const {
+			// Return stored pointer - this should be set by SetManagers before Initialize
+			return viewManager;
+		}
 
 	public:
-		// Internal method for PluginManager to set managers (must be public for cross-DLL access)
+		// CRITICAL: This method MUST be called by PluginManager BEFORE Initialize
+		// It sets up the manager pointers that the plugin will use
 		void SetManagers(ECS::EntityManager* eMgr, GUI::ViewManager* vMgr) {
+			if (!eMgr || !vMgr) {
+				std::cerr << "BasePlugin::SetManagers - NULL POINTERS PASSED!" << std::endl;
+				std::cerr << "EntityManager: " << eMgr << ", ViewManager: " << vMgr << std::endl;
+				return;
+			}
+
 			entityManager = eMgr;
 			viewManager = vMgr;
+
+			std::cout << "BasePlugin::SetManagers - Managers set successfully" << std::endl;
+			std::cout << "EntityManager: " << entityManager << ", ViewManager: " << viewManager << std::endl;
 		}
 
 	private:
@@ -84,17 +105,3 @@ namespace Plugin {
 	};
 
 } // namespace Plugin
-
-// Required C interface that all plugins must implement
-extern "C" {
-	// Plugin creation/destruction - REQUIRED
-	PLUGIN_API Plugin::BasePlugin* CreatePlugin();
-	PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin);
-
-	// Plugin information - REQUIRED
-	PLUGIN_API const char* GetPluginName();
-	PLUGIN_API const char* GetPluginVersion();
-
-	// Plugin capabilities - OPTIONAL (defaults provided)
-	// Don't declare these here to avoid conflicts, let plugins define them if needed
-}

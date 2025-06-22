@@ -5,15 +5,15 @@ call venv\Scripts\activate.bat
 :: Navigate to the build directory if it exists
 if exist build (
     cd build
-    
+
     :: Delete specific directories if they exist
     if exist Release rmdir /s /q Release
     if exist bin rmdir /s /q bin
     if exist external rmdir /s /q external
     if exist x64 rmdir /s /q x64
     
-    :: Delete all files directly in the build directory
-    del /q *
+    :: Delete all files directly in the build directory (but NOT directories)
+    for %%f in (*) do del /q "%%f"
 
     :: Go back to the parent directory
     cd ..
@@ -22,7 +22,7 @@ if exist build (
 )
 
 :: Create build directory if it was deleted or does not exist
-mkdir build
+if not exist build mkdir build
 cd build
 
 :: Configure with CMake (only build AniStudio)

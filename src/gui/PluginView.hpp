@@ -1,62 +1,51 @@
-/*
-	Fixed PluginView.hpp - Properly handles plugin management UI
-*/
+//============================================================================
+// PluginView.hpp - FIXED Plugin Management UI View
+//============================================================================
 
 #pragma once
 
 #include "GUI.h"
 #include "PluginManager.hpp"
-#include <imgui.h>
-#include <vector>
 #include <string>
 
-namespace GUI {
+namespace Plugin {
 
-	class PluginView : public BaseView {
+	class PluginView : public GUI::BaseView {
 	public:
-		struct Notification {
-			std::string message;
-			ImVec4 color;
-			float timeRemaining;
-		};
-
-		PluginView(ECS::EntityManager& entityMgr, Plugin::PluginManager& pluginMgr);
+		explicit PluginView(ECS::EntityManager& entityMgr, PluginManager& pluginMgr);
 		~PluginView() override;
 
-		// BaseView overrides
 		void Init() override;
 		void Render() override;
-		void Update(const float deltaT) override;
-
-		// Serialization
-		nlohmann::json Serialize() const override;
-		void Deserialize(const nlohmann::json& j) override;
+		void Update(float deltaTime) override;
 
 	private:
-		// Reference to the plugin manager
-		Plugin::PluginManager& pluginManager;
+		PluginManager& pluginManager;
 
-		// UI state
+		// UI State
 		std::string selectedPlugin;
-		std::vector<std::string> loadedPlugins;
-		std::vector<Plugin::PluginManager::PluginInfo> cachedPluginInfo;
-		std::vector<Notification> notifications;
-		float refreshTimer = 0.0f;
+		bool showOnlyLoaded = false;
+		std::string searchFilter;
 
-		// Event handlers
-		void OnPluginLoaded(const std::string& name, bool isReload);
-		void OnPluginUnloaded(const std::string& name);
-
-		// UI rendering methods
-		void RenderDirectoryControls();
-		void RenderHotReloadControls();
-		void RenderPluginStats();
+		// UI sections
+		void RenderToolbar();
 		void RenderPluginList();
 		void RenderPluginDetails();
-		void RenderNotifications();
 
-		// Utility methods
-		void RefreshPluginList();
+		// Plugin operations
+		void LoadSelectedPlugin();
+		void UnloadSelectedPlugin();
+		void ReloadSelectedPlugin();
+		void RemoveSelectedPlugin();
+
+		// UI helpers
+		void RenderStatusBadge(const std::string& status, const ImVec4& color);
+
+		// Error handling - FIXED: Change to take no parameters to match usage
+		void ShowErrorModal();
+		bool showErrorModal = false;
+		std::string errorTitle;
+		std::string errorMessage;
 	};
 
-} // namespace GUI
+} // namespace Plugin

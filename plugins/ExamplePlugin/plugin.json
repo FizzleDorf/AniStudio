@@ -1,0 +1,16 @@
+{
+	"name": "ExamplePlugin",
+	"version" : "1.0.0",
+	"description" : "An example plugin demonstrating AniStudio plugin development",
+	"author" : "AniStudio Developer",
+	"minEngineVersion" : "1.0.0",
+	"canHotReload" : true,
+	"dependencies" : [],
+	"conflicts" : [],
+	"metadata" : {
+		"category": "Example",
+		"tags" : ["tutorial", "example", "template"],
+		"website" : "https://github.com/anistudio/example-plugin",
+		"documentation" : "https://docs.anistudio.dev/plugins/example"
+	}
+}

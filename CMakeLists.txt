@@ -131,6 +131,7 @@ find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(FFmpeg REQUIRED)
 find_package(pybind11 REQUIRED)
+find_package(semver REQUIRED)
 
 include_directories(${GLFW_INCLUDE_DIRS})
 
@@ -256,6 +257,7 @@ if(BUILD_ANISTUDIO)
         ffmpeg::avutil
         ffmpeg::swscale
         pybind11::embed
+		semver::semver
     )
 
     if(ZEP_AVAILABLE)
@@ -336,6 +338,7 @@ target_link_libraries(AniStudioCore PRIVATE
     ffmpeg::avutil
     ffmpeg::swscale
     pybind11::embed
+	semver::semver
 )
 
 if(ZEP_AVAILABLE)

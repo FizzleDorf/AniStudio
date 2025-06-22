@@ -1,112 +1,115 @@
-/*
- * COMPLETELY FIXED PluginRegistry.cpp
- * - Ensures plugins use host managers, not their own
- * - Proper fallback to function pointers for cross-DLL access
- * - Debug output to track manager usage
- * - Added missing function definitions
- */
+//============================================================================
+// PluginRegistry.cpp - FIXED Plugin Registration System Implementation
+//============================================================================
 
 #include "PluginRegistry.hpp"
-#include "PluginInterface.hpp"
-#include "EntityManager.hpp"
-#include "ViewManager.hpp"
 #include <iostream>
 
 namespace Plugin {
 
-	// Static member definitions for this binary's instance
+	// Static member definitions
 	ECS::EntityManager* PluginRegistry::s_entityManager = nullptr;
 	GUI::ViewManager* PluginRegistry::s_viewManager = nullptr;
-	std::unordered_map<std::string, PluginRegistry::PluginCreator> PluginRegistry::s_pluginCreators;
+	std::unordered_map<std::string, PluginCreator> PluginRegistry::s_pluginCreators;
 	std::unordered_map<std::string, std::vector<std::string>> PluginRegistry::s_pluginComponents;
 	std::unordered_map<std::string, std::vector<std::string>> PluginRegistry::s_pluginSystems;
 	std::unordered_map<std::string, std::vector<std::string>> PluginRegistry::s_pluginViews;
 
-	// Registry for managing plugin-registered components, systems, and views
 	void PluginRegistry::Initialize(ECS::EntityManager* entityMgr, GUI::ViewManager* viewMgr) {
-		std::cout << "PluginRegistry::Initialize called with EntityManager: " << entityMgr
-			<< ", ViewManager: " << viewMgr << std::endl;
+		std::cout << "PluginRegistry::Initialize called" << std::endl;
+
+		if (!entityMgr || !viewMgr) {
+			std::cerr << "PluginRegistry::Initialize - NULL MANAGERS PASSED!" << std::endl;
+			return;
+		}
 
 		s_entityManager = entityMgr;
 		s_viewManager = viewMgr;
 
-		std::cout << "PluginRegistry initialized - EntityManager: " << s_entityManager
-			<< ", ViewManager: " << s_viewManager << std::endl;
+		std::cout << "PluginRegistry initialized with EntityManager: " << entityMgr
+			<< ", ViewManager: " << viewMgr << std::endl;
 	}
 
-	void PluginRegistry::SetManagers(ECS::EntityManager* entityMgr, GUI::ViewManager* viewMgr) {
-		std::cout << "PluginRegistry::SetManagers called with EntityManager: " << entityMgr
-			<< ", ViewManager: " << viewMgr << std::endl;
+	void PluginRegistry::Shutdown() {
+		std::cout << "PluginRegistry::Shutdown called" << std::endl;
 
-		s_entityManager = entityMgr;
-		s_viewManager = viewMgr;
+		// Clear all static data
+		s_pluginCreators.clear();
+		s_pluginComponents.clear();
+		s_pluginSystems.clear();
+		s_pluginViews.clear();
+
+		s_entityManager = nullptr;
+		s_viewManager = nullptr;
+
+		std::cout << "PluginRegistry shutdown complete" << std::endl;
+	}
+
+	void PluginRegistry::RegisterPlugin(const std::string& name, PluginCreator creator) {
+		std::cout << "PluginRegistry: Registering plugin: " << name << std::endl;
+		s_pluginCreators[name] = creator;
+	}
+
+	const std::unordered_map<std::string, PluginCreator>& PluginRegistry::GetPluginCreators() {
+		return s_pluginCreators;
 	}
 
 	ECS::EntityID PluginRegistry::CreateEntity(ECS::EntityManager* entityMgr) {
 		ECS::EntityManager* mgr = entityMgr ? entityMgr : GetEntityManager();
-		std::cout << "PluginRegistry::CreateEntity called - using EntityManager: " << mgr << std::endl;
-
 		if (!mgr) {
-			std::cerr << "PluginRegistry: EntityManager not available!" << std::endl;
+			std::cerr << "PluginRegistry: EntityManager not available for entity creation!" << std::endl;
 			return 0;
 		}
 
-		return mgr->AddNewEntity();
+		try {
+			return mgr->AddNewEntity();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "PluginRegistry: Failed to create entity: " << e.what() << std::endl;
+			return 0;
+		}
 	}
 
 	std::vector<std::string> PluginRegistry::GetRegisteredComponents(ECS::EntityManager* entityMgr) {
 		ECS::EntityManager* mgr = entityMgr ? entityMgr : GetEntityManager();
 		if (!mgr) {
+			std::cerr << "PluginRegistry: EntityManager not available!" << std::endl;
 			return {};
 		}
 
-		return mgr->GetAllRegisteredComponentNames();
+		try {
+			return mgr->GetAllRegisteredComponentNames();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "PluginRegistry: Failed to get registered components: " << e.what() << std::endl;
+			return {};
+		}
 	}
 
 	ECS::EntityManager* PluginRegistry::GetEntityManager() {
-		// CRITICAL: First try the function pointer (for plugins accessing main exe managers)
-		if (auto mgr = GetHostEntityManagerViaPointer()) {
-			std::cout << "PluginRegistry::GetEntityManager via getter - returning HOST: " << mgr << std::endl;
-			return mgr;
+		if (!s_entityManager) {
+			std::cerr << "PluginRegistry: EntityManager not initialized!" << std::endl;
 		}
-
-		// Fallback to local static (for main exe)
-		std::cout << "PluginRegistry::GetEntityManager via static - returning LOCAL: " << s_entityManager << std::endl;
 		return s_entityManager;
 	}
 
 	GUI::ViewManager* PluginRegistry::GetViewManager() {
-		// CRITICAL: First try the function pointer (for plugins accessing main exe managers)
-		if (auto mgr = GetHostViewManagerViaPointer()) {
-			std::cout << "PluginRegistry::GetViewManager via getter - returning HOST: " << mgr << std::endl;
-			return mgr;
+		if (!s_viewManager) {
+			std::cerr << "PluginRegistry: ViewManager not initialized!" << std::endl;
 		}
-
-		// Fallback to local static (for main exe)
-		std::cout << "PluginRegistry::GetViewManager via static - returning LOCAL: " << s_viewManager << std::endl;
 		return s_viewManager;
 	}
 
 	void PluginRegistry::CleanupPlugin(const std::string& pluginName) {
-		// This would be used to track and cleanup plugin-specific registrations
-		// For now, we'll just log the cleanup
 		std::cout << "PluginRegistry: Cleaning up plugin: " << pluginName << std::endl;
-	}
 
-	// MISSING FUNCTION DEFINITIONS - ADD THESE
-	
-	// These are weak symbols that will be overridden by the main application
-	// They provide a way for plugins to access the host's managers
-	__attribute__((weak)) ECS::EntityManager* GetHostEntityManagerViaPointer() {
-		// This should be implemented in the main application
-		// Return nullptr if not implemented (fallback to local static)
-		return nullptr;
-	}
+		// Remove plugin-specific registrations
+		s_pluginComponents.erase(pluginName);
+		s_pluginSystems.erase(pluginName);
+		s_pluginViews.erase(pluginName);
+		s_pluginCreators.erase(pluginName);
 
-	__attribute__((weak)) GUI::ViewManager* GetHostViewManagerViaPointer() {
-		// This should be implemented in the main application
-		// Return nullptr if not implemented (fallback to local static)
-		return nullptr;
+		std::cout << "PluginRegistry: Cleanup complete for plugin: " << pluginName << std::endl;
 	}
 
 } // namespace Plugin

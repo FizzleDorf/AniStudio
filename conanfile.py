@@ -33,6 +33,9 @@ class AniStudio(ConanFile):
         self.requires("exiv2/0.28.1")
         self.requires("ffmpeg/4.4.4")
         
+        # versioning
+        self.requires("neargye-semver/0.3.1")
+
         # zep dependencies
         self.requires("spdlog/1.11.0")
 
