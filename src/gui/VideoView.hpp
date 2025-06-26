@@ -22,6 +22,7 @@
 #define VIDEOVIEW_HPP
 
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
 #include "../events/Events.hpp"

@@ -20,6 +20,7 @@
 
 #pragma once
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include "pch.h"
 #include <components.h>
 #include <SDcppSystem.hpp>

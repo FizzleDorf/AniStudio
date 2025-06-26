@@ -3,7 +3,7 @@
 	   d88888          Y8P d88P  Y88b 888                  888 Y8P
 	  d88P888              Y88b.      888                  888
 	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+	d88P  888 888 "88b 888     "Y8888 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
@@ -21,19 +21,10 @@
 #ifndef ENGINE_HPP
 #define ENGINE_HPP
 
-#include "ECS.h"
-#include "GUI.h"
-#include "AllViews.h"
-#include "PluginManager.hpp"
+#include "AniStudio.hpp" // The AniStudio API also contains the AniEngine
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
-
-using namespace ECS;
-using namespace GUI;
-using namespace Plugin;
+#include <memory>
 
 namespace ANI {
 
@@ -54,29 +45,33 @@ namespace ANI {
 		void Draw();
 		void Quit();
 
-		// Dependency accessors
-		EntityManager &GetEntityManager() { return mgr; }
-		ViewManager &GetViewManager() { return viewManager; }
-		PluginManager &GetPluginManager() { return pluginManager; }
+		// Dependency accessors - delegate to StudioCore APIs
+		ECS::EntityManager &GetEntityManager();
+		GUI::ViewManager &GetViewManager();
+		Plugin::PluginManager &GetPluginManager();
 		GLFWwindow *Window() const { return window; }
 		bool Run() const { return run; }
 
 	private:
 		Engine();
 
-		// Core dependencies
-		EntityManager mgr;
-		ViewManager viewManager;
-		PluginManager pluginManager{ mgr, viewManager };
+		// Window/graphics management only
+		bool InitializeWindow();
+		void CleanupWindow();
+
+		// Window state
 		bool run;
 		GLFWwindow *window;
 		int videoWidth;
 		int videoHeight;
+
+		// FPS tracking
 		double fpsSum;
 		int frameCount;
 		double timeElapsed;
 	};
 
+	// Global callbacks for GLFW
 	void WindowCloseCallback(GLFWwindow *window);
 	extern Engine &Core;
 

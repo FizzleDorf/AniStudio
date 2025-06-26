@@ -22,6 +22,7 @@
 #include "Constants.hpp"
 #include "ECS.h"
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include "ImGuiFileDialog.h"
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"

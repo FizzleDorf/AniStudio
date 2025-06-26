@@ -20,6 +20,7 @@
 
 #pragma once
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include <components.h>
 #include <systems.h>
 

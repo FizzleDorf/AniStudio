@@ -1,7 +1,9 @@
 #include "Events.hpp"
 #include "AllViews.h"
 #include "PluginManager.hpp"
+#include "GUI.h"  // Add this include for ViewListID and GUI namespace
 #include <iostream>
+#include "../engine/Engine.hpp"
 
 namespace ANI {
 
@@ -14,7 +16,9 @@ namespace ANI {
 		glfwSetWindowCloseCallback(window, WindowCloseCallback);
 	}
 
-	void Events::QueueEvent(const Event &event) { eventQueue.push(event); }
+	void Events::QueueEvent(const Event &event) {
+		eventQueue.push(event);
+	}
 
 	void Events::Poll() {
 		// Poll and handle events (inputs, window resize, etc.)
@@ -23,11 +27,12 @@ namespace ANI {
 		// Process all pending events after polling
 		ProcessEvents();
 	}
-	static size_t debugID = 0;
-	static size_t settingsID = 0;
-	static size_t viewsID = 0;
-	static size_t pluginsID = 0;
-	static size_t helpID = 0;
+
+	static GUI::ViewListID debugID = 0;      // Add GUI:: namespace prefix
+	static GUI::ViewListID settingsID = 0;  // Add GUI:: namespace prefix
+	static GUI::ViewListID viewsID = 0;     // Add GUI:: namespace prefix
+	static GUI::ViewListID pluginsID = 0;   // Add GUI:: namespace prefix
+	static GUI::ViewListID helpID = 0;      // Add GUI:: namespace prefix
 
 	// Handle events based on its EventType
 	void Events::ProcessEvents() {
@@ -44,98 +49,85 @@ namespace ANI {
 
 			case EventType::OpenSettings: {
 				auto &vMgr = Core.GetViewManager();
-				ViewListID id = vMgr.CreateView();
-				vMgr.AddView<SettingsView>(id, SettingsView(Core.GetEntityManager()));
-				vMgr.GetView<SettingsView>(id).Init();
+				GUI::ViewListID id = vMgr.CreateView();
+				vMgr.AddView<GUI::SettingsView>(id, GUI::SettingsView(Core.GetEntityManager()));
+				vMgr.GetView<GUI::SettingsView>(id).Init();
 				settingsID = id;
 				break;
 			}
 
 			case EventType::CloseSettings: {
 				auto &vMgr = Core.GetViewManager();
-				auto views = vMgr.GetAllViews();
-
-				if (vMgr.HasView<SettingsView>(settingsID)) {
+				if (vMgr.HasView<GUI::SettingsView>(settingsID)) {
 					vMgr.DestroyView(settingsID);
 				}
-
 				break;
 			}
 
 			case EventType::OpenDebug: {
 				auto &vMgr = Core.GetViewManager();
-				ViewListID id = vMgr.CreateView();
-				vMgr.AddView<DebugView>(id, DebugView(Core.GetEntityManager()));
-				vMgr.GetView<DebugView>(id).Init();
+				GUI::ViewListID id = vMgr.CreateView();
+				vMgr.AddView<GUI::DebugView>(id, GUI::DebugView(Core.GetEntityManager()));
+				vMgr.GetView<GUI::DebugView>(id).Init();
 				debugID = id;
 				break;
 			}
+
 			case EventType::CloseDebug: {
 				auto &vMgr = Core.GetViewManager();
-				auto views = vMgr.GetAllViews();
-				for (auto view : views) {
-					if (vMgr.HasView<DebugView>(debugID)) {
-						vMgr.DestroyView(debugID);
-					}
+				if (vMgr.HasView<GUI::DebugView>(debugID)) {
+					vMgr.DestroyView(debugID);
 				}
 				break;
 			}
 
 			case EventType::OpenConvert: {
 				auto &vMgr = Core.GetViewManager();
-				ViewListID id = vMgr.CreateView();
-				vMgr.AddView<ConvertView>(id, ConvertView(Core.GetEntityManager()));
-				vMgr.GetView<ConvertView>(id).Init();
+				GUI::ViewListID id = vMgr.CreateView();
+				vMgr.AddView<GUI::ConvertView>(id, GUI::ConvertView(Core.GetEntityManager()));
+				vMgr.GetView<GUI::ConvertView>(id).Init();
 				viewsID = id;
 				break;
 			}
 
 			case EventType::CloseConvert: {
 				auto &vMgr = Core.GetViewManager();
-				auto views = vMgr.GetAllViews();
-				for (auto view : views) {
-					if (vMgr.HasView<ConvertView>(viewsID)) {
-						vMgr.DestroyView(viewsID);
-					}
+				if (vMgr.HasView<GUI::ConvertView>(viewsID)) {
+					vMgr.DestroyView(viewsID);
 				}
 				break;
 			}
 
 			case EventType::OpenViews: {
 				auto &vMgr = Core.GetViewManager();
-				ViewListID id = vMgr.CreateView();
-				vMgr.AddView<ViewListManagerView>(id, ViewListManagerView(Core.GetEntityManager(), vMgr));
-				vMgr.GetView<ViewListManagerView>(id).Init();
+				GUI::ViewListID id = vMgr.CreateView();
+				vMgr.AddView<GUI::ViewListManagerView>(id, GUI::ViewListManagerView(Core.GetEntityManager(), vMgr));
+				vMgr.GetView<GUI::ViewListManagerView>(id).Init();
 				viewsID = id;
 				break;
 			}
 
 			case EventType::CloseViews: {
 				auto &vMgr = Core.GetViewManager();
-				auto views = vMgr.GetAllViews();
-				for (auto view : views) {
-					if (vMgr.HasView<ViewListManagerView>(view)) {
-						vMgr.DestroyView(viewsID);
-					}
+				if (vMgr.HasView<GUI::ViewListManagerView>(viewsID)) {
+					vMgr.DestroyView(viewsID);
 				}
 				break;
 			}
+
 			case EventType::OpenPlugins: {
 				auto &vMgr = Core.GetViewManager();
 				auto id = vMgr.CreateView();
-				vMgr.AddView<PluginView>(id, PluginView(Core.GetEntityManager(), Core.GetPluginManager()));
-				vMgr.GetView<PluginView>(id).Init();
+				vMgr.AddView<GUI::PluginView>(id, GUI::PluginView(Core.GetEntityManager(), Core.GetPluginManager()));
+				vMgr.GetView<GUI::PluginView>(id).Init();
 				pluginsID = id;
 				break;
 			}
 
 			case EventType::ClosePlugins: {
 				auto &vMgr = Core.GetViewManager();
-				auto views = vMgr.GetAllViews();
-				for (auto view : views) {
-					if (vMgr.HasView<PluginView>(view)) {
-						vMgr.DestroyView(view);
-					}
+				if (vMgr.HasView<GUI::PluginView>(pluginsID)) {
+					vMgr.DestroyView(pluginsID);
 				}
 				break;
 			}
@@ -143,19 +135,16 @@ namespace ANI {
 			case EventType::OpenHelp: {
 				auto &vMgr = Core.GetViewManager();
 				auto id = vMgr.CreateView();
-				vMgr.AddView<HelpView>(id, HelpView(Core.GetEntityManager()));
-				vMgr.GetView<HelpView>(id).Init();
+				vMgr.AddView<GUI::HelpView>(id, GUI::HelpView(Core.GetEntityManager()));
+				vMgr.GetView<GUI::HelpView>(id).Init();
 				helpID = id;
 				break;
 			}
 
 			case EventType::CloseHelp: {
 				auto &vMgr = Core.GetViewManager();
-				auto views = vMgr.GetAllViews();
-				for (auto view : views) {
-					if (vMgr.HasView<HelpView>(helpID)) {
-						vMgr.DestroyView(helpID);
-					}
+				if (vMgr.HasView<GUI::HelpView>(helpID)) {
+					vMgr.DestroyView(helpID);
 				}
 				break;
 			}
@@ -215,6 +204,7 @@ namespace ANI {
 				}
 				break;
 			}
+
 			case EventType::PauseInference: {
 				auto sdcppSystem = Core.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
 				if (sdcppSystem) {
@@ -285,8 +275,9 @@ namespace ANI {
 				}
 				break;
 			}
+
 			default:
-				std::cerr << "Unknown event type" << std::endl; // Use cerr for errors
+				std::cerr << "Unknown event type" << std::endl;
 				break;
 			}
 		}

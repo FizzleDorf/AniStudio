@@ -15,91 +15,94 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
 #include "ECS.h"
 #include "GUI.h"
-#include "../engine/Engine.hpp"
 #include <systems.h>
 #include "FilePaths.hpp"
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>
 
+ // Forward declaration
+namespace ANI {
+	class Engine;
+	extern Engine &Core;
+	void WindowCloseCallback(GLFWwindow *window);  // Add this declaration
+}
+
 namespace ANI {
 
-enum class EventType {
-    // Application
-    Quit,
-    NewProject,
-    OpenProject,
+	enum class EventType {
+		// Application
+		Quit,
+		NewProject,
+		OpenProject,
 
-    // Menu Views
-    OpenSettings,
-    CloseSettings,
-    OpenDebug,
-    CloseDebug,
-    OpenConvert, 
-    CloseConvert,
-    OpenViews,
-    CloseViews,
-	OpenPlugins,
-	ClosePlugins,
-	OpenHelp,
-	CloseHelp,
+		// Menu Views
+		OpenSettings,
+		CloseSettings,
+		OpenDebug,
+		CloseDebug,
+		OpenConvert,
+		CloseConvert,
+		OpenViews,
+		CloseViews,
+		OpenPlugins,
+		ClosePlugins,
+		OpenHelp,
+		CloseHelp,
 
-    // Diffusion
-    InferenceRequest,
-    Img2ImgRequest,
-    UpscaleRequest,
-    T2VInferenceRequest,
-    ConvertToGGUF,
-    
-    // Queue Controls
-    ClearInferenceQueue,
-    PauseInference,
-    ResumeInference,
-    StopCurrentTask,
+		// Diffusion
+		InferenceRequest,
+		Img2ImgRequest,
+		UpscaleRequest,
+		T2VInferenceRequest,
+		ConvertToGGUF,
 
-    // IO Events
-    LoadImageEvent,
-    SaveImageEvent,
-    RemoveImageEvent,
+		// Queue Controls
+		ClearInferenceQueue,
+		PauseInference,
+		ResumeInference,
+		StopCurrentTask,
 
-    LoadVideoEvent,
-    SaveVideoEvent
-};
+		// IO Events
+		LoadImageEvent,
+		SaveImageEvent,
+		RemoveImageEvent,
 
-struct Event {
-    EventType type;
-    ECS::EntityID entityID;
-};
+		LoadVideoEvent,
+		SaveVideoEvent
+	};
 
-class Events {
-public:
-    ~Events();
-    Events(const Events &) = delete;
-    Events &operator=(const Events &) = delete;
+	struct Event {
+		EventType type;
+		ECS::EntityID entityID;
+	};
 
-    // Singleton reference
-    static Events &Ref() {
-        static Events instance; // Changed reference to instance for clarity
-        return instance;
-    }
+	class Events {
+	public:
+		~Events();
+		Events(const Events &) = delete;
+		Events &operator=(const Events &) = delete;
 
-    void Poll();
-    void Init(GLFWwindow *window);
-    void QueueEvent(const Event &event);
-    void ProcessEvents();
+		// Singleton reference
+		static Events &Ref() {
+			static Events instance; // Changed reference to instance for clarity
+			return instance;
+		}
 
-private:
-    Events(); // Constructor is private for singleton pattern
-    std::queue<Event> eventQueue;
+		void Poll();
+		void Init(GLFWwindow *window);
+		void QueueEvent(const Event &event);
+		void ProcessEvents();
 
-    // Static callback function for GLFW window close
-    // static void WindowCloseCallback(GLFWwindow *window) { Engine::Ref().Quit();}
-};
+	private:
+		Events(); // Constructor is private for singleton pattern
+		std::queue<Event> eventQueue;
+	};
 
 } // namespace ANI

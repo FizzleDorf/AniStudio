@@ -21,6 +21,7 @@
 // MenuBar.h
 #pragma once
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include "pch.h"
 
 namespace GUI {

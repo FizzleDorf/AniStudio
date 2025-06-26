@@ -1,90 +1,103 @@
-cmake_minimum_required(VERSION 3.12)
-cmake_policy(SET CMP0091 NEW)
+# CMakeLists.txt for ExamplePlugin - Simple approach that works with YOUR system
+cmake_minimum_required(VERSION 3.15)
 project(ExamplePlugin VERSION 1.0.0)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-# FIGURE OUT THE FUCKING PATHS OURSELVES
-get_filename_component(PLUGIN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
-get_filename_component(ANISTUDIO_ROOT "${PLUGIN_SOURCE_DIR}/../.." ABSOLUTE)
-set(ANISTUDIO_BUILD_DIR "${ANISTUDIO_ROOT}/build")
-set(ANISTUDIO_PLUGIN_DIR "${CMAKE_CURRENT_BINARY_DIR}")
-
-message(STATUS "ExamplePlugin configuration:")
-message(STATUS "  Plugin source: ${PLUGIN_SOURCE_DIR}")
-message(STATUS "  AniStudio root: ${ANISTUDIO_ROOT}")
-message(STATUS "  AniStudio build dir: ${ANISTUDIO_BUILD_DIR}")
-message(STATUS "  Plugin output dir: ${ANISTUDIO_PLUGIN_DIR}")
-
-# Include Conan toolchain from AniStudio build directory
-set(CONAN_TOOLCHAIN_FILE "${ANISTUDIO_BUILD_DIR}/conan/conan_toolchain.cmake")
-if(EXISTS "${CONAN_TOOLCHAIN_FILE}")
-    include("${CONAN_TOOLCHAIN_FILE}")
-    message(STATUS "Found and included Conan toolchain: ${CONAN_TOOLCHAIN_FILE}")
-else()
-    message(FATAL_ERROR "Conan toolchain not found at: ${CONAN_TOOLCHAIN_FILE}")
+# Platform-specific settings
+if(WIN32)
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
+    add_definitions(-DNOMINMAX)
 endif()
 
-# Include the AniStudio plugin helper
-set(ANISTUDIO_PLUGIN_CMAKE "${ANISTUDIO_BUILD_DIR}/../cmake/AniStudioPlugin.cmake")
-if(EXISTS "${ANISTUDIO_PLUGIN_CMAKE}")
-    include("${ANISTUDIO_PLUGIN_CMAKE}")
-    message(STATUS "Using AniStudio plugin helper: ${ANISTUDIO_PLUGIN_CMAKE}")
-else()
-    message(FATAL_ERROR "AniStudioPlugin.cmake not found at: ${ANISTUDIO_PLUGIN_CMAKE}")
+# Build configuration
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# Create the plugin as a shared library
-add_library(${PROJECT_NAME} SHARED
+# Auto-detect host paths
+get_filename_component(ANISTUDIO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+set(PLUGINS_OUTPUT_DIR "${ANISTUDIO_ROOT}/build/plugins")
+
+# Include directories - minimal, only what we need
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${ANISTUDIO_ROOT}/external/imgui                      # ImGui headers only
+)
+
+# Plugin source files
+set(PLUGIN_SOURCES
     ExamplePlugin.cpp
 )
 
-# Use the AniStudio plugin setup function to configure everything
-setup_anistudio_plugin(${PROJECT_NAME})
-
-# Add missing ImGui include directory that the helper forgot
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${ANISTUDIO_BUILD_DIR}/../external/imgui
-    ${ANISTUDIO_BUILD_DIR}/../external/imgui/backends
+# Create the plugin as a shared library
+add_library(${PROJECT_NAME} SHARED 
+    ${PLUGIN_SOURCES}
 )
 
-# Link to required libraries that the helper is missing
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    ${ANISTUDIO_CORE_LIB}
-    ${IMGUI_LIBRARY}
-)
-
-# Find and link ImGui library manually since the helper failed
-find_library(IMGUI_LIB
-    NAMES ImGui
-    PATHS ${ANISTUDIO_BUILD_DIR}/lib
-    NO_DEFAULT_PATH
-)
-
-if(IMGUI_LIB)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ${IMGUI_LIB})
-    message(STATUS "Linked ImGui: ${IMGUI_LIB}")
+# Platform-specific library naming and settings
+if(WIN32)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        SUFFIX ".dll"
+        PREFIX ""
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}
+    )
+elseif(APPLE)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        SUFFIX ".dylib"
+        PREFIX "lib"
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
 else()
-    message(FATAL_ERROR "ImGui library not found in ${ANISTUDIO_BUILD_DIR}/lib")
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        SUFFIX ".so"
+        PREFIX "lib"
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
 endif()
 
-# OVERRIDE: Disable PCH completely for plugins to avoid include path issues
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    DISABLE_PRECOMPILE_HEADERS ON
+# Compiler flags
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    IMGUI_DEFINE_MATH_OPERATORS
 )
 
-# Clear any PCH that might have been set by the helper function
-set_property(TARGET ${PROJECT_NAME} PROPERTY PRECOMPILE_HEADERS "")
+# Link only system libraries - no complex host dependencies
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME}
+        user32
+        kernel32
+    )
+elseif(APPLE)
+    target_link_libraries(${PROJECT_NAME})
+else()
+    target_link_libraries(${PROJECT_NAME}
+        dl
+        pthread
+    )
+endif()
 
-# Copy the plugin manifest to the build directory
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/plugin.json
-    ${ANISTUDIO_PLUGIN_DIR}/plugin.json
-    COPYONLY
+# Create plugins output directory
+if(NOT EXISTS ${PLUGINS_OUTPUT_DIR})
+    file(MAKE_DIRECTORY ${PLUGINS_OUTPUT_DIR})
+endif()
+
+# Copy to plugins directory after build
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy 
+        $<TARGET_FILE:${PROJECT_NAME}> 
+        ${PLUGINS_OUTPUT_DIR}/$<TARGET_FILE_NAME:${PROJECT_NAME}>
+    COMMENT "Copying plugin to plugins directory"
 )
 
-message(STATUS "ExamplePlugin configuration complete")
-message(STATUS "Plugin will be built to: ${ANISTUDIO_PLUGIN_DIR}")
+# Print build information
+message(STATUS "=== ${PROJECT_NAME} Configuration ===")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Host Directory: ${ANISTUDIO_ROOT}")
+message(STATUS "Output Directory: ${CMAKE_BINARY_DIR}")
+message(STATUS "Plugins Directory: ${PLUGINS_OUTPUT_DIR}")
+message(STATUS "Using simple self-contained plugin approach")

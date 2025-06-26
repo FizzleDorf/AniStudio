@@ -22,6 +22,7 @@
 #define NODEGRAPHVIEW_HPP
 
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include <imgui_node_editor.h>
 #include <string>
 #include <imgui.h>

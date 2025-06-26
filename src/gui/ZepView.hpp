@@ -26,6 +26,7 @@
 #include "PythonComponent.hpp"
 #include "PythonSystem.hpp"
 #include "ImGuiFileDialog.h"
+#include "FilePaths.hpp"
 #include <memory>
 #include <string>
 #include <filesystem>

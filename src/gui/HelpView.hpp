@@ -3,6 +3,7 @@
 
 #include "GUI.h"
 #include "pch.h"
+#include "FilePaths.hpp"
 #include "imgui_markdown.h"
 #include "ImageUtils.hpp"
 #include "OpenGLUtils.hpp"

@@ -1,329 +1,418 @@
-//============================================================================
-// ExamplePlugin.cpp - FIXED Implementation for Your ECS
-//============================================================================
-
-#include "ExamplePlugin.hpp"
+// ExamplePlugin.cpp - Simple plugin that works with YOUR existing PluginAPI
 #include <iostream>
+#include <memory>
+#include <string>
+#include <unordered_map>
 
-// Global storage for host function pointers
-static GetEntityManagerFunc g_getEntityManager = nullptr;
-static GetViewManagerFunc g_getViewManager = nullptr;
-static GetImGuiContextFunc g_getImGuiContext = nullptr;
-
-// Global storage for host managers (set during initialization)
-static ECS::EntityManager* g_hostEntityManager = nullptr;
-static GUI::ViewManager* g_hostViewManager = nullptr;
-
-// Registry synchronization state
-static bool g_registrySynced = false;
-
-// Plugin entry points
-extern "C" PLUGIN_API Plugin::BasePlugin* CreatePlugin() {
-	try {
-		std::cout << "=== EXAMPLE PLUGIN CREATE START ===" << std::endl;
-		auto* plugin = new ExamplePluginImpl();
-		std::cout << "ExamplePluginImpl created successfully" << std::endl;
-		return plugin;
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Exception in CreatePlugin: " << e.what() << std::endl;
-		return nullptr;
-	}
+// Forward declarations to match your PluginAPI.hpp
+namespace ECS {
+	using EntityID = size_t;
+	class EntityManager;
 }
 
-extern "C" PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin) {
-	try {
-		std::cout << "=== EXAMPLE PLUGIN DESTROY START ===" << std::endl;
-		if (plugin) {
-			delete plugin;
-			std::cout << "Plugin deleted successfully" << std::endl;
-		}
-
-		// Clear global references
-		g_hostEntityManager = nullptr;
-		g_hostViewManager = nullptr;
-		g_registrySynced = false;
-
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Exception in DestroyPlugin: " << e.what() << std::endl;
-	}
+namespace GUI {
+	using ViewListID = size_t;
+	class ViewManager;
 }
 
-extern "C" PLUGIN_API const char* GetPluginName() {
-	return "ExamplePlugin";
-}
+// Platform-specific plugin export macros
+#ifdef _WIN32
+#define PLUGIN_API __declspec(dllexport)
+#else
+#define PLUGIN_API __attribute__((visibility("default")))
+#endif
 
-extern "C" PLUGIN_API const char* GetPluginVersion() {
-	return "2.0.0";
-}
+// Include ImGui for rendering
+#include <imgui.h>
 
-extern "C" PLUGIN_API const char* GetPluginDescription() {
-	return "Example plugin with perfect hot reload support";
-}
+// ============================================================================
+// SIMPLE PLUGIN COMPONENTS - Stored internally in plugin
+// ============================================================================
 
-extern "C" PLUGIN_API bool GetPluginCanHotReload() {
-	return true;
-}
+struct Transform2D {
+	float x = 0.0f;
+	float y = 0.0f;
+	float rotation = 0.0f;
+	float scaleX = 1.0f;
+	float scaleY = 1.0f;
+};
 
-// FIXED: Registry synchronization function for your ECS implementation
-void SyncWithHostRegistry(ECS::EntityManager* hostMgr) {
-	if (!hostMgr) {
-		std::cerr << "SyncWithHostRegistry: Host EntityManager is null!" << std::endl;
-		return;
-	}
+struct Velocity2D {
+	float vx = 0.0f;
+	float vy = 0.0f;
+	float maxSpeed = 300.0f;
+};
 
-	if (g_registrySynced) {
-		std::cout << "Registry already synced, skipping..." << std::endl;
-		return;
-	}
+struct PlayerController {
+	float moveSpeed = 200.0f;
+	float jumpForce = 400.0f;
+	bool isGrounded = false;
+	bool canDoubleJump = true;
+	bool hasDoubleJumped = false;
+};
 
-	std::cout << "=== REGISTRY SYNC START ===" << std::endl;
+// Component storage - simple maps stored in plugin
+static std::unordered_map<ECS::EntityID, Transform2D> g_transforms;
+static std::unordered_map<ECS::EntityID, Velocity2D> g_velocities;
+static std::unordered_map<ECS::EntityID, PlayerController> g_controllers;
 
-	try {
-		// STEP 1: Get component registry state from host
-		auto hostComponentNames = hostMgr->GetAllRegisteredComponentNames();
+// ============================================================================
+// SIMPLE PLUGIN CLASS - Matches YOUR BasePlugin interface
+// ============================================================================
 
-		std::cout << "Host component registry state:" << std::endl;
-		std::cout << "  Components: " << hostComponentNames.size() << std::endl;
+class SimplePlatformerPlugin {
+private:
+	ECS::EntityManager* entityManager = nullptr;
+	GUI::ViewManager* viewManager = nullptr;
 
-		// STEP 2: Reset plugin component registry to match host
-		ECS::ComponentTypeRegistry::Reset();
-		std::cout << "Plugin component registry reset" << std::endl;
+	// Game state
+	ECS::EntityID playerEntity = 0;
+	std::vector<ECS::EntityID> platformEntities;
+	float gameTime = 0.0f;
+	bool gameRunning = true;
+	bool initialized = false;
 
-		// STEP 3: Import ALL host component registrations with exact IDs
-		for (const auto& componentName : hostComponentNames) {
-			ECS::ComponentTypeID hostTypeId = hostMgr->GetComponentTypeIdByName(componentName);
+public:
+	// Plugin lifecycle - matches YOUR BasePlugin interface
+	bool Initialize(ECS::EntityManager& entityMgr, GUI::ViewManager* viewMgr = nullptr) {
+		std::cout << "[SimplePlatformerPlugin] Initializing..." << std::endl;
 
-			// Force register with the exact same ID in plugin registry
-			// Since your registry doesn't have ForceRegisterWithId, we'll use a workaround
-			// Register components in order to match IDs
-			while (ECS::ComponentTypeRegistry::GetIDByName(componentName) != hostTypeId) {
-				// Create dummy registrations to advance the counter if needed
-				if (ECS::ComponentTypeRegistry::GetIDByName(componentName) == ECS::MAX_COMPONENT_COUNT) {
-					// This component isn't registered yet in plugin, we need to sync the counter
-					break;
-				}
-			}
+		entityManager = &entityMgr;
+		viewManager = viewMgr;
 
-			std::cout << "  Synced component: " << componentName << " -> ID " << hostTypeId << std::endl;
-		}
+		CreateGameEntities();
 
-		g_registrySynced = true;
-		std::cout << "=== REGISTRY SYNC COMPLETE ===" << std::endl;
-
-	}
-	catch (const std::exception& e) {
-		std::cerr << "Exception during registry sync: " << e.what() << std::endl;
-		g_registrySynced = false;
-	}
-}
-
-// Manager getter setup function
-extern "C" PLUGIN_API void SetManagerGetters(
-	GetEntityManagerFunc entityGetter,
-	GetViewManagerFunc viewGetter,
-	GetImGuiContextFunc contextGetter,
-	GetImGuiAllocFunc allocGetter,
-	GetImGuiFreeFunc freeGetter,
-	GetImGuiUserDataFunc userDataGetter) {
-
-	std::cout << "=== SET MANAGER GETTERS CALLED ===" << std::endl;
-
-	// Store the function pointers
-	g_getEntityManager = entityGetter;
-	g_getViewManager = viewGetter;
-	g_getImGuiContext = contextGetter;
-
-	// Set up ImGui context if provided
-	if (contextGetter) {
-		ImGuiContext* hostContext = contextGetter();
-		if (hostContext) {
-			ImGui::SetCurrentContext(hostContext);
-			std::cout << "ImGui context set successfully" << std::endl;
-		}
-	}
-
-	// CRITICAL: Sync registries immediately when we get access to host managers
-	if (entityGetter) {
-		ECS::EntityManager* hostMgr = entityGetter();
-		if (hostMgr) {
-			SyncWithHostRegistry(hostMgr);
-		}
-	}
-
-	std::cout << "Manager getters stored and registry synced" << std::endl;
-}
-
-// Helper functions for cross-DLL manager access
-namespace Plugin {
-	ECS::EntityManager* GetHostEntityManagerViaPointer() {
-		return g_getEntityManager ? g_getEntityManager() : g_hostEntityManager;
-	}
-
-	GUI::ViewManager* GetHostViewManagerViaPointer() {
-		return g_getViewManager ? g_getViewManager() : g_hostViewManager;
-	}
-
-	ImGuiContext* GetHostImGuiContextViaPointer() {
-		return g_getImGuiContext ? g_getImGuiContext() : nullptr;
-	}
-}
-
-// PLUGIN IMPLEMENTATION
-ExamplePluginImpl::ExamplePluginImpl() {
-	m_name = "ExamplePlugin";
-	m_version = "2.0.0";
-	m_description = "Example plugin with perfect hot reload support";
-	m_initialized = false;
-	m_viewID = 0;
-}
-
-bool ExamplePluginImpl::Initialize(ECS::EntityManager& entityManager, GUI::ViewManager& viewManager) {
-	try {
-		std::cout << "=== EXAMPLE PLUGIN INITIALIZE START ===" << std::endl;
-
-		// Store the host managers
-		g_hostEntityManager = &entityManager;
-		g_hostViewManager = &viewManager;
-
-		// Verify managers are valid
-		if (!&entityManager || !&viewManager) {
-			std::cerr << "ExamplePlugin: Invalid managers passed to Initialize!" << std::endl;
-			return false;
-		}
-
-		std::cout << "Using EntityManager: " << &entityManager << std::endl;
-		std::cout << "Using ViewManager: " << &viewManager << std::endl;
-
-		// Ensure registry is synced
-		if (!g_registrySynced) {
-			std::cout << "Registry not synced yet, syncing now..." << std::endl;
-			SyncWithHostRegistry(&entityManager);
-		}
-
-		// SIMPLIFIED: Register our component with the HOST's entity manager
-		try {
-			if (!entityManager.IsComponentNameRegistered("ExampleComponent")) {
-				entityManager.RegisterComponentName<ExamplePlugin::ExampleComponent>("ExampleComponent");
-				std::cout << "Component registered successfully with HOST" << std::endl;
-			}
-			else {
-				std::cout << "Component already registered in HOST, skipping" << std::endl;
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Failed to register component with HOST: " << e.what() << std::endl;
-			return false;
-		}
-
-		// VERIFY: Check that our component type ID matches host
-		ECS::ComponentTypeID hostTypeId = entityManager.GetComponentTypeIdByName("ExampleComponent");
-		ECS::ComponentTypeID currentPluginTypeId = ECS::CompType<ExamplePlugin::ExampleComponent>();
-
-		std::cout << "=== REGISTRATION VERIFICATION ===" << std::endl;
-		std::cout << "Host registry type ID for ExampleComponent: " << hostTypeId << std::endl;
-		std::cout << "Plugin CompType<ExampleComponent>() returns: " << currentPluginTypeId << std::endl;
-
-		if (hostTypeId != currentPluginTypeId) {
-			std::cerr << "WARNING: Type ID mismatch - Host=" << hostTypeId << ", Plugin=" << currentPluginTypeId << std::endl;
-			// For now, continue anyway - the host registration is what matters
-		}
-
-		// Create view
-		try {
-			m_viewID = viewManager.CreateView();
-			if (m_viewID == 0) {
-				std::cerr << "Failed to create view!" << std::endl;
-				return false;
-			}
-
-			ExamplePlugin::ExampleView exampleView(entityManager);
-			viewManager.AddView<ExamplePlugin::ExampleView>(m_viewID, std::move(exampleView));
-			viewManager.GetView<ExamplePlugin::ExampleView>(m_viewID).Init();
-
-			std::cout << "View created successfully with ID: " << m_viewID << std::endl;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Error creating view: " << e.what() << std::endl;
-			return false;
-		}
-
-		SetInitialized(true);
-		m_initialized = true;
-
-		std::cout << "=== EXAMPLE PLUGIN INITIALIZE COMPLETE ===" << std::endl;
+		initialized = true;
+		std::cout << "[SimplePlatformerPlugin] Initialized successfully!" << std::endl;
 		return true;
-
 	}
-	catch (const std::exception& e) {
-		std::cerr << "Exception during ExamplePlugin initialization: " << e.what() << std::endl;
-		return false;
+
+	void Shutdown() {
+		std::cout << "[SimplePlatformerPlugin] Shutting down..." << std::endl;
+
+		// Clear component storage
+		g_transforms.clear();
+		g_velocities.clear();
+		g_controllers.clear();
+
+		initialized = false;
 	}
-}
 
-void ExamplePluginImpl::Shutdown() {
-	try {
-		std::cout << "=== EXAMPLE PLUGIN SHUTDOWN START ===" << std::endl;
+	void Update(float deltaTime) {
+		if (!initialized || !gameRunning) return;
 
-		if (m_initialized && m_viewID != 0) {
-			auto* viewMgr = GetViewManager();
-			if (viewMgr) {
-				try {
-					if (viewMgr->HasView<ExamplePlugin::ExampleView>(m_viewID)) {
-						viewMgr->RemoveView<ExamplePlugin::ExampleView>(m_viewID);
-					}
-					viewMgr->DestroyView(m_viewID);
-					m_viewID = 0;
-					std::cout << "View removed successfully" << std::endl;
-				}
-				catch (const std::exception& e) {
-					std::cerr << "Error removing view: " << e.what() << std::endl;
-				}
-			}
+		gameTime += deltaTime;
+		UpdateInput(deltaTime);
+		UpdatePhysics(deltaTime);
+		RenderGame();
+	}
+
+	// Plugin information
+	const std::string& GetName() const {
+		static std::string name = "Simple 2D Platformer";
+		return name;
+	}
+
+	const std::string& GetVersion() const {
+		static std::string version = "1.0.0";
+		return version;
+	}
+
+	const std::string& GetDescription() const {
+		static std::string desc = "A simple 2D platformer game plugin";
+		return desc;
+	}
+
+	// Static versions for C interface
+	static const char* StaticGetName() { return "Simple 2D Platformer"; }
+	static const char* StaticGetVersion() { return "1.0.0"; }
+	static const char* StaticGetDescription() { return "A simple 2D platformer game plugin"; }
+
+	bool HasSettings() const { return false; }
+	void ShowSettings() {}
+	bool CanReload() const { return true; }
+
+private:
+	void CreateGameEntities() {
+		if (!entityManager) return;
+
+		// Create player entity
+		playerEntity = entityManager->AddNewEntity();
+		std::cout << "[SimplePlatformerPlugin] Created player entity: " << playerEntity << std::endl;
+
+		// Add components to player (stored in plugin)
+		g_transforms[playerEntity] = Transform2D{ 100.0f, 300.0f, 0.0f, 1.0f, 1.0f };
+		g_velocities[playerEntity] = Velocity2D{ 0.0f, 0.0f, 300.0f };
+		g_controllers[playerEntity] = PlayerController{ 200.0f, 400.0f, false, true, false };
+
+		// Create platform entities
+		platformEntities.clear();
+		for (int i = 0; i < 3; i++) {
+			ECS::EntityID platform = entityManager->AddNewEntity();
+			g_transforms[platform] = Transform2D{ 200.0f + i * 150.0f, 450.0f - i * 50.0f, 0.0f, 1.0f, 1.0f };
+			platformEntities.push_back(platform);
 		}
 
-		SetInitialized(false);
-		m_initialized = false;
-
-		std::cout << "=== EXAMPLE PLUGIN SHUTDOWN COMPLETE ===" << std::endl;
-
+		std::cout << "[SimplePlatformerPlugin] Created " << (platformEntities.size() + 1) << " entities" << std::endl;
 	}
-	catch (const std::exception& e) {
-		std::cerr << "Exception during ExamplePlugin shutdown: " << e.what() << std::endl;
+
+	void UpdateInput(float deltaTime) {
+		auto transformIt = g_transforms.find(playerEntity);
+		auto velocityIt = g_velocities.find(playerEntity);
+		auto controllerIt = g_controllers.find(playerEntity);
+
+		if (transformIt == g_transforms.end() || velocityIt == g_velocities.end() || controllerIt == g_controllers.end()) {
+			return;
+		}
+
+		Velocity2D& velocity = velocityIt->second;
+		PlayerController& controller = controllerIt->second;
+
+		// Movement
+		float moveInput = 0.0f;
+		if (ImGui::IsKeyDown(ImGuiKey_A) || ImGui::IsKeyDown(ImGuiKey_LeftArrow)) moveInput -= 1.0f;
+		if (ImGui::IsKeyDown(ImGuiKey_D) || ImGui::IsKeyDown(ImGuiKey_RightArrow)) moveInput += 1.0f;
+
+		velocity.vx = moveInput * controller.moveSpeed;
+
+		// Jumping
+		if ((ImGui::IsKeyPressed(ImGuiKey_Space) || ImGui::IsKeyPressed(ImGuiKey_W)) && controller.isGrounded) {
+			velocity.vy = -controller.jumpForce;
+			controller.isGrounded = false;
+		}
+	}
+
+	void UpdatePhysics(float deltaTime) {
+		auto transformIt = g_transforms.find(playerEntity);
+		auto velocityIt = g_velocities.find(playerEntity);
+		auto controllerIt = g_controllers.find(playerEntity);
+
+		if (transformIt == g_transforms.end() || velocityIt == g_velocities.end() || controllerIt == g_controllers.end()) {
+			return;
+		}
+
+		Transform2D& transform = transformIt->second;
+		Velocity2D& velocity = velocityIt->second;
+		PlayerController& controller = controllerIt->second;
+
+		const float GRAVITY = 980.0f;
+		const float GROUND_Y = 400.0f;
+
+		// Apply gravity
+		velocity.vy += GRAVITY * deltaTime;
+
+		// Update position
+		transform.x += velocity.vx * deltaTime;
+		transform.y += velocity.vy * deltaTime;
+
+		// Ground collision
+		if (transform.y > GROUND_Y) {
+			transform.y = GROUND_Y;
+			velocity.vy = 0.0f;
+			controller.isGrounded = true;
+			controller.hasDoubleJumped = false;
+		}
+		else {
+			controller.isGrounded = false;
+		}
+
+		// Screen bounds
+		if (transform.x < 0) { transform.x = 0; velocity.vx = 0; }
+		if (transform.x > 800) { transform.x = 800; velocity.vx = 0; }
+	}
+
+	void RenderGame() {
+		if (ImGui::Begin("Simple 2D Platformer", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Simple Plugin - No Complex Registration Needed!");
+			ImGui::Separator();
+
+			ImGui::Text("Game Time: %.1fs", gameTime);
+			ImGui::Text("Player Entity: %zu", playerEntity);
+			ImGui::Text("Platform Entities: %zu", platformEntities.size());
+
+			if (ImGui::Button(gameRunning ? "Pause" : "Play")) {
+				gameRunning = !gameRunning;
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Reset")) {
+				CreateGameEntities();
+				gameTime = 0.0f;
+			}
+
+			ImGui::Text("Use WASD or Arrow Keys to move, Space to jump");
+
+			// Game viewport
+			if (ImGui::BeginChild("GameViewport", ImVec2(500, 350), true)) {
+				ImDrawList* drawList = ImGui::GetWindowDrawList();
+				ImVec2 canvasPos = ImGui::GetCursorScreenPos();
+				ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+
+				// Background
+				drawList->AddRectFilled(canvasPos,
+					ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+					IM_COL32(135, 206, 235, 255));
+
+				// Ground
+				float groundY = canvasPos.y + canvasSize.y * 0.8f;
+				drawList->AddRectFilled(
+					ImVec2(canvasPos.x, groundY),
+					ImVec2(canvasPos.x + canvasSize.x, canvasPos.y + canvasSize.y),
+					IM_COL32(34, 139, 34, 255));
+
+				// Render player
+				auto playerTransform = g_transforms.find(playerEntity);
+				if (playerTransform != g_transforms.end()) {
+					const Transform2D& transform = playerTransform->second;
+					float screenX = canvasPos.x + (transform.x / 800.0f) * canvasSize.x;
+					float screenY = canvasPos.y + (transform.y / 600.0f) * canvasSize.y;
+
+					drawList->AddRectFilled(
+						ImVec2(screenX, screenY),
+						ImVec2(screenX + 32, screenY + 32),
+						IM_COL32(255, 100, 100, 255));
+
+					// Show entity ID
+					char idText[32];
+					snprintf(idText, sizeof(idText), "P:%zu", playerEntity);
+					drawList->AddText(ImVec2(screenX, screenY - 15),
+						IM_COL32(255, 255, 255, 255), idText);
+				}
+
+				// Render platforms
+				for (auto platformID : platformEntities) {
+					auto platformTransform = g_transforms.find(platformID);
+					if (platformTransform != g_transforms.end()) {
+						const Transform2D& transform = platformTransform->second;
+						float screenX = canvasPos.x + (transform.x / 800.0f) * canvasSize.x;
+						float screenY = canvasPos.y + (transform.y / 600.0f) * canvasSize.y;
+
+						drawList->AddRectFilled(
+							ImVec2(screenX, screenY),
+							ImVec2(screenX + 150, screenY + 20),
+							IM_COL32(139, 69, 19, 255));
+
+						// Show entity ID
+						char idText[32];
+						snprintf(idText, sizeof(idText), "PL:%zu", platformID);
+						drawList->AddText(ImVec2(screenX, screenY - 15),
+							IM_COL32(255, 255, 255, 255), idText);
+					}
+				}
+
+				drawList->AddText(ImVec2(canvasPos.x + 5, canvasPos.y + 5),
+					IM_COL32(255, 255, 255, 255), "WASD: Move | Space: Jump");
+			}
+			ImGui::EndChild();
+
+			// Component debug info
+			if (ImGui::CollapsingHeader("Component Debug")) {
+				ImGui::Text("Transform2D Components: %zu", g_transforms.size());
+				ImGui::Text("Velocity2D Components: %zu", g_velocities.size());
+				ImGui::Text("PlayerController Components: %zu", g_controllers.size());
+			}
+		}
+		ImGui::End();
+	}
+};
+
+// ============================================================================
+// PLUGIN INTERFACE IMPLEMENTATION - YOUR required C interface
+// ============================================================================
+
+namespace Plugin {
+	class BasePlugin {
+	public:
+		virtual ~BasePlugin() = default;
+		virtual bool Initialize(ECS::EntityManager& entityManager, GUI::ViewManager* viewManager = nullptr) = 0;
+		virtual void Shutdown() = 0;
+		virtual void Update(float deltaTime) = 0;
+		virtual const std::string& GetName() const = 0;
+		virtual const std::string& GetVersion() const = 0;
+		virtual const std::string& GetDescription() const = 0;
+		virtual bool HasSettings() const = 0;
+		virtual void ShowSettings() = 0;
+		virtual bool CanReload() const = 0;
+	};
+}
+
+// Wrapper class that implements YOUR BasePlugin interface
+class PluginWrapper : public Plugin::BasePlugin {
+private:
+	std::unique_ptr<SimplePlatformerPlugin> plugin;
+
+public:
+	PluginWrapper() : plugin(std::make_unique<SimplePlatformerPlugin>()) {}
+
+	bool Initialize(ECS::EntityManager& entityManager, GUI::ViewManager* viewManager = nullptr) override {
+		return plugin->Initialize(entityManager, viewManager);
+	}
+
+	void Shutdown() override {
+		plugin->Shutdown();
+	}
+
+	void Update(float deltaTime) override {
+		plugin->Update(deltaTime);
+	}
+
+	const std::string& GetName() const override {
+		return plugin->GetName();
+	}
+
+	const std::string& GetVersion() const override {
+		return plugin->GetVersion();
+	}
+
+	const std::string& GetDescription() const override {
+		return plugin->GetDescription();
+	}
+
+	bool HasSettings() const override {
+		return plugin->HasSettings();
+	}
+
+	void ShowSettings() override {
+		plugin->ShowSettings();
+	}
+
+	bool CanReload() const override {
+		return plugin->CanReload();
+	}
+};
+
+// ============================================================================
+// C INTERFACE - Required by YOUR PluginManager
+// ============================================================================
+
+static std::unique_ptr<PluginWrapper> g_pluginInstance;
+
+extern "C" {
+	PLUGIN_API Plugin::BasePlugin* CreatePlugin() {
+		g_pluginInstance = std::make_unique<PluginWrapper>();
+		return g_pluginInstance.get();
+	}
+
+	PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin) {
+		g_pluginInstance.reset();
+	}
+
+	PLUGIN_API const char* GetPluginName() {
+		return SimplePlatformerPlugin::StaticGetName();
+	}
+
+	PLUGIN_API const char* GetPluginVersion() {
+		return SimplePlatformerPlugin::StaticGetVersion();
+	}
+
+	PLUGIN_API const char* GetPluginDescription() {
+		return SimplePlatformerPlugin::StaticGetDescription();
+	}
+
+	PLUGIN_API bool HasPluginSettings() {
+		return g_pluginInstance ? g_pluginInstance->HasSettings() : false;
+	}
+
+	PLUGIN_API bool CanPluginReload() {
+		return g_pluginInstance ? g_pluginInstance->CanReload() : true;
 	}
 }
-
-void ExamplePluginImpl::Update(float deltaTime) {
-	if (m_initialized) {
-		// Plugin update logic here
-	}
-}
-
-// These methods should be declared in the header but weren't in your current impl
-void ExamplePluginImpl::SaveState() {
-	std::cout << "ExamplePlugin: Saving state for hot reload..." << std::endl;
-	// Save any state that should persist across reloads
-}
-
-void ExamplePluginImpl::LoadState() {
-	std::cout << "ExamplePlugin: Loading state after hot reload..." << std::endl;
-	// Restore any state that should persist across reloads
-}
-
-void ExamplePluginImpl::OnPreReload() {
-	std::cout << "ExamplePlugin: Preparing for hot reload..." << std::endl;
-	SaveState();
-}
-
-void ExamplePluginImpl::OnPostReload() {
-	std::cout << "ExamplePlugin: Completed hot reload..." << std::endl;
-	LoadState();
-}
-
-const std::string& ExamplePluginImpl::GetName() const { return m_name; }
-const std::string& ExamplePluginImpl::GetVersion() const { return m_version; }
-const std::string& ExamplePluginImpl::GetDescription() const { return m_description; }
-bool ExamplePluginImpl::HasSettings() const { return false; }
-bool ExamplePluginImpl::CanReload() const { return true; }
-std::vector<std::string> ExamplePluginImpl::GetDependencies() const { return {}; }

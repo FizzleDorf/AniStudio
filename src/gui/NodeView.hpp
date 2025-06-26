@@ -20,6 +20,7 @@
 
 #pragma once
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include "ImNodeFlow.h"
 #include "ECS.h"
 #include <string>

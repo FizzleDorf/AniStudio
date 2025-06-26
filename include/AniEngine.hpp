@@ -20,71 +20,53 @@
 
 #pragma once
 
- // Include the core engine API - this gives us ALL the ECS functionality
-#include "AniEngine.hpp"
+ // FIXED: Since you're building as static library, remove all DLL export nonsense
+#define ANI_ENGINE_API
 
-// Include the existing GUI system files
-#include "GUI.h"
-#include "AllViews.h"
-#include "gui_utils.h"
+// Include the existing ECS system files
+#include "ECS.h"
+#include "PluginManager.hpp"
+#include "utils.h"
+#include "components.h"
+#include "systems.h"
 
-#define ANI_STUDIO_API
-
-// GUI and ImGui includes
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#include <imgui_impl_opengl3.h>
-#include <GLFW/glfw3.h>
-#include <nlohmann/json.hpp>
-
-
-// ============================================================================
-// STUDIO CORE - Main Studio Management Class
-// ============================================================================
+// Core includes
+#include <memory>
+#include <string>
+#include <filesystem>
+#include <iostream>
 
 namespace ANI {
 
-	class ANI_STUDIO_API StudioCore {
+	class ANI_ENGINE_API EngineCore {
 	public:
 		// Core lifecycle
 		static bool Initialize();
 		static void Shutdown();
 		static void Update(float deltaTime);
-		static void Render();
 
 		// Manager access
 		static ECS::EntityManager& GetEntityManager();
-		static GUI::ViewManager& GetViewManager();
 		static Plugin::PluginManager& GetPluginManager();
-
-		// Studio state
-		static bool IsRunning();
-		static void SetRunning(bool running);
-
-		// Window management
-		static void SetWindowHandle(void* window);
-		static void SetImGuiContext(void* context);
 
 		// Plugin management
 		static bool LoadPlugin(const std::string& path);
-		static void UnloadPlugin(const std::string& name);
 		static void LoadDefaultPlugins();
+
+		// Engine state
+		static bool IsRunning();
+		static void SetRunning(bool running);
+
+		// Internal setup - PUBLIC so StudioCore can use them
+		static void RegisterCoreComponents(ECS::EntityManager& mgr);
+		static void RegisterCoreSystems(ECS::EntityManager& mgr);
 
 	private:
 		// FIXED: Static members without any DLL export decorations
 		static std::unique_ptr<ECS::EntityManager> s_entityManager;
-		static std::unique_ptr<GUI::ViewManager> s_viewManager;
 		static std::unique_ptr<Plugin::PluginManager> s_pluginManager;
 		static bool s_initialized;
 		static bool s_running;
-		static void* s_windowHandle;
-		static void* s_imguiContext;
-
-		// Internal setup
-		static void RegisterCoreComponents();
-		static void RegisterCoreViews();
-		static void RegisterCoreSystems();
-		static void CreateCoreViews();
-		static void SetupPluginCallbacks();
 	};
+
 }

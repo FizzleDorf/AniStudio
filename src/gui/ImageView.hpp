@@ -22,6 +22,7 @@
 #define IMAGEVIEW_HPP
 
 #include "GUI.h"
+#include "FilePaths.hpp"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
 #include "../events/Events.hpp"

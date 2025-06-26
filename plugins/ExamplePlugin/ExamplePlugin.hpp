@@ -1,162 +1,92 @@
+// BasePlugin.hpp - FIXED VERSION
+// Removes duplicate HostData definition that conflicts with CRWrapper.hpp
 #pragma once
 
-#include "BasePlugin.hpp"
-#include "PluginRegistry.hpp"
-#include "PluginAPI.hpp"
 #include <string>
-#include <iostream>
+#include <memory>
 
-namespace ExamplePlugin {
+// Forward declarations
+namespace ECS { class EntityManager; }
+namespace GUI { class ViewManager; }
+namespace HotReload { struct HostData; } // Use the one from CRWrapper.hpp
 
-	// Example component
-	struct ExampleComponent : public ECS::BaseComponent {
-		int counter = 0;
-		float value = 0.0f;
-		bool enabled = true;
-		char text[256] = "Hello World";
+namespace Plugin {
 
-		ExampleComponent() {
-			compName = "ExampleComponent";
-			compCategory = "Example";
-		}
-
-		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j;
-			j["compName"] = compName;
-			j[compName] = {
-				{"counter", counter},
-				{"value", value},
-				{"enabled", enabled},
-				{"text", std::string(text)}
-			};
-			return j;
-		}
-
-		virtual void Deserialize(const nlohmann::json& j) override {
-			ECS::BaseComponent::Deserialize(j);
-			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-			else {
-				componentData = j;
-			}
-			if (componentData.contains("counter"))
-				counter = componentData["counter"];
-			if (componentData.contains("value"))
-				value = componentData["value"];
-			if (componentData.contains("enabled"))
-				enabled = componentData["enabled"];
-			if (componentData.contains("text")) {
-				std::string textStr = componentData["text"];
-				strncpy_s(text, sizeof(text), textStr.c_str(), _TRUNCATE);
-			}
-		}
-	};
-
-	// Example view - SAFELY handles manager access
-	class ExampleView : public GUI::BaseView {
-	private:
-		ECS::EntityID testEntity = 0;
-
+	class BasePlugin {
 	public:
-		// BaseView constructor takes EntityManager reference
-		ExampleView(ECS::EntityManager& entityMgr) : GUI::BaseView(entityMgr) {
-			viewName = "Example View";
+		BasePlugin() = default;
+		virtual ~BasePlugin() = default;
+
+		// Plugin lifecycle - MUST be implemented by plugins
+		virtual bool Initialize(HotReload::HostData* hostData) = 0;
+		virtual void Update(float deltaTime) = 0;
+		virtual void Render() = 0;
+		virtual void Shutdown() = 0;
+
+		// Plugin information
+		virtual const char* GetName() const = 0;
+		virtual const char* GetVersion() const = 0;
+		virtual const char* GetDescription() const { return "No description"; }
+
+		// Hot reload support
+		virtual void OnReload() {}
+		virtual void OnUnload() {}
+
+		// Access to host data
+		HotReload::HostData* GetHostData() const { return hostData; }
+		ECS::EntityManager* GetEntityManager() const {
+			return hostData ? hostData->entityManager : nullptr;
+		}
+		GUI::ViewManager* GetViewManager() const {
+			return hostData ? hostData->viewManager : nullptr;
 		}
 
-		void Render() override {
-			if (!ImGui::Begin("Example Plugin View")) {
-				ImGui::End();
-				return;
-			}
+	protected:
+		HotReload::HostData* hostData = nullptr;
 
-			// SAFETY CHECK: Ensure mgr is valid before using
-			try {
-				// Use mgr from BaseView (protected member)
-				if (mgr.HasComponent<ExampleComponent>(testEntity)) {
-					auto& comp = mgr.GetComponent<ExampleComponent>(testEntity);
+		// Helper methods for common operations
+		void SetImGuiContext();
+		void UpdateImGuiFrame();
+		void RenderImGuiFrame();
 
-					// ImGui controls with proper parameters
-					ImGui::InputInt("Counter", &comp.counter);
-					ImGui::SliderFloat("Value", &comp.value, 0.0f, 100.0f);
-					ImGui::Checkbox("Enabled", &comp.enabled);
-					ImGui::InputText("Text", comp.text, sizeof(comp.text));
-
-					if (ImGui::Button("Reset Values")) {
-						comp.counter = 0;
-						comp.value = 0.0f;
-						comp.enabled = true;
-						strcpy_s(comp.text, sizeof(comp.text), "Hello World");
-					}
-				}
-
-				if (ImGui::Button("Create Test Entity")) {
-					try {
-						testEntity = mgr.AddNewEntity();
-						auto& newComp = mgr.AddComponent<ExampleComponent>(testEntity);
-						newComp.counter = 42;
-					}
-					catch (const std::exception& e) {
-						ImGui::Text("Error creating entity: %s", e.what());
-					}
-				}
-
-				if (ImGui::Button("List All Entities")) {
-					ImGui::Text("All entities with ExampleComponent:");
-					try {
-						auto entities = mgr.GetAllEntities();
-						for (auto entity : entities) {
-							if (mgr.HasComponent<ExampleComponent>(entity)) {
-								auto& c = mgr.GetComponent<ExampleComponent>(entity);
-								ImGui::Text("Entity %u: counter=%d", entity, c.counter);
-							}
-						}
-					}
-					catch (const std::exception& e) {
-						ImGui::Text("Error listing entities: %s", e.what());
-					}
-				}
-			}
-			catch (const std::exception& e) {
-				ImGui::Text("ERROR: %s", e.what());
-			}
-
-			ImGui::End();
-		}
+		// ImGui rendering state helpers
+		bool CreateImGuiDeviceObjects();
+		void InvalidateImGuiDeviceObjects();
+		bool CreateImGuiFontsTexture();
+		void RenderImGuiDrawLists(void* draw_data);
 	};
 
-} // namespace ExamplePlugin
+	// Plugin factory function type
+	using CreatePluginFunc = BasePlugin * (*)();
+	using DestroyPluginFunc = void(*)(BasePlugin*);
 
-// Main plugin class - FIXED with all required method declarations
-class ExamplePluginImpl : public Plugin::BasePlugin {
-private:
-	std::string m_name = "ExamplePlugin";
-	std::string m_version = "2.0.0";
-	std::string m_description = "Example plugin demonstrating basic functionality";
-	bool m_initialized = false;
-	GUI::ViewListID m_viewID = 0;
+} // namespace Plugin
 
-public:
-	// Default constructor
-	ExamplePluginImpl();
-
-	// Core plugin lifecycle - these are REQUIRED by BasePlugin
-	bool Initialize(ECS::EntityManager& entityManager, GUI::ViewManager& viewManager) override;
-	void Shutdown() override;
-	void Update(float deltaTime) override;
-
-	// Plugin information - these are REQUIRED by BasePlugin
-	const std::string& GetName() const override;
-	const std::string& GetVersion() const override;
-	const std::string& GetDescription() const override;
-	bool HasSettings() const override;
-	std::vector<std::string> GetDependencies() const override;
-
-	// Hot reload support methods - ADD THESE DECLARATIONS
-	bool CanReload() const;
-	void SaveState();
-	void LoadState();
-	void OnPreReload();
-	void OnPostReload();
-};
+// Macro to simplify plugin export for CR
+#define DECLARE_CR_PLUGIN(ClassName) \
+    static ClassName* g_plugin = nullptr; \
+    extern "C" int cr_main(struct cr_plugin* ctx, enum cr_op operation) { \
+        auto* hostData = static_cast<HotReload::HostData*>(ctx->userdata); \
+        switch (operation) { \
+            case CR_LOAD: \
+                if (!g_plugin) g_plugin = new ClassName(); \
+                return g_plugin->Initialize(hostData) ? 0 : -1; \
+            case CR_STEP: \
+                if (g_plugin) { \
+                    g_plugin->Update(0.016f); \
+                    g_plugin->Render(); \
+                } \
+                return 0; \
+            case CR_UNLOAD: \
+                if (g_plugin) g_plugin->OnUnload(); \
+                return 0; \
+            case CR_CLOSE: \
+                if (g_plugin) { \
+                    g_plugin->Shutdown(); \
+                    delete g_plugin; \
+                    g_plugin = nullptr; \
+                } \
+                return 0; \
+        } \
+        return 0; \
+    }
