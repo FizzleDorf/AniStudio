@@ -45,8 +45,6 @@ namespace ANI {
 			auto& entityMgr = *s_entityManager;
 
 			// Create essential views only - plugins will create their own
-			// Example:
-			// auto settingsViewID = viewMgr.CreateView<SettingsView>(entityMgr);
 
 			std::cout << "[StudioCore] Core views created" << std::endl;
 		}
