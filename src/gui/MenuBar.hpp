@@ -70,8 +70,8 @@ namespace GUI {
 	// Global view states instance
 	extern ViewStates g_viewStates;
 
-	// Main menu bar function
-	void ShowMenuBar(GLFWwindow* window);
+	// Main menu bar function - now takes the actual managers being used
+	void ShowMenuBar(GLFWwindow* window, GUI::ViewManager& viewManager, ECS::EntityManager& entityManager);
 
 	// Individual view management functions that handle ECS views
 	void ShowOrCreateSettingsView();
