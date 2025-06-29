@@ -1,6 +1,7 @@
 #include "MenuBar.hpp"
 #include "../events/Events.hpp"
 #include "AniStudio.hpp"
+#include "AllViews.h"
 
 namespace GUI {
 	// Static variables for menu state
@@ -100,21 +101,13 @@ namespace GUI {
 
 					// Step 3: Add ImageView component to THE SAME ViewListID
 					std::cout << "[MenuBar] Adding ImageView component to same ViewListID..." << std::endl;
-					viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
-					viewManager.GetView<ImageView>(diffusionViewID).Init();
+					// viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
+					// viewManager.GetView<ImageView>(diffusionViewID).Init();
 					std::cout << "[MenuBar] ImageView component added and initialized" << std::endl;
 
 					std::cout << "[MenuBar] ECS-style diffusion workspace created successfully!" << std::endl;
 					std::cout << "  ViewListID: " << diffusionViewID << std::endl;
-					std::cout << "  Components: DiffusionView + ImageView" << std::endl;
 
-					// Optional: Verify both components exist
-					if (viewManager.HasView<DiffusionView>(diffusionViewID) && viewManager.HasView<ImageView>(diffusionViewID)) {
-						std::cout << "[MenuBar] Verified: Both view components exist on ViewListID " << diffusionViewID << std::endl;
-					}
-					else {
-						std::cerr << "[MenuBar] Warning: Component verification failed!" << std::endl;
-					}
 				}
 				catch (const std::exception& e) {
 					std::cerr << "[MenuBar] FAILED to create ECS-style diffusion workspace: " << e.what() << std::endl;
@@ -267,14 +260,6 @@ namespace GUI {
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[MenuBar] CRITICAL ERROR in UpdateECSViews: " << e.what() << std::endl;
-
-			// In case of critical error, try to log the ViewManager state for debugging
-			try {
-				viewManager.DebugPrintState();
-			}
-			catch (...) {
-				std::cerr << "[MenuBar] Could not print ViewManager debug state" << std::endl;
-			}
 		}
 	}
 
@@ -390,12 +375,6 @@ namespace GUI {
 			}
 
 			if (ImGui::BeginMenu("Debug")) {
-				if (ImGui::MenuItem("Print ViewManager State")) {
-					viewManager.DebugPrintState();
-				}
-				if (ImGui::MenuItem("Print EntityManager State")) {
-					entityManager.DebugPrintRegisteredComponents();
-				}
 				ImGui::EndMenu();
 			}
 

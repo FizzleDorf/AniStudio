@@ -87,22 +87,14 @@ namespace GUI {
 			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
 			assert(GetViewSignature(viewList)->size() < MAX_VIEW_COUNT && "View count limit reached!");
 
-			// Check if view already exists
-			if (HasView<T>(viewList)) {
-				std::cerr << "View with ID " << viewList << " already exists! Skipping AddView." << std::endl;
-				return;
-			}
-
 			// Set the view's ID and add it to signatures
 			view.viewID = viewList;
 			GetViewSignature(viewList)->insert(ViewType<T>());
 
-			// Add to appropriate view list
+			// Add to appropriate view list - ViewList::Insert() handles the ECS logic
 			auto viewListPtr = GetViewList<T>();
-			std::cout << "Adding view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
+			std::cout << "ViewManager: Adding view - ViewListID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
 			viewListPtr->Insert(std::forward<T>(view));
-
-			// Note: We don't initialize the view here - it will be initialized separately
 		}
 
 		// Removes a view from the viewlist by template class

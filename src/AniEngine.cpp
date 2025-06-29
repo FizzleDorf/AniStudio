@@ -1,20 +1,36 @@
+// AniEngine.cpp - FIXED to match working StudioCore pattern
 #define ANI_ENGINE_EXPORTS
 
 #include "AniEngine.hpp"
+#include "ECS.h"
 #include "PluginManager.hpp"
+#include "utils.h"
+#include "components.h"
+#include "systems.h"
 #include <iostream>
+#include <filesystem>
 
 using namespace ECS;
 
 namespace ANI {
-	// Static members
-	std::unique_ptr<ECS::EntityManager> EngineCore::s_entityManager = nullptr;
-	std::unique_ptr<Plugin::PluginManager> EngineCore::s_pluginManager = nullptr;
+	// Static members initialization
 	bool EngineCore::s_initialized = false;
 	bool EngineCore::s_running = false;
 
+	// CRITICAL FIX: Direct static instances like the working StudioCore
+	static ECS::EntityManager g_entityManager;
+	static Plugin::PluginManager g_pluginManager(g_entityManager);
+
+	ECS::EntityManager& EngineCore::GetEntityManagerImpl() {
+		return g_entityManager;
+	}
+
+	Plugin::PluginManager& EngineCore::GetPluginManagerImpl() {
+		return g_pluginManager;
+	}
+
 	void EngineCore::RegisterCoreComponents(ECS::EntityManager& mgr) {
-		// Register Component Names
+		// Register Component Names - EXACTLY like working StudioCore
 		mgr.RegisterComponentName<ModelComponent>("Model");
 		mgr.RegisterComponentName<ClipLComponent>("ClipL");
 		mgr.RegisterComponentName<ClipGComponent>("ClipG");
@@ -44,7 +60,7 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreSystems(ECS::EntityManager& mgr) {
-		// Register core systems
+		// Register core systems - EXACTLY like working StudioCore
 		mgr.RegisterSystem<SDCPPSystem>();
 		mgr.RegisterSystem<ImageSystem>();
 		mgr.RegisterSystem<VideoSystem>();
@@ -62,25 +78,22 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			// Initialize file paths
+			// Initialize file paths - EXACTLY like working StudioCore
 			Utils::FilePaths::LoadFilePathDefaults();
 
-			// Create entity manager
-			s_entityManager = std::make_unique<ECS::EntityManager>();
+			// Reset managers (no need to construct, they're already static)
+			g_entityManager.Reset();
 
-			// Invalidate ID 0 for consistency
-			const ECS::EntityID temp = s_entityManager->AddNewEntity();
-			s_entityManager->DestroyEntity(temp);
+			// Invalidate ID 0 for consistency - EXACTLY like working StudioCore
+			const ECS::EntityID temp = g_entityManager.AddNewEntity();
+			g_entityManager.DestroyEntity(temp);
 
-			// Register core components and systems
-			RegisterCoreComponents(*s_entityManager);
-			RegisterCoreSystems(*s_entityManager);
-
-			// Create plugin manager for engine-only (no GUI)
-			s_pluginManager = std::make_unique<Plugin::PluginManager>(*s_entityManager);
+			// Register core components and systems using the static instance
+			RegisterCoreComponents(g_entityManager);
+			RegisterCoreSystems(g_entityManager);
 
 			// Initialize the plugin manager
-			s_pluginManager->Init();
+			g_pluginManager.Init();
 
 			s_initialized = true;
 			s_running = true;
@@ -101,16 +114,9 @@ namespace ANI {
 
 		s_running = false;
 
-		// Shutdown plugin manager first
-		if (s_pluginManager) {
-			s_pluginManager.reset();
-		}
-
-		// Reset entity manager
-		if (s_entityManager) {
-			s_entityManager->Reset();
-			s_entityManager.reset();
-		}
+		// Reset managers (no need to delete, they're static)
+		g_entityManager.Reset();
+		// PluginManager doesn't have Reset(), but it will be destroyed with static cleanup
 
 		s_initialized = false;
 		std::cout << "[EngineCore] Shutdown complete" << std::endl;
@@ -120,38 +126,31 @@ namespace ANI {
 		if (!s_initialized) return;
 
 		// Update all registered systems
-		if (s_entityManager) {
-			s_entityManager->Update(deltaTime);
-		}
+		g_entityManager.Update(deltaTime);
 
 		// Update plugins
-		if (s_pluginManager) {
-			s_pluginManager->Update(deltaTime);
-		}
+		g_pluginManager.Update(deltaTime);
 	}
 
 	ECS::EntityManager& EngineCore::GetEntityManager() {
-		if (!s_initialized || !s_entityManager) {
+		if (!s_initialized) {
 			throw std::runtime_error("[EngineCore] EntityManager accessed before initialization!");
 		}
-		return *s_entityManager;
+		return g_entityManager;
 	}
 
 	Plugin::PluginManager& EngineCore::GetPluginManager() {
-		if (!s_initialized || !s_pluginManager) {
+		if (!s_initialized) {
 			throw std::runtime_error("[EngineCore] PluginManager accessed before initialization!");
 		}
-		return *s_pluginManager;
+		return g_pluginManager;
 	}
 
 	bool EngineCore::LoadPlugin(const std::string& path) {
-		if (!s_pluginManager) return false;
-		return s_pluginManager->LoadPlugin(path);
+		return g_pluginManager.LoadPlugin(path);
 	}
 
 	void EngineCore::LoadDefaultPlugins() {
-		if (!s_pluginManager) return;
-
 		std::string pluginsDir = Utils::FilePaths::pluginPath;
 
 		if (!std::filesystem::exists(pluginsDir)) {
@@ -173,7 +172,7 @@ namespace ANI {
 #endif
 					std::string pluginPath = entry.path().string();
 					std::cout << "[EngineCore] Loading plugin: " << pluginPath << std::endl;
-					s_pluginManager->LoadPlugin(pluginPath);
+					g_pluginManager.LoadPlugin(pluginPath);
 				}
 				}
 			}

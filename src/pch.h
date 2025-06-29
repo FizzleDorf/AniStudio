@@ -46,6 +46,8 @@
 // Essential third-party libraries
 #include "nlohmann/json.hpp"
 
+#include "OpenGLWrapper.hpp"
+
 // Math library
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -53,5 +55,3 @@
 
 // Common type aliases
 using json = nlohmann::json;
-
-#include "OpenGLWrapper.hpp"

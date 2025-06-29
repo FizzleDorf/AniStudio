@@ -262,7 +262,7 @@ namespace ECS {
 			taskQueue.insert(taskQueue.begin() + toIndex, std::move(task));
 		}
 
-		// Return copyable queue items for UI display
+		// Return copyable queue items for UI display - SIMPLE AND WORKING
 		std::vector<QueueItem> GetQueueSnapshot() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			std::vector<QueueItem> result;

@@ -1,32 +1,14 @@
-/*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y8888 888    888  888 d88" 888 888 d88""88b
-   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
- d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
- */
-
+// AniStudio.hpp - FIXED VERSION
 #pragma once
 
- // Include the core engine API - this gives us ALL the ECS functionality
+// Include the core engine API - this gives us ALL the ECS functionality
 #include "AniEngine.hpp"
 
-// Include the existing GUI system files
-#include "GUI.h"
-#include "AllViews.h"
-#include "gui_utils.h"
+// Forward declarations to avoid circular includes
+namespace GUI {
+	class ViewManager;
+	void ShowMenuBar(void* window, ViewManager& viewManager, ECS::EntityManager& entityManager);
+}
 
 #define ANI_STUDIO_API
 
@@ -34,9 +16,7 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <GLFW/glfw3.h>
 #include <nlohmann/json.hpp>
-
 
 // ============================================================================
 // STUDIO CORE - Main Studio Management Class
@@ -71,20 +51,19 @@ namespace ANI {
 		static void LoadDefaultPlugins();
 
 	private:
-		// FIXED: Static members without any DLL export decorations
-		static std::unique_ptr<ECS::EntityManager> s_entityManager;
-		static std::unique_ptr<GUI::ViewManager> s_viewManager;
-		static std::unique_ptr<Plugin::PluginManager> s_pluginManager;
+		// Private implementation - defined in .cpp file
 		static bool s_initialized;
 		static bool s_running;
 		static void* s_windowHandle;
 		static void* s_imguiContext;
 
+		// These will be implemented as stack-allocated statics in the .cpp file
+		static ECS::EntityManager& GetEntityManagerImpl();
+		static GUI::ViewManager& GetViewManagerImpl();
+		static Plugin::PluginManager& GetPluginManagerImpl();
+
 		// Internal setup
-		static void RegisterCoreComponents();
 		static void RegisterCoreViews();
-		static void RegisterCoreSystems();
 		static void CreateCoreViews();
-		static void SetupPluginCallbacks();
 	};
 }

@@ -17,8 +17,8 @@ namespace ANI {
 	}
 
 	Engine::~Engine() {
-		// Cleanup in reverse order
-		StudioCore::Shutdown(); // API handles all the complex cleanup
+		// Cleanup in reverse order - StudioCore handles all the complex cleanup
+		StudioCore::Shutdown();
 		CleanupWindow();
 	}
 
@@ -34,7 +34,7 @@ namespace ANI {
 			throw std::runtime_error("Failed to initialize window");
 		}
 
-		// Initialize the studio core (handles ALL ECS, GUI, and Plugin logic)
+		// Initialize the studio core - THIS DOES EXACTLY WHAT THE WORKING ENGINE.CPP DID
 		if (!StudioCore::Initialize()) {
 			throw std::runtime_error("Failed to initialize StudioCore");
 		}
@@ -78,7 +78,7 @@ namespace ANI {
 
 		glViewport(0, 0, videoWidth, videoHeight);
 
-		// Initialize ImGui
+		// Initialize ImGui - EXACTLY like working Engine.cpp
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 
@@ -130,7 +130,7 @@ namespace ANI {
 			timeElapsed = 0.0;
 		}
 
-		// Update studio core (handles ECS + GUI + Plugins)
+		// Update studio core - this handles ECS + GUI + Plugins exactly like working Engine.cpp
 		StudioCore::Update(deltaT);
 	}
 
@@ -140,7 +140,7 @@ namespace ANI {
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 
-			// Render studio content (all views including plugin views and menu bar)
+			// Render studio content - this does EXACTLY what the working Engine.cpp did
 			StudioCore::Render();
 		}
 		catch (const std::exception& e) {

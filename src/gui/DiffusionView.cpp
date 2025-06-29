@@ -26,6 +26,7 @@ static void LogCallback(sd_log_level_t level, const char* text, void* data) {
 		break;
 	}
 }
+
 static ProgressData progressData;
 static void ProgressCallback(int step, int steps, float time, void* data) {
 	progressData.currentStep = step;
@@ -42,73 +43,88 @@ namespace GUI {
 	}
 
 	DiffusionView::~DiffusionView() {
-		if(txt2imgEntity != 0)
+		if (txt2imgEntity != 0)
 			mgr.DestroyEntity(txt2imgEntity);
 		if (img2imgEntity != 0)
 			mgr.DestroyEntity(img2imgEntity);
 	}
 
 	void DiffusionView::Init() {
-		sd_set_log_callback(LogCallback, nullptr);
-		sd_set_progress_callback(ProgressCallback, nullptr);
-		ResetEntities();
+		try {
+			std::cout << "[DiffusionView] Initializing..." << std::endl;
+			sd_set_log_callback(LogCallback, nullptr);
+			sd_set_progress_callback(ProgressCallback, nullptr);
+			ResetEntities();
+			std::cout << "[DiffusionView] Initialization complete" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[DiffusionView] Exception in Init(): " << e.what() << std::endl;
+		}
 	}
 
 	void DiffusionView::ResetEntities() {
-		
-		if (txt2imgEntity != 0) {
-			mgr.DestroyEntity(txt2imgEntity);
-			txt2imgEntity = 0;
+		try {
+			std::cout << "[DiffusionView] Resetting entities..." << std::endl;
+
+			if (txt2imgEntity != 0) {
+				mgr.DestroyEntity(txt2imgEntity);
+				txt2imgEntity = 0;
+			}
+
+			if (img2imgEntity != 0) {
+				mgr.DestroyEntity(img2imgEntity);
+				img2imgEntity = 0;
+			}
+
+			// Create entity for Txt2Img mode
+			txt2imgEntity = mgr.AddNewEntity();
+
+			// Add components for Txt2Img
+			mgr.AddComponent<ModelComponent>(txt2imgEntity);
+			mgr.AddComponent<ClipLComponent>(txt2imgEntity);
+			mgr.AddComponent<ClipGComponent>(txt2imgEntity);
+			mgr.AddComponent<T5XXLComponent>(txt2imgEntity);
+			mgr.AddComponent<DiffusionModelComponent>(txt2imgEntity);
+			mgr.AddComponent<VaeComponent>(txt2imgEntity);
+			mgr.AddComponent<LoraComponent>(txt2imgEntity);
+			mgr.AddComponent<TaesdComponent>(txt2imgEntity);
+			mgr.AddComponent<LatentComponent>(txt2imgEntity);
+			mgr.AddComponent<SamplerComponent>(txt2imgEntity);
+			mgr.AddComponent<GuidanceComponent>(txt2imgEntity);
+			mgr.AddComponent<ClipSkipComponent>(txt2imgEntity);
+			mgr.AddComponent<PromptComponent>(txt2imgEntity);
+			mgr.AddComponent<LayerSkipComponent>(txt2imgEntity);
+			mgr.AddComponent<OutputImageComponent>(txt2imgEntity);
+
+			// Create entity for Img2Img mode 
+			img2imgEntity = mgr.AddNewEntity();
+
+			// Add components for Img2Img
+			mgr.AddComponent<ModelComponent>(img2imgEntity);
+			mgr.AddComponent<ClipLComponent>(img2imgEntity);
+			mgr.AddComponent<ClipGComponent>(img2imgEntity);
+			mgr.AddComponent<T5XXLComponent>(img2imgEntity);
+			mgr.AddComponent<DiffusionModelComponent>(img2imgEntity);
+			mgr.AddComponent<VaeComponent>(img2imgEntity);
+			mgr.AddComponent<LoraComponent>(img2imgEntity);
+			mgr.AddComponent<TaesdComponent>(img2imgEntity);
+			mgr.AddComponent<LatentComponent>(img2imgEntity);
+			mgr.AddComponent<SamplerComponent>(img2imgEntity);
+			mgr.AddComponent<GuidanceComponent>(img2imgEntity);
+			mgr.AddComponent<ClipSkipComponent>(img2imgEntity);
+			mgr.AddComponent<PromptComponent>(img2imgEntity);
+			mgr.AddComponent<LayerSkipComponent>(img2imgEntity);
+			mgr.AddComponent<OutputImageComponent>(img2imgEntity);
+			mgr.AddComponent<InputImageComponent>(img2imgEntity);
+
+			// Default denoise value for Img2Img
+			mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;
+
+			std::cout << "[DiffusionView] Entities reset successfully" << std::endl;
 		}
-			
-		if (img2imgEntity != 0) {
-			mgr.DestroyEntity(img2imgEntity);
-			img2imgEntity = 0;
+		catch (const std::exception& e) {
+			std::cerr << "[DiffusionView] Exception in ResetEntities(): " << e.what() << std::endl;
 		}
-			
-		// Create entity for Txt2Img mode
-		txt2imgEntity = mgr.AddNewEntity();
-
-		// Add components for Txt2Img
-		mgr.AddComponent<ModelComponent>(txt2imgEntity);
-		mgr.AddComponent<ClipLComponent>(txt2imgEntity);
-		mgr.AddComponent<ClipGComponent>(txt2imgEntity);
-		mgr.AddComponent<T5XXLComponent>(txt2imgEntity);
-		mgr.AddComponent<DiffusionModelComponent>(txt2imgEntity);
-		mgr.AddComponent<VaeComponent>(txt2imgEntity);
-		mgr.AddComponent<LoraComponent>(txt2imgEntity);
-		mgr.AddComponent<TaesdComponent>(txt2imgEntity);
-		mgr.AddComponent<LatentComponent>(txt2imgEntity);
-		mgr.AddComponent<SamplerComponent>(txt2imgEntity);
-		mgr.AddComponent<GuidanceComponent>(txt2imgEntity);
-		mgr.AddComponent<ClipSkipComponent>(txt2imgEntity);
-		mgr.AddComponent<PromptComponent>(txt2imgEntity);
-		mgr.AddComponent<LayerSkipComponent>(txt2imgEntity);
-		mgr.AddComponent<OutputImageComponent>(txt2imgEntity);
-
-		// Create entity for Img2Img mode 
-		img2imgEntity = mgr.AddNewEntity();
-
-		// Add components for Img2Img
-		mgr.AddComponent<ModelComponent>(img2imgEntity);
-		mgr.AddComponent<ClipLComponent>(img2imgEntity);
-		mgr.AddComponent<ClipGComponent>(img2imgEntity);
-		mgr.AddComponent<T5XXLComponent>(img2imgEntity);
-		mgr.AddComponent<DiffusionModelComponent>(img2imgEntity);
-		mgr.AddComponent<VaeComponent>(img2imgEntity);
-		mgr.AddComponent<LoraComponent>(img2imgEntity);
-		mgr.AddComponent<TaesdComponent>(img2imgEntity);
-		mgr.AddComponent<LatentComponent>(img2imgEntity);
-		mgr.AddComponent<SamplerComponent>(img2imgEntity);
-		mgr.AddComponent<GuidanceComponent>(img2imgEntity);
-		mgr.AddComponent<ClipSkipComponent>(img2imgEntity);
-		mgr.AddComponent<PromptComponent>(img2imgEntity);
-		mgr.AddComponent<LayerSkipComponent>(img2imgEntity);
-		mgr.AddComponent<OutputImageComponent>(img2imgEntity);
-		mgr.AddComponent<InputImageComponent>(img2imgEntity);
-
-		// Default denoise value for Img2Img
-		mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;
 	}
 
 	void DiffusionView::RenderModelLoader(const EntityID entity) {
@@ -128,7 +144,6 @@ namespace GUI {
 			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
 
 			// Row for "Checkpoint"
 			ImGui::TableNextColumn();
@@ -168,124 +183,120 @@ namespace GUI {
 	}
 
 	void DiffusionView::RenderFilePath(const EntityID entity) {
-    if (!mgr.HasComponent<OutputImageComponent>(entity)) {
-        return;
-    }
-    auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
-    
-    // File name input
-    if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        // ImGui::TableHeadersRow();
-        ImGui::TableNextColumn();
-        ImGui::Text("FileName"); // Row for "Filename"
-        ImGui::TableNextColumn();
-        if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
-            imageComp.fileName = fileName;
-            isFilenameChanged = true;
-        }
-        ImGui::EndTable();
-    }
-    
-    // File extension selector
-    const char* extensions[] = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp" };
-    
-    if (ImGui::BeginTable("Extension", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableNextColumn();
-        ImGui::Text("Format");
-        ImGui::TableNextColumn();
-        
-        if (ImGui::BeginCombo("##ExtensionCombo", currentExtension.c_str())) {
-            for (int i = 0; i < IM_ARRAYSIZE(extensions); i++) {
-                bool isSelected = (currentExtensionIndex == i);
-                if (ImGui::Selectable(extensions[i], isSelected)) {
-                    currentExtensionIndex = i;
-                    currentExtension = extensions[i];
-                    isFilenameChanged = true; // Trigger update of the file extension
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::EndTable();
-    }
-    
-    // Directory selector
-    if (ImGui::BeginTable("Output Dir", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-        ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableNextColumn();
-        ImGui::Text("Dir Path");
-        ImGui::TableNextColumn();
-        
-        if (ImGui::Button("...##w8")) {
-            IGFD::FileDialogConfig config;
-            config.path = Utils::FilePaths::defaultProjectPath; // Set the initial directory
-            ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
-        }
-        
-        ImGui::SameLine();
-        if (ImGui::Button("R##w9")) {
-            imageComp.fileName = "AniStudio";
-            imageComp.filePath = Utils::FilePaths::defaultProjectPath;
-        }
-        
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", imageComp.filePath.c_str());
-        ImGui::EndTable();
-    }
-    
-    // Handle the file dialog display and selection
-    if (ImGuiFileDialog::Instance()->Display("LoadDirDialog", 32, ImVec2(700, 400))) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
-            if (!selectedDir.empty()) {
-                strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
-                outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0'; // Null termination
-                imageComp.filePath = selectedDir;
-                isFilenameChanged = true;
-            }
-        }
-        ImGuiFileDialog::Instance()->Close();
-    }
-    
-    // Update ImageComponent properties if filename or filepath changes
-    if (isFilenameChanged) {
-        std::string newFileName(fileName);
-        
-        // Process the file name
-        if (!newFileName.empty()) {
-            std::filesystem::path filePath(newFileName);
-            
-            // Check if the extension should be changed
-            std::string currentFileExtension = filePath.has_extension() ? 
-                filePath.extension().string() : "";
-            
-            // If the extension is missing or different from the selected one, update it
-            if (currentFileExtension != currentExtension) {
-                filePath.replace_extension(currentExtension);
-                newFileName = filePath.filename().string();
-            }
-            
-            // Update the ImageComponent
-            imageComp.fileName = newFileName;
-            
-            std::cout << "ImageComponent updated:\n";
-            std::cout << "  FileName: " << imageComp.fileName << '\n';
-            std::cout << "  FilePath: " << imageComp.filePath << '\n';
-        } else {
-            std::cerr << "Invalid directory or filename!" << '\n';
-        }
-        
-        isFilenameChanged = false; // Reset the flag
-    }
-}
+		if (!mgr.HasComponent<OutputImageComponent>(entity)) {
+			return;
+		}
+		auto& imageComp = mgr.GetComponent<OutputImageComponent>(entity);
+
+		// File name input
+		if (ImGui::BeginTable("Output Name", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableNextColumn();
+			ImGui::Text("FileName");
+			ImGui::TableNextColumn();
+			if (ImGui::InputText("##Filename", fileName, IM_ARRAYSIZE(fileName))) {
+				imageComp.fileName = fileName;
+				isFilenameChanged = true;
+			}
+			ImGui::EndTable();
+		}
+
+		// File extension selector
+		const char* extensions[] = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp" };
+
+		if (ImGui::BeginTable("Extension", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableNextColumn();
+			ImGui::Text("Format");
+			ImGui::TableNextColumn();
+
+			if (ImGui::BeginCombo("##ExtensionCombo", currentExtension.c_str())) {
+				for (int i = 0; i < IM_ARRAYSIZE(extensions); i++) {
+					bool isSelected = (currentExtensionIndex == i);
+					if (ImGui::Selectable(extensions[i], isSelected)) {
+						currentExtensionIndex = i;
+						currentExtension = extensions[i];
+						isFilenameChanged = true;
+					}
+					if (isSelected) {
+						ImGui::SetItemDefaultFocus();
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::EndTable();
+		}
+
+		// Directory selector
+		if (ImGui::BeginTable("Output Dir", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 54.0f);
+			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+			ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableNextColumn();
+			ImGui::Text("Dir Path");
+			ImGui::TableNextColumn();
+
+			if (ImGui::Button("...##w8")) {
+				IGFD::FileDialogConfig config;
+				config.path = Utils::FilePaths::defaultProjectPath;
+				ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
+			}
+
+			ImGui::SameLine();
+			if (ImGui::Button("R##w9")) {
+				imageComp.fileName = "AniStudio";
+				imageComp.filePath = Utils::FilePaths::defaultProjectPath;
+			}
+
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", imageComp.filePath.c_str());
+			ImGui::EndTable();
+		}
+
+		// Handle the file dialog display and selection
+		if (ImGuiFileDialog::Instance()->Display("LoadDirDialog", 32, ImVec2(700, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
+				if (!selectedDir.empty()) {
+					strncpy(outputDir, selectedDir.c_str(), IM_ARRAYSIZE(outputDir) - 1);
+					outputDir[IM_ARRAYSIZE(outputDir) - 1] = '\0';
+					imageComp.filePath = selectedDir;
+					isFilenameChanged = true;
+				}
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
+
+		// Update ImageComponent properties if filename or filepath changes
+		if (isFilenameChanged) {
+			std::string newFileName(fileName);
+
+			if (!newFileName.empty()) {
+				std::filesystem::path filePath(newFileName);
+
+				std::string currentFileExtension = filePath.has_extension() ?
+					filePath.extension().string() : "";
+
+				if (currentFileExtension != currentExtension) {
+					filePath.replace_extension(currentExtension);
+					newFileName = filePath.filename().string();
+				}
+
+				imageComp.fileName = newFileName;
+
+				std::cout << "ImageComponent updated:\n";
+				std::cout << "  FileName: " << imageComp.fileName << '\n';
+				std::cout << "  FilePath: " << imageComp.filePath << '\n';
+			}
+			else {
+				std::cerr << "Invalid directory or filename!" << '\n';
+			}
+
+			isFilenameChanged = false;
+		}
+	}
 
 	void DiffusionView::RenderLatents(const EntityID entity) {
 		if (!mgr.HasComponent<LatentComponent>(entity) ||
@@ -315,12 +326,8 @@ namespace GUI {
 			ImGui::InputInt("##Height", &latentComp.latentHeight, 8, 8);
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			// Batching using sdcpp just queues, does not batch asyncronously
-			// ImGui::Text("Batch");
-			// ImGui::TableNextColumn();
-			// ImGui::InputInt("##Batch Size", &latentComp.batchSize);
 			ImGui::EndTable();
-			if(ImGui::Button("Swap XY")) {
+			if (ImGui::Button("Swap XY")) {
 				int temp = latentComp.latentWidth;
 				latentComp.latentWidth = latentComp.latentHeight;
 				latentComp.latentHeight = temp;
@@ -354,10 +361,9 @@ namespace GUI {
 
 			ImGui::SameLine();
 			if (ImGui::Button("X##clear_img123")) {
-				// Clear image using the InputImageComponent's built-in method
 				imageComp.ClearImageData();
 				if (imageComp.textureID != 0) {
-					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
 					imageComp.textureID = 0;
 				}
 				imageComp.fileName = "";
@@ -378,24 +384,20 @@ namespace GUI {
 				std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
 				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 
-				// Clean up previous image data if it exists
-				imageComp.ClearImageData();  // Use the built-in method
+				imageComp.ClearImageData();
 				if (imageComp.textureID != 0) {
-					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
 					imageComp.textureID = 0;
 				}
 
-				// Load new image
 				int width, height, channels;
 				unsigned char* imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
 
 				if (imageData) {
-					// Update component data using the safe method
 					imageComp.SetImageData(imageData, width, height, channels);
 					imageComp.fileName = fileName;
 					imageComp.filePath = filePath;
 
-					// Generate texture for preview using OpenGLUtils
 					imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
 				}
@@ -437,18 +439,15 @@ namespace GUI {
 
 			ImGui::EndChild();
 
-			// Show estimated output dimensions
 			if (mgr.HasComponent<EsrganComponent>(entity)) {
 				auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
 				int outWidth = imageComp.width * esrganComp.upscaleFactor;
 				int outHeight = imageComp.height * esrganComp.upscaleFactor;
 				ImGui::Text("Estimated output: %d x %d", outWidth, outHeight);
 
-				// Add option to use image dimensions for latent size
 				if (ImGui::Button("Use image dimensions for output")) {
 					if (mgr.HasComponent<LatentComponent>(entity)) {
 						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
-						// Make dimensions divisible by 8 (required for stable diffusion)
 						latentComp.latentWidth = (imageComp.width / 8) * 8;
 						latentComp.latentHeight = (imageComp.height / 8) * 8;
 					}
@@ -462,7 +461,7 @@ namespace GUI {
 			ImGui::EndChild();
 		}
 	}
-	
+
 	void DiffusionView::RenderPrompts(const EntityID entity) {
 
 		if (!mgr.HasComponent<PromptComponent>(entity)) {
@@ -493,15 +492,6 @@ namespace GUI {
 		if (UISchema::RenderSchema(samplerComp.schema, properties)) {
 		}
 	}
-
-	//void DiffusionView::RenderClipSkip() {
-	//	// Get the property map directly from the component
-	//	auto properties = clipSkipComp.GetPropertyMap();
-
-	//	// Use the component's schema to render the UI
-	//	if (UISchema::RenderSchema(clipSkipComp.schema, properties)) {
-	//	}
-	//}
 
 	void DiffusionView::HandleT2IEvent() {
 
@@ -551,13 +541,13 @@ namespace GUI {
 	void DiffusionView::HandleI2IEvent() {
 		std::cout << "Adding new entity..." << std::endl;
 		EntityID newEntity = mgr.CloneEntity(img2imgEntity);
-		
+
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
 			mgr.DestroyEntity(newEntity);
 			return;
 		}
-		
+
 		if (!mgr.HasComponent<OutputImageComponent>(img2imgEntity)) {
 			std::cerr << "Failed to find output path!" << std::endl;
 			mgr.DestroyEntity(newEntity);
@@ -571,7 +561,7 @@ namespace GUI {
 		}
 
 		mgr.GetComponent<InputImageComponent>(newEntity) = mgr.GetComponent<InputImageComponent>(img2imgEntity);
-		
+
 		// Get references to source and destination output image comps
 		auto& srcOutputComp = mgr.GetComponent<OutputImageComponent>(txt2imgEntity);
 		auto& destOutputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
@@ -622,7 +612,6 @@ namespace GUI {
 			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 64.0f);
 			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
 			ImGui::TableNextColumn();
 			ImGui::Text("Controlnet");
 			ImGui::TableNextColumn();
@@ -660,7 +649,6 @@ namespace GUI {
 		if (ImGui::BeginTable("Control Settings", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
 			ImGui::TableNextColumn();
 			ImGui::Text("Strength");
 			ImGui::TableNextColumn();
@@ -678,6 +666,7 @@ namespace GUI {
 			ImGui::EndTable();
 		}
 	}
+
 	void DiffusionView::RenderEmbeddings(const EntityID entity) {
 		if (!mgr.HasComponent<EmbeddingComponent>(entity)) {
 			return;
@@ -689,7 +678,6 @@ namespace GUI {
 			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-			// ImGui::TableHeadersRow();
 			ImGui::TableNextColumn();
 			ImGui::Text("Embedding:");
 			ImGui::TableNextColumn();
@@ -752,7 +740,7 @@ namespace GUI {
 			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text("Unet:"); // Row for Unet
+			ImGui::Text("Unet:");
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##n2")) {
 				IGFD::FileDialogConfig config;
@@ -783,7 +771,7 @@ namespace GUI {
 
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text("Clip L:"); // Row for Clip L
+			ImGui::Text("Clip L:");
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##b7")) {
 				IGFD::FileDialogConfig config;
@@ -814,7 +802,7 @@ namespace GUI {
 
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text("Clip G:"); // Row for Clip G
+			ImGui::Text("Clip G:");
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##g7")) {
 				IGFD::FileDialogConfig config;
@@ -845,7 +833,7 @@ namespace GUI {
 
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			ImGui::Text("T5XXL:"); // Row for T5XXL
+			ImGui::Text("T5XXL:");
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##x6")) {
 				IGFD::FileDialogConfig config;
@@ -934,7 +922,7 @@ namespace GUI {
 		auto& vaeComp = mgr.GetComponent<VaeComponent>(entity);
 
 		if (ImGui::BeginTable("VaeOptionsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit)) {
-			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 64.0f); // Fixed width for Model
+			ImGui::TableSetupColumn("Param", ImGuiTableColumnFlags_WidthFixed, 64.0f);
 			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
 
 			ImGui::TableNextColumn();
@@ -965,283 +953,310 @@ namespace GUI {
 		}
 	}
 
+	// CRITICAL FIX: SAFE RenderQueueList() - No more crashes!
 	void DiffusionView::RenderQueueList() {
-
 		ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Queue")) {
+			try {
+				// Get current progress values
+				int currentStep = progressData.currentStep;
+				int totalSteps = progressData.totalSteps;
+				float time = progressData.currentTime;
+				bool isProcessing = progressData.isProcessing;
 
-			// Get current progress values
-			int currentStep = progressData.currentStep;
-			int totalSteps = progressData.totalSteps;
-			float time = progressData.currentTime;
-			bool isProcessing = progressData.isProcessing;
-
-			if (isProcessing && totalSteps > 0) {
-				float progress = static_cast<float>(currentStep) / totalSteps;
-				std::ostringstream ss;
-				ss << "Processing: " << currentStep << "/" << totalSteps << " steps (" << std::fixed << std::setprecision(1)
-					<< time << "s)";
-				ImGui::Text("%s", ss.str().c_str());
-				ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0));
-			}
-			else {
-				ImGui::Text("Waiting...");
-				ImGui::ProgressBar(0.0f, ImVec2(-FLT_MIN, 0));
-			}
-			ImGui::Separator();
-
-			if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
-				if (numQueues < 1) {
-					numQueues = 1;
+				if (isProcessing && totalSteps > 0) {
+					float progress = static_cast<float>(currentStep) / totalSteps;
+					std::ostringstream ss;
+					ss << "Processing: " << currentStep << "/" << totalSteps << " steps (" << std::fixed << std::setprecision(1)
+						<< time << "s)";
+					ImGui::Text("%s", ss.str().c_str());
+					ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0));
 				}
-			}
-
-			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-				EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
-				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
-					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
-					loraComp.modelPath = Utils::FilePaths::loraDir;
+				else {
+					ImGui::Text("Waiting...");
+					ImGui::ProgressBar(0.0f, ImVec2(-FLT_MIN, 0));
 				}
-				
-				for (int i = 0; i < numQueues; i++) {
-					if (isTxt2ImgMode) {
-						HandleT2IEvent();
+				ImGui::Separator();
+
+				if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
+					if (numQueues < 1) {
+						numQueues = 1;
 					}
-					else {
-						HandleI2IEvent();
+				}
+
+				if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
+					EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
+					if (mgr.HasComponent<LoraComponent>(targetEntity)) {
+						auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
+						loraComp.modelPath = Utils::FilePaths::loraDir;
 					}
-					
-					// seedControl->activate();
-				}
-			}
 
-			ImGui::Separator();
-
-			if (isPaused) {
-				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
-					Event event;
-					event.type = EventType::ResumeInference;
-					ANI::Events::Ref().QueueEvent(event);
-					isPaused = false;
-				}
-			}
-			else {
-				if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
-					Event event;
-					event.type = EventType::PauseInference;
-					ANI::Events::Ref().QueueEvent(event);
-					isPaused = true;
-				}
-			}
-
-			if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
-				Event event;
-				event.type = EventType::StopCurrentTask;
-				ANI::Events::Ref().QueueEvent(event);
-			}
-
-			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
-				Event event;
-				event.type = EventType::ClearInferenceQueue;
-				ANI::Events::Ref().QueueEvent(event);
-			}
-
-			ImGui::Separator();
-
-			if (ImGui::BeginTable("Queue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
-				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 44.0f);
-				ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
-				// ImGui::TableSetupColumn("Prompt", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
-
-				auto sdSystem = mgr.GetSystem<SDCPPSystem>();
-				if (sdSystem) {
-					auto queueItems = sdSystem->GetQueueSnapshot();
-					for (size_t i = 0; i < queueItems.size(); i++) {
-						const auto& item = queueItems[i];
-
-						ImGui::TableNextRow();
-
-						// ID column
-						ImGui::TableNextColumn();
-						ImGui::Text("%d", static_cast<int>(item.entityID));
-
-						// Status column
-						ImGui::TableNextColumn();
-						if (item.processing) {
-							ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
+					for (int i = 0; i < numQueues; i++) {
+						if (isTxt2ImgMode) {
+							HandleT2IEvent();
 						}
 						else {
-							ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
+							HandleI2IEvent();
 						}
-
-						// Controls column
-						ImGui::TableNextColumn();
-						if (!item.processing) {
-
-							if (i > 0) {
-								if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
-									sdSystem->MoveInQueue(i, i - 1);
-								}
-								ImGui::SameLine();
-
-							}
-
-							if (i < queueItems.size() - 1) {
-								if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
-									sdSystem->MoveInQueue(i, i + 1);
-								}
-								ImGui::SameLine();
-							}
-
-							if (i > 0) {
-								if (ImGui::Button(("Top##Top" + std::to_string(i)).c_str())) {
-									if (queueItems[0].processing) {
-										sdSystem->MoveInQueue(i, 1);
-									}
-									else {
-										sdSystem->MoveInQueue(i, 0);
-									}
-										
-								}
-								ImGui::SameLine();
-							}
-
-							if (i < queueItems.size() - 1) {
-								if (ImGui::Button(("Bottom##Bottom" + std::to_string(i)).c_str())) {
-									sdSystem->MoveInQueue(i, queueItems.size() - 1);
-								}
-								ImGui::SameLine();
-							}
-
-							if (ImGui::Button(("X##Remove" + std::to_string(i)).c_str())) {
-								sdSystem->RemoveFromQueue(i);
-							}
-
-						}
-
-						// // Prompt column
-						// ImGui::TableNextColumn();
-						// if (prompt.length() > 50) {
-						// 	ImGui::Text("%s...", prompt.substr(0, 47).c_str());
-						// 	if (ImGui::IsItemHovered()) {
-						// 		ImGui::SetTooltip("%s", prompt.c_str());
-						// 	}
-						// }
-						// else {
-						// 	ImGui::Text("%s", prompt.c_str());
-						// }
 					}
 				}
-				ImGui::EndTable();
+
+				ImGui::Separator();
+
+				if (isPaused) {
+					if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
+						Event event;
+						event.type = EventType::ResumeInference;
+						ANI::Events::Ref().QueueEvent(event);
+						isPaused = false;
+					}
+				}
+				else {
+					if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
+						Event event;
+						event.type = EventType::PauseInference;
+						ANI::Events::Ref().QueueEvent(event);
+						isPaused = true;
+					}
+				}
+
+				if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
+					Event event;
+					event.type = EventType::StopCurrentTask;
+					ANI::Events::Ref().QueueEvent(event);
+				}
+
+				if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
+					Event event;
+					event.type = EventType::ClearInferenceQueue;
+					ANI::Events::Ref().QueueEvent(event);
+				}
+
+				ImGui::Separator();
+
+				// CRITICAL FIX: Safe queue display with proper error handling
+				if (ImGui::BeginTable("Queue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+					ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+					ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 44.0f);
+					ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableHeadersRow();
+
+					// CRITICAL: Safe SDCPPSystem access
+					auto sdSystem = mgr.GetSystem<SDCPPSystem>();
+					if (sdSystem) {
+						try {
+							// CRITICAL: Safe GetQueueSnapshot call
+							auto queueItems = sdSystem->GetQueueSnapshot();
+
+							for (size_t i = 0; i < queueItems.size(); i++) {
+								const auto& item = queueItems[i];
+
+								ImGui::TableNextRow();
+
+								// ID column
+								ImGui::TableNextColumn();
+								ImGui::Text("%d", static_cast<int>(item.entityID));
+
+								// Status column
+								ImGui::TableNextColumn();
+								if (item.processing) {
+									ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
+								}
+								else {
+									ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
+								}
+
+								// Controls column
+								ImGui::TableNextColumn();
+								if (!item.processing) {
+
+									if (i > 0) {
+										if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
+											sdSystem->MoveInQueue(i, i - 1);
+										}
+										ImGui::SameLine();
+									}
+
+									if (i < queueItems.size() - 1) {
+										if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
+											sdSystem->MoveInQueue(i, i + 1);
+										}
+										ImGui::SameLine();
+									}
+
+									if (i > 0) {
+										if (ImGui::Button(("Top##Top" + std::to_string(i)).c_str())) {
+											if (queueItems.size() > 0 && queueItems[0].processing) {
+												sdSystem->MoveInQueue(i, 1);
+											}
+											else {
+												sdSystem->MoveInQueue(i, 0);
+											}
+										}
+										ImGui::SameLine();
+									}
+
+									if (i < queueItems.size() - 1) {
+										if (ImGui::Button(("Bottom##Bottom" + std::to_string(i)).c_str())) {
+											sdSystem->MoveInQueue(i, queueItems.size() - 1);
+										}
+										ImGui::SameLine();
+									}
+
+									if (ImGui::Button(("X##Remove" + std::to_string(i)).c_str())) {
+										sdSystem->RemoveFromQueue(i);
+									}
+								}
+							}
+						}
+						catch (const std::exception& e) {
+							std::cerr << "[DiffusionView] Exception in queue rendering: " << e.what() << std::endl;
+							ImGui::Text("Error displaying queue: %s", e.what());
+						}
+					}
+					else {
+						ImGui::TableNextRow();
+						ImGui::TableNextColumn();
+						ImGui::Text("SDCPPSystem not available");
+						ImGui::TableNextColumn();
+						ImGui::Text("N/A");
+						ImGui::TableNextColumn();
+						ImGui::Text("N/A");
+					}
+					ImGui::EndTable();
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[DiffusionView] Exception in RenderQueueList: " << e.what() << std::endl;
+				ImGui::Text("Error rendering queue: %s", e.what());
 			}
 		}
 		ImGui::End();
 	}
 
 	void DiffusionView::Render() {
-		// Render queue controls
-		RenderQueueList();
-
-		// Main window
-		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Image Generation")) {
-			// Metadata controls
-			if (ImGui::CollapsingHeader("Metadata Controls")) {
-				RenderMetadataControls();
+		try {
+			// CRITICAL: Safety check before rendering
+			if (txt2imgEntity == 0 || img2imgEntity == 0) {
+				ImGui::Begin("Image Generation - ERROR");
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "ERROR: Entities not initialized!");
+				ImGui::Text("txt2imgEntity: %zu", txt2imgEntity);
+				ImGui::Text("img2imgEntity: %zu", img2imgEntity);
+				if (ImGui::Button("Retry Initialization")) {
+					ResetEntities();
+				}
+				ImGui::End();
+				return;
 			}
 
-			// Tab bar for switching between Txt2Img and Img2Img
-			if (ImGui::BeginTabBar("Image")) {
-				// Text-to-Image tab
-				if (ImGui::BeginTabItem("Txt2Img")) {
-					isTxt2ImgMode = true;
+			// Render queue controls first
+			RenderQueueList();
 
-					// Render appropriate UI sections
-					if (ImGui::CollapsingHeader("Output Settings")) {
-						RenderFilePath(txt2imgEntity);
-					}
-
-					if (ImGui::CollapsingHeader("Model Selection")) {
-						if (ImGui::BeginTabBar("Model Loader")) {
-							if (ImGui::BeginTabItem("Full")) {
-								RenderModelLoader(txt2imgEntity);
-								ImGui::EndTabItem();
-							}
-							if (ImGui::BeginTabItem("Separate")) {
-								RenderDiffusionModelLoader(txt2imgEntity);
-								ImGui::EndTabItem();
-							}
-							ImGui::EndTabBar();
-						}
-					}
-
-					if (ImGui::CollapsingHeader("Latent Settings")) {
-						RenderLatents(txt2imgEntity);
-					}
-
-					if (ImGui::CollapsingHeader("Prompt Inputs")) {
-						RenderPrompts(txt2imgEntity);
-					}
-
-					if (ImGui::CollapsingHeader("Sampler Settings")) {
-						RenderSampler(txt2imgEntity);
-					}
-
-					if (ImGui::CollapsingHeader("Other Settings")) {
-						RenderOther(txt2imgEntity);
-					}
-
-					ImGui::EndTabItem();
+			// Main window
+			ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
+			if (ImGui::Begin("Image Generation")) {
+				// Metadata controls
+				if (ImGui::CollapsingHeader("Metadata Controls")) {
+					RenderMetadataControls();
 				}
 
-				// Image-to-Image tab
-				if (ImGui::BeginTabItem("Img2Img")) {
-					isTxt2ImgMode = false;
+				// Tab bar for switching between Txt2Img and Img2Img
+				if (ImGui::BeginTabBar("Image")) {
+					// Text-to-Image tab
+					if (ImGui::BeginTabItem("Txt2Img")) {
+						isTxt2ImgMode = true;
 
-					if (ImGui::CollapsingHeader("Output Settings")) {
-						RenderFilePath(img2imgEntity);
-					}
-
-					if (ImGui::CollapsingHeader("Input Image")) {
-						RenderInputImage(img2imgEntity);
-					}
-
-					if (ImGui::CollapsingHeader("Model Selection")) {
-						if (ImGui::BeginTabBar("Model Loader")) {
-							if (ImGui::BeginTabItem("Full")) {
-								RenderModelLoader(img2imgEntity);
-								ImGui::EndTabItem();
-							}
-							if (ImGui::BeginTabItem("Separate")) {
-								RenderDiffusionModelLoader(img2imgEntity);
-								ImGui::EndTabItem();
-							}
-							ImGui::EndTabBar();
+						// Render appropriate UI sections
+						if (ImGui::CollapsingHeader("Output Settings")) {
+							RenderFilePath(txt2imgEntity);
 						}
+
+						if (ImGui::CollapsingHeader("Model Selection")) {
+							if (ImGui::BeginTabBar("Model Loader")) {
+								if (ImGui::BeginTabItem("Full")) {
+									RenderModelLoader(txt2imgEntity);
+									ImGui::EndTabItem();
+								}
+								if (ImGui::BeginTabItem("Separate")) {
+									RenderDiffusionModelLoader(txt2imgEntity);
+									ImGui::EndTabItem();
+								}
+								ImGui::EndTabBar();
+							}
+						}
+
+						if (ImGui::CollapsingHeader("Latent Settings")) {
+							RenderLatents(txt2imgEntity);
+						}
+
+						if (ImGui::CollapsingHeader("Prompt Inputs")) {
+							RenderPrompts(txt2imgEntity);
+						}
+
+						if (ImGui::CollapsingHeader("Sampler Settings")) {
+							RenderSampler(txt2imgEntity);
+						}
+
+						if (ImGui::CollapsingHeader("Other Settings")) {
+							RenderOther(txt2imgEntity);
+						}
+
+						ImGui::EndTabItem();
 					}
 
-					if (ImGui::CollapsingHeader("Latent Settings")) {
-						RenderLatents(img2imgEntity);
-					}
+					// Image-to-Image tab
+					if (ImGui::BeginTabItem("Img2Img")) {
+						isTxt2ImgMode = false;
 
-					if (ImGui::CollapsingHeader("Prompt Inputs")) {
-						RenderPrompts(img2imgEntity);
-					}
+						if (ImGui::CollapsingHeader("Output Settings")) {
+							RenderFilePath(img2imgEntity);
+						}
 
-					if (ImGui::CollapsingHeader("Sampler Settings")) {
-						RenderSampler(img2imgEntity);
-					}
+						if (ImGui::CollapsingHeader("Input Image")) {
+							RenderInputImage(img2imgEntity);
+						}
 
-					if (ImGui::CollapsingHeader("Other Settings")) {
-						RenderOther(img2imgEntity);
-					}
+						if (ImGui::CollapsingHeader("Model Selection")) {
+							if (ImGui::BeginTabBar("Model Loader")) {
+								if (ImGui::BeginTabItem("Full")) {
+									RenderModelLoader(img2imgEntity);
+									ImGui::EndTabItem();
+								}
+								if (ImGui::BeginTabItem("Separate")) {
+									RenderDiffusionModelLoader(img2imgEntity);
+									ImGui::EndTabItem();
+								}
+								ImGui::EndTabBar();
+							}
+						}
 
-					ImGui::EndTabItem();
+						if (ImGui::CollapsingHeader("Latent Settings")) {
+							RenderLatents(img2imgEntity);
+						}
+
+						if (ImGui::CollapsingHeader("Prompt Inputs")) {
+							RenderPrompts(img2imgEntity);
+						}
+
+						if (ImGui::CollapsingHeader("Sampler Settings")) {
+							RenderSampler(img2imgEntity);
+						}
+
+						if (ImGui::CollapsingHeader("Other Settings")) {
+							RenderOther(img2imgEntity);
+						}
+
+						ImGui::EndTabItem();
+					}
+					ImGui::EndTabBar();
 				}
-				ImGui::EndTabBar();
 			}
+			ImGui::End();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[DiffusionView] Exception in Render(): " << e.what() << std::endl;
+			ImGui::Begin("Image Generation - RENDER ERROR");
+			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "RENDER ERROR: %s", e.what());
 			ImGui::End();
 		}
 	}
@@ -1254,12 +1269,12 @@ namespace GUI {
 		else {
 			entityJson = mgr.SerializeEntity(img2imgEntity);
 		}
-		
+
 		return entityJson;
 	}
 
 	void DiffusionView::Deserialize(const nlohmann::json& j) {
-		
+
 		EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
 
 		if (targetEntity == 0) {
@@ -1275,7 +1290,6 @@ namespace GUI {
 			std::cerr << "Exception during deserialization: " << e.what() << std::endl;
 		}
 	}
-
 
 	void DiffusionView::SaveMetadataToJson(const std::string& filepath) {
 		try {
@@ -1466,4 +1480,5 @@ namespace GUI {
 			ImGuiFileDialog::Instance()->Close();
 		}
 	}
+
 } // namespace GUI
