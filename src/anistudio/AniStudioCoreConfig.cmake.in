@@ -1,0 +1,27 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find AniEngineCore first
+find_dependency(AniEngineCore REQUIRED)
+
+# Find GUI dependencies
+find_dependency(glew REQUIRED)
+find_dependency(glfw3 REQUIRED)
+find_dependency(exiv2 REQUIRED)
+
+# Optional Zep editor
+if(@ZEP_AVAILABLE@)
+    find_dependency(Zep QUIET)
+endif()
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/AniStudioCoreTargets.cmake")
+
+check_required_components(AniStudioCore)
+
+# Provide version information
+set(AniStudioCore_VERSION @PROJECT_VERSION@)
+set(AniStudioCore_VERSION_MAJOR @PROJECT_VERSION_MAJOR@)
+set(AniStudioCore_VERSION_MINOR @PROJECT_VERSION_MINOR@)
+set(AniStudioCore_VERSION_PATCH @PROJECT_VERSION_PATCH@)

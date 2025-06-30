@@ -18,23 +18,23 @@
  * For commercial license iformation, please contact legal@kframe.ai.
  */
 
-#include "engine/Engine.hpp"
-#include "events/Events.hpp"
+#include "core/Core.hpp"
+#include "anistudio/events/Events.hpp"
 #include "timer/Timer.hpp"
 
 int main(int argc, char* argv[]) {
 
     // Initialize the engine
-    ANI::Core.Init();
-    ANI::Events::Ref().Init(ANI::Core.Window());
+    ANI::Core::Ref().Init();
+    ANI::Events::Ref().Init(ANI::Core::Ref().Window());
     ANI::Timer.Ref().Init();
 
     // Main loop
-    while (ANI::Core.Run()) { 
+    while (ANI::Core::Ref().Run()) {
         ANI::Timer.Ref().Tick();
         ANI::Events::Ref().Poll();
-        ANI::Core.Update(ANI::Timer.Ref().DeltaTime());
-        ANI::Core.Draw();
+        ANI::Core::Ref().Update(ANI::Timer.Ref().DeltaTime());
+        ANI::Core::Ref().Draw();
     }
     
     return 0;

@@ -1,22 +1,17 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0091 NEW)
 
-project(AniStudio)
+project(AniStudio VERSION 1.0.0)
 
-if(SD_CUDA)
-    enable_language(CUDA)
-    set(CUDA_ARCHITECTURES "89" CACHE STRING "Override for RTX 4090" FORCE)
-    add_definitions(-DSD_USE_CUDA)
-    
-    # Find CUDA toolkit
-    find_package(CUDAToolkit REQUIRED)
-    if(NOT CUDAToolkit_FOUND)
-        message(FATAL_ERROR "CUDA toolkit not found!")
-    endif()
-endif()
+# Build options
+option(BUILD_ANIENGINE "Build AniEngine library" ON)
+option(BUILD_ANISTUDIO "Build AniStudio library" ON)
+option(BUILD_ANIPLUGINS "Build AniPlugins library" ON)
+option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
+option(BUILD_SHARED_LIBS "Build shared libraries instead of static" OFF)
+option(SD_CUDA "Enable CUDA support for Stable Diffusion" OFF)
 
-option(BUILD_ANISTUDIO "Build the AniStudio application" ON)
-
+# Project-wide settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -30,6 +25,18 @@ if(UNIX AND NOT APPLE)
     set(OpenGL_GL_PREFERENCE GLVND)
 endif()
 
+# CUDA setup if enabled
+if(SD_CUDA)
+    enable_language(CUDA)
+    set(CUDA_ARCHITECTURES "89" CACHE STRING "Override for RTX 4090" FORCE)
+    add_definitions(-DSD_USE_CUDA)
+    
+    find_package(CUDAToolkit REQUIRED)
+    if(NOT CUDAToolkit_FOUND)
+        message(FATAL_ERROR "CUDA toolkit not found!")
+    endif()
+endif()
+
 # Include Conan toolchain
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
@@ -40,9 +47,6 @@ if(NOT CONAN_TOOLCHAIN)
         message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
     endif()
     
-    set(CMAKE_SKIP_BUILD_RPATH FALSE)
-    set(CMAKE_BUILD_RPATH_USE_ORIGIN TRUE)
-
     execute_process(
         COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}" 
                 --output-folder="${CMAKE_BINARY_DIR}" 
@@ -58,54 +62,53 @@ if(NOT CONAN_TOOLCHAIN)
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
 endif()
 
-set(CMAKE_VERBOSE_MAKEFILE ON)
-
-set(CMAKE_INSTALL_RPATH "$ORIGIN/../lib")
-set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-# Set binary output directories
+# Set output directories - FIXED VERSION
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# ADDED: Force single output directory for all configurations
+# This prevents CMake from adding /Debug or /Release subdirectories
+foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
+    string(TOUPPER ${CONFIG} CONFIG_UPPER)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/lib)
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/lib)
+endforeach()
+
+# Also set for single-config generators (like Makefiles)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
-
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
-
-# Create directories
+# Create necessary directories
 set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
-file(MAKE_DIRECTORY ${PLUGINS_DIR})
-
 set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
 set(DEFAULTS_DIR "${DATA_DIR}/defaults")
+set(SCRIPTS_DIR "${CMAKE_BINARY_DIR}/scripts")
+
+file(MAKE_DIRECTORY ${PLUGINS_DIR})
 file(MAKE_DIRECTORY ${DATA_DIR})
 file(MAKE_DIRECTORY ${DEFAULTS_DIR})
-
-file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
-foreach(DEFAULT_FILE ${DEFAULT_FILES})
-    file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/data/defaults" "${DEFAULT_FILE}")
-    set(DEST_FILE "${DEFAULTS_DIR}/${REL_PATH}")
-    
-    if(NOT EXISTS "${DEST_FILE}")
-        get_filename_component(DEST_DIR "${DEST_FILE}" DIRECTORY)
-        file(MAKE_DIRECTORY "${DEST_DIR}")
-        file(COPY "${DEFAULT_FILE}" DESTINATION "${DEST_DIR}")
-        message(STATUS "Copied default file: ${REL_PATH}")
-    else()
-        message(STATUS "Skipping existing file: ${REL_PATH}")
-    endif()
-endforeach()
-
-set(SCRIPTS_DIR "${CMAKE_BINARY_DIR}/scripts")
 file(MAKE_DIRECTORY ${SCRIPTS_DIR})
 
+# Copy default files
+if(EXISTS "${CMAKE_SOURCE_DIR}/data/defaults")
+    file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
+    foreach(DEFAULT_FILE ${DEFAULT_FILES})
+        file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/data/defaults" "${DEFAULT_FILE}")
+        set(DEST_FILE "${DEFAULTS_DIR}/${REL_PATH}")
+        
+        if(NOT EXISTS "${DEST_FILE}")
+            get_filename_component(DEST_DIR "${DEST_FILE}" DIRECTORY)
+            file(MAKE_DIRECTORY "${DEST_DIR}")
+            file(COPY "${DEFAULT_FILE}" DESTINATION "${DEST_DIR}")
+        endif()
+    endforeach()
+endif()
+
+# Copy scripts
 if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
     file(GLOB_RECURSE SCRIPT_FILES "${CMAKE_SOURCE_DIR}/scripts/*")
     foreach(SCRIPT_FILE ${SCRIPT_FILES})
@@ -116,12 +119,17 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
         file(MAKE_DIRECTORY "${DEST_DIR}")
         file(COPY "${SCRIPT_FILE}" DESTINATION "${DEST_DIR}")
     endforeach()
-    message(STATUS "Copied scripts directory to ${SCRIPTS_DIR}")
-else()
-    message(STATUS "No scripts directory found at ${CMAKE_SOURCE_DIR}/scripts")
 endif()
 
-# Find required packages
+# Copy shaders
+if(EXISTS "${CMAKE_SOURCE_DIR}/src/shaders")
+    set(SHADER_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
+    file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
+    message(STATUS "Copied shaders to ${CMAKE_BINARY_DIR}/shaders")
+endif()
+
+# Find external dependencies (find_package only - no building here)
 find_package(Vulkan REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(glew REQUIRED)
@@ -133,188 +141,45 @@ find_package(FFmpeg REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(semver REQUIRED)
 
-include_directories(${GLFW_INCLUDE_DIRS})
-
-# Shader files
-set(SHADER_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
-file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
-message(STATUS "Copied shaders to ${CMAKE_BINARY_DIR}/shaders")
-
-# Add external dependencies
-add_subdirectory(external/stable-diffusion.cpp)
-add_subdirectory(external/imgui)
-add_subdirectory(external/imgui_nodes)
-add_subdirectory(external/ImNodeFlow)
-add_subdirectory(external/imgui_filedialog)
-add_subdirectory(external/ImJSchema)
-add_subdirectory(external/ImGuizmo)
-
-# Only build Zep if needed
-set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
-set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE) 
-set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
-set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)
-
+# Check for Zep availability (but don't build it here)
 if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
-    add_subdirectory(external/zep)
     set(ZEP_AVAILABLE TRUE)
-    message(STATUS "Zep text editor found and will be built")
+    message(STATUS "Zep text editor source found")
 else()
     message(WARNING "Zep not found at external/zep - text editor features will be limited")
     set(ZEP_AVAILABLE FALSE)
 endif()
 
-# Include directories
-include_directories(
-    ${CONAN_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/base_plugins
-    ${CMAKE_SOURCE_DIR}/src/events
-    ${CMAKE_SOURCE_DIR}/src/gui
-    ${CMAKE_SOURCE_DIR}/src/gui/base
-    ${CMAKE_SOURCE_DIR}/src/utils
-    ${CMAKE_SOURCE_DIR}/src/gui_utils
-    ${CMAKE_SOURCE_DIR}/src/ecs
-    ${CMAKE_SOURCE_DIR}/src/ecs/base
-    ${CMAKE_SOURCE_DIR}/src/ecs/systems
-    ${CMAKE_SOURCE_DIR}/src/ecs/components
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/SDCPPComponents
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/ImageComponents
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/VideoComponents
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/ScriptComponents
-    ${CMAKE_SOURCE_DIR}/external/glm
-    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
-    ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
-    ${CMAKE_SOURCE_DIR}/external/nlohmann_json
-    ${CMAKE_SOURCE_DIR}/external/imgui_nodes
-    ${CMAKE_SOURCE_DIR}/external/immvision
-    ${CMAKE_SOURCE_DIR}/external/imgui_markdown
-    ${CMAKE_SOURCE_DIR}/external/zep/include
-    ${CMAKE_SOURCE_DIR}/external/cr/cr
-    ${Vulkan_INCLUDE_DIR}
-)
+# External libraries will be built by the individual library CMakeLists
+# This avoids rebuilding them when only one library changes
 
-# Source files - FIXED: Collect sources properly and exclude problematic files
-file(GLOB_RECURSE ALL_MAIN_SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
+# Pass options to subdirectories
+set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS})
+set(ANIENGINE_ENABLE_CUDA ${SD_CUDA})
+set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS})
+set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE})
+set(ANIPLUGINS_BUILD_SHARED ${BUILD_SHARED_LIBS})
 
-# Remove specific files that we'll handle separately
-list(REMOVE_ITEM ALL_MAIN_SOURCES 
-    "${CMAKE_SOURCE_DIR}/src/AniEngine.cpp"
-    "${CMAKE_SOURCE_DIR}/src/AniStudio.cpp"
-    "${CMAKE_SOURCE_DIR}/src/main.cpp"
-)
-
-file(GLOB_RECURSE GUI_SOURCES ${CMAKE_SOURCE_DIR}/src/gui/*.cpp)
-file(GLOB_RECURSE SYSTEM_SOURCES ${CMAKE_SOURCE_DIR}/src/ecs/systems/*.cpp)
-file(GLOB_RECURSE UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/utils/*.cpp)
-file(GLOB_RECURSE PLUGIN_SOURCES ${CMAKE_SOURCE_DIR}/src/base_plugins/*.cpp)
-file(GLOB_RECURSE EVENT_SOURCES ${CMAKE_SOURCE_DIR}/src/events/*.cpp)
-file(GLOB_RECURSE GUI_UTILS_SOURCES ${CMAKE_SOURCE_DIR}/src/gui_utils/*.cpp)
-
-# AniStudioCore library - FIXED: Build as static library with proper sources
-add_library(AniStudioCore STATIC
-    ${CMAKE_SOURCE_DIR}/src/pch.cpp
-    ${CMAKE_SOURCE_DIR}/src/AniEngine.cpp      # Add explicitly with proper definitions
-    ${CMAKE_SOURCE_DIR}/src/AniStudio.cpp      # Add explicitly with proper definitions
-    ${ALL_MAIN_SOURCES}                        # Rest of the sources (excluding main.cpp)
-    ${CMAKE_SOURCE_DIR}/src/engine/Engine.cpp
-    ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
-    ${GUI_SOURCES}
-    ${SYSTEM_SOURCES}
-    ${UTILS_SOURCES}
-    ${PLUGIN_SOURCES}
-    ${EVENT_SOURCES}
-    ${GUI_UTILS_SOURCES}
-)
-
-# FIXED: Proper compile definitions for static library (no DLL exports)
-target_compile_definitions(AniStudioCore PUBLIC 
-    GLEW_STATIC
-    IMGUI_DEFINE_MATH_OPERATORS
-    "ANI_ENGINE_API="           # Empty - no DLL exports needed for static lib
-    "ANI_STUDIO_API="           # Empty - no DLL exports needed for static lib
-    "ANI_CORE_API="             # Empty - no DLL exports needed for static lib
-    "PLUGIN_API=__declspec(dllexport)"  # Only plugins need DLL exports
-)
-
-target_include_directories(AniStudioCore PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/base_plugins
-    ${CMAKE_SOURCE_DIR}/src/events
-    ${CMAKE_SOURCE_DIR}/src/gui
-    ${CMAKE_SOURCE_DIR}/src/gui/base
-    ${CMAKE_SOURCE_DIR}/src/utils
-    ${CMAKE_SOURCE_DIR}/src/gui_utils
-    ${CMAKE_SOURCE_DIR}/src/ecs
-    ${CMAKE_SOURCE_DIR}/src/ecs/base
-    ${CMAKE_SOURCE_DIR}/src/ecs/systems
-    ${CMAKE_SOURCE_DIR}/src/ecs/components
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/SDCPPComponents
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/ImageComponents
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/VideoComponents
-    ${CMAKE_SOURCE_DIR}/src/ecs/components/ScriptComponents
-    ${CMAKE_SOURCE_DIR}/external/glm
-    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
-    ${CMAKE_SOURCE_DIR}/external/imgui_filedialog
-    ${CMAKE_SOURCE_DIR}/external/nlohmann_json
-    ${CMAKE_SOURCE_DIR}/external/imgui_nodes
-    ${CMAKE_SOURCE_DIR}/external/immvision
-    ${CMAKE_SOURCE_DIR}/external/imgui_markdown
-    ${CMAKE_SOURCE_DIR}/external/zep/include
-    ${CMAKE_SOURCE_DIR}/external/cr/cr
-)
-
-target_link_libraries(AniStudioCore PUBLIC
-    ${CONAN_LIBS}
-    stable-diffusion
-    ImGui
-    ImGui_Nodes
-    ImNodeFlow
-    ImJSchema
-    ImGuiFileDialog
-    ImGuizmo
-    opencv::opencv
-    glfw
-    GLEW::GLEW
-    ZLIB::ZLIB
-    PNG::PNG
-    Vulkan::Vulkan
-    exiv2::exiv2
-    ffmpeg::avcodec
-    ffmpeg::avformat
-    ffmpeg::avutil
-    ffmpeg::swscale
-    pybind11::embed
-    semver::semver
-)
-
-if(ZEP_AVAILABLE)
-    target_link_libraries(AniStudioCore PUBLIC Zep::Zep)
-    target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
+# Add subdirectory libraries
+if(BUILD_ANIPLUGINS)
+    add_subdirectory(src/aniplugins)
 endif()
 
-if(SD_CUDA)
-    target_compile_definitions(AniStudioCore PUBLIC SD_USE_CUDA)
-    target_link_libraries(AniStudioCore PUBLIC CUDA::cudart)
+if(BUILD_ANIENGINE)
+    add_subdirectory(src/aniengine)
 endif()
 
-set_target_properties(AniStudioCore PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-    ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib
-    ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib
-    ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib
-    ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib
-)
-
-target_compile_features(AniStudioCore PUBLIC cxx_std_17)
-
-# Main executable - FIXED: Simple executable that just links to AniStudioCore
 if(BUILD_ANISTUDIO)
+    add_subdirectory(src/anistudio)
+endif()
+
+# Main application
+if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
+        ${CMAKE_SOURCE_DIR}/src/pch.cpp
+        ${CMAKE_SOURCE_DIR}/src/core/Core.cpp
+        ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
     )
 
     set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -322,26 +187,128 @@ if(BUILD_ANISTUDIO)
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
+        # ADDED: Explicitly set output directories for main executable
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin
     )
 
-    # FIXED: Simple compile definitions for executable
     target_compile_definitions(${PROJECT_NAME} PRIVATE 
         GLEW_STATIC
         IMGUI_DEFINE_MATH_OPERATORS
     )
     
-    # Link to AniStudioCore which has everything
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/core
+        ${CMAKE_SOURCE_DIR}/src/timer
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    
+    # Link to AniStudioCore which includes AniEngineCore
     target_link_libraries(${PROJECT_NAME} PRIVATE
         AniStudioCore
     )
 
     # Precompiled headers
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
+    
+    message(STATUS "Main application will be built")
 endif()
 
-message(STATUS "AniStudio build configuration complete")
-message(STATUS "  - AniStudioCore: Static library with all engine functionality")
-message(STATUS "  - ${PROJECT_NAME}: Main executable")
-message(STATUS "  - Plugins directory: ${PLUGINS_DIR}")
-message(STATUS "  - CR plugin system: Enabled")
-message(STATUS "  - Use add_cr_plugin() function to build plugins")
+# Plugin utility function for the main project
+function(add_cr_plugin TARGET_NAME)
+    cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
+    
+    add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
+    
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/aniplugins
+        ${CMAKE_SOURCE_DIR}/external/cr/cr
+        ${PLUGIN_INCLUDE_DIRS}
+    )
+    
+    target_link_libraries(${TARGET_NAME} PRIVATE
+        AniEngineCore
+        ${PLUGIN_LIBRARIES}
+    )
+    
+    target_compile_definitions(${TARGET_NAME} PRIVATE
+        PLUGIN_API=__declspec\(dllexport\)
+    )
+    
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        RUNTIME_OUTPUT_DIRECTORY ${PLUGINS_DIR}
+        LIBRARY_OUTPUT_DIRECTORY ${PLUGINS_DIR}
+        # ADDED: Force plugin output directories for all configurations
+        RUNTIME_OUTPUT_DIRECTORY_DEBUG ${PLUGINS_DIR}
+        RUNTIME_OUTPUT_DIRECTORY_RELEASE ${PLUGINS_DIR}
+        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${PLUGINS_DIR}
+        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${PLUGINS_DIR}
+        LIBRARY_OUTPUT_DIRECTORY_DEBUG ${PLUGINS_DIR}
+        LIBRARY_OUTPUT_DIRECTORY_RELEASE ${PLUGINS_DIR}
+        LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${PLUGINS_DIR}
+        LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${PLUGINS_DIR}
+    )
+    
+    message(STATUS "Added CR plugin: ${TARGET_NAME}")
+endfunction()
+
+# Install configuration (when building full project)
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    include(GNUInstallDirs)
+    
+    # Install the main application
+    if(BUILD_MAIN_APP AND TARGET ${PROJECT_NAME})
+        install(TARGETS ${PROJECT_NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
+    
+    # Install data and scripts
+    install(DIRECTORY ${DATA_DIR}/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
+        PATTERN "*.tmp" EXCLUDE
+    )
+    
+    install(DIRECTORY ${SCRIPTS_DIR}/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts
+        PATTERN "*.tmp" EXCLUDE
+    )
+    
+    # Install shaders
+    if(EXISTS ${CMAKE_BINARY_DIR}/shaders)
+        install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/shaders
+        )
+    endif()
+    
+    # Create plugins directory
+    install(DIRECTORY DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins)
+endif()
+
+# Summary
+message(STATUS "")
+message(STATUS "AniStudio build configuration:")
+message(STATUS "  Version: ${PROJECT_VERSION}")
+message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Shared libraries: ${BUILD_SHARED_LIBS}")
+message(STATUS "  CUDA support: ${SD_CUDA}")
+message(STATUS "")
+message(STATUS "Components:")
+message(STATUS "  AniPlugins: ${BUILD_ANIPLUGINS}")
+message(STATUS "  AniEngine: ${BUILD_ANIENGINE}")
+message(STATUS "  AniStudio: ${BUILD_ANISTUDIO}")
+message(STATUS "  Main App: ${BUILD_MAIN_APP}")
+message(STATUS "  Zep Editor: ${ZEP_AVAILABLE}")
+message(STATUS "")
+message(STATUS "Output directories:")
+message(STATUS "  Binaries: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+message(STATUS "  Libraries: ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}")
+message(STATUS "  Plugins: ${PLUGINS_DIR}")
+message(STATUS "")

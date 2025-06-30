@@ -1,0 +1,15 @@
+{
+    "assetsFolderPath": "",
+    "checkpointDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/checkpoints",
+    "controlnetDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/controlnet",
+    "defaultModelRootPath": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models",
+    "defaultProjectPath": "F:\\Stable_Diffusion_Stuff\\AniStudio\\projects\\new_project",
+    "defaultScriptsPath": "../scripts",
+    "encoderDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/clip",
+    "lastOpenProjectPath": "",
+    "loraDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/loras",
+    "unetDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/unet",
+    "upscaleDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/upscale_models",
+    "vaeDir": "F:\\Stable_Diffusion_Stuff\\AniStudio\\models/vae",
+    "virtualEnvPath": "../venv"
+}
