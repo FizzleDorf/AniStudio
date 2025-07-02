@@ -38,5 +38,6 @@
 #include "VideoSequencerView.hpp"
 #include "ZepView.hpp"
 #include "HelpView.hpp"
+#include "ProjectView.hpp"
 
 #endif

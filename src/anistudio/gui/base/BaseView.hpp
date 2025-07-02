@@ -14,6 +14,8 @@ namespace GUI {
 	class BaseView {
 	public:
 		std::string viewName = "Base_View";
+		std::string category = "";
+
 		BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr) {}
 		virtual ~BaseView() {}
 
