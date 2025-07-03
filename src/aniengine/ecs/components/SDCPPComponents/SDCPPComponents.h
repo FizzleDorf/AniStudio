@@ -37,3 +37,4 @@
 
 // Other
 #include "LayerSkipComponent.hpp"
+#include "ChromaComponent.hpp"

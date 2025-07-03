@@ -30,7 +30,7 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreComponents(ECS::EntityManager& mgr) {
-		// Register Component Names - EXACTLY like working StudioCore
+		// Existing component registrations...
 		mgr.RegisterComponentName<ModelComponent>("Model");
 		mgr.RegisterComponentName<ClipLComponent>("ClipL");
 		mgr.RegisterComponentName<ClipGComponent>("ClipG");
@@ -55,8 +55,10 @@ namespace ANI {
 		mgr.RegisterComponentName<InputVideoComponent>("InputVideo");
 		mgr.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 		mgr.RegisterComponentName<PythonComponent>("Python");
+		mgr.RegisterComponentName<ChromaComponent>("Chroma");
+		mgr.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
 
-		std::cout << "[EngineCore] Core components registered" << std::endl;
+		std::cout << "[EngineCore] Core components registered (including new Chroma support)" << std::endl;
 	}
 
 	void EngineCore::RegisterCoreSystems(ECS::EntityManager& mgr) {

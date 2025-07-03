@@ -1,4 +1,4 @@
-// AniStudio.cpp - FIXED TO ONLY REGISTER, NOT CREATE VIEWS
+// AniStudio.cpp - UPDATED to use ViewManager factory system
 #include "AniStudio.hpp"
 #include "GUI.h"
 #include "AllViews.h"
@@ -33,30 +33,49 @@ namespace ANI {
 	}
 
 	void StudioCore::RegisterCoreViews() {
-		// Register Views ONLY - NO CREATION
-		g_viewManager.RegisterViewType<DebugView>("DebugView");
-		g_viewManager.RegisterViewType<SettingsView>("SettingsView");
-		g_viewManager.RegisterViewType<DiffusionView>("DiffusionView");
-		g_viewManager.RegisterViewType<ImageView>("ImageView");
-		g_viewManager.RegisterViewType<NodeGraphView>("NodeGraphView");
-		g_viewManager.RegisterViewType<ConvertView>("ConvertView");
-		g_viewManager.RegisterViewType<ViewListManagerView>("ViewListManagerView");
-		g_viewManager.RegisterViewType<SequencerView>("SequencerView");
-		g_viewManager.RegisterViewType<PluginView>("PluginView");
-		g_viewManager.RegisterViewType<NodeView>("NodeView");
-		g_viewManager.RegisterViewType<UpscaleView>("UpscaleView");
-		g_viewManager.RegisterViewType<VideoView>("VideoView");
-		g_viewManager.RegisterViewType<VideoView>("VideoSequencerView");
-		g_viewManager.RegisterViewType<ZepView>("ZepView");
-		g_viewManager.RegisterViewType<HelpView>("HelpView");
+		std::cout << "[StudioCore] Registering core view factories..." << std::endl;
 
-		std::cout << "[StudioCore] Core views registered" << std::endl;
+		// Register standard views with factory functions (standard constructor: EntityManager&)
+		g_viewManager.RegisterViewFactory<DebugView>("DebugView");
+		g_viewManager.RegisterViewFactory<SettingsView>("SettingsView");
+		g_viewManager.RegisterViewFactory<DiffusionView>("DiffusionView");
+		g_viewManager.RegisterViewFactory<ImageView>("ImageView");
+		g_viewManager.RegisterViewFactory<NodeGraphView>("NodeGraphView");
+		g_viewManager.RegisterViewFactory<ConvertView>("ConvertView");
+		g_viewManager.RegisterViewFactory<SequencerView>("SequencerView");
+		g_viewManager.RegisterViewFactory<NodeView>("NodeView");
+		g_viewManager.RegisterViewFactory<UpscaleView>("UpscaleView");
+		g_viewManager.RegisterViewFactory<VideoView>("VideoView");
+		g_viewManager.RegisterViewFactory<ZepView>("ZepView");
+		g_viewManager.RegisterViewFactory<HelpView>("HelpView");
+
+		// Register special views with custom factory functions (different constructors)
+
+		// PluginView requires PluginManager
+		g_viewManager.RegisterCustomViewFactory("PluginView",
+			[](GUI::ViewListID viewID, ECS::EntityManager& mgr) {
+			auto& pluginMgr = StudioCore::GetPluginManager();
+			g_viewManager.AddView<PluginView>(viewID, PluginView(mgr, pluginMgr));
+			g_viewManager.GetView<PluginView>(viewID).Init();
+		}
+		);
+
+		// ViewListManagerView requires both EntityManager and ViewManager
+		g_viewManager.RegisterCustomViewFactory("ViewListManagerView",
+			[](GUI::ViewListID viewID, ECS::EntityManager& mgr) {
+			g_viewManager.AddView<ViewListManagerView>(viewID, ViewListManagerView(mgr, g_viewManager));
+			g_viewManager.GetView<ViewListManagerView>(viewID).Init();
+		}
+		);
+
+		std::cout << "[StudioCore] Core view factories registered successfully!" << std::endl;
+		std::cout << "[StudioCore] Total registered factories: " << g_viewManager.GetRegisteredFactories().size() << std::endl;
 	}
 
 	// CRITICAL FIX: Remove CreateCoreViews entirely - MenuBar will handle all view creation
 	void StudioCore::CreateCoreViews() {
-		// DO NOTHING - Let MenuBar handle all view creation on demand
-		std::cout << "[StudioCore] Skipping core view creation - MenuBar will handle view creation" << std::endl;
+		// DO NOTHING - Let MenuBar handle all view creation on demand using factories
+		std::cout << "[StudioCore] Skipping core view creation - MenuBar will use factory system" << std::endl;
 	}
 
 	bool StudioCore::Initialize() {
@@ -117,7 +136,7 @@ namespace ANI {
 			auto tempView = g_viewManager.CreateView();
 			g_viewManager.DestroyView(tempView);
 
-			// Register views - EXACTLY like working Engine.cpp
+			// Register view FACTORIES (not just types) - EXACTLY like working Engine.cpp
 			RegisterCoreViews();
 
 			// Register Component Names - EXACTLY like working Engine.cpp
@@ -145,6 +164,8 @@ namespace ANI {
 			g_entityManager.RegisterComponentName<InputVideoComponent>("InputVideo");
 			g_entityManager.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 			g_entityManager.RegisterComponentName<PythonComponent>("Python");
+			g_entityManager.RegisterComponentName<ChromaComponent>("Chroma");
+			g_entityManager.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
 
 			// Register core systems - EXACTLY like working Engine.cpp
 			g_entityManager.RegisterSystem<SDCPPSystem>();
@@ -155,12 +176,19 @@ namespace ANI {
 			g_pluginManager.Init();
 
 			// CRITICAL FIX: DO NOT CREATE ANY VIEWS HERE
-			// CreateCoreViews(); // REMOVED - MenuBar will handle this
+			// CreateCoreViews(); // REMOVED - MenuBar will handle this using factories
 
 			s_initialized = true;
 			s_running = true;
 
-			std::cout << "[StudioCore] Initialized successfully - NO VIEWS CREATED" << std::endl;
+			std::cout << "[StudioCore] Initialized successfully with factory system!" << std::endl;
+			std::cout << "[StudioCore] Available view factories: " << g_viewManager.GetRegisteredFactories().size() << std::endl;
+
+			// Debug output
+			for (const std::string& factoryName : g_viewManager.GetRegisteredFactories()) {
+				std::cout << "[StudioCore] - Factory: " << factoryName << std::endl;
+			}
+
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -223,10 +251,10 @@ namespace ANI {
 			ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
 			// Show the menu bar and render views - EXACTLY like working Engine.cpp
-			// MenuBar will create views on demand
+			// MenuBar will use factory system to create views on demand
 			GUI::ShowMenuBar(static_cast<GLFWwindow*>(s_windowHandle), g_viewManager, g_entityManager);
 
-			// Render all views created by MenuBar
+			// Render all views created by MenuBar using factories
 			g_viewManager.Render();
 
 			// Render ImGui

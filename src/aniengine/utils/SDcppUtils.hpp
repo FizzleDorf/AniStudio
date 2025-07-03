@@ -3,7 +3,7 @@
 	   d88888          Y8P d88P  Y88b 888                  888 Y8P
 	  d88P888              Y88b.      888                  888
 	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+	d88P  888 888 "88b 888     "Y888b. 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
@@ -36,7 +36,6 @@ namespace Utils
 	{
 	public:
 		// Generate a random seed using STDDefaultRNG from sdcpp
-		// TODO: move this to a util
 		static uint64_t generateRandomSeed()
 		{
 			// Seed the RNG with a random device if not already seeded
@@ -54,16 +53,20 @@ namespace Utils
 			return seed > 0 ? seed : 1; // Ensure seed is positive
 		}
 
-		// SD context initialization
+		// SD context initialization - UPDATED for new API
 		static sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata)
 		{
 			try
 			{
 				std::string modelPath = "", clipLPath = "", clipGPath = "", t5xxlPath = "";
 				std::string diffusionModelPath = "", vaePath = "", taesdPath = "", controlnetPath = "";
-				std::string loraPath = "", embedPath = "";
+				std::string loraPath = "", embedPath = "", stackedIdEmbedPath = "";
 				bool vae_decode_only = false, isTiled = false, free_params_immediately = true;
-				bool keep_vae_on_cpu = false;
+				bool keep_clip_on_cpu = true, keep_control_net_cpu = false, keep_vae_on_cpu = false;
+				bool diffusion_flash_attn = false;
+				// NEW: Chroma-specific parameters
+				bool chroma_use_dit_mask = false, chroma_use_t5_mask = false;
+				int chroma_t5_mask_pad = 0;
 				int n_threads = 4;
 				sd_type_t type_method = SD_TYPE_F16;
 				rng_type_t rng_type = STD_DEFAULT_RNG;
@@ -187,13 +190,23 @@ namespace Utils
 						}
 
 						// Embedding component
-						if (comp.contains("EmbeddingComponent"))
+						if (comp.contains("Embedding"))
 						{
-							auto embed = comp["EmbeddingComponent"];
+							auto embed = comp["Embedding"];
 							if (embed.contains("modelPath") && !embed["modelPath"].get<std::string>().empty())
 								embedPath = embed["modelPath"];
 							else if (embed.contains("modelName") && !embed["modelName"].get<std::string>().empty())
 								embedPath = FilePaths::embedDir + "/" + embed["modelName"].get<std::string>();
+						}
+
+						// NEW: Stacked ID Embedding component for PhotoMaker/Chroma support
+						if (comp.contains("StackedIdEmbed"))
+						{
+							auto stackedEmbed = comp["StackedIdEmbed"];
+							if (stackedEmbed.contains("modelPath") && !stackedEmbed["modelPath"].get<std::string>().empty())
+								stackedIdEmbedPath = stackedEmbed["modelPath"];
+							else if (stackedEmbed.contains("modelName") && !stackedEmbed["modelName"].get<std::string>().empty())
+								stackedIdEmbedPath = FilePaths::embedDir + "/" + stackedEmbed["modelName"].get<std::string>();
 						}
 
 						// Sampler component
@@ -204,12 +217,30 @@ namespace Utils
 								n_threads = sampler["n_threads"];
 							if (sampler.contains("free_params_immediately"))
 								free_params_immediately = sampler["free_params_immediately"];
+							if (sampler.contains("keep_clip_on_cpu"))
+								keep_clip_on_cpu = sampler["keep_clip_on_cpu"];
+							if (sampler.contains("keep_control_net_cpu"))
+								keep_control_net_cpu = sampler["keep_control_net_cpu"];
+							if (sampler.contains("diffusion_flash_attn"))
+								diffusion_flash_attn = sampler["diffusion_flash_attn"];
 							if (sampler.contains("current_type_method"))
 								type_method = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
 							if (sampler.contains("current_rng_type"))
 								rng_type = static_cast<rng_type_t>(sampler["current_rng_type"].get<int>());
 							if (sampler.contains("current_scheduler_method"))
 								scheduler_method = static_cast<schedule_t>(sampler["current_scheduler_method"].get<int>());
+						}
+
+						// NEW: Chroma component for Chroma-specific settings
+						if (comp.contains("Chroma"))
+						{
+							auto chroma = comp["Chroma"];
+							if (chroma.contains("use_dit_mask"))
+								chroma_use_dit_mask = chroma["use_dit_mask"];
+							if (chroma.contains("use_t5_mask"))
+								chroma_use_t5_mask = chroma["use_t5_mask"];
+							if (chroma.contains("t5_mask_pad"))
+								chroma_t5_mask_pad = chroma["t5_mask_pad"];
 						}
 					}
 				}
@@ -226,8 +257,14 @@ namespace Utils
 				std::cout << "Controlnet: " << controlnetPath << std::endl;
 				std::cout << "Lora: " << loraPath << std::endl;
 				std::cout << "Embedding: " << embedPath << std::endl;
+				std::cout << "StackedIdEmbed: " << stackedIdEmbedPath << std::endl;
 
-				// Initialize SD context with parsed metadata
+				// NEW: Chroma debug output
+				std::cout << "Chroma DiT Mask: " << (chroma_use_dit_mask ? "true" : "false") << std::endl;
+				std::cout << "Chroma T5 Mask: " << (chroma_use_t5_mask ? "true" : "false") << std::endl;
+				std::cout << "Chroma T5 Mask Pad: " << chroma_t5_mask_pad << std::endl;
+
+				// Initialize SD context with parsed metadata - UPDATED API CALL
 				return new_sd_ctx(
 					modelPath.c_str(),
 					clipLPath.c_str(),
@@ -239,18 +276,21 @@ namespace Utils
 					controlnetPath.c_str(),
 					loraPath.c_str(),
 					embedPath.c_str(),
-					"", // placeholder_token_text
+					stackedIdEmbedPath.c_str(),  // NEW: stacked_id_embed_dir_c_str
 					vae_decode_only,
-					isTiled,
+					isTiled,  // vae_tiling
 					free_params_immediately,
 					n_threads,
-					type_method,
+					type_method,  // wtype
 					rng_type,
-					scheduler_method,
-					true,  // shift_text_decoder
-					false, // debug_clip_pos
+					scheduler_method,  // s (schedule)
+					keep_clip_on_cpu,
+					keep_control_net_cpu,
 					keep_vae_on_cpu,
-					false // debug_extract_shifts
+					diffusion_flash_attn,
+					chroma_use_dit_mask,  // NEW: chroma_use_dit_mask
+					chroma_use_t5_mask,   // NEW: chroma_use_t5_mask
+					chroma_t5_mask_pad    // NEW: chroma_t5_mask_pad
 				);
 			}
 			catch (const std::exception &e)
@@ -383,7 +423,6 @@ namespace Utils
 		}
 
 		// Implementations of core methods for generation
-
 		static bool RunInference(const nlohmann::json &metadata, std::string fullPath)
 		{
 			sd_ctx_t *sd_context = nullptr;
@@ -444,6 +483,7 @@ namespace Utils
 				return false;
 			}
 		}
+
 		static bool ConvertToGGUF(const nlohmann::json &metadata)
 		{
 			try
@@ -488,8 +528,8 @@ namespace Utils
 				// Create output path with type suffix
 				std::filesystem::path inPath(inputPath);
 				std::string outPath = inPath.parent_path().string() + "/" +
-									  inPath.stem().string() + "_" +
-									  std::string(type_method_items[type]) + ".gguf";
+					inPath.stem().string() + "_" +
+					std::string(sd_type_name(type)) + ".gguf";
 
 				// Perform conversion
 				bool result;
@@ -692,7 +732,7 @@ namespace Utils
 				if (!inputData)
 				{
 					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
-										(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
 					throw std::runtime_error(error);
 				}
 
@@ -700,7 +740,7 @@ namespace Utils
 				inputChannels = 3;
 
 				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
-						  << " with " << inputChannels << " channels (forced RGB)" << std::endl;
+					<< " with " << inputChannels << " channels (forced RGB)" << std::endl;
 
 				// Validate image dimensions
 				if (inputWidth <= 0 || inputHeight <= 0)
@@ -727,10 +767,10 @@ namespace Utils
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
 					3, // FORCE 3 channels (RGB)
-					inputData};
+					inputData };
 
 				// Initialize mask image struct - IMPROVED MASK HANDLING
-				sd_image_t mask_image = {0};
+				sd_image_t mask_image = { 0 };
 
 				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath))
 				{
@@ -777,8 +817,8 @@ namespace Utils
 						if (maskWidth != inputWidth || maskHeight != inputHeight)
 						{
 							std::cout << "Warning: Mask dimensions (" << maskWidth << "x" << maskHeight
-									  << ") don't match input image (" << inputWidth << "x" << inputHeight
-									  << "), using white mask instead" << std::endl;
+								<< ") don't match input image (" << inputWidth << "x" << inputHeight
+								<< "), using white mask instead" << std::endl;
 
 							// Free the loaded mask and create a white one
 							stbi_image_free(maskData);
@@ -801,7 +841,7 @@ namespace Utils
 							mask_image.data = maskData;
 
 							std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
-									  << " with 1 channel (grayscale)" << std::endl;
+								<< " with 1 channel (grayscale)" << std::endl;
 						}
 					}
 				}
@@ -855,11 +895,11 @@ namespace Utils
 				}
 
 				std::cout << "img2img successful: " << result_image->width << "x" << result_image->height
-						  << "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
+					<< "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
 
 				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
-						  result_image->channel, metadata, fullPath);
+					result_image->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 				// Cleanup resources
@@ -1044,12 +1084,12 @@ namespace Utils
 				if (!inputData)
 				{
 					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
-										(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
+						(stbi_failure_reason() ? stbi_failure_reason() : "unknown reason");
 					throw std::runtime_error(error);
 				}
 
 				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
-						  << " with " << inputChannels << " channels" << std::endl;
+					<< " with " << inputChannels << " channels" << std::endl;
 
 				// Create output path
 				std::filesystem::path outputDir(outputPath);
@@ -1069,7 +1109,7 @@ namespace Utils
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
 					static_cast<uint32_t>(inputChannels),
-					inputData};
+					inputData };
 
 				// Perform upscaling
 				sd_image_t upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
@@ -1099,7 +1139,7 @@ namespace Utils
 
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
-						  upscaled_image.channel, metadata, fullPath);
+					upscaled_image.channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 				// Cleanup resources
@@ -1141,10 +1181,10 @@ namespace Utils
 				return false;
 			}
 		}
-		// Replace the SaveImage function in your SDcppUtils.hpp with this corrected version
 
+		// Replace the SaveImage function in your SDcppUtils.hpp with this corrected version
 		static void SaveImage(const unsigned char *data, int width, int height, int channels,
-							  const nlohmann::json &metadata, const std::string &fullPath)
+			const nlohmann::json &metadata, const std::string &fullPath)
 		{
 			try
 			{
@@ -1225,4 +1265,4 @@ namespace Utils
 			}
 		}
 	};
-} // namespace ECS
+} // namespace Utils

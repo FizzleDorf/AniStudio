@@ -66,6 +66,10 @@ namespace GUI {
 		void RenderControlnets(const EntityID entity);
 		void RenderEmbeddings(const EntityID entity);
 		void RenderVaeOptions(const EntityID entity);
+		void RenderChromaSettings(const EntityID entity);
+		void RenderStackedIdEmbed(const EntityID entity);
+		void RenderAdvancedSettings(const EntityID entity);
+
 		void HandleT2IEvent();
 		void HandleI2IEvent();
 		void HandleUpscaleEvent();
@@ -96,6 +100,11 @@ namespace GUI {
 
 		int currentExtensionIndex = 0;
 		std::string currentExtension = ".png"; // Default extension
+
+		// NEW: UI state for advanced features
+		bool showAdvancedSettings = false;
+		bool chromaSettingsExpanded = false;
+		bool stackedIdEmbedExpanded = false;
 	};
 
 } // namespace GUI
