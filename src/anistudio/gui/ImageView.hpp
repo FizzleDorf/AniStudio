@@ -1,7 +1,7 @@
 /*
- * Fixed ImageView.hpp - No Direct ECS System Callbacks
- * CRITICAL FIX: ImageView should NOT register callbacks with ECS systems
- * Instead, it should poll the system for data when needed
+ * ImageView.hpp - RESTORED GUI Callback Registration
+ * REQUIRED: ImageView SHOULD register callbacks with ECS systems for immediate UI updates
+ * This provides responsive UI updates when images are loaded or removed
  */
 
 #ifndef IMAGEVIEW_HPP
@@ -35,64 +35,37 @@ namespace GUI {
 		void Init() override {
 			std::cout << "[ImageView] Initializing..." << std::endl;
 
-			// CRITICAL FIX: Only ensure ImageSystem exists - NO CALLBACK REGISTRATION
+			// Ensure ImageSystem exists
 			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 			if (!imageSystem) {
 				std::cout << "[ImageView] Registering ImageSystem..." << std::endl;
 				mgr.RegisterSystem<ECS::ImageSystem>();
+				imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 			}
 
-			// CRITICAL FIX: Just refresh data once - no callbacks needed
+			// REGISTER GUI CALLBACKS WITH THE SYSTEM
+			if (imageSystem) {
+				// Register callback for when images are loaded successfully
+				imageSystem->RegisterImageLoadedCallback([this](ECS::EntityID entityID) {
+					OnImageLoaded(entityID);
+				});
+
+				// Register callback for when images are removed
+				imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entityID) {
+					OnImageRemoved(entityID);
+				});
+
+				std::cout << "[ImageView] Registered callbacks with ImageSystem" << std::endl;
+			}
+
 			RefreshImageEntities();
 
-			std::cout << "[ImageView] Initialization complete - NO CALLBACKS REGISTERED" << std::endl;
+			std::cout << "[ImageView] Initialization complete - CALLBACKS REGISTERED" << std::endl;
 		}
 
 		void Update(const float deltaT) override {
-			// CRITICAL FIX: Poll for changes instead of using callbacks
-			// This is GUI polling ECS data, which is the correct architecture
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (imageSystem) {
-				auto currentEntities = imageSystem->GetAllImageEntities();
-
-				// Check if entity list changed
-				if (currentEntities.size() != lastEntityCount) {
-					std::cout << "[ImageView] Entity count changed: " << lastEntityCount
-						<< " -> " << currentEntities.size() << std::endl;
-
-					imageEntities = currentEntities;
-					lastEntityCount = imageEntities.size();
-
-					// Handle selection changes when entities are added/removed
-					if (imageEntities.empty()) {
-						selectedEntityID = 0;
-						imgIndex = 0;
-					}
-					else if (selectedEntityID == 0) {
-						// Auto-select first image if none selected
-						selectedEntityID = imageEntities[0];
-						imgIndex = 0;
-					}
-					else {
-						// Update imgIndex if selected entity still exists
-						auto it = std::find(imageEntities.begin(), imageEntities.end(), selectedEntityID);
-						if (it != imageEntities.end()) {
-							imgIndex = static_cast<int>(std::distance(imageEntities.begin(), it));
-						}
-						else {
-							// Selected entity was removed, select first available
-							if (!imageEntities.empty()) {
-								selectedEntityID = imageEntities[0];
-								imgIndex = 0;
-							}
-							else {
-								selectedEntityID = 0;
-								imgIndex = 0;
-							}
-						}
-					}
-				}
-			}
+			// NOTE: We no longer need to poll for changes in Update since we use callbacks
+			// The callbacks will handle immediate updates when images are loaded/removed
 		}
 
 		void Render() override {
@@ -139,7 +112,12 @@ namespace GUI {
 		}
 
 		~ImageView() {
-			std::cout << "[ImageView] Destructor called - NO CALLBACKS TO UNREGISTER" << std::endl;
+			std::cout << "[ImageView] Destructor called - Clearing callbacks" << std::endl;
+			// Clear callbacks when this view is destroyed
+			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			if (imageSystem) {
+				imageSystem->ClearCallbacks();
+			}
 		}
 
 	private:
@@ -153,7 +131,7 @@ namespace GUI {
 		float offsetX;
 		float offsetY;
 
-		// Cached entity list - updated by polling
+		// Cached entity list - updated by callbacks and polling
 		std::vector<ECS::EntityID> imageEntities;
 
 		// File filters
@@ -163,6 +141,65 @@ namespace GUI {
 			"{.jpg,.jpeg},JPEG"
 			"{.bmp},BMP"
 			"{.tga},TGA";
+
+		// CALLBACK HANDLERS - Called by ImageSystem when images are loaded/removed
+		void OnImageLoaded(ECS::EntityID entityID) {
+			std::cout << "[ImageView] CALLBACK: Image loaded for entity " << entityID << std::endl;
+
+			// Refresh the entity list
+			RefreshImageEntities();
+
+			// Set the selection to the newly loaded image (last in the list)
+			if (!imageEntities.empty()) {
+				// Find the index of the loaded entity
+				auto it = std::find(imageEntities.begin(), imageEntities.end(), entityID);
+				if (it != imageEntities.end()) {
+					imgIndex = static_cast<int>(std::distance(imageEntities.begin(), it));
+					selectedEntityID = entityID;
+					std::cout << "[ImageView] Selected newly loaded image: Entity " << entityID << " at index " << imgIndex << std::endl;
+				}
+			}
+		}
+
+		void OnImageRemoved(ECS::EntityID entityID) {
+			std::cout << "[ImageView] CALLBACK: Image removed for entity " << entityID << std::endl;
+
+			// Store the current index before refresh
+			int previousIndex = imgIndex;
+
+			// Refresh the entity list
+			RefreshImageEntities();
+
+			// Handle selection changes after removal
+			if (selectedEntityID == entityID) {
+				// The selected image was removed, select previous image or adjust selection
+				if (!imageEntities.empty()) {
+					// If we were at the last image, go to the new last image
+					if (previousIndex >= static_cast<int>(imageEntities.size())) {
+						imgIndex = static_cast<int>(imageEntities.size()) - 1;
+					}
+					// Otherwise try to stay at the same index (which now points to the next image)
+					else {
+						imgIndex = std::max(0, std::min(previousIndex, static_cast<int>(imageEntities.size()) - 1));
+					}
+
+					if (imgIndex >= 0 && imgIndex < static_cast<int>(imageEntities.size())) {
+						selectedEntityID = imageEntities[imgIndex];
+						std::cout << "[ImageView] Selected previous image: Entity " << selectedEntityID << " at index " << imgIndex << std::endl;
+					}
+					else {
+						selectedEntityID = 0;
+						imgIndex = 0;
+					}
+				}
+				else {
+					// No images left
+					selectedEntityID = 0;
+					imgIndex = 0;
+					std::cout << "[ImageView] No images remaining after removal" << std::endl;
+				}
+			}
+		}
 
 		void RefreshImageEntities() {
 			try {

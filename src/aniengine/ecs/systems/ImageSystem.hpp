@@ -1,7 +1,7 @@
 /*
- * Fixed ImageSystem.hpp - Removed GUI Callback Mechanism
- * CRITICAL FIX: ECS Systems should NEVER have callbacks to GUI classes
- * GUI should poll ECS for data changes, not the other way around
+ * ImageSystem.hpp - RESTORED GUI Callback Mechanism
+ * REQUIRED: ECS Systems SHOULD have callbacks to GUI classes for immediate notifications
+ * GUI should both poll ECS for data AND receive immediate callbacks for responsive UI
  */
 
 #pragma once
@@ -19,11 +19,16 @@
 #include <queue>
 #include <mutex>
 #include <future>
+#include <functional>
 
 namespace ECS {
 
 	class ImageSystem : public BaseSystem {
 	public:
+		// Callback function types for GUI notifications
+		using ImageLoadedCallback = std::function<void(EntityID entityID)>;
+		using ImageRemovedCallback = std::function<void(EntityID entityID)>;
+
 		struct LoadResult {
 			bool success = false;
 			unsigned char* data = nullptr;
@@ -62,7 +67,7 @@ namespace ECS {
 			: BaseSystem(entityMgr) {
 			sysName = "ImageSystem";
 			AddComponentSignature<ImageComponent>();
-			std::cout << "[ImageSystem] Created - NO GUI CALLBACKS" << std::endl;
+			std::cout << "[ImageSystem] Created - WITH GUI CALLBACKS SUPPORT" << std::endl;
 		}
 
 		~ImageSystem() override {
@@ -96,12 +101,25 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
-			// CRITICAL FIX: Only process async loading - no GUI callbacks
 			ProcessCompletedLoads();
 		}
 
-		// CRITICAL FIX: Removed all callback registration methods
-		// GUI classes should poll this system instead
+		// GUI CALLBACK REGISTRATION METHODS
+		void RegisterImageLoadedCallback(ImageLoadedCallback callback) {
+			imageLoadedCallbacks.push_back(callback);
+			std::cout << "[ImageSystem] Registered image loaded callback" << std::endl;
+		}
+
+		void RegisterImageRemovedCallback(ImageRemovedCallback callback) {
+			imageRemovedCallbacks.push_back(callback);
+			std::cout << "[ImageSystem] Registered image removed callback" << std::endl;
+		}
+
+		void ClearCallbacks() {
+			imageLoadedCallbacks.clear();
+			imageRemovedCallbacks.clear();
+			std::cout << "[ImageSystem] Cleared all callbacks" << std::endl;
+		}
 
 		void SetImage(const EntityID entity, const std::string& filePath) {
 			std::cout << "[ImageSystem] SetImage called for entity " << entity << ": " << filePath << std::endl;
@@ -145,12 +163,14 @@ namespace ECS {
 					UnloadImage(imageComp);
 				}
 
-				// CRITICAL FIX: No GUI callbacks - just destroy the entity
+				// NOTIFY GUI BEFORE DESTROYING THE ENTITY
+				NotifyImageRemoved(entity);
+
+				// Destroy the entity
 				mgr.DestroyEntity(entity);
 			}
 		}
 
-		// CRITICAL FIX: This is the ONLY way GUI should get data from ECS
 		std::vector<EntityID> GetAllImageEntities() const {
 			std::vector<EntityID> result;
 			for (auto entity : entities) {
@@ -187,6 +207,34 @@ namespace ECS {
 	private:
 		std::vector<LoadingTask> pendingLoads;
 		mutable std::mutex loadMutex; // Made mutable for const methods
+
+		// GUI Callback storage
+		std::vector<ImageLoadedCallback> imageLoadedCallbacks;
+		std::vector<ImageRemovedCallback> imageRemovedCallbacks;
+
+		void NotifyImageLoaded(EntityID entityID) {
+			std::cout << "[ImageSystem] Notifying GUI callbacks: Image loaded for entity " << entityID << std::endl;
+			for (auto& callback : imageLoadedCallbacks) {
+				try {
+					callback(entityID);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[ImageSystem] Exception in image loaded callback: " << e.what() << std::endl;
+				}
+			}
+		}
+
+		void NotifyImageRemoved(EntityID entityID) {
+			std::cout << "[ImageSystem] Notifying GUI callbacks: Image removed for entity " << entityID << std::endl;
+			for (auto& callback : imageRemovedCallbacks) {
+				try {
+					callback(entityID);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[ImageSystem] Exception in image removed callback: " << e.what() << std::endl;
+				}
+			}
+		}
 
 		void LoadImageAsync(EntityID entity, const std::string& filePath) {
 			std::cout << "[ImageSystem] Starting async load for entity " << entity << ": " << filePath << std::endl;
@@ -249,7 +297,7 @@ namespace ECS {
 								imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 									result.width, result.height, result.channels, result.data);
 
-								// CRITICAL FIX: Update InputImageComponent if present
+								// Update InputImageComponent if present
 								if (mgr.HasComponent<InputImageComponent>(it->entityID)) {
 									auto& inputComp = mgr.GetComponent<InputImageComponent>(it->entityID);
 
@@ -276,7 +324,8 @@ namespace ECS {
 								std::cout << "[ImageSystem] Async loaded image: " << result.filePath << " ("
 									<< result.width << "x" << result.height << ")" << std::endl;
 
-								// CRITICAL FIX: No GUI callbacks - GUI will poll for changes
+								// NOTIFY GUI CALLBACKS THAT IMAGE WAS LOADED SUCCESSFULLY
+								NotifyImageLoaded(it->entityID);
 							}
 							else {
 								std::cerr << "[ImageSystem] Failed to async load image: " << result.filePath << std::endl;
