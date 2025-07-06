@@ -1,3 +1,5 @@
+// FIXED MenuBar.cpp - Use StudioCore Instance Instead of Static Methods
+
 #include "MenuBar.hpp"
 #include "../events/Events.hpp"
 #include "AniStudio.hpp"
@@ -23,17 +25,14 @@ namespace GUI {
 	static bool videoSequencerViewOpen = false;
 	static bool zepViewOpen = false;
 
-	// CRITICAL FIX: Only ONE ViewListID for diffusion workspace (contains both DiffusionView AND ImageView)
+	// View IDs
 	static GUI::ViewListID settingsViewID = 0;
 	static GUI::ViewListID debugViewID = 0;
 	static GUI::ViewListID convertViewID = 0;
 	static GUI::ViewListID viewListManagerViewID = 0;
 	static GUI::ViewListID pluginViewID = 0;
 	static GUI::ViewListID helpViewID = 0;
-
-	// ONE ViewListID for diffusion workspace (will contain BOTH view types)
-	static GUI::ViewListID diffusionViewID = 0;        // Contains DiffusionView + ImageView
-
+	static GUI::ViewListID diffusionViewID = 0;
 	static GUI::ViewListID upscaleViewID = 0;
 	static GUI::ViewListID imageViewID = 0;
 	static GUI::ViewListID nodeGraphViewID = 0;
@@ -43,44 +42,11 @@ namespace GUI {
 	static GUI::ViewListID videoSequencerViewID = 0;
 	static GUI::ViewListID zepViewID = 0;
 
-	// Helper function with robust error handling
-	static void DestroyViewIfClosed(GUI::ViewListID& viewID, bool isOpen, GUI::ViewManager& viewManager) {
-		if (viewID != 0 && !isOpen) {
-			try {
-				std::cout << "[MenuBar] Destroying ViewListID: " << viewID << std::endl;
-				viewManager.DestroyView(viewID);
-				viewID = 0;
-				std::cout << "[MenuBar] ViewListID destroyed successfully" << std::endl;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[MenuBar] Error destroying ViewListID " << viewID << ": " << e.what() << std::endl;
-				viewID = 0; // Reset anyway to prevent repeated attempts
-			}
-		}
-	}
+	static void UpdateECSViews(ANI::StudioCore& studioCore) {
+		// Get everything from StudioCore
+		GUI::ViewManager& viewManager = studioCore.GetViewManager();
+		ECS::EntityManager& entityManager = studioCore.GetEntityManager();
 
-	// Macro to reduce boilerplate for simple single-component views
-#define CREATE_SIMPLE_VIEW(viewType, viewOpen, viewID, viewClass) \
-		if (viewOpen && viewID == 0) { \
-			try { \
-				std::cout << "[MenuBar] Creating " #viewClass "..." << std::endl; \
-				viewID = viewManager.CreateView(); \
-				viewManager.AddView<viewClass>(viewID, viewClass(entityManager)); \
-				viewManager.GetView<viewClass>(viewID).Init(); \
-				std::cout << "[MenuBar] " #viewClass " created successfully with ViewListID: " << viewID << std::endl; \
-			} \
-			catch (const std::exception& e) { \
-				std::cerr << "[MenuBar] FAILED to create " #viewClass ": " << e.what() << std::endl; \
-				if (viewID != 0) { \
-					try { viewManager.DestroyView(viewID); } catch (...) {} \
-					viewID = 0; \
-				} \
-				viewOpen = false; \
-			} \
-		} \
-		DestroyViewIfClosed(viewID, viewOpen, viewManager);
-
-	static void UpdateECSViews(GUI::ViewManager& viewManager, ECS::EntityManager& entityManager) {
 		try {
 			// ========================================================================
 			// ECS-STYLE: Create ONE ViewListID with MULTIPLE view components
@@ -89,30 +55,20 @@ namespace GUI {
 				std::cout << "[MenuBar] Creating ECS-style diffusion workspace..." << std::endl;
 
 				try {
-					// Step 1: Create ONE ViewListID (like creating one entity)
 					diffusionViewID = viewManager.CreateView();
 					std::cout << "[MenuBar] Created ViewListID: " << diffusionViewID << std::endl;
 
-					// Step 2: Add DiffusionView component to this ViewListID
 					std::cout << "[MenuBar] Adding DiffusionView component..." << std::endl;
 					viewManager.AddView<DiffusionView>(diffusionViewID, DiffusionView(entityManager));
 					viewManager.GetView<DiffusionView>(diffusionViewID).Init();
 					std::cout << "[MenuBar] DiffusionView component added and initialized" << std::endl;
 
-					// Step 3: Add ImageView component to THE SAME ViewListID
-					std::cout << "[MenuBar] Adding ImageView component to same ViewListID..." << std::endl;
-					// viewManager.AddView<ImageView>(diffusionViewID, ImageView(entityManager));
-					// viewManager.GetView<ImageView>(diffusionViewID).Init();
-					std::cout << "[MenuBar] ImageView component added and initialized" << std::endl;
-
 					std::cout << "[MenuBar] ECS-style diffusion workspace created successfully!" << std::endl;
 					std::cout << "  ViewListID: " << diffusionViewID << std::endl;
-
 				}
 				catch (const std::exception& e) {
 					std::cerr << "[MenuBar] FAILED to create ECS-style diffusion workspace: " << e.what() << std::endl;
 
-					// Cleanup on failure
 					if (diffusionViewID != 0) {
 						try {
 							std::cout << "[MenuBar] Attempting cleanup of failed ViewListID " << diffusionViewID << std::endl;
@@ -129,27 +85,266 @@ namespace GUI {
 				}
 			}
 
-			// When diffusion is closed, destroy the ViewListID (destroys BOTH components automatically)
+			// When diffusion is closed, destroy the ViewListID
 			if (!diffusionViewOpen && diffusionViewID != 0) {
-				std::cout << "[MenuBar] Destroying diffusion workspace (removes both components)..." << std::endl;
-				viewManager.DestroyView(diffusionViewID);  // This removes BOTH DiffusionView AND ImageView
+				std::cout << "[MenuBar] Destroying diffusion workspace..." << std::endl;
+				viewManager.DestroyView(diffusionViewID);
 				diffusionViewID = 0;
 			}
 
 			// ========================================================================
-			// SINGLE-COMPONENT VIEWS (Traditional Style)
+			// INDIVIDUAL VIEWS - NO MORE MACRO BULLSHIT
 			// ========================================================================
 
 			// Settings View
-			CREATE_SIMPLE_VIEW("Settings", settingsWindowOpen, settingsViewID, SettingsView);
+			if (settingsWindowOpen && settingsViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating SettingsView..." << std::endl;
+					settingsViewID = viewManager.CreateView();
+					viewManager.AddView<SettingsView>(settingsViewID, SettingsView(entityManager));
+					viewManager.GetView<SettingsView>(settingsViewID).Init();
+					std::cout << "[MenuBar] SettingsView created successfully with ViewListID: " << settingsViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create SettingsView: " << e.what() << std::endl;
+					if (settingsViewID != 0) {
+						try { viewManager.DestroyView(settingsViewID); }
+						catch (...) {}
+						settingsViewID = 0;
+					}
+					settingsWindowOpen = false;
+				}
+			}
+			if (!settingsWindowOpen && settingsViewID != 0) {
+				try {
+					viewManager.DestroyView(settingsViewID);
+					settingsViewID = 0;
+				}
+				catch (...) {}
+			}
 
 			// Debug View
-			CREATE_SIMPLE_VIEW("Debug", debugWindowOpen, debugViewID, DebugView);
+			if (debugWindowOpen && debugViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating DebugView..." << std::endl;
+					debugViewID = viewManager.CreateView();
+					viewManager.AddView<DebugView>(debugViewID, DebugView(entityManager));
+					viewManager.GetView<DebugView>(debugViewID).Init();
+					std::cout << "[MenuBar] DebugView created successfully with ViewListID: " << debugViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create DebugView: " << e.what() << std::endl;
+					if (debugViewID != 0) {
+						try { viewManager.DestroyView(debugViewID); }
+						catch (...) {}
+						debugViewID = 0;
+					}
+					debugWindowOpen = false;
+				}
+			}
+			if (!debugWindowOpen && debugViewID != 0) {
+				try {
+					viewManager.DestroyView(debugViewID);
+					debugViewID = 0;
+				}
+				catch (...) {}
+			}
 
 			// Convert View
-			CREATE_SIMPLE_VIEW("Convert", convertWindowOpen, convertViewID, ConvertView);
+			if (convertWindowOpen && convertViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating ConvertView..." << std::endl;
+					convertViewID = viewManager.CreateView();
+					viewManager.AddView<ConvertView>(convertViewID, ConvertView(entityManager));
+					viewManager.GetView<ConvertView>(convertViewID).Init();
+					std::cout << "[MenuBar] ConvertView created successfully with ViewListID: " << convertViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create ConvertView: " << e.what() << std::endl;
+					if (convertViewID != 0) {
+						try { viewManager.DestroyView(convertViewID); }
+						catch (...) {}
+						convertViewID = 0;
+					}
+					convertWindowOpen = false;
+				}
+			}
+			if (!convertWindowOpen && convertViewID != 0) {
+				try {
+					viewManager.DestroyView(convertViewID);
+					convertViewID = 0;
+				}
+				catch (...) {}
+			}
 
-			// View Manager View (requires both ViewManager and EntityManager)
+			// IMAGE VIEW - EXPLICIT IMPLEMENTATION
+			if (imageViewOpen && imageViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating ImageView..." << std::endl;
+					imageViewID = viewManager.CreateView();
+					viewManager.AddView<ImageView>(imageViewID, ImageView(entityManager));
+					viewManager.GetView<ImageView>(imageViewID).Init();
+					std::cout << "[MenuBar] ImageView created successfully with ViewListID: " << imageViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create ImageView: " << e.what() << std::endl;
+					if (imageViewID != 0) {
+						try { viewManager.DestroyView(imageViewID); }
+						catch (...) {}
+						imageViewID = 0;
+					}
+					imageViewOpen = false;
+				}
+			}
+			// ONLY destroy when the window is actually closed
+			if (!imageViewOpen && imageViewID != 0) {
+				try {
+					std::cout << "[MenuBar] Destroying ImageView (window closed)" << std::endl;
+					viewManager.DestroyView(imageViewID);
+					imageViewID = 0;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] Error destroying ImageView: " << e.what() << std::endl;
+					imageViewID = 0;
+				}
+			}
+
+			// Upscale View
+			if (upscaleViewOpen && upscaleViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating UpscaleView..." << std::endl;
+					upscaleViewID = viewManager.CreateView();
+					viewManager.AddView<UpscaleView>(upscaleViewID, UpscaleView(entityManager));
+					viewManager.GetView<UpscaleView>(upscaleViewID).Init();
+					std::cout << "[MenuBar] UpscaleView created successfully with ViewListID: " << upscaleViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create UpscaleView: " << e.what() << std::endl;
+					if (upscaleViewID != 0) {
+						try { viewManager.DestroyView(upscaleViewID); }
+						catch (...) {}
+						upscaleViewID = 0;
+					}
+					upscaleViewOpen = false;
+				}
+			}
+			if (!upscaleViewOpen && upscaleViewID != 0) {
+				try {
+					viewManager.DestroyView(upscaleViewID);
+					upscaleViewID = 0;
+				}
+				catch (...) {}
+			}
+
+			// NodeGraph View
+			if (nodeGraphViewOpen && nodeGraphViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating NodeGraphView..." << std::endl;
+					nodeGraphViewID = viewManager.CreateView();
+					viewManager.AddView<NodeGraphView>(nodeGraphViewID, NodeGraphView(entityManager));
+					viewManager.GetView<NodeGraphView>(nodeGraphViewID).Init();
+					std::cout << "[MenuBar] NodeGraphView created successfully with ViewListID: " << nodeGraphViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create NodeGraphView: " << e.what() << std::endl;
+					if (nodeGraphViewID != 0) {
+						try { viewManager.DestroyView(nodeGraphViewID); }
+						catch (...) {}
+						nodeGraphViewID = 0;
+					}
+					nodeGraphViewOpen = false;
+				}
+			}
+			if (!nodeGraphViewOpen && nodeGraphViewID != 0) {
+				try {
+					viewManager.DestroyView(nodeGraphViewID);
+					nodeGraphViewID = 0;
+				}
+				catch (...) {}
+			}
+
+			// Sequencer View
+			if (sequencerViewOpen && sequencerViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating SequencerView..." << std::endl;
+					sequencerViewID = viewManager.CreateView();
+					viewManager.AddView<SequencerView>(sequencerViewID, SequencerView(entityManager));
+					viewManager.GetView<SequencerView>(sequencerViewID).Init();
+					std::cout << "[MenuBar] SequencerView created successfully with ViewListID: " << sequencerViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create SequencerView: " << e.what() << std::endl;
+					if (sequencerViewID != 0) {
+						try { viewManager.DestroyView(sequencerViewID); }
+						catch (...) {}
+						sequencerViewID = 0;
+					}
+					sequencerViewOpen = false;
+				}
+			}
+			if (!sequencerViewOpen && sequencerViewID != 0) {
+				try {
+					viewManager.DestroyView(sequencerViewID);
+					sequencerViewID = 0;
+				}
+				catch (...) {}
+			}
+
+			// Node View
+			if (nodeViewOpen && nodeViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating NodeView..." << std::endl;
+					nodeViewID = viewManager.CreateView();
+					viewManager.AddView<NodeView>(nodeViewID, NodeView(entityManager));
+					viewManager.GetView<NodeView>(nodeViewID).Init();
+					std::cout << "[MenuBar] NodeView created successfully with ViewListID: " << nodeViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create NodeView: " << e.what() << std::endl;
+					if (nodeViewID != 0) {
+						try { viewManager.DestroyView(nodeViewID); }
+						catch (...) {}
+						nodeViewID = 0;
+					}
+					nodeViewOpen = false;
+				}
+			}
+			if (!nodeViewOpen && nodeViewID != 0) {
+				try {
+					viewManager.DestroyView(nodeViewID);
+					nodeViewID = 0;
+				}
+				catch (...) {}
+			}
+
+			// Video View
+			if (videoViewOpen && videoViewID == 0) {
+				try {
+					std::cout << "[MenuBar] Creating VideoView..." << std::endl;
+					videoViewID = viewManager.CreateView();
+					viewManager.AddView<VideoView>(videoViewID, VideoView(entityManager));
+					viewManager.GetView<VideoView>(videoViewID).Init();
+					std::cout << "[MenuBar] VideoView created successfully with ViewListID: " << videoViewID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[MenuBar] FAILED to create VideoView: " << e.what() << std::endl;
+					if (videoViewID != 0) {
+						try { viewManager.DestroyView(videoViewID); }
+						catch (...) {}
+						videoViewID = 0;
+					}
+					videoViewOpen = false;
+				}
+			}
+			if (!videoViewOpen && videoViewID != 0) {
+				try {
+					viewManager.DestroyView(videoViewID);
+					videoViewID = 0;
+				}
+				catch (...) {}
+			}
+
+			// ViewListManager View
 			if (viewsWindowOpen && viewListManagerViewID == 0) {
 				try {
 					std::cout << "[MenuBar] Creating ViewListManagerView..." << std::endl;
@@ -168,13 +363,20 @@ namespace GUI {
 					viewsWindowOpen = false;
 				}
 			}
-			DestroyViewIfClosed(viewListManagerViewID, viewsWindowOpen, viewManager);
+			if (!viewsWindowOpen && viewListManagerViewID != 0) {
+				try {
+					viewManager.DestroyView(viewListManagerViewID);
+					viewListManagerViewID = 0;
+				}
+				catch (...) {}
+			}
 
-			// Plugin View (requires PluginManager)
+			// Plugin View
 			if (pluginsWindowOpen && pluginViewID == 0) {
 				try {
 					std::cout << "[MenuBar] Creating PluginView..." << std::endl;
-					auto& pluginMgr = ANI::StudioCore::GetPluginManager();
+					// FIXED: Use studioCore instance instead of static method
+					auto& pluginMgr = studioCore.GetPluginManager();
 					pluginViewID = viewManager.CreateView();
 					viewManager.AddView<PluginView>(pluginViewID, PluginView(entityManager, pluginMgr));
 					viewManager.GetView<PluginView>(pluginViewID).Init();
@@ -190,71 +392,12 @@ namespace GUI {
 					pluginsWindowOpen = false;
 				}
 			}
-			DestroyViewIfClosed(pluginViewID, pluginsWindowOpen, viewManager);
-
-			// Help View
-			CREATE_SIMPLE_VIEW("Help", helpWindowOpen, helpViewID, HelpView);
-
-			// Tool Views
-			CREATE_SIMPLE_VIEW("Upscale", upscaleViewOpen, upscaleViewID, UpscaleView);
-			CREATE_SIMPLE_VIEW("Image", imageViewOpen, imageViewID, ImageView);
-			CREATE_SIMPLE_VIEW("NodeGraph", nodeGraphViewOpen, nodeGraphViewID, NodeGraphView);
-			CREATE_SIMPLE_VIEW("Sequencer", sequencerViewOpen, sequencerViewID, SequencerView);
-			CREATE_SIMPLE_VIEW("Node", nodeViewOpen, nodeViewID, NodeView);
-			CREATE_SIMPLE_VIEW("Video", videoViewOpen, videoViewID, VideoView);
-			CREATE_SIMPLE_VIEW("Zep", zepViewOpen, zepViewID, ZepView);
-
-			// Video Sequencer View (uses VideoView class)
-			if (videoSequencerViewOpen && videoSequencerViewID == 0) {
+			if (!pluginsWindowOpen && pluginViewID != 0) {
 				try {
-					std::cout << "[MenuBar] Creating VideoSequencerView..." << std::endl;
-					videoSequencerViewID = viewManager.CreateView();
-					viewManager.AddView<VideoView>(videoSequencerViewID, VideoView(entityManager));
-					viewManager.GetView<VideoView>(videoSequencerViewID).Init();
-					std::cout << "[MenuBar] VideoSequencerView created successfully with ViewListID: " << videoSequencerViewID << std::endl;
+					viewManager.DestroyView(pluginViewID);
+					pluginViewID = 0;
 				}
-				catch (const std::exception& e) {
-					std::cerr << "[MenuBar] FAILED to create VideoSequencerView: " << e.what() << std::endl;
-					if (videoSequencerViewID != 0) {
-						try { viewManager.DestroyView(videoSequencerViewID); }
-						catch (...) {}
-						videoSequencerViewID = 0;
-					}
-					videoSequencerViewOpen = false;
-				}
-			}
-			DestroyViewIfClosed(videoSequencerViewID, videoSequencerViewOpen, viewManager);
-
-			// ========================================================================
-			// OPTIONAL: Dynamic view component management (like ECS systems)
-			// ========================================================================
-
-			// Add/remove components dynamically with hotkeys
-			if (ImGui::IsKeyPressed(ImGuiKey_F1)) {
-				// Add a debug component to the diffusion workspace
-				if (diffusionViewID != 0 && !viewManager.HasView<DebugView>(diffusionViewID)) {
-					try {
-						viewManager.AddView<DebugView>(diffusionViewID, DebugView(entityManager));
-						viewManager.GetView<DebugView>(diffusionViewID).Init();
-						std::cout << "[MenuBar] Added DebugView component to diffusion workspace!" << std::endl;
-					}
-					catch (const std::exception& e) {
-						std::cerr << "[MenuBar] Failed to add DebugView: " << e.what() << std::endl;
-					}
-				}
-			}
-
-			if (ImGui::IsKeyPressed(ImGuiKey_F2)) {
-				// Remove the debug component from diffusion workspace
-				if (diffusionViewID != 0 && viewManager.HasView<DebugView>(diffusionViewID)) {
-					try {
-						viewManager.RemoveView<DebugView>(diffusionViewID);
-						std::cout << "[MenuBar] Removed DebugView component from diffusion workspace!" << std::endl;
-					}
-					catch (const std::exception& e) {
-						std::cerr << "[MenuBar] Failed to remove DebugView: " << e.what() << std::endl;
-					}
-				}
+				catch (...) {}
 			}
 
 		}
@@ -263,7 +406,7 @@ namespace GUI {
 		}
 	}
 
-	void ShowMenuBar(GLFWwindow* window, GUI::ViewManager& viewManager, ECS::EntityManager& entityManager) {
+	void ShowMenuBar(ANI::StudioCore& studioCore) {
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("New")) {
@@ -332,34 +475,19 @@ namespace GUI {
 					videoViewOpen = !videoViewOpen;
 				}
 
-				if (ImGui::MenuItem("Video Sequencer", nullptr, videoSequencerViewOpen)) {
-					videoSequencerViewOpen = !videoSequencerViewOpen;
-				}
-
-				if (ImGui::MenuItem("Zep Editor", nullptr, zepViewOpen)) {
-					zepViewOpen = !zepViewOpen;
-				}
-
 				ImGui::EndMenu();
 			}
 
 			if (ImGui::BeginMenu("View")) {
-				if (ImGui::MenuItem("View Manager", nullptr, viewsWindowOpen)) {
-					viewsWindowOpen = !viewsWindowOpen;
-				}
-
-				ImGui::Separator();
-
 				if (ImGui::MenuItem("Debug", nullptr, debugWindowOpen)) {
 					debugWindowOpen = !debugWindowOpen;
 				}
-
-				ImGui::Separator();
-
+				if (ImGui::MenuItem("Views", nullptr, viewsWindowOpen)) {
+					viewsWindowOpen = !viewsWindowOpen;
+				}
 				if (ImGui::MenuItem("Plugins", nullptr, pluginsWindowOpen)) {
 					pluginsWindowOpen = !pluginsWindowOpen;
 				}
-
 				ImGui::EndMenu();
 			}
 
@@ -367,24 +495,15 @@ namespace GUI {
 				if (ImGui::MenuItem("Help", nullptr, helpWindowOpen)) {
 					helpWindowOpen = !helpWindowOpen;
 				}
-				ImGui::Separator();
-				ImGui::Text("Hotkeys:");
-				ImGui::Text("F1: Add Debug to Diffusion");
-				ImGui::Text("F2: Remove Debug from Diffusion");
-				ImGui::EndMenu();
-			}
-
-			if (ImGui::BeginMenu("Debug")) {
+				ImGui::MenuItem("About");
 				ImGui::EndMenu();
 			}
 
 			ImGui::EndMainMenuBar();
 		}
 
-		// Update ECS views based on menu states
-		UpdateECSViews(viewManager, entityManager);
+		// CLEAN: Pass only StudioCore - it has everything we need
+		UpdateECSViews(studioCore);
 	}
-
-#undef CREATE_SIMPLE_VIEW
 
 } // namespace GUI

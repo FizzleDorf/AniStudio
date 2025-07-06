@@ -172,6 +172,7 @@ namespace ECS {
 
 			system->Start();
 			registeredSystems[systemType] = std::move(system);
+			std::cout << "Registered system: " << typeid(T).name() << " with ID: " << systemType << std::endl;
 		}
 
 		template<typename T>
@@ -181,6 +182,7 @@ namespace ECS {
 			if (it != registeredSystems.end()) {
 				registeredSystems.erase(it);
 			}
+			std::cout << "Unregistered system: " << typeid(T).name() << " with ID: " << systemType << std::endl;
 		}
 
 		template <typename T>

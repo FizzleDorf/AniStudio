@@ -1,7 +1,21 @@
 /*
- * ImageSystem.hpp - RESTORED GUI Callback Mechanism
- * REQUIRED: ECS Systems SHOULD have callbacks to GUI classes for immediate notifications
- * GUI should both poll ECS for data AND receive immediate callbacks for responsive UI
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -14,20 +28,18 @@
 #include "OpenGLUtils.hpp"
 #include <GL/glew.h>
 #include <memory>
+#include <functional>
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <queue>
 #include <mutex>
 #include <future>
-#include <functional>
 
 namespace ECS {
 
 	class ImageSystem : public BaseSystem {
 	public:
-		// Callback function types for GUI notifications
-		using ImageLoadedCallback = std::function<void(EntityID entityID)>;
-		using ImageRemovedCallback = std::function<void(EntityID entityID)>;
+		using ImageCallback = std::function<void(EntityID)>;
 
 		struct LoadResult {
 			bool success = false;
@@ -44,12 +56,16 @@ namespace ECS {
 			std::string filePath;
 			std::future<LoadResult> future;
 
+			// Default constructor
 			LoadingTask() = default;
+
+			// Move constructor
 			LoadingTask(LoadingTask&& other) noexcept
 				: entityID(other.entityID)
 				, filePath(std::move(other.filePath))
 				, future(std::move(other.future)) {}
 
+			// Move assignment
 			LoadingTask& operator=(LoadingTask&& other) noexcept {
 				if (this != &other) {
 					entityID = other.entityID;
@@ -59,6 +75,7 @@ namespace ECS {
 				return *this;
 			}
 
+			// Delete copy operations
 			LoadingTask(const LoadingTask&) = delete;
 			LoadingTask& operator=(const LoadingTask&) = delete;
 		};
@@ -67,12 +84,9 @@ namespace ECS {
 			: BaseSystem(entityMgr) {
 			sysName = "ImageSystem";
 			AddComponentSignature<ImageComponent>();
-			std::cout << "[ImageSystem] Created - WITH GUI CALLBACKS SUPPORT" << std::endl;
 		}
 
 		~ImageSystem() override {
-			std::cout << "[ImageSystem] Destructor - cleaning up textures..." << std::endl;
-
 			// Clean up loaded textures
 			for (auto entity : entities) {
 				if (mgr.HasComponent<ImageComponent>(entity)) {
@@ -80,13 +94,9 @@ namespace ECS {
 					UnloadImage(imageComp);
 				}
 			}
-
-			std::cout << "[ImageSystem] Destructor complete" << std::endl;
 		}
 
 		void Start() override {
-			std::cout << "[ImageSystem] Starting - processing existing entities..." << std::endl;
-
 			// Load images for existing entities with ImageComponent
 			for (auto entity : entities) {
 				if (mgr.HasComponent<ImageComponent>(entity)) {
@@ -96,34 +106,21 @@ namespace ECS {
 					}
 				}
 			}
-
-			std::cout << "[ImageSystem] Start complete" << std::endl;
 		}
 
 		void Update(const float deltaT) override {
 			ProcessCompletedLoads();
 		}
 
-		// GUI CALLBACK REGISTRATION METHODS
-		void RegisterImageLoadedCallback(ImageLoadedCallback callback) {
-			imageLoadedCallbacks.push_back(callback);
-			std::cout << "[ImageSystem] Registered image loaded callback" << std::endl;
+		void RegisterImageAddedCallback(const ImageCallback& callback) {
+			imageAddedCallbacks.push_back(callback);
 		}
 
-		void RegisterImageRemovedCallback(ImageRemovedCallback callback) {
+		void RegisterImageRemovedCallback(const ImageCallback& callback) {
 			imageRemovedCallbacks.push_back(callback);
-			std::cout << "[ImageSystem] Registered image removed callback" << std::endl;
-		}
-
-		void ClearCallbacks() {
-			imageLoadedCallbacks.clear();
-			imageRemovedCallbacks.clear();
-			std::cout << "[ImageSystem] Cleared all callbacks" << std::endl;
 		}
 
 		void SetImage(const EntityID entity, const std::string& filePath) {
-			std::cout << "[ImageSystem] SetImage called for entity " << entity << ": " << filePath << std::endl;
-
 			// Handle both regular ImageComponent and InputImageComponent
 			if (mgr.HasComponent<ImageComponent>(entity)) {
 				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
@@ -145,8 +142,6 @@ namespace ECS {
 		}
 
 		void RemoveImage(const EntityID entity) {
-			std::cout << "[ImageSystem] RemoveImage called for entity " << entity << std::endl;
-
 			if (mgr.HasComponent<ImageComponent>(entity)) {
 				auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
 
@@ -163,10 +158,7 @@ namespace ECS {
 					UnloadImage(imageComp);
 				}
 
-				// NOTIFY GUI BEFORE DESTROYING THE ENTITY
 				NotifyImageRemoved(entity);
-
-				// Destroy the entity
 				mgr.DestroyEntity(entity);
 			}
 		}
@@ -181,64 +173,13 @@ namespace ECS {
 			return result;
 		}
 
-		// Additional polling methods for GUI
-		size_t GetImageEntityCount() const {
-			return entities.size();
-		}
-
-		bool IsImageLoaded(EntityID entity) const {
-			if (mgr.HasComponent<ImageComponent>(entity)) {
-				const auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-				return imageComp.textureID != 0 && imageComp.width > 0 && imageComp.height > 0;
-			}
-			return false;
-		}
-
-		bool IsImageLoading(EntityID entity) const {
-			std::lock_guard<std::mutex> lock(loadMutex);
-			for (const auto& task : pendingLoads) {
-				if (task.entityID == entity) {
-					return true;
-				}
-			}
-			return false;
-		}
-
 	private:
+		std::vector<ImageCallback> imageAddedCallbacks;
+		std::vector<ImageCallback> imageRemovedCallbacks;
 		std::vector<LoadingTask> pendingLoads;
-		mutable std::mutex loadMutex; // Made mutable for const methods
-
-		// GUI Callback storage
-		std::vector<ImageLoadedCallback> imageLoadedCallbacks;
-		std::vector<ImageRemovedCallback> imageRemovedCallbacks;
-
-		void NotifyImageLoaded(EntityID entityID) {
-			std::cout << "[ImageSystem] Notifying GUI callbacks: Image loaded for entity " << entityID << std::endl;
-			for (auto& callback : imageLoadedCallbacks) {
-				try {
-					callback(entityID);
-				}
-				catch (const std::exception& e) {
-					std::cerr << "[ImageSystem] Exception in image loaded callback: " << e.what() << std::endl;
-				}
-			}
-		}
-
-		void NotifyImageRemoved(EntityID entityID) {
-			std::cout << "[ImageSystem] Notifying GUI callbacks: Image removed for entity " << entityID << std::endl;
-			for (auto& callback : imageRemovedCallbacks) {
-				try {
-					callback(entityID);
-				}
-				catch (const std::exception& e) {
-					std::cerr << "[ImageSystem] Exception in image removed callback: " << e.what() << std::endl;
-				}
-			}
-		}
+		std::mutex loadMutex;
 
 		void LoadImageAsync(EntityID entity, const std::string& filePath) {
-			std::cout << "[ImageSystem] Starting async load for entity " << entity << ": " << filePath << std::endl;
-
 			auto& ioPool = Utils::ThreadPoolManager::getInstance().getIOPool();
 
 			// Create async task
@@ -297,7 +238,7 @@ namespace ECS {
 								imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 									result.width, result.height, result.channels, result.data);
 
-								// Update InputImageComponent if present
+								// CRITICAL FIX: Update InputImageComponent if present
 								if (mgr.HasComponent<InputImageComponent>(it->entityID)) {
 									auto& inputComp = mgr.GetComponent<InputImageComponent>(it->entityID);
 
@@ -313,7 +254,7 @@ namespace ECS {
 									inputComp.SetImageData(result.data, result.width, result.height, result.channels);
 									// Don't free result.data here - ownership transferred to InputImageComponent
 
-									std::cout << "[ImageSystem] Updated InputImageComponent: " << result.fileName << " ("
+									std::cout << "Updated InputImageComponent: " << result.fileName << " ("
 										<< result.width << "x" << result.height << ")" << std::endl;
 								}
 								else {
@@ -321,14 +262,13 @@ namespace ECS {
 									Utils::ImageUtils::FreeImageData(result.data);
 								}
 
-								std::cout << "[ImageSystem] Async loaded image: " << result.filePath << " ("
+								std::cout << "Async loaded image: " << result.filePath << " ("
 									<< result.width << "x" << result.height << ")" << std::endl;
 
-								// NOTIFY GUI CALLBACKS THAT IMAGE WAS LOADED SUCCESSFULLY
-								NotifyImageLoaded(it->entityID);
+								NotifyImageAdded(it->entityID);
 							}
 							else {
-								std::cerr << "[ImageSystem] Failed to async load image: " << result.filePath << std::endl;
+								std::cerr << "Failed to async load image: " << result.filePath << std::endl;
 							}
 						}
 						else {
@@ -336,11 +276,10 @@ namespace ECS {
 							if (result.data) {
 								Utils::ImageUtils::FreeImageData(result.data);
 							}
-							std::cout << "[ImageSystem] Entity " << it->entityID << " destroyed during loading" << std::endl;
 						}
 					}
 					catch (const std::exception& e) {
-						std::cerr << "[ImageSystem] Exception in async image loading: " << e.what() << std::endl;
+						std::cerr << "Exception in async image loading: " << e.what() << std::endl;
 					}
 
 					// Remove completed task
@@ -360,6 +299,18 @@ namespace ECS {
 				pendingLoads.end());
 		}
 
+		void NotifyImageAdded(EntityID entity) {
+			for (const auto& callback : imageAddedCallbacks) {
+				callback(entity);
+			}
+		}
+
+		void NotifyImageRemoved(EntityID entity) {
+			for (const auto& callback : imageRemovedCallbacks) {
+				callback(entity);
+			}
+		}
+
 		void UnloadImage(ImageComponent& imageComp) {
 			if (imageComp.textureID != 0) {
 				Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
@@ -367,7 +318,6 @@ namespace ECS {
 				imageComp.width = 0;
 				imageComp.height = 0;
 				imageComp.channels = 0;
-				std::cout << "[ImageSystem] Unloaded image texture" << std::endl;
 			}
 		}
 	};

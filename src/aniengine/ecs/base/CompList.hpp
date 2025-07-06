@@ -21,7 +21,7 @@
 #pragma once
 
 #include "Types.hpp"
-#include <deque>  // CHANGED: Use deque instead of vector to prevent iterator invalidation
+#include <deque>
 
 namespace ECS {
 
@@ -42,7 +42,6 @@ namespace ECS {
 		void Insert(const T &component) {
 			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == component.GetID(); });
 			if (comp == data.end()) {
-				// FIXED: Using deque prevents iterator/reference invalidation
 				data.push_back(component);
 				std::cout << "Component added! ID: " << component.GetID()
 					<< ", Type ID: " << CompType<T>() << std::endl;

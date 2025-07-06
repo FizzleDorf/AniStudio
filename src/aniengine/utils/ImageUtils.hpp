@@ -39,10 +39,14 @@ namespace Utils {
 
 	class ImageUtils {
 	public:
-		// Load image data from a file
+		// CRITICAL FIX: Minimize lock scope to prevent deadlocks
 		static unsigned char* LoadImageData(const std::string& filePath, int& width, int& height, int& channels) {
-			std::lock_guard<std::mutex> lock(stbi_mutex);
-			unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
+			unsigned char* data;
+			{
+				std::lock_guard<std::mutex> lock(stbi_mutex);
+				data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
+			}
+
 			if (!data) {
 				std::cerr << "Failed to load image: " << filePath << " - " << stbi_failure_reason() << std::endl;
 				return nullptr;
@@ -50,7 +54,7 @@ namespace Utils {
 			return data;
 		}
 
-		// Free image data
+		// CRITICAL FIX: Minimize lock scope
 		static void FreeImageData(unsigned char* data) {
 			if (data) {
 				std::lock_guard<std::mutex> lock(stbi_mutex);
@@ -72,7 +76,7 @@ namespace Utils {
 			return copy;
 		}
 
-		// Save an image to a file
+		// CRITICAL FIX: Minimize lock scope for save operations
 		static bool SaveImage(const std::string& filePath, int width, int height, int channels, const unsigned char* data) {
 			// Create the directory if it doesn't exist
 			std::filesystem::path path(filePath);
@@ -84,7 +88,7 @@ namespace Utils {
 
 			int result = 0;
 
-			// Protect stb_image_write calls with mutex
+			// Protect stb_image_write calls with mutex - minimized scope
 			{
 				std::lock_guard<std::mutex> lock(stbi_mutex);
 

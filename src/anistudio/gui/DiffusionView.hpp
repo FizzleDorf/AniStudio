@@ -101,7 +101,6 @@ namespace GUI {
 		int currentExtensionIndex = 0;
 		std::string currentExtension = ".png"; // Default extension
 
-		// NEW: UI state for advanced features
 		bool showAdvancedSettings = false;
 		bool chromaSettingsExpanded = false;
 		bool stackedIdEmbedExpanded = false;

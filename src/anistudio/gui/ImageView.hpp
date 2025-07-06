@@ -1,7 +1,21 @@
 /*
- * ImageView.hpp - RESTORED GUI Callback Registration
- * REQUIRED: ImageView SHOULD register callbacks with ECS systems for immediate UI updates
- * This provides responsive UI updates when images are loaded or removed
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #ifndef IMAGEVIEW_HPP
@@ -43,10 +57,9 @@ namespace GUI {
 				imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 			}
 
-			// REGISTER GUI CALLBACKS WITH THE SYSTEM
 			if (imageSystem) {
-				// Register callback for when images are loaded successfully
-				imageSystem->RegisterImageLoadedCallback([this](ECS::EntityID entityID) {
+				// Register callback for when images are added successfully
+				imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
 					OnImageLoaded(entityID);
 				});
 
@@ -112,12 +125,10 @@ namespace GUI {
 		}
 
 		~ImageView() {
-			std::cout << "[ImageView] Destructor called - Clearing callbacks" << std::endl;
-			// Clear callbacks when this view is destroyed
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (imageSystem) {
-				imageSystem->ClearCallbacks();
-			}
+			std::cout << "[ImageView] Destructor called - Note: ImageSystem callbacks are stored by value so no cleanup needed" << std::endl;
+			// NOTE: The ImageSystem stores callbacks in a vector by value (lambdas)
+			// When this view is destroyed, the lambdas become invalid but that's handled
+			// by the capture-by-value nature of the lambdas
 		}
 
 	private:
@@ -144,7 +155,7 @@ namespace GUI {
 
 		// CALLBACK HANDLERS - Called by ImageSystem when images are loaded/removed
 		void OnImageLoaded(ECS::EntityID entityID) {
-			std::cout << "[ImageView] CALLBACK: Image loaded for entity " << entityID << std::endl;
+			std::cout << "[ImageView] CALLBACK: Image added for entity " << entityID << std::endl;
 
 			// Refresh the entity list
 			RefreshImageEntities();

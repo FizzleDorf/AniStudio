@@ -39,7 +39,6 @@ namespace GUI {
 	// Template function - must be implemented in header
 	template <typename T>
 	inline static const ViewTypeID ViewType() noexcept {
-		// FIXED: More specific static_assert that allows for debugging but prevents BaseView usage
 		static_assert((std::is_base_of<BaseView, T>::value && !std::is_same<BaseView, T>::value),
 			"INVALID VIEW TYPE: T must inherit from BaseView but cannot be BaseView itself. Use a derived view class like DiffusionView, ImageView, etc.");
 
@@ -47,7 +46,6 @@ namespace GUI {
 		return typeID;
 	}
 
-	// ADDED: Specialized template to handle BaseView case explicitly
 	template <>
 	inline static const ViewTypeID ViewType<BaseView>() noexcept {
 		// Special case for BaseView - return a reserved ID but don't increment counter
@@ -56,12 +54,10 @@ namespace GUI {
 		return INVALID_VIEW_TYPE_ID;
 	}
 
-	// ADDED: Helper function to check if a ViewTypeID is valid
 	inline bool IsValidViewTypeID(ViewTypeID typeID) {
 		return typeID != SIZE_MAX;
 	}
 
-	// ADDED: Helper to get view type name for debugging
 	template <typename T>
 	inline const char* GetViewTypeName() {
 		return typeid(T).name();

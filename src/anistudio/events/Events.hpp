@@ -31,7 +31,7 @@
 namespace ANI {
 	class Core;
 	extern Core &appCore;
-	void WindowCloseCallback(GLFWwindow *window);  // Add this declaration
+	void WindowCloseCallback(GLFWwindow *window);
 }
 
 namespace ANI {
@@ -91,7 +91,7 @@ namespace ANI {
 
 		// Singleton reference
 		static Events &Ref() {
-			static Events instance; // Changed reference to instance for clarity
+			static Events instance;
 			return instance;
 		}
 

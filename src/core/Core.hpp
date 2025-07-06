@@ -15,12 +15,12 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
 
-#include "AniStudio.hpp" // The AniStudio API also contains the AniEngine
+#include "AniStudio.hpp"
 #include "OpenGLWrapper.hpp"
 #include "FilePaths.hpp"
 #include <memory>
@@ -32,8 +32,8 @@ namespace ANI {
 
 	class Core {
 	public:
-		static Core &Ref() {
-			static Core instance;
+		static Core& Ref() {
+			static Core instance;  // Only static thing - the singleton pattern
 			return instance;
 		}
 
@@ -44,11 +44,12 @@ namespace ANI {
 		void Draw();
 		void Quit();
 
-		// Dependency accessors - delegate to StudioCore APIs
-		ECS::EntityManager &GetEntityManager();
-		GUI::ViewManager &GetViewManager();
-		Plugin::PluginManager &GetPluginManager();
-		GLFWwindow *Window() const { return window; }
+		// Dependency accessors - delegate to StudioCore instance
+		ECS::EntityManager& GetEntityManager() { return studioCore.GetEntityManager(); }
+		GUI::ViewManager& GetViewManager() { return studioCore.GetViewManager(); }
+		Plugin::PluginManager& GetPluginManager() { return studioCore.GetPluginManager(); }
+
+		GLFWwindow* Window() const { return window; }
 		bool Run() const { return run; }
 
 	private:
@@ -60,7 +61,7 @@ namespace ANI {
 
 		// Window state
 		bool run;
-		GLFWwindow *window;
+		GLFWwindow* window;
 		int videoWidth;
 		int videoHeight;
 
@@ -68,10 +69,12 @@ namespace ANI {
 		double fpsSum;
 		int frameCount;
 		double timeElapsed;
+
+		StudioCore studioCore;
 	};
 
 	// Global callbacks for GLFW
-	void WindowCloseCallback(GLFWwindow *window);
-	extern Core &appCore;
+	void WindowCloseCallback(GLFWwindow* window);
+	extern Core& appCore;
 
 } // namespace ANI

@@ -3,7 +3,7 @@
 	   d88888          Y8P d88P  Y88b 888                  888 Y8P
 	  d88P888              Y88b.      888                  888
 	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y888b. 888    888  888 d88" 888 888 d88""88b
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
@@ -15,13 +15,14 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
+ * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #pragma once
 
 #include "stable-diffusion.h"
 #include "PngMetadataUtils.hpp"
+#include "rng.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include "pch.h"

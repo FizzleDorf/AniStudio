@@ -1,12 +1,21 @@
 /*
- * FIXED SDCPPSystem.hpp - Eliminates resource deadlock in QueueTask
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
  *
- * KEY FIXES:
- * 1. Removed nested mutex locks that caused deadlock
- * 2. Simplified CloneEntityForProcessing to avoid EntityManager conflicts
- * 3. Added proper RAII lock management
- * 4. Fixed exception handling in critical sections
- * 5. Separated entity operations from queue operations
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -18,6 +27,7 @@
 #include "ImageSystem.hpp"
 #include "SDCPPComponents.h"
 #include "SDcppUtils.hpp"
+#include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
 #include "PngMetadataUtils.hpp"
@@ -49,8 +59,13 @@ namespace ECS {
 			bool processing = false;
 			TaskType taskType;
 
+			// Default constructor
 			QueueItem() = default;
+
+			// Copy constructor
 			QueueItem(const QueueItem& other) = default;
+
+			// Assignment operator
 			QueueItem& operator=(const QueueItem& other) = default;
 		};
 
@@ -64,6 +79,7 @@ namespace ECS {
 			std::future<bool> result;
 			bool isClonedEntity = false;
 
+			// Default constructor
 			TaskData() = default;
 
 			// Move constructor
@@ -100,8 +116,7 @@ namespace ECS {
 			: BaseSystem(entityMgr)
 			, pauseWorker(false)
 			, hasActiveTask(false)
-			, clearRequested(false)
-			, shuttingDown(false) {
+			, clearRequested(false) {
 			sysName = "SDCPPSystem";
 			AddComponentSignature<LatentComponent>();
 			AddComponentSignature<OutputImageComponent>();
@@ -139,67 +154,71 @@ namespace ECS {
 			}
 		}
 
-		// FIXED: QueueTask method with proper deadlock prevention
+		// Public methods
 		void QueueTask(const EntityID entityID, const TaskType taskType) {
-			std::cout << "[SDCPPSystem] QueueTask called for entity " << entityID << std::endl;
-
-			// STEP 1: Validate entity exists OUTSIDE of any locks
+			// Validate entity exists first
 			if (!mgr.GetEntitiesSignatures().count(entityID)) {
 				std::cerr << "Error: Entity " << entityID << " does not exist!" << std::endl;
 				return;
 			}
 
-			// STEP 2: Clone entity OUTSIDE of queue mutex to avoid deadlock
-			EntityID clonedEntity = 0;
-			nlohmann::json entityMetadata;
-
 			try {
-				clonedEntity = CloneEntitySafely(entityID, taskType);
-				if (clonedEntity == 0) {
-					std::cerr << "Failed to clone entity " << entityID << " for processing" << std::endl;
-					return;
-				}
-
-				// Serialize the cloned entity OUTSIDE of queue mutex
-				entityMetadata = mgr.SerializeEntity(clonedEntity);
-				std::cout << "Successfully serialized cloned entity " << clonedEntity << " (original: " << entityID << ")" << std::endl;
-
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Exception during entity cloning/serialization: " << e.what() << std::endl;
-				if (clonedEntity != 0) {
-					mgr.DestroyEntity(clonedEntity);
-				}
-				return;
-			}
-
-			// STEP 3: Now safely add to queue with minimal lock time
-			{
 				std::lock_guard<std::mutex> lock(queueMutex);
 
 				// Don't accept new tasks during shutdown
 				if (shuttingDown) {
 					std::cerr << "Cannot queue task during shutdown" << std::endl;
-					mgr.DestroyEntity(clonedEntity);
+					return;
+				}
+
+				// Create a cloned entity for processing to preserve original
+				EntityID clonedEntity = CloneEntityForProcessing(entityID);
+				if (clonedEntity == 0) {
+					std::cerr << "Failed to clone entity " << entityID << " for processing" << std::endl;
 					return;
 				}
 
 				// Create task data
 				TaskData taskData;
-				taskData.entityID = clonedEntity;
+				taskData.entityID = clonedEntity;  // Use cloned entity
 				taskData.processing = false;
 				taskData.taskType = taskType;
 				taskData.isClonedEntity = true;
-				taskData.metadata = std::move(entityMetadata);
+
+				// Check if we need to generate a random seed
+				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
+
+					if (mgr.HasComponent<SamplerComponent>(clonedEntity)) {
+						auto& samplerComp = mgr.GetComponent<SamplerComponent>(clonedEntity);
+
+						// Generate random seed if needed
+						if (samplerComp.seed < 0) {
+							uint64_t newSeed = Utils::SDCPPUtils::generateRandomSeed();
+							samplerComp.seed = static_cast<int>(newSeed);
+							std::cout << "Generated random seed: " << samplerComp.seed << std::endl;
+						}
+					}
+				}
+
+				// Serialize entity to metadata
+				taskData.metadata = mgr.SerializeEntity(clonedEntity);
+				std::cout << "Successfully serialized cloned entity " << clonedEntity << " (original: " << entityID << ")" << std::endl;
 
 				// Add to internal task list
 				taskQueue.push_back(std::move(taskData));
 
 				std::cout << "Entity " << clonedEntity << " (cloned from " << entityID << ") queued for processing. Queue position: " << taskQueue.size() << std::endl;
 			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception in QueueTask: " << e.what() << std::endl;
+			}
+			catch (...) {
+				std::cerr << "Unknown exception in QueueTask!" << std::endl;
+			}
 		}
 
 		void Update(const float deltaT) override {
+
 			if (shuttingDown) {
 				return;
 			}
@@ -322,41 +341,32 @@ namespace ECS {
 		// Private member variables
 		std::vector<TaskData> taskQueue;
 		std::atomic<bool> pauseWorker;
-		std::atomic<bool> shuttingDown;
+		std::atomic<bool> shuttingDown{ false };
 		std::atomic<bool> terminateFlag{ false };
 		std::atomic<bool> clearRequested{ false };
 		std::vector<EntityID> entitiesNeedingCleanup;
 		mutable std::mutex queueMutex;
 
+		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
+			return Utils::ThreadPoolManager::getInstance().getStats();
+		}
+
 		// Single task tracking
 		bool hasActiveTask{ false };
 		std::thread::id activeThreadId{};
 
-		// FIXED: Safe entity cloning that avoids deadlocks
-		EntityID CloneEntitySafely(const EntityID originalEntity, const TaskType taskType) {
+		// Clone entity for processing to preserve original input images
+		EntityID CloneEntityForProcessing(const EntityID originalEntity) {
 			try {
-				std::cout << "[SDCPPSystem] Cloning entity " << originalEntity << " safely..." << std::endl;
+				// Serialize the original entity
+				nlohmann::json entityData = mgr.SerializeEntity(originalEntity);
 
-				// Clone the entity using the EntityManager's clone method
-				EntityID clonedEntity = mgr.CloneEntity(originalEntity);
+				// Create a new entity from the serialized data
+				EntityID clonedEntity = mgr.DeserializeEntity(entityData);
 
 				if (clonedEntity == 0) {
-					std::cerr << "Failed to clone entity using EntityManager" << std::endl;
+					std::cerr << "Failed to deserialize cloned entity" << std::endl;
 					return 0;
-				}
-
-				// Handle seed generation for inference tasks
-				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
-					if (mgr.HasComponent<SamplerComponent>(clonedEntity)) {
-						auto& samplerComp = mgr.GetComponent<SamplerComponent>(clonedEntity);
-
-						// Generate random seed if needed
-						if (samplerComp.seed < 0) {
-							uint64_t newSeed = Utils::SDCPPUtils::generateRandomSeed();
-							samplerComp.seed = static_cast<int>(newSeed);
-							std::cout << "Generated random seed: " << samplerComp.seed << std::endl;
-						}
-					}
 				}
 
 				// Special handling for InputImageComponent to preserve image data
@@ -700,6 +710,7 @@ namespace ECS {
 
 		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath) {
 			try {
+
 				if (shuttingDown) {
 					return;
 				}

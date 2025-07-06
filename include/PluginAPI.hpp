@@ -87,7 +87,7 @@ extern "C" {
 	PLUGIN_API bool CanPluginReload();
 }
 
-// PLUGIN HELPER MACROS - For easy plugin creation
+// PLUGIN HELPER MACROS - For plugin creation
 
 // Macro to implement the required C interface for a plugin class
 #define IMPLEMENT_PLUGIN(PluginClass) \

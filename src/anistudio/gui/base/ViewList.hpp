@@ -1,9 +1,25 @@
 /*
- * ULTIMATE FIX: ViewList.hpp - Completely deadlock-free implementation
- * The issue is that RenderViews() is being called while holding locks
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #pragma once
+
 #include "ViewTypes.hpp"
 #include "pch.h"
 
@@ -188,13 +204,10 @@ namespace GUI {
 			}
 		}
 
-		// CRITICAL FIX: Completely deadlock-free rendering
 		void RenderViews() override {
-			// STEP 1: Create a local copy to avoid any potential locks on the original data
 			std::vector<std::shared_ptr<T>> viewsCopy;
 
 			try {
-				// Quick copy - this should never deadlock because we're not calling any external methods
 				viewsCopy = data;
 			}
 			catch (const std::exception& e) {
@@ -202,19 +215,14 @@ namespace GUI {
 				return;
 			}
 
-			// STEP 2: Now iterate over the copy with NO LOCKS HELD
 			for (auto &view : viewsCopy) {
 				if (view) {
 					try {
-						// CRITICAL: This is where the deadlock was happening
-						// The view->Render() call was trying to access EntityManager while locks were held
 						view->Render();
 					}
 					catch (const std::exception& e) {
-						// CRITICAL: Catch and log the exact exception that was causing deadlock
 						std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception in RenderViews: " << e.what() << ": " << e.what() << std::endl;
 
-						// Don't re-throw - continue rendering other views
 						continue;
 					}
 					catch (...) {
@@ -295,7 +303,6 @@ namespace GUI {
 		const std::vector<std::shared_ptr<T>>& GetData() const { return data; }
 
 	private:
-		// CRITICAL: Using std::vector with careful management
 		std::vector<std::shared_ptr<T>> data;
 	};
 

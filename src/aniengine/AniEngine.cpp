@@ -1,9 +1,6 @@
-// AniEngine.cpp - FIXED to match working StudioCore pattern
 #define ANI_ENGINE_EXPORTS
 
 #include "AniEngine.hpp"
-#include "ECS.h"
-#include "PluginManager.hpp"
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
@@ -13,66 +10,60 @@
 using namespace ECS;
 
 namespace ANI {
-	// Static members initialization
-	bool EngineCore::s_initialized = false;
-	bool EngineCore::s_running = false;
 
-	// CRITICAL FIX: Direct static instances like the working StudioCore
-	static ECS::EntityManager g_entityManager;
-	static Plugin::PluginManager g_pluginManager(g_entityManager);
-
-	ECS::EntityManager& EngineCore::GetEntityManagerImpl() {
-		return g_entityManager;
+	EngineCore::EngineCore()
+		: initialized(false), running(false), pluginManager(entityManager) {
+		std::cout << "[EngineCore] Constructor called" << std::endl;
 	}
 
-	Plugin::PluginManager& EngineCore::GetPluginManagerImpl() {
-		return g_pluginManager;
+	EngineCore::~EngineCore() {
+		if (initialized) {
+			Shutdown();
+		}
 	}
 
-	void EngineCore::RegisterCoreComponents(ECS::EntityManager& mgr) {
-		// Existing component registrations...
-		mgr.RegisterComponentName<ModelComponent>("Model");
-		mgr.RegisterComponentName<ClipLComponent>("ClipL");
-		mgr.RegisterComponentName<ClipGComponent>("ClipG");
-		mgr.RegisterComponentName<T5XXLComponent>("T5XXL");
-		mgr.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
-		mgr.RegisterComponentName<LatentComponent>("Latent");
-		mgr.RegisterComponentName<LoraComponent>("Lora");
-		mgr.RegisterComponentName<PromptComponent>("Prompt");
-		mgr.RegisterComponentName<SamplerComponent>("Sampler");
-		mgr.RegisterComponentName<GuidanceComponent>("Guidance");
-		mgr.RegisterComponentName<EsrganComponent>("Esrgan");
-		mgr.RegisterComponentName<ClipSkipComponent>("ClipSkip");
-		mgr.RegisterComponentName<VaeComponent>("Vae");
-		mgr.RegisterComponentName<TaesdComponent>("Taesd");
-		mgr.RegisterComponentName<ImageComponent>("Image");
-		mgr.RegisterComponentName<InputImageComponent>("InputImage");
-		mgr.RegisterComponentName<OutputImageComponent>("OutputImage");
-		mgr.RegisterComponentName<EmbeddingComponent>("Embedding");
-		mgr.RegisterComponentName<ControlnetComponent>("Controlnet");
-		mgr.RegisterComponentName<LayerSkipComponent>("LayerSkip");
-		mgr.RegisterComponentName<VideoComponent>("Video");
-		mgr.RegisterComponentName<InputVideoComponent>("InputVideo");
-		mgr.RegisterComponentName<OutputVideoComponent>("OutputVideo");
-		mgr.RegisterComponentName<PythonComponent>("Python");
-		mgr.RegisterComponentName<ChromaComponent>("Chroma");
-		mgr.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
+	void EngineCore::RegisterCoreComponents() {
+		entityManager.RegisterComponentName<ModelComponent>("Model");
+		entityManager.RegisterComponentName<ClipLComponent>("ClipL");
+		entityManager.RegisterComponentName<ClipGComponent>("ClipG");
+		entityManager.RegisterComponentName<T5XXLComponent>("T5XXL");
+		entityManager.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
+		entityManager.RegisterComponentName<LatentComponent>("Latent");
+		entityManager.RegisterComponentName<LoraComponent>("Lora");
+		entityManager.RegisterComponentName<PromptComponent>("Prompt");
+		entityManager.RegisterComponentName<SamplerComponent>("Sampler");
+		entityManager.RegisterComponentName<GuidanceComponent>("Guidance");
+		entityManager.RegisterComponentName<EsrganComponent>("Esrgan");
+		entityManager.RegisterComponentName<ClipSkipComponent>("ClipSkip");
+		entityManager.RegisterComponentName<VaeComponent>("Vae");
+		entityManager.RegisterComponentName<TaesdComponent>("Taesd");
+		entityManager.RegisterComponentName<ImageComponent>("Image");
+		entityManager.RegisterComponentName<InputImageComponent>("InputImage");
+		entityManager.RegisterComponentName<OutputImageComponent>("OutputImage");
+		entityManager.RegisterComponentName<EmbeddingComponent>("Embedding");
+		entityManager.RegisterComponentName<ControlnetComponent>("Controlnet");
+		entityManager.RegisterComponentName<LayerSkipComponent>("LayerSkip");
+		entityManager.RegisterComponentName<VideoComponent>("Video");
+		entityManager.RegisterComponentName<InputVideoComponent>("InputVideo");
+		entityManager.RegisterComponentName<OutputVideoComponent>("OutputVideo");
+		entityManager.RegisterComponentName<PythonComponent>("Python");
+		entityManager.RegisterComponentName<ChromaComponent>("Chroma");
+		entityManager.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
 
-		std::cout << "[EngineCore] Core components registered (including new Chroma support)" << std::endl;
+		std::cout << "[EngineCore] Core components registered" << std::endl;
 	}
 
-	void EngineCore::RegisterCoreSystems(ECS::EntityManager& mgr) {
-		// Register core systems - EXACTLY like working StudioCore
-		mgr.RegisterSystem<SDCPPSystem>();
-		mgr.RegisterSystem<ImageSystem>();
-		mgr.RegisterSystem<VideoSystem>();
-		mgr.RegisterSystem<PythonSystem>();
+	void EngineCore::RegisterCoreSystems() {
+		entityManager.RegisterSystem<ImageSystem>();
+		entityManager.RegisterSystem<SDCPPSystem>();
+		entityManager.RegisterSystem<VideoSystem>();
+		entityManager.RegisterSystem<PythonSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}
 
 	bool EngineCore::Initialize() {
-		if (s_initialized) {
+		if (initialized) {
 			std::cerr << "[EngineCore] Already initialized!" << std::endl;
 			return false;
 		}
@@ -80,27 +71,25 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			// Initialize file paths - EXACTLY like working StudioCore
+			// Initialize file paths
 			Utils::FilePaths::LoadFilePathDefaults();
 
-			// Reset managers (no need to construct, they're already static)
-			g_entityManager.Reset();
+			// Invalidate ID 0 for consistency
+			const ECS::EntityID temp = entityManager.AddNewEntity();
+			entityManager.DestroyEntity(temp);
 
-			// Invalidate ID 0 for consistency - EXACTLY like working StudioCore
-			const ECS::EntityID temp = g_entityManager.AddNewEntity();
-			g_entityManager.DestroyEntity(temp);
-
-			// Register core components and systems using the static instance
-			RegisterCoreComponents(g_entityManager);
-			RegisterCoreSystems(g_entityManager);
+			// Register components and systems
+			RegisterCoreComponents();
+			RegisterCoreSystems();
 
 			// Initialize the plugin manager
-			g_pluginManager.Init();
+			pluginManager.Init();
 
-			s_initialized = true;
-			s_running = true;
+			initialized = true;
+			running = true;
 
 			std::cout << "[EngineCore] Initialized successfully with plugin system" << std::endl;
+			std::cout << "[EngineCore] EntityManager address: " << &entityManager << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -110,46 +99,26 @@ namespace ANI {
 	}
 
 	void EngineCore::Shutdown() {
-		if (!s_initialized) return;
+		if (!initialized) return;
 
 		std::cout << "[EngineCore] Shutting down..." << std::endl;
 
-		s_running = false;
+		running = false;
+		entityManager.Reset();
+		initialized = false;
 
-		// Reset managers (no need to delete, they're static)
-		g_entityManager.Reset();
-		// PluginManager doesn't have Reset(), but it will be destroyed with static cleanup
-
-		s_initialized = false;
 		std::cout << "[EngineCore] Shutdown complete" << std::endl;
 	}
 
 	void EngineCore::Update(float deltaTime) {
-		if (!s_initialized) return;
+		if (!initialized) return;
 
-		// Update all registered systems
-		g_entityManager.Update(deltaTime);
-
-		// Update plugins
-		g_pluginManager.Update(deltaTime);
-	}
-
-	ECS::EntityManager& EngineCore::GetEntityManager() {
-		if (!s_initialized) {
-			throw std::runtime_error("[EngineCore] EntityManager accessed before initialization!");
-		}
-		return g_entityManager;
-	}
-
-	Plugin::PluginManager& EngineCore::GetPluginManager() {
-		if (!s_initialized) {
-			throw std::runtime_error("[EngineCore] PluginManager accessed before initialization!");
-		}
-		return g_pluginManager;
+		entityManager.Update(deltaTime);
+		pluginManager.Update(deltaTime);
 	}
 
 	bool EngineCore::LoadPlugin(const std::string& path) {
-		return g_pluginManager.LoadPlugin(path);
+		return pluginManager.LoadPlugin(path);
 	}
 
 	void EngineCore::LoadDefaultPlugins() {
@@ -174,18 +143,10 @@ namespace ANI {
 #endif
 					std::string pluginPath = entry.path().string();
 					std::cout << "[EngineCore] Loading plugin: " << pluginPath << std::endl;
-					g_pluginManager.LoadPlugin(pluginPath);
+					pluginManager.LoadPlugin(pluginPath);
 				}
 				}
 			}
 		}
-
-	bool EngineCore::IsRunning() {
-		return s_running;
-	}
-
-	void EngineCore::SetRunning(bool running) {
-		s_running = running;
-	}
 
 	} // namespace ANI

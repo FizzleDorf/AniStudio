@@ -156,17 +156,72 @@ namespace ECS {
 		}
 	};
 
-	// Initialize static members
+	// FIXED: System Type Registry for consistent system IDs
+	class SystemTypeRegistry {
+	private:
+		static SystemTypeID nextTypeID;
+		static std::unordered_map<std::type_index, SystemTypeID> typeToID;
+
+	public:
+		// Register a system type and get unique ID
+		template <typename T>
+		static SystemTypeID RegisterType() {
+			std::type_index typeIdx = std::type_index(typeid(T));
+			auto it = typeToID.find(typeIdx);
+
+			if (it != typeToID.end()) {
+				// Already registered, return existing ID
+				return it->second;
+			}
+
+			// Register new system type
+			SystemTypeID newId = nextTypeID++;
+			typeToID[typeIdx] = newId;
+
+			std::cout << "[SystemRegistry] Registered system type: " << typeid(T).name()
+				<< " with ID: " << newId << std::endl;
+
+			return newId;
+		}
+
+		// Get system type ID
+		template <typename T>
+		static SystemTypeID GetIDByType() {
+			std::type_index typeIdx = std::type_index(typeid(T));
+			auto it = typeToID.find(typeIdx);
+			if (it != typeToID.end()) {
+				return it->second;
+			}
+
+			// Auto-register if not found
+			return RegisterType<T>();
+		}
+
+		// Reset registry
+		static void Reset() {
+			nextTypeID = 0;
+			typeToID.clear();
+		}
+
+		// Debug print
+		static void DebugPrint() {
+			std::cout << "System Type Registry State:" << std::endl;
+			std::cout << "Total registered systems: " << typeToID.size() << std::endl;
+			for (const auto& pair : typeToID) {
+				std::cout << "Type: " << pair.first.name() << " -> ID: " << pair.second << std::endl;
+			}
+		}
+	};
+
+	// Initialize static members for ComponentTypeRegistry
 	inline ComponentTypeID ComponentTypeRegistry::nextTypeID = 0;
 	inline std::unordered_map<std::string, ComponentTypeID> ComponentTypeRegistry::nameToID;
 	inline std::unordered_map<ComponentTypeID, std::string> ComponentTypeRegistry::idToName;
 	inline std::unordered_map<std::type_index, ComponentTypeID> ComponentTypeRegistry::typeToID;
 
-	// Non-template function for system IDs
-	static SystemTypeID GetRuntimeSystemTypeID() {
-		static SystemTypeID typeID = 0u;
-		return typeID++;
-	}
+	// Initialize static members for SystemTypeRegistry
+	inline SystemTypeID SystemTypeRegistry::nextTypeID = 0;
+	inline std::unordered_map<std::type_index, SystemTypeID> SystemTypeRegistry::typeToID;
 
 	// Get component type ID - always use the registry
 	template <typename T>
@@ -189,7 +244,8 @@ namespace ECS {
 	inline static const SystemTypeID SystemType() noexcept {
 		static_assert((std::is_base_of<BaseSystem, T>::value && !std::is_same<BaseSystem, T>::value),
 			"INVALID SYSTEM TYPE");
-		static const SystemTypeID typeID = GetRuntimeSystemTypeID();
-		return typeID;
+
+		return SystemTypeRegistry::GetIDByType<T>();
 	}
+
 } // namespace ECS

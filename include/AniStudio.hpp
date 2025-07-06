@@ -1,57 +1,77 @@
+/*
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ *
+ * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
+ * and a commercial license. You may choose to use it under either license.
+ *
+ * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
+ * For commercial license information, please contact legal@kframe.ai.
+ */
 #pragma once
 
 #include "AniEngine.hpp"
-
-namespace GUI {
-	class ViewManager;
-	void ShowMenuBar(void* window, ViewManager& viewManager, ECS::EntityManager& entityManager);
-}
-
-#define ANI_STUDIO_API
-
+#include "GUI.h"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
-#include <nlohmann/json.hpp>
+
+#define ANI_STUDIO_API
 
 namespace ANI {
 
 	class ANI_STUDIO_API StudioCore {
 	public:
+		// Constructor/Destructor
+		StudioCore();
+		~StudioCore();
 
-		static bool Initialize();
-		static void Shutdown();
-		static void Update(float deltaTime);
-		static void Render();
+		// Core lifecycle
+		bool Initialize();
+		void Shutdown();
+		void Update(float deltaTime);
+		void Render();
 
-		static ECS::EntityManager& GetEntityManager();
+		// Manager access
+		ECS::EntityManager& GetEntityManager() { return engineCore.GetEntityManager(); }
+		GUI::ViewManager& GetViewManager() { return viewManager; }
+		Plugin::PluginManager& GetPluginManager() { return engineCore.GetPluginManager(); }
 
-		static GUI::ViewManager& GetViewManager();
+		// Studio state
+		bool IsRunning() const { return running && engineCore.IsRunning(); }
+		void SetRunning(bool isRunning) {
+			running = isRunning;
+			engineCore.SetRunning(isRunning);
+		}
 
-		static Plugin::PluginManager& GetPluginManager();
+		// Window management
+		void SetWindowHandle(void* window) { windowHandle = window; }
+		void SetImGuiContext(void* context) { imguiContext = context; }
 
-		static bool IsRunning();
-		static void SetRunning(bool running);
-
-		static void SetWindowHandle(void* window);
-		static void SetImGuiContext(void* context);
-
-		static bool LoadPlugin(const std::string& path);
-		static void UnloadPlugin(const std::string& name);
-		static void LoadDefaultPlugins();
+		// Plugin management
+		bool LoadPlugin(const std::string& path) { return engineCore.LoadPlugin(path); }
+		void LoadDefaultPlugins() { engineCore.LoadDefaultPlugins(); }
 
 	private:
+		bool initialized;
+		bool running;
+		void* windowHandle;
+		void* imguiContext;
 
-		static bool s_initialized;
-		static bool s_running;
-		static void* s_windowHandle;
-		static void* s_imguiContext;
-
-		static GUI::ViewManager& GetViewManagerImpl();
+		EngineCore engineCore;
+		GUI::ViewManager viewManager;
 
 		// Internal setup
-		static void RegisterCoreViews();
+		void RegisterCoreViews();
 	};
 
-	void LoadStyleFromFile(ImGuiStyle& style, const std::string& path);
 }
