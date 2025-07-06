@@ -1,4 +1,3 @@
-// AniStudio.cpp - EXACTLY like your working Engine.cpp but with AniEngine API
 #include "AniStudio.hpp"
 #include "GUI.h"
 #include "AllViews.h"
@@ -8,25 +7,17 @@
 using namespace GUI;
 
 namespace ANI {
-	
+
+	// Static members for StudioCore state
 	bool StudioCore::s_initialized = false;
 	bool StudioCore::s_running = false;
 	void* StudioCore::s_windowHandle = nullptr;
 	void* StudioCore::s_imguiContext = nullptr;
-	static GUI::ViewManager g_viewManager;
 
-	ECS::EntityManager& StudioCore::GetEntityManagerImpl() {
-		// Use Engine's EntityManager instance
-		return EngineCore::GetEntityManagerImpl();
-	}
+	static GUI::ViewManager g_viewManager;
 
 	GUI::ViewManager& StudioCore::GetViewManagerImpl() {
 		return g_viewManager;
-	}
-
-	Plugin::PluginManager& StudioCore::GetPluginManagerImpl() {
-		// Use Engine's PluginManager instance  
-		return EngineCore::GetPluginManagerImpl();
 	}
 
 	void StudioCore::RegisterCoreViews() {
@@ -44,7 +35,7 @@ namespace ANI {
 		g_viewManager.RegisterView<NodeView>("NodeView");
 		g_viewManager.RegisterView<UpscaleView>("UpscaleView");
 		g_viewManager.RegisterView<VideoView>("VideoView");
-		g_viewManager.RegisterView<VideoView>("VideoSequencerView");
+		g_viewManager.RegisterView<VideoSequencerView>("VideoSequencerView");
 
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
 	}
@@ -58,13 +49,16 @@ namespace ANI {
 		try {
 			std::cout << "[StudioCore] Initializing..." << std::endl;
 
-			// Initialize Engine FIRST - this sets up ECS
+			// Initialize Engine FIRST - this sets up ECS, ThreadPools, etc.
 			if (!EngineCore::Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
 
-			// Invalidate ViewList ID 0
+			// Reset our ViewManager (not Engine's managers!)
+			g_viewManager.Reset();
+
+			// Invalidate ViewList ID 0 for consistency
 			auto tempView = g_viewManager.CreateView();
 			g_viewManager.DestroyView(tempView);
 
@@ -91,10 +85,10 @@ namespace ANI {
 
 		s_running = false;
 
-		// Reset our ViewManager
+		// Reset ONLY our ViewManager
 		g_viewManager.Reset();
 
-		// Shutdown Engine
+		// Shutdown Engine (this handles EntityManager, ThreadPools, PluginManager)
 		EngineCore::Shutdown();
 
 		s_windowHandle = nullptr;
@@ -107,8 +101,11 @@ namespace ANI {
 	void StudioCore::Update(float deltaTime) {
 		if (!s_initialized) return;
 
-		EngineCore::Update(deltaTime);  // Update ECS + Plugins
-		g_viewManager.Update(deltaTime);  // Update Views
+		// Update Engine first (ECS Systems + Plugins + ThreadPools)
+		EngineCore::Update(deltaTime);
+
+		// Then update our ViewManager
+		g_viewManager.Update(deltaTime);
 	}
 
 	void StudioCore::Render() {
@@ -122,7 +119,7 @@ namespace ANI {
 
 			ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
 
-			// Render Views
+			// Render Views using Engine's EntityManager
 			GUI::ShowMenuBar(static_cast<GLFWwindow*>(s_windowHandle), g_viewManager, EngineCore::GetEntityManager());
 			g_viewManager.Render();
 
@@ -140,20 +137,23 @@ namespace ANI {
 		}
 	}
 
-	// Manager access - delegate to Engine
 	ECS::EntityManager& StudioCore::GetEntityManager() {
+		// ALWAYS use Engine's EntityManager
 		return EngineCore::GetEntityManager();
 	}
 
 	GUI::ViewManager& StudioCore::GetViewManager() {
+		if (!s_initialized) {
+			throw std::runtime_error("[StudioCore] ViewManager accessed before initialization!");
+		}
 		return g_viewManager;
 	}
 
 	Plugin::PluginManager& StudioCore::GetPluginManager() {
+		// ALWAYS use Engine's PluginManager
 		return EngineCore::GetPluginManager();
 	}
 
-	// State management
 	bool StudioCore::IsRunning() {
 		return s_running && EngineCore::IsRunning();
 	}
@@ -163,7 +163,6 @@ namespace ANI {
 		EngineCore::SetRunning(running);
 	}
 
-	// Window management
 	void StudioCore::SetWindowHandle(void* window) {
 		s_windowHandle = window;
 	}
@@ -172,13 +171,13 @@ namespace ANI {
 		s_imguiContext = context;
 	}
 
-	// Plugin management - delegate to Engine
 	bool StudioCore::LoadPlugin(const std::string& path) {
 		return EngineCore::LoadPlugin(path);
 	}
 
 	void StudioCore::UnloadPlugin(const std::string& name) {
-		std::cerr << "[StudioCore] UnloadPlugin not implemented in EngineCore" << std::endl;
+		std::cerr << "[StudioCore] UnloadPlugin not implemented in EngineCore yet" << std::endl;
+		// TODO: Add unload support to EngineCore if needed
 	}
 
 	void StudioCore::LoadDefaultPlugins() {
