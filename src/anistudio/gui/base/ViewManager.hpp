@@ -134,7 +134,7 @@ namespace GUI {
 
 		// Registers a view by string name
 		template <typename T>
-		void RegisterViewType(const std::string &name) {
+		void RegisterView(const std::string &name) {
 			ViewTypeID typeId = ViewType<T>();
 			registeredViews[name] = typeId;
 			std::cout << "Registered view type: " << name << " with ID: " << typeId << std::endl;
