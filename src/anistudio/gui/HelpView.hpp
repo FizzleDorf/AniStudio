@@ -51,6 +51,14 @@ namespace GUI {
 
 	class HelpView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Docs",
+            "category": "Help",
+            "description": "Documentation for development and usage."
+        })";
+		}
+
 		HelpView(ECS::EntityManager& entityMgr);
 		~HelpView();
 

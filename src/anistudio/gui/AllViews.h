@@ -18,25 +18,42 @@
  * For commercial license information, please contact legal@kframe.ai.
  */
 
-#ifndef ALLVIEWS_HPP
-#define ALLVIEWS_HPP
+#pragma once
 
-#include "ConvertView.hpp"
+// Core views
 #include "DebugView.hpp"
-#include "DiffusionView.hpp"
-#include "ImageView.hpp"
-#include "MenuBar.hpp"
-#include "NodeGraphView.hpp"
-#include "PluginView.hpp"
-#include "SequencerView.hpp"
 #include "SettingsView.hpp"
-#include "UpscaleView.hpp"
 #include "ViewListManagerView.hpp"
-#include "NodeView.hpp"
-#include "UpscaleView.hpp"
-#include "VideoView.hpp"
-#include "VideoSequencerView.hpp"
-#include "ZepView.hpp"
+#include "PluginView.hpp"
 #include "HelpView.hpp"
+#include "MenuBar.hpp"
 
+// Project management views (from gui/projects/)
+#include "project/ProjectManagerView.hpp"
+#include "project/NewProjectView.hpp"
+#include "project/LoadProjectView.hpp"
+
+// AI Generation views
+#include "DiffusionView.hpp"
+#include "UpscaleView.hpp"
+#include "ConvertView.hpp"
+
+// Media views
+#include "ImageView.hpp"
+#include "VideoView.hpp"
+
+// Node Editor views
+#include "NodeGraphView.hpp"
+#include "NodeView.hpp"
+
+// Animation views
+#include "SequencerView.hpp"
+
+// Utility views
+#include "ConvertView.hpp"
+#include "PluginView.hpp"
+
+// Optional views (if available)
+#ifdef ZEP_AVAILABLE
+#include "ZepView.hpp"
 #endif

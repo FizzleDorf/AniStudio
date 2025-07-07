@@ -39,6 +39,14 @@ struct Track {
 
 class SequencerView : public ImSequencer::SequenceInterface, public BaseView {
 public:
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "Sequencer View",
+            "category": "Tools",
+            "description": "A Simple Sequencer."
+        })";
+	}
+
     SequencerView(ECS::EntityManager &entityMgr);
     ~SequencerView() = default;
     // Sequencer control

@@ -30,6 +30,13 @@
 
 class SettingsView : public BaseView {
 public:
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "Settings View",
+            "category": "Edit",
+            "description": "Manage application and project settings."
+        })";
+	}
     SettingsView(ECS::EntityManager &mgr) : BaseView(mgr) { viewName = "Settings View";}
     ~SettingsView() {}
 

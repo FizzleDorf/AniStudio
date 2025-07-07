@@ -21,6 +21,7 @@
 
 #include "AniEngine.hpp"
 #include "GUI.h"
+#include "ProjectManager.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -69,6 +70,8 @@ namespace ANI {
 
 		EngineCore engineCore;
 		GUI::ViewManager viewManager;
+		ANI::ProjectManager m_projectManager;
+		GUI::ViewListID m_menuBarID;
 
 		// Internal setup
 		void RegisterCoreViews();

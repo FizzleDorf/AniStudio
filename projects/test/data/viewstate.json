@@ -1,0 +1,17 @@
+{
+    "activeWorkspace": "Default",
+    "workspaces": {
+        "Default": {
+            "mainMenuBarVisible": true,
+            "openViewTypes": [
+                "NewProjectView",
+                "LoadProjectView",
+                "ImageView",
+                "DiffusionView"
+            ],
+            "statusBarVisible": true,
+            "toolbarVisible": true,
+            "workspaceName": "Default"
+        }
+    }
+}

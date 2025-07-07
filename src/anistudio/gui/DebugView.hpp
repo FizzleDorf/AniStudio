@@ -30,6 +30,14 @@ namespace GUI {
 
 class DebugView : public BaseView {
 public:
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "Debug View",
+            "category": "Debug",
+            "description": "A simple debugger."
+        })";
+	}
+
     DebugView(ECS::EntityManager &entityMgr) : BaseView(entityMgr) { viewName = "DebugView"; }
     ~DebugView(){}
     void Init();

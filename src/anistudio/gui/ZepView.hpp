@@ -35,6 +35,14 @@
 namespace GUI {
 	class ZepView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Text Editor",
+            "category": "Tools",
+            "description": "Edit text and running python scripts."
+        })";
+		}
+
 		ZepView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
 			viewName = "Code Editor";
 			textEditor = std::make_unique<Utils::ZepTextEditor>();

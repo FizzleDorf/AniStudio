@@ -1,4 +1,4 @@
-// AniStudio.cpp - INSTANCE-BASED, NO MORE STATIC BULLSHIT
+// AniStudio.cpp - Fixed constructor issues
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include <iostream>
@@ -6,7 +6,8 @@
 namespace ANI {
 
 	StudioCore::StudioCore()
-		: initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr) {
+		: initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
+		m_projectManager(viewManager, engineCore.GetEntityManager()), m_menuBarID(0) {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 	}
 
@@ -19,18 +20,58 @@ namespace ANI {
 	void StudioCore::RegisterCoreViews() {
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
 
+		// Register standard views (only need EntityManager)
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
 		viewManager.RegisterView<GUI::DiffusionView>("DiffusionView");
 		viewManager.RegisterView<GUI::ImageView>("ImageView");
 		viewManager.RegisterView<GUI::NodeGraphView>("NodeGraphView");
 		viewManager.RegisterView<GUI::ConvertView>("ConvertView");
-		viewManager.RegisterView<GUI::ViewListManagerView>("ViewListManagerView");
 		viewManager.RegisterView<GUI::SequencerView>("SequencerView");
-		viewManager.RegisterView<GUI::PluginView>("PluginView");
 		viewManager.RegisterView<GUI::NodeView>("NodeView");
 		viewManager.RegisterView<GUI::UpscaleView>("UpscaleView");
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
+		viewManager.RegisterView<GUI::HelpView>("HelpView");
+		viewManager.RegisterView<GUI::ZepView>("ZepView");
+
+
+		// Register views that need special constructors with custom factories
+		viewManager.RegisterViewWithFactory("ViewListManagerView", "Views",
+			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+			return std::make_unique<GUI::ViewListManagerView>(mgr, viewManager);
+		},
+			[]() -> GUI::ViewMetadata { return GUI::ViewListManagerView::GetMetadata(); }
+		);
+
+		viewManager.RegisterViewWithFactory("PluginView", "Plugins",
+			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+			return std::make_unique<GUI::PluginView>(mgr, engineCore.GetPluginManager());
+		},
+			[]() -> GUI::ViewMetadata { return GUI::PluginView::GetMetadata(); }
+		);
+
+		viewManager.RegisterViewWithFactory("ProjectManagerView", "Core",
+			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+			return std::make_unique<GUI::ProjectManagerView>(mgr, m_projectManager);
+		},
+			[]() -> GUI::ViewMetadata { return GUI::ProjectManagerView::GetMetadata(); }
+		);
+
+		viewManager.RegisterViewWithFactory("NewProjectView", "Core",
+			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+			return std::make_unique<GUI::NewProjectView>(mgr, m_projectManager);
+		},
+			[]() -> GUI::ViewMetadata { return GUI::NewProjectView::GetMetadata(); }
+		);
+
+		viewManager.RegisterViewWithFactory("LoadProjectView", "Core",
+			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+			return std::make_unique<GUI::LoadProjectView>(mgr, m_projectManager);
+		},
+			[]() -> GUI::ViewMetadata { return GUI::LoadProjectView::GetMetadata(); }
+		);
+
+		// Don't register MenuBar here
 
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
 	}
@@ -54,8 +95,12 @@ namespace ANI {
 			auto tempView = viewManager.CreateView();
 			viewManager.DestroyView(tempView);
 
-			// Register view types
+			// Register view types with factories
 			RegisterCoreViews();
+
+			// Create MenuBar manually since it needs a special constructor
+			m_menuBarID = viewManager.CreateView();
+			viewManager.AddView<GUI::MenuBar>(m_menuBarID, GUI::MenuBar(m_projectManager, viewManager, engineCore.GetEntityManager()));
 
 			initialized = true;
 			running = true;
@@ -109,9 +154,6 @@ namespace ANI {
 			ImGui::NewFrame();
 
 			ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
-
-			GUI::ShowMenuBar(*this);
-
 			viewManager.Render();
 
 			// Render ImGui

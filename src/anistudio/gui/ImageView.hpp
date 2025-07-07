@@ -32,6 +32,14 @@ namespace GUI {
 
 	class ImageView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Image View",
+            "category": "Views",
+            "description": "A simple image viewer"
+        })";
+		}
+
 		ImageView(ECS::EntityManager& entityMgr)
 			: BaseView(entityMgr),
 			selectedEntityID(0),

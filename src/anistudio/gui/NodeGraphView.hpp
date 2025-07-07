@@ -32,6 +32,14 @@ namespace ed = ax::NodeEditor;
 namespace GUI {
 class NodeGraphView : public BaseView {
 public:
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "Nodegraph View",
+            "category": "Tools",
+            "description": "Nodes."
+        })";
+	}
+
     NodeGraphView(ECS::EntityManager &entityMgr);
     ~NodeGraphView();
 

@@ -1,0 +1,9 @@
+{
+	"name": "Simple_Image_Diffusion",
+	"description": "Project set up for AI image generation with stable diffusion models. Includes diffusion controls and image viewer for managing generated content.",
+	"category": "AI Generation",
+	"defaultOpenViews": [
+		"DiffusionView",
+		"ImageView"
+	]
+}

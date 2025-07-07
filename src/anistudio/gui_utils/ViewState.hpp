@@ -13,76 +13,40 @@
  */
 
 #pragma once
-#include "ViewTypes.hpp"
-#include "ViewManager.hpp"
 #include <nlohmann/json.hpp>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
-#include <memory>
+#include <vector>
 
 namespace GUI {
 
-	// Forward declarations
-	class ViewManager;
-	class BaseView;
-
 	/**
-	 * Individual view state information
-	 */
-	struct ViewInstanceState {
-		std::string viewTypeName;
-		ViewTypeID viewTypeID = 0;
-		ViewListID viewListID = 0;
-		bool isOpen = false;
-		bool isVisible = true;
-		nlohmann::json viewData; // Serialized view-specific data
-
-		// Window/docking information
-		bool isDocked = false;
-		std::string dockSpaceID;
-		ImVec2 windowPos = ImVec2(0, 0);
-		ImVec2 windowSize = ImVec2(400, 300);
-		bool windowCollapsed = false;
-
-		nlohmann::json Serialize() const;
-		void Deserialize(const nlohmann::json& j);
-	};
-
-	/**
-	 * Complete workspace view state
+	 * Simple workspace state - just tracks which view types should be open
 	 */
 	struct WorkspaceState {
 		std::string workspaceName = "Default";
-		std::unordered_map<ViewListID, ViewInstanceState> viewStates;
+		std::unordered_set<std::string> openViewTypes; // Just track which view types are open
 
-		// Workspace-level settings
+		// Workspace-level UI settings
 		bool mainMenuBarVisible = true;
 		bool statusBarVisible = true;
 		bool toolbarVisible = true;
 
-		// Docking layout
-		std::string dockingLayoutData; // ImGui docking layout serialized as string
-
 		nlohmann::json Serialize() const;
 		void Deserialize(const nlohmann::json& j);
 
-		// Helper methods
-		void AddViewState(const ViewInstanceState& state);
-		void RemoveViewState(ViewListID viewID);
-		bool HasViewState(ViewListID viewID) const;
-		ViewInstanceState* GetViewState(ViewListID viewID);
-		const ViewInstanceState* GetViewState(ViewListID viewID) const;
-
-		// Statistics
-		size_t GetOpenViewCount() const;
-		size_t GetTotalViewCount() const;
-		std::vector<ViewListID> GetOpenViews() const;
-		std::vector<ViewListID> GetAllViews() const;
+		// Simple helpers
+		bool IsViewOpen(const std::string& viewType) const;
+		void SetViewOpen(const std::string& viewType, bool open);
+		void ToggleView(const std::string& viewType);
+		size_t GetOpenViewCount() const { return openViewTypes.size(); }
+		std::vector<std::string> GetOpenViews() const;
 	};
 
 	/**
-	 * Project-level view state management
-	 * Handles multiple workspaces and view state persistence
+	 * Simplified ViewState - only manages which views should be open
+	 * Doesn't know about ViewManager or actual view instances
 	 */
 	class ViewState {
 	public:
@@ -101,20 +65,14 @@ namespace GUI {
 		WorkspaceState* GetWorkspace(const std::string& name);
 		const WorkspaceState* GetWorkspace(const std::string& name) const;
 
-		// View state capture and restoration
-		bool CaptureCurrentState(ViewManager& viewManager);
-		bool RestoreState(ViewManager& viewManager, ECS::EntityManager& entityManager);
+		// View state management (delegates to active workspace)
+		bool IsViewOpen(const std::string& viewType) const;
+		void SetViewOpen(const std::string& viewType, bool open);
+		void ToggleView(const std::string& viewType);
+		void CloseAllViews();
 
-		// Individual view management
-		bool SaveViewState(ViewListID viewID, const BaseView& view);
-		bool LoadViewState(ViewListID viewID, BaseView& view);
-		bool RemoveViewState(ViewListID viewID);
-
-		// View creation/destruction tracking
-		void OnViewCreated(ViewListID viewID, const std::string& viewTypeName, ViewTypeID viewTypeID);
-		void OnViewDestroyed(ViewListID viewID);
-		void OnViewOpened(ViewListID viewID);
-		void OnViewClosed(ViewListID viewID);
+		std::vector<std::string> GetOpenViewTypes() const;
+		size_t GetOpenViewCount() const;
 
 		// Serialization
 		nlohmann::json Serialize() const;
@@ -124,30 +82,19 @@ namespace GUI {
 		bool SaveToFile(const std::string& filepath) const;
 		bool LoadFromFile(const std::string& filepath);
 
-		// State validation
-		bool ValidateState() const;
-		void CleanupInvalidStates();
-
 		// Reset to defaults
 		void Reset();
 		void CreateDefaultWorkspace();
 
-		// Statistics and debugging
-		size_t GetTotalViewCount() const;
-		size_t GetOpenViewCount() const;
-		void PrintDebugInfo() const;
+		// Template application
+		void ApplyTemplate(const std::vector<std::string>& viewTypes);
 
 	private:
 		std::unordered_map<std::string, WorkspaceState> m_workspaces;
 		std::string m_activeWorkspaceName = "Default";
 
-		// Helper methods
-		bool IsValidWorkspaceName(const std::string& name) const;
 		void EnsureDefaultWorkspace();
-
-		// View type name resolution (for serialization)
-		std::string GetViewTypeName(ViewTypeID typeID, ViewManager& viewManager) const;
-		ViewTypeID GetViewTypeID(const std::string& typeName, ViewManager& viewManager) const;
+		bool IsValidWorkspaceName(const std::string& name) const;
 	};
 
 } // namespace GUI

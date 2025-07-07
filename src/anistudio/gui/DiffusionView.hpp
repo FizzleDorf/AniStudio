@@ -40,6 +40,14 @@ namespace GUI {
 
 	class DiffusionView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Diffusion View",
+            "category": "Tools",
+            "description": "A simple view for inferencing diffusion models."
+        })";
+		}
+
 		DiffusionView(EntityManager& entityMgr);
 		~DiffusionView();
 

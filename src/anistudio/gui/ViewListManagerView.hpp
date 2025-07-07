@@ -23,11 +23,22 @@
 #include "pch.h"
 #include "imgui.h"
 
+namespace GUI {
+    class ViewManager;
+}
 
 namespace GUI {
 
 class ViewListManagerView : public BaseView {
 public:
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "ViewList Manager",
+            "category": "Views",
+            "description": "Manage and debug active views."
+        })";
+	}
+
     ViewListManagerView(ECS::EntityManager &entityMgr, ViewManager &viewMgr)
         : BaseView(entityMgr), viewManager(viewMgr), selectedViewList(-1), selectedActiveView(-1),
           selectedInactiveView(-1) {

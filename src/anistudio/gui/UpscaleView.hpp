@@ -33,6 +33,14 @@ namespace GUI {
 
 	class UpscaleView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Upscale View",
+            "category": "Tools",
+            "description": "Upscale images with ESRGAN models."
+        })";
+		}
+
 		UpscaleView(EntityManager &entityMgr);
 		~UpscaleView();
 

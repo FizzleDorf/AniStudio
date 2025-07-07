@@ -93,13 +93,6 @@ elseif(TARGET ImGuizmo)
     message(STATUS "ImGuizmo already available")
 endif()
 
-if(NOT TARGET ImJSchema AND EXISTS "${EXTERNAL_DIR}/ImJSchema/CMakeLists.txt")
-    add_subdirectory("${EXTERNAL_DIR}/ImJSchema" "${CMAKE_BINARY_DIR}/ImJSchema")
-    message(STATUS "Added ImJSchema: ${EXTERNAL_DIR}/ImJSchema")
-elseif(TARGET ImJSchema)
-    message(STATUS "ImJSchema already available")
-endif()
-
 # Add NodeEditor - only add if not already added
 if(NOT TARGET ax::NodeEditor AND EXISTS "${EXTERNAL_DIR}/node-editor/CMakeLists.txt")
     add_subdirectory("${EXTERNAL_DIR}/node-editor" "${CMAKE_BINARY_DIR}/node-editor")
@@ -169,6 +162,7 @@ endif()
 file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/base/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/project/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
 )
@@ -208,6 +202,7 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/base>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/project>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/events>
     $<INSTALL_INTERFACE:include/anistudio>

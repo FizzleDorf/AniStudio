@@ -15,12 +15,12 @@
 #pragma once
 #include "ViewState.hpp"
 #include "FilePaths.hpp"
-#include "ViewManager.hpp"
-#include "ECS.h"
 #include <nlohmann/json.hpp>
 #include <string>
-#include <filesystem>
-#include <memory>
+#include <vector>
+
+namespace GUI { class ViewManager; }
+namespace ECS { class EntityManager; }
 
 namespace ANI {
 
@@ -32,14 +32,6 @@ namespace ANI {
 		std::string createdDate;
 		std::string lastModified;
 
-		// Project-specific model paths
-		std::string projectModelRoot;
-		std::string projectCheckpointDir;
-		std::string projectVaeDir;
-		std::string projectLoraDir;
-		std::string projectControlnetDir;
-		std::string projectUpscaleDir;
-
 		nlohmann::json Serialize() const;
 		void Deserialize(const nlohmann::json& j);
 	};
@@ -49,86 +41,49 @@ namespace ANI {
 		ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr);
 		~ProjectManager();
 
+		// Startup detection
+		bool ShouldShowStartup() const;
+
 		// Project lifecycle
 		bool CreateNewProject(const std::string& projectPath, const std::string& projectName);
 		bool LoadProject(const std::string& projectPath);
 		bool SaveProject();
-		bool SaveProjectAs(const std::string& newPath);
 		void CloseProject();
 
 		// Project state
 		bool IsProjectOpen() const { return m_isProjectOpen; }
 		const std::string& GetCurrentProjectPath() const { return m_currentProjectPath; }
 		const std::string& GetCurrentProjectName() const { return m_projectSettings.projectName; }
-		const ProjectSettings& GetProjectSettings() const { return m_projectSettings; }
-		ProjectSettings& GetProjectSettings() { return m_projectSettings; }
 
-		// ViewState management
-		bool SaveViewState();
-		bool LoadViewState();
-		bool HasSavedViewState() const;
-
-		// Auto-save functionality
-		void SetAutoSave(bool enabled) { m_autoSaveEnabled = enabled; }
-		bool IsAutoSaveEnabled() const { return m_autoSaveEnabled; }
-		void SetAutoSaveInterval(float seconds) { m_autoSaveInterval = seconds; }
-		void Update(float deltaTime);
+		// ViewState
+		GUI::ViewState& GetViewState() { return m_viewState; }
+		const GUI::ViewState& GetViewState() const { return m_viewState; }
 
 		// Recent projects
 		std::vector<std::string> GetRecentProjects() const;
 		void AddToRecentProjects(const std::string& projectPath);
 
-		// Project templates
-		bool CreateProjectFromTemplate(const std::string& templateName, const std::string& projectPath, const std::string& projectName);
-		std::vector<std::string> GetAvailableTemplates() const;
-
 		// Error handling
 		const std::string& GetLastError() const { return m_lastError; }
 
 	private:
-		// References to core systems
 		GUI::ViewManager& m_viewManager;
 		ECS::EntityManager& m_entityManager;
 
-		// Project state
 		bool m_isProjectOpen = false;
 		std::string m_currentProjectPath;
 		ProjectSettings m_projectSettings;
 		GUI::ViewState m_viewState;
-
-		// Auto-save
-		bool m_autoSaveEnabled = true;
-		float m_autoSaveInterval = 300.0f; // 5 minutes
-		float m_autoSaveTimer = 0.0f;
-		bool m_hasUnsavedChanges = false;
-
-		// Error handling
+		std::vector<std::string> m_recentProjects;
 		std::string m_lastError;
 
-		// File paths
-		std::string GetProjectFilePath() const;
-		std::string GetViewStateFilePath() const;
-		std::string GetSettingsFilePath() const;
-		std::string GetAssetsDirectoryPath() const;
-		std::string GetScriptsDirectoryPath() const;
-		std::string GetModelsDirectoryPath() const;
-
-		// Internal methods
-		bool CreateProjectDirectory(const std::string& projectPath);
-		bool SetupProjectStructure(const std::string& projectPath);
-		void UpdateFilePaths();
-		void MarkAsModified();
-		bool ValidateProjectPath(const std::string& path) const;
-
-		// Serialization helpers
-		nlohmann::json SerializeProjectData() const;
-		bool DeserializeProjectData(const nlohmann::json& j);
-
-		// Recent projects management
+		// File operations
+		bool SaveViewState();
+		bool LoadViewState();
+		bool SaveImGuiLayout();
+		bool LoadImGuiLayout();
 		void LoadRecentProjects();
 		void SaveRecentProjects();
-		std::vector<std::string> m_recentProjects;
-		static constexpr size_t MAX_RECENT_PROJECTS = 10;
 	};
 
 } // namespace ANI

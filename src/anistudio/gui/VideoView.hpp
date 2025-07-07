@@ -32,6 +32,14 @@ namespace GUI {
 
 	class VideoView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Video View",
+            "category": "Views",
+            "description": "A simple video viewer."
+        })";
+		}
+
 		VideoView(ECS::EntityManager& entityMgr)
 			: BaseView(entityMgr),
 			selectedEntityID(0),

@@ -32,6 +32,14 @@ namespace GUI {
 
 class ConvertView : public BaseView {
 public:
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "Convert Model",
+            "category": "Tools",
+            "description": "Convert diffusion models to GGUF/Quant format."
+        })";
+	}
+
     ConvertView(ECS::EntityManager &entityMgr);
     ~ConvertView() = default;
 

@@ -21,12 +21,14 @@
 #pragma once
 #include "BaseView.hpp"
 #include "ViewList.hpp"
-#include "ViewTypes.hpp"
 #include "pch.h"
 
 using json = nlohmann::json;
 
 namespace GUI {
+
+	// Factory function type
+	using ViewCreationCallback = std::function<std::unique_ptr<BaseView>(ECS::EntityManager&)>;
 
 	class ViewManager {
 	public:
@@ -46,6 +48,8 @@ namespace GUI {
 			for (const auto& viewList : viewArrays) {
 				viewList.second->UpdateViews(deltaT);
 			}
+			// Update generic views
+			UpdateGenericViews(deltaT);
 		}
 
 		// Render all views
@@ -53,6 +57,8 @@ namespace GUI {
 			for (const auto &viewList : viewArrays) {
 				viewList.second->RenderViews();
 			}
+			// Render generic views
+			RenderGenericViews();
 		}
 
 		// Adds a viewlist
@@ -76,6 +82,9 @@ namespace GUI {
 				array.second->Erase(viewList);
 			}
 
+			// Remove from generic views if it's there
+			genericViews.erase(viewList);
+
 			// Return the ID to the available pool
 			viewListCount--;
 			availableViews.push(viewList);
@@ -97,12 +106,13 @@ namespace GUI {
 			view.viewID = viewList;
 			GetViewSignature(viewList)->insert(ViewType<T>());
 
+			// Initialize the view before adding it
+			view.Init();
+
 			// Add to appropriate view list
 			auto viewListPtr = GetViewList<T>();
-			std::cout << "Adding view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
+			std::cout << "Adding and initializing view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
 			viewListPtr->Insert(std::forward<T>(view));
-
-			// Note: We don't initialize the view here - it will be initialized separately
 		}
 
 		// Removes a view from the viewlist by template class
@@ -140,12 +150,175 @@ namespace GUI {
 			return (signature.count(viewType) > 0);
 		}
 
-		// Registers a view by string name
+		// Registers a view by string name WITH FACTORY AND METADATA
 		template <typename T>
-		void RegisterView(const std::string &name) {
+		void RegisterView(const std::string &name, const std::string& source = "Core") {
 			ViewTypeID typeId = ViewType<T>();
 			registeredViews[name] = typeId;
-			std::cout << "Registered view type: " << name << " with ID: " << typeId << std::endl;
+
+			// DEBUG: Test the metadata during registration
+			std::cout << "[DEBUG REG] Registering " << name << " (type: " << typeid(T).name() << ")" << std::endl;
+
+			const char* json = T::GetMetadataJSON();
+			std::cout << "[DEBUG REG] JSON: " << json << std::endl;
+
+			// Use the template method to get the correct metadata
+			auto testMeta = BaseView::GetMetadataFor<T>();
+			std::cout << "[DEBUG REG] Parsed: " << testMeta.displayName << " [" << testMeta.category << "] - " << testMeta.description << std::endl;
+
+			// Register metadata getter using the template method
+			viewMetadata[name] = []() -> ViewMetadata {
+				return BaseView::GetMetadataFor<T>();
+			};
+			viewSources[name] = source;
+
+			// Register factory function
+			viewFactories[name] = [](ECS::EntityManager& mgr) -> std::unique_ptr<BaseView> {
+				return std::make_unique<T>(mgr);
+			};
+
+			std::cout << "Registered view type: " << name << " with ID: " << typeId
+				<< " from source: " << source << std::endl;
+		}
+
+		// Register view with custom factory (for views with special constructors)
+		void RegisterViewWithFactory(const std::string& name, const std::string& source,
+			ViewCreationCallback factory, std::function<ViewMetadata()> metadataGetter) {
+			// Generate a dummy type ID for non-template views
+			static ViewTypeID nextCustomTypeId = 10000; // Start high to avoid conflicts
+			ViewTypeID typeId = nextCustomTypeId++;
+
+			registeredViews[name] = typeId;
+			viewSources[name] = source;
+			viewFactories[name] = factory;
+			viewMetadata[name] = metadataGetter;
+
+			std::cout << "Registered custom view type: " << name << " with ID: " << typeId
+				<< " from source: " << source << std::endl;
+		}
+
+		// Create view by name using factory
+		ViewListID CreateViewByName(const std::string& viewTypeName, ECS::EntityManager& entityMgr) {
+			auto factoryIt = viewFactories.find(viewTypeName);
+			if (factoryIt == viewFactories.end()) {
+				std::cerr << "[ViewManager] No factory registered for view type: " << viewTypeName << std::endl;
+				return 0; // Invalid ViewListID
+			}
+
+			try {
+				// Create the ViewListID
+				ViewListID viewID = CreateView();
+
+				// Create the view instance using the factory
+				auto view = factoryIt->second(entityMgr);
+				if (!view) {
+					DestroyView(viewID);
+					return 0;
+				}
+
+				// Set the view ID
+				view->viewID = viewID;
+
+				// Initialize the view immediately
+				view->Init();
+
+				// Store in generic storage
+				genericViews[viewID] = std::move(view);
+
+				std::cout << "[ViewManager] Created and initialized view: " << viewTypeName << " with ID: " << viewID << std::endl;
+				return viewID;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[ViewManager] Failed to create view " << viewTypeName << ": " << e.what() << std::endl;
+				return 0;
+			}
+		}
+
+		// Unregister views from a source (for plugin cleanup)
+		void UnregisterViewSource(const std::string& source) {
+			auto it = viewSources.begin();
+			while (it != viewSources.end()) {
+				if (it->second == source) {
+					const std::string& viewName = it->first;
+					std::cout << "Unregistering view: " << viewName
+						<< " from source: " << source << std::endl;
+
+					// Remove from all tracking maps
+					registeredViews.erase(viewName);
+					viewMetadata.erase(viewName);
+					viewFactories.erase(viewName);
+					it = viewSources.erase(it);
+				}
+				else {
+					++it;
+				}
+			}
+		}
+
+		// Get metadata for a view type
+		ViewMetadata GetViewMetadata(const std::string& viewTypeName) const {
+			auto it = viewMetadata.find(viewTypeName);
+			if (it != viewMetadata.end()) {
+				return it->second();
+			}
+
+			// Return default metadata for unknown types
+			ViewMetadata meta;
+			meta.displayName = viewTypeName;
+			meta.category = "Unknown";
+			meta.description = "";
+			return meta;
+		}
+
+		// Get all view types in a category
+		std::vector<std::string> GetViewsByCategory(const std::string& category) const {
+			std::vector<std::string> viewsInCategory;
+
+			for (const auto&[viewTypeName, typeID] : registeredViews) {
+				ViewMetadata meta = GetViewMetadata(viewTypeName);
+				if (meta.category == category) {
+					viewsInCategory.push_back(viewTypeName);
+				}
+			}
+
+			return viewsInCategory;
+		}
+
+		// Get all categories
+		std::vector<std::string> GetViewCategories() const {
+			std::set<std::string> categories;
+
+			for (const auto&[viewTypeName, typeID] : registeredViews) {
+				ViewMetadata meta = GetViewMetadata(viewTypeName);
+				categories.insert(meta.category);
+			}
+
+			return std::vector<std::string>(categories.begin(), categories.end());
+		}
+
+		// Get views by source
+		std::vector<std::string> GetViewsBySource(const std::string& source) const {
+			std::vector<std::string> views;
+			for (const auto&[viewTypeName, viewSource] : viewSources) {
+				if (viewSource == source) {
+					views.push_back(viewTypeName);
+				}
+			}
+			return views;
+		}
+
+		// Update generic views
+		void UpdateGenericViews(float deltaT) {
+			for (auto&[viewID, view] : genericViews) {
+				view->Update(deltaT);
+			}
+		}
+
+		// Render generic views
+		void RenderGenericViews() {
+			for (auto&[viewID, view] : genericViews) {
+				view->Render();
+			}
 		}
 
 		// Returns a designated view type by string name
@@ -166,6 +339,7 @@ namespace GUI {
 				DestroyView(viewSignaturePair.first);
 			}
 			viewSignatures.clear();
+			genericViews.clear();
 
 			// Reset available views queue
 			while (!availableViews.empty()) {
@@ -178,6 +352,9 @@ namespace GUI {
 			viewListCount = 0;
 			viewArrays.clear();
 			registeredViews.clear();
+			viewMetadata.clear();
+			viewSources.clear();
+			viewFactories.clear();
 			Init();
 		}
 
@@ -280,6 +457,14 @@ namespace GUI {
 		std::map<ViewListID, std::shared_ptr<ViewSignature>> viewSignatures;
 		std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
 		std::unordered_map<std::string, ViewTypeID> registeredViews;
+
+		// Metadata and creation tracking
+		std::unordered_map<std::string, std::function<ViewMetadata()>> viewMetadata;
+		std::unordered_map<std::string, std::string> viewSources;
+		std::unordered_map<std::string, ViewCreationCallback> viewFactories;
+
+		// Generic view storage for views created by name
+		std::unordered_map<ViewListID, std::unique_ptr<BaseView>> genericViews;
 	};
 
 } // namespace GUI

@@ -36,6 +36,14 @@ namespace GUI {
 
     class NodeView : public BaseView {
     public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Node View",
+            "category": "Tools",
+            "description": "Moar Nodes."
+        })";
+		}
+
         NodeView(ECS::EntityManager& entityMgr);
         ~NodeView() = default;
 

@@ -10,20 +10,65 @@
 
  * This file is part of AniStudio.
  * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
-#include "GUI.h"
+#include "BaseView.hpp"
+#include <unordered_map>
+#include <memory>
 
-// Forward declaration
-namespace ANI { class StudioCore; }
+namespace ANI { class ProjectManager; }
 
 namespace GUI {
-	void ShowMenuBar(ANI::StudioCore& studioCore);
-}
+	class ViewManager;
+
+	// Structure for building hierarchical menus
+	struct MenuNode {
+		std::unordered_map<std::string, std::unique_ptr<MenuNode>> children;
+		std::vector<std::pair<std::string, ViewMetadata>> views;
+	};
+
+	class MenuBar : public BaseView {
+	public:
+		MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ECS::EntityManager& entityMgr);
+
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+				"displayName": "Menu Bar",
+				"category": "Hidden",
+				"description": "Main application menu bar"
+			})";
+		}
+
+		void Init() override {}
+		void Update(const float deltaT) override { UpdateViews(); }
+		void Render() override;
+
+		void UpdateViews();
+
+	private:
+		ANI::ProjectManager& m_projectManager;
+		ECS::EntityManager& m_entityManager;
+		ViewManager& m_viewManager;
+
+		// Track active views
+		std::unordered_map<std::string, ViewListID> m_activeViews;
+
+		// Menu sections
+		void ShowFileMenu();
+		void ShowEditMenu();
+		void ShowCategoryMenus();  // New method for dynamic category menus
+		void ShowHelpMenu();
+
+		// Hierarchical menu building
+		std::vector<std::string> SplitCategoryPath(const std::string& category);
+		void RenderMenuNode(const MenuNode& node);
+
+		// View management
+		void SyncViewState();
+		void CreateView(const std::string& viewType);
+		void DestroyView(const std::string& viewType);
+		bool IsViewActive(const std::string& viewType) const;
+	};
+
+} // namespace GUI

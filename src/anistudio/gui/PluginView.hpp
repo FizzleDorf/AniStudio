@@ -38,6 +38,14 @@ namespace GUI {
 
 	class PluginView : public BaseView {
 	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Plugin View",
+            "category": "Plugins",
+            "description": "Manage plugin loading/unloading."
+        })";
+		}
+
 		explicit PluginView(ECS::EntityManager& entityMgr, Plugin::PluginManager& pluginMgr);
 		~PluginView() override = default;
 
