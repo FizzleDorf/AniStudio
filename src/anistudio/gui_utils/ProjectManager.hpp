@@ -41,7 +41,7 @@ namespace ANI {
 		ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr);
 		~ProjectManager();
 
-		// Startup detection
+		// Startup detection - now uses FilePaths utility
 		bool ShouldShowStartup() const;
 
 		// Project lifecycle
@@ -59,9 +59,18 @@ namespace ANI {
 		GUI::ViewState& GetViewState() { return m_viewState; }
 		const GUI::ViewState& GetViewState() const { return m_viewState; }
 
-		// Recent projects
+		// Recent projects - now using FilePaths utility for storage
 		std::vector<std::string> GetRecentProjects() const;
 		void AddToRecentProjects(const std::string& projectPath);
+
+		// Path management - delegates to FilePaths utility
+		void SetDefaultProjectPath(const std::string& path);
+		std::string GetDefaultProjectPath() const;
+		void SetAssetsFolder(const std::string& path);
+		std::string GetAssetsFolder() const;
+
+		// Application-level path initialization
+		static void InitializeApplicationPaths();
 
 		// Error handling
 		const std::string& GetLastError() const { return m_lastError; }
@@ -74,7 +83,6 @@ namespace ANI {
 		std::string m_currentProjectPath;
 		ProjectSettings m_projectSettings;
 		GUI::ViewState m_viewState;
-		std::vector<std::string> m_recentProjects;
 		std::string m_lastError;
 
 		// File operations
@@ -82,8 +90,15 @@ namespace ANI {
 		bool LoadViewState();
 		bool SaveImGuiLayout();
 		bool LoadImGuiLayout();
-		void LoadRecentProjects();
-		void SaveRecentProjects();
+
+		// Project-specific path management
+		void UpdateProjectSpecificPaths();
+		void ClearProjectSpecificPaths();
+
+		// Path utilities
+		std::string GetProjectDataPath() const;
+		std::string GetProjectAssetsPath() const;
+		std::string GetProjectOutputPath() const;
 	};
 
 } // namespace ANI

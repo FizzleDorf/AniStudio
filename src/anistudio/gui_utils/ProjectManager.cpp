@@ -34,15 +34,22 @@ namespace ANI {
 	// ProjectManager implementation
 	ProjectManager::ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr)
 		: m_viewManager(viewMgr), m_entityManager(entityMgr) {
-		LoadRecentProjects();
+		// FilePaths utility should already be initialized at application startup
+		// We just read the current state
 	}
 
 	ProjectManager::~ProjectManager() {
-		SaveRecentProjects();
+		// Save any changes to FilePaths when the ProjectManager is destroyed
+		Utils::FilePaths::SaveFilepathDefaults();
+	}
+
+	void ProjectManager::InitializeApplicationPaths() {
+		// This should be called at application startup, before creating ProjectManager
+		Utils::FilePaths::Init();
 	}
 
 	bool ProjectManager::ShouldShowStartup() const {
-		// Show startup if no project path is set or no project is open
+		// Use FilePaths utility to check if we should show startup
 		return Utils::FilePaths::lastOpenProjectPath.empty() || !m_isProjectOpen;
 	}
 
@@ -58,7 +65,7 @@ namespace ANI {
 				CloseProject();
 			}
 
-			// Create project directory
+			// Create project directory structure
 			std::filesystem::create_directories(projectPath);
 			std::filesystem::create_directories(projectPath + "/data");
 			std::filesystem::create_directories(projectPath + "/assets");
@@ -83,17 +90,20 @@ namespace ANI {
 			// Reset view state
 			m_viewState.Reset();
 
+			// Update FilePaths utility with new project info
+			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
+			UpdateProjectSpecificPaths();
+
 			// Save project
 			if (!SaveProject()) {
 				m_lastError = "Failed to save new project";
 				return false;
 			}
 
-			// Update file paths
-			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
+			// Save updated paths to utility
 			Utils::FilePaths::SaveFilepathDefaults();
 
-			// Add to recent projects
+			// Add to recent projects (handled by FilePaths utility)
 			AddToRecentProjects(m_currentProjectPath);
 
 			std::cout << "[ProjectManager] Created new project: " << projectName << std::endl;
@@ -138,14 +148,17 @@ namespace ANI {
 			m_currentProjectPath = std::filesystem::absolute(projectPath).string();
 			m_isProjectOpen = true;
 
+			// Update FilePaths utility
+			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
+			UpdateProjectSpecificPaths();
+
 			// Load view state
 			LoadViewState();
 
 			// Load ImGui layout
 			LoadImGuiLayout();
 
-			// Update file paths
-			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
+			// Save updated paths to utility
 			Utils::FilePaths::SaveFilepathDefaults();
 
 			// Add to recent projects
@@ -196,6 +209,9 @@ namespace ANI {
 			// Save ImGui layout
 			SaveImGuiLayout();
 
+			// Save updated FilePaths
+			Utils::FilePaths::SaveFilepathDefaults();
+
 			std::cout << "[ProjectManager] Saved project: " << m_projectSettings.projectName << std::endl;
 			return true;
 		}
@@ -217,8 +233,11 @@ namespace ANI {
 		m_projectSettings = ProjectSettings();
 		m_viewState.Reset();
 
-		// Clear file paths
+		// Clear project-specific paths in FilePaths utility
 		Utils::FilePaths::lastOpenProjectPath.clear();
+		ClearProjectSpecificPaths();
+
+		// Save cleared paths
 		Utils::FilePaths::SaveFilepathDefaults();
 
 		// Show startup view
@@ -228,32 +247,94 @@ namespace ANI {
 	}
 
 	std::vector<std::string> ProjectManager::GetRecentProjects() const {
-		return m_recentProjects;
+		// Load recent projects from the JSON file that FilePaths manages
+		std::vector<std::string> recentProjects;
+
+		try {
+			std::string recentFile = Utils::FilePaths::dataPath + "/recent_projects.json";
+			if (!std::filesystem::exists(recentFile)) return recentProjects;
+
+			std::ifstream file(recentFile);
+			if (!file.is_open()) return recentProjects;
+
+			nlohmann::json j;
+			file >> j;
+			file.close();
+
+			if (j.contains("recentProjects") && j["recentProjects"].is_array()) {
+				for (const auto& path : j["recentProjects"]) {
+					if (path.is_string() && std::filesystem::exists(path.get<std::string>())) {
+						recentProjects.push_back(path.get<std::string>());
+					}
+				}
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[ProjectManager] Failed to load recent projects: " << e.what() << std::endl;
+		}
+
+		return recentProjects;
 	}
 
 	void ProjectManager::AddToRecentProjects(const std::string& projectPath) {
-		// Remove if already exists
-		auto it = std::find(m_recentProjects.begin(), m_recentProjects.end(), projectPath);
-		if (it != m_recentProjects.end()) {
-			m_recentProjects.erase(it);
+		try {
+			auto recentProjects = GetRecentProjects();
+
+			// Remove if already exists
+			auto it = std::find(recentProjects.begin(), recentProjects.end(), projectPath);
+			if (it != recentProjects.end()) {
+				recentProjects.erase(it);
+			}
+
+			// Add to front
+			recentProjects.insert(recentProjects.begin(), projectPath);
+
+			// Limit size
+			if (recentProjects.size() > 10) {
+				recentProjects.resize(10);
+			}
+
+			// Save back to file
+			std::filesystem::create_directories(Utils::FilePaths::dataPath);
+
+			nlohmann::json j;
+			j["recentProjects"] = recentProjects;
+
+			std::string recentFile = Utils::FilePaths::dataPath + "/recent_projects.json";
+			std::ofstream file(recentFile);
+			if (file.is_open()) {
+				file << j.dump(4);
+				file.close();
+			}
 		}
-
-		// Add to front
-		m_recentProjects.insert(m_recentProjects.begin(), projectPath);
-
-		// Limit size
-		if (m_recentProjects.size() > 10) {
-			m_recentProjects.resize(10);
+		catch (const std::exception& e) {
+			std::cerr << "[ProjectManager] Failed to save recent projects: " << e.what() << std::endl;
 		}
+	}
 
-		SaveRecentProjects();
+	void ProjectManager::SetDefaultProjectPath(const std::string& path) {
+		Utils::FilePaths::defaultProjectPath = path;
+		Utils::FilePaths::SaveFilepathDefaults();
+	}
+
+	std::string ProjectManager::GetDefaultProjectPath() const {
+		return Utils::FilePaths::defaultProjectPath;
+	}
+
+	void ProjectManager::SetAssetsFolder(const std::string& path) {
+		Utils::FilePaths::assetsFolderPath = path;
+		Utils::FilePaths::SaveFilepathDefaults();
+	}
+
+	std::string ProjectManager::GetAssetsFolder() const {
+		return Utils::FilePaths::assetsFolderPath;
 	}
 
 	bool ProjectManager::SaveViewState() {
 		if (!m_isProjectOpen) return false;
 
 		try {
-			std::string viewStateFile = m_currentProjectPath + "/data/viewstate.json";
+			std::string viewStateFile = GetProjectDataPath() + "/viewstate.json";
 			return m_viewState.SaveToFile(viewStateFile);
 		}
 		catch (const std::exception& e) {
@@ -266,7 +347,7 @@ namespace ANI {
 		if (!m_isProjectOpen) return false;
 
 		try {
-			std::string viewStateFile = m_currentProjectPath + "/data/viewstate.json";
+			std::string viewStateFile = GetProjectDataPath() + "/viewstate.json";
 			if (std::filesystem::exists(viewStateFile)) {
 				return m_viewState.LoadFromFile(viewStateFile);
 			}
@@ -283,7 +364,7 @@ namespace ANI {
 		try {
 			// TODO: Implement ImGui layout saving
 			// Need to copy current imgui.ini to project data directory
-			std::string imguiFile = m_currentProjectPath + "/data/imgui.ini";
+			std::string imguiFile = GetProjectDataPath() + "/imgui.ini";
 			// ImGui::SaveIniSettingsToDisk(imguiFile.c_str());
 			return true;
 		}
@@ -299,7 +380,7 @@ namespace ANI {
 		try {
 			// TODO: Implement ImGui layout loading
 			// Need to load imgui.ini from project data directory
-			std::string imguiFile = m_currentProjectPath + "/data/imgui.ini";
+			std::string imguiFile = GetProjectDataPath() + "/imgui.ini";
 			if (std::filesystem::exists(imguiFile)) {
 				// ImGui::LoadIniSettingsFromDisk(imguiFile.c_str());
 				return true;
@@ -311,49 +392,34 @@ namespace ANI {
 		return false;
 	}
 
-	void ProjectManager::LoadRecentProjects() {
-		try {
-			std::string recentFile = "../data/defaults/recent_projects.json";
-			if (!std::filesystem::exists(recentFile)) return;
+	void ProjectManager::UpdateProjectSpecificPaths() {
+		if (!m_isProjectOpen) return;
 
-			std::ifstream file(recentFile);
-			if (!file.is_open()) return;
-
-			nlohmann::json j;
-			file >> j;
-			file.close();
-
-			if (j.contains("recentProjects") && j["recentProjects"].is_array()) {
-				m_recentProjects.clear();
-				for (const auto& path : j["recentProjects"]) {
-					if (path.is_string() && std::filesystem::exists(path.get<std::string>())) {
-						m_recentProjects.push_back(path.get<std::string>());
-					}
-				}
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to load recent projects: " << e.what() << std::endl;
+		// Update project-specific asset folder if not already set
+		if (Utils::FilePaths::assetsFolderPath.empty()) {
+			Utils::FilePaths::assetsFolderPath = GetProjectAssetsPath();
 		}
 	}
 
-	void ProjectManager::SaveRecentProjects() {
-		try {
-			std::filesystem::create_directories("../data/defaults");
-
-			nlohmann::json j;
-			j["recentProjects"] = m_recentProjects;
-
-			std::string recentFile = "../data/defaults/recent_projects.json";
-			std::ofstream file(recentFile);
-			if (file.is_open()) {
-				file << j.dump(4);
-				file.close();
-			}
+	void ProjectManager::ClearProjectSpecificPaths() {
+		// Clear any project-specific paths but keep global ones
+		// Only clear assetsFolderPath if it was pointing to the closed project
+		if (!Utils::FilePaths::assetsFolderPath.empty() &&
+			Utils::FilePaths::assetsFolderPath.find(m_currentProjectPath) != std::string::npos) {
+			Utils::FilePaths::assetsFolderPath.clear();
 		}
-		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to save recent projects: " << e.what() << std::endl;
-		}
+	}
+
+	std::string ProjectManager::GetProjectDataPath() const {
+		return m_currentProjectPath + "/data";
+	}
+
+	std::string ProjectManager::GetProjectAssetsPath() const {
+		return m_currentProjectPath + "/assets";
+	}
+
+	std::string ProjectManager::GetProjectOutputPath() const {
+		return m_currentProjectPath + "/output";
 	}
 
 } // namespace ANI
