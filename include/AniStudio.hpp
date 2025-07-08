@@ -22,6 +22,7 @@
 #include "AniEngine.hpp"
 #include "GUI.h"
 #include "ProjectManager.hpp"
+#include "ImGuiStateUtils.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -61,6 +62,11 @@ namespace ANI {
 		// Plugin management
 		bool LoadPlugin(const std::string& path) { return engineCore.LoadPlugin(path); }
 		void LoadDefaultPlugins() { engineCore.LoadDefaultPlugins(); }
+
+		// Project event handlers
+		void OnProjectLoaded(const std::string& projectPath);
+		void OnProjectCreated(const std::string& projectPath);
+		void OnProjectClosed();
 
 	private:
 		bool initialized;

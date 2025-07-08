@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <functional>
 
 namespace GUI { class ViewManager; }
 namespace ECS { class EntityManager; }
@@ -75,6 +76,19 @@ namespace ANI {
 		// Error handling
 		const std::string& GetLastError() const { return m_lastError; }
 
+		// Project event callbacks - NEW: Added callback system
+		void SetProjectLoadedCallback(std::function<void(const std::string&)> callback) {
+			m_onProjectLoadedCallback = callback;
+		}
+
+		void SetProjectCreatedCallback(std::function<void(const std::string&)> callback) {
+			m_onProjectCreatedCallback = callback;
+		}
+
+		void SetProjectClosedCallback(std::function<void()> callback) {
+			m_onProjectClosedCallback = callback;
+		}
+
 	private:
 		GUI::ViewManager& m_viewManager;
 		ECS::EntityManager& m_entityManager;
@@ -84,6 +98,11 @@ namespace ANI {
 		ProjectSettings m_projectSettings;
 		GUI::ViewState m_viewState;
 		std::string m_lastError;
+
+		// Project event callbacks - NEW: Callback function members
+		std::function<void(const std::string&)> m_onProjectLoadedCallback;
+		std::function<void(const std::string&)> m_onProjectCreatedCallback;
+		std::function<void()> m_onProjectClosedCallback;
 
 		// File operations
 		bool SaveViewState();

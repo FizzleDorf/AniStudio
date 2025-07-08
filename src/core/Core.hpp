@@ -33,7 +33,7 @@ namespace ANI {
 	class Core {
 	public:
 		static Core& Ref() {
-			static Core instance;  // Only static thing - the singleton pattern
+			static Core instance;
 			return instance;
 		}
 
@@ -58,6 +58,7 @@ namespace ANI {
 		// Window/graphics management only
 		bool InitializeWindow();
 		void CleanupWindow();
+		void PerformCleanShutdown();  // NEW - actual cleanup logic
 
 		// Window state
 		bool run;

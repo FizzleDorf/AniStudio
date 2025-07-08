@@ -1,4 +1,4 @@
-// Core.cpp - INSTANCE-BASED, USES STUDICORE INSTANCE
+// Core.cpp - Just fix the destructor and Quit method
 #include "Core.hpp"
 #include <iostream>
 #include <sstream>
@@ -19,13 +19,16 @@ namespace ANI {
 	}
 
 	Core::~Core() {
-		// StudioCore destructor handles all cleanup automatically
+		std::cout << "[Core] Destructor - calling StudioCore shutdown..." << std::endl;
+		studioCore.Shutdown();
 		CleanupWindow();
 	}
 
 	void Core::Quit() {
+		std::cout << "[Core] Quit called - setting run to false" << std::endl;
 		run = false;
 		studioCore.SetRunning(false);
+		// Destructor will handle the actual shutdown when Core goes out of scope
 	}
 
 	void Core::Init() {
@@ -107,15 +110,20 @@ namespace ANI {
 
 	void Core::CleanupWindow() {
 		if (window) {
+			std::cout << "[Core] Cleaning up ImGui and GLFW..." << std::endl;
 			ImGui_ImplOpenGL3_Shutdown();
 			ImGui_ImplGlfw_Shutdown();
 			ImGui::DestroyContext();
 			glfwDestroyWindow(window);
+			window = nullptr;
 		}
 		glfwTerminate();
+		std::cout << "[Core] Window cleanup complete" << std::endl;
 	}
 
 	void Core::Update(const float deltaT) {
+		if (!run) return;
+
 		// FPS tracking
 		timeElapsed += deltaT;
 		frameCount++;
@@ -129,10 +137,17 @@ namespace ANI {
 		}
 
 		// Update studio core
-		studioCore.Update(deltaT);
+		try {
+			studioCore.Update(deltaT);
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[Core] Update error: " << e.what() << std::endl;
+		}
 	}
 
 	void Core::Draw() {
+		if (!run) return;
+
 		try {
 			// Clear and render
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);

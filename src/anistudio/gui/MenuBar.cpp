@@ -19,10 +19,9 @@ namespace GUI {
 		if (ImGui::BeginMainMenuBar()) {
 			ShowFileMenu();
 			ShowEditMenu();
-
+			ShowHelpMenu();
 			// Dynamic category-based menus
 			ShowCategoryMenus();
-
 			ImGui::EndMainMenuBar();
 		}
 
@@ -57,8 +56,12 @@ namespace GUI {
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("Exit", "Alt+F4")) {
-				// TODO: Queue exit event
+				ANI::Event event;
+				event.type = ANI::EventType::Quit;
+				ANI::Events::Ref().QueueEvent(event);
 			}
+
+			ImGui::Separator();
 
 			ImGui::EndMenu();
 		}
@@ -75,12 +78,13 @@ namespace GUI {
 			}
 
 			ImGui::Separator();
+			ImGui::EndMenu();
+		}
+	}
 
-			bool settingsOpen = m_projectManager.GetViewState().IsViewOpen("SettingsView");
-			if (ImGui::MenuItem("Settings", "Ctrl+,", settingsOpen)) {
-				m_projectManager.GetViewState().ToggleView("SettingsView");
-			}
-
+	// this just ensures the help menu is always placed last
+	void MenuBar::ShowHelpMenu() {
+		if (ImGui::BeginMenu("Help")) {
 			ImGui::EndMenu();
 		}
 	}

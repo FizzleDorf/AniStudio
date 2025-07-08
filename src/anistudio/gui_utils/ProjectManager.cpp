@@ -1,6 +1,7 @@
 #include "ProjectManager.hpp"
 #include "ViewManager.hpp"
 #include "FilePaths.hpp"
+#include "ImGuiStateUtils.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -106,6 +107,11 @@ namespace ANI {
 			// Add to recent projects (handled by FilePaths utility)
 			AddToRecentProjects(m_currentProjectPath);
 
+			// NEW: Call the project created callback
+			if (m_onProjectCreatedCallback) {
+				m_onProjectCreatedCallback(m_currentProjectPath);
+			}
+
 			std::cout << "[ProjectManager] Created new project: " << projectName << std::endl;
 			return true;
 		}
@@ -163,6 +169,11 @@ namespace ANI {
 
 			// Add to recent projects
 			AddToRecentProjects(m_currentProjectPath);
+
+			// NEW: Call the project loaded callback
+			if (m_onProjectLoadedCallback) {
+				m_onProjectLoadedCallback(m_currentProjectPath);
+			}
 
 			std::cout << "[ProjectManager] Loaded project: " << m_projectSettings.projectName << std::endl;
 			return true;
@@ -227,6 +238,9 @@ namespace ANI {
 		// Save before closing
 		SaveProject();
 
+		// Save current project's ImGui layout before closing
+		SaveImGuiLayout();
+
 		// Reset state
 		m_isProjectOpen = false;
 		m_currentProjectPath.clear();
@@ -239,6 +253,11 @@ namespace ANI {
 
 		// Save cleared paths
 		Utils::FilePaths::SaveFilepathDefaults();
+
+		// NEW: Call the project closed callback BEFORE showing startup view
+		if (m_onProjectClosedCallback) {
+			m_onProjectClosedCallback();
+		}
 
 		// Show startup view
 		m_viewState.SetViewOpen("ProjectManagerView", true);
@@ -362,10 +381,8 @@ namespace ANI {
 		if (!m_isProjectOpen) return false;
 
 		try {
-			// TODO: Implement ImGui layout saving
-			// Need to copy current imgui.ini to project data directory
-			std::string imguiFile = GetProjectDataPath() + "/imgui.ini";
-			// ImGui::SaveIniSettingsToDisk(imguiFile.c_str());
+			Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_currentProjectPath);
+			std::cout << "[ProjectManager] Saved ImGui layout for project" << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -378,13 +395,9 @@ namespace ANI {
 		if (!m_isProjectOpen) return false;
 
 		try {
-			// TODO: Implement ImGui layout loading
-			// Need to load imgui.ini from project data directory
-			std::string imguiFile = GetProjectDataPath() + "/imgui.ini";
-			if (std::filesystem::exists(imguiFile)) {
-				// ImGui::LoadIniSettingsFromDisk(imguiFile.c_str());
-				return true;
-			}
+			Utils::ImGuiStateUtils::LoadProjectImGuiLayout(m_currentProjectPath);
+			std::cout << "[ProjectManager] Loaded ImGui layout for project" << std::endl;
+			return true;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[ProjectManager] Failed to load ImGui layout: " << e.what() << std::endl;

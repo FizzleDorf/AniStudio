@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ImGuiStateUtils.hpp"
 #include "GuiStyleHelpers.hpp"
 #include "OpenGLUtils.hpp"
 #include "OpenGLWrapper.hpp"

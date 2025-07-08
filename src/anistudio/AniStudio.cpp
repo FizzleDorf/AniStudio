@@ -1,7 +1,9 @@
-// AniStudio.cpp - Fixed constructor issues
+// AniStudio.cpp - Updated to use ImGuiStateUtils
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include <iostream>
+#include <thread>
+#include <chrono>
 
 namespace ANI {
 
@@ -33,7 +35,6 @@ namespace ANI {
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
-
 
 		// Register views that need special constructors with custom factories
 		viewManager.RegisterViewWithFactory("ViewListManagerView", "Views",
@@ -126,13 +127,98 @@ namespace ANI {
 		}
 	}
 
+	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
+		// Use utility function for ImGui state management
+		Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
+	}
+
+	void StudioCore::OnProjectCreated(const std::string& projectPath) {
+		// Use utility function for ImGui state management
+		Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
+	}
+
+	void StudioCore::OnProjectClosed() {
+		// Save current project layout before switching if project is open
+		if (m_projectManager.IsProjectOpen()) {
+			Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
+		}
+
+		// Use utility function for ImGui state management
+		Utils::ImGuiStateUtils::OnProjectClosed();
+	}
+
 	void StudioCore::Shutdown() {
 		if (!initialized) return;
 
-		std::cout << "[StudioCore] Shutting down..." << std::endl;
+		std::cout << "[StudioCore] Starting shutdown sequence..." << std::endl;
 
+		// Set flag to prevent any further operations
 		running = false;
-		engineCore.Shutdown();  // This handles EntityManager shutdown
+
+		try {
+			// CRITICAL: Save everything BEFORE starting shutdown
+			std::cout << "[StudioCore] Saving application state before shutdown..." << std::endl;
+
+			// Save current project if one is open
+			if (m_projectManager.IsProjectOpen()) {
+				std::cout << "[StudioCore] Saving open project: " << m_projectManager.GetCurrentProjectName() << std::endl;
+				try {
+					if (!m_projectManager.SaveProject()) {
+						std::cerr << "[StudioCore] Warning: Failed to save project: " << m_projectManager.GetLastError() << std::endl;
+					}
+					else {
+						std::cout << "[StudioCore] Project saved successfully" << std::endl;
+					}
+
+					// Save project-specific ImGui layout using utility
+					Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[StudioCore] Exception saving project: " << e.what() << std::endl;
+				}
+			}
+
+			// ImGui will automatically save its layout when it shuts down
+			// No need to manually call SaveIniSettingsToDisk here
+			std::cout << "[StudioCore] ImGui will auto-save layout on shutdown" << std::endl;
+
+			// Save application paths and settings ONCE here
+			std::cout << "[StudioCore] Saving file paths and settings..." << std::endl;
+			try {
+				Utils::FilePaths::SaveFilepathDefaults();
+				std::cout << "[StudioCore] File paths saved" << std::endl;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] Warning: Failed to save file paths: " << e.what() << std::endl;
+			}
+
+			// Give a moment for file operations to complete
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[StudioCore] Error during save operations: " << e.what() << std::endl;
+		}
+
+		// Now proceed with normal shutdown
+		std::cout << "[StudioCore] Starting system shutdown..." << std::endl;
+
+		try {
+			// Clean up views first
+			if (m_menuBarID != 0) {
+				viewManager.DestroyView(m_menuBarID);
+				m_menuBarID = 0;
+			}
+
+			// Reset view manager
+			viewManager.Reset();
+
+			// Shutdown engine core last
+			engineCore.Shutdown();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[StudioCore] Error during system shutdown: " << e.what() << std::endl;
+		}
 
 		windowHandle = nullptr;
 		imguiContext = nullptr;
@@ -142,14 +228,19 @@ namespace ANI {
 	}
 
 	void StudioCore::Update(float deltaTime) {
-		if (!initialized) return;
+		if (!initialized || !running) return;
 
-		engineCore.Update(deltaTime);      // Update ECS Systems + Plugins
-		viewManager.Update(deltaTime);     // Update Views
+		try {
+			engineCore.Update(deltaTime);      // Update ECS Systems + Plugins
+			viewManager.Update(deltaTime);     // Update Views
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[StudioCore] Update error: " << e.what() << std::endl;
+		}
 	}
 
 	void StudioCore::Render() {
-		if (!initialized) return;
+		if (!initialized || !running) return;
 
 		try {
 			// Setup ImGui frame

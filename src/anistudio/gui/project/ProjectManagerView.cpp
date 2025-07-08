@@ -88,7 +88,9 @@ namespace GUI {
 
 			ImGui::SameLine(0, spacing);
 			if (ImGui::Button("Exit", ImVec2(buttonWidth, buttonHeight))) {
-				std::cout << "[ProjectManagerView] Exit button clicked" << std::endl;
+				ANI::Event event;
+				event.type = ANI::EventType::Quit;
+				ANI::Events::Ref().QueueEvent(event);
 			}
 
 		}
