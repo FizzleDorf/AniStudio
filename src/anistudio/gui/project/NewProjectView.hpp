@@ -38,13 +38,26 @@ namespace GUI {
 		void Update(const float deltaT) override;
 		void Render() override;
 
+		// Metadata for view registration
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+				"displayName": "New Project",
+				"category": "Hidden",
+				"description": "Create new project dialog"
+			})";
+		}
+
+		static ViewMetadata GetMetadata() {
+			return GetMetadataFor<NewProjectView>();
+		}
+
 	private:
 		ANI::ProjectManager& m_projectManager;
 
 		std::vector<ProjectTemplate> m_templates;
 		int m_selectedTemplate = -1;
 
-		// FIXED: Use char buffers instead of std::string for ImGui::InputText
+		// Project input buffers
 		char m_projectNameBuffer[256] = "Untitled Project";
 		char m_projectPathBuffer[512] = "../projects/";
 

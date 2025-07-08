@@ -22,16 +22,29 @@ namespace GUI {
 	}
 
 	void NewProjectView::Render() {
-		if (ImGui::Begin(viewName.c_str())) {
+		// Center the window like a modal
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(550, 450), ImGuiCond_Appearing);
+
+		// Modal-like flags
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+
+		bool isOpen = true;
+		if (ImGui::Begin("Create New Project##NewProjectModal", &isOpen, flags)) {
 			ImGui::Text("Create New Project");
 			ImGui::Separator();
 
-			// Project details - FIXED: Use char buffers
-			ImGui::InputText("Project Name", m_projectNameBuffer, sizeof(m_projectNameBuffer));
-			ImGui::InputText("Project Path", m_projectPathBuffer, sizeof(m_projectPathBuffer));
+			// Project details
+			ImGui::Text("Project Name:");
+			ImGui::InputText("##ProjectName", m_projectNameBuffer, sizeof(m_projectNameBuffer));
+
+			ImGui::Text("Project Path:");
+			ImGui::InputText("##ProjectPath", m_projectPathBuffer, sizeof(m_projectPathBuffer));
 			ImGui::SameLine();
-			if (ImGui::Button("Browse...")) {
-				// TODO: File dialog
+			if (ImGui::Button("Browse...##PathBrowse")) {
+				std::cout << "[NewProjectView] Browse button clicked" << std::endl;
 			}
 
 			ImGui::Separator();
@@ -42,17 +55,27 @@ namespace GUI {
 			ImGui::Separator();
 
 			// Buttons
-			if (ImGui::Button("Create Project")) {
+			float buttonWidth = 120.0f;
+			float spacing = 10.0f;
+			float totalWidth = buttonWidth * 2 + spacing;
+			float startX = (ImGui::GetContentRegionAvail().x - totalWidth) * 0.5f;
+
+			ImGui::SetCursorPosX(startX);
+			if (ImGui::Button("Create Project", ImVec2(buttonWidth, 30))) {
 				CreateProject();
 			}
 
-			ImGui::SameLine();
-
-			if (ImGui::Button("Cancel")) {
-				// TODO: Close this view
+			ImGui::SameLine(0, spacing);
+			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 30))) {
+				m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
 			}
 		}
 		ImGui::End();
+
+		// Handle close button or ESC key
+		if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
+		}
 	}
 
 	void NewProjectView::LoadTemplates() {
@@ -64,7 +87,7 @@ namespace GUI {
 			if (!std::filesystem::exists(templatesDir)) {
 				std::filesystem::create_directories(templatesDir);
 
-				// Create default templates
+				// Create default template
 				ProjectTemplate diffusionTemplate;
 				diffusionTemplate.name = "AI Image Generation";
 				diffusionTemplate.description = "Project for AI image generation with diffusion models";
@@ -112,42 +135,47 @@ namespace GUI {
 	void NewProjectView::ShowTemplateSelector() {
 		ImGui::Text("Choose Template:");
 
-		// Blank project option
-		bool isBlankSelected = (m_selectedTemplate == -1);
-		if (ImGui::Selectable("Blank Project", isBlankSelected)) {
-			m_selectedTemplate = -1;
-		}
-		if (isBlankSelected) {
-			ImGui::Indent();
-			ImGui::TextWrapped("Empty project with no views open");
-			ImGui::Unindent();
-		}
-
-		ImGui::Separator();
-
-		// Template options
-		for (int i = 0; i < m_templates.size(); ++i) {
-			const auto& template_ = m_templates[i];
-			bool isSelected = (m_selectedTemplate == i);
-
-			if (ImGui::Selectable(template_.name.c_str(), isSelected)) {
-				m_selectedTemplate = i;
+		if (ImGui::BeginChild("TemplateList", ImVec2(0, 200), true)) {
+			// Blank project option
+			bool isBlankSelected = (m_selectedTemplate == -1);
+			if (ImGui::Selectable("Blank Project", isBlankSelected)) {
+				m_selectedTemplate = -1;
 			}
-
-			if (isSelected) {
+			if (isBlankSelected) {
 				ImGui::Indent();
-				ImGui::TextWrapped("Category: %s", template_.category.c_str());
-				ImGui::TextWrapped("Description: %s", template_.description.c_str());
-
-				if (!template_.defaultOpenViews.empty()) {
-					ImGui::Text("Default Views:");
-					for (const auto& viewType : template_.defaultOpenViews) {
-						ImGui::BulletText("%s", viewType.c_str());
-					}
-				}
+				ImGui::TextWrapped("Empty project with no views open");
 				ImGui::Unindent();
 			}
+
+			if (!m_templates.empty()) {
+				ImGui::Separator();
+			}
+
+			// Template options
+			for (int i = 0; i < m_templates.size(); ++i) {
+				const auto& template_ = m_templates[i];
+				bool isSelected = (m_selectedTemplate == i);
+
+				if (ImGui::Selectable(template_.name.c_str(), isSelected)) {
+					m_selectedTemplate = i;
+				}
+
+				if (isSelected) {
+					ImGui::Indent();
+					ImGui::TextWrapped("Category: %s", template_.category.c_str());
+					ImGui::TextWrapped("Description: %s", template_.description.c_str());
+
+					if (!template_.defaultOpenViews.empty()) {
+						ImGui::Text("Default Views:");
+						for (const auto& viewType : template_.defaultOpenViews) {
+							ImGui::BulletText("%s", viewType.c_str());
+						}
+					}
+					ImGui::Unindent();
+				}
+			}
 		}
+		ImGui::EndChild();
 	}
 
 	void NewProjectView::CreateProject() {
@@ -155,6 +183,7 @@ namespace GUI {
 		std::string projectPath = GetProjectPath();
 
 		if (projectName.empty() || projectPath.empty()) {
+			std::cerr << "[NewProjectView] Project name and path cannot be empty" << std::endl;
 			return;
 		}
 
@@ -169,7 +198,8 @@ namespace GUI {
 				}
 			}
 
-			// TODO: Close this view
+			// Close the view after successful creation
+			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
 			std::cout << "[NewProjectView] Created project: " << projectName << std::endl;
 		}
 		else {

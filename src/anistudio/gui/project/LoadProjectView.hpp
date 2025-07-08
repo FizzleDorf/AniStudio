@@ -29,6 +29,19 @@ namespace GUI {
 		void Update(const float deltaT) override;
 		void Render() override;
 
+		// Metadata for view registration
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+				"displayName": "Load Project",
+				"category": "Hidden",
+				"description": "Load existing project dialog"
+			})";
+		}
+
+		static ViewMetadata GetMetadata() {
+			return GetMetadataFor<LoadProjectView>();
+		}
+
 	private:
 		ANI::ProjectManager& m_projectManager;
 		std::vector<std::string> m_recentProjects;

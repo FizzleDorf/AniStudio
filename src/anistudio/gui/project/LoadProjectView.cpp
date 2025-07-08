@@ -19,7 +19,17 @@ namespace GUI {
 	}
 
 	void LoadProjectView::Render() {
-		if (ImGui::Begin(viewName.c_str())) {
+		// Center the window like a modal
+		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+		ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Appearing);
+
+		// Modal-like flags
+		ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+
+		bool isOpen = true;
+		if (ImGui::Begin("Load Project##LoadProjectModal", &isOpen, flags)) {
 			ImGui::Text("Load Project");
 			ImGui::Separator();
 
@@ -31,11 +41,20 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			if (ImGui::Button("Cancel")) {
-				// TODO: Close this view
+			// Cancel button
+			float buttonWidth = 100.0f;
+			float startX = (ImGui::GetContentRegionAvail().x - buttonWidth) * 0.5f;
+			ImGui::SetCursorPosX(startX);
+			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 30))) {
+				m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
 			}
 		}
 		ImGui::End();
+
+		// Handle close button or ESC key
+		if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+			m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
+		}
 	}
 
 	void LoadProjectView::RefreshRecentProjects() {
@@ -50,15 +69,14 @@ namespace GUI {
 			return;
 		}
 
-		// Show recent projects in a child window for scrolling
-		if (ImGui::BeginChild("RecentProjects", ImVec2(0, 200), true)) {
+		if (ImGui::BeginChild("RecentProjects", ImVec2(0, 220), true)) {
 			for (const auto& projectPath : m_recentProjects) {
 				std::filesystem::path path(projectPath);
 				std::string displayName = path.filename().string();
 
 				if (ImGui::Selectable(displayName.c_str())) {
 					if (m_projectManager.LoadProject(projectPath)) {
-						// TODO: Close this view
+						m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
 						std::cout << "[LoadProjectView] Loaded project: " << projectPath << std::endl;
 					}
 					else {
@@ -75,14 +93,18 @@ namespace GUI {
 	}
 
 	void LoadProjectView::ShowBrowseOption() {
-		if (ImGui::Button("Browse for Project...", ImVec2(200, 30))) {
-			// TODO: File dialog to browse for .ani project files
+		float buttonWidth = 150.0f;
+		float spacing = 10.0f;
+		float totalWidth = buttonWidth * 2 + spacing;
+		float startX = (ImGui::GetContentRegionAvail().x - totalWidth) * 0.5f;
+
+		ImGui::SetCursorPosX(startX);
+		if (ImGui::Button("Browse for Project...", ImVec2(buttonWidth, 30))) {
 			std::cout << "[LoadProjectView] Browse for project (file dialog not implemented)" << std::endl;
 		}
 
-		ImGui::SameLine();
-
-		if (ImGui::Button("Refresh", ImVec2(80, 30))) {
+		ImGui::SameLine(0, spacing);
+		if (ImGui::Button("Refresh", ImVec2(buttonWidth, 30))) {
 			RefreshRecentProjects();
 		}
 	}

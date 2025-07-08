@@ -5,7 +5,7 @@
 	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
 	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 Y88..88P
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
 
  * This file is part of AniStudio.
@@ -27,10 +27,21 @@ namespace GUI {
 		void Update(const float deltaT) override;
 		void Render() override;
 
+		// Metadata for view registration
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+				"displayName": "Project Manager",
+				"category": "Hidden",
+				"description": "Main project startup dialog"
+			})";
+		}
+
+		static ViewMetadata GetMetadata() {
+			return GetMetadataFor<ProjectManagerView>();
+		}
+
 	private:
 		ANI::ProjectManager& m_projectManager;
-		bool m_showNewProjectDialog = false;
-		bool m_showLoadProjectDialog = false;
 	};
 
 } // namespace GUI

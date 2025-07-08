@@ -71,8 +71,6 @@ namespace ANI {
 			[]() -> GUI::ViewMetadata { return GUI::LoadProjectView::GetMetadata(); }
 		);
 
-		// Don't register MenuBar here
-
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
 	}
 
@@ -101,6 +99,12 @@ namespace ANI {
 			// Create MenuBar manually since it needs a special constructor
 			m_menuBarID = viewManager.CreateView();
 			viewManager.AddView<GUI::MenuBar>(m_menuBarID, GUI::MenuBar(m_projectManager, viewManager, engineCore.GetEntityManager()));
+
+			// Show startup view if no project should be loaded
+			if (m_projectManager.ShouldShowStartup()) {
+				m_projectManager.GetViewState().SetViewOpen("ProjectManagerView", true);
+				std::cout << "[StudioCore] Showing startup view - no project to auto-load" << std::endl;
+			}
 
 			initialized = true;
 			running = true;
