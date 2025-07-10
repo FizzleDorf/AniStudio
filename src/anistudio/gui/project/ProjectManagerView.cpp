@@ -1,5 +1,6 @@
 #include "ProjectManagerView.hpp"
 #include "ProjectManager.hpp"
+#include "../Events/Events.hpp"
 #include <imgui.h>
 #include <filesystem>
 

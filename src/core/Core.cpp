@@ -1,4 +1,4 @@
-// Core.cpp - Just fix the destructor and Quit method
+// Core.cpp - Simplified with Window Management moved to StudioCore
 #include "Core.hpp"
 #include <iostream>
 #include <sstream>
@@ -38,12 +38,12 @@ namespace ANI {
 			throw std::runtime_error("Failed to initialize window");
 		}
 
-		// Initialize the studio core
+		// Initialize the studio core AFTER window creation
 		if (!studioCore.Initialize()) {
 			throw std::runtime_error("Failed to initialize StudioCore");
 		}
 
-		// Setup window context for plugins
+		// Setup window context for plugins and window management
 		studioCore.SetWindowHandle(window);
 		studioCore.SetImGuiContext(ImGui::GetCurrentContext());
 

@@ -15,6 +15,7 @@
 #pragma once
 #include "ViewState.hpp"
 #include "FilePaths.hpp"
+#include "OpenGLWrapper.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -41,6 +42,9 @@ namespace ANI {
 	public:
 		ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr);
 		~ProjectManager();
+
+		// Window handle management
+		void SetWindowHandle(void* windowHandle);
 
 		// Startup detection - now uses FilePaths utility
 		bool ShouldShowStartup() const;
@@ -76,7 +80,7 @@ namespace ANI {
 		// Error handling
 		const std::string& GetLastError() const { return m_lastError; }
 
-		// Project event callbacks - NEW: Added callback system
+		// Project event callbacks
 		void SetProjectLoadedCallback(std::function<void(const std::string&)> callback) {
 			m_onProjectLoadedCallback = callback;
 		}
@@ -99,7 +103,10 @@ namespace ANI {
 		GUI::ViewState m_viewState;
 		std::string m_lastError;
 
-		// Project event callbacks - NEW: Callback function members
+		// Window handle for direct GLFW access
+		void* m_windowHandle;
+
+		// Project event callbacks
 		std::function<void(const std::string&)> m_onProjectLoadedCallback;
 		std::function<void(const std::string&)> m_onProjectCreatedCallback;
 		std::function<void()> m_onProjectClosedCallback;
@@ -109,6 +116,11 @@ namespace ANI {
 		bool LoadViewState();
 		bool SaveImGuiLayout();
 		bool LoadImGuiLayout();
+
+		// Window state operations - now directly work with GLFW
+		bool SaveProjectWindowState();
+		bool LoadAndApplyProjectWindowState();
+		std::string GetProjectWindowStatePath() const;
 
 		// Project-specific path management
 		void UpdateProjectSpecificPaths();

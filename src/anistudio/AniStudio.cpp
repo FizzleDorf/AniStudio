@@ -1,9 +1,11 @@
-// AniStudio.cpp - Updated to use ImGuiStateUtils
+// AniStudio.cpp - Fixed Window State Integration
 #include "AniStudio.hpp"
 #include "AllViews.h"
+#include "FilePaths.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <filesystem>
 
 namespace ANI {
 
@@ -75,6 +77,108 @@ namespace ANI {
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
 	}
 
+	void StudioCore::SetupProjectCallbacks() {
+		// Set up project manager callbacks for window state management
+		m_projectManager.SetProjectLoadedCallback([this](const std::string& projectPath) {
+			OnProjectLoaded(projectPath);
+		});
+
+		m_projectManager.SetProjectCreatedCallback([this](const std::string& projectPath) {
+			OnProjectCreated(projectPath);
+		});
+
+		m_projectManager.SetProjectClosedCallback([this]() {
+			OnProjectClosed();
+		});
+	}
+
+	void StudioCore::InitializeWindowState() {
+		// Set the global data path for WindowState utility
+		m_windowState.SetGlobalDataPath(Utils::FilePaths::dataPath);
+
+		// Load default window state from build/data/window_state.json
+		std::string defaultPath = GetDefaultWindowStatePath();
+		if (std::filesystem::exists(defaultPath)) {
+			std::cout << "[StudioCore] Loading default window state from: " << defaultPath << std::endl;
+			m_windowState.LoadFromFile(defaultPath);
+
+			// Apply the loaded state to the existing GLFW window
+			ApplyWindowStateToGLFW();
+		}
+		else {
+			std::cout << "[StudioCore] No default window state found, using current configuration" << std::endl;
+			// Sync WindowState with current GLFW window state
+			SyncWindowStateFromGLFW();
+		}
+
+		std::cout << "[StudioCore] Window state initialized" << std::endl;
+	}
+
+	void StudioCore::SetWindowHandle(void* window) {
+		windowHandle = window;
+
+		if (window) {
+			std::cout << "[StudioCore] Window handle set for WindowState utility" << std::endl;
+
+			// Pass the window handle to ProjectManager so it can apply window states
+			m_projectManager.SetWindowHandle(window);
+
+			// Now that we have the window handle, we can sync or apply states
+			if (initialized) {
+				InitializeWindowState();
+			}
+		}
+	}
+
+	void StudioCore::SyncWindowStateFromGLFW() {
+		if (!windowHandle) return;
+
+		GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(windowHandle);
+
+		// Update WindowState to match current GLFW window
+		int width, height, x, y;
+		glfwGetWindowSize(glfwWindow, &width, &height);
+		glfwGetWindowPos(glfwWindow, &x, &y);
+
+		// Load current state into a temporary JSON to update WindowState
+		nlohmann::json currentState;
+		currentState["width"] = width;
+		currentState["height"] = height;
+		currentState["posX"] = x;
+		currentState["posY"] = y;
+		currentState["maximized"] = (glfwGetWindowAttrib(glfwWindow, GLFW_MAXIMIZED) == GLFW_TRUE);
+		currentState["fullscreen"] = (glfwGetWindowMonitor(glfwWindow) != nullptr);
+		currentState["vsync"] = true; // Default to true
+		currentState["title"] = "AniStudio";
+
+		m_windowState.Deserialize(currentState);
+		std::cout << "[StudioCore] Synced WindowState with current GLFW window" << std::endl;
+	}
+
+	void StudioCore::ApplyWindowStateToGLFW() {
+		if (!windowHandle) return;
+
+		GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(windowHandle);
+
+		// Apply WindowState to GLFW window
+		glfwSetWindowSize(glfwWindow, m_windowState.GetWidth(), m_windowState.GetHeight());
+		glfwSetWindowPos(glfwWindow, m_windowState.GetPosX(), m_windowState.GetPosY());
+
+		if (m_windowState.IsMaximized()) {
+			glfwMaximizeWindow(glfwWindow);
+		}
+		else {
+			glfwRestoreWindow(glfwWindow);
+		}
+
+		// Apply VSync
+		glfwSwapInterval(1); // For now, always use VSync
+
+		std::cout << "[StudioCore] Applied WindowState to GLFW window: "
+			<< m_windowState.GetWidth() << "x" << m_windowState.GetHeight()
+			<< " at (" << m_windowState.GetPosX() << "," << m_windowState.GetPosY() << ")" << std::endl;
+	}
+
 	bool StudioCore::Initialize() {
 		if (initialized) {
 			std::cerr << "[StudioCore] Already initialized!" << std::endl;
@@ -97,6 +201,9 @@ namespace ANI {
 			// Register view types with factories
 			RegisterCoreViews();
 
+			// Setup project callbacks
+			SetupProjectCallbacks();
+
 			// Create MenuBar manually since it needs a special constructor
 			m_menuBarID = viewManager.CreateView();
 			viewManager.AddView<GUI::MenuBar>(m_menuBarID, GUI::MenuBar(m_projectManager, viewManager, engineCore.GetEntityManager()));
@@ -110,14 +217,10 @@ namespace ANI {
 			initialized = true;
 			running = true;
 
+			// Initialize window state management AFTER everything else is set up
+			// This will be called when SetWindowHandle is called from Core
+
 			std::cout << "[StudioCore] Initialized successfully!" << std::endl;
-
-			// DEBUG: Verify systems are there
-			ECS::EntityManager& entityMgr = engineCore.GetEntityManager();
-			auto imageSystem = entityMgr.GetSystem<ECS::ImageSystem>();
-			std::cout << "[StudioCore] DEBUG: EntityManager address: " << &entityMgr << std::endl;
-			std::cout << "[StudioCore] DEBUG: ImageSystem found: " << (imageSystem ? "YES" : "NO") << std::endl;
-
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -128,23 +231,40 @@ namespace ANI {
 	}
 
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
+		std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
+
 		// Use utility function for ImGui state management
 		Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
+
+		// ProjectManager will handle the window state loading for projects
+		// StudioCore just handles the default state at startup
 	}
 
 	void StudioCore::OnProjectCreated(const std::string& projectPath) {
+		std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
+
 		// Use utility function for ImGui state management
 		Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
+
+		// ProjectManager will handle saving window state to new project
 	}
 
 	void StudioCore::OnProjectClosed() {
-		// Save current project layout before switching if project is open
-		if (m_projectManager.IsProjectOpen()) {
-			Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
-		}
+		std::cout << "[StudioCore] Project closing..." << std::endl;
+
+		// Sync current GLFW window state to WindowState, then save as default
+		SyncWindowStateFromGLFW();
+		std::string defaultPath = GetDefaultWindowStatePath();
+		std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+		m_windowState.SaveToFile(defaultPath);
+		std::cout << "[StudioCore] Saved current window state as default" << std::endl;
 
 		// Use utility function for ImGui state management
 		Utils::ImGuiStateUtils::OnProjectClosed();
+	}
+
+	std::string StudioCore::GetDefaultWindowStatePath() const {
+		return Utils::FilePaths::dataPath + "/window_state.json";
 	}
 
 	void StudioCore::Shutdown() {
@@ -159,6 +279,13 @@ namespace ANI {
 			// CRITICAL: Save everything BEFORE starting shutdown
 			std::cout << "[StudioCore] Saving application state before shutdown..." << std::endl;
 
+			// Save current window state as default
+			SyncWindowStateFromGLFW();
+			std::string defaultPath = GetDefaultWindowStatePath();
+			std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+			m_windowState.SaveToFile(defaultPath);
+			std::cout << "[StudioCore] Saved window state as default" << std::endl;
+
 			// Save current project if one is open
 			if (m_projectManager.IsProjectOpen()) {
 				std::cout << "[StudioCore] Saving open project: " << m_projectManager.GetCurrentProjectName() << std::endl;
@@ -170,7 +297,7 @@ namespace ANI {
 						std::cout << "[StudioCore] Project saved successfully" << std::endl;
 					}
 
-					// Save project-specific ImGui layout using utility
+					// Save project-specific ImGui layout
 					Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
 				}
 				catch (const std::exception& e) {
@@ -179,7 +306,6 @@ namespace ANI {
 			}
 
 			// ImGui will automatically save its layout when it shuts down
-			// No need to manually call SaveIniSettingsToDisk here
 			std::cout << "[StudioCore] ImGui will auto-save layout on shutdown" << std::endl;
 
 			// Save application paths and settings ONCE here

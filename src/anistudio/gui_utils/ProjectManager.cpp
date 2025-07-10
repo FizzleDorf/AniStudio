@@ -34,7 +34,7 @@ namespace ANI {
 
 	// ProjectManager implementation
 	ProjectManager::ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr)
-		: m_viewManager(viewMgr), m_entityManager(entityMgr) {
+		: m_viewManager(viewMgr), m_entityManager(entityMgr), m_windowHandle(nullptr) {
 		// FilePaths utility should already be initialized at application startup
 		// We just read the current state
 	}
@@ -42,6 +42,11 @@ namespace ANI {
 	ProjectManager::~ProjectManager() {
 		// Save any changes to FilePaths when the ProjectManager is destroyed
 		Utils::FilePaths::SaveFilepathDefaults();
+	}
+
+	void ProjectManager::SetWindowHandle(void* windowHandle) {
+		m_windowHandle = windowHandle;
+		std::cout << "[ProjectManager] Window handle set for window state management" << std::endl;
 	}
 
 	void ProjectManager::InitializeApplicationPaths() {
@@ -95,6 +100,9 @@ namespace ANI {
 			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
 			UpdateProjectSpecificPaths();
 
+			// Save current window state to the new project
+			SaveProjectWindowState();
+
 			// Save project
 			if (!SaveProject()) {
 				m_lastError = "Failed to save new project";
@@ -107,7 +115,7 @@ namespace ANI {
 			// Add to recent projects (handled by FilePaths utility)
 			AddToRecentProjects(m_currentProjectPath);
 
-			// NEW: Call the project created callback
+			// Call the project created callback
 			if (m_onProjectCreatedCallback) {
 				m_onProjectCreatedCallback(m_currentProjectPath);
 			}
@@ -158,6 +166,9 @@ namespace ANI {
 			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
 			UpdateProjectSpecificPaths();
 
+			// Load project-specific window state and apply it IMMEDIATELY
+			LoadAndApplyProjectWindowState();
+
 			// Load view state
 			LoadViewState();
 
@@ -170,7 +181,7 @@ namespace ANI {
 			// Add to recent projects
 			AddToRecentProjects(m_currentProjectPath);
 
-			// NEW: Call the project loaded callback
+			// Call the project loaded callback
 			if (m_onProjectLoadedCallback) {
 				m_onProjectLoadedCallback(m_currentProjectPath);
 			}
@@ -220,6 +231,9 @@ namespace ANI {
 			// Save ImGui layout
 			SaveImGuiLayout();
 
+			// Save project window state
+			SaveProjectWindowState();
+
 			// Save updated FilePaths
 			Utils::FilePaths::SaveFilepathDefaults();
 
@@ -238,8 +252,9 @@ namespace ANI {
 		// Save before closing
 		SaveProject();
 
-		// Save current project's ImGui layout before closing
+		// Save current project's ImGui layout and window state before closing
 		SaveImGuiLayout();
+		SaveProjectWindowState();
 
 		// Reset state
 		m_isProjectOpen = false;
@@ -254,7 +269,7 @@ namespace ANI {
 		// Save cleared paths
 		Utils::FilePaths::SaveFilepathDefaults();
 
-		// NEW: Call the project closed callback BEFORE showing startup view
+		// Call the project closed callback BEFORE showing startup view
 		if (m_onProjectClosedCallback) {
 			m_onProjectClosedCallback();
 		}
@@ -403,6 +418,112 @@ namespace ANI {
 			std::cerr << "[ProjectManager] Failed to load ImGui layout: " << e.what() << std::endl;
 		}
 		return false;
+	}
+
+	bool ProjectManager::SaveProjectWindowState() {
+		if (!m_isProjectOpen || !m_windowHandle) return false;
+
+		try {
+			GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_windowHandle);
+
+			// Get current window state
+			int width, height, x, y;
+			glfwGetWindowSize(glfwWindow, &width, &height);
+			glfwGetWindowPos(glfwWindow, &x, &y);
+			bool maximized = (glfwGetWindowAttrib(glfwWindow, GLFW_MAXIMIZED) == GLFW_TRUE);
+			bool fullscreen = (glfwGetWindowMonitor(glfwWindow) != nullptr);
+
+			// Create window state JSON
+			nlohmann::json windowState;
+			windowState["width"] = width;
+			windowState["height"] = height;
+			windowState["posX"] = x;
+			windowState["posY"] = y;
+			windowState["maximized"] = maximized;
+			windowState["fullscreen"] = fullscreen;
+			windowState["vsync"] = true;
+			windowState["title"] = "AniStudio";
+
+			// Save to project
+			std::string windowStatePath = GetProjectWindowStatePath();
+			std::filesystem::create_directories(std::filesystem::path(windowStatePath).parent_path());
+
+			std::ofstream file(windowStatePath);
+			if (file.is_open()) {
+				file << windowState.dump(4);
+				file.close();
+				std::cout << "[ProjectManager] Saved window state for project: "
+					<< width << "x" << height << " at (" << x << "," << y << ")" << std::endl;
+				return true;
+			}
+			else {
+				std::cerr << "[ProjectManager] Failed to open window state file for writing" << std::endl;
+				return false;
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[ProjectManager] Failed to save project window state: " << e.what() << std::endl;
+			return false;
+		}
+	}
+
+	bool ProjectManager::LoadAndApplyProjectWindowState() {
+		if (!m_isProjectOpen || !m_windowHandle) return false;
+
+		try {
+			std::string windowStatePath = GetProjectWindowStatePath();
+			if (std::filesystem::exists(windowStatePath)) {
+				// Load the window state JSON
+				std::ifstream file(windowStatePath);
+				if (file.is_open()) {
+					nlohmann::json windowState;
+					file >> windowState;
+					file.close();
+
+					// Apply the state to the actual GLFW window
+					GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_windowHandle);
+
+					int width = windowState.value("width", 1200);
+					int height = windowState.value("height", 720);
+					int x = windowState.value("posX", 100);
+					int y = windowState.value("posY", 100);
+					bool maximized = windowState.value("maximized", false);
+
+					// Apply size and position
+					glfwSetWindowSize(glfwWindow, width, height);
+					glfwSetWindowPos(glfwWindow, x, y);
+
+					// Apply maximized state
+					if (maximized) {
+						glfwMaximizeWindow(glfwWindow);
+					}
+					else {
+						glfwRestoreWindow(glfwWindow);
+					}
+
+					std::cout << "[ProjectManager] Loaded and applied project window state: "
+						<< width << "x" << height << " at (" << x << "," << y << ")" << std::endl;
+
+					return true;
+				}
+				else {
+					std::cerr << "[ProjectManager] Failed to open window state file" << std::endl;
+					return false;
+				}
+			}
+			else {
+				std::cout << "[ProjectManager] No project window state found, using current window" << std::endl;
+				return false;
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[ProjectManager] Failed to load project window state: " << e.what() << std::endl;
+			return false;
+		}
+	}
+
+	std::string ProjectManager::GetProjectWindowStatePath() const {
+		return GetProjectDataPath() + "/window_state.json";
 	}
 
 	void ProjectManager::UpdateProjectSpecificPaths() {

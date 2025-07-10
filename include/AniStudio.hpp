@@ -23,6 +23,7 @@
 #include "GUI.h"
 #include "ProjectManager.hpp"
 #include "ImGuiStateUtils.hpp"
+#include "WindowState.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -56,7 +57,7 @@ namespace ANI {
 		}
 
 		// Window management
-		void SetWindowHandle(void* window) { windowHandle = window; }
+		void SetWindowHandle(void* window);
 		void SetImGuiContext(void* context) { imguiContext = context; }
 
 		// Plugin management
@@ -79,8 +80,18 @@ namespace ANI {
 		ANI::ProjectManager m_projectManager;
 		GUI::ViewListID m_menuBarID;
 
+		// Use existing WindowState utility
+		Utils::WindowState m_windowState;
+
 		// Internal setup
 		void RegisterCoreViews();
+		void SetupProjectCallbacks();
+
+		// Window state management - simplified to use WindowState utility
+		void InitializeWindowState();
+		void SyncWindowStateFromGLFW();
+		void ApplyWindowStateToGLFW();
+		std::string GetDefaultWindowStatePath() const;
 	};
 
 }

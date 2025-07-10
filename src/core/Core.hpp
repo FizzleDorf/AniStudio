@@ -58,7 +58,6 @@ namespace ANI {
 		// Window/graphics management only
 		bool InitializeWindow();
 		void CleanupWindow();
-		void PerformCleanShutdown();  // NEW - actual cleanup logic
 
 		// Window state
 		bool run;
