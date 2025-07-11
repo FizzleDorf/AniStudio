@@ -9,6 +9,13 @@
 #include <iomanip>
 #include <sstream>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+// Include GLFW for window state management
+#include <GLFW/glfw3.h>
+
 namespace ANI {
 
 	// ProjectSettings implementation
@@ -34,7 +41,7 @@ namespace ANI {
 
 	// ProjectManager implementation
 	ProjectManager::ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr)
-		: m_viewManager(viewMgr), m_entityManager(entityMgr), m_windowHandle(nullptr) {
+		: m_viewManager(viewMgr), m_entityManager(entityMgr) {
 		// FilePaths utility should already be initialized at application startup
 		// We just read the current state
 	}
@@ -364,6 +371,16 @@ namespace ANI {
 		return Utils::FilePaths::assetsFolderPath;
 	}
 
+	void ProjectManager::SetOutputFolder(const std::string& path) {
+		Utils::FilePaths::outputFolderPath = path;
+		Utils::FilePaths::SaveFilepathDefaults();
+		std::cout << "[ProjectManager] Set output folder to: " << path << std::endl;
+	}
+
+	std::string ProjectManager::GetOutputFolder() const {
+		return Utils::FilePaths::outputFolderPath;
+	}
+
 	bool ProjectManager::SaveViewState() {
 		if (!m_isProjectOpen) return false;
 
@@ -522,17 +539,18 @@ namespace ANI {
 		}
 	}
 
-	std::string ProjectManager::GetProjectWindowStatePath() const {
-		return GetProjectDataPath() + "/window_state.json";
-	}
-
 	void ProjectManager::UpdateProjectSpecificPaths() {
 		if (!m_isProjectOpen) return;
 
 		// Update project-specific asset folder if not already set
 		if (Utils::FilePaths::assetsFolderPath.empty()) {
 			Utils::FilePaths::assetsFolderPath = GetProjectAssetsPath();
+			std::cout << "[ProjectManager] Set assets folder to: " << Utils::FilePaths::assetsFolderPath << std::endl;
 		}
+
+		// Update project-specific output folder 
+		Utils::FilePaths::outputFolderPath = GetProjectOutputPath();
+		std::cout << "[ProjectManager] Set output folder to: " << Utils::FilePaths::outputFolderPath << std::endl;
 	}
 
 	void ProjectManager::ClearProjectSpecificPaths() {
@@ -541,6 +559,14 @@ namespace ANI {
 		if (!Utils::FilePaths::assetsFolderPath.empty() &&
 			Utils::FilePaths::assetsFolderPath.find(m_currentProjectPath) != std::string::npos) {
 			Utils::FilePaths::assetsFolderPath.clear();
+			std::cout << "[ProjectManager] Cleared assets folder path" << std::endl;
+		}
+
+		// Clear output folder path if it was pointing to the closed project
+		if (!Utils::FilePaths::outputFolderPath.empty() &&
+			Utils::FilePaths::outputFolderPath.find(m_currentProjectPath) != std::string::npos) {
+			Utils::FilePaths::outputFolderPath.clear();
+			std::cout << "[ProjectManager] Cleared output folder path" << std::endl;
 		}
 	}
 
@@ -554,6 +580,10 @@ namespace ANI {
 
 	std::string ProjectManager::GetProjectOutputPath() const {
 		return m_currentProjectPath + "/output";
+	}
+
+	std::string ProjectManager::GetProjectWindowStatePath() const {
+		return GetProjectDataPath() + "/window_state.json";
 	}
 
 } // namespace ANI

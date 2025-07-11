@@ -45,7 +45,9 @@ namespace GUI {
 
 		// Initialize with default values
 		outputComp.fileName = "upscaled_output.png";
-		outputComp.filePath = Utils::FilePaths::defaultProjectPath;
+		outputComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
+			? Utils::FilePaths::outputFolderPath
+			: Utils::FilePaths::defaultProjectPath;
 		esrganComp.upscaleFactor = 2;
 		esrganComp.preserveAspectRatio = true;
 		samplerComp.n_threads = std::thread::hardware_concurrency();
@@ -386,13 +388,17 @@ namespace GUI {
 			ImGui::TableNextColumn();
 			if (ImGui::Button("...##ChooseDir123123")) {
 				IGFD::FileDialogConfig config;
-				config.path = Utils::FilePaths::defaultProjectPath;
+				config.path = !Utils::FilePaths::outputFolderPath.empty()
+					? Utils::FilePaths::outputFolderPath
+					: Utils::FilePaths::defaultProjectPath;
 				ImGuiFileDialog::Instance()->OpenDialog("ChooseDirDialog", "Choose Output Directory", nullptr, config);
 			}
 
 			ImGui::SameLine();
 			if (ImGui::Button("R##ResetDir123123")) {
-				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
+				outputComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
+					? Utils::FilePaths::outputFolderPath
+					: Utils::FilePaths::defaultProjectPath;
 				strncpy(outDirPath, outputComp.filePath.c_str(), sizeof(outDirPath) - 1);
 				outDirPath[sizeof(outDirPath) - 1] = '\0';  // Ensure null termination
 			}

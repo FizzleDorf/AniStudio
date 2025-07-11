@@ -48,6 +48,7 @@ namespace Utils
 		inline static std::string lastOpenProjectPath = "";
 		inline static std::string defaultProjectPath = "";
 		inline static std::string assetsFolderPath = "";
+		inline static std::string outputFolderPath = "";  // NEW: Project output folder
 
 		// Model paths - global defaults
 		inline static std::string defaultModelRootPath = "";
@@ -270,6 +271,7 @@ namespace Utils
 				json["lastOpenProjectPath"] = lastOpenProjectPath;
 				json["defaultProjectPath"] = defaultProjectPath;
 				json["assetsFolderPath"] = assetsFolderPath;
+				json["outputFolderPath"] = outputFolderPath;  // NEW: Save output folder path
 
 				// Model paths
 				json["defaultModelRootPath"] = defaultModelRootPath;
@@ -344,6 +346,8 @@ namespace Utils
 					defaultModelRootPath = json["defaultModelRootPath"];
 				if (json.contains("assetsFolderPath") && json["assetsFolderPath"].is_string())
 					assetsFolderPath = json["assetsFolderPath"];
+				if (json.contains("outputFolderPath") && json["outputFolderPath"].is_string())  // NEW: Load output folder path
+					outputFolderPath = json["outputFolderPath"];
 				if (json.contains("checkpointDir") && json["checkpointDir"].is_string())
 					checkpointDir = json["checkpointDir"];
 				if (json.contains("encoderDir") && json["encoderDir"].is_string())
@@ -465,6 +469,7 @@ namespace Utils
 			std::cout << "[FilePaths] Last Open Project: " << lastOpenProjectPath << std::endl;
 			std::cout << "[FilePaths] Default Project: " << defaultProjectPath << std::endl;
 			std::cout << "[FilePaths] Assets Folder: " << assetsFolderPath << std::endl;
+			std::cout << "[FilePaths] Output Folder: " << outputFolderPath << std::endl;  // NEW: Show output folder
 			std::cout << "[FilePaths] Model Root: " << defaultModelRootPath << std::endl;
 			std::cout << "[FilePaths] Scripts: " << defaultScriptsPath << std::endl;
 			std::cout << "[FilePaths] Plugins: " << pluginPath << std::endl;

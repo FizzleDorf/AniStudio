@@ -226,14 +226,18 @@ namespace GUI {
 
 			if (ImGui::Button("...##w8")) {
 				IGFD::FileDialogConfig config;
-				config.path = Utils::FilePaths::defaultProjectPath; // Set the initial directory
+				config.path = !Utils::FilePaths::outputFolderPath.empty()
+					? Utils::FilePaths::outputFolderPath
+					: Utils::FilePaths::defaultProjectPath;
 				ImGuiFileDialog::Instance()->OpenDialog("LoadDirDialog", "Choose Directory", nullptr, config);
 			}
 
 			ImGui::SameLine();
 			if (ImGui::Button("R##w9")) {
 				imageComp.fileName = "AniStudio";
-				imageComp.filePath = Utils::FilePaths::defaultProjectPath;
+				imageComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
+					? Utils::FilePaths::outputFolderPath
+					: Utils::FilePaths::defaultProjectPath;
 			}
 
 			ImGui::TableNextColumn();

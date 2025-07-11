@@ -15,7 +15,6 @@
 #pragma once
 #include "ViewState.hpp"
 #include "FilePaths.hpp"
-#include "OpenGLWrapper.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -43,7 +42,7 @@ namespace ANI {
 		ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr);
 		~ProjectManager();
 
-		// Window handle management
+		// Window handle management for window state saving/loading
 		void SetWindowHandle(void* windowHandle);
 
 		// Startup detection - now uses FilePaths utility
@@ -74,6 +73,10 @@ namespace ANI {
 		void SetAssetsFolder(const std::string& path);
 		std::string GetAssetsFolder() const;
 
+		// Output folder management
+		void SetOutputFolder(const std::string& path);
+		std::string GetOutputFolder() const;
+
 		// Application-level path initialization
 		static void InitializeApplicationPaths();
 
@@ -103,8 +106,8 @@ namespace ANI {
 		GUI::ViewState m_viewState;
 		std::string m_lastError;
 
-		// Window handle for direct GLFW access
-		void* m_windowHandle;
+		// Window handle for window state management
+		void* m_windowHandle = nullptr;
 
 		// Project event callbacks
 		std::function<void(const std::string&)> m_onProjectLoadedCallback;
@@ -117,10 +120,9 @@ namespace ANI {
 		bool SaveImGuiLayout();
 		bool LoadImGuiLayout();
 
-		// Window state operations - now directly work with GLFW
+		// Window state management
 		bool SaveProjectWindowState();
 		bool LoadAndApplyProjectWindowState();
-		std::string GetProjectWindowStatePath() const;
 
 		// Project-specific path management
 		void UpdateProjectSpecificPaths();
@@ -130,6 +132,7 @@ namespace ANI {
 		std::string GetProjectDataPath() const;
 		std::string GetProjectAssetsPath() const;
 		std::string GetProjectOutputPath() const;
+		std::string GetProjectWindowStatePath() const;
 	};
 
 } // namespace ANI
