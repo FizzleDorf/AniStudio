@@ -14,6 +14,7 @@
 
 #pragma once
 #include "BaseView.hpp"
+#include "ViewTypes.hpp"
 #include <unordered_map>
 #include <memory>
 
@@ -40,35 +41,44 @@ namespace GUI {
 			})";
 		}
 
-		void Init() override {}
-		void Update(const float deltaT) override { UpdateViews(); }
+		void Init() override;
+		void Update(const float deltaT) override;
 		void Render() override;
 
-		void UpdateViews();
+		// Set the workspace that this menubar manages
+		void SetManagedWorkspace(WorkspaceID workspaceId) { m_managedWorkspace = workspaceId; }
+		WorkspaceID GetManagedWorkspace() const { return m_managedWorkspace; }
 
 	private:
 		ANI::ProjectManager& m_projectManager;
 		ECS::EntityManager& m_entityManager;
 		ViewManager& m_viewManager;
 
-		// Track active views
-		std::unordered_map<std::string, ViewListID> m_activeViews;
+		// The workspace this menubar manages
+		WorkspaceID m_managedWorkspace = 0;
+
+		// Track actual view instances created by this menubar
+		std::unordered_map<std::string, WorkspaceID> m_activeViewInstances;
 
 		// Menu sections
 		void ShowFileMenu();
 		void ShowEditMenu();
-		void ShowCategoryMenus();  // New method for dynamic category menus
+		void ShowCategoryMenus();
 		void ShowHelpMenu();
 
 		// Hierarchical menu building
 		std::vector<std::string> SplitCategoryPath(const std::string& category);
 		void RenderMenuNode(const MenuNode& node);
 
-		// View management
+		// View instance management (creates/destroys actual view instances)
 		void SyncViewState();
-		void CreateView(const std::string& viewType);
-		void DestroyView(const std::string& viewType);
-		bool IsViewActive(const std::string& viewType) const;
+		bool IsViewInstanceInWorkspace(const std::string& viewTypeName) const;
+		void ToggleViewInstanceInWorkspace(const std::string& viewType);
+
+		// Helper methods for managing actual view instances
+		void CreateViewInstance(const std::string& viewTypeName);
+		void RemoveViewInstance(const std::string& viewTypeName);
+		bool CheckViewExistsByName(const std::string& viewTypeName) const;
 	};
 
 } // namespace GUI

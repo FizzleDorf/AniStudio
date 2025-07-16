@@ -1,4 +1,4 @@
-// Updated MenuBar.cpp with top-level category menus
+// Updated MenuBar.cpp - Properly managing actual view instances
 #include "MenuBar.hpp"
 #include "../Events/Events.hpp"
 #include "ProjectManager.hpp"
@@ -15,6 +15,18 @@ namespace GUI {
 		viewName = "MenuBar";
 	}
 
+	void MenuBar::Init() {
+		// Create a workspace for this menubar to manage if one isn't set
+		if (m_managedWorkspace == 0) {
+			m_managedWorkspace = m_viewManager.CreateView();
+			std::cout << "[MenuBar] Created managed workspace: " << m_managedWorkspace << std::endl;
+		}
+	}
+
+	void MenuBar::Update(const float deltaT) {
+		SyncViewState();
+	}
+
 	void MenuBar::Render() {
 		if (ImGui::BeginMainMenuBar()) {
 			ShowFileMenu();
@@ -24,12 +36,6 @@ namespace GUI {
 			ShowCategoryMenus();
 			ImGui::EndMainMenuBar();
 		}
-
-		UpdateViews();
-	}
-
-	void MenuBar::UpdateViews() {
-		SyncViewState();
 	}
 
 	void MenuBar::ShowFileMenu() {
@@ -61,8 +67,6 @@ namespace GUI {
 				ANI::Events::Ref().QueueEvent(event);
 			}
 
-			ImGui::Separator();
-
 			ImGui::EndMenu();
 		}
 	}
@@ -70,11 +74,11 @@ namespace GUI {
 	void MenuBar::ShowEditMenu() {
 		if (ImGui::BeginMenu("Edit")) {
 			if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
-				// TODO: ImGui undo
+				// TODO: Implement undo
 			}
 
 			if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
-				// TODO: ImGui redo
+				// TODO: Implement redo
 			}
 
 			ImGui::Separator();
@@ -82,10 +86,9 @@ namespace GUI {
 		}
 	}
 
-	// this just ensures the help menu is always placed last
 	void MenuBar::ShowHelpMenu() {
 		if (ImGui::BeginMenu("Help")) {
-			ImGui::EndMenu();
+			
 		}
 	}
 
@@ -140,7 +143,6 @@ namespace GUI {
 		}
 	}
 
-	// Helper function to split category path
 	std::vector<std::string> MenuBar::SplitCategoryPath(const std::string& category) {
 		std::vector<std::string> parts;
 		std::stringstream ss(category);
@@ -155,7 +157,6 @@ namespace GUI {
 		return parts;
 	}
 
-	// Render a menu node and its children (for submenus)
 	void MenuBar::RenderMenuNode(const MenuNode& node) {
 		// Sort children by name for consistent ordering
 		std::vector<std::pair<std::string, MenuNode*>> sortedChildren;
@@ -179,10 +180,10 @@ namespace GUI {
 
 		// Render views in this menu level
 		for (const auto&[viewTypeName, meta] : node.views) {
-			bool isOpen = m_projectManager.GetViewState().IsViewOpen(viewTypeName);
+			bool isViewActive = IsViewInstanceInWorkspace(viewTypeName);
 
-			if (ImGui::MenuItem(meta.displayName.c_str(), nullptr, isOpen)) {
-				m_projectManager.GetViewState().ToggleView(viewTypeName);
+			if (ImGui::MenuItem(meta.displayName.c_str(), nullptr, isViewActive)) {
+				ToggleViewInstanceInWorkspace(viewTypeName);
 			}
 
 			if (ImGui::IsItemHovered() && !meta.description.empty()) {
@@ -192,60 +193,72 @@ namespace GUI {
 	}
 
 	void MenuBar::SyncViewState() {
+		// Sync the workspace state with the project's view state
 		auto& viewState = m_projectManager.GetViewState();
 		auto openViewTypes = viewState.GetOpenViewTypes();
 
-		// Create views that should be open but aren't active
+		// For each view type that should be open, ensure it exists in workspace
 		for (const auto& viewType : openViewTypes) {
-			if (!IsViewActive(viewType)) {
-				CreateView(viewType);
+			if (!IsViewInstanceInWorkspace(viewType)) {
+				CreateViewInstance(viewType);
 			}
 		}
 
-		// Destroy views that are active but shouldn't be
-		auto it = m_activeViews.begin();
-		while (it != m_activeViews.end()) {
-			const std::string& viewType = it->first;
-			if (!viewState.IsViewOpen(viewType)) {
-				ViewListID viewID = it->second;
-				it = m_activeViews.erase(it);
-				m_viewManager.DestroyView(viewID);
-			}
-			else {
-				++it;
+		// For each view type that shouldn't be open, remove from workspace
+		for (const auto&[viewTypeName, typeId] : m_viewManager.GetRegisteredViews()) {
+			bool shouldBeOpen = std::find(openViewTypes.begin(), openViewTypes.end(), viewTypeName) != openViewTypes.end();
+			if (!shouldBeOpen && IsViewInstanceInWorkspace(viewTypeName)) {
+				RemoveViewInstance(viewTypeName);
 			}
 		}
 	}
 
-	void MenuBar::CreateView(const std::string& viewType) {
-		if (IsViewActive(viewType)) return;
+	bool MenuBar::IsViewInstanceInWorkspace(const std::string& viewTypeName) const {
+		// We need to check if the actual view instance exists in the workspace
+		// This requires us to know the concrete type to call HasView<T>()
+		// For now, we'll use a registry of known view types
+		return CheckViewExistsByName(viewTypeName);
+	}
 
+	void MenuBar::ToggleViewInstanceInWorkspace(const std::string& viewType) {
+		if (IsViewInstanceInWorkspace(viewType)) {
+			RemoveViewInstance(viewType);
+			m_projectManager.GetViewState().SetViewOpen(viewType, false);
+		}
+		else {
+			CreateViewInstance(viewType);
+			m_projectManager.GetViewState().SetViewOpen(viewType, true);
+		}
+	}
+
+	void MenuBar::CreateViewInstance(const std::string& viewTypeName) {
+		// Create the actual view instance using the registered factory
 		try {
-			ViewListID viewID = m_viewManager.CreateViewByName(viewType, m_entityManager);
-
-			if (viewID != 0) {
-				m_activeViews[viewType] = viewID;
-				std::cout << "[MenuBar] Created view: " << viewType << " with ID: " << viewID << std::endl;
-			}
-			else {
-				std::cerr << "[MenuBar] Failed to create view: " << viewType << std::endl;
+			// Use CreateViewByName to create in generic storage, then add to our workspace
+			WorkspaceID tempId = m_viewManager.CreateViewByName(viewTypeName, m_entityManager);
+			if (tempId != 0) {
+				// Move the view from generic storage to our managed workspace
+				// For now, just track it in our registry
+				m_activeViewInstances[viewTypeName] = tempId;
+				std::cout << "[MenuBar] Created view instance: " << viewTypeName << " with ID: " << tempId << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[MenuBar] Exception creating view " << viewType << ": " << e.what() << std::endl;
+			std::cerr << "[MenuBar] Failed to create view instance " << viewTypeName << ": " << e.what() << std::endl;
 		}
 	}
 
-	void MenuBar::DestroyView(const std::string& viewType) {
-		auto it = m_activeViews.find(viewType);
-		if (it != m_activeViews.end()) {
+	void MenuBar::RemoveViewInstance(const std::string& viewTypeName) {
+		auto it = m_activeViewInstances.find(viewTypeName);
+		if (it != m_activeViewInstances.end()) {
 			m_viewManager.DestroyView(it->second);
-			m_activeViews.erase(it);
+			m_activeViewInstances.erase(it);
+			std::cout << "[MenuBar] Removed view instance: " << viewTypeName << std::endl;
 		}
 	}
 
-	bool MenuBar::IsViewActive(const std::string& viewType) const {
-		return m_activeViews.find(viewType) != m_activeViews.end();
+	bool MenuBar::CheckViewExistsByName(const std::string& viewTypeName) const {
+		return m_activeViewInstances.find(viewTypeName) != m_activeViewInstances.end();
 	}
 
 } // namespace GUI

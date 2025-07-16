@@ -55,7 +55,7 @@ namespace GUI {
 			return GetMetadataFor<BaseView>();
 		}
 
-		inline const ViewListID GetID() const { return viewID; }
+		inline const WorkspaceID GetID() const { return workspaceID; }
 
 		virtual void Init() {}
 		virtual void Update(const float deltaT) {}
@@ -63,7 +63,7 @@ namespace GUI {
 		virtual void Render() {
 			if (ImGui::Begin(viewName.c_str())) {
 				ImGui::Text("Default BaseView Render");
-				ImGui::Text("ViewID: %zu", viewID);
+				ImGui::Text("ViewID: %zu", workspaceID);
 				ImGui::Text("This view should override Render()");
 			}
 			ImGui::End();
@@ -87,7 +87,7 @@ namespace GUI {
 
 	private:
 		friend class ViewManager;
-		ViewListID viewID;
+		WorkspaceID workspaceID;
 	};
 
 } // namespace GUI

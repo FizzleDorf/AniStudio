@@ -20,7 +20,7 @@
 
 #pragma once
 #include "BaseView.hpp"
-#include "ViewList.hpp"
+#include "Workspace.hpp"
 #include "pch.h"
 
 using json = nlohmann::json;
@@ -32,10 +32,10 @@ namespace GUI {
 
 	class ViewManager {
 	public:
-		ViewManager() : viewListCount(0) {
+		ViewManager() : workspaceCount(0) {
 			// Initialize available view IDs
-			for (ViewListID view = 0u; view < MAX_VIEW_COUNT; view++) {
-				availableViews.push(view);
+			for (WorkspaceID view = 0u; view < MAX_VIEW_COUNT; view++) {
+				availableWorkspaces.push(view);
 			}
 		}
 
@@ -45,55 +45,55 @@ namespace GUI {
 
 		// Update all view lists
 		void Update(const float deltaT) {
-			for (const auto& viewList : viewArrays) {
-				viewList.second->UpdateViews(deltaT);
+			for (const auto& workspace : workspaceArrays) {
+				workspace.second->UpdateViews(deltaT);
 			}
 			// Update generic views
-			UpdateGenericViews(deltaT);
+			UpdateGenericWorkspaces(deltaT);
 		}
 
 		// Render all views
 		void Render() {
-			for (const auto &viewList : viewArrays) {
-				viewList.second->RenderViews();
+			for (const auto &workspace : workspaceArrays) {
+				workspace.second->RenderViews();
 			}
 			// Render generic views
-			RenderGenericViews();
+			RenderGenericWorkspaces();
 		}
 
 		// Adds a viewlist
-		const ViewListID CreateView() {
-			const ViewListID viewList = availableViews.front();
+		const WorkspaceID CreateView() {
+			const WorkspaceID viewList = availableWorkspaces.front();
 			AddViewSignature(viewList);
-			availableViews.pop();
-			viewListCount++;
+			availableWorkspaces.pop();
+			workspaceCount++;
 			return viewList;
 		}
 
 		// Removes a viewlist and all of its views
-		void DestroyView(const ViewListID viewList) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		void DestroyView(const WorkspaceID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
 			// Remove this view's signature
-			viewSignatures.erase(viewList);
+			workspaceSignatures.erase(viewList);
 
 			// Remove this view from all view arrays
-			for (auto &array : viewArrays) {
+			for (auto &array : workspaceArrays) {
 				array.second->Erase(viewList);
 			}
 
 			// Remove from generic views if it's there
-			genericViews.erase(viewList);
+			genericWorkspaces.erase(viewList);
 
 			// Return the ID to the available pool
-			viewListCount--;
-			availableViews.push(viewList);
+			workspaceCount--;
+			availableWorkspaces.push(viewList);
 		}
 
 		// Adds a view to the viewlist by template class
 		template <typename T>
-		void AddView(const ViewListID viewList, T &&view) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		void AddView(const WorkspaceID viewList, T &&view) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 			assert(GetViewSignature(viewList)->size() < MAX_VIEW_COUNT && "View count limit reached!");
 
 			// Check if view already exists
@@ -103,7 +103,7 @@ namespace GUI {
 			}
 
 			// Set the view's ID and add it to signatures
-			view.viewID = viewList;
+			view.workspaceID = viewList;
 			GetViewSignature(viewList)->insert(ViewType<T>());
 
 			// Initialize the view before adding it
@@ -117,8 +117,8 @@ namespace GUI {
 
 		// Removes a view from the viewlist by template class
 		template <typename T>
-		void RemoveView(const ViewListID viewList) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		void RemoveView(const WorkspaceID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
 			// Remove from signatures
 			const ViewTypeID viewType = ViewType<T>();
@@ -130,18 +130,18 @@ namespace GUI {
 
 		// Returns a designated view type by template class
 		template <typename T>
-		T &GetView(const ViewListID viewList) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		T &GetView(const WorkspaceID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 			return GetViewList<T>()->Get(viewList);
 		}
 
 		// Returns true if view is in a view list
 		template <typename T>
-		const bool HasView(const ViewListID viewList) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		const bool HasView(const WorkspaceID viewList) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
-			auto it = viewSignatures.find(viewList);
-			if (it == viewSignatures.end()) {
+			auto it = workspaceSignatures.find(viewList);
+			if (it == workspaceSignatures.end()) {
 				return false;
 			}
 
@@ -198,35 +198,35 @@ namespace GUI {
 		}
 
 		// Create view by name using factory
-		ViewListID CreateViewByName(const std::string& viewTypeName, ECS::EntityManager& entityMgr) {
+		WorkspaceID CreateViewByName(const std::string& viewTypeName, ECS::EntityManager& entityMgr) {
 			auto factoryIt = viewFactories.find(viewTypeName);
 			if (factoryIt == viewFactories.end()) {
 				std::cerr << "[ViewManager] No factory registered for view type: " << viewTypeName << std::endl;
-				return 0; // Invalid ViewListID
+				return 0; // Invalid WorkspaceID
 			}
 
 			try {
-				// Create the ViewListID
-				ViewListID viewID = CreateView();
+				// Create the WorkspaceID
+				WorkspaceID id = CreateView();
 
 				// Create the view instance using the factory
 				auto view = factoryIt->second(entityMgr);
 				if (!view) {
-					DestroyView(viewID);
+					DestroyView(id);
 					return 0;
 				}
 
 				// Set the view ID
-				view->viewID = viewID;
+				view->workspaceID = id;
 
 				// Initialize the view immediately
 				view->Init();
 
 				// Store in generic storage
-				genericViews[viewID] = std::move(view);
+				genericWorkspaces[id] = std::move(view);
 
-				std::cout << "[ViewManager] Created and initialized view: " << viewTypeName << " with ID: " << viewID << std::endl;
-				return viewID;
+				std::cout << "[ViewManager] Created and initialized view: " << viewTypeName << " with ID: " << id << std::endl;
+				return id;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "[ViewManager] Failed to create view " << viewTypeName << ": " << e.what() << std::endl;
@@ -308,15 +308,15 @@ namespace GUI {
 		}
 
 		// Update generic views
-		void UpdateGenericViews(float deltaT) {
-			for (auto&[viewID, view] : genericViews) {
+		void UpdateGenericWorkspaces(float deltaT) {
+			for (auto&[viewID, view] : genericWorkspaces) {
 				view->Update(deltaT);
 			}
 		}
 
 		// Render generic views
-		void RenderGenericViews() {
-			for (auto&[viewID, view] : genericViews) {
+		void RenderGenericWorkspaces() {
+			for (auto&[viewID, view] : genericWorkspaces) {
 				view->Render();
 			}
 		}
@@ -335,22 +335,22 @@ namespace GUI {
 		// Resets to init state
 		void Reset() {
 			// Destroy all views
-			for (auto &viewSignaturePair : viewSignatures) {
+			for (auto &viewSignaturePair : workspaceSignatures) {
 				DestroyView(viewSignaturePair.first);
 			}
-			viewSignatures.clear();
-			genericViews.clear();
+			workspaceSignatures.clear();
+			genericWorkspaces.clear();
 
 			// Reset available views queue
-			while (!availableViews.empty()) {
-				availableViews.pop();
+			while (!availableWorkspaces.empty()) {
+				availableWorkspaces.pop();
 			}
-			for (ViewListID view = 0u; view < MAX_VIEW_COUNT; ++view) {
-				availableViews.push(view);
+			for (WorkspaceID view = 0u; view < MAX_VIEW_COUNT; ++view) {
+				availableWorkspaces.push(view);
 			}
 
-			viewListCount = 0;
-			viewArrays.clear();
+			workspaceCount = 0;
+			workspaceArrays.clear();
 			registeredViews.clear();
 			viewMetadata.clear();
 			viewSources.clear();
@@ -359,29 +359,29 @@ namespace GUI {
 		}
 
 		// Return all view IDs
-		std::vector<ViewListID> GetAllViews() const {
-			std::vector<ViewListID> views;
-			for (const auto &pair : viewSignatures) {
-				views.push_back(pair.first);
+		std::vector<WorkspaceID> GetAllWorkspaces() const {
+			std::vector<WorkspaceID> ids;
+			for (const auto &pair : workspaceSignatures) {
+				ids.push_back(pair.first);
 			}
-			return views;
+			return ids;
 		}
 
 		// Returns all registered view names and types
 		const std::unordered_map<std::string, ViewTypeID> &GetRegisteredViews() const { return registeredViews; }
 
-		// Returns all view list IDs and view signatures
-		const std::map<ViewListID, std::shared_ptr<ViewSignature>> &GetViewSignatures() const { return viewSignatures; }
+		// Returns all view list IDs and view signatures - FIXED: This was the problematic function
+		const std::map<WorkspaceID, std::shared_ptr<ViewSignature>> &GetWorkspaceSignatures() const { return workspaceSignatures; }
 
 		// Adds a view in the view list by type
-		void AddViewByType(const ViewListID viewList, const ViewTypeID viewType) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		void AddViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 			GetViewSignature(viewList)->insert(viewType);
 		}
 
 		// Removes a view in the view list by type
-		void RemoveViewByType(const ViewListID viewList, const ViewTypeID viewType) {
-			assert(viewList < MAX_VIEW_COUNT && "ViewListID out of range!");
+		void RemoveViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
+			assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 			GetViewSignature(viewList)->erase(viewType);
 		}
 
@@ -390,9 +390,9 @@ namespace GUI {
 		// Serialize JSON into view lists
 		json SerializeViewLists() const {
 			json viewListsJson;
-			for (const auto &[viewListID, signature] : viewSignatures) {
+			for (const auto &[WorkspaceID, signature] : workspaceSignatures) {
 				json viewListJson;
-				viewListJson["ViewListID"] = viewListID;
+				viewListJson["WorkspaceID"] = WorkspaceID;
 
 				json viewsJson;
 				for (const auto &viewTypeID : *signature) {
@@ -410,12 +410,12 @@ namespace GUI {
 		// Deserialize JSON into view lists
 		void DeserializeViewLists(const json &viewListsJson) {
 			for (const auto &viewListJson : viewListsJson) {
-				ViewListID viewListID = viewListJson["ViewListID"];
-				AddViewSignature(viewListID); // Create a new ViewList
+				WorkspaceID WorkspaceID = viewListJson["WorkspaceID"];
+				AddViewSignature(WorkspaceID); // Create a new ViewList
 
 				for (const auto &viewJson : viewListJson["Views"]) {
 					ViewTypeID viewTypeID = viewJson["ViewTypeID"];
-					AddViewByType(viewListID, viewTypeID); // Add the view to the ViewList
+					AddViewByType(WorkspaceID, viewTypeID); // Add the view to the ViewList
 				}
 			}
 		}
@@ -423,39 +423,44 @@ namespace GUI {
 	private:
 		// Adds a new view list
 		template <typename T>
-		void AddViewList() {
+		void AddWorkspace() {
 			const ViewTypeID viewType = ViewType<T>();
-			assert(viewArrays.find(viewType) == viewArrays.end() && "ViewList already registered!");
-			viewArrays[viewType] = std::make_shared<ViewList<T>>();
+			assert(workspaceArrays.find(viewType) == workspaceArrays.end() && "ViewList already registered!");
+			workspaceArrays[viewType] = std::make_shared<Workspace<T>>();
 		}
 
-		// Returns all view lists
+		// Returns all view lists - FIXED: Renamed from GetWorkspaceViews to GetWorkspace
 		template <typename T>
-		std::shared_ptr<ViewList<T>> GetViewList() {
+		std::shared_ptr<Workspace<T>> GetWorkspace() {
 			const ViewTypeID viewType = ViewType<T>();
-			if (viewArrays.count(viewType) == 0) {
-				AddViewList<T>();
+			if (workspaceArrays.count(viewType) == 0) {
+				AddWorkspace<T>();
 			}
-			return std::static_pointer_cast<ViewList<T>>(viewArrays.at(viewType));
+			return std::static_pointer_cast<Workspace<T>>(workspaceArrays.at(viewType));
+		}
+
+		template <typename T>
+		std::shared_ptr<Workspace<T>> GetViewList() {
+			return GetWorkspace<T>();
 		}
 
 		// Adds a new view signature if it doesn't exist
-		void AddViewSignature(const ViewListID viewList) {
-			assert(viewSignatures.find(viewList) == viewSignatures.end() && "Signature already exists");
-			viewSignatures[viewList] = std::make_shared<ViewSignature>();
+		void AddViewSignature(const WorkspaceID viewList) {
+			assert(workspaceSignatures.find(viewList) == workspaceSignatures.end() && "Signature already exists");
+			workspaceSignatures[viewList] = std::make_shared<ViewSignature>();
 		}
 
 		// Returns view signatures
-		std::shared_ptr<ViewSignature> GetViewSignature(const ViewListID viewList) {
-			assert(viewSignatures.find(viewList) != viewSignatures.end() && "Signature Not Found");
-			return viewSignatures.at(viewList);
+		std::shared_ptr<ViewSignature> GetViewSignature(const WorkspaceID viewList) {
+			assert(workspaceSignatures.find(viewList) != workspaceSignatures.end() && "Signature Not Found");
+			return workspaceSignatures.at(viewList);
 		}
 
 	private:
-		ViewListID viewListCount;
-		std::queue<ViewListID> availableViews;
-		std::map<ViewListID, std::shared_ptr<ViewSignature>> viewSignatures;
-		std::map<ViewTypeID, std::shared_ptr<IViewList>> viewArrays;
+		WorkspaceID workspaceCount;
+		std::queue<WorkspaceID> availableWorkspaces;
+		std::map<WorkspaceID, std::shared_ptr<ViewSignature>> workspaceSignatures;
+		std::map<ViewTypeID, std::shared_ptr<IWorkspace>> workspaceArrays;
 		std::unordered_map<std::string, ViewTypeID> registeredViews;
 
 		// Metadata and creation tracking
@@ -464,7 +469,7 @@ namespace GUI {
 		std::unordered_map<std::string, ViewCreationCallback> viewFactories;
 
 		// Generic view storage for views created by name
-		std::unordered_map<ViewListID, std::unique_ptr<BaseView>> genericViews;
+		std::unordered_map<WorkspaceID, std::unique_ptr<BaseView>> genericWorkspaces;
 	};
 
 } // namespace GUI

@@ -23,7 +23,7 @@
 // Core views
 #include "DebugView.hpp"
 #include "SettingsView.hpp"
-#include "ViewListManagerView.hpp"
+#include "WorkspaceView.hpp"
 #include "PluginView.hpp"
 #include "HelpView.hpp"
 #include "MenuBar.hpp"

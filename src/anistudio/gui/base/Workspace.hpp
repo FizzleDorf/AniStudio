@@ -25,27 +25,27 @@
 
 namespace GUI {
 
-	class IViewList {
+	class IWorkspace {
 	public:
-		IViewList() = default;
-		virtual ~IViewList() = default;
-		virtual void Erase(const ViewListID viewID) {}
+		IWorkspace() = default;
+		virtual ~IWorkspace() = default;
+		virtual void Erase(const WorkspaceID id) {}
 		virtual void UpdateViews(const float deltaT) {}
 		virtual void RenderViews() = 0;
 		virtual size_t Size() const { return 0; }
 		virtual void Clear() {}
-		virtual std::vector<ViewListID> GetAllViewIDs() const { return {}; }
+		virtual std::vector<WorkspaceID> GetAllWorkspaceIDs() const { return {}; }
 	};
 
 	template <typename T>
-	class ViewList : public IViewList {
+	class Workspace : public IWorkspace {
 	public:
-		ViewList() {
+		Workspace() {
 			data.reserve(16);
 			std::cout << "[ViewList<" << typeid(T).name() << ">] Created with initial capacity: " << data.capacity() << std::endl;
 		}
 
-		~ViewList() {
+		~Workspace() {
 			std::cout << "[ViewList<" << typeid(T).name() << ">] Destructor called, size: " << data.size() << std::endl;
 		}
 
@@ -60,18 +60,18 @@ namespace GUI {
 				std::cout << "[ViewList<" << typeid(T).name() << ">] Reserved capacity: " << newCapacity << std::endl;
 			}
 
-			ViewListID viewID = view.GetID();
+			WorkspaceID id = view.GetID();
 
-			if (viewID == 0) {
+			if (id == 0) {
 				std::cerr << "[ViewList<" << typeid(T).name() << ">] ERROR: Invalid ViewID (0)" << std::endl;
 				return;
 			}
 
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Processing ViewID: " << viewID << std::endl;
+			std::cout << "[ViewList<" << typeid(T).name() << ">] Processing ViewID: " << id << std::endl;
 
 			bool thisTypeExists = false;
 			for (const auto& existingView : data) {
-				if (existingView && existingView->GetID() == viewID) {
+				if (existingView && existingView->GetID() == id) {
 					thisTypeExists = true;
 					break;
 				}
@@ -79,10 +79,10 @@ namespace GUI {
 
 			if (thisTypeExists) {
 				std::cout << "[ViewList<" << typeid(T).name() << ">] Component type " << typeid(T).name()
-					<< " already exists on ViewListID: " << viewID << " - REPLACING" << std::endl;
+					<< " already exists on ViewListID: " << id << " - REPLACING" << std::endl;
 
 				for (auto& existingView : data) {
-					if (existingView && existingView->GetID() == viewID) {
+					if (existingView && existingView->GetID() == id) {
 						existingView = std::make_shared<T>(std::forward<T>(view));
 						std::cout << "[ViewList<" << typeid(T).name() << ">] Replaced existing component" << std::endl;
 						return;
@@ -98,13 +98,13 @@ namespace GUI {
 					return;
 				}
 
-				if (newView->GetID() != viewID) {
+				if (newView->GetID() != id) {
 					std::cerr << "[ViewList<" << typeid(T).name() << ">] ERROR: ViewID changed during shared_ptr creation!" << std::endl;
 					return;
 				}
 
 				data.push_back(newView);
-				std::cout << "[ViewList<" << typeid(T).name() << ">] NEW COMPONENT ADDED! ViewListID: " << viewID
+				std::cout << "[ViewList<" << typeid(T).name() << ">] NEW COMPONENT ADDED! ViewListID: " << id
 					<< ", Type: " << typeid(T).name()
 					<< ", Total components of this type: " << data.size()
 					<< ", New capacity: " << data.capacity() << std::endl;
@@ -119,18 +119,18 @@ namespace GUI {
 			}
 		}
 
-		T &Get(const ViewListID viewID) {
-			if (viewID == 0) {
+		T &Get(const WorkspaceID id) {
+			if (id == 0) {
 				throw std::runtime_error("[ViewList<" + std::string(typeid(T).name()) + ">] Invalid ViewID (0)");
 			}
 
 			auto view = std::find_if(data.begin(), data.end(),
-				[viewID](const std::shared_ptr<T> &v) {
-				return v && v->GetID() == viewID;
+				[id](const std::shared_ptr<T> &v) {
+				return v && v->GetID() == id;
 			});
 
 			if (view == data.end()) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] View not found with ID: " << viewID << std::endl;
+				std::cerr << "[ViewList<" << typeid(T).name() << ">] View not found with ID: " << id << std::endl;
 				std::cerr << "[ViewList<" << typeid(T).name() << ">] Available views: ";
 				for (const auto& v : data) {
 					if (v) {
@@ -139,30 +139,31 @@ namespace GUI {
 				}
 				std::cerr << std::endl;
 
-				throw std::runtime_error("[ViewList<" + std::string(typeid(T).name()) + ">] View doesn't exist with ID: " + std::to_string(viewID));
+				throw std::runtime_error("[ViewList<" + std::string(typeid(T).name()) + ">] View doesn't exist with ID: " + std::to_string(id));
 			}
 
 			return *(*view);
 		}
 
-		void Erase(const ViewListID viewID) override final {
-			if (viewID == 0) {
+		void Erase(const WorkspaceID id) override final {
+			if (id == 0) {
 				std::cout << "[ViewList<" << typeid(T).name() << ">] Ignoring erase of invalid ViewID (0)" << std::endl;
 				return;
 			}
 
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Attempting to erase ViewID: " << viewID << std::endl;
+			std::cout << "[ViewList<" << typeid(T).name() << ">] Attempting to erase ViewID: " << id << std::endl;
 
 			auto view = std::find_if(data.begin(), data.end(),
-				[viewID](const std::shared_ptr<T> &v) {
-				return v && v->GetID() == viewID;
+				[id](const std::shared_ptr<T> &v) {
+				return v && v->GetID() == id;
 			});
 
 			if (view != data.end()) {
 				try {
 					std::cout << "[ViewList<" << typeid(T).name() << ">] Found view to erase, removing..." << std::endl;
 					data.erase(view);
-					std::cout << "[ViewList<" << typeid(T).name() << ">] View erased! ID: " << viewID
+					std::cout << "[ViewList<" << typeid(T).name() 
+						<< ">] View erased! ID: " << id
 						<< ", Type ID: " << ViewType<T>()
 						<< ", Remaining views: " << data.size() << std::endl;
 				}
@@ -172,13 +173,12 @@ namespace GUI {
 				}
 			}
 			else {
-				std::cout << "[ViewList<" << typeid(T).name() << ">] No view found with ID: " << viewID
+				std::cout << "[ViewList<" << typeid(T).name() << ">] No view found with ID: " << id
 					<< ", Type ID: " << ViewType<T>() << std::endl;
 			}
 		}
 
 		void UpdateViews(const float deltaT) override {
-			// CRITICAL FIX: Create a copy of the data to iterate over
 			// This prevents iterator invalidation if views modify the container
 			std::vector<std::shared_ptr<T>> viewsCopy;
 
@@ -246,21 +246,21 @@ namespace GUI {
 			data.clear();
 		}
 
-		std::vector<ViewListID> GetAllViewIDs() const override {
-			std::vector<ViewListID> viewIDs;
-			for (const auto& view : data) {
-				if (view) {
-					viewIDs.push_back(view->GetID());
+		std::vector<WorkspaceID> GetAllWorkspaceIDs() const override {
+			std::vector<WorkspaceID> ids;
+			for (const auto& ws : data) {
+				if (ws) {
+					ids.push_back(ws->GetID());
 				}
 			}
-			return viewIDs;
+			return ids;
 		}
 
-		bool Contains(const ViewListID viewID) const {
-			if (viewID == 0) return false;
+		bool Contains(const WorkspaceID id) const {
+			if (id == 0) return false;
 
-			for (const auto& view : data) {
-				if (view && view->GetID() == viewID) {
+			for (const auto& ws : data) {
+				if (ws && ws->GetID() == id) {
 					return true;
 				}
 			}

@@ -26,7 +26,7 @@ namespace GUI {
 
 	const size_t MAX_VIEW_COUNT = 100;
 
-	using ViewListID = size_t;
+	using WorkspaceID = size_t;
 	using ViewTypeID = size_t;
 	using ViewSignature = std::set<ViewTypeID>;
 

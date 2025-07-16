@@ -39,11 +39,11 @@ namespace ANI {
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
 
 		// Register views that need special constructors with custom factories
-		viewManager.RegisterViewWithFactory("ViewListManagerView", "Views",
+		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-			return std::make_unique<GUI::ViewListManagerView>(mgr, viewManager);
+			return std::make_unique<GUI::WorkspaceView>(mgr, viewManager);
 		},
-			[]() -> GUI::ViewMetadata { return GUI::ViewListManagerView::GetMetadata(); }
+			[]() -> GUI::ViewMetadata { return GUI::WorkspaceView::GetMetadata(); }
 		);
 
 		viewManager.RegisterViewWithFactory("PluginView", "Plugins",

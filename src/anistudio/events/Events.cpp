@@ -1,7 +1,7 @@
 #include "Events.hpp"
 #include "AllViews.h"
 #include "PluginManager.hpp"
-#include "GUI.h"  // Add this include for ViewListID and GUI namespace
+#include "GUI.h"
 #include <iostream>
 #include "../core/Core.hpp"
 
@@ -12,7 +12,6 @@ namespace ANI {
 	Events::~Events() {}
 
 	void Events::Init(GLFWwindow *window) {
-		// Set the close callback to the static function that invokes Engine::Quit()
 		glfwSetWindowCloseCallback(window, WindowCloseCallback);
 	}
 
@@ -28,11 +27,11 @@ namespace ANI {
 		ProcessEvents();
 	}
 
-	static GUI::ViewListID debugID = 0;      // Add GUI:: namespace prefix
-	static GUI::ViewListID settingsID = 0;  // Add GUI:: namespace prefix
-	static GUI::ViewListID viewsID = 0;     // Add GUI:: namespace prefix
-	static GUI::ViewListID pluginsID = 0;   // Add GUI:: namespace prefix
-	static GUI::ViewListID helpID = 0;      // Add GUI:: namespace prefix
+	static GUI::WorkspaceID debugID = 0;   
+	static GUI::WorkspaceID settingsID = 0;
+	static GUI::WorkspaceID viewsID = 0;   
+	static GUI::WorkspaceID pluginsID = 0; 
+	static GUI::WorkspaceID helpID = 0;    
 
 	// Handle events based on its EventType
 	void Events::ProcessEvents() {
@@ -44,108 +43,6 @@ namespace ANI {
 
 			case EventType::Quit: {
 				appCore.Quit();
-				break;
-			}
-
-			case EventType::OpenSettings: {
-				auto &vMgr = appCore.GetViewManager();
-				GUI::ViewListID id = vMgr.CreateView();
-				vMgr.AddView<GUI::SettingsView>(id, GUI::SettingsView(appCore.GetEntityManager()));
-				vMgr.GetView<GUI::SettingsView>(id).Init();
-				settingsID = id;
-				break;
-			}
-
-			case EventType::CloseSettings: {
-				auto &vMgr = appCore.GetViewManager();
-				if (vMgr.HasView<GUI::SettingsView>(settingsID)) {
-					vMgr.DestroyView(settingsID);
-				}
-				break;
-			}
-
-			case EventType::OpenDebug: {
-				auto &vMgr = appCore.GetViewManager();
-				GUI::ViewListID id = vMgr.CreateView();
-				vMgr.AddView<GUI::DebugView>(id, GUI::DebugView(appCore.GetEntityManager()));
-				vMgr.GetView<GUI::DebugView>(id).Init();
-				debugID = id;
-				break;
-			}
-
-			case EventType::CloseDebug: {
-				auto &vMgr = appCore.GetViewManager();
-				if (vMgr.HasView<GUI::DebugView>(debugID)) {
-					vMgr.DestroyView(debugID);
-				}
-				break;
-			}
-
-			case EventType::OpenConvert: {
-				auto &vMgr = appCore.GetViewManager();
-				GUI::ViewListID id = vMgr.CreateView();
-				vMgr.AddView<GUI::ConvertView>(id, GUI::ConvertView(appCore.GetEntityManager()));
-				vMgr.GetView<GUI::ConvertView>(id).Init();
-				viewsID = id;
-				break;
-			}
-
-			case EventType::CloseConvert: {
-				auto &vMgr = appCore.GetViewManager();
-				if (vMgr.HasView<GUI::ConvertView>(viewsID)) {
-					vMgr.DestroyView(viewsID);
-				}
-				break;
-			}
-
-			case EventType::OpenViews: {
-				auto &vMgr = appCore.GetViewManager();
-				GUI::ViewListID id = vMgr.CreateView();
-				vMgr.AddView<GUI::ViewListManagerView>(id, GUI::ViewListManagerView(appCore.GetEntityManager(), vMgr));
-				vMgr.GetView<GUI::ViewListManagerView>(id).Init();
-				viewsID = id;
-				break;
-			}
-
-			case EventType::CloseViews: {
-				auto &vMgr = appCore.GetViewManager();
-				if (vMgr.HasView<GUI::ViewListManagerView>(viewsID)) {
-					vMgr.DestroyView(viewsID);
-				}
-				break;
-			}
-
-			case EventType::OpenPlugins: {
-				auto &vMgr = appCore.GetViewManager();
-				auto id = vMgr.CreateView();
-				vMgr.AddView<GUI::PluginView>(id, GUI::PluginView(appCore.GetEntityManager(), appCore.GetPluginManager()));
-				vMgr.GetView<GUI::PluginView>(id).Init();
-				pluginsID = id;
-				break;
-			}
-
-			case EventType::ClosePlugins: {
-				auto &vMgr = appCore.GetViewManager();
-				if (vMgr.HasView<GUI::PluginView>(pluginsID)) {
-					vMgr.DestroyView(pluginsID);
-				}
-				break;
-			}
-
-			case EventType::OpenHelp: {
-				auto &vMgr = appCore.GetViewManager();
-				auto id = vMgr.CreateView();
-				vMgr.AddView<GUI::HelpView>(id, GUI::HelpView(appCore.GetEntityManager()));
-				vMgr.GetView<GUI::HelpView>(id).Init();
-				helpID = id;
-				break;
-			}
-
-			case EventType::CloseHelp: {
-				auto &vMgr = appCore.GetViewManager();
-				if (vMgr.HasView<GUI::HelpView>(helpID)) {
-					vMgr.DestroyView(helpID);
-				}
 				break;
 			}
 
