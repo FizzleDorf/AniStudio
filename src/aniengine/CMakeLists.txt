@@ -67,13 +67,6 @@ endif()
 file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/base/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/systems/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/SDCPPComponents/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ImageComponents/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/VideoComponents/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ScriptComponents/*.cpp"
 )
 
 # Add the main AniEngine implementation
@@ -101,15 +94,23 @@ set_target_properties(AniEngineCore PROPERTIES
 # Include directories
 target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
+	#ecs base
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/base>
+	# systems
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/systems>
+	# components
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/SDCPPComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ImageComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/VideoComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ScriptComponents>
+	# utils
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/defaults>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/media>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/scripts>
+	# interface
     $<INSTALL_INTERFACE:include/aniengine>
 )
 
