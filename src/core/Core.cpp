@@ -1,4 +1,3 @@
-// Core.cpp - Simplified with Window Management moved to StudioCore
 #include "Core.hpp"
 #include <iostream>
 #include <sstream>
@@ -46,8 +45,6 @@ namespace ANI {
 		// Setup window context for plugins and window management
 		studioCore.SetWindowHandle(window);
 		studioCore.SetImGuiContext(ImGui::GetCurrentContext());
-
-		// Load default plugins
 		studioCore.LoadDefaultPlugins();
 
 		std::cout << "[Core] Initialization complete!" << std::endl;

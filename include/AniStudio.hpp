@@ -30,6 +30,17 @@
 
 #define ANI_STUDIO_API
 
+/*
+The AniStudio Library is responsible for the AniEngine instance if you choose to use this 
+library. You can access any of the managers from the get functions here. Other than holding 
+the AniEngine Instance, the library contains all gui logic and utilities. generally it's a 
+bad idea to include imgui as a shared library but in cases where the lifetime needed is short 
+(game overlays for example) it can do just fine. If you want to use another gui solution 
+instead of imgui, you can still access the gui utilities via the AniStudio shared library. 
+Otherwise, I would suggest you use the AniEngine shared library instead. Commercial licence 
+owners can bypass this by using the static libs or use code dirtectly.
+*/
+
 namespace ANI {
 
 	class ANI_STUDIO_API StudioCore {
@@ -72,9 +83,12 @@ namespace ANI {
 	private:
 		bool initialized;
 		bool running;
+
+		// Pointers to the imgui and glfw instances
 		void* windowHandle;
 		void* imguiContext;
 
+		// AniEngine instance
 		EngineCore engineCore;
 		GUI::ViewManager viewManager;
 		ANI::ProjectManager m_projectManager;

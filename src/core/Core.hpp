@@ -25,13 +25,26 @@
 #include "FilePaths.hpp"
 #include <memory>
 
+/* 
+This is the application core that is run in the main loop. please use this as an example for integrating the AniStudio library
+into your own applications. If all you want is the AniEngine library for integrating into your own frontend solution, see the
+AniStudio hpp/cpp for more details. the header API is located in root/include for convenience.
+*/
+
 namespace ANI {
 
+	// min window size for first time startups
 	const int SCREEN_WIDTH = 1200;
 	const int SCREEN_HEIGHT = 720;
 
 	class Core {
 	public:
+
+		/* 
+		singleton instance for keeping one degree of separation from the main thread
+		the Core thread will be used as the mainline thread for running the libraries
+		this isn't required for implementing the library into your own projects
+		*/
 		static Core& Ref() {
 			static Core instance;
 			return instance;

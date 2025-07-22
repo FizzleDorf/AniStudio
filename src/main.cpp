@@ -22,6 +22,8 @@
 #include "anistudio/events/Events.hpp"
 #include "timer/Timer.hpp"
 
+// this is just the main application loop that gets executed please see Core hpp/cpp for details
+
 int main(int argc, char* argv[]) {
 
     // Initialize the engine

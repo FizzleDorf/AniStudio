@@ -20,6 +20,10 @@
 
 #pragma once
 
+/*
+Just a singleton deltatime calculation used for updating
+*/
+
 namespace ANI {
     class T_Timer {
 
