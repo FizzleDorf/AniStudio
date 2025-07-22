@@ -34,26 +34,24 @@
 #include "project/LoadProjectView.hpp"
 
 // AI Generation views
-#include "DiffusionView.hpp"
-#include "UpscaleView.hpp"
-#include "ConvertView.hpp"
+#include "tools/DiffusionView.hpp"
+#include "tools/UpscaleView.hpp"
+#include "tools/ConvertView.hpp"
 
 // Media views
-#include "ImageView.hpp"
-#include "VideoView.hpp"
+#include "viewers/ImageView.hpp"
+#include "viewers/VideoView.hpp"
+
+// text editor views
+#include "editors/ZepView.hpp"
 
 // Node Editor views
-#include "NodeGraphView.hpp"
-#include "NodeView.hpp"
+#include "editors/NodeGraphView.hpp"
+#include "editors/NodeView.hpp"
 
 // Animation views
-#include "SequencerView.hpp"
+#include "tools/SequencerView.hpp"
 
 // Utility views
-#include "ConvertView.hpp"
 #include "PluginView.hpp"
 
-// Optional views (if available)
-#ifdef ZEP_AVAILABLE
-#include "ZepView.hpp"
-#endif

@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ImGuiStateUtils.hpp"
+#include "states/ImGuiStateUtils.hpp"
 #include "GuiStyleHelpers.hpp"
-#include "OpenGLUtils.hpp"
-#include "OpenGLWrapper.hpp"
-#include "UISchema.hpp"
-#include "ZepUtils.hpp"
+#include "rendering/OpenGLUtils.hpp"
+#include "rendering/OpenGLWrapper.hpp"
+#include "ui_schema/UISchema.hpp"
+#include "widgets/ZepUtils.hpp"

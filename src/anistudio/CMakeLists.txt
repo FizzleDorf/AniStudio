@@ -161,8 +161,6 @@ endif()
 # Collect source files
 file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/gui/base/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/gui/project/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
 )
@@ -199,12 +197,23 @@ set_target_properties(AniStudioCore PROPERTIES
 
 # Include directories
 target_include_directories(AniStudioCore PUBLIC
+	# root
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+	# gui
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/base>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/editors>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/project>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/tools>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/viewers>
+	# gui_utils
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/rendering>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/states>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/ui_schema>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/widgets>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/events>
+	# interface
     $<INSTALL_INTERFACE:include/anistudio>
 )
 
