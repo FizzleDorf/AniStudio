@@ -26,7 +26,7 @@
 
 int main(int argc, char* argv[]) {
 
-    // Initialize the engine
+    // Initialize the Application Core
     ANI::Core::Ref().Init();
     ANI::Events::Ref().Init(ANI::Core::Ref().Window());
     ANI::Timer.Ref().Init();

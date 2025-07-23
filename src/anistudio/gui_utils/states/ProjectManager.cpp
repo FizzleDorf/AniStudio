@@ -73,16 +73,33 @@ namespace ANI {
 				return false;
 			}
 
+			// Check if project already exists at this path
+			std::string fullPath = projectPath;
+			if (std::filesystem::exists(fullPath)) {
+				m_lastError = "A project already exists at this location: " + fullPath;
+				return false;
+			}
+
+			// Check if project name conflicts with existing projects
+			if (IsProjectNameTaken(projectName, projectPath)) {
+				m_lastError = "A project with the name '" + projectName + "' already exists. Please choose a different name.";
+				return false;
+			}
+
 			// Close current project if open
 			if (m_isProjectOpen) {
 				CloseProject();
 			}
 
+			// RESET ENTITY MANAGER - Clear all entities and systems while preserving component types
+			std::cout << "[ProjectManager] Resetting EntityManager for new project..." << std::endl;
+			m_entityManager.Reset();
+
 			// Create project directory structure
-			std::filesystem::create_directories(projectPath);
-			std::filesystem::create_directories(projectPath + "/data");
-			std::filesystem::create_directories(projectPath + "/assets");
-			std::filesystem::create_directories(projectPath + "/output");
+			std::filesystem::create_directories(fullPath);
+			std::filesystem::create_directories(fullPath + "/data");
+			std::filesystem::create_directories(fullPath + "/assets");
+			std::filesystem::create_directories(fullPath + "/output");
 
 			// Initialize project settings
 			m_projectSettings = ProjectSettings();
@@ -97,7 +114,7 @@ namespace ANI {
 			m_projectSettings.createdDate = ss.str();
 			m_projectSettings.lastModified = ss.str();
 
-			m_currentProjectPath = std::filesystem::absolute(projectPath).string();
+			m_currentProjectPath = std::filesystem::absolute(fullPath).string();
 			m_isProjectOpen = true;
 
 			// Reset view state
@@ -150,6 +167,10 @@ namespace ANI {
 				CloseProject();
 			}
 
+			// RESET ENTITY MANAGER - Clear all entities and systems while preserving component types
+			std::cout << "[ProjectManager] Resetting EntityManager for project load..." << std::endl;
+			m_entityManager.Reset();
+
 			// Load project file
 			std::ifstream file(projectFile);
 			if (!file.is_open()) {
@@ -199,6 +220,70 @@ namespace ANI {
 		catch (const std::exception& e) {
 			m_lastError = "Exception loading project: " + std::string(e.what());
 			return false;
+		}
+	}
+
+	bool ProjectManager::IsProjectNameTaken(const std::string& projectName, const std::string& excludePath) const {
+		try {
+			// Check recent projects for name conflicts
+			auto recentProjects = GetRecentProjects();
+			for (const auto& projectPath : recentProjects) {
+				// Skip the current path if we're updating an existing project
+				if (projectPath == excludePath) continue;
+
+				// Check if project still exists
+				std::string projectFile = projectPath + "/project.ani";
+				if (std::filesystem::exists(projectFile)) {
+					// Load and check project name
+					std::ifstream file(projectFile);
+					if (file.is_open()) {
+						nlohmann::json projectData;
+						file >> projectData;
+						file.close();
+
+						if (projectData.contains("settings") && projectData["settings"].contains("projectName")) {
+							std::string existingName = projectData["settings"]["projectName"];
+							if (existingName == projectName) {
+								return true; // Name is taken
+							}
+						}
+					}
+				}
+			}
+
+			// Also check the default projects directory for additional conflicts
+			std::string defaultProjectsPath = Utils::FilePaths::defaultProjectPath;
+			if (std::filesystem::exists(defaultProjectsPath)) {
+				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectsPath)) {
+					if (entry.is_directory()) {
+						std::string potentialProjectPath = entry.path().string();
+						if (potentialProjectPath == excludePath) continue;
+
+						std::string projectFile = potentialProjectPath + "/project.ani";
+						if (std::filesystem::exists(projectFile)) {
+							std::ifstream file(projectFile);
+							if (file.is_open()) {
+								nlohmann::json projectData;
+								file >> projectData;
+								file.close();
+
+								if (projectData.contains("settings") && projectData["settings"].contains("projectName")) {
+									std::string existingName = projectData["settings"]["projectName"];
+									if (existingName == projectName) {
+										return true; // Name is taken
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			return false; // Name is available
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[ProjectManager] Error checking project name: " << e.what() << std::endl;
+			return false; // Assume available on error
 		}
 	}
 

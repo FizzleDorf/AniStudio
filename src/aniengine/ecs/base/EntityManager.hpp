@@ -20,6 +20,8 @@
 
 #pragma once
 #include <queue>
+#include <functional>
+#include <unordered_map>
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"
@@ -29,55 +31,16 @@ namespace ECS {
 	class EntityManager {
 
 	public:
-		EntityManager() : entityCount(0) {
-			Reset();
-		}
+		EntityManager();
+		~EntityManager();
 
-		~EntityManager() {}
+		void Update(const float deltaT);
+		void Reset();
+		const EntityID AddNewEntity();
+		void DestroyEntity(const EntityID entity);
+		bool IsEntityValid(EntityID entity) const;
 
-		void Update(const float deltaT) {
-			for (auto& system : registeredSystems) {
-				system.second->Update(deltaT);
-			}
-		}
-
-		const EntityID AddNewEntity() {
-			const EntityID entity = availableEntities.front();
-			AddEntitySignature(entity);
-			availableEntities.pop();
-			entityCount++;
-			return entity;
-		}
-
-		void DestroyEntity(const EntityID entity) {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-
-			// If entity doesn't exist in signatures, just return
-			if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
-				return;
-			}
-
-			entitiesSignatures.erase(entity);
-
-			for (auto& array : componentsArrays) {
-				array.second->Erase(entity);
-			}
-
-			for (auto& system : registeredSystems) {
-				system.second->RemoveEntity(entity);
-			}
-
-			entityCount--;
-			availableEntities.push(entity);
-			std::cout << "Removed Entity: " << entity << "\n";
-		}
-
-		bool IsEntityValid(EntityID entity) const {
-			return entity < MAX_ENTITY_COUNT &&
-				entitiesSignatures.find(entity) != entitiesSignatures.end();
-		}
-
-		// Add component by type - use existing ID if registered
+		// Template methods that need to be in header
 		template<typename T, typename... Args>
 		T& AddComponent(const EntityID entity, Args &&...args) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
@@ -115,20 +78,6 @@ namespace ECS {
 			}
 		}
 
-		void RemoveComponentById(EntityID entityID, ComponentTypeID componentId) {
-			auto it = entitiesSignatures.find(entityID);
-			if (it != entitiesSignatures.end()) {
-				it->second->erase(componentId);
-
-				auto arrayIt = componentsArrays.find(componentId);
-				if (arrayIt != componentsArrays.end()) {
-					arrayIt->second->Erase(entityID);
-				}
-
-				UpdateEntityTargetSystem(entityID);
-			}
-		}
-
 		template<typename T>
 		T& GetComponent(const EntityID entity) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
@@ -146,17 +95,6 @@ namespace ECS {
 			const EntitySignature& signature = *(it->second);
 			const ComponentTypeID compType = CompType<T>();
 			return (signature.count(compType) > 0);
-		}
-
-		bool HasComponentById(const EntityID entity, ComponentTypeID componentId) {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			// Check if the entity exists in the map
-			auto it = entitiesSignatures.find(entity);
-			if (it == entitiesSignatures.end()) {
-				return false; // Entity signature not found
-			}
-			const EntitySignature& signature = *(it->second);
-			return (signature.count(componentId) > 0);
 		}
 
 		template <typename T>
@@ -195,54 +133,6 @@ namespace ECS {
 			return nullptr;
 		}
 
-		void Reset() {
-			// Reset the component type registry first
-			ComponentTypeRegistry::Reset();
-
-			// Clear all entity signatures
-			entitiesSignatures.clear();
-
-			// Clear all registered systems
-			registeredSystems.clear();
-
-			// Clear all component arrays
-			componentsArrays.clear();
-
-			// Clear component mappings
-			componentCreators.clear();
-			componentGetters.clear();
-
-			// Reset entity queue
-			while (!availableEntities.empty()) {
-				availableEntities.pop();
-			}
-			for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; ++entity) {
-				availableEntities.push(entity);
-			}
-
-			// Reset entity count
-			entityCount = 0;
-		}
-
-		std::vector<EntityID> GetAllEntities() const {
-			std::vector<EntityID> entities;
-			for (const auto& pair : entitiesSignatures) {
-				entities.push_back(pair.first);
-			}
-			return entities;
-		}
-
-		std::vector<ComponentTypeID> GetEntityComponents(EntityID entity) const {
-			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			auto it = entitiesSignatures.find(entity);
-			if (it != entitiesSignatures.end()) {
-				const EntitySignature& signature = *(it->second);
-				return { signature.begin(), signature.end() };
-			}
-			return {};
-		}
-
-		// Register a component by name - THE PRIMARY WAY TO REGISTER COMPONENTS
 		template <typename T>
 		void RegisterComponentName(const std::string& name) {
 			// Register with the component registry
@@ -263,223 +153,6 @@ namespace ECS {
 			std::cout << "Registered component: " << name << " with ID: " << typeId << std::endl;
 		}
 
-		// Get component type ID by name
-		ComponentTypeID GetComponentTypeIdByName(const std::string& name) const {
-			return ComponentTypeRegistry::GetIDByName(name);
-		}
-
-		// Get component name by type ID
-		std::string GetComponentNameById(ComponentTypeID typeId) const {
-			return ComponentTypeRegistry::GetNameByID(typeId);
-		}
-
-		// Get all registered component names
-		std::vector<std::string> GetAllRegisteredComponentNames() const {
-			return ComponentTypeRegistry::GetAllNames();
-		}
-
-		// Check if a component name is registered
-		bool IsComponentNameRegistered(const std::string& name) const {
-			return ComponentTypeRegistry::IsNameRegistered(name);
-		}
-
-		// FIXED: Non-destructive serialization
-		nlohmann::json SerializeEntity(const EntityID entity) const {
-			nlohmann::json entityJson;
-
-			entityJson["ID"] = entity;
-			entityJson["components"] = nlohmann::json::array();
-
-			auto componentTypes = GetEntityComponents(entity);
-			for (const auto& componentId : componentTypes) {
-				// Use const version to avoid modifying original
-				if (auto* baseComponent = GetComponentByIdConst(entity, componentId)) {
-					// Create a json object with the component name as key
-					nlohmann::json componentJson;
-					std::string componentName = GetComponentNameById(componentId);
-					if (componentName != "Unknown") {
-						// Extract the inner content from the component's serialization
-						nlohmann::json serialized = baseComponent->Serialize();
-
-						// Check if the serialized data has the component name as a key
-						if (serialized.contains(componentName)) {
-							// Use the inner content to avoid double nesting
-							componentJson[componentName] = serialized[componentName];
-						}
-						else {
-							// Use as-is if not nested
-							componentJson[componentName] = serialized;
-						}
-
-						entityJson["components"].push_back(componentJson);
-					}
-				}
-			}
-
-			return entityJson;
-		}
-
-		// FIXED: Enhanced clone method with proper deep copying
-		EntityID CloneEntity(const EntityID sourceEntity) {
-			if (!IsEntityValid(sourceEntity)) {
-				std::cerr << "Error: Cannot clone invalid entity " << sourceEntity << std::endl;
-				return 0;
-			}
-
-			// Create new entity
-			EntityID newEntity = AddNewEntity();
-
-			// Get all components from source entity
-			auto componentTypes = GetEntityComponents(sourceEntity);
-
-			try {
-				for (const auto& componentId : componentTypes) {
-					// Create the component on new entity first
-					auto creator = componentCreators.find(componentId);
-					if (creator != componentCreators.end()) {
-						creator->second(newEntity);
-
-						// Now safely copy data from source to destination
-						if (auto* sourceComponent = GetComponentByIdConst(sourceEntity, componentId)) {
-							if (auto* destComponent = GetComponentById(newEntity, componentId)) {
-								// Use JSON serialization for safe copying
-								nlohmann::json componentData = sourceComponent->Serialize();
-								destComponent->Deserialize(componentData);
-
-								// Handle special cases for components with pointers/resources
-								CopyComponentResources(sourceEntity, newEntity, componentId);
-							}
-						}
-					}
-				}
-
-				std::cout << "Successfully cloned entity " << sourceEntity << " to " << newEntity << std::endl;
-				return newEntity;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error cloning entity " << sourceEntity << ": " << e.what() << std::endl;
-				// Clean up failed entity
-				DestroyEntity(newEntity);
-				return 0;
-			}
-		}
-
-		// IMPROVED: Safer deserialization that doesn't affect existing entities
-		EntityID DeserializeEntity(const nlohmann::json& json) {
-			if (!json.contains("components") || !json["components"].is_array()) {
-				std::cerr << "Error: Invalid entity data format in JSON" << std::endl;
-				return 0;
-			}
-
-			EntityID entity = AddNewEntity();
-
-			try {
-				for (const auto& componentJson : json["components"]) {
-					for (auto it = componentJson.begin(); it != componentJson.end(); ++it) {
-						std::string componentName = it.key();
-						ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
-						if (typeId != MAX_COMPONENT_COUNT) {
-							auto creator = componentCreators.find(typeId);
-							if (creator != componentCreators.end()) {
-								// Create component first
-								creator->second(entity);
-
-								// Then deserialize data safely
-								if (auto* component = GetComponentById(entity, typeId)) {
-									component->Deserialize(componentJson[componentName]);
-								}
-							}
-						}
-					}
-				}
-
-				return entity;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error deserializing entity: " << e.what() << std::endl;
-				DestroyEntity(entity);
-				return 0;
-			}
-		}
-
-		// IMPROVED: Safer in-place deserialization
-		void DeserializeEntity(const nlohmann::json& json, const EntityID entity) {
-			if (!IsEntityValid(entity)) {
-				std::cerr << "Error: Cannot deserialize to invalid entity " << entity << std::endl;
-				return;
-			}
-
-			if (!json.contains("components") || !json["components"].is_array()) {
-				std::cerr << "Error: Invalid entity data format in JSON" << std::endl;
-				return;
-			}
-
-			try {
-				for (const auto& componentJson : json["components"]) {
-					for (auto it = componentJson.begin(); it != componentJson.end(); ++it) {
-						std::string componentName = it.key();
-						ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
-						if (typeId != MAX_COMPONENT_COUNT) {
-							// Only create component if it doesn't exist
-							if (!HasComponentById(entity, typeId)) {
-								auto creator = componentCreators.find(typeId);
-								if (creator != componentCreators.end()) {
-									creator->second(entity);
-								}
-							}
-
-							// Deserialize data to existing or new component
-							if (auto* component = GetComponentById(entity, typeId)) {
-								component->Deserialize(componentJson[componentName]);
-							}
-						}
-					}
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error deserializing to entity " << entity << ": " << e.what() << std::endl;
-			}
-		}
-
-		// Plugin support for component registration
-		using ComponentCreator = std::function<void(EntityID)>;
-		using ComponentGetter = std::function<BaseComponent* (EntityID)>;
-
-		void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter) {
-			componentCreators[typeId] = creator;
-			componentGetters[typeId] = getter;
-		}
-
-		// Getters for private variables
-		EntityID GetEntityCount() const { return entityCount; }
-		std::queue<EntityID> GetAvailableEntities() const { return availableEntities; }
-		const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const { return entitiesSignatures; }
-		const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const { return registeredSystems; }
-		const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const { return componentsArrays; }
-
-		// Debug function to print registered components
-		void DebugPrintRegisteredComponents() const {
-			std::cout << "Registered Component Types:" << std::endl;
-			auto names = GetAllRegisteredComponentNames();
-			for (const auto& name : names) {
-				ComponentTypeID id = GetComponentTypeIdByName(name);
-				std::cout << "  - " << name << " (ID: " << id << ")" << std::endl;
-			}
-
-			// Additional registry debug info
-			ComponentTypeRegistry::DebugPrint();
-		}
-
-		// Debug function to print entity components
-		void DebugPrintEntityComponents(EntityID entity) const {
-			std::cout << "Entity " << entity << " raw components (" << GetEntityComponents(entity).size() << "):" << std::endl;
-			for (const auto& compId : GetEntityComponents(entity)) {
-				std::string name = GetComponentNameById(compId);
-				std::cout << "  - ID: " << compId << " (" << name << ")" << std::endl;
-			}
-		}
-
-	private:
 		template<typename T>
 		void AddCompList() {
 			const ComponentTypeID compType = CompType<T>();
@@ -494,91 +167,52 @@ namespace ECS {
 			return std::static_pointer_cast<CompList<T>>(componentsArrays.at(compType));
 		}
 
-		void AddEntitySignature(const EntityID entity) {
-			auto it = entitiesSignatures.find(entity);
-			if (it != entitiesSignatures.end()) {
-				// Signature already exists, clear it
-				it->second->clear();
-			}
-			else {
-				// Create new signature
-				entitiesSignatures[entity] = std::make_shared<EntitySignature>();
-			}
-		}
+		// Non-template public methods
+		void RemoveComponentById(EntityID entityID, ComponentTypeID componentId);
+		bool HasComponentById(const EntityID entity, ComponentTypeID componentId);
+		std::vector<EntityID> GetAllEntities() const;
+		std::vector<ComponentTypeID> GetEntityComponents(EntityID entity) const;
 
-		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity) {
-			auto it = entitiesSignatures.find(entity);
-			if (it == entitiesSignatures.end()) {
-				// If no signature exists, create one
-				AddEntitySignature(entity);
-			}
-			return entitiesSignatures.at(entity);
-		}
+		// Component registration by name
+		ComponentTypeID GetComponentTypeIdByName(const std::string& name) const;
+		std::string GetComponentNameById(ComponentTypeID typeId) const;
+		std::vector<std::string> GetAllRegisteredComponentNames() const;
+		bool IsComponentNameRegistered(const std::string& name) const;
 
-		void UpdateEntityTargetSystem(const EntityID entity) {
-			for (auto& system : registeredSystems) {
-				AddEntityToSystem(entity, system.second.get());
-			}
-		}
+		// Serialization
+		nlohmann::json SerializeEntity(const EntityID entity) const;
+		EntityID CloneEntity(const EntityID sourceEntity);
+		EntityID DeserializeEntity(const nlohmann::json& json);
+		void DeserializeEntity(const nlohmann::json& json, const EntityID entity);
 
-		void AddEntityToSystem(const EntityID entity, BaseSystem* system) {
-			if (IsEntityInSystem(entity, system->signature)) {
-				system->entities.insert(entity);
-			}
-			else {
-				system->entities.erase(entity);
-			}
-		}
+		// Plugin support for component registration
+		using ComponentCreator = std::function<void(EntityID)>;
+		using ComponentGetter = std::function<BaseComponent* (EntityID)>;
+		void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter);
 
-		bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature) {
-			auto entitySigIt = entitiesSignatures.find(entity);
-			if (entitySigIt == entitiesSignatures.end()) {
-				return false;
-			}
+		// Getters for private variables
+		EntityID GetEntityCount() const;
+		std::queue<EntityID> GetAvailableEntities() const;
+		const std::map<EntityID, std::shared_ptr<EntitySignature>>& GetEntitiesSignatures() const;
+		const std::map<SystemTypeID, std::shared_ptr<BaseSystem>>& GetRegisteredSystems() const;
+		const std::map<ComponentTypeID, std::shared_ptr<ICompList>>& GetComponentsArrays() const;
 
-			for (const auto compType : system_signature) {
-				if (entitySigIt->second->count(compType) == 0) {
-					return false;
-				}
-			}
-			return true;
-		}
+		// Debug functions
+		void DebugPrintRegisteredComponents() const;
+		void DebugPrintEntityComponents(EntityID entity) const;
 
-		// FIXED: Const version that doesn't modify original
-		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const {
-			auto getter = componentGetters.find(typeId);
-			if (getter != componentGetters.end()) {
-				return const_cast<const BaseComponent*>(getter->second(entity));
-			}
-			return nullptr;
-		}
+	private:
+		// Private helper methods
+		void AddEntitySignature(const EntityID entity);
+		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
+		void UpdateEntityTargetSystem(const EntityID entity);
+		void AddEntityToSystem(const EntityID entity, BaseSystem* system);
+		bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature);
+		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
+		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
+		void CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId);
 
-		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId) {
-			auto getter = componentGetters.find(typeId);
-			if (getter != componentGetters.end()) {
-				return getter->second(entity);
-			}
-			return nullptr;
-		}
-
-		void CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId) {
-			std::string componentName = GetComponentNameById(componentId);
-
-			// Handle InputImageComponent and ImageComponent special cases
-			if (componentName == "InputImage" || componentName == "Image") {
-				// For image components, we need to handle the texture and image data
-				auto sourceComp = GetComponentById(sourceEntity, componentId);
-				auto destComp = GetComponentById(destEntity, componentId);
-
-				if (sourceComp && destComp) {
-					// Cast to appropriate types and handle resource copying
-					// This is where you'd implement specific logic for each component type
-					// For now, the JSON serialization should handle most cases
-				}
-			}
-			// Add more special cases as needed for other component types
-		}
-
+		// Private member variables
 		EntityID entityCount;
 		std::queue<EntityID> availableEntities;
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;

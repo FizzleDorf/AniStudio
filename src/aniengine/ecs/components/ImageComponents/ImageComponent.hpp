@@ -30,9 +30,10 @@
 namespace ECS {
 	struct ImageComponent : public BaseComponent {
 		std::string fileName = "AniStudio";                  // Default file name
-		std::string filePath = !Utils::FilePaths::outputFolderPath.empty()
-			? Utils::FilePaths::outputFolderPath
-			: Utils::FilePaths::defaultProjectPath;// Directory containing the Image
+		std::string filePath = 
+			!Utils::FilePaths::outputFolderPath.empty()
+			? Utils::FilePaths::outputFolderPath			 // Output folder if one is found
+			: Utils::FilePaths::defaultProjectPath;			 // Directory containing the Image
 		unsigned char *imageData = nullptr;                  // Pointer to image data - DO NOT FREE in destructor for base class
 		int width = 0;                                       // Image width
 		int height = 0;                                      // Image height
@@ -227,6 +228,8 @@ namespace ECS {
 			compName = "OutputImage";
 		}
 	};
+
+	// TODO: these are just placeholders until the node execution is implemented
 
 	struct ControlNetImageComponent : public ImageComponent {
 		ControlNetImageComponent() {

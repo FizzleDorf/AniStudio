@@ -28,7 +28,12 @@
 #include <string>
 
 /*
-The backend data and systems 
+The ECS backend for AniStudio. The engine contains all the classes and logic for performing 
+asset IO, machine learning inference and stored data structures. Components are the structured 
+data that systems process asyncronously. Entities are vectors of components for ID and system 
+processes. Entities and components can be accessed, added or removed via the EnitiyManager. 
+The EnityManager should only be accessed on the thread it was created on (just like imgui 
+and OpenGL). 
 */
 
 namespace ANI {

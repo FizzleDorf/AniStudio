@@ -57,13 +57,14 @@ namespace GUI {
 		std::vector<ProjectTemplate> m_templates;
 		int m_selectedTemplate = -1;
 
-		// Project input buffers
-		char m_projectNameBuffer[256] = "Untitled Project";
-		char m_projectPathBuffer[512] = "../projects/";
+		// Project input buffers - NOTE: Now initialized properly in constructor
+		char m_projectNameBuffer[256];
+		char m_projectPathBuffer[512];
 
 		void LoadTemplates();
 		void ShowTemplateSelector();
 		void CreateProject();
+		void InitializeDefaultPaths();
 
 		// Helper functions to convert between std::string and char buffers
 		std::string GetProjectName() const { return std::string(m_projectNameBuffer); }

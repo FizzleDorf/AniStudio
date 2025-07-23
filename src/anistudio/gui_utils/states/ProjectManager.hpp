@@ -54,6 +54,9 @@ namespace ANI {
 		bool SaveProject();
 		void CloseProject();
 
+		// Project validation
+		bool IsProjectNameTaken(const std::string& projectName, const std::string& excludePath = "") const;
+
 		// Project state
 		bool IsProjectOpen() const { return m_isProjectOpen; }
 		const std::string& GetCurrentProjectPath() const { return m_currentProjectPath; }
