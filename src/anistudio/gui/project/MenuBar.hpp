@@ -13,10 +13,10 @@
  */
 
 #pragma once
-#include "BaseView.hpp"
-#include "ViewTypes.hpp"
 #include <unordered_map>
 #include <memory>
+#include <string>
+#include <vector>
 
 namespace ANI { class ProjectManager; }
 
@@ -26,59 +26,31 @@ namespace GUI {
 	// Structure for building hierarchical menus
 	struct MenuNode {
 		std::unordered_map<std::string, std::unique_ptr<MenuNode>> children;
-		std::vector<std::pair<std::string, ViewMetadata>> views;
+		std::vector<std::pair<std::string, std::string>> views; // viewType, displayName pairs
 	};
 
-	class MenuBar : public BaseView {
+	// Standalone MenuBar - not derived from BaseView
+	class MenuBar {
 	public:
-		MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ECS::EntityManager& entityMgr);
+		MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr);
 
-		static constexpr const char* GetMetadataJSON() {
-			return R"({
-				"displayName": "Menu Bar",
-				"category": "Hidden",
-				"description": "Main application menu bar"
-			})";
-		}
-
-		void Init() override;
-		void Update(const float deltaT) override;
-		void Render() override;
-
-		// Set the workspace that this menubar manages
-		void SetManagedWorkspace(WorkspaceID workspaceId) { m_managedWorkspace = workspaceId; }
-		WorkspaceID GetManagedWorkspace() const { return m_managedWorkspace; }
+		void Update(float deltaTime);
+		void Render();
 
 	private:
 		ANI::ProjectManager& m_projectManager;
-		ECS::EntityManager& m_entityManager;
 		ViewManager& m_viewManager;
-
-		// The workspace this menubar manages
-		WorkspaceID m_managedWorkspace = 0;
-
-		// Track actual view instances created by this menubar
-		std::unordered_map<std::string, WorkspaceID> m_activeViewInstances;
 
 		// Menu sections
 		void ShowFileMenu();
 		void ShowEditMenu();
-		void ShowCategoryMenus();
+		void ShowViewMenus();
+		void ShowWorkspaceMenu();
 		void ShowHelpMenu();
 
 		// Hierarchical menu building
 		std::vector<std::string> SplitCategoryPath(const std::string& category);
 		void RenderMenuNode(const MenuNode& node);
-
-		// View instance management (creates/destroys actual view instances)
-		void SyncViewState();
-		bool IsViewInstanceInWorkspace(const std::string& viewTypeName) const;
-		void ToggleViewInstanceInWorkspace(const std::string& viewType);
-
-		// Helper methods for managing actual view instances
-		void CreateViewInstance(const std::string& viewTypeName);
-		void RemoveViewInstance(const std::string& viewTypeName);
-		bool CheckViewExistsByName(const std::string& viewTypeName) const;
 	};
 
 } // namespace GUI

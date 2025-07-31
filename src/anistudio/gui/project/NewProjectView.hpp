@@ -13,7 +13,6 @@
  */
 
 #pragma once
-#include "BaseView.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <string>
@@ -30,26 +29,14 @@ namespace GUI {
 		nlohmann::json settings;
 	};
 
-	class NewProjectView : public BaseView {
+	// Standalone new project modal - not derived from BaseView
+	class NewProjectView {
 	public:
-		NewProjectView(ECS::EntityManager& entityMgr, ANI::ProjectManager& projectMgr);
+		NewProjectView(ANI::ProjectManager& projectMgr);
 
-		void Init() override;
-		void Update(const float deltaT) override;
-		void Render() override;
-
-		// Metadata for view registration
-		static constexpr const char* GetMetadataJSON() {
-			return R"({
-				"displayName": "New Project",
-				"category": "Hidden",
-				"description": "Create new project dialog"
-			})";
-		}
-
-		static ViewMetadata GetMetadata() {
-			return GetMetadataFor<NewProjectView>();
-		}
+		void Init();
+		void Update(const float deltaT);
+		void Render();
 
 	private:
 		ANI::ProjectManager& m_projectManager;
@@ -57,14 +44,13 @@ namespace GUI {
 		std::vector<ProjectTemplate> m_templates;
 		int m_selectedTemplate = -1;
 
-		// Project input buffers - NOTE: Now initialized properly in constructor
+		// Project input buffers
 		char m_projectNameBuffer[256];
 		char m_projectPathBuffer[512];
 
 		void LoadTemplates();
 		void ShowTemplateSelector();
 		void CreateProject();
-		void InitializeDefaultPaths();
 
 		// Helper functions to convert between std::string and char buffers
 		std::string GetProjectName() const { return std::string(m_projectNameBuffer); }

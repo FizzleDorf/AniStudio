@@ -1,5 +1,6 @@
 /*
- * PluginManager.hpp - Simple plugin manager that directly registers everything
+ * StudioPluginManager.hpp - Studio Plugin Manager (Unified API)
+ * Lives in AniStudioCore, knows about both ECS and GUI
  */
 
 #pragma once
@@ -38,7 +39,7 @@ namespace GUI {
 
 namespace Plugin {
 
-	class PluginManager {
+	class StudioPluginManager {
 	public:
 		struct PluginInfo {
 			std::string name;
@@ -79,8 +80,8 @@ namespace Plugin {
 		static std::atomic<int> tempFileCounter;
 
 	public:
-		PluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager* viewMgr = nullptr);
-		~PluginManager();
+		StudioPluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr);
+		~StudioPluginManager();
 
 		// Core functions
 		bool LoadPlugin(const std::string& pluginPath);

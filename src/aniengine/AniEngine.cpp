@@ -1,6 +1,7 @@
 #define ANI_ENGINE_EXPORTS
 
 #include "AniEngine.hpp"
+#include "EnginePluginManager.hpp"
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
@@ -12,8 +13,11 @@ using namespace ECS;
 namespace ANI {
 
 	EngineCore::EngineCore()
-		: initialized(false), running(false), pluginManager(entityManager) {
+		: initialized(false), running(false) {
 		std::cout << "[EngineCore] Constructor called" << std::endl;
+
+		// Create engine-only plugin manager (no GUI support)
+		enginePluginManager = std::make_unique<Plugin::EnginePluginManager>(entityManager);
 	}
 
 	EngineCore::~EngineCore() {
@@ -71,7 +75,7 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			// FIXED: Initialize file paths properly (sets up defaults AND loads saved paths)
+			// Initialize file paths properly (sets up defaults AND loads saved paths)
 			std::cout << "[EngineCore] Initializing file paths..." << std::endl;
 			Utils::FilePaths::Init();
 
@@ -83,14 +87,15 @@ namespace ANI {
 			RegisterCoreComponents();
 			RegisterCoreSystems();
 
-			// Initialize the plugin manager
-			std::cout << "[EngineCore] Initializing plugin manager..." << std::endl;
-			pluginManager.Init();
+			// The engine plugin manager is already initialized in constructor
+			std::cout << "[EngineCore] Engine plugin manager ready" << std::endl;
+
+			// NO auto-loading of plugins - they are loaded manually by user choice
 
 			initialized = true;
 			running = true;
 
-			std::cout << "[EngineCore] Initialized successfully with plugin system" << std::endl;
+			std::cout << "[EngineCore] Initialized successfully with engine plugin system" << std::endl;
 			std::cout << "[EngineCore] EntityManager address: " << &entityManager << std::endl;
 			return true;
 		}
@@ -106,6 +111,12 @@ namespace ANI {
 		std::cout << "[EngineCore] Shutting down..." << std::endl;
 
 		running = false;
+
+		// Shutdown plugins first
+		if (enginePluginManager) {
+			enginePluginManager->UnloadAllPlugins();
+		}
+
 		entityManager.Reset();
 		initialized = false;
 
@@ -116,68 +127,33 @@ namespace ANI {
 		if (!initialized) return;
 
 		entityManager.Update(deltaTime);
-		pluginManager.Update(deltaTime);
+
+		// Update engine plugin systems
+		if (enginePluginManager) {
+			enginePluginManager->Update(deltaTime);
+		}
 	}
 
 	bool EngineCore::LoadPlugin(const std::string& path) {
-		return pluginManager.LoadPlugin(path);
+		if (!enginePluginManager) {
+			std::cerr << "[EngineCore] Engine plugin manager not initialized!" << std::endl;
+			return false;
+		}
+		return enginePluginManager->LoadPlugin(path);
 	}
 
-	void EngineCore::LoadDefaultPlugins() {
-		std::string pluginsDir = Utils::FilePaths::pluginPath;
-
-		// IMPROVED: Better error handling and logging
-		if (pluginsDir.empty()) {
-			std::cerr << "[EngineCore] ERROR: Plugin path is empty! FilePaths may not be initialized." << std::endl;
-			return;
+	bool EngineCore::UnloadPlugin(const std::string& pluginName) {
+		if (!enginePluginManager) {
+			std::cerr << "[EngineCore] Engine plugin manager not initialized!" << std::endl;
+			return false;
 		}
+		return enginePluginManager->UnloadPlugin(pluginName);
+	}
 
-		std::cout << "[EngineCore] Plugin directory path: " << pluginsDir << std::endl;
-
-		if (!std::filesystem::exists(pluginsDir)) {
-			std::cout << "[EngineCore] Creating plugins directory: " << pluginsDir << std::endl;
-			try {
-				std::error_code ec;
-				bool created = std::filesystem::create_directories(pluginsDir, ec);
-				if (ec) {
-					std::cerr << "[EngineCore] Failed to create plugins directory: " << ec.message() << std::endl;
-					return;
-				}
-				if (created) {
-					std::cout << "[EngineCore] Successfully created plugins directory" << std::endl;
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[EngineCore] Exception creating plugins directory: " << e.what() << std::endl;
-				return;
-			}
-			return; // No plugins to load from empty directory
+	std::vector<std::string> EngineCore::GetLoadedPlugins() const {
+		if (!enginePluginManager) {
+			return {};
 		}
-
-		std::cout << "[EngineCore] Loading plugins from: " << pluginsDir << std::endl;
-
-		try {
-			for (const auto& entry : std::filesystem::directory_iterator(pluginsDir)) {
-				if (entry.is_regular_file()) {
-					std::string extension = entry.path().extension().string();
-
-#ifdef _WIN32
-					if (extension == ".dll") {
-#else
-					if (extension == ".so") {
-#endif
-						std::string pluginPath = entry.path().string();
-						std::cout << "[EngineCore] Loading plugin: " << pluginPath << std::endl;
-						if (!pluginManager.LoadPlugin(pluginPath)) {
-							std::cerr << "[EngineCore] Failed to load plugin: " << pluginPath << std::endl;
-						}
-					}
-					}
-				}
-			}
-		catch (const std::exception& e) {
-			std::cerr << "[EngineCore] Exception while loading plugins: " << e.what() << std::endl;
-		}
-		}
-
-	} // namespace ANI
+		return enginePluginManager->GetLoadedPluginNames();
+	}
+}

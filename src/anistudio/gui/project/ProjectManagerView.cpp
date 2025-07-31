@@ -1,14 +1,12 @@
 #include "ProjectManagerView.hpp"
 #include "ProjectManager.hpp"
-#include "../Events/Events.hpp"
 #include <imgui.h>
 #include <filesystem>
 
 namespace GUI {
 
-	ProjectManagerView::ProjectManagerView(ECS::EntityManager& entityMgr, ANI::ProjectManager& projectMgr)
-		: BaseView(entityMgr), m_projectManager(projectMgr) {
-		viewName = "Project Manager";
+	ProjectManagerView::ProjectManagerView(ANI::ProjectManager& projectMgr)
+		: m_projectManager(projectMgr) {
 	}
 
 	void ProjectManagerView::Init() {
@@ -16,17 +14,25 @@ namespace GUI {
 	}
 
 	void ProjectManagerView::Update(const float deltaT) {
-		// This view will be closed automatically by ProjectManager when project opens
+		// Close this view if a project is now open
+		if (m_projectManager.IsProjectOpen()) {
+			m_projectManager.GetViewState().SetViewOpen("ProjectManagerView", false);
+		}
 	}
 
 	void ProjectManagerView::Render() {
+		// Don't render if project is open
+		if (m_projectManager.IsProjectOpen()) {
+			return;
+		}
+
 		// Center the startup window
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_Appearing);
 
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar;
 
 		if (ImGui::Begin("Welcome to AniStudio##StartupWindow", nullptr, flags)) {
 
@@ -53,6 +59,7 @@ namespace GUI {
 							if (ImGui::IsMouseDoubleClicked(0)) {
 								if (m_projectManager.LoadProject(projectPath)) {
 									std::cout << "[ProjectManagerView] Loaded project: " << projectPath << std::endl;
+									// View will close automatically in Update()
 								}
 								else {
 									std::cerr << "[ProjectManagerView] Failed to load project: " << m_projectManager.GetLastError() << std::endl;
@@ -89,9 +96,8 @@ namespace GUI {
 
 			ImGui::SameLine(0, spacing);
 			if (ImGui::Button("Exit", ImVec2(buttonWidth, buttonHeight))) {
-				ANI::Event event;
-				event.type = ANI::EventType::Quit;
-				ANI::Events::Ref().QueueEvent(event);
+				// Set running to false or send quit event
+				exit(0); // For now, simple exit
 			}
 
 		}

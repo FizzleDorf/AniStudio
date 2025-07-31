@@ -13,32 +13,20 @@
  */
 
 #pragma once
-#include "BaseView.hpp"
+#include <string>
 
 namespace ANI { class ProjectManager; }
 
 namespace GUI {
 
-	class ProjectManagerView : public BaseView {
+	// Standalone project manager modal - not derived from BaseView
+	class ProjectManagerView {
 	public:
-		ProjectManagerView(ECS::EntityManager& entityMgr, ANI::ProjectManager& projectMgr);
+		ProjectManagerView(ANI::ProjectManager& projectMgr);
 
-		void Init() override;
-		void Update(const float deltaT) override;
-		void Render() override;
-
-		// Metadata for view registration
-		static constexpr const char* GetMetadataJSON() {
-			return R"({
-				"displayName": "Project Manager",
-				"category": "Hidden",
-				"description": "Main project startup dialog"
-			})";
-		}
-
-		static ViewMetadata GetMetadata() {
-			return GetMetadataFor<ProjectManagerView>();
-		}
+		void Init();
+		void Update(const float deltaT);
+		void Render();
 
 	private:
 		ANI::ProjectManager& m_projectManager;

@@ -25,11 +25,11 @@
 #include "FilePaths.hpp"
 #include <memory>
 
-/* 
-This is the application core that is run in the main loop. please use this as an example for integrating the AniStudio library
-into your own applications. If all you want is the AniEngine library for integrating into your own frontend solution, see the
-AniStudio hpp/cpp for more details. the header API is located in root/include for convenience.
-*/
+ /*
+ This is the application core that is run in the main loop. please use this as an example for integrating the AniStudio library
+ into your own applications. If all you want is the AniEngine library for integrating into your own frontend solution, see the
+ AniStudio hpp/cpp for more details. the header API is located in root/include for convenience.
+ */
 
 namespace ANI {
 
@@ -40,7 +40,7 @@ namespace ANI {
 	class Core {
 	public:
 
-		/* 
+		/*
 		singleton instance for keeping one degree of separation from the main thread
 		the Core thread will be used as the mainline thread for running the libraries
 		this isn't required for implementing the library into your own projects
@@ -60,7 +60,10 @@ namespace ANI {
 		// Dependency accessors - delegate to StudioCore instance
 		ECS::EntityManager& GetEntityManager() { return studioCore.GetEntityManager(); }
 		GUI::ViewManager& GetViewManager() { return studioCore.GetViewManager(); }
-		Plugin::PluginManager& GetPluginManager() { return studioCore.GetPluginManager(); }
+
+		// FIXED: Use the correct plugin manager accessor methods
+		Plugin::StudioPluginManager& GetStudioPluginManager() { return studioCore.GetStudioPluginManager(); }
+		Plugin::EnginePluginManager& GetEnginePluginManager() { return studioCore.GetEnginePluginManager(); }
 
 		GLFWwindow* Window() const { return window; }
 		bool Run() const { return run; }

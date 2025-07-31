@@ -23,17 +23,23 @@
 #define ANI_ENGINE_API
 
 #include "ECS.h"
-#include "PluginManager.hpp"
 #include <memory>
 #include <string>
 
+ // Forward declarations
+namespace Plugin {
+	class EnginePluginManager;
+}
+
 /*
-The ECS backend for AniStudio. The engine contains all the classes and logic for performing 
-asset IO, machine learning inference and stored data structures. Components are the structured 
-data that systems process asyncronously. Entities are vectors of components for ID and system 
-processes. Entities and components can be accessed, added or removed via the EnitiyManager. 
-The EnityManager should only be accessed on the thread it was created on (just like imgui 
-and OpenGL). 
+The ECS backend for AniStudio. The engine contains all the classes and logic for performing
+asset IO, machine learning inference and stored data structures. Components are the structured
+data that systems process asynchronously. Entities are vectors of components for ID and system
+processes. Entities and components can be accessed, added or removed via the EntityManager.
+The EntityManager should only be accessed on the thread it was created on (just like imgui
+and OpenGL).
+
+NOW INCLUDES: Engine-only plugin system for ECS components and systems.
 */
 
 namespace ANI {
@@ -51,11 +57,12 @@ namespace ANI {
 
 		// Manager access
 		ECS::EntityManager& GetEntityManager() { return entityManager; }
-		Plugin::PluginManager& GetPluginManager() { return pluginManager; }
+		Plugin::EnginePluginManager& GetEnginePluginManager() { return *enginePluginManager; }
 
-		// Plugin management
+		// Engine plugin management
 		bool LoadPlugin(const std::string& path);
-		void LoadDefaultPlugins();
+		bool UnloadPlugin(const std::string& pluginName);
+		std::vector<std::string> GetLoadedPlugins() const;
 
 		// Engine state
 		bool IsRunning() const { return running; }
@@ -70,7 +77,7 @@ namespace ANI {
 		bool running;
 
 		ECS::EntityManager entityManager;
-		Plugin::PluginManager pluginManager;
+		std::unique_ptr<Plugin::EnginePluginManager> enginePluginManager;
 	};
 
 }

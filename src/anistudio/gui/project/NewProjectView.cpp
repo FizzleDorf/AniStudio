@@ -8,9 +8,18 @@
 
 namespace GUI {
 
-	NewProjectView::NewProjectView(ECS::EntityManager& entityMgr, ANI::ProjectManager& projectMgr)
-		: BaseView(entityMgr), m_projectManager(projectMgr) {
-		viewName = "New Project";
+	NewProjectView::NewProjectView(ANI::ProjectManager& projectMgr)
+		: m_projectManager(projectMgr) {
+
+		// Initialize buffers
+		memset(m_projectNameBuffer, 0, sizeof(m_projectNameBuffer));
+		memset(m_projectPathBuffer, 0, sizeof(m_projectPathBuffer));
+
+		// Set default project path
+		std::string defaultPath = m_projectManager.GetDefaultProjectPath();
+		if (!defaultPath.empty()) {
+			strncpy_s(m_projectPathBuffer, defaultPath.c_str(), sizeof(m_projectPathBuffer) - 1);
+		}
 	}
 
 	void NewProjectView::Init() {
@@ -18,7 +27,10 @@ namespace GUI {
 	}
 
 	void NewProjectView::Update(const float deltaT) {
-		// Nothing to update
+		// Close this view if a project is now open
+		if (m_projectManager.IsProjectOpen()) {
+			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
+		}
 	}
 
 	void NewProjectView::Render() {
@@ -190,16 +202,22 @@ namespace GUI {
 		std::string fullPath = projectPath + "/" + projectName;
 
 		if (m_projectManager.CreateNewProject(fullPath, projectName)) {
-			// Apply template if selected
+			// Create workspace based on selected template
+			auto& viewState = m_projectManager.GetViewState();
+
 			if (m_selectedTemplate >= 0 && m_selectedTemplate < m_templates.size()) {
+				// Use selected template
 				const auto& template_ = m_templates[m_selectedTemplate];
-				for (const auto& viewType : template_.defaultOpenViews) {
-					m_projectManager.GetViewState().SetViewOpen(viewType, true);
-				}
+				size_t workspaceID = viewState.CreateWorkspace(template_.name, template_.defaultOpenViews);
+				std::cout << "[NewProjectView] Created workspace from template: " << template_.name << std::endl;
+			}
+			else {
+				// Blank project - create empty workspace
+				size_t workspaceID = viewState.CreateWorkspace("Main", {});
+				std::cout << "[NewProjectView] Created blank workspace" << std::endl;
 			}
 
-			// Close the view after successful creation
-			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
+			// View will close automatically in Update() when project is created
 			std::cout << "[NewProjectView] Created project: " << projectName << std::endl;
 		}
 		else {

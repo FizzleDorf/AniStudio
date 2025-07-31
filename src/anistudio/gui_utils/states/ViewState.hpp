@@ -22,11 +22,13 @@
 namespace GUI {
 
 	/**
-	 * Simple workspace state - just tracks which view types should be open
+	 * Workspace state with ID and alias management
 	 */
 	struct WorkspaceState {
-		std::string workspaceName = "Default";
-		std::unordered_set<std::string> openViewTypes; // Just track which view types are open
+		size_t workspaceID = 0;
+		std::string alias = "Default";
+		std::string templateName = "Blank";
+		std::unordered_set<std::string> openViewTypes; // Which view types are open
 
 		// Workspace-level UI settings
 		bool mainMenuBarVisible = true;
@@ -45,25 +47,32 @@ namespace GUI {
 	};
 
 	/**
-	 * Simplified ViewState - only manages which views should be open
-	 * Doesn't know about ViewManager or actual view instances
+	 * Enhanced ViewState - manages workspaces with IDs and aliases
 	 */
 	class ViewState {
 	public:
 		ViewState();
 		~ViewState() = default;
 
-		// Workspace management
-		bool CreateWorkspace(const std::string& name);
-		bool DeleteWorkspace(const std::string& name);
-		bool SetActiveWorkspace(const std::string& name);
-		const std::string& GetActiveWorkspaceName() const { return m_activeWorkspaceName; }
-		std::vector<std::string> GetWorkspaceNames() const;
+		// Workspace management with IDs and aliases
+		size_t CreateWorkspace(const std::string& templateName, const std::vector<std::string>& defaultViews);
+		bool DeleteWorkspace(size_t workspaceID);
+		bool SetActiveWorkspace(size_t workspaceID);
+		size_t GetActiveWorkspaceID() const { return m_activeWorkspaceID; }
+
+		// Alias management
+		bool RenameWorkspace(size_t workspaceID, const std::string& newAlias);
+		std::string GetWorkspaceAlias(size_t workspaceID) const;
+		size_t GetWorkspaceByAlias(const std::string& alias) const;
+
+		// Workspace queries
+		std::vector<size_t> GetWorkspaceIDs() const;
+		std::vector<std::pair<size_t, std::string>> GetWorkspaceList() const; // ID, alias pairs
 
 		WorkspaceState* GetActiveWorkspace();
 		const WorkspaceState* GetActiveWorkspace() const;
-		WorkspaceState* GetWorkspace(const std::string& name);
-		const WorkspaceState* GetWorkspace(const std::string& name) const;
+		WorkspaceState* GetWorkspace(size_t workspaceID);
+		const WorkspaceState* GetWorkspace(size_t workspaceID) const;
 
 		// View state management (delegates to active workspace)
 		bool IsViewOpen(const std::string& viewType) const;
@@ -84,15 +93,13 @@ namespace GUI {
 
 		// Reset to defaults
 		void Reset();
-		void CreateDefaultWorkspace();
-
-		// Template application
-		void ApplyTemplate(const std::vector<std::string>& viewTypes);
 
 	private:
-		std::unordered_map<std::string, WorkspaceState> m_workspaces;
-		std::string m_activeWorkspaceName = "Default";
+		std::unordered_map<size_t, WorkspaceState> m_workspaces;
+		size_t m_activeWorkspaceID = 0;
+		size_t m_nextWorkspaceID = 1;
 
+		std::string GenerateUniqueAlias(const std::string& baseName, size_t workspaceID);
 		void EnsureDefaultWorkspace();
 		bool IsValidWorkspaceName(const std::string& name) const;
 	};

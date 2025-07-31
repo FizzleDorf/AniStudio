@@ -1,6 +1,20 @@
+/*
+		d8888          d8b  .d8888b.  888                  888 d8b
+	   d88888          Y8P d88P  Y88b 888                  888 Y8P
+	  d88P888              Y88b.      888                  888
+	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
+  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
+ d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
+
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ */
+
 #include "ProjectManager.hpp"
 #include "ViewManager.hpp"
-#include "FilePaths.hpp"
+#include "WindowState.hpp"
 #include "ImGuiStateUtils.hpp"
 #include <filesystem>
 #include <fstream>
@@ -8,13 +22,6 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
-// Include GLFW for window state management
-#include <GLFW/glfw3.h>
 
 namespace ANI {
 
@@ -42,71 +49,82 @@ namespace ANI {
 	// ProjectManager implementation
 	ProjectManager::ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr)
 		: m_viewManager(viewMgr), m_entityManager(entityMgr) {
-		// FilePaths utility should already be initialized at application startup
-		// We just read the current state
+		std::cout << "[ProjectManager] Initialized" << std::endl;
+
+		// Ensure FilePaths is initialized
+		if (!Utils::FilePaths::initialized) {
+			std::cout << "[ProjectManager] FilePaths not initialized, initializing now..." << std::endl;
+			Utils::FilePaths::Init();
+		}
+
+		// Debug current FilePaths state
+		std::cout << "[ProjectManager] Current FilePaths state:" << std::endl;
+		std::cout << "  - Default project path: '" << Utils::FilePaths::defaultProjectPath << "'" << std::endl;
+		std::cout << "  - Last opened project: '" << Utils::FilePaths::lastOpenProjectPath << "'" << std::endl;
+		std::cout << "  - Data path: '" << Utils::FilePaths::dataPath << "'" << std::endl;
 	}
 
 	ProjectManager::~ProjectManager() {
-		// Save any changes to FilePaths when the ProjectManager is destroyed
-		Utils::FilePaths::SaveFilepathDefaults();
+		if (m_isProjectOpen) {
+			SaveProject();
+		}
 	}
 
 	void ProjectManager::SetWindowHandle(void* windowHandle) {
 		m_windowHandle = windowHandle;
-		std::cout << "[ProjectManager] Window handle set for window state management" << std::endl;
-	}
-
-	void ProjectManager::InitializeApplicationPaths() {
-		// This should be called at application startup, before creating ProjectManager
-		Utils::FilePaths::Init();
+		std::cout << "[ProjectManager] Window handle set for project window state management" << std::endl;
 	}
 
 	bool ProjectManager::ShouldShowStartup() const {
-		// Use FilePaths utility to check if we should show startup
-		return Utils::FilePaths::lastOpenProjectPath.empty() || !m_isProjectOpen;
+		// Check if we have a last opened project
+		bool hasLastProject = !Utils::FilePaths::lastOpenProjectPath.empty();
+
+		// Debug output
+		std::cout << "[ProjectManager] ShouldShowStartup check:" << std::endl;
+		std::cout << "  - Last opened project: '" << Utils::FilePaths::lastOpenProjectPath << "'" << std::endl;
+		std::cout << "  - Has last project: " << (hasLastProject ? "YES" : "NO") << std::endl;
+		std::cout << "  - Default project path: '" << Utils::FilePaths::defaultProjectPath << "'" << std::endl;
+
+		// Try to find any existing projects
+		auto recentProjects = GetRecentProjects();
+		std::cout << "  - Found " << recentProjects.size() << " recent projects" << std::endl;
+		for (const auto& proj : recentProjects) {
+			std::cout << "    * " << proj << std::endl;
+		}
+
+		// Show startup if no recent projects found
+		bool shouldShow = recentProjects.empty();
+		std::cout << "  - Should show startup: " << (shouldShow ? "YES" : "NO") << std::endl;
+
+		return shouldShow;
 	}
 
 	bool ProjectManager::CreateNewProject(const std::string& projectPath, const std::string& projectName) {
+		m_lastError.clear();
+
 		try {
-			if (projectPath.empty() || projectName.empty()) {
-				m_lastError = "Project path and name cannot be empty";
+			// Validate project path
+			std::filesystem::path projPath(projectPath);
+			if (std::filesystem::exists(projPath)) {
+				m_lastError = "Project directory already exists: " + projectPath;
 				return false;
 			}
 
-			// Check if project already exists at this path
-			std::string fullPath = projectPath;
-			if (std::filesystem::exists(fullPath)) {
-				m_lastError = "A project already exists at this location: " + fullPath;
-				return false;
-			}
+			// Create project directory
+			std::filesystem::create_directories(projPath);
 
-			// Check if project name conflicts with existing projects
-			if (IsProjectNameTaken(projectName, projectPath)) {
-				m_lastError = "A project with the name '" + projectName + "' already exists. Please choose a different name.";
-				return false;
-			}
+			// Create subdirectories
+			std::filesystem::create_directories(projPath / "data");
+			std::filesystem::create_directories(projPath / "assets");
+			std::filesystem::create_directories(projPath / "output");
+			std::filesystem::create_directories(projPath / "settings");
 
-			// Close current project if open
-			if (m_isProjectOpen) {
-				CloseProject();
-			}
-
-			// RESET ENTITY MANAGER - Clear all entities and systems while preserving component types
-			std::cout << "[ProjectManager] Resetting EntityManager for new project..." << std::endl;
-			m_entityManager.Reset();
-
-			// Create project directory structure
-			std::filesystem::create_directories(fullPath);
-			std::filesystem::create_directories(fullPath + "/data");
-			std::filesystem::create_directories(fullPath + "/assets");
-			std::filesystem::create_directories(fullPath + "/output");
-
-			// Initialize project settings
-			m_projectSettings = ProjectSettings();
+			// Setup project settings
+			m_projectSettings = ProjectSettings{};
 			m_projectSettings.projectName = projectName;
 			m_projectSettings.projectVersion = "1.0.0";
 
-			// Set creation date
+			// Get current date/time
 			auto now = std::chrono::system_clock::now();
 			auto time_t = std::chrono::system_clock::to_time_t(now);
 			std::stringstream ss;
@@ -114,176 +132,121 @@ namespace ANI {
 			m_projectSettings.createdDate = ss.str();
 			m_projectSettings.lastModified = ss.str();
 
-			m_currentProjectPath = std::filesystem::absolute(fullPath).string();
+			// Set current project path
+			m_currentProjectPath = projectPath;
 			m_isProjectOpen = true;
 
-			// Reset view state
+			// Reset ViewState and create default workspace
 			m_viewState.Reset();
 
-			// Update FilePaths utility with new project info
-			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
-			UpdateProjectSpecificPaths();
-
-			// Save current window state to the new project
-			SaveProjectWindowState();
-
-			// Save project
+			// Save project files
 			if (!SaveProject()) {
 				m_lastError = "Failed to save new project";
+				m_isProjectOpen = false;
+				m_currentProjectPath.clear();
 				return false;
 			}
 
-			// Save updated paths to utility
-			Utils::FilePaths::SaveFilepathDefaults();
+			// Update project-specific paths
+			UpdateProjectSpecificPaths();
 
-			// Add to recent projects (handled by FilePaths utility)
-			AddToRecentProjects(m_currentProjectPath);
+			// Add to recent projects
+			AddToRecentProjects(projectPath);
 
-			// Call the project created callback
+			std::cout << "[ProjectManager] Created new project: " << projectName << " at " << projectPath << std::endl;
+
+			// Trigger callback
 			if (m_onProjectCreatedCallback) {
-				m_onProjectCreatedCallback(m_currentProjectPath);
+				m_onProjectCreatedCallback(projectPath);
 			}
 
-			std::cout << "[ProjectManager] Created new project: " << projectName << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
 			m_lastError = "Exception creating project: " + std::string(e.what());
+			std::cerr << "[ProjectManager] " << m_lastError << std::endl;
 			return false;
 		}
 	}
 
 	bool ProjectManager::LoadProject(const std::string& projectPath) {
+		m_lastError.clear();
+
 		try {
-			// Check if project file exists
-			std::string projectFile = projectPath + "/project.ani";
-			if (!std::filesystem::exists(projectFile)) {
-				m_lastError = "Project file not found: " + projectFile;
+			// Validate project path
+			std::filesystem::path projPath(projectPath);
+			if (!std::filesystem::exists(projPath)) {
+				m_lastError = "Project directory does not exist: " + projectPath;
 				return false;
 			}
 
-			// Close current project if open
+			// Check for project file
+			std::filesystem::path projectFile = projPath / "project.ani";
+			if (!std::filesystem::exists(projectFile)) {
+				m_lastError = "Project file not found: " + projectFile.string();
+				return false;
+			}
+
+			// Close existing project if open
 			if (m_isProjectOpen) {
 				CloseProject();
 			}
 
-			// RESET ENTITY MANAGER - Clear all entities and systems while preserving component types
-			std::cout << "[ProjectManager] Resetting EntityManager for project load..." << std::endl;
-			m_entityManager.Reset();
-
-			// Load project file
+			// Load project settings
 			std::ifstream file(projectFile);
 			if (!file.is_open()) {
-				m_lastError = "Failed to open project file";
+				m_lastError = "Failed to open project file: " + projectFile.string();
 				return false;
 			}
 
-			nlohmann::json projectData;
-			file >> projectData;
+			nlohmann::json projectJson;
+			file >> projectJson;
 			file.close();
 
-			// Deserialize project settings
-			if (projectData.contains("settings")) {
-				m_projectSettings.Deserialize(projectData["settings"]);
+			// Extract settings from the nested structure
+			if (projectJson.contains("settings")) {
+				m_projectSettings.Deserialize(projectJson["settings"]);
+			}
+			else {
+				m_lastError = "Invalid project file format: missing settings";
+				return false;
 			}
 
-			m_currentProjectPath = std::filesystem::absolute(projectPath).string();
+			// Set current project path
+			m_currentProjectPath = projectPath;
 			m_isProjectOpen = true;
 
-			// Update FilePaths utility
-			Utils::FilePaths::lastOpenProjectPath = m_currentProjectPath;
-			UpdateProjectSpecificPaths();
-
-			// Load project-specific window state and apply it IMMEDIATELY
-			LoadAndApplyProjectWindowState();
-
-			// Load view state
-			LoadViewState();
-
-			// Load ImGui layout
-			LoadImGuiLayout();
-
-			// Save updated paths to utility
-			Utils::FilePaths::SaveFilepathDefaults();
-
-			// Add to recent projects
-			AddToRecentProjects(m_currentProjectPath);
-
-			// Call the project loaded callback
-			if (m_onProjectLoadedCallback) {
-				m_onProjectLoadedCallback(m_currentProjectPath);
+			// Load ViewState
+			if (!LoadViewState()) {
+				std::cout << "[ProjectManager] No ViewState found, using defaults" << std::endl;
+				m_viewState.Reset();
 			}
 
-			std::cout << "[ProjectManager] Loaded project: " << m_projectSettings.projectName << std::endl;
+			// Load ImGui layout (if exists)
+			LoadImGuiLayout();
+
+			// Load and apply project window state
+			LoadAndApplyProjectWindowState();
+
+			// Update project-specific paths
+			UpdateProjectSpecificPaths();
+
+			// Add to recent projects
+			AddToRecentProjects(projectPath);
+
+			std::cout << "[ProjectManager] Loaded project: " << m_projectSettings.projectName << " from " << projectPath << std::endl;
+
+			// Trigger callback
+			if (m_onProjectLoadedCallback) {
+				m_onProjectLoadedCallback(projectPath);
+			}
+
 			return true;
 		}
 		catch (const std::exception& e) {
 			m_lastError = "Exception loading project: " + std::string(e.what());
+			std::cerr << "[ProjectManager] " << m_lastError << std::endl;
 			return false;
-		}
-	}
-
-	bool ProjectManager::IsProjectNameTaken(const std::string& projectName, const std::string& excludePath) const {
-		try {
-			// Check recent projects for name conflicts
-			auto recentProjects = GetRecentProjects();
-			for (const auto& projectPath : recentProjects) {
-				// Skip the current path if we're updating an existing project
-				if (projectPath == excludePath) continue;
-
-				// Check if project still exists
-				std::string projectFile = projectPath + "/project.ani";
-				if (std::filesystem::exists(projectFile)) {
-					// Load and check project name
-					std::ifstream file(projectFile);
-					if (file.is_open()) {
-						nlohmann::json projectData;
-						file >> projectData;
-						file.close();
-
-						if (projectData.contains("settings") && projectData["settings"].contains("projectName")) {
-							std::string existingName = projectData["settings"]["projectName"];
-							if (existingName == projectName) {
-								return true; // Name is taken
-							}
-						}
-					}
-				}
-			}
-
-			// Also check the default projects directory for additional conflicts
-			std::string defaultProjectsPath = Utils::FilePaths::defaultProjectPath;
-			if (std::filesystem::exists(defaultProjectsPath)) {
-				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectsPath)) {
-					if (entry.is_directory()) {
-						std::string potentialProjectPath = entry.path().string();
-						if (potentialProjectPath == excludePath) continue;
-
-						std::string projectFile = potentialProjectPath + "/project.ani";
-						if (std::filesystem::exists(projectFile)) {
-							std::ifstream file(projectFile);
-							if (file.is_open()) {
-								nlohmann::json projectData;
-								file >> projectData;
-								file.close();
-
-								if (projectData.contains("settings") && projectData["settings"].contains("projectName")) {
-									std::string existingName = projectData["settings"]["projectName"];
-									if (existingName == projectName) {
-										return true; // Name is taken
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
-			return false; // Name is available
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Error checking project name: " << e.what() << std::endl;
-			return false; // Assume available on error
 		}
 	}
 
@@ -293,6 +256,8 @@ namespace ANI {
 			return false;
 		}
 
+		m_lastError.clear();
+
 		try {
 			// Update last modified time
 			auto now = std::chrono::system_clock::now();
@@ -301,39 +266,43 @@ namespace ANI {
 			ss << std::put_time(std::localtime(&time_t), "%Y-%m-%d %H:%M:%S");
 			m_projectSettings.lastModified = ss.str();
 
-			// Create project data
-			nlohmann::json projectData;
-			projectData["version"] = "1.0";
-			projectData["settings"] = m_projectSettings.Serialize();
-
-			// Save project file
-			std::string projectFile = m_currentProjectPath + "/project.ani";
+			// Save project settings in .ani format
+			std::filesystem::path projectFile = std::filesystem::path(m_currentProjectPath) / "project.ani";
 			std::ofstream file(projectFile);
 			if (!file.is_open()) {
-				m_lastError = "Failed to open project file for writing";
+				m_lastError = "Failed to open project file for writing: " + projectFile.string();
 				return false;
 			}
 
-			file << projectData.dump(4);
+			// Create the project structure with nested settings
+			nlohmann::json projectJson;
+			projectJson["version"] = "1.0";
+			projectJson["settings"] = m_projectSettings.Serialize();
+
+			file << projectJson.dump(4);
 			file.close();
 
-			// Save view state
-			SaveViewState();
+			// Save ViewState
+			if (!SaveViewState()) {
+				std::cout << "[ProjectManager] Warning: Failed to save ViewState" << std::endl;
+			}
 
 			// Save ImGui layout
-			SaveImGuiLayout();
+			if (!SaveImGuiLayout()) {
+				std::cout << "[ProjectManager] Warning: Failed to save ImGui layout" << std::endl;
+			}
 
-			// Save project window state
-			SaveProjectWindowState();
+			// Save window state
+			if (!SaveProjectWindowState()) {
+				std::cout << "[ProjectManager] Warning: Failed to save window state" << std::endl;
+			}
 
-			// Save updated FilePaths
-			Utils::FilePaths::SaveFilepathDefaults();
-
-			std::cout << "[ProjectManager] Saved project: " << m_projectSettings.projectName << std::endl;
+			std::cout << "[ProjectManager] Project saved: " << m_projectSettings.projectName << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
 			m_lastError = "Exception saving project: " + std::string(e.what());
+			std::cerr << "[ProjectManager] " << m_lastError << std::endl;
 			return false;
 		}
 	}
@@ -341,101 +310,94 @@ namespace ANI {
 	void ProjectManager::CloseProject() {
 		if (!m_isProjectOpen) return;
 
-		// Save before closing
+		std::cout << "[ProjectManager] Closing project: " << m_projectSettings.projectName << std::endl;
+
+		// Save project before closing
 		SaveProject();
 
-		// Save current project's ImGui layout and window state before closing
-		SaveImGuiLayout();
-		SaveProjectWindowState();
+		// Clear project-specific paths
+		ClearProjectSpecificPaths();
 
 		// Reset state
 		m_isProjectOpen = false;
 		m_currentProjectPath.clear();
-		m_projectSettings = ProjectSettings();
+		m_projectSettings = ProjectSettings{};
 		m_viewState.Reset();
 
-		// Clear project-specific paths in FilePaths utility
-		Utils::FilePaths::lastOpenProjectPath.clear();
-		ClearProjectSpecificPaths();
-
-		// Save cleared paths
-		Utils::FilePaths::SaveFilepathDefaults();
-
-		// Call the project closed callback BEFORE showing startup view
+		// Trigger callback
 		if (m_onProjectClosedCallback) {
 			m_onProjectClosedCallback();
 		}
+	}
 
-		// Show startup view
-		m_viewState.SetViewOpen("ProjectManagerView", true);
+	bool ProjectManager::IsProjectNameTaken(const std::string& projectName, const std::string& excludePath) const {
+		// Get default project path
+		std::string defaultPath = GetDefaultProjectPath();
+		if (defaultPath.empty()) return false;
 
-		std::cout << "[ProjectManager] Project closed" << std::endl;
+		std::filesystem::path projectDir = std::filesystem::path(defaultPath) / projectName;
+
+		// If this is the path we're excluding, it's not "taken"
+		if (!excludePath.empty() && std::filesystem::equivalent(projectDir, excludePath)) {
+			return false;
+		}
+
+		return std::filesystem::exists(projectDir);
 	}
 
 	std::vector<std::string> ProjectManager::GetRecentProjects() const {
-		// Load recent projects from the JSON file that FilePaths manages
 		std::vector<std::string> recentProjects;
 
-		try {
-			std::string recentFile = Utils::FilePaths::dataPath + "/recent_projects.json";
-			if (!std::filesystem::exists(recentFile)) return recentProjects;
+		// First, check if we have a last opened project
+		if (!Utils::FilePaths::lastOpenProjectPath.empty() &&
+			std::filesystem::exists(Utils::FilePaths::lastOpenProjectPath)) {
+			recentProjects.push_back(Utils::FilePaths::lastOpenProjectPath);
+		}
 
-			std::ifstream file(recentFile);
-			if (!file.is_open()) return recentProjects;
+		// Then scan the default project directory for any existing projects
+		std::string defaultProjectDir = Utils::FilePaths::defaultProjectPath;
+		if (!defaultProjectDir.empty() && std::filesystem::exists(defaultProjectDir)) {
+			try {
+				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectDir)) {
+					if (entry.is_directory()) {
+						std::string projectPath = entry.path().string();
 
-			nlohmann::json j;
-			file >> j;
-			file.close();
-
-			if (j.contains("recentProjects") && j["recentProjects"].is_array()) {
-				for (const auto& path : j["recentProjects"]) {
-					if (path.is_string() && std::filesystem::exists(path.get<std::string>())) {
-						recentProjects.push_back(path.get<std::string>());
+						// Check if this directory contains a project.ani file (indicating it's a project)
+						std::string projectFile = projectPath + "/project.ani";
+						if (std::filesystem::exists(projectFile)) {
+							// Don't add duplicates
+							if (std::find(recentProjects.begin(), recentProjects.end(), projectPath) == recentProjects.end()) {
+								recentProjects.push_back(projectPath);
+							}
+						}
 					}
 				}
 			}
+			catch (const std::exception& e) {
+				std::cerr << "[ProjectManager] Error scanning for projects: " << e.what() << std::endl;
+			}
 		}
-		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to load recent projects: " << e.what() << std::endl;
-		}
+
+		// Sort by most recently modified
+		std::sort(recentProjects.begin(), recentProjects.end(),
+			[](const std::string& a, const std::string& b) {
+			try {
+				auto timeA = std::filesystem::last_write_time(a + "/project.ani");
+				auto timeB = std::filesystem::last_write_time(b + "/project.ani");
+				return timeA > timeB; // Most recent first
+			}
+			catch (...) {
+				return false;
+			}
+		});
 
 		return recentProjects;
 	}
 
 	void ProjectManager::AddToRecentProjects(const std::string& projectPath) {
-		try {
-			auto recentProjects = GetRecentProjects();
-
-			// Remove if already exists
-			auto it = std::find(recentProjects.begin(), recentProjects.end(), projectPath);
-			if (it != recentProjects.end()) {
-				recentProjects.erase(it);
-			}
-
-			// Add to front
-			recentProjects.insert(recentProjects.begin(), projectPath);
-
-			// Limit size
-			if (recentProjects.size() > 10) {
-				recentProjects.resize(10);
-			}
-
-			// Save back to file
-			std::filesystem::create_directories(Utils::FilePaths::dataPath);
-
-			nlohmann::json j;
-			j["recentProjects"] = recentProjects;
-
-			std::string recentFile = Utils::FilePaths::dataPath + "/recent_projects.json";
-			std::ofstream file(recentFile);
-			if (file.is_open()) {
-				file << j.dump(4);
-				file.close();
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to save recent projects: " << e.what() << std::endl;
-		}
+		// Update the last opened project path in FilePaths
+		Utils::FilePaths::lastOpenProjectPath = projectPath;
+		Utils::FilePaths::SaveFilepathDefaults();
 	}
 
 	void ProjectManager::SetDefaultProjectPath(const std::string& path) {
@@ -459,215 +421,171 @@ namespace ANI {
 	void ProjectManager::SetOutputFolder(const std::string& path) {
 		Utils::FilePaths::outputFolderPath = path;
 		Utils::FilePaths::SaveFilepathDefaults();
-		std::cout << "[ProjectManager] Set output folder to: " << path << std::endl;
 	}
 
 	std::string ProjectManager::GetOutputFolder() const {
 		return Utils::FilePaths::outputFolderPath;
 	}
 
-	bool ProjectManager::SaveViewState() {
-		if (!m_isProjectOpen) return false;
+	void ProjectManager::InitializeApplicationPaths() {
+		Utils::FilePaths::Init();
+	}
 
+	// Private methods
+	bool ProjectManager::SaveViewState() {
 		try {
-			std::string viewStateFile = GetProjectDataPath() + "/viewstate.json";
-			return m_viewState.SaveToFile(viewStateFile);
+			std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
+			return m_viewState.SaveToFile(viewStatePath);
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to save view state: " << e.what() << std::endl;
+			std::cerr << "[ProjectManager] Exception saving ViewState: " << e.what() << std::endl;
 			return false;
 		}
 	}
 
 	bool ProjectManager::LoadViewState() {
-		if (!m_isProjectOpen) return false;
-
 		try {
-			std::string viewStateFile = GetProjectDataPath() + "/viewstate.json";
-			if (std::filesystem::exists(viewStateFile)) {
-				return m_viewState.LoadFromFile(viewStateFile);
-			}
+			std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
+			return m_viewState.LoadFromFile(viewStatePath);
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to load view state: " << e.what() << std::endl;
+			std::cerr << "[ProjectManager] Exception loading ViewState: " << e.what() << std::endl;
+			return false;
 		}
-		return false;
 	}
 
 	bool ProjectManager::SaveImGuiLayout() {
-		if (!m_isProjectOpen) return false;
-
 		try {
 			Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_currentProjectPath);
-			std::cout << "[ProjectManager] Saved ImGui layout for project" << std::endl;
-			return true;
+			return true; // Assume success since the utility function is void
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to save ImGui layout: " << e.what() << std::endl;
+			std::cerr << "[ProjectManager] Exception saving ImGui layout: " << e.what() << std::endl;
 			return false;
 		}
 	}
 
 	bool ProjectManager::LoadImGuiLayout() {
-		if (!m_isProjectOpen) return false;
-
 		try {
 			Utils::ImGuiStateUtils::LoadProjectImGuiLayout(m_currentProjectPath);
-			std::cout << "[ProjectManager] Loaded ImGui layout for project" << std::endl;
-			return true;
+			return true; // Assume success since the utility function is void
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to load ImGui layout: " << e.what() << std::endl;
+			std::cerr << "[ProjectManager] Exception loading ImGui layout: " << e.what() << std::endl;
+			return false;
 		}
-		return false;
 	}
 
 	bool ProjectManager::SaveProjectWindowState() {
-		if (!m_isProjectOpen || !m_windowHandle) return false;
+		if (!m_windowHandle) return false;
 
 		try {
-			GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_windowHandle);
+			// Create a window state and manually sync from GLFW
+			Utils::WindowState windowState;
+			windowState.SetGlobalDataPath(GetProjectDataPath());
 
-			// Get current window state
+			// Manually sync current window state using GLFW functions
+			GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_windowHandle);
 			int width, height, x, y;
 			glfwGetWindowSize(glfwWindow, &width, &height);
 			glfwGetWindowPos(glfwWindow, &x, &y);
-			bool maximized = (glfwGetWindowAttrib(glfwWindow, GLFW_MAXIMIZED) == GLFW_TRUE);
-			bool fullscreen = (glfwGetWindowMonitor(glfwWindow) != nullptr);
 
-			// Create window state JSON
-			nlohmann::json windowState;
-			windowState["width"] = width;
-			windowState["height"] = height;
-			windowState["posX"] = x;
-			windowState["posY"] = y;
-			windowState["maximized"] = maximized;
-			windowState["fullscreen"] = fullscreen;
-			windowState["vsync"] = true;
-			windowState["title"] = "AniStudio";
+			// Create JSON and deserialize it into WindowState
+			nlohmann::json currentState;
+			currentState["width"] = width;
+			currentState["height"] = height;
+			currentState["posX"] = x;
+			currentState["posY"] = y;
+			currentState["maximized"] = (glfwGetWindowAttrib(glfwWindow, GLFW_MAXIMIZED) == GLFW_TRUE);
+			currentState["fullscreen"] = (glfwGetWindowMonitor(glfwWindow) != nullptr);
+			currentState["vsync"] = true;
+			currentState["title"] = "AniStudio";
 
-			// Save to project
+			windowState.Deserialize(currentState);
+
+			// Save to project-specific location
 			std::string windowStatePath = GetProjectWindowStatePath();
-			std::filesystem::create_directories(std::filesystem::path(windowStatePath).parent_path());
-
-			std::ofstream file(windowStatePath);
-			if (file.is_open()) {
-				file << windowState.dump(4);
-				file.close();
-				std::cout << "[ProjectManager] Saved window state for project: "
-					<< width << "x" << height << " at (" << x << "," << y << ")" << std::endl;
-				return true;
-			}
-			else {
-				std::cerr << "[ProjectManager] Failed to open window state file for writing" << std::endl;
-				return false;
-			}
+			return windowState.SaveToFile(windowStatePath);
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to save project window state: " << e.what() << std::endl;
+			std::cerr << "[ProjectManager] Exception saving window state: " << e.what() << std::endl;
 			return false;
 		}
 	}
 
 	bool ProjectManager::LoadAndApplyProjectWindowState() {
-		if (!m_isProjectOpen || !m_windowHandle) return false;
+		if (!m_windowHandle) return false;
 
 		try {
 			std::string windowStatePath = GetProjectWindowStatePath();
-			if (std::filesystem::exists(windowStatePath)) {
-				// Load the window state JSON
-				std::ifstream file(windowStatePath);
-				if (file.is_open()) {
-					nlohmann::json windowState;
-					file >> windowState;
-					file.close();
+			if (!std::filesystem::exists(windowStatePath)) {
+				return false; // No saved state, which is fine
+			}
 
-					// Apply the state to the actual GLFW window
-					GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_windowHandle);
+			Utils::WindowState windowState;
+			windowState.SetGlobalDataPath(GetProjectDataPath());
 
-					int width = windowState.value("width", 1200);
-					int height = windowState.value("height", 720);
-					int x = windowState.value("posX", 100);
-					int y = windowState.value("posY", 100);
-					bool maximized = windowState.value("maximized", false);
+			if (windowState.LoadFromFile(windowStatePath)) {
+				// Manually apply to GLFW window using the same approach as AniStudio.cpp
+				GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(m_windowHandle);
+				glfwSetWindowSize(glfwWindow, windowState.GetWidth(), windowState.GetHeight());
+				glfwSetWindowPos(glfwWindow, windowState.GetPosX(), windowState.GetPosY());
 
-					// Apply size and position
-					glfwSetWindowSize(glfwWindow, width, height);
-					glfwSetWindowPos(glfwWindow, x, y);
-
-					// Apply maximized state
-					if (maximized) {
-						glfwMaximizeWindow(glfwWindow);
-					}
-					else {
-						glfwRestoreWindow(glfwWindow);
-					}
-
-					std::cout << "[ProjectManager] Loaded and applied project window state: "
-						<< width << "x" << height << " at (" << x << "," << y << ")" << std::endl;
-
-					return true;
+				if (windowState.IsMaximized()) {
+					glfwMaximizeWindow(glfwWindow);
 				}
 				else {
-					std::cerr << "[ProjectManager] Failed to open window state file" << std::endl;
-					return false;
+					glfwRestoreWindow(glfwWindow);
 				}
-			}
-			else {
-				std::cout << "[ProjectManager] No project window state found, using current window" << std::endl;
-				return false;
+
+				std::cout << "[ProjectManager] Applied project window state" << std::endl;
+				return true;
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ProjectManager] Failed to load project window state: " << e.what() << std::endl;
-			return false;
+			std::cerr << "[ProjectManager] Exception loading window state: " << e.what() << std::endl;
 		}
+
+		return false;
 	}
 
 	void ProjectManager::UpdateProjectSpecificPaths() {
-		if (!m_isProjectOpen) return;
-
-		// Update project-specific asset folder if not already set
-		if (Utils::FilePaths::assetsFolderPath.empty()) {
+		// For now, just set the paths directly in the FilePaths static variables
+		// In a future update, we could implement project-specific path management
+		if (!GetProjectAssetsPath().empty()) {
 			Utils::FilePaths::assetsFolderPath = GetProjectAssetsPath();
-			std::cout << "[ProjectManager] Set assets folder to: " << Utils::FilePaths::assetsFolderPath << std::endl;
 		}
-
-		// Update project-specific output folder 
-		Utils::FilePaths::outputFolderPath = GetProjectOutputPath();
-		std::cout << "[ProjectManager] Set output folder to: " << Utils::FilePaths::outputFolderPath << std::endl;
+		if (!GetProjectOutputPath().empty()) {
+			Utils::FilePaths::outputFolderPath = GetProjectOutputPath();
+		}
+		Utils::FilePaths::SaveFilepathDefaults();
 	}
 
 	void ProjectManager::ClearProjectSpecificPaths() {
-		// Clear any project-specific paths but keep global ones
-		// Only clear assetsFolderPath if it was pointing to the closed project
-		if (!Utils::FilePaths::assetsFolderPath.empty() &&
-			Utils::FilePaths::assetsFolderPath.find(m_currentProjectPath) != std::string::npos) {
-			Utils::FilePaths::assetsFolderPath.clear();
-			std::cout << "[ProjectManager] Cleared assets folder path" << std::endl;
-		}
-
-		// Clear output folder path if it was pointing to the closed project
-		if (!Utils::FilePaths::outputFolderPath.empty() &&
-			Utils::FilePaths::outputFolderPath.find(m_currentProjectPath) != std::string::npos) {
-			Utils::FilePaths::outputFolderPath.clear();
-			std::cout << "[ProjectManager] Cleared output folder path" << std::endl;
-		}
+		// Clear project-specific paths back to defaults
+		// This could be enhanced to restore previous global defaults
+		Utils::FilePaths::assetsFolderPath = "";
+		Utils::FilePaths::outputFolderPath = "";
+		Utils::FilePaths::SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetProjectDataPath() const {
+		if (!m_isProjectOpen) return "";
 		return m_currentProjectPath + "/data";
 	}
 
 	std::string ProjectManager::GetProjectAssetsPath() const {
+		if (!m_isProjectOpen) return "";
 		return m_currentProjectPath + "/assets";
 	}
 
 	std::string ProjectManager::GetProjectOutputPath() const {
+		if (!m_isProjectOpen) return "";
 		return m_currentProjectPath + "/output";
 	}
 
 	std::string ProjectManager::GetProjectWindowStatePath() const {
+		if (!m_isProjectOpen) return "";
 		return GetProjectDataPath() + "/window_state.json";
 	}
 

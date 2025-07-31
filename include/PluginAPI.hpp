@@ -1,158 +1,66 @@
 /*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
-   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
- d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * PluginAPI.hpp - Single Unified Plugin API
+ * Works for both Engine and Studio - managers decide what to provide
  */
 
 #pragma once
 
-#include "ECS.h"
 #include <string>
-#include <memory>
 
-// Forward declarations to avoid circular includes
-namespace GUI {
-	class ViewManager;
-	using ViewListID = size_t;
+ // Forward declarations
+namespace ECS {
+	class EntityManager;
 }
 
-// Platform-specific plugin export macros
+namespace GUI {
+	class ViewManager;
+}
+
+namespace Plugin {
+
+	// Single context struct - managers provide what they can
+	struct PluginContext {
+		ECS::EntityManager* entityManager = nullptr;  // Always available
+		GUI::ViewManager* viewManager = nullptr;      // Only available in Studio
+	};
+
+	// Single plugin interface
+	class IPlugin {
+	public:
+		virtual ~IPlugin() = default;
+		virtual bool Initialize(PluginContext* context) = 0;
+		virtual void Shutdown() = 0;
+		virtual void Update(float deltaTime) { /* Optional */ }
+		virtual const char* GetName() const = 0;
+		virtual const char* GetVersion() const = 0;
+		virtual const char* GetDescription() const = 0;
+	};
+}
+
+// Helper macros
+#ifndef PLUGIN_API
 #ifdef _WIN32
 #define PLUGIN_API __declspec(dllexport)
 #else
 #define PLUGIN_API __attribute__((visibility("default")))
 #endif
+#endif
 
-namespace Plugin {
-
-	// BASE PLUGIN CLASS
-	class BasePlugin {
-	public:
-		BasePlugin() = default;
-		virtual ~BasePlugin() = default;
-
-		// Core plugin lifecycle
-		virtual bool Initialize(ECS::EntityManager& entityManager, GUI::ViewManager* viewManager = nullptr) = 0;
-		virtual void Shutdown() = 0;
-		virtual void Update(float deltaTime) {}
-
-		// Plugin information
-		virtual const std::string& GetName() const = 0;
-		virtual const std::string& GetVersion() const = 0;
-		virtual const std::string& GetDescription() const {
-			static std::string empty = "No description";
-			return empty;
-		}
-
-		// Plugin capabilities
-		virtual bool HasSettings() const { return false; }
-		virtual void ShowSettings() {}
-		virtual bool CanReload() const { return true; }
-
-	protected:
-		// Store manager references for easy access
-		ECS::EntityManager* entityManager = nullptr;
-		GUI::ViewManager* viewManager = nullptr;
-	};
-
-} // namespace Plugin
-
-// REQUIRED C INTERFACE - Every plugin DLL must implement these
-extern "C" {
-	// Plugin creation/destruction - REQUIRED
-	PLUGIN_API Plugin::BasePlugin* CreatePlugin();
-	PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin);
-
-	// Plugin information - REQUIRED
-	PLUGIN_API const char* GetPluginName();
-	PLUGIN_API const char* GetPluginVersion();
-	PLUGIN_API const char* GetPluginDescription();
-
-	// Plugin capabilities - OPTIONAL
-	PLUGIN_API bool HasPluginSettings();
-	PLUGIN_API bool CanPluginReload();
-}
-
-// PLUGIN HELPER MACROS - For plugin creation
-
-// Macro to implement the required C interface for a plugin class
-#define IMPLEMENT_PLUGIN(PluginClass) \
-    static std::unique_ptr<PluginClass> g_pluginInstance; \
-    \
+#define IMPLEMENT_PLUGIN(PluginClass, Name, Version, Description) \
     extern "C" { \
-        PLUGIN_API Plugin::BasePlugin* CreatePlugin() { \
-            g_pluginInstance = std::make_unique<PluginClass>(); \
-            return g_pluginInstance.get(); \
+        PLUGIN_API Plugin::IPlugin* CreatePlugin() { \
+            return new PluginClass(); \
         } \
-        \
-        PLUGIN_API void DestroyPlugin(Plugin::BasePlugin* plugin) { \
-            g_pluginInstance.reset(); \
+        PLUGIN_API void DestroyPlugin(Plugin::IPlugin* plugin) { \
+            delete plugin; \
         } \
-        \
         PLUGIN_API const char* GetPluginName() { \
-            return PluginClass::StaticGetName(); \
+            return Name; \
         } \
-        \
         PLUGIN_API const char* GetPluginVersion() { \
-            return PluginClass::StaticGetVersion(); \
+            return Version; \
         } \
-        \
         PLUGIN_API const char* GetPluginDescription() { \
-            return PluginClass::StaticGetDescription(); \
-        } \
-        \
-        PLUGIN_API bool HasPluginSettings() { \
-            return g_pluginInstance ? g_pluginInstance->HasSettings() : false; \
-        } \
-        \
-        PLUGIN_API bool CanPluginReload() { \
-            return g_pluginInstance ? g_pluginInstance->CanReload() : true; \
+            return Description; \
         } \
     }
-
-// PLUGIN COMPONENT STORAGE - Simple helper for plugins
-template<typename T>
-class PluginComponentStorage {
-public:
-	static std::unordered_map<ECS::EntityID, T>& GetStorage() {
-		static std::unordered_map<ECS::EntityID, T> storage;
-		return storage;
-	}
-
-	static void Add(ECS::EntityID entity, const T& component) {
-		GetStorage()[entity] = component;
-	}
-
-	static T* Get(ECS::EntityID entity) {
-		auto& storage = GetStorage();
-		auto it = storage.find(entity);
-		return (it != storage.end()) ? &it->second : nullptr;
-	}
-
-	static bool Has(ECS::EntityID entity) {
-		auto& storage = GetStorage();
-		return storage.find(entity) != storage.end();
-	}
-
-	static void Remove(ECS::EntityID entity) {
-		GetStorage().erase(entity);
-	}
-
-	static void Clear() {
-		GetStorage().clear();
-	}
-};

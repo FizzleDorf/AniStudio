@@ -165,12 +165,11 @@ file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
 )
 
-# Add PluginManager source from aniplugins directory
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/PluginManager.cpp")
-    list(APPEND ANISTUDIO_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/PluginManager.cpp")
-    message(STATUS "Added PluginManager.cpp to AniStudioCore")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/StudioPluginManager.cpp")
+    list(APPEND ANISTUDIO_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/StudioPluginManager.cpp")
+    message(STATUS "Added StudioPluginManager.cpp to AniStudioCore")
 else()
-    message(FATAL_ERROR "PluginManager.cpp not found at ${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/")
+    message(FATAL_ERROR "StudioPluginManager.cpp not found at ${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/")
 endif()
 
 # Add the main AniStudio implementation
@@ -395,21 +394,6 @@ endif()
 if(ANISTUDIO_BUILD_EXAMPLES AND CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_subdirectory(examples)
 endif()
-
-# Print configuration summary
-message(STATUS "")
-message(STATUS "AniStudio configuration:")
-message(STATUS "  Version: ${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Library type: ${BUILD_SHARED_LIBS}")
-message(STATUS "  External dir: ${EXTERNAL_DIR}")
-message(STATUS "")
-message(STATUS "Features:")
-message(STATUS "  Zep editor: ${ZEP_AVAILABLE}")
-message(STATUS "  ImGui Markdown: ${IMGUI_MARKDOWN_FOUND}")
-message(STATUS "  ImGui Tex Inspect: ${IMGUI_TEX_INSPECT_FOUND}")
-message(STATUS "  Examples: ${ANISTUDIO_BUILD_EXAMPLES}")
-message(STATUS "")
 
 # Check for required targets
 if(NOT TARGET ImGuiFileDialog)

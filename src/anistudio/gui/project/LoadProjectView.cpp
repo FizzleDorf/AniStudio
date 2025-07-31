@@ -5,9 +5,8 @@
 
 namespace GUI {
 
-	LoadProjectView::LoadProjectView(ECS::EntityManager& entityMgr, ANI::ProjectManager& projectMgr)
-		: BaseView(entityMgr), m_projectManager(projectMgr) {
-		viewName = "Load Project";
+	LoadProjectView::LoadProjectView(ANI::ProjectManager& projectMgr)
+		: m_projectManager(projectMgr) {
 	}
 
 	void LoadProjectView::Init() {
@@ -15,7 +14,10 @@ namespace GUI {
 	}
 
 	void LoadProjectView::Update(const float deltaT) {
-		// Nothing to update
+		// Close this view if a project is now open
+		if (m_projectManager.IsProjectOpen()) {
+			m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
+		}
 	}
 
 	void LoadProjectView::Render() {
@@ -76,8 +78,8 @@ namespace GUI {
 
 				if (ImGui::Selectable(displayName.c_str())) {
 					if (m_projectManager.LoadProject(projectPath)) {
-						m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
 						std::cout << "[LoadProjectView] Loaded project: " << projectPath << std::endl;
+						// View will close automatically in Update() when project loads
 					}
 					else {
 						std::cerr << "[LoadProjectView] Failed to load project: " << m_projectManager.GetLastError() << std::endl;

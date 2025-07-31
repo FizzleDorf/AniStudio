@@ -1,5 +1,6 @@
 /*
- * PluginManager.hpp - Simple plugin manager that directly registers everything
+ * EnginePluginManager.hpp - Engine-Only Plugin Manager (Unified API)
+ * Lives in AniEngineCore, only knows about ECS
  */
 
 #pragma once
@@ -32,13 +33,9 @@ namespace ECS {
 	class EntityManager;
 }
 
-namespace GUI {
-	class ViewManager;
-}
-
 namespace Plugin {
 
-	class PluginManager {
+	class EnginePluginManager {
 	public:
 		struct PluginInfo {
 			std::string name;
@@ -63,7 +60,6 @@ namespace Plugin {
 
 	private:
 		ECS::EntityManager* entityManager;
-		GUI::ViewManager* viewManager;
 		PluginContext context;
 
 		std::unordered_map<std::string, PluginInfo> plugins;
@@ -79,8 +75,8 @@ namespace Plugin {
 		static std::atomic<int> tempFileCounter;
 
 	public:
-		PluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager* viewMgr = nullptr);
-		~PluginManager();
+		explicit EnginePluginManager(ECS::EntityManager& entityMgr);
+		~EnginePluginManager();
 
 		// Core functions
 		bool LoadPlugin(const std::string& pluginPath);

@@ -21,74 +21,172 @@
 #pragma once
 
 #include "BaseView.hpp"
-#include "PluginManager.hpp"
 #include <imgui.h>
 #include <string>
 #include <vector>
-#include <chrono>
+#include <filesystem>
+
+ // Forward declarations for the plugin managers
+namespace Plugin {
+	class EnginePluginManager;
+	class StudioPluginManager;
+}
+
+/*
+Plugin management GUI for AniStudio. This view provides a comprehensive interface
+for loading, unloading, and managing plugins at runtime. Supports both Engine and
+Studio plugin managers through a unified wrapper interface.
+
+Features:
+- Automatic plugin discovery from standard directories
+- Load/unload/reload individual plugins
+- Hot reload support with file watching
+- Real-time notifications for plugin operations
+- Plugin type indication (Engine vs Studio)
+- Error handling and reporting
+- Keyboard shortcuts (Ctrl+R to reload, Ctrl+U to unload)
+- Context menus for plugin management
+*/
 
 namespace GUI {
 
+	// Notification structure for the plugin view
 	struct PluginNotification {
 		std::string message;
-		bool isError;
-		float timeLeft;
-		ImVec4 color;
+		float timeLeft = 0.0f;
+		bool isError = false;
+		ImVec4 color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+	};
+
+	// Plugin manager interface for the view
+	class IPluginManagerWrapper {
+	public:
+		virtual ~IPluginManagerWrapper() = default;
+		virtual bool LoadPlugin(const std::string& path) = 0;
+		virtual bool UnloadPlugin(const std::string& name) = 0;
+		virtual bool ReloadPlugin(const std::string& name) = 0;
+		virtual void UnloadAllPlugins() = 0;
+		virtual bool IsPluginLoaded(const std::string& name) const = 0;
+		virtual std::vector<std::string> GetLoadedPluginNames() const = 0;
+		virtual void StartHotReload(const std::string& watchDir) = 0;
+		virtual void StopHotReload() = 0;
+		virtual bool IsHotReloadActive() const = 0;
+		virtual const std::string& GetWatchDirectory() const = 0;
+		virtual std::string GetPluginType() const = 0; // "Engine" or "Studio"
+	};
+
+	// Wrapper for EnginePluginManager
+	class EnginePluginWrapper : public IPluginManagerWrapper {
+	private:
+		Plugin::EnginePluginManager& manager;
+	public:
+		EnginePluginWrapper(Plugin::EnginePluginManager& mgr) : manager(mgr) {}
+
+		bool LoadPlugin(const std::string& path) override;
+		bool UnloadPlugin(const std::string& name) override;
+		bool ReloadPlugin(const std::string& name) override;
+		void UnloadAllPlugins() override;
+		bool IsPluginLoaded(const std::string& name) const override;
+		std::vector<std::string> GetLoadedPluginNames() const override;
+		void StartHotReload(const std::string& watchDir) override;
+		void StopHotReload() override;
+		bool IsHotReloadActive() const override;
+		const std::string& GetWatchDirectory() const override;
+		std::string GetPluginType() const override { return "Engine"; }
+	};
+
+	// Wrapper for StudioPluginManager
+	class StudioPluginWrapper : public IPluginManagerWrapper {
+	private:
+		Plugin::StudioPluginManager& manager;
+	public:
+		StudioPluginWrapper(Plugin::StudioPluginManager& mgr) : manager(mgr) {}
+
+		bool LoadPlugin(const std::string& path) override;
+		bool UnloadPlugin(const std::string& name) override;
+		bool ReloadPlugin(const std::string& name) override;
+		void UnloadAllPlugins() override;
+		bool IsPluginLoaded(const std::string& name) const override;
+		std::vector<std::string> GetLoadedPluginNames() const override;
+		void StartHotReload(const std::string& watchDir) override;
+		void StopHotReload() override;
+		bool IsHotReloadActive() const override;
+		const std::string& GetWatchDirectory() const override;
+		std::string GetPluginType() const override { return "Studio"; }
 	};
 
 	class PluginView : public BaseView {
+	private:
+		std::unique_ptr<IPluginManagerWrapper> pluginManager;
+
+		// UI state
+		std::string selectedPluginName;
+		char directoryInputBuffer[512] = "";
+		char pluginPathBuffer[512] = "";
+		bool showDirectoryInput = false;
+		bool showAdvancedControls = false;
+		bool showStats = false;
+		bool autoRefresh = false;
+		bool pluginListOpen = true;
+
+		// Timing
+		float refreshTimer = 0.0f;
+		float refreshInterval = 2.0f;
+
+		// Notifications
+		std::vector<PluginNotification> notifications;
+		float notificationDuration = 3.0f;
+
+		// Available plugins cache
+		std::vector<std::string> availablePlugins;
+		float lastScanTime = 0.0f;
+		float scanInterval = 2.0f;
+
 	public:
+		// Constructor for Engine plugin manager
+		PluginView(ECS::EntityManager& entityMgr, Plugin::EnginePluginManager& engineMgr);
+
+		// Constructor for Studio plugin manager  
+		PluginView(ECS::EntityManager& entityMgr, Plugin::StudioPluginManager& studioMgr);
+
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
-            "displayName": "Plugin View",
-            "category": "Plugins",
-            "description": "Manage plugin loading/unloading."
-        })";
+                "displayName": "Plugin Manager", 
+                "category": "Development",
+                "description": "Comprehensive plugin management interface with hot reload support"
+            })";
 		}
 
-		explicit PluginView(ECS::EntityManager& entityMgr, Plugin::PluginManager& pluginMgr);
-		~PluginView() override = default;
+		static ViewMetadata GetMetadata() {
+			return GetMetadataFor<PluginView>();
+		}
 
 		void Init() override;
-		void Update(float deltaTime) override;
+		void Update(const float deltaT) override;
 		void Render() override;
 
 	private:
-		// Reference to plugin manager
-		Plugin::PluginManager& pluginManager;
-
-		// UI State members
-		char directoryInputBuffer[512];
-		std::vector<PluginNotification> notifications;
-		bool showAdvancedControls = false;
-		bool showStats = false;
-		bool autoRefresh = true;
-		bool showDirectoryInput = false;
-		bool pluginListOpen = true;
-		float refreshTimer = 0.0f;
-		float refreshInterval = 2.0f;
-		const float notificationDuration = 3.0f;
-		std::string selectedPluginName;
-
-		// Event handlers for CR plugin system
-		void OnPluginLoaded(const std::string& name, bool isReload);
-		void OnPluginUnloaded(const std::string& name);
-		void OnPluginError(const std::string& name, const std::string& error);
-
-		// UI rendering methods
+		// Main rendering functions
 		void RenderPluginControls();
 		void RenderPluginList();
+		void RenderAvailablePlugins();
 		void RenderHotReloadControls();
 		void RenderPluginInfo();
 		void RenderPluginStats();
 		void RenderNotifications();
 		void RenderDirectoryControls();
 
-		// Helper methods
+		// Utility functions
 		void UpdateNotifications(float deltaT);
 		void AddNotification(const std::string& message, bool isError);
 		void HandleKeyboardShortcuts();
+		void ScanForAvailablePlugins();
+		void LoadAllAvailablePlugins();
+
+		// Helper functions
 		ImVec4 GetStatusColor(bool isLoaded, bool hasError) const;
 		const char* GetStatusText(bool isLoaded, bool hasError) const;
+		std::string GetPluginNameFromPath(const std::string& path) const;
 	};
-}
+
+} // namespace GUI

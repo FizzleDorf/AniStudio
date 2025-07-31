@@ -1,3 +1,4 @@
+// Core.cpp - FIXED - No LoadDefaultPlugins call
 #include "Core.hpp"
 #include <iostream>
 #include <sstream>
@@ -37,15 +38,18 @@ namespace ANI {
 			throw std::runtime_error("Failed to initialize window");
 		}
 
-		// Initialize the studio core AFTER window creation
+		// Initialize the studio core
 		if (!studioCore.Initialize()) {
 			throw std::runtime_error("Failed to initialize StudioCore");
 		}
 
-		// Setup window context for plugins and window management
+		// Setup window context for plugins
 		studioCore.SetWindowHandle(window);
 		studioCore.SetImGuiContext(ImGui::GetCurrentContext());
-		studioCore.LoadDefaultPlugins();
+
+		// REMOVED: NO MORE LoadDefaultPlugins call
+		// EngineCore already loaded its plugins
+		// StudioCore plugins are loaded manually via GUI
 
 		std::cout << "[Core] Initialization complete!" << std::endl;
 	}
