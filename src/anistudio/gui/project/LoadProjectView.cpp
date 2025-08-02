@@ -14,24 +14,35 @@ namespace GUI {
 	}
 
 	void LoadProjectView::Update(const float deltaT) {
-		// Close this view if a project is now open
+		// Close popup if a project was loaded
 		if (m_projectManager.IsProjectOpen()) {
-			m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
+			m_showPopup = false;
 		}
 	}
 
 	void LoadProjectView::Render() {
-		// Center the window like a modal
+		// Check if ViewState wants us to show
+		if (m_projectManager.GetViewState().IsViewOpen("LoadProjectView")) {
+			m_showPopup = true;
+			m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false); // Clear the flag
+		}
+
+		if (m_showPopup) {
+			ImGui::OpenPopup("Load Project##LoadProjectPopup");
+		}
+
+		// Center and make it a proper modal popup
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(500, 400), ImGuiCond_Appearing);
 
-		// Modal-like flags
+		// Modal popup flags
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
+			ImGuiWindowFlags_Modal;
 
 		bool isOpen = true;
-		if (ImGui::Begin("Load Project##LoadProjectModal", &isOpen, flags)) {
+		if (ImGui::BeginPopupModal("Load Project##LoadProjectPopup", &isOpen, flags)) {
 			ImGui::Text("Load Project");
 			ImGui::Separator();
 
@@ -48,14 +59,16 @@ namespace GUI {
 			float startX = (ImGui::GetContentRegionAvail().x - buttonWidth) * 0.5f;
 			ImGui::SetCursorPosX(startX);
 			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 30))) {
-				m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
+				m_showPopup = false;
+				ImGui::CloseCurrentPopup();
 			}
+
+			ImGui::EndPopup();
 		}
-		ImGui::End();
 
 		// Handle close button or ESC key
 		if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-			m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false);
+			m_showPopup = false;
 		}
 	}
 
@@ -79,7 +92,7 @@ namespace GUI {
 				if (ImGui::Selectable(displayName.c_str())) {
 					if (m_projectManager.LoadProject(projectPath)) {
 						std::cout << "[LoadProjectView] Loaded project: " << projectPath << std::endl;
-						// View will close automatically in Update() when project loads
+						m_showPopup = false;
 					}
 					else {
 						std::cerr << "[LoadProjectView] Failed to load project: " << m_projectManager.GetLastError() << std::endl;

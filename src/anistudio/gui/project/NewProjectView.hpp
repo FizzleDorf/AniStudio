@@ -13,21 +13,13 @@
  */
 
 #pragma once
-#include <nlohmann/json.hpp>
+#include "ProjectTemplate.hpp"
 #include <vector>
 #include <string>
 
 namespace ANI { class ProjectManager; }
 
 namespace GUI {
-
-	struct ProjectTemplate {
-		std::string name;
-		std::string description;
-		std::string category;
-		std::vector<std::string> defaultOpenViews;
-		nlohmann::json settings;
-	};
 
 	// Standalone new project modal - not derived from BaseView
 	class NewProjectView {
@@ -47,6 +39,9 @@ namespace GUI {
 		// Project input buffers
 		char m_projectNameBuffer[256];
 		char m_projectPathBuffer[512];
+
+		// Simple popup state
+		bool m_showPopup = false;
 
 		void LoadTemplates();
 		void ShowTemplateSelector();

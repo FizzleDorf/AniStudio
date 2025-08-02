@@ -8,14 +8,25 @@
 namespace GUI {
 
 	MenuBar::MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr)
-		: m_projectManager(projectMgr), m_viewManager(viewMgr) {
+		: m_projectManager(projectMgr), m_viewManager(viewMgr),
+		m_newProjectView(projectMgr), m_loadProjectView(projectMgr) {
+
+		// Initialize the views
+		m_newProjectView.Init();
+		m_loadProjectView.Init();
 	}
 
 	void MenuBar::Update(float deltaTime) {
-		// Nothing to update for menubar
+		// Update the views
+		m_newProjectView.Update(deltaTime);
+		m_loadProjectView.Update(deltaTime);
 	}
 
 	void MenuBar::Render() {
+		// Always render the popup views first
+		m_newProjectView.Render();
+		m_loadProjectView.Render();
+
 		// Only render menubar if inside a window with menubar enabled
 		if (ImGui::BeginMenuBar()) {
 			ShowFileMenu();
@@ -30,10 +41,12 @@ namespace GUI {
 	void MenuBar::ShowFileMenu() {
 		if (ImGui::BeginMenu("File")) {
 			if (ImGui::MenuItem("New Project...", "Ctrl+N")) {
+				// Open the new project view
 				m_projectManager.GetViewState().SetViewOpen("NewProjectView", true);
 			}
 
 			if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
+				// Open the load project view
 				m_projectManager.GetViewState().SetViewOpen("LoadProjectView", true);
 			}
 
@@ -51,7 +64,7 @@ namespace GUI {
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("Exit", "Alt+F4")) {
-				// Send quit event or set running flag false
+				exit(0);
 			}
 
 			ImGui::EndMenu();

@@ -13,6 +13,8 @@
  */
 
 #pragma once
+#include "NewProjectView.hpp"
+#include "LoadProjectView.hpp"
 #include <unordered_map>
 #include <memory>
 #include <string>
@@ -40,6 +42,10 @@ namespace GUI {
 	private:
 		ANI::ProjectManager& m_projectManager;
 		ViewManager& m_viewManager;
+
+		// Direct view instances
+		NewProjectView m_newProjectView;
+		LoadProjectView m_loadProjectView;
 
 		// Menu sections
 		void ShowFileMenu();

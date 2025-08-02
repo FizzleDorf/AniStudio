@@ -40,8 +40,6 @@ namespace Plugin {
 namespace GUI {
 	class MenuBar;
 	class ProjectManagerView;
-	class NewProjectView;
-	class LoadProjectView;
 }
 
 /*
@@ -114,11 +112,9 @@ namespace ANI {
 		// Studio plugin manager (supports all plugin types)
 		std::unique_ptr<Plugin::StudioPluginManager> studioPluginManager;
 
-		// Standalone views (not managed by ViewManager)
+		// Standalone views (only ProjectManagerView now - contains the popups)
 		std::unique_ptr<GUI::MenuBar> m_menuBar;
 		std::unique_ptr<GUI::ProjectManagerView> m_projectManagerView;
-		std::unique_ptr<GUI::NewProjectView> m_newProjectView;
-		std::unique_ptr<GUI::LoadProjectView> m_loadProjectView;
 
 		// Use existing WindowState utility
 		Utils::WindowState m_windowState;

@@ -13,32 +13,18 @@
  */
 
 #pragma once
+#include <nlohmann/json.hpp>
 #include <vector>
 #include <string>
 
-namespace ANI { class ProjectManager; }
-
 namespace GUI {
 
-	// Standalone load project modal - not derived from BaseView
-	class LoadProjectView {
-	public:
-		LoadProjectView(ANI::ProjectManager& projectMgr);
-
-		void Init();
-		void Update(const float deltaT);
-		void Render();
-
-	private:
-		ANI::ProjectManager& m_projectManager;
-		std::vector<std::string> m_recentProjects;
-
-		// Simple popup state
-		bool m_showPopup = false;
-
-		void RefreshRecentProjects();
-		void ShowRecentProjects();
-		void ShowBrowseOption();
+	struct ProjectTemplate {
+		std::string name;
+		std::string description;
+		std::string category;
+		std::vector<std::string> defaultOpenViews;
+		nlohmann::json settings;
 	};
 
 } // namespace GUI

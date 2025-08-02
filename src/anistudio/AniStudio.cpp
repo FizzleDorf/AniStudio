@@ -40,10 +40,8 @@ namespace ANI {
 			viewManager
 			);
 
-		// Create standalone project views (not managed by ViewManager, no EntityManager needed)
+		// Create standalone project view (only ProjectManagerView - contains the popups now)
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
-		m_newProjectView = std::make_unique<GUI::NewProjectView>(m_projectManager);
-		m_loadProjectView = std::make_unique<GUI::LoadProjectView>(m_projectManager);
 	}
 
 	StudioCore::~StudioCore() {
@@ -298,12 +296,10 @@ namespace ANI {
 				std::cout << "[StudioCore] Started studio plugin hot reload for: " << pluginsDir << std::endl;
 			}
 
-			// Initialize standalone views
+			// Initialize standalone view
 			m_projectManagerView->Init();
-			m_newProjectView->Init();
-			m_loadProjectView->Init();
 
-			// Create MenuBar (standalone, not managed by ViewManager)
+			// Create MenuBar (standalone, not managed by ViewManager) - pass ProjectManagerView reference
 			m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
 
 			// Show startup view if no project should be loaded
@@ -443,8 +439,6 @@ namespace ANI {
 			// Clean up standalone views
 			m_menuBar.reset();
 			m_projectManagerView.reset();
-			m_newProjectView.reset();
-			m_loadProjectView.reset();
 
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
 			viewManager.FullReset();
@@ -478,16 +472,10 @@ namespace ANI {
 			// Update standalone views
 			if (m_menuBar) m_menuBar->Update(deltaTime);
 
-			// Update project views only if they should be visible
+			// Update project view only if it should be visible
 			auto& viewState = m_projectManager.GetViewState();
 			if (viewState.IsViewOpen("ProjectManagerView")) {
 				m_projectManagerView->Update(deltaTime);
-			}
-			if (viewState.IsViewOpen("NewProjectView")) {
-				m_newProjectView->Update(deltaTime);
-			}
-			if (viewState.IsViewOpen("LoadProjectView")) {
-				m_loadProjectView->Update(deltaTime);
 			}
 
 			// Update ViewManager's generic workspaces (this updates all view instances)
@@ -508,26 +496,26 @@ namespace ANI {
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			// ALWAYS render project management views first - these should show when no project is open
 			auto& viewState = m_projectManager.GetViewState();
 
-			// Force ProjectManagerView to be open if no project is loaded
-			if (!m_projectManager.IsProjectOpen() && !viewState.IsViewOpen("ProjectManagerView")) {
-				viewState.SetViewOpen("ProjectManagerView", true);
-				std::cout << "[StudioCore] No project open, forcing ProjectManagerView to show" << std::endl;
+			// FIXED: Only set ProjectManagerView open ONCE, not every frame
+			static bool startupShown = false;
+			if (!m_projectManager.IsProjectOpen() && !startupShown) {
+				if (!viewState.IsViewOpen("ProjectManagerView")) {
+					viewState.SetViewOpen("ProjectManagerView", true);
+					startupShown = true;
+					std::cout << "[StudioCore] Showing startup view - no project to auto-load" << std::endl;
+				}
 			}
 
-			// Render project management views as standalone modals/windows
+			// Reset flag when project is open
+			if (m_projectManager.IsProjectOpen()) {
+				startupShown = false;
+			}
+
+			// Render project management view (contains the popups now)
 			if (viewState.IsViewOpen("ProjectManagerView")) {
 				m_projectManagerView->Render();
-			}
-
-			if (viewState.IsViewOpen("NewProjectView")) {
-				m_newProjectView->Render();
-			}
-
-			if (viewState.IsViewOpen("LoadProjectView")) {
-				m_loadProjectView->Render();
 			}
 
 			// Only render main interface if project is open

@@ -27,24 +27,35 @@ namespace GUI {
 	}
 
 	void NewProjectView::Update(const float deltaT) {
-		// Close this view if a project is now open
+		// Close popup if a project was created/loaded
 		if (m_projectManager.IsProjectOpen()) {
-			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
+			m_showPopup = false;
 		}
 	}
 
 	void NewProjectView::Render() {
-		// Center the window like a modal
+		// Check if ViewState wants us to show
+		if (m_projectManager.GetViewState().IsViewOpen("NewProjectView")) {
+			m_showPopup = true;
+			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false); // Clear the flag
+		}
+
+		if (m_showPopup) {
+			ImGui::OpenPopup("Create New Project##NewProjectPopup");
+		}
+
+		// Center and make it a proper modal popup
 		ImVec2 center = ImGui::GetMainViewport()->GetCenter();
 		ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
 		ImGui::SetNextWindowSize(ImVec2(550, 450), ImGuiCond_Appearing);
 
-		// Modal-like flags
+		// Modal popup flags
 		ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking;
+			ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
+			ImGuiWindowFlags_Modal;
 
 		bool isOpen = true;
-		if (ImGui::Begin("Create New Project##NewProjectModal", &isOpen, flags)) {
+		if (ImGui::BeginPopupModal("Create New Project##NewProjectPopup", &isOpen, flags)) {
 			ImGui::Text("Create New Project");
 			ImGui::Separator();
 
@@ -75,18 +86,22 @@ namespace GUI {
 			ImGui::SetCursorPosX(startX);
 			if (ImGui::Button("Create Project", ImVec2(buttonWidth, 30))) {
 				CreateProject();
+				m_showPopup = false;
+				ImGui::CloseCurrentPopup();
 			}
 
 			ImGui::SameLine(0, spacing);
 			if (ImGui::Button("Cancel", ImVec2(buttonWidth, 30))) {
-				m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
+				m_showPopup = false;
+				ImGui::CloseCurrentPopup();
 			}
+
+			ImGui::EndPopup();
 		}
-		ImGui::End();
 
 		// Handle close button or ESC key
 		if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false);
+			m_showPopup = false;
 		}
 	}
 
@@ -217,7 +232,6 @@ namespace GUI {
 				std::cout << "[NewProjectView] Created blank workspace" << std::endl;
 			}
 
-			// View will close automatically in Update() when project is created
 			std::cout << "[NewProjectView] Created project: " << projectName << std::endl;
 		}
 		else {
