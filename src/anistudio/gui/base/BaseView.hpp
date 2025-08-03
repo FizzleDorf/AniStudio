@@ -1,10 +1,11 @@
-// BaseView.hpp - Fixed version
+// BaseView.hpp - Enhanced version with window close detection
 #pragma once
 #include "ECS.h"
 #include "ViewTypes.hpp"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <functional>
 
 namespace GUI {
 
@@ -21,7 +22,7 @@ namespace GUI {
 		// Instance members
 		std::string viewName = "Base_View";
 
-		BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr) {}
+		BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr), m_shouldClose(false) {}
 		virtual ~BaseView() {}
 
 		// Static metadata - each derived class overrides this
@@ -57,16 +58,49 @@ namespace GUI {
 
 		inline const WorkspaceID GetID() const { return workspaceID; }
 
+		// Check if view should be closed (window X was clicked)
+		inline bool ShouldClose() const { return m_shouldClose; }
+
+		// Set close callback - called when view needs to be closed
+		inline void SetCloseCallback(std::function<void(WorkspaceID)> callback) {
+			m_closeCallback = callback;
+		}
+
 		virtual void Init() {}
 		virtual void Update(const float deltaT) {}
 
+		// Enhanced Render method that handles window close detection
 		virtual void Render() {
-			if (ImGui::Begin(viewName.c_str())) {
-				ImGui::Text("Default BaseView Render");
-				ImGui::Text("ViewID: %zu", workspaceID);
-				ImGui::Text("This view should override Render()");
+			std::string windowName = GetWindowTitle();
+			bool windowOpen = true;
+
+			// Begin window with close button enabled
+			if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
+				// Check if window was closed via X button
+				if (!windowOpen && !m_shouldClose) {
+					m_shouldClose = true;
+					// Trigger close callback if set
+					if (m_closeCallback) {
+						m_closeCallback(workspaceID);
+					}
+				}
+
+				// Call derived class render implementation
+				RenderContent();
 			}
 			ImGui::End();
+
+			// Reset close flag if window is still open
+			if (windowOpen) {
+				m_shouldClose = false;
+			}
+		}
+
+		// Derived classes override this instead of Render()
+		virtual void RenderContent() {
+			ImGui::Text("Default BaseView Content");
+			ImGui::Text("ViewID: %zu", workspaceID);
+			ImGui::Text("This view should override RenderContent()");
 		}
 
 		virtual void HandleInput(int key, int action) {}
@@ -85,9 +119,16 @@ namespace GUI {
 	protected:
 		ECS::EntityManager &mgr;
 
+		// Generate window title with unique ID
+		virtual std::string GetWindowTitle() const {
+			return viewName + "##" + std::to_string(workspaceID);
+		}
+
 	private:
 		friend class ViewManager;
 		WorkspaceID workspaceID;
+		bool m_shouldClose;
+		std::function<void(WorkspaceID)> m_closeCallback;
 	};
 
 } // namespace GUI

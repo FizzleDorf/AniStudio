@@ -132,6 +132,10 @@ namespace ANI {
 					GUI::WorkspaceID createdID = viewManager.CreateViewByName(viewTypeName, engineCore.GetEntityManager());
 					if (createdID != 0) {
 						m_activeViewInstances[viewInstanceID] = createdID;
+
+						// Set up close callback for the created view
+						SetupViewCloseCallback(createdID, viewTypeName);
+
 						std::cout << "[StudioCore] Created view instance: " << viewTypeName << " with ID: " << createdID << std::endl;
 					}
 					else {
@@ -174,6 +178,57 @@ namespace ANI {
 
 		// Now render all the active view instances through ViewManager
 		viewManager.RenderGenericWorkspaces();
+	}
+
+	void StudioCore::SetupViewCloseCallback(GUI::WorkspaceID viewID, const std::string& viewTypeName) {
+		// Get the view from ViewManager's generic storage
+		auto& genericWorkspaces = viewManager.GetGenericWorkspaces();
+		auto viewIt = genericWorkspaces.find(viewID);
+
+		if (viewIt != genericWorkspaces.end() && viewIt->second) {
+			// Set up the close callback
+			viewIt->second->SetCloseCallback([this, viewTypeName](GUI::WorkspaceID closedViewID) {
+				OnViewClosed(closedViewID, viewTypeName);
+			});
+
+			std::cout << "[StudioCore] Set up close callback for view: " << viewTypeName << " (ID: " << viewID << ")" << std::endl;
+		}
+		else {
+			std::cerr << "[StudioCore] Failed to find view for close callback setup: " << viewTypeName << " (ID: " << viewID << ")" << std::endl;
+		}
+	}
+
+	void StudioCore::OnViewClosed(GUI::WorkspaceID viewID, const std::string& viewTypeName) {
+		std::cout << "[StudioCore] View closed via X button: " << viewTypeName << " (ID: " << viewID << ")" << std::endl;
+
+		if (!m_projectManager.IsProjectOpen()) {
+			std::cerr << "[StudioCore] No project open, cannot update workspace state" << std::endl;
+			return;
+		}
+
+		auto& viewState = m_projectManager.GetViewState();
+
+		// Remove the view from the active workspace state
+		viewState.SetViewOpen(viewTypeName, false);
+
+		// Find and remove from our tracking
+		auto it = m_activeViewInstances.begin();
+		while (it != m_activeViewInstances.end()) {
+			if (it->second == viewID) {
+				std::cout << "[StudioCore] Removing view from tracking: " << viewTypeName
+					<< " (Instance ID: " << it->first << ", View ID: " << viewID << ")" << std::endl;
+				it = m_activeViewInstances.erase(it);
+				break;
+			}
+			else {
+				++it;
+			}
+		}
+
+		// Destroy the view in ViewManager
+		viewManager.DestroyView(viewID);
+
+		std::cout << "[StudioCore] Successfully closed and cleaned up view: " << viewTypeName << std::endl;
 	}
 
 	void StudioCore::InitializeWindowState() {

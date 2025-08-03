@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 project(AniPlugins VERSION 1.0.0 LANGUAGES CXX)
 
-# Build options
-option(ANIPLUGINS_BUILD_EXAMPLES "Build AniPlugins examples" ON)
-
 # C++ Standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -81,16 +78,6 @@ function(add_anistudio_plugin TARGET_NAME)
     
     message(STATUS "Added AniStudio plugin: ${TARGET_NAME}")
 endfunction()
-
-# Build example plugin if requested
-if(ANIPLUGINS_BUILD_EXAMPLES)
-    # Example plugin
-    add_anistudio_plugin(ExamplePlugin
-        SOURCES ExamplePlugin.cpp
-    )
-    
-    message(STATUS "Built example plugin")
-endif()
 
 # Install configuration (when building standalone)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
