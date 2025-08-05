@@ -49,6 +49,9 @@
 #include "editors/NodeGraphView.hpp"
 #include "editors/NodeView.hpp"
 
+//3D
+#include "editors/ModelView.hpp"
+
 // Animation views
 #include "tools/SequencerView.hpp"
 

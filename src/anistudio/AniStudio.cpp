@@ -52,6 +52,8 @@ namespace ANI {
 
 	void StudioCore::RegisterCoreViews() {
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
+		
+		
 
 		// Register standard views (only need EntityManager)
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
@@ -66,6 +68,8 @@ namespace ANI {
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
+
+		viewManager.RegisterView<GUI::ModelView>("ModelView");
 
 		// Register views that need special constructors with custom factories
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",

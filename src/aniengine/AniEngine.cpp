@@ -54,6 +54,10 @@ namespace ANI {
 		entityManager.RegisterComponentName<ChromaComponent>("Chroma");
 		entityManager.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
 
+		entityManager.RegisterComponentName<ECS::TransformComponent>("Transform");
+		entityManager.RegisterComponentName<ECS::MeshComponent>("Mesh");
+		entityManager.RegisterComponentName<ECS::CameraComponent>("Camera");
+
 		std::cout << "[EngineCore] Core components registered" << std::endl;
 	}
 
@@ -62,6 +66,8 @@ namespace ANI {
 		entityManager.RegisterSystem<SDCPPSystem>();
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
+
+		entityManager.RegisterSystem<ECS::RenderSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}
