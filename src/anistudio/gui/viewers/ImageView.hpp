@@ -1,5 +1,5 @@
 /*
- * ImageView.hpp - Enhanced version with RenderContent override
+ * ImageView.hpp - Enhanced version with Events-based close handling
  */
 
 #ifndef IMAGEVIEW_HPP
@@ -9,7 +9,6 @@
 #include "FilePaths.hpp"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
-#include "../events/Events.hpp"
 #include <pch.h>
 
 namespace GUI {
@@ -30,7 +29,8 @@ namespace GUI {
 		void Init() override;
 		void Update(const float deltaT) override;
 
-		// Override RenderContent instead of Render to use BaseView's window close handling
+		// Override Render to handle window close
+		void Render() override;
 		void RenderContent() override;
 
 	private:

@@ -1,10 +1,11 @@
 /*
- * ImageView.cpp - Enhanced version with proper window close handling
+ * ImageView.cpp - Enhanced version with Events-based window close handling
  */
 
 #include "ImageView.hpp"
 #include "ImageUtils.hpp"
 #include "ImGuiFileDialog.h"
+#include "Events.hpp"
 #include <algorithm>
 #include <iostream>
 
@@ -32,9 +33,6 @@ namespace GUI {
 
 	ImageView::~ImageView() {
 		std::cout << "[ImageView] Destructor called - Note: ImageSystem callbacks are stored by value so no cleanup needed" << std::endl;
-		// NOTE: The ImageSystem stores callbacks in a vector by value (lambdas)
-		// When this view is destroyed, the lambdas become invalid but that's handled
-		// by the capture-by-value nature of the lambdas
 	}
 
 	void ImageView::Init() {
@@ -67,12 +65,25 @@ namespace GUI {
 		std::cout << "[ImageView] Initialization complete - CALLBACKS REGISTERED" << std::endl;
 	}
 
-	void ImageView::Update(const float deltaT) {
-		// NOTE: We no longer need to poll for changes in Update since we use callbacks
-		// The callbacks will handle immediate updates when images are loaded/removed
+	void ImageView::Update(const float deltaT) {}
+
+	void ImageView::Render() {
+		std::string windowName = GetWindowTitle();
+		bool windowOpen = true;
+
+		if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
+			// Check if window was closed via X button
+			if (!windowOpen) {
+				// Send remove view event
+				ANI::Events::Ref().RequestRemoveView(GetID(), "ImageView");
+			}
+
+			RenderContent();
+		}
+		ImGui::End();
 	}
 
-	// Override RenderContent instead of Render to use BaseView's window close handling
+	// Main content rendering (separated from window management)
 	void ImageView::RenderContent() {
 		try {
 			RenderImageInfo();
@@ -179,7 +190,6 @@ namespace GUI {
 		}
 	}
 
-	// RENDERING METHODS
 	void ImageView::RenderImageInfo() {
 		if (selectedEntityID != 0 && mgr.IsEntityValid(selectedEntityID) &&
 			mgr.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
@@ -475,7 +485,6 @@ namespace GUI {
 		}
 	}
 
-	// IMAGE OPERATIONS
 	void ImageView::SetZoom(float newZoom) {
 		zoom = std::clamp(newZoom, 0.1f, 5.0f);
 	}

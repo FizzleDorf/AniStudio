@@ -131,9 +131,7 @@ void SettingsView::RenderSettingsWindow() {
     }
     ImGui::SameLine();
     if (ImGui::Button("Close")) {
-        ANI::Event event;
-        event.type = ANI::EventType::CloseSettings;
-        ANI::Events::Ref().QueueEvent(event);
+
     }
 
     // Save Confirmation Popup
@@ -147,9 +145,7 @@ void SettingsView::RenderSettingsWindow() {
             showSavePopup = false;
             ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
-            ANI::Event event;
-            event.type = ANI::EventType::CloseSettings;
-            ANI::Events::Ref().QueueEvent(event);
+
         }
     }
 }

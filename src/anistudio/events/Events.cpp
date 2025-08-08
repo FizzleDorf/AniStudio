@@ -19,19 +19,69 @@ namespace ANI {
 		eventQueue.push(event);
 	}
 
+	void Events::QueueViewEvent(const ViewEvent &event) {
+		viewEventQueue.push(event);
+	}
+
 	void Events::Poll() {
 		// Poll and handle events (inputs, window resize, etc.)
 		glfwPollEvents();
 
 		// Process all pending events after polling
 		ProcessEvents();
+
+		// Process view events
+		ProcessViewEvents();
 	}
 
-	static GUI::WorkspaceID debugID = 0;   
+	void Events::ProcessViewEvents() {
+		while (!viewEventQueue.empty()) {
+			ViewEvent event = viewEventQueue.front();
+			viewEventQueue.pop();
+
+			// Access ViewManager through the existing appCore reference
+			auto& viewManager = appCore.GetViewManager();
+
+			switch (event.type) {
+			case ViewEventType::AddView: {
+				std::cout << "[Events] Adding view: " << event.viewTypeName << std::endl;
+
+				GUI::WorkspaceID newViewID = viewManager.CreateViewByName(event.viewTypeName,
+					appCore.GetEntityManager());
+
+				if (newViewID != 0) {
+					std::cout << "[Events] Successfully added view: " << event.viewTypeName
+						<< " with ID: " << newViewID << std::endl;
+				}
+				else {
+					std::cerr << "[Events] Failed to add view: " << event.viewTypeName << std::endl;
+				}
+				break;
+			}
+
+			case ViewEventType::RemoveView: {
+				std::cout << "[Events] Removing view: " << event.viewTypeName
+					<< " (ID: " << event.viewID << ")" << std::endl;
+
+				// Destroy the view
+				viewManager.DestroyView(event.viewID);
+
+				std::cout << "[Events] Successfully removed view: " << event.viewTypeName << std::endl;
+				break;
+			}
+
+			default:
+				std::cerr << "[Events] Unknown view event type" << std::endl;
+				break;
+			}
+		}
+	}
+
+	static GUI::WorkspaceID debugID = 0;
 	static GUI::WorkspaceID settingsID = 0;
-	static GUI::WorkspaceID viewsID = 0;   
-	static GUI::WorkspaceID pluginsID = 0; 
-	static GUI::WorkspaceID helpID = 0;    
+	static GUI::WorkspaceID viewsID = 0;
+	static GUI::WorkspaceID pluginsID = 0;
+	static GUI::WorkspaceID helpID = 0;
 
 	// Handle events based on its EventType
 	void Events::ProcessEvents() {

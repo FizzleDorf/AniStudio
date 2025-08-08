@@ -1,23 +1,3 @@
-/*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
-   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
- d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
- */
-
 #pragma once
 #include "ECS.h"
 #include "GUI.h"
@@ -26,8 +6,9 @@
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>
+#include <string>
 
- // Forward declaration
+// Forward declaration
 namespace ANI {
 	class Core;
 	extern Core &appCore;
@@ -41,20 +22,6 @@ namespace ANI {
 		Quit,
 		NewProject,
 		OpenProject,
-
-		// Menu Views
-		OpenSettings,
-		CloseSettings,
-		OpenDebug,
-		CloseDebug,
-		OpenConvert,
-		CloseConvert,
-		OpenViews,
-		CloseViews,
-		OpenPlugins,
-		ClosePlugins,
-		OpenHelp,
-		CloseHelp,
 
 		// Diffusion
 		InferenceRequest,
@@ -78,9 +45,20 @@ namespace ANI {
 		SaveVideoEvent
 	};
 
+	enum class ViewEventType {
+		AddView,
+		RemoveView
+	};
+
 	struct Event {
 		EventType type;
 		ECS::EntityID entityID;
+	};
+
+	struct ViewEvent {
+		ViewEventType type;
+		GUI::WorkspaceID viewID;
+		std::string viewTypeName;
 	};
 
 	class Events {
@@ -89,7 +67,6 @@ namespace ANI {
 		Events(const Events &) = delete;
 		Events &operator=(const Events &) = delete;
 
-		// Singleton reference
 		static Events &Ref() {
 			static Events instance;
 			return instance;
@@ -100,9 +77,31 @@ namespace ANI {
 		void QueueEvent(const Event &event);
 		void ProcessEvents();
 
+		// ViewEvent functions
+		void QueueViewEvent(const ViewEvent &event);
+		void ProcessViewEvents();
+
+		// Helper functions for view events
+		void RequestAddView(const std::string& viewTypeName) {
+			ViewEvent event;
+			event.type = ViewEventType::AddView;
+			event.viewID = 0;
+			event.viewTypeName = viewTypeName;
+			QueueViewEvent(event);
+		}
+
+		void RequestRemoveView(GUI::WorkspaceID viewID, const std::string& viewTypeName) {
+			ViewEvent event;
+			event.type = ViewEventType::RemoveView;
+			event.viewID = viewID;
+			event.viewTypeName = viewTypeName;
+			QueueViewEvent(event);
+		}
+
 	private:
-		Events(); // Constructor is private for singleton pattern
+		Events();
 		std::queue<Event> eventQueue;
+		std::queue<ViewEvent> viewEventQueue;
 	};
 
 } // namespace ANI

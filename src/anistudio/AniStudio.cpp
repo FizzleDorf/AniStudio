@@ -34,13 +34,11 @@ namespace ANI {
 		m_projectManager(viewManager, engineCore.GetEntityManager()) {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
-		// Create studio plugin manager with BOTH ECS and GUI support
 		studioPluginManager = std::make_unique<Plugin::StudioPluginManager>(
 			engineCore.GetEntityManager(),
 			viewManager
 			);
 
-		// Create standalone project view (only ProjectManagerView - contains the popups now)
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
 	}
 
@@ -52,10 +50,7 @@ namespace ANI {
 
 	void StudioCore::RegisterCoreViews() {
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
-		
-		
 
-		// Register standard views (only need EntityManager)
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
 		viewManager.RegisterView<GUI::DiffusionView>("DiffusionView");
@@ -68,10 +63,8 @@ namespace ANI {
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
-
 		viewManager.RegisterView<GUI::ModelView>("ModelView");
 
-		// Register views that need special constructors with custom factories
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
 			return std::make_unique<GUI::WorkspaceView>(mgr, viewManager);
@@ -79,7 +72,6 @@ namespace ANI {
 			[]() -> GUI::ViewMetadata { return GUI::WorkspaceView::GetMetadata(); }
 		);
 
-		// Register PluginView with StudioPluginManager
 		viewManager.RegisterViewWithFactory("PluginView", "Development",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
 			return std::make_unique<GUI::PluginView>(mgr, *studioPluginManager);
@@ -91,7 +83,6 @@ namespace ANI {
 	}
 
 	void StudioCore::SetupProjectCallbacks() {
-		// Set up project manager callbacks for workspace management
 		m_projectManager.SetProjectLoadedCallback([this](const std::string& projectPath) {
 			OnProjectLoaded(projectPath);
 		});
@@ -113,33 +104,22 @@ namespace ANI {
 
 		if (!activeWorkspace) return;
 
-		// Get the views that should be open in this workspace
 		auto openViewTypes = activeWorkspace->GetOpenViews();
 
-		// For each open view type, create and render the view if it doesn't exist
 		for (const std::string& viewTypeName : openViewTypes) {
 			try {
-				// Check if this view type is registered
 				auto registeredViews = viewManager.GetRegisteredViews();
 				if (registeredViews.find(viewTypeName) == registeredViews.end()) {
 					std::cerr << "[StudioCore] View type not registered: " << viewTypeName << std::endl;
 					continue;
 				}
 
-				// Create a unique WorkspaceID for this view in this workspace
-				// Use a hash of workspace ID + view type name for consistency
 				GUI::WorkspaceID viewInstanceID = std::hash<std::string>{}(std::to_string(activeWorkspace->workspaceID) + "_" + viewTypeName);
 
-				// Check if view instance already exists in ViewManager
 				if (!m_activeViewInstances.count(viewInstanceID)) {
-					// Create the view instance using ViewManager
 					GUI::WorkspaceID createdID = viewManager.CreateViewByName(viewTypeName, engineCore.GetEntityManager());
 					if (createdID != 0) {
 						m_activeViewInstances[viewInstanceID] = createdID;
-
-						// Set up close callback for the created view
-						SetupViewCloseCallback(createdID, viewTypeName);
-
 						std::cout << "[StudioCore] Created view instance: " << viewTypeName << " with ID: " << createdID << std::endl;
 					}
 					else {
@@ -160,7 +140,6 @@ namespace ANI {
 			GUI::WorkspaceID viewInstanceID = it->first;
 			GUI::WorkspaceID actualViewID = it->second;
 
-			// Check if this view should still be open
 			bool shouldBeOpen = false;
 			for (const std::string& viewTypeName : openViewTypes) {
 				GUI::WorkspaceID expectedID = std::hash<std::string>{}(std::to_string(activeWorkspace->workspaceID) + "_" + viewTypeName);
@@ -171,7 +150,6 @@ namespace ANI {
 			}
 
 			if (!shouldBeOpen) {
-				// Remove the view
 				viewManager.DestroyView(actualViewID);
 				it = m_activeViewInstances.erase(it);
 			}
@@ -180,77 +158,20 @@ namespace ANI {
 			}
 		}
 
-		// Now render all the active view instances through ViewManager
 		viewManager.RenderGenericWorkspaces();
 	}
 
-	void StudioCore::SetupViewCloseCallback(GUI::WorkspaceID viewID, const std::string& viewTypeName) {
-		// Get the view from ViewManager's generic storage
-		auto& genericWorkspaces = viewManager.GetGenericWorkspaces();
-		auto viewIt = genericWorkspaces.find(viewID);
-
-		if (viewIt != genericWorkspaces.end() && viewIt->second) {
-			// Set up the close callback
-			viewIt->second->SetCloseCallback([this, viewTypeName](GUI::WorkspaceID closedViewID) {
-				OnViewClosed(closedViewID, viewTypeName);
-			});
-
-			std::cout << "[StudioCore] Set up close callback for view: " << viewTypeName << " (ID: " << viewID << ")" << std::endl;
-		}
-		else {
-			std::cerr << "[StudioCore] Failed to find view for close callback setup: " << viewTypeName << " (ID: " << viewID << ")" << std::endl;
-		}
-	}
-
-	void StudioCore::OnViewClosed(GUI::WorkspaceID viewID, const std::string& viewTypeName) {
-		std::cout << "[StudioCore] View closed via X button: " << viewTypeName << " (ID: " << viewID << ")" << std::endl;
-
-		if (!m_projectManager.IsProjectOpen()) {
-			std::cerr << "[StudioCore] No project open, cannot update workspace state" << std::endl;
-			return;
-		}
-
-		auto& viewState = m_projectManager.GetViewState();
-
-		// Remove the view from the active workspace state
-		viewState.SetViewOpen(viewTypeName, false);
-
-		// Find and remove from our tracking
-		auto it = m_activeViewInstances.begin();
-		while (it != m_activeViewInstances.end()) {
-			if (it->second == viewID) {
-				std::cout << "[StudioCore] Removing view from tracking: " << viewTypeName
-					<< " (Instance ID: " << it->first << ", View ID: " << viewID << ")" << std::endl;
-				it = m_activeViewInstances.erase(it);
-				break;
-			}
-			else {
-				++it;
-			}
-		}
-
-		// Destroy the view in ViewManager
-		viewManager.DestroyView(viewID);
-
-		std::cout << "[StudioCore] Successfully closed and cleaned up view: " << viewTypeName << std::endl;
-	}
-
 	void StudioCore::InitializeWindowState() {
-		// Set the global data path for WindowState utility
 		m_windowState.SetGlobalDataPath(Utils::FilePaths::dataPath);
 
-		// Load default window state from build/data/window_state.json
 		std::string defaultPath = GetDefaultWindowStatePath();
 		if (std::filesystem::exists(defaultPath)) {
 			std::cout << "[StudioCore] Loading default window state from: " << defaultPath << std::endl;
 			m_windowState.LoadFromFile(defaultPath);
-
-			// Apply the loaded state to the existing GLFW window
 			ApplyWindowStateToGLFW();
 		}
 		else {
 			std::cout << "[StudioCore] No default window state found, using current configuration" << std::endl;
-			// Sync WindowState with current GLFW window state
 			SyncWindowStateFromGLFW();
 		}
 
@@ -262,11 +183,8 @@ namespace ANI {
 
 		if (window) {
 			std::cout << "[StudioCore] Window handle set for WindowState utility" << std::endl;
-
-			// Pass the window handle to ProjectManager so it can apply window states
 			m_projectManager.SetWindowHandle(window);
 
-			// Now that we have the window handle, we can sync or apply states
 			if (initialized) {
 				InitializeWindowState();
 			}
@@ -278,12 +196,10 @@ namespace ANI {
 
 		GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(windowHandle);
 
-		// Update WindowState to match current GLFW window
 		int width, height, x, y;
 		glfwGetWindowSize(glfwWindow, &width, &height);
 		glfwGetWindowPos(glfwWindow, &x, &y);
 
-		// Load current state into a temporary JSON to update WindowState
 		nlohmann::json currentState;
 		currentState["width"] = width;
 		currentState["height"] = height;
@@ -291,7 +207,7 @@ namespace ANI {
 		currentState["posY"] = y;
 		currentState["maximized"] = (glfwGetWindowAttrib(glfwWindow, GLFW_MAXIMIZED) == GLFW_TRUE);
 		currentState["fullscreen"] = (glfwGetWindowMonitor(glfwWindow) != nullptr);
-		currentState["vsync"] = true; // Default to true
+		currentState["vsync"] = true;
 		currentState["title"] = "AniStudio";
 
 		m_windowState.Deserialize(currentState);
@@ -303,7 +219,6 @@ namespace ANI {
 
 		GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(windowHandle);
 
-		// Apply WindowState to GLFW window
 		glfwSetWindowSize(glfwWindow, m_windowState.GetWidth(), m_windowState.GetHeight());
 		glfwSetWindowPos(glfwWindow, m_windowState.GetPosX(), m_windowState.GetPosY());
 
@@ -314,8 +229,7 @@ namespace ANI {
 			glfwRestoreWindow(glfwWindow);
 		}
 
-		// Apply VSync
-		glfwSwapInterval(1); // For now, always use VSync
+		glfwSwapInterval(1);
 
 		std::cout << "[StudioCore] Applied WindowState to GLFW window: "
 			<< m_windowState.GetWidth() << "x" << m_windowState.GetHeight()
@@ -331,23 +245,17 @@ namespace ANI {
 		try {
 			std::cout << "[StudioCore] Initializing..." << std::endl;
 
-			// Initialize Engine FIRST - this registers systems on THE EntityManager
 			if (!engineCore.Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
 
-			// Invalidate ViewList ID 0 for consistency
 			auto tempView = viewManager.CreateView();
 			viewManager.DestroyView(tempView);
 
-			// Register view types with factories
 			RegisterCoreViews();
-
-			// Setup project callbacks
 			SetupProjectCallbacks();
 
-			// Initialize studio plugin manager (NO AUTO-LOADING)
 			std::cout << "[StudioCore] Initializing studio plugin manager..." << std::endl;
 			std::string pluginsDir = Utils::FilePaths::pluginPath;
 			if (!pluginsDir.empty()) {
@@ -355,13 +263,9 @@ namespace ANI {
 				std::cout << "[StudioCore] Started studio plugin hot reload for: " << pluginsDir << std::endl;
 			}
 
-			// Initialize standalone view
 			m_projectManagerView->Init();
-
-			// Create MenuBar (standalone, not managed by ViewManager) - pass ProjectManagerView reference
 			m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
 
-			// Show startup view if no project should be loaded
 			if (m_projectManager.ShouldShowStartup()) {
 				m_projectManager.GetViewState().SetViewOpen("ProjectManagerView", true);
 				std::cout << "[StudioCore] Showing startup view - no project to auto-load" << std::endl;
@@ -382,41 +286,28 @@ namespace ANI {
 
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
-
-		// The ProjectManager/ViewState handles workspace loading from project data
-
-		// Use utility function for ImGui state management
 		Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
 	}
 
 	void StudioCore::OnProjectCreated(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
-
-		// The NewProjectView triggers workspace creation based on selected template
-
-		// Use utility function for ImGui state management
 		Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
 	}
 
 	void StudioCore::OnProjectClosed() {
 		std::cout << "[StudioCore] Project closing..." << std::endl;
 
-		// Clear all active view instances when project closes
 		for (const auto&[viewInstanceID, actualViewID] : m_activeViewInstances) {
 			viewManager.DestroyView(actualViewID);
 		}
 		m_activeViewInstances.clear();
 
-		// ViewState/ProjectManager handles workspace cleanup
-
-		// Sync current GLFW window state to WindowState, then save as default
 		SyncWindowStateFromGLFW();
 		std::string defaultPath = GetDefaultWindowStatePath();
 		std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
 		m_windowState.SaveToFile(defaultPath);
 		std::cout << "[StudioCore] Saved current window state as default" << std::endl;
 
-		// Use utility function for ImGui state management
 		Utils::ImGuiStateUtils::OnProjectClosed();
 	}
 
@@ -428,22 +319,17 @@ namespace ANI {
 		if (!initialized) return;
 
 		std::cout << "[StudioCore] Starting shutdown sequence..." << std::endl;
-
-		// Set flag to prevent any further operations
 		running = false;
 
 		try {
-			// CRITICAL: Save everything BEFORE starting shutdown
 			std::cout << "[StudioCore] Saving application state before shutdown..." << std::endl;
 
-			// Save current window state as default
 			SyncWindowStateFromGLFW();
 			std::string defaultPath = GetDefaultWindowStatePath();
 			std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
 			m_windowState.SaveToFile(defaultPath);
 			std::cout << "[StudioCore] Saved window state as default" << std::endl;
 
-			// Save current project if one is open
 			if (m_projectManager.IsProjectOpen()) {
 				std::cout << "[StudioCore] Saving open project: " << m_projectManager.GetCurrentProjectName() << std::endl;
 				try {
@@ -454,7 +340,6 @@ namespace ANI {
 						std::cout << "[StudioCore] Project saved successfully" << std::endl;
 					}
 
-					// Save project-specific ImGui layout
 					Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
 				}
 				catch (const std::exception& e) {
@@ -462,10 +347,8 @@ namespace ANI {
 				}
 			}
 
-			// ImGui will automatically save its layout when it shuts down
 			std::cout << "[StudioCore] ImGui will auto-save layout on shutdown" << std::endl;
 
-			// Save application paths and settings ONCE here
 			std::cout << "[StudioCore] Saving file paths and settings..." << std::endl;
 			try {
 				Utils::FilePaths::SaveFilepathDefaults();
@@ -475,18 +358,15 @@ namespace ANI {
 				std::cerr << "[StudioCore] Warning: Failed to save file paths: " << e.what() << std::endl;
 			}
 
-			// Give a moment for file operations to complete
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 			std::cout << "[StudioCore] Critical saves completed" << std::endl;
 
-			// Clear all active view instances
 			for (const auto&[viewInstanceID, actualViewID] : m_activeViewInstances) {
 				viewManager.DestroyView(actualViewID);
 			}
 			m_activeViewInstances.clear();
 
-			// Now shutdown components in reverse order
 			std::cout << "[StudioCore] Shutting down plugin managers..." << std::endl;
 			if (studioPluginManager) {
 				studioPluginManager->StopHotReload();
@@ -495,7 +375,6 @@ namespace ANI {
 				std::cout << "[StudioCore] Studio plugin manager shutdown complete" << std::endl;
 			}
 
-			// Clean up standalone views
 			m_menuBar.reset();
 			m_projectManagerView.reset();
 
@@ -520,24 +399,19 @@ namespace ANI {
 		if (!running || !initialized) return;
 
 		try {
-			// Update core engine
 			engineCore.Update(deltaTime);
 
-			// Update studio plugin manager
 			if (studioPluginManager) {
 				studioPluginManager->Update(deltaTime);
 			}
 
-			// Update standalone views
 			if (m_menuBar) m_menuBar->Update(deltaTime);
 
-			// Update project view only if it should be visible
 			auto& viewState = m_projectManager.GetViewState();
 			if (viewState.IsViewOpen("ProjectManagerView")) {
 				m_projectManagerView->Update(deltaTime);
 			}
 
-			// Update ViewManager's generic workspaces (this updates all view instances)
 			viewManager.UpdateGenericWorkspaces(deltaTime);
 
 		}
@@ -550,14 +424,12 @@ namespace ANI {
 		if (!running || !initialized) return;
 
 		try {
-			// Start new ImGui frame
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
 			auto& viewState = m_projectManager.GetViewState();
 
-			// FIXED: Only set ProjectManagerView open ONCE, not every frame
 			static bool startupShown = false;
 			if (!m_projectManager.IsProjectOpen() && !startupShown) {
 				if (!viewState.IsViewOpen("ProjectManagerView")) {
@@ -567,19 +439,15 @@ namespace ANI {
 				}
 			}
 
-			// Reset flag when project is open
 			if (m_projectManager.IsProjectOpen()) {
 				startupShown = false;
 			}
 
-			// Render project management view (contains the popups now)
 			if (viewState.IsViewOpen("ProjectManagerView")) {
 				m_projectManagerView->Render();
 			}
 
-			// Only render main interface if project is open
 			if (m_projectManager.IsProjectOpen()) {
-				// Create main window that fills the viewport with menubar
 				ImGuiViewport* viewport = ImGui::GetMainViewport();
 				ImGui::SetNextWindowPos(viewport->WorkPos);
 				ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -599,16 +467,13 @@ namespace ANI {
 				if (ImGui::Begin("MainDockSpaceWindow", &open, window_flags)) {
 					ImGui::PopStyleVar(3);
 
-					// Render MenuBar inside the main window
 					if (m_menuBar) {
 						m_menuBar->Render();
 					}
 
-					// Create dock space for views
 					ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
 					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-					// Render the views that should be open in the active workspace
 					RenderActiveWorkspaceViews();
 				}
 				else {
@@ -617,11 +482,9 @@ namespace ANI {
 				ImGui::End();
 			}
 
-			// Render ImGui
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-			// Handle multi-viewport
 			ImGuiIO& io = ImGui::GetIO();
 			if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
 				GLFWwindow* backup_current_context = glfwGetCurrentContext();
@@ -636,7 +499,6 @@ namespace ANI {
 		}
 	}
 
-	// Plugin management functions
 	bool StudioCore::LoadPlugin(const std::string& path) {
 		if (studioPluginManager) {
 			return studioPluginManager->LoadPlugin(path);

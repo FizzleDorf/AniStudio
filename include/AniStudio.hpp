@@ -100,10 +100,6 @@ namespace ANI {
 		// Rendering methods
 		void RenderActiveWorkspaceViews();
 
-		// View close handling methods
-		void SetupViewCloseCallback(GUI::WorkspaceID viewID, const std::string& viewTypeName);
-		void OnViewClosed(GUI::WorkspaceID viewID, const std::string& viewTypeName);
-
 		// Window state management
 		void InitializeWindowState();
 		void SyncWindowStateFromGLFW();
