@@ -8,6 +8,7 @@
 #include "Events.hpp"
 #include <algorithm>
 #include <iostream>
+#include "../events/Events.hpp"
 
 namespace GUI {
 
@@ -27,7 +28,7 @@ namespace GUI {
 			"{.bmp},BMP"
 			"{.tga},TGA")
 	{
-		viewName = "Image Viewer";
+		viewName = "ImageView";
 		std::cout << "[ImageView] Constructor called" << std::endl;
 	}
 
@@ -68,24 +69,12 @@ namespace GUI {
 	void ImageView::Update(const float deltaT) {}
 
 	void ImageView::Render() {
-		std::string windowName = GetWindowTitle();
-		bool windowOpen = true;
 
-		if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
-			// Check if window was closed via X button
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 			if (!windowOpen) {
-				// Send remove view event
-				ANI::Events::Ref().RequestRemoveView(GetID(), "ImageView");
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
 			}
 
-			RenderContent();
-		}
-		ImGui::End();
-	}
-
-	// Main content rendering (separated from window management)
-	void ImageView::RenderContent() {
-		try {
 			RenderImageInfo();
 			RenderControls();
 			RenderSelector();
@@ -104,13 +93,9 @@ namespace GUI {
 			}
 			ImGui::EndChild();
 		}
-		catch (const std::exception& e) {
-			std::cerr << "[ImageView] Exception in RenderContent: " << e.what() << std::endl;
-			ImGui::Text("Error rendering ImageView: %s", e.what());
-		}
+		ImGui::End();
 	}
 
-	// CALLBACK HANDLERS
 	void ImageView::OnImageLoaded(ECS::EntityID entityID) {
 		std::cout << "[ImageView] CALLBACK: Image added for entity " << entityID << std::endl;
 

@@ -62,9 +62,19 @@ namespace ANI {
 		const std::string& GetCurrentProjectPath() const { return m_currentProjectPath; }
 		const std::string& GetCurrentProjectName() const { return m_projectSettings.projectName; }
 
-		// ViewState
+		// ViewState with active workspace tracking
 		GUI::ViewState& GetViewState() { return m_viewState; }
 		const GUI::ViewState& GetViewState() const { return m_viewState; }
+
+		// Set the last active workspace (called by MenuBar or other workspace managers)
+		void SetLastActiveWorkspace(GUI::WorkspaceID workspaceID) {
+			m_viewState.SetLastActiveWorkspace(workspaceID);
+		}
+
+		// Get the last active workspace
+		GUI::WorkspaceID GetLastActiveWorkspace() const {
+			return m_viewState.GetLastActiveWorkspace();
+		}
 
 		// Recent projects - now using FilePaths utility for storage
 		std::vector<std::string> GetRecentProjects() const;
@@ -99,6 +109,11 @@ namespace ANI {
 			m_onProjectClosedCallback = callback;
 		}
 
+		// NEW: Callback for when ViewState is loaded with active workspace
+		void SetViewStateLoadedCallback(std::function<void(GUI::WorkspaceID)> callback) {
+			m_onViewStateLoadedCallback = callback;
+		}
+
 	private:
 		GUI::ViewManager& m_viewManager;
 		ECS::EntityManager& m_entityManager;
@@ -116,6 +131,7 @@ namespace ANI {
 		std::function<void(const std::string&)> m_onProjectLoadedCallback;
 		std::function<void(const std::string&)> m_onProjectCreatedCallback;
 		std::function<void()> m_onProjectClosedCallback;
+		std::function<void(GUI::WorkspaceID)> m_onViewStateLoadedCallback;  // NEW
 
 		// File operations
 		bool SaveViewState();

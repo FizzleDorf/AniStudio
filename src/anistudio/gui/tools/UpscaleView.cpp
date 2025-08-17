@@ -53,9 +53,15 @@ namespace GUI {
 		samplerComp.n_threads = std::thread::hardware_concurrency();
 	}
 	void UpscaleView::Render() {
-		ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Image Upscaler")) {
 
+		ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+			
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
+			
+			
 			if (ImGui::CollapsingHeader("Metadata")) {
 				RenderMetadataControls();
 			}

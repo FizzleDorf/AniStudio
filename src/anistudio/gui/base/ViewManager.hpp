@@ -1,5 +1,3 @@
-// Enhanced ViewManager.hpp - Add access to generic workspaces
-
 #pragma once
 #include "BaseView.hpp"
 #include "Workspace.hpp"
@@ -22,8 +20,8 @@ namespace GUI {
 		// Update all view lists
 		void Update(const float deltaT);
 
-		// Render all views
-		void Render();
+		// Render all views in the active workspace
+		void Render(WorkspaceID activeWorkspaceID);
 
 		// Adds a viewlist
 		const WorkspaceID CreateView();
@@ -73,19 +71,22 @@ namespace GUI {
 		// Get views by source
 		std::vector<std::string> GetViewsBySource(const std::string& source) const;
 
-		// Update generic views
-		void UpdateGenericWorkspaces(float deltaT);
+		// Update workspaces
+		void UpdateWorkspaces(float deltaT);
 
-		// Render generic views
-		void RenderGenericWorkspaces();
+		// Render workspaces
+		void RenderWorkspaces();
 
-		// Access to generic workspaces (for close callback setup)
-		std::unordered_map<WorkspaceID, std::unique_ptr<BaseView>>& GetGenericWorkspaces() {
-			return genericWorkspaces;
+		// Access to workspaces
+		std::unordered_map<WorkspaceID, std::unordered_map<ViewTypeID, std::unique_ptr<BaseView>>>& GetWorkspaces() {
+			return workspaces;
 		}
-		const std::unordered_map<WorkspaceID, std::unique_ptr<BaseView>>& GetGenericWorkspaces() const {
-			return genericWorkspaces;
+		const std::unordered_map<WorkspaceID, std::unordered_map<ViewTypeID, std::unique_ptr<BaseView>>>& GetWorkspaces() const {
+			return workspaces;
 		}
+
+		// Set entity manager reference for view creation
+		void SetEntityManager(ECS::EntityManager& mgr) { entityManager = &mgr; }
 
 		// Returns a designated view type by string name
 		ViewTypeID GetViewType(const std::string &name) const;
@@ -139,6 +140,10 @@ namespace GUI {
 		// Returns view signatures
 		std::shared_ptr<ViewSignature> GetViewSignature(const WorkspaceID viewList);
 
+		// Create/remove view instances for workspaces
+		void CreateViewInstanceForWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID);
+		void RemoveViewInstanceFromWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID);
+
 		// Reset workspace-related data without touching registrations
 		void ResetWorkspaceData();
 
@@ -157,11 +162,14 @@ namespace GUI {
 		std::unordered_map<std::string, std::string> viewSources;
 		std::unordered_map<std::string, ViewCreationCallback> viewFactories;
 
-		// Generic view storage for views created by name
-		std::unordered_map<WorkspaceID, std::unique_ptr<BaseView>> genericWorkspaces;
+		// View storage for views created by name - map workspace to map of view types to views
+		std::unordered_map<WorkspaceID, std::unordered_map<ViewTypeID, std::unique_ptr<BaseView>>> workspaces;
+
+		// Entity manager reference for view creation
+		ECS::EntityManager* entityManager = nullptr;
 	};
 
-	// Template implementations remain the same...
+	// Template implementations
 	template <typename T>
 	void ViewManager::AddView(const WorkspaceID viewList, T &&view) {
 		assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");

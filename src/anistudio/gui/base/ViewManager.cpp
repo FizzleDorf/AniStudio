@@ -10,12 +10,6 @@
 
  * This file is part of AniStudio.
  * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #include "ViewManager.hpp"
@@ -39,16 +33,49 @@ namespace GUI {
 		for (const auto& workspace : workspaceArrays) {
 			workspace.second->UpdateViews(deltaT);
 		}
-		// Update generic views
-		UpdateGenericWorkspaces(deltaT);
+		// Update workspaces
+		UpdateWorkspaces(deltaT);
 	}
 
-	void ViewManager::Render() {
-		for (const auto &workspace : workspaceArrays) {
-			workspace.second->RenderViews();
+	void ViewManager::Render(WorkspaceID activeWorkspaceID) {
+		// Get the signature for the active workspace
+		auto signatureIt = workspaceSignatures.find(activeWorkspaceID);
+		if (signatureIt == workspaceSignatures.end()) {
+			return; // No views in this workspace
 		}
-		// Render generic views
-		RenderGenericWorkspaces();
+
+		const auto& signature = *(signatureIt->second);
+
+		// Render only views that are in the active workspace signature
+		for (const auto& viewTypeID : signature) {
+			// Check template-based views first
+			auto arrayIt = workspaceArrays.find(viewTypeID);
+			if (arrayIt != workspaceArrays.end()) {
+				// For template views, we need to find and render only the specific view for this workspace
+				auto workspace = arrayIt->second;
+				// Check if this workspace has this view type
+				auto workspaceData = std::static_pointer_cast<Workspace<BaseView>>(workspace);
+				if (workspaceData && workspaceData->Contains(activeWorkspaceID)) {
+					try {
+						auto& view = workspaceData->Get(activeWorkspaceID);
+						view.Render();
+					}
+					catch (...) {
+						// View doesn't exist for this workspace, skip
+					}
+				}
+			}
+		}
+
+		// Render factory-created views for this workspace
+		auto workspaceIt = workspaces.find(activeWorkspaceID);
+		if (workspaceIt != workspaces.end()) {
+			for (auto&[viewTypeID, view] : workspaceIt->second) {
+				if (signature.count(viewTypeID) > 0) {
+					view->Render();
+				}
+			}
+		}
 	}
 
 	const WorkspaceID ViewManager::CreateView() {
@@ -70,8 +97,8 @@ namespace GUI {
 			array.second->Erase(viewList);
 		}
 
-		// Remove from generic views if it's there
-		genericWorkspaces.erase(viewList);
+		// Remove from workspaces if it's there
+		workspaces.erase(viewList);
 
 		// Return the ID to the available pool
 		workspaceCount--;
@@ -117,8 +144,9 @@ namespace GUI {
 			// Initialize the view immediately
 			view->Init();
 
-			// Store in generic storage
-			genericWorkspaces[id] = std::move(view);
+			// Store in workspace storage
+			ViewTypeID typeID = GetViewType(viewTypeName);
+			workspaces[id][typeID] = std::move(view);
 
 			std::cout << "[ViewManager] Created and initialized view: " << viewTypeName << " with ID: " << id << std::endl;
 			return id;
@@ -197,15 +225,19 @@ namespace GUI {
 		return views;
 	}
 
-	void ViewManager::UpdateGenericWorkspaces(float deltaT) {
-		for (auto&[viewID, view] : genericWorkspaces) {
-			view->Update(deltaT);
+	void ViewManager::UpdateWorkspaces(float deltaT) {
+		for (auto&[workspaceID, viewsMap] : workspaces) {
+			for (auto&[viewTypeID, view] : viewsMap) {
+				view->Update(deltaT);
+			}
 		}
 	}
 
-	void ViewManager::RenderGenericWorkspaces() {
-		for (auto&[viewID, view] : genericWorkspaces) {
-			view->Render();
+	void ViewManager::RenderWorkspaces() {
+		for (auto&[workspaceID, viewsMap] : workspaces) {
+			for (auto&[viewTypeID, view] : viewsMap) {
+				view->Render();
+			}
 		}
 	}
 
@@ -263,42 +295,238 @@ namespace GUI {
 	void ViewManager::AddViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
 		assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 		GetViewSignature(viewList)->insert(viewType);
+
+		// Create the actual view instance
+		CreateViewInstanceForWorkspace(viewList, viewType);
 	}
 
 	void ViewManager::RemoveViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
 		assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 		GetViewSignature(viewList)->erase(viewType);
+
+		// Remove the view instance
+		RemoveViewInstanceFromWorkspace(viewList, viewType);
 	}
 
+	void ViewManager::CreateViewInstanceForWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID) {
+		// Find the view type name for this ID
+		for (const auto&[viewTypeName, typeID] : registeredViews) {
+			if (typeID == viewTypeID) {
+				auto factoryIt = viewFactories.find(viewTypeName);
+				if (factoryIt != viewFactories.end()) {
+					try {
+						auto view = factoryIt->second(*entityManager);
+						view->workspaceID = workspaceID;
+						view->Init();
+						workspaces[workspaceID][viewTypeID] = std::move(view);
+						std::cout << "[ViewManager] Created view instance: " << viewTypeName
+							<< " for workspace: " << workspaceID << std::endl;
+					}
+					catch (const std::exception& e) {
+						std::cerr << "[ViewManager] Failed to create view instance for " << viewTypeName
+							<< ": " << e.what() << std::endl;
+					}
+				}
+				break;
+			}
+		}
+	}
+
+	void ViewManager::RemoveViewInstanceFromWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID) {
+		auto workspaceIt = workspaces.find(workspaceID);
+		if (workspaceIt != workspaces.end()) {
+			workspaceIt->second.erase(viewTypeID);
+		}
+	}
+
+	// FIXED SERIALIZATION - Like EntityManager does with entities
 	json ViewManager::SerializeViewLists() const {
-		json viewListsJson;
-		for (const auto &[WorkspaceID, signature] : workspaceSignatures) {
-			json viewListJson;
-			viewListJson["WorkspaceID"] = WorkspaceID;
+		json workspacesJson = json::object();
 
-			json viewsJson;
-			for (const auto &viewTypeID : *signature) {
-				json viewJson;
-				viewJson["ViewTypeID"] = viewTypeID;
-				viewsJson.push_back(viewJson);
-			}
-			viewListJson["Views"] = viewsJson;
+		std::cout << "[ViewManager] Serializing workspaces..." << std::endl;
+		std::cout << "[ViewManager] workspaceSignatures size: " << workspaceSignatures.size() << std::endl;
+		std::cout << "[ViewManager] workspaces size: " << workspaces.size() << std::endl;
 
-			viewListsJson.push_back(viewListJson);
+		// Collect all workspace IDs from both sources
+		std::set<WorkspaceID> allWorkspaceIDs;
+
+		// Add from workspaceSignatures (template views)
+		for (const auto &[workspaceID, signature] : workspaceSignatures) {
+			allWorkspaceIDs.insert(workspaceID);
 		}
-		return viewListsJson;
+
+		// Add from workspaces (factory views)
+		for (const auto &[workspaceID, viewsMap] : workspaces) {
+			allWorkspaceIDs.insert(workspaceID);
+		}
+
+		std::cout << "[ViewManager] Total unique workspaces found: " << allWorkspaceIDs.size() << std::endl;
+
+		// Serialize each workspace as a JSON object with the workspace ID as key
+		for (WorkspaceID workspaceID : allWorkspaceIDs) {
+			json workspaceJson = json::object();
+			workspaceJson["ID"] = workspaceID;
+			workspaceJson["views"] = json::array();
+
+			std::cout << "[ViewManager] Serializing workspace " << workspaceID << std::endl;
+
+			// Add views from workspaces (factory views) - these have serializable data
+			auto workspaceIt = workspaces.find(workspaceID);
+			if (workspaceIt != workspaces.end()) {
+				for (const auto &[viewTypeID, view] : workspaceIt->second) {
+					if (view) {
+						// Find view type name
+						std::string viewTypeName;
+						for (const auto &[name, typeID] : registeredViews) {
+							if (typeID == viewTypeID) {
+								viewTypeName = name;
+								break;
+							}
+						}
+
+						if (!viewTypeName.empty()) {
+							// Create view object with type name as key (like EntityManager does with components)
+							json viewJson = json::object();
+							viewJson[viewTypeName] = view->Serialize();
+							workspaceJson["views"].push_back(viewJson);
+
+							std::cout << "[ViewManager]   Added view: " << viewTypeName << " with data" << std::endl;
+						}
+					}
+				}
+			}
+
+			// Add views from workspaceSignatures (template views) - these might not have data
+			auto signatureIt = workspaceSignatures.find(workspaceID);
+			if (signatureIt != workspaceSignatures.end()) {
+				for (const auto &viewTypeID : *(signatureIt->second)) {
+					// Skip if we already added this view from factory views
+					auto workspaceIt = workspaces.find(workspaceID);
+					if (workspaceIt != workspaces.end() && workspaceIt->second.find(viewTypeID) != workspaceIt->second.end()) {
+						continue; // Already added from factory views
+					}
+
+					// Find view type name
+					std::string viewTypeName;
+					for (const auto &[name, typeID] : registeredViews) {
+						if (typeID == viewTypeID) {
+							viewTypeName = name;
+							break;
+						}
+					}
+
+					if (!viewTypeName.empty()) {
+						// Create view object with just the type name (no data)
+						json viewJson = json::object();
+						viewJson[viewTypeName] = json::object(); // Empty object for template views
+						workspaceJson["views"].push_back(viewJson);
+
+						std::cout << "[ViewManager]   Added template view: " << viewTypeName << " (no data)" << std::endl;
+					}
+				}
+			}
+
+			// Add workspace to main object using workspace ID as key (like EntityManager)
+			std::string workspaceKey = std::to_string(workspaceID);
+			workspacesJson[workspaceKey] = workspaceJson;
+
+			std::cout << "[ViewManager] Workspace " << workspaceID << " serialized with " << workspaceJson["views"].size() << " views" << std::endl;
+		}
+
+		std::cout << "[ViewManager] Serialization complete. Total workspaces: " << workspacesJson.size() << std::endl;
+		return workspacesJson;
 	}
 
-	void ViewManager::DeserializeViewLists(const json &viewListsJson) {
-		for (const auto &viewListJson : viewListsJson) {
-			WorkspaceID WorkspaceID = viewListJson["WorkspaceID"];
-			AddViewSignature(WorkspaceID); // Create a new ViewList
+	void ViewManager::DeserializeViewLists(const json &workspacesJson) {
+		std::cout << "[ViewManager] Deserializing workspaces..." << std::endl;
 
-			for (const auto &viewJson : viewListJson["Views"]) {
-				ViewTypeID viewTypeID = viewJson["ViewTypeID"];
-				AddViewByType(WorkspaceID, viewTypeID); // Add the view to the ViewList
+		if (workspacesJson.is_null()) {
+			std::cout << "[ViewManager] Workspaces JSON is null, nothing to deserialize" << std::endl;
+			return;
+		}
+
+		if (!workspacesJson.is_object()) {
+			std::cerr << "[ViewManager] Workspaces JSON is not an object!" << std::endl;
+			return;
+		}
+
+		std::cout << "[ViewManager] Found " << workspacesJson.size() << " workspaces to deserialize" << std::endl;
+
+		// Iterate through workspace objects (like EntityManager does with entities)
+		for (auto workspaceIt = workspacesJson.begin(); workspaceIt != workspacesJson.end(); ++workspaceIt) {
+			const json& workspaceJson = workspaceIt.value();
+
+			if (!workspaceJson.contains("ID")) {
+				std::cerr << "[ViewManager] Workspace JSON missing ID" << std::endl;
+				continue;
+			}
+
+			WorkspaceID workspaceID = workspaceJson["ID"];
+			std::cout << "[ViewManager] Deserializing workspace " << workspaceID << std::endl;
+
+			// Create the workspace signature if it doesn't exist
+			if (workspaceSignatures.find(workspaceID) == workspaceSignatures.end()) {
+				AddViewSignature(workspaceID);
+				std::cout << "[ViewManager] Created signature for workspace " << workspaceID << std::endl;
+			}
+
+			if (!workspaceJson.contains("views") || !workspaceJson["views"].is_array()) {
+				std::cout << "[ViewManager] Workspace " << workspaceID << " has no views" << std::endl;
+				continue;
+			}
+
+			// Process views array (like EntityManager does with components)
+			for (const auto &viewJson : workspaceJson["views"]) {
+				if (!viewJson.is_object()) {
+					std::cerr << "[ViewManager] View JSON is not an object" << std::endl;
+					continue;
+				}
+
+				// Iterate through view types in this view object (like EntityManager does with components)
+				for (auto viewIt = viewJson.begin(); viewIt != viewJson.end(); ++viewIt) {
+					std::string viewTypeName = viewIt.key();
+					const json& viewData = viewIt.value();
+
+					std::cout << "[ViewManager]   Deserializing view: " << viewTypeName << std::endl;
+
+					try {
+						ViewTypeID viewTypeID = GetViewType(viewTypeName);
+
+						// Add to workspace signature
+						GetViewSignature(workspaceID)->insert(viewTypeID);
+
+						// Create view instance if we have a factory
+						auto factoryIt = viewFactories.find(viewTypeName);
+						if (factoryIt != viewFactories.end() && entityManager) {
+							auto view = factoryIt->second(*entityManager);
+							if (view) {
+								view->workspaceID = workspaceID;
+								view->Init();
+
+								// Deserialize view data if it exists
+								if (!viewData.is_null() && !viewData.empty()) {
+									view->Deserialize(viewData);
+									std::cout << "[ViewManager]     Recreated view: " << viewTypeName << " with data" << std::endl;
+								}
+								else {
+									std::cout << "[ViewManager]     Recreated view: " << viewTypeName << " (no data)" << std::endl;
+								}
+
+								workspaces[workspaceID][viewTypeID] = std::move(view);
+							}
+						}
+						else {
+							std::cout << "[ViewManager]     Added view to signature only: " << viewTypeName << std::endl;
+						}
+					}
+					catch (const std::exception& e) {
+						std::cerr << "[ViewManager] Failed to deserialize view " << viewTypeName << ": " << e.what() << std::endl;
+					}
+				}
 			}
 		}
+
+		std::cout << "[ViewManager] Deserialization complete" << std::endl;
 	}
 
 	void ViewManager::AddViewSignature(const WorkspaceID viewList) {
@@ -317,7 +545,7 @@ namespace GUI {
 			DestroyView(viewSignaturePair.first);
 		}
 		workspaceSignatures.clear();
-		genericWorkspaces.clear();
+		workspaces.clear();
 
 		// Reset available views queue
 		while (!availableWorkspaces.empty()) {

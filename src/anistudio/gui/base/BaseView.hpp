@@ -55,21 +55,12 @@ namespace GUI {
 		virtual void Update(const float deltaT) {}
 
 		virtual void Render() {
-			std::string windowName = GetWindowTitle();
-			bool windowOpen = true;
-
-			if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
-				// Individual views handle close events in their own implementations
-				// by overriding this method and including Events.hpp
-				RenderContent();
+			if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+				ImGui::Text("Default BaseView Content");
+				ImGui::Text("ViewID: %zu", workspaceID);
+				ImGui::Text("This view should override RenderContent()");
 			}
 			ImGui::End();
-		}
-
-		virtual void RenderContent() {
-			ImGui::Text("Default BaseView Content");
-			ImGui::Text("ViewID: %zu", workspaceID);
-			ImGui::Text("This view should override RenderContent()");
 		}
 
 		virtual void HandleInput(int key, int action) {}
@@ -87,6 +78,7 @@ namespace GUI {
 
 	protected:
 		ECS::EntityManager &mgr;
+		bool windowOpen = true;
 
 		virtual std::string GetWindowTitle() const {
 			return viewName + "##" + std::to_string(workspaceID);

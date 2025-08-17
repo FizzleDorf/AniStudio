@@ -10,12 +10,6 @@
 
  * This file is part of AniStudio.
  * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
  */
 
 #include "AniStudio.hpp"
@@ -31,7 +25,7 @@ namespace ANI {
 
 	StudioCore::StudioCore()
 		: initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
-		m_projectManager(viewManager, engineCore.GetEntityManager()) {
+		m_projectManager(viewManager, engineCore.GetEntityManager()), m_activeWorkspaceID(0), m_isShuttingDown(false) {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
 		studioPluginManager = std::make_unique<Plugin::StudioPluginManager>(
@@ -92,73 +86,63 @@ namespace ANI {
 		});
 
 		m_projectManager.SetProjectClosedCallback([this]() {
-			OnProjectClosed();
+			// Only handle project close events if we're not shutting down
+			if (!m_isShuttingDown) {
+				OnProjectClosed();
+			}
+		});
+
+		// NEW: Handle ViewState loading to set active workspace
+		m_projectManager.SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
+			std::cout << "[StudioCore] Setting active workspace from loaded ViewState: " << activeWorkspaceID << std::endl;
+			SetActiveWorkspace(activeWorkspaceID);
 		});
 	}
 
 	void StudioCore::RenderActiveWorkspaceViews() {
 		if (!m_projectManager.IsProjectOpen()) return;
 
-		auto& viewState = m_projectManager.GetViewState();
-		const GUI::WorkspaceState* activeWorkspace = viewState.GetActiveWorkspace();
+		// Render only the active workspace managed by StudioCore
+		viewManager.Render(m_activeWorkspaceID);
+	}
 
-		if (!activeWorkspace) return;
+	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {
+		auto allWorkspaces = viewManager.GetAllWorkspaces();
+		if (std::find(allWorkspaces.begin(), allWorkspaces.end(), workspaceID) != allWorkspaces.end()) {
+			m_activeWorkspaceID = workspaceID;
 
-		auto openViewTypes = activeWorkspace->GetOpenViews();
-
-		for (const std::string& viewTypeName : openViewTypes) {
-			try {
-				auto registeredViews = viewManager.GetRegisteredViews();
-				if (registeredViews.find(viewTypeName) == registeredViews.end()) {
-					std::cerr << "[StudioCore] View type not registered: " << viewTypeName << std::endl;
-					continue;
-				}
-
-				GUI::WorkspaceID viewInstanceID = std::hash<std::string>{}(std::to_string(activeWorkspace->workspaceID) + "_" + viewTypeName);
-
-				if (!m_activeViewInstances.count(viewInstanceID)) {
-					GUI::WorkspaceID createdID = viewManager.CreateViewByName(viewTypeName, engineCore.GetEntityManager());
-					if (createdID != 0) {
-						m_activeViewInstances[viewInstanceID] = createdID;
-						std::cout << "[StudioCore] Created view instance: " << viewTypeName << " with ID: " << createdID << std::endl;
-					}
-					else {
-						std::cerr << "[StudioCore] Failed to create view: " << viewTypeName << std::endl;
-						continue;
-					}
-				}
-
+			// CRITICAL: Update ProjectManager's ViewState with the new active workspace
+			if (m_projectManager.IsProjectOpen()) {
+				m_projectManager.SetLastActiveWorkspace(workspaceID);
 			}
-			catch (const std::exception& e) {
-				std::cerr << "[StudioCore] Error rendering view " << viewTypeName << ": " << e.what() << std::endl;
-			}
+
+			std::cout << "[StudioCore] Set active workspace to: " << workspaceID << std::endl;
+		}
+		else {
+			std::cerr << "[StudioCore] Cannot set active workspace - ID " << workspaceID << " does not exist" << std::endl;
+			EnsureValidActiveWorkspace();
+		}
+	}
+
+	GUI::WorkspaceID StudioCore::GetActiveWorkspace() const {
+		return m_activeWorkspaceID;
+	}
+
+	void StudioCore::EnsureValidActiveWorkspace() {
+		auto allWorkspaces = viewManager.GetAllWorkspaces();
+
+		// If no workspaces exist, create one
+		if (allWorkspaces.empty()) {
+			m_activeWorkspaceID = viewManager.CreateView();
+			std::cout << "[StudioCore] Created default workspace: " << m_activeWorkspaceID << std::endl;
+			return;
 		}
 
-		// Clean up views that are no longer open
-		auto it = m_activeViewInstances.begin();
-		while (it != m_activeViewInstances.end()) {
-			GUI::WorkspaceID viewInstanceID = it->first;
-			GUI::WorkspaceID actualViewID = it->second;
-
-			bool shouldBeOpen = false;
-			for (const std::string& viewTypeName : openViewTypes) {
-				GUI::WorkspaceID expectedID = std::hash<std::string>{}(std::to_string(activeWorkspace->workspaceID) + "_" + viewTypeName);
-				if (viewInstanceID == expectedID) {
-					shouldBeOpen = true;
-					break;
-				}
-			}
-
-			if (!shouldBeOpen) {
-				viewManager.DestroyView(actualViewID);
-				it = m_activeViewInstances.erase(it);
-			}
-			else {
-				++it;
-			}
+		// If current active workspace doesn't exist, switch to the first available
+		if (std::find(allWorkspaces.begin(), allWorkspaces.end(), m_activeWorkspaceID) == allWorkspaces.end()) {
+			m_activeWorkspaceID = allWorkspaces[0];
+			std::cout << "[StudioCore] Switched to valid workspace: " << m_activeWorkspaceID << std::endl;
 		}
-
-		viewManager.RenderGenericWorkspaces();
 	}
 
 	void StudioCore::InitializeWindowState() {
@@ -250,8 +234,8 @@ namespace ANI {
 				return false;
 			}
 
-			auto tempView = viewManager.CreateView();
-			viewManager.DestroyView(tempView);
+			// Set entity manager reference for the ViewManager
+			viewManager.SetEntityManager(engineCore.GetEntityManager());
 
 			RegisterCoreViews();
 			SetupProjectCallbacks();
@@ -266,15 +250,16 @@ namespace ANI {
 			m_projectManagerView->Init();
 			m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
 
+			// Show startup view if needed
 			if (m_projectManager.ShouldShowStartup()) {
-				m_projectManager.GetViewState().SetViewOpen("ProjectManagerView", true);
-				std::cout << "[StudioCore] Showing startup view - no project to auto-load" << std::endl;
+				m_showProjectManagerView = true;
+				std::cout << "[StudioCore] Will show startup view - no project to auto-load" << std::endl;
 			}
 
 			initialized = true;
 			running = true;
 
-			std::cout << "[StudioCore] Initialized successfully with studio plugin system!" << std::endl;
+			std::cout << "[StudioCore] Initialized successfully!" << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -286,21 +271,23 @@ namespace ANI {
 
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
+
+		m_showProjectManagerView = false;
 		Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
 	}
 
 	void StudioCore::OnProjectCreated(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
+
+		m_showProjectManagerView = false;
 		Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
 	}
 
 	void StudioCore::OnProjectClosed() {
 		std::cout << "[StudioCore] Project closing..." << std::endl;
 
-		for (const auto&[viewInstanceID, actualViewID] : m_activeViewInstances) {
-			viewManager.DestroyView(actualViewID);
-		}
-		m_activeViewInstances.clear();
+		// Show project manager view again
+		m_showProjectManagerView = true;
 
 		SyncWindowStateFromGLFW();
 		std::string defaultPath = GetDefaultWindowStatePath();
@@ -320,24 +307,24 @@ namespace ANI {
 
 		std::cout << "[StudioCore] Starting shutdown sequence..." << std::endl;
 		running = false;
+		m_isShuttingDown = true; // Prevent OnProjectClosed callback
 
 		try {
-			std::cout << "[StudioCore] Saving application state before shutdown..." << std::endl;
-
-			SyncWindowStateFromGLFW();
-			std::string defaultPath = GetDefaultWindowStatePath();
-			std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
-			m_windowState.SaveToFile(defaultPath);
-			std::cout << "[StudioCore] Saved window state as default" << std::endl;
-
+			// STEP 1: SAVE PROJECT FIRST - BEFORE ANYTHING ELSE IS DESTROYED
 			if (m_projectManager.IsProjectOpen()) {
-				std::cout << "[StudioCore] Saving open project: " << m_projectManager.GetCurrentProjectName() << std::endl;
+				std::cout << "[StudioCore] Saving open project BEFORE shutdown: " << m_projectManager.GetCurrentProjectName() << std::endl;
+
+				// Update the active workspace in project manager BEFORE saving
+				m_projectManager.SetLastActiveWorkspace(m_activeWorkspaceID);
+				std::cout << "[StudioCore] Set active workspace " << m_activeWorkspaceID << " in project before saving" << std::endl;
+
 				try {
+					// SAVE PROJECT DIRECTLY - DON'T CALL CloseProject() which triggers callbacks
 					if (!m_projectManager.SaveProject()) {
-						std::cerr << "[StudioCore] Warning: Failed to save project: " << m_projectManager.GetLastError() << std::endl;
+						std::cerr << "[StudioCore] ERROR: Failed to save project: " << m_projectManager.GetLastError() << std::endl;
 					}
 					else {
-						std::cout << "[StudioCore] Project saved successfully" << std::endl;
+						std::cout << "[StudioCore] Project saved successfully with all workspaces" << std::endl;
 					}
 
 					Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
@@ -346,6 +333,15 @@ namespace ANI {
 					std::cerr << "[StudioCore] Exception saving project: " << e.what() << std::endl;
 				}
 			}
+
+			// STEP 2: Save application state
+			std::cout << "[StudioCore] Saving application state..." << std::endl;
+
+			SyncWindowStateFromGLFW();
+			std::string defaultPath = GetDefaultWindowStatePath();
+			std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+			m_windowState.SaveToFile(defaultPath);
+			std::cout << "[StudioCore] Saved window state as default" << std::endl;
 
 			std::cout << "[StudioCore] ImGui will auto-save layout on shutdown" << std::endl;
 
@@ -358,15 +354,11 @@ namespace ANI {
 				std::cerr << "[StudioCore] Warning: Failed to save file paths: " << e.what() << std::endl;
 			}
 
-			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Give more time for saves
 
 			std::cout << "[StudioCore] Critical saves completed" << std::endl;
 
-			for (const auto&[viewInstanceID, actualViewID] : m_activeViewInstances) {
-				viewManager.DestroyView(actualViewID);
-			}
-			m_activeViewInstances.clear();
-
+			// STEP 3: NOW shutdown systems (after everything is saved)
 			std::cout << "[StudioCore] Shutting down plugin managers..." << std::endl;
 			if (studioPluginManager) {
 				studioPluginManager->StopHotReload();
@@ -375,12 +367,15 @@ namespace ANI {
 				std::cout << "[StudioCore] Studio plugin manager shutdown complete" << std::endl;
 			}
 
+			// STEP 4: Destroy UI components
 			m_menuBar.reset();
 			m_projectManagerView.reset();
 
+			// STEP 5: ONLY NOW reset the view manager (after everything is saved)
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
 			viewManager.FullReset();
 
+			// STEP 6: Finally shutdown engine core
 			std::cout << "[StudioCore] Shutting down engine core..." << std::endl;
 			engineCore.Shutdown();
 
@@ -407,12 +402,11 @@ namespace ANI {
 
 			if (m_menuBar) m_menuBar->Update(deltaTime);
 
-			auto& viewState = m_projectManager.GetViewState();
-			if (viewState.IsViewOpen("ProjectManagerView")) {
+			if (m_showProjectManagerView) {
 				m_projectManagerView->Update(deltaTime);
 			}
 
-			viewManager.UpdateGenericWorkspaces(deltaTime);
+			viewManager.Update(deltaTime);
 
 		}
 		catch (const std::exception& e) {
@@ -428,12 +422,10 @@ namespace ANI {
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			auto& viewState = m_projectManager.GetViewState();
-
 			static bool startupShown = false;
 			if (!m_projectManager.IsProjectOpen() && !startupShown) {
-				if (!viewState.IsViewOpen("ProjectManagerView")) {
-					viewState.SetViewOpen("ProjectManagerView", true);
+				if (!m_showProjectManagerView) {
+					m_showProjectManagerView = true;
 					startupShown = true;
 					std::cout << "[StudioCore] Showing startup view - no project to auto-load" << std::endl;
 				}
@@ -441,9 +433,10 @@ namespace ANI {
 
 			if (m_projectManager.IsProjectOpen()) {
 				startupShown = false;
+				m_showProjectManagerView = false;
 			}
 
-			if (viewState.IsViewOpen("ProjectManagerView")) {
+			if (m_showProjectManagerView) {
 				m_projectManagerView->Render();
 			}
 

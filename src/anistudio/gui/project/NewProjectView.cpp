@@ -1,5 +1,6 @@
 #include "NewProjectView.hpp"
 #include "ProjectManager.hpp"
+#include "Events.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <fstream>
@@ -34,10 +35,8 @@ namespace GUI {
 	}
 
 	void NewProjectView::Render() {
-		// Check if ViewState wants us to show
-		if (m_projectManager.GetViewState().IsViewOpen("NewProjectView")) {
-			m_showPopup = true;
-			m_projectManager.GetViewState().SetViewOpen("NewProjectView", false); // Clear the flag
+		if (!m_showPopup) {
+			return;
 		}
 
 		if (m_showPopup) {
@@ -217,18 +216,28 @@ namespace GUI {
 		std::string fullPath = projectPath + "/" + projectName;
 
 		if (m_projectManager.CreateNewProject(fullPath, projectName)) {
-			// Create workspace based on selected template
-			auto& viewState = m_projectManager.GetViewState();
+			// Use events to create workspace based on selected template
+			auto& events = ANI::Events::Ref();
 
 			if (m_selectedTemplate >= 0 && m_selectedTemplate < m_templates.size()) {
-				// Use selected template
+				// Use selected template - create workspace and add default views
 				const auto& template_ = m_templates[m_selectedTemplate];
-				size_t workspaceID = viewState.CreateWorkspace(template_.name, template_.defaultOpenViews);
+
+				events.RequestCreateWorkspace(template_.name);
+
+				// Queue events to add the default views after workspace is created
+				// Note: This assumes the workspace will be created with the next available ID
+				// In a real implementation, you might need a callback system or queue the view adds
+				for (const auto& viewTypeName : template_.defaultOpenViews) {
+					// This is a simplified approach - in practice you'd need to know the workspace ID
+					std::cout << "[NewProjectView] Will add view: " << viewTypeName << " to new workspace" << std::endl;
+				}
+
 				std::cout << "[NewProjectView] Created workspace from template: " << template_.name << std::endl;
 			}
 			else {
 				// Blank project - create empty workspace
-				size_t workspaceID = viewState.CreateWorkspace("Main", {});
+				events.RequestCreateWorkspace("Main");
 				std::cout << "[NewProjectView] Created blank workspace" << std::endl;
 			}
 

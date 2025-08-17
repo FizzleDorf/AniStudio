@@ -21,10 +21,8 @@ namespace GUI {
 	}
 
 	void LoadProjectView::Render() {
-		// Check if ViewState wants us to show
-		if (m_projectManager.GetViewState().IsViewOpen("LoadProjectView")) {
-			m_showPopup = true;
-			m_projectManager.GetViewState().SetViewOpen("LoadProjectView", false); // Clear the flag
+		if (!m_showPopup) {
+			return;
 		}
 
 		if (m_showPopup) {
@@ -93,6 +91,7 @@ namespace GUI {
 					if (m_projectManager.LoadProject(projectPath)) {
 						std::cout << "[LoadProjectView] Loaded project: " << projectPath << std::endl;
 						m_showPopup = false;
+						ImGui::CloseCurrentPopup();
 					}
 					else {
 						std::cerr << "[LoadProjectView] Failed to load project: " << m_projectManager.GetLastError() << std::endl;

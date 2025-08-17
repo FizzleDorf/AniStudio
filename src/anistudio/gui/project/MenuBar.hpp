@@ -15,12 +15,16 @@
 #pragma once
 #include "NewProjectView.hpp"
 #include "LoadProjectView.hpp"
+#include "ViewTypes.hpp"
 #include <unordered_map>
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace ANI { class ProjectManager; }
+namespace ANI {
+	class ProjectManager;
+	class Events;
+}
 
 namespace GUI {
 	class ViewManager;
@@ -31,7 +35,6 @@ namespace GUI {
 		std::vector<std::pair<std::string, std::string>> views; // viewType, displayName pairs
 	};
 
-	// Standalone MenuBar - not derived from BaseView
 	class MenuBar {
 	public:
 		MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr);
@@ -40,12 +43,17 @@ namespace GUI {
 		void Render();
 
 	private:
-		ANI::ProjectManager& m_projectManager;
-		ViewManager& m_viewManager;
+		ANI::ProjectManager& projectManager;
+		ViewManager& viewManager;
+		ANI::Events& events;
 
-		// Direct view instances
-		NewProjectView m_newProjectView;
-		LoadProjectView m_loadProjectView;
+		// Direct view instances for dialogs
+		NewProjectView newProjectView;
+		LoadProjectView loadProjectView;
+
+		// State for showing dialogs
+		bool showNewProjectDialog = false;
+		bool showLoadProjectDialog = false;
 
 		// Menu sections
 		void ShowFileMenu();
@@ -57,6 +65,12 @@ namespace GUI {
 		// Hierarchical menu building
 		std::vector<std::string> SplitCategoryPath(const std::string& category);
 		void RenderMenuNode(const MenuNode& node);
+
+		// Workspace helpers
+		void CreateNewWorkspace();
+		void DeleteCurrentWorkspace();
+		bool IsViewActiveInCurrentWorkspace(const std::string& viewTypeName) const;
+		void ToggleViewInCurrentWorkspace(const std::string& viewTypeName);
 	};
 
 } // namespace GUI

@@ -1,8 +1,8 @@
 #pragma once
 #include "ECS.h"
-#include "GUI.h"
-#include <systems.h>
+#include "ViewTypes.hpp"
 #include "FilePaths.hpp"
+#include "systems.h"
 #include <GLFW/glfw3.h>
 #include <functional>
 #include <queue>
@@ -47,7 +47,10 @@ namespace ANI {
 
 	enum class ViewEventType {
 		AddView,
-		RemoveView
+		RemoveView,
+		SetActiveWorkspace,
+		CreateWorkspace,
+		DeleteWorkspace
 	};
 
 	struct Event {
@@ -57,8 +60,14 @@ namespace ANI {
 
 	struct ViewEvent {
 		ViewEventType type;
-		GUI::WorkspaceID viewID;
+		GUI::WorkspaceID workspaceID;  // The workspace/view ID
 		std::string viewTypeName;
+
+		// Additional data for specific events
+		std::string workspaceName; // For CreateWorkspace
+
+		// Legacy compatibility (deprecated)
+		GUI::WorkspaceID viewID() const { return workspaceID; }
 	};
 
 	class Events {
@@ -82,19 +91,40 @@ namespace ANI {
 		void ProcessViewEvents();
 
 		// Helper functions for view events
-		void RequestAddView(const std::string& viewTypeName) {
+		void RequestAddView(GUI::WorkspaceID workspaceID, const std::string& viewTypeName) {
 			ViewEvent event;
 			event.type = ViewEventType::AddView;
-			event.viewID = 0;
+			event.workspaceID = workspaceID;
 			event.viewTypeName = viewTypeName;
 			QueueViewEvent(event);
 		}
 
-		void RequestRemoveView(GUI::WorkspaceID viewID, const std::string& viewTypeName) {
+		void RequestRemoveView(GUI::WorkspaceID workspaceID, const std::string& viewTypeName) {
 			ViewEvent event;
 			event.type = ViewEventType::RemoveView;
-			event.viewID = viewID;
+			event.workspaceID = workspaceID;
 			event.viewTypeName = viewTypeName;
+			QueueViewEvent(event);
+		}
+
+		void RequestSetActiveWorkspace(GUI::WorkspaceID workspaceID) {
+			ViewEvent event;
+			event.type = ViewEventType::SetActiveWorkspace;
+			event.workspaceID = workspaceID;
+			QueueViewEvent(event);
+		}
+
+		void RequestCreateWorkspace(const std::string& workspaceName = "New Workspace") {
+			ViewEvent event;
+			event.type = ViewEventType::CreateWorkspace;
+			event.workspaceName = workspaceName;
+			QueueViewEvent(event);
+		}
+
+		void RequestDeleteWorkspace(GUI::WorkspaceID workspaceID) {
+			ViewEvent event;
+			event.type = ViewEventType::DeleteWorkspace;
+			event.workspaceID = workspaceID;
 			QueueViewEvent(event);
 		}
 

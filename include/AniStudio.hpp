@@ -1,17 +1,20 @@
 /*
- * AniStudio.hpp - Enhanced version with view close handling
+ * AniStudio.hpp - Enhanced version with proper view state management
  */
 #pragma once
 
 #include "AniEngine.hpp"
 #include "GUI.h"
 #include "ProjectManager.hpp"
+#include "ViewState.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"
+#include "ViewTypes.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <memory>
+#include <set>
 #include <unordered_map>
 
 #define ANI_STUDIO_API
@@ -57,6 +60,10 @@ namespace ANI {
 		void SetWindowHandle(void* window);
 		void SetImGuiContext(void* context) { imguiContext = context; }
 
+		// Workspace management
+		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
+		GUI::WorkspaceID GetActiveWorkspace() const;
+
 		// Plugin management (auto-detects and loads any plugin type)
 		bool LoadPlugin(const std::string& path);
 		bool UnloadPlugin(const std::string& pluginName);
@@ -70,6 +77,7 @@ namespace ANI {
 	private:
 		bool initialized;
 		bool running;
+		bool m_isShuttingDown; // NEW: Prevent callbacks during shutdown
 
 		// Pointers to the imgui and glfw instances
 		void* windowHandle;
@@ -80,18 +88,19 @@ namespace ANI {
 		GUI::ViewManager viewManager;
 		ANI::ProjectManager m_projectManager;
 
+		// Active workspace tracking
+		GUI::WorkspaceID m_activeWorkspaceID;
+
 		// Studio plugin manager (supports all plugin types)
 		std::unique_ptr<Plugin::StudioPluginManager> studioPluginManager;
 
-		// Standalone views (only ProjectManagerView now - contains the popups)
+		// Standalone views
 		std::unique_ptr<GUI::MenuBar> m_menuBar;
 		std::unique_ptr<GUI::ProjectManagerView> m_projectManagerView;
+		bool m_showProjectManagerView = false;
 
 		// Use existing WindowState utility
 		Utils::WindowState m_windowState;
-
-		// Track active view instances - maps ViewState view instances to ViewManager WorkspaceIDs
-		std::unordered_map<GUI::WorkspaceID, GUI::WorkspaceID> m_activeViewInstances;
 
 		// Internal setup
 		void RegisterCoreViews();
@@ -99,6 +108,9 @@ namespace ANI {
 
 		// Rendering methods
 		void RenderActiveWorkspaceViews();
+
+		// Workspace management methods
+		void EnsureValidActiveWorkspace();
 
 		// Window state management
 		void InitializeWindowState();

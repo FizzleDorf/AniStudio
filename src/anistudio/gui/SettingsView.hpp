@@ -37,7 +37,7 @@ public:
             "description": "Manage application and project settings."
         })";
 	}
-    SettingsView(ECS::EntityManager &mgr) : BaseView(mgr) { viewName = "Settings View";}
+    SettingsView(ECS::EntityManager &mgr) : BaseView(mgr) { viewName = "SettingsView";}
     ~SettingsView() {}
 
     void Render() override;

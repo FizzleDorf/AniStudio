@@ -31,7 +31,6 @@ namespace GUI {
 
 		// Override Render to handle window close
 		void Render() override;
-		void RenderContent() override;
 
 	private:
 		ECS::EntityID selectedEntityID;

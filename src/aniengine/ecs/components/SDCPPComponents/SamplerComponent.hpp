@@ -3,7 +3,7 @@
 	   d88888          Y8P d88P  Y88b 888                  888 Y8P
 	  d88P888              Y88b.      888                  888
 	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y888b. 888    888  888 d88" 888 888 d88""88b
+	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
@@ -31,127 +31,133 @@ namespace ECS {
 		SamplerComponent() {
 			compName = "Sampler";
 
-			// Enhanced schema with new backend parameters
+			// Enhanced schema WITHOUT table layout - just direct widget rendering
 			schema = {
-				{"title", "Sampler Settings"},
-				{"type", "object"},
-				{"propertyOrder", {
-					"current_sample_method", "current_scheduler_method", "seed",
-					"cfg", "steps", "denoise", "n_threads", "free_params_immediately",
-					"keep_clip_on_cpu", "keep_control_net_cpu", "keep_vae_on_cpu", "diffusion_flash_attn"
-				}},
-				{"ui:table", {
-					{"columns", 2},
-					{"flags", ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp},
-					{"columnSetup", {
-						{"Param", ImGuiTableColumnFlags_WidthFixed, 64.0f},
-						{"Value", ImGuiTableColumnFlags_WidthStretch}
-					}}
-				}},
-				{"properties", {
-					{"current_sample_method", {
-						{"type", "integer"},
-						{"title", "Sampler"},
-						{"ui:widget", "combo"},
-						{"items", sample_method_items},
-						{"itemCount", sample_method_item_count}
-					}},
-					{"current_scheduler_method", {
-						{"type", "integer"},
-						{"title", "Scheduler"},
-						{"ui:widget", "combo"},
-						{"items", scheduler_method_items},
-						{"itemCount", scheduler_method_item_count}
-					}},
-					{"current_type_method", {
-						{"type", "integer"},
-						{"title", "Quant Type"},
-						{"ui:widget", "combo"},
-						{"items", type_method_items},
-						{"itemCount", type_method_item_count}
-					}},
-					{"current_rng_type", {
-						{"type", "integer"},
-						{"title", "RNG Type"},
-						{"ui:widget", "combo"},
-						{"items", type_rng_items},
-						{"itemCount", type_rng_item_count}
-					}},
-					{"seed", {
-						{"type", "integer"},
-						{"title", "Seed"},
-						{"ui:widget", "input_int"}
-					}},
-					{"cfg", {
-						{"type", "number"},
-						{"title", "CFG"},
-						{"ui:widget", "input_float"},
-						{"ui:options", {
-							{"step", 0.5f},
-							{"step_fast", 1.0f},
-							{"format", "%.2f"}
-						}}
-					}},
-					{"steps", {
-						{"type", "integer"},
-						{"title", "Steps"},
-						{"ui:widget", "input_int"},
-						{"ui:options", {
-							{"step", 1},
-							{"step_fast", 5},
-							{"min", 1},
-							{"max", 150}
-						}}
-					}},
-					{"denoise", {
-						{"type", "number"},
-						{"title", "Denoise"},
-						{"ui:widget", "input_float"},
-						{"ui:options", {
-							{"step", 0.01f},
-							{"step_fast", 0.1f},
-							{"format", "%.2f"},
-							{"min", 0.0f},
-							{"max", 1.0f}
-						}}
-					}},
-					{"n_threads", {
-						{"type", "integer"},
-						{"title", "# Threads"},
-						{"ui:widget", "input_int"},
-						{"ui:options", {
-							{"step", 1},
-							{"step_fast", 4},
-							{"min", 1},
-							{"max", 32}
-						}}
-					}},
-					{"free_params_immediately", {
-						{"type", "boolean"},
-						{"title", "Free Params"},
-						{"ui:widget", "checkbox"}
-					}},
-					{"keep_clip_on_cpu", {
-						{"type", "boolean"},
-						{"title", "CLIP on CPU"},
-						{"ui:widget", "checkbox"}
-					}},
-					{"keep_control_net_cpu", {
-						{"type", "boolean"},
-						{"title", "ControlNet on CPU"},
-						{"ui:widget", "checkbox"}
-					}},
-					{"keep_vae_on_cpu", {
-						{"type", "boolean"},
-						{"title", "VAE on CPU"},
-						{"ui:widget", "checkbox"}
-					}},
-					{"diffusion_flash_attn", {
-						{"type", "boolean"},
-						{"title", "Flash Attention"},
-						{"ui:widget", "checkbox"}
-					}}
+		{"title", "Sampler Settings"},
+		{"type", "object"},
+		{"propertyOrder", {
+			"current_sample_method", "current_scheduler_method", "seed",
+			"cfg", "steps", "denoise", "n_threads", "free_params_immediately",
+			"keep_clip_on_cpu", "keep_control_net_cpu", "keep_vae_on_cpu", "diffusion_flash_attn"
+		}},
+		{"properties", {
+			{"current_sample_method", {
+				{"type", "integer"},
+				{"title", "Sampler"},
+				{"description", "The sampling method used for denoising. Euler is fast and stable, DPM++ methods provide higher quality at the cost of speed."},
+				{"ui:widget", "combo"},
+				{"items", sample_method_items},
+				{"itemCount", sample_method_item_count}
+			}},
+			{"current_scheduler_method", {
+				{"type", "integer"},
+				{"title", "Scheduler"},
+				{"description", "The noise schedule that controls how noise is removed during sampling. Karras schedule often produces better results."},
+				{"ui:widget", "combo"},
+				{"items", scheduler_method_items},
+				{"itemCount", scheduler_method_item_count}
+			}},
+			{"current_type_method", {
+				{"type", "integer"},
+				{"title", "Quant Type"},
+				{"description", "Model precision type. F16 uses less memory, F32 is more accurate. Q4_0/Q8_0 are quantized for even lower memory usage."},
+				{"ui:widget", "combo"},
+				{"items", type_method_items},
+				{"itemCount", type_method_item_count}
+			}},
+			{"current_rng_type", {
+				{"type", "integer"},
+				{"title", "RNG Type"},
+				{"description", "Random number generator type. CUDA RNG provides different results than CPU RNG for the same seed."},
+				{"ui:widget", "combo"},
+				{"items", type_rng_items},
+				{"itemCount", type_rng_item_count}
+			}},
+			{"seed", {
+				{"type", "integer"},
+				{"title", "Seed"},
+				{"description", "Random seed for reproducible results. Use -1 for random seed, or any positive number for consistent output."},
+				{"ui:widget", "input_int"}
+			}},
+			{"cfg", {
+				{"type", "number"},
+				{"title", "CFG"},
+				{"description", "Classifier-Free Guidance scale. Higher values follow the prompt more closely but may reduce image quality. Typical range: 1-20."},
+				{"ui:widget", "input_float"},
+				{"ui:options", {
+					{"step", 0.5f},
+					{"step_fast", 1.0f},
+					{"format", "%.2f"}
 				}}
+			}},
+			{"steps", {
+				{"type", "integer"},
+				{"title", "Steps"},
+				{"description", "Number of denoising steps. More steps = higher quality but slower generation. 20-50 is typical range."},
+				{"ui:widget", "input_int"},
+				{"ui:options", {
+					{"step", 1},
+					{"step_fast", 5},
+					{"min", 1},
+					{"max", 150}
+				}}
+			}},
+			{"denoise", {
+				{"type", "number"},
+				{"title", "Denoise"},
+				{"description", "Denoising strength for img2img. 1.0 = complete denoising (ignores input), 0.0 = no denoising (copies input). 0.6-0.8 is typical."},
+				{"ui:widget", "input_float"},
+				{"ui:options", {
+					{"step", 0.01f},
+					{"step_fast", 0.1f},
+					{"format", "%.2f"},
+					{"min", 0.0f},
+					{"max", 1.0f}
+				}}
+			}},
+			{"n_threads", {
+				{"type", "integer"},
+				{"title", "# Threads"},
+				{"description", "Number of CPU threads to use. Only affects CPU inference. Set to 0 for auto-detection."},
+				{"ui:widget", "input_int"},
+				{"ui:options", {
+					{"step", 1},
+					{"step_fast", 4},
+					{"min", 1},
+					{"max", 32}
+				}}
+			}},
+			{"free_params_immediately", {
+				{"type", "boolean"},
+				{"title", "Free Params"},
+				{"description", "Free model parameters immediately after use to save memory. May cause slower performance for consecutive generations."},
+				{"ui:widget", "checkbox"}
+			}},
+			{"keep_clip_on_cpu", {
+				{"type", "boolean"},
+				{"title", "CLIP on CPU"},
+				{"description", "Keep text encoder on CPU instead of GPU. Saves VRAM but may slow down text processing."},
+				{"ui:widget", "checkbox"}
+			}},
+			{"keep_control_net_cpu", {
+				{"type", "boolean"},
+				{"title", "ControlNet on CPU"},
+				{"description", "Keep ControlNet models on CPU. Saves significant VRAM when using ControlNet but reduces performance."},
+				{"ui:widget", "checkbox"}
+			}},
+			{"keep_vae_on_cpu", {
+				{"type", "boolean"},
+				{"title", "VAE on CPU"},
+				{"description", "Keep VAE on CPU instead of GPU. Can help with memory issues but significantly slows down encoding/decoding."},
+				{"ui:widget", "checkbox"}
+			}},
+			{"diffusion_flash_attn", {
+				{"type", "boolean"},
+				{"title", "Flash Attention"},
+				{"description", "Enable Flash Attention optimization for faster and more memory-efficient attention computation. Requires compatible hardware."},
+				{"ui:widget", "checkbox"}
+			}}
+		}}
 			};
 		}
 
@@ -273,8 +279,6 @@ namespace ECS {
 				n_threads = componentData["n_threads"];
 			if (componentData.contains("free_params_immediately"))
 				free_params_immediately = componentData["free_params_immediately"].get<bool>();
-
-			// NEW: Deserialize backend control parameters
 			if (componentData.contains("keep_clip_on_cpu"))
 				keep_clip_on_cpu = componentData["keep_clip_on_cpu"].get<bool>();
 			if (componentData.contains("keep_control_net_cpu"))

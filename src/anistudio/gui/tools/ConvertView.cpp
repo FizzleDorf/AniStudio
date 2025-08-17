@@ -14,59 +14,64 @@ void ConvertView::Init() {
 
 void ConvertView::Render() {
     ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Convert Model to GGUF/Quant");
-
-    if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-        ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-        ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-        ImGui::TableHeadersRow();
-
-        // Row for "Input Model"
-        ImGui::TableNextColumn();
-        ImGui::Text("Input Model");
-        ImGui::TableNextColumn();
-        if (ImGui::Button("...##j6")) {
-            IGFD::FileDialogConfig config;
-            config.path = Utils::FilePaths::checkpointDir;
-            ImGuiFileDialog::Instance()->OpenDialog("ConvertModelDialog", "Choose Model",
-                                                    ".safetensors, .ckpt, .pt, .gguf", config);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("R##j6")) {
-            modelComp.modelName = "";
-            modelComp.modelPath = "";
-        }
-        ImGui::TableNextColumn();
-        ImGui::Text("%s", modelComp.modelName.c_str());
-        
-        RenderVaeLoader();
-
-        ImGui::EndTable();
-    }
-
-    if (ImGuiFileDialog::Instance()->Display("ConvertModelDialog", 32, ImVec2(700, 400))) {
-        if (ImGuiFileDialog::Instance()->IsOk()) {
-            std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
-            std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-
-            modelComp.modelName = selectedFile;
-            modelComp.modelPath = fullPath;
-            std::cout << "Selected file: " << modelComp.modelName << std::endl;
-            std::cout << "Full path: " << modelComp.modelPath << std::endl;
-            std::cout << "New model path set: " << modelComp.modelPath << std::endl;
-        }
-
-        ImGuiFileDialog::Instance()->Close();
-    }
     
-    ImGui::Combo("Quant Type", reinterpret_cast<int *>(&samplerComp.current_type_method), type_method_items,
-                 type_method_item_count);
+	if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 
-    if (ImGui::Button("Convert")) {
-        Convert();
-    }
+		if (!windowOpen) {
+			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+		}
 
+		if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
+			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			// Row for "Input Model"
+			ImGui::TableNextColumn();
+			ImGui::Text("Input Model");
+			ImGui::TableNextColumn();
+			if (ImGui::Button("...##j6")) {
+				IGFD::FileDialogConfig config;
+				config.path = Utils::FilePaths::checkpointDir;
+				ImGuiFileDialog::Instance()->OpenDialog("ConvertModelDialog", "Choose Model",
+					".safetensors, .ckpt, .pt, .gguf", config);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("R##j6")) {
+				modelComp.modelName = "";
+				modelComp.modelPath = "";
+			}
+			ImGui::TableNextColumn();
+			ImGui::Text("%s", modelComp.modelName.c_str());
+
+			RenderVaeLoader();
+
+			ImGui::EndTable();
+		}
+
+		if (ImGuiFileDialog::Instance()->Display("ConvertModelDialog", 32, ImVec2(700, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
+				std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+				modelComp.modelName = selectedFile;
+				modelComp.modelPath = fullPath;
+				std::cout << "Selected file: " << modelComp.modelName << std::endl;
+				std::cout << "Full path: " << modelComp.modelPath << std::endl;
+				std::cout << "New model path set: " << modelComp.modelPath << std::endl;
+			}
+
+			ImGuiFileDialog::Instance()->Close();
+		}
+
+		ImGui::Combo("Quant Type", reinterpret_cast<int *>(&samplerComp.current_type_method), type_method_items,
+			type_method_item_count);
+
+		if (ImGui::Button("Convert")) {
+			Convert();
+		}
+	}
     ImGui::End();
 }
 

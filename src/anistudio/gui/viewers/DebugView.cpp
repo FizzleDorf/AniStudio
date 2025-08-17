@@ -1,4 +1,5 @@
 #include "DebugView.hpp"
+#include "../Events/Events.hpp"
 
 namespace GUI {
 
@@ -15,31 +16,36 @@ void DebugView::Render() {
 }
 
 void DebugView::RenderEntityPanel() {
-    ImGui::Begin("Entities");
+	if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+		
+		if (!windowOpen) {
+			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+		}
 
-    if (ImGui::Button("Refresh Entities")) {
-        RefreshEntities();
-    }
+		if (ImGui::Button("Refresh Entities")) {
+			RefreshEntities();
+		}
 
-    for (size_t i = 0; i < entities.size(); ++i) {
-        EntityID entity = entities[i];
-        bool isSelected = (entity == selectedEntity);
+		for (size_t i = 0; i < entities.size(); ++i) {
+			EntityID entity = entities[i];
+			bool isSelected = (entity == selectedEntity);
 
-        if (ImGui::Selectable((std::string("Entity ") + std::to_string(entity)).c_str(), isSelected)) {
-            selectedEntity = entity;
-            entityIndex = static_cast<int>(i);
-        }
+			if (ImGui::Selectable((std::string("Entity ") + std::to_string(entity)).c_str(), isSelected)) {
+				selectedEntity = entity;
+				entityIndex = static_cast<int>(i);
+			}
 
-        if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
-            auto components = mgr.GetEntityComponents(entity);
-            for (auto compType : components) {
-                ImGui::Text("Component ID: %u", compType);
-                ImGui::SameLine();
-                ImGui::Text("Component Name: %u", compType);
-            }
-            ImGui::TreePop();
-        }
-    }
+			if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
+				auto components = mgr.GetEntityComponents(entity);
+				for (auto compType : components) {
+					ImGui::Text("Component ID: %u", compType);
+					ImGui::SameLine();
+					ImGui::Text("Component Name: %u", compType);
+				}
+				ImGui::TreePop();
+			}
+		}
+	}
     ImGui::End();
 }
 

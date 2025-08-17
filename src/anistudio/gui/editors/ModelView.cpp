@@ -1,11 +1,12 @@
 #include "ModelView.hpp"
 #include <iostream>
 #include <algorithm>
+#include "../events/Events.hpp"
 
 namespace GUI {
 
 	ModelView::ModelView(ECS::EntityManager& mgr) : BaseView(mgr) {
-		viewName = "Model View";
+		viewName = "ModelView";
 		std::cout << "[ModelView] Constructor called" << std::endl;
 	}
 
@@ -58,7 +59,12 @@ namespace GUI {
 	}
 
 	void ModelView::Render() {
-		if (ImGui::Begin(viewName.c_str(), nullptr, ImGuiWindowFlags_MenuBar)) {
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
+			
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
+			
 			RenderMenuBar();
 
 			// Get available content area
@@ -73,15 +79,15 @@ namespace GUI {
 
 			// Handle viewport input safely
 			HandleViewportInput();
+
+			// Render side panels
+			RenderSceneHierarchy();
+			RenderObjectInspector();
+			if (showGizmoSettings) {
+				RenderGizmoSettings();
+			}
 		}
 		ImGui::End();
-
-		// Render side panels
-		RenderSceneHierarchy();
-		RenderObjectInspector();
-		if (showGizmoSettings) {
-			RenderGizmoSettings();
-		}
 	}
 
 	void ModelView::RenderGizmoSettings() {

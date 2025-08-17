@@ -30,6 +30,9 @@ namespace GUI {
 		void Update(const float deltaT);
 		void Render();
 
+		// Control visibility
+		void SetVisible(bool visible) { m_showPopup = visible; }
+
 	private:
 		ANI::ProjectManager& m_projectManager;
 

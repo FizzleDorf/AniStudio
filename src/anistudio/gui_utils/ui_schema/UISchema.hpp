@@ -49,6 +49,31 @@ namespace UISchema {
 		return windowStates;
 	}
 
+	// NEW: Tooltip rendering utility function
+	static void RenderTooltipIfPresent(const nlohmann::json& propSchema, float delay = 0.5f) {
+		std::string tooltipText;
+
+		// Check for ui:tooltip first (explicit tooltip)
+		if (propSchema.contains("ui:tooltip") && propSchema["ui:tooltip"].is_string()) {
+			tooltipText = propSchema["ui:tooltip"].get<std::string>();
+		}
+		// Fall back to description
+		else if (propSchema.contains("description") && propSchema["description"].is_string()) {
+			tooltipText = propSchema["description"].get<std::string>();
+		}
+
+		if (!tooltipText.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+			ImGui::BeginTooltip();
+
+			// Support multiline tooltips
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+			ImGui::TextUnformatted(tooltipText.c_str());
+			ImGui::PopTextWrapPos();
+
+			ImGui::EndTooltip();
+		}
+	}
+
 	// Forward declarations
 	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties);
 	static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
@@ -90,7 +115,6 @@ namespace UISchema {
 		return modified;
 	}
 
-	// NEW: Handle separate window rendering - COMPLETELY SELF-CONTAINED
 	// NEW: Handle separate window rendering - COMPLETELY SELF-CONTAINED
 	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties) {
 		bool modified = false;
@@ -135,6 +159,8 @@ namespace UISchema {
 					// Render checkbox to toggle window
 					std::string checkboxLabel = windowName + " Editor";
 					ImGui::Checkbox(checkboxLabel.c_str(), &windowStates[windowId]);
+					// NEW: Add tooltip to checkbox as well
+					RenderTooltipIfPresent(propSchema);
 
 					// Show status
 					ImGui::SameLine();
@@ -223,41 +249,53 @@ namespace UISchema {
 		PropertyVariant& propVariant, const nlohmann::json& propSchema,
 		const PropertyMap& allProperties) {
 
+		bool modified = false;
+
 		if (std::holds_alternative<bool*>(propVariant)) {
 			bool* value = std::get<bool*>(propVariant);
-			return BoolWidgets::Render(label, value, widgetType, propSchema);
+			modified = BoolWidgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<int*>(propVariant)) {
 			int* value = std::get<int*>(propVariant);
-			return IntWidgets::Render(label, value, widgetType, propSchema, allProperties);
+			modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<float*>(propVariant)) {
 			float* value = std::get<float*>(propVariant);
-			return FloatWidgets::Render(label, value, widgetType, propSchema);
+			modified = FloatWidgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<double*>(propVariant)) {
 			double* value = std::get<double*>(propVariant);
-			return DoubleWidgets::Render(label, value, widgetType, propSchema);
+			modified = DoubleWidgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<std::string*>(propVariant)) {
 			std::string* value = std::get<std::string*>(propVariant);
-			return StringWidgets::Render(label, value, widgetType, propSchema);
+			modified = StringWidgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<ImVec2*>(propVariant)) {
 			ImVec2* value = std::get<ImVec2*>(propVariant);
-			return Vec2Widgets::Render(label, value, widgetType, propSchema);
+			modified = Vec2Widgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<ImVec4*>(propVariant)) {
 			ImVec4* value = std::get<ImVec4*>(propVariant);
-			return Vec4Widgets::Render(label, value, widgetType, propSchema);
+			modified = Vec4Widgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<std::vector<std::string>*>(propVariant)) {
 			std::vector<std::string>* value = std::get<std::vector<std::string>*>(propVariant);
-			return StringArrayWidgets::Render(label, value, widgetType, propSchema);
+			modified = StringArrayWidgets::Render(label, value, widgetType, propSchema);
+			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+		}
+		else {
+			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unsupported property type");
 		}
 
-		ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unsupported property type");
-		return false;
+		return modified;
 	}
 
 	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties) {
@@ -295,6 +333,8 @@ namespace UISchema {
 
 					ImGui::TableNextColumn();
 					ImGui::Text("%s", label.c_str());
+					// NEW: Add tooltip to table labels as well
+					RenderTooltipIfPresent(propSchema);
 
 					ImGui::TableNextColumn();
 					std::string widgetType = GetWidgetType(propSchema);
@@ -323,7 +363,9 @@ namespace UISchema {
 	static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
 		const nlohmann::json& propSchema, const PropertyMap& allProperties) {
 		// Use empty label for table widgets since label is in first column
-		return RenderPropertyWidget("##value", widgetType, propVariant, propSchema, allProperties);
+		bool modified = RenderPropertyWidget("##value", widgetType, propVariant, propSchema, allProperties);
+		// Note: Tooltip is already handled in RenderPropertyWidget, so no need to add it here again
+		return modified;
 	}
 
 	static void SetupTableColumns(const nlohmann::json& tableSchema, int columns) {
@@ -361,6 +403,7 @@ namespace UISchema {
 			{"posPrompt", {
 				{"type", "string"},
 				{"title", "Positive"},
+				{"description", "Enter your positive prompt here to describe what you want to generate"},
 				{"ui:widget", "zep_editor_toolbar"},
 				{"ui:window", true},  // Create separate window
 				{"ui:window_name", "Positive"},  // Window name
@@ -372,6 +415,7 @@ namespace UISchema {
 			{"negPrompt", {
 				{"type", "string"},
 				{"title", "Negative"},
+				{"description", "Enter negative prompt to describe what you want to avoid in the generation"},
 				{"ui:widget", "zep_editor_toolbar"},
 				{"ui:window", true},  // Create separate window
 				{"ui:window_name", "Negative"},  // Window name
@@ -386,7 +430,7 @@ namespace UISchema {
 	// Usage in your view - THAT'S IT! UISchema handles everything:
 	auto promptProps = promptComponent.GetPropertyMap();
 	UISchema::RenderSchema(promptSchema, promptProps);
-	// ^ This shows buttons AND automatically renders "Positive" and "Negative" windows!
+	// ^ This shows buttons AND automatically renders "Positive" and "Negative" windows with tooltips!
 	*/
 
 } // namespace UISchema

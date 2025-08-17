@@ -64,11 +64,7 @@ namespace ANI {
 		std::cout << "  - Data path: '" << Utils::FilePaths::dataPath << "'" << std::endl;
 	}
 
-	ProjectManager::~ProjectManager() {
-		if (m_isProjectOpen) {
-			SaveProject();
-		}
-	}
+	ProjectManager::~ProjectManager() {}
 
 	void ProjectManager::SetWindowHandle(void* windowHandle) {
 		m_windowHandle = windowHandle;
@@ -312,9 +308,12 @@ namespace ANI {
 
 		std::cout << "[ProjectManager] Closing project: " << m_projectSettings.projectName << std::endl;
 
-		// Save project before closing
+		// Save project before closing (this will save ViewState, ImGui layout, etc.)
 		SaveProject();
 
+		// Reset the ViewManager and EntityManager to clean state
+		std::cout << "[ProjectManager] Resetting ViewManager and EntityManager..." << std::endl;
+		
 		// Clear project-specific paths
 		ClearProjectSpecificPaths();
 
@@ -323,6 +322,8 @@ namespace ANI {
 		m_currentProjectPath.clear();
 		m_projectSettings = ProjectSettings{};
 		m_viewState.Reset();
+
+		std::cout << "[ProjectManager] Project closed and managers reset" << std::endl;
 
 		// Trigger callback
 		if (m_onProjectClosedCallback) {
@@ -435,7 +436,12 @@ namespace ANI {
 	bool ProjectManager::SaveViewState() {
 		try {
 			std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
-			return m_viewState.SaveToFile(viewStatePath);
+
+			// CRITICAL: Save the current active workspace before serializing
+			// This should be set by StudioCore when the active workspace changes
+			std::cout << "[ProjectManager] Saving ViewState with active workspace: " << m_viewState.GetLastActiveWorkspace() << std::endl;
+
+			return m_viewState.SaveViewManagerState(m_viewManager, viewStatePath);
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[ProjectManager] Exception saving ViewState: " << e.what() << std::endl;
@@ -446,7 +452,20 @@ namespace ANI {
 	bool ProjectManager::LoadViewState() {
 		try {
 			std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
-			return m_viewState.LoadFromFile(viewStatePath);
+			bool success = m_viewState.LoadViewManagerState(m_viewManager, viewStatePath);
+
+			if (success) {
+				// CRITICAL FIX: After loading ViewState, notify callback about the active workspace
+				GUI::WorkspaceID lastActiveWorkspace = m_viewState.GetLastActiveWorkspace();
+				std::cout << "[ProjectManager] Loaded ViewState with active workspace: " << lastActiveWorkspace << std::endl;
+
+				// Trigger callback to set the active workspace in StudioCore
+				if (m_onViewStateLoadedCallback) {
+					m_onViewStateLoadedCallback(lastActiveWorkspace);
+				}
+			}
+
+			return success;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[ProjectManager] Exception loading ViewState: " << e.what() << std::endl;

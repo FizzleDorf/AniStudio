@@ -1151,14 +1151,19 @@ namespace GUI {
 
 		// Main window
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin("Image Generation")) {
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+			
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
+
 			// Metadata controls
 			if (ImGui::CollapsingHeader("Metadata Controls")) {
 				RenderMetadataControls();
 			}
 
 			// Tab bar for switching between Txt2Img and Img2Img
-			if (ImGui::BeginTabBar("Image")) {
+			if (ImGui::BeginTabBar("Diffusion")) {
 				// Text-to-Image tab
 				if (ImGui::BeginTabItem("Txt2Img")) {
 					isTxt2ImgMode = true;

@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <iostream>
 #include <cstring>
+#include "../events/Events.hpp"
 
 namespace GUI {
 
@@ -116,7 +117,7 @@ namespace GUI {
 
 	PluginView::PluginView(ECS::EntityManager& entityMgr, Plugin::EnginePluginManager& engineMgr)
 		: BaseView(entityMgr) {
-		viewName = "Plugin Manager";
+		viewName = "PluginView";
 		pluginManager = std::make_unique<EnginePluginWrapper>(engineMgr);
 
 		// Initialize directory buffer
@@ -130,7 +131,7 @@ namespace GUI {
 
 	PluginView::PluginView(ECS::EntityManager& entityMgr, Plugin::StudioPluginManager& studioMgr)
 		: BaseView(entityMgr) {
-		viewName = "Plugin Manager";
+		viewName = "PluginView";
 		pluginManager = std::make_unique<StudioPluginWrapper>(studioMgr);
 
 		// Initialize directory buffer
@@ -171,7 +172,12 @@ namespace GUI {
 	}
 
 	void PluginView::Render() {
-		if (ImGui::Begin(viewName.c_str(), nullptr, ImGuiWindowFlags_MenuBar)) {
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
+			
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
+			
 			// Menu bar
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Options")) {

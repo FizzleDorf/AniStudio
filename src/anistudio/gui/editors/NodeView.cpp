@@ -1,14 +1,15 @@
 #include "NodeView.hpp"
 #include "imgui.h"
 #include <iostream>
+#include "../events/Events.hpp"
 
 namespace GUI {
 
     NodeView::NodeView(ECS::EntityManager& entityMgr)
         : BaseView(entityMgr)
     {
-        viewName = "Node Editor";
-        m_nodeFlow = std::make_unique<ImFlow::ImNodeFlow>("NodeEditor");
+        viewName = "NodeView";
+        m_nodeFlow = std::make_unique<ImFlow::ImNodeFlow>("NodeView");
 
         // Set style properties
         auto& style = m_nodeFlow->getStyle();
@@ -44,8 +45,16 @@ namespace GUI {
     }
 
     void NodeView::Render() {
+		std::string windowName = GetWindowTitle();
+		bool windowOpen = true;
+
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin(viewName.c_str())) {
+        if (ImGui::Begin(windowName.c_str(), &windowOpen)) {
+
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
+
             // Process node editor
             m_nodeFlow->update();
 

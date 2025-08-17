@@ -120,46 +120,45 @@ namespace GUI {
 		}
 
 		void Render() override {
-			if (!ImGui::GetCurrentContext()) {
-				std::cerr << "[VideoView] ERROR: No ImGui context!" << std::endl;
-				return;
-			}
-
-			ImGui::SetNextWindowSize(ImVec2(1024, 768), ImGuiCond_FirstUseEver);
-
-			std::string windowName = "Video Viewer##" + std::to_string(GetID());
-			bool windowOpen = true;
-
-			if (!ImGui::Begin(windowName.c_str(), &windowOpen)) {
-				ImGui::End();
-				return;
-			}
-
 			try {
-				RenderVideoInfo();
-				RenderSelector();
-				RenderControls();
-				RenderPlaybackControls();
-
-				ImGui::SameLine();
-				ImGui::Checkbox("Show History", &showHistory);
-
-				if (showHistory) {
-					RenderHistory();
+				if (!ImGui::GetCurrentContext()) {
+					std::cerr << "[VideoView] ERROR: No ImGui context!" << std::endl;
+					return;
 				}
 
-				ImGui::Separator();
+				ImGui::SetNextWindowSize(ImVec2(1024, 768), ImGuiCond_FirstUseEver);
 
-				if (ImGui::BeginChild("VideoViewerChild", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) {
-					RenderSelectedVideo();
+				if (!ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+					
+					if (!windowOpen) {
+						ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+					}
+
+					ImGui::SameLine();
+					ImGui::Checkbox("Show History", &showHistory);
+
+					if (showHistory) {
+						RenderHistory();
+					}
+
+					ImGui::Separator();
+
+					if (ImGui::BeginChild("VideoViewerChild", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) {
+						RenderSelectedVideo();
+					}
+					ImGui::EndChild();
+
+					RenderVideoInfo();
+					RenderSelector();
+					RenderControls();
+					RenderPlaybackControls();
+
 				}
-				ImGui::EndChild();
 			}
 			catch (const std::exception& e) {
 				std::cerr << "[VideoView] Exception in Render: " << e.what() << std::endl;
 				ImGui::Text("Error rendering VideoView: %s", e.what());
 			}
-
 			ImGui::End();
 		}
 

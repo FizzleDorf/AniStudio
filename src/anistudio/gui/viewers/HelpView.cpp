@@ -4,6 +4,7 @@
 #include <iostream>
 #include <algorithm>
 #include <sstream>
+#include "../Events/Events.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -17,7 +18,7 @@
 namespace GUI {
 
 	HelpView::HelpView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
-		viewName = "Help";
+		viewName = "HelpView";
 	}
 
 	HelpView::~HelpView() {
@@ -134,7 +135,10 @@ namespace GUI {
 	void HelpView::Render() {
 		ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
-		if (ImGui::Begin("Help & Documentation", nullptr, ImGuiWindowFlags_MenuBar)) {
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
 
 			// Menu bar
 			if (ImGui::BeginMenuBar()) {

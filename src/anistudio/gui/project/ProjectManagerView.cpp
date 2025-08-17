@@ -32,7 +32,7 @@ namespace GUI {
 	void ProjectManagerView::Update(const float deltaT) {
 		// Close this view if a project is now open
 		if (m_projectManager.IsProjectOpen()) {
-			m_projectManager.GetViewState().SetViewOpen("ProjectManagerView", false);
+			// View will be hidden automatically when project opens
 			// Reset popup flags when closing
 			showNewProjectPopup = false;
 			showLoadProjectPopup = false;
@@ -124,7 +124,7 @@ namespace GUI {
 
 		// Handle close or ESC
 		if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-			m_projectManager.GetViewState().SetViewOpen("ProjectManagerView", false);
+			// View will be hidden automatically when project opens
 		}
 
 		// Handle popups like your settings example
@@ -384,19 +384,15 @@ namespace GUI {
 		std::string fullPath = projectPath + "/" + projectName;
 
 		if (m_projectManager.CreateNewProject(fullPath, projectName)) {
-			// Create workspace based on selected template
-			auto& viewState = m_projectManager.GetViewState();
-
+			// TODO: Workspace creation will be handled by the ViewManager
+			// For now, the ViewManager will create default workspaces automatically
 			if (m_selectedTemplate >= 0 && m_selectedTemplate < m_templates.size()) {
-				// Use selected template
 				const auto& template_ = m_templates[m_selectedTemplate];
-				size_t workspaceID = viewState.CreateWorkspace(template_.name, template_.defaultOpenViews);
-				std::cout << "[ProjectManagerView] Created workspace from template: " << template_.name << std::endl;
+				std::cout << "[ProjectManagerView] Will create workspace from template: " << template_.name << std::endl;
+				// TODO: Use events to create workspace with template views
 			}
 			else {
-				// Blank project - create empty workspace
-				size_t workspaceID = viewState.CreateWorkspace("Main", {});
-				std::cout << "[ProjectManagerView] Created blank workspace" << std::endl;
+				std::cout << "[ProjectManagerView] Will create blank workspace" << std::endl;
 			}
 
 			// View will close automatically in Update() when project is created

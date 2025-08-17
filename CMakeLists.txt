@@ -125,8 +125,19 @@ endif()
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/shaders")
     set(SHADER_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
-    file(COPY ${SHADER_DIR}/basic.vert ${SHADER_DIR}/basic.frag DESTINATION ${CMAKE_BINARY_DIR}/shaders)
-    message(STATUS "Copied shaders to ${CMAKE_BINARY_DIR}/shaders")
+    
+    # Get all shader files
+    file(GLOB SHADER_FILES "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag")
+    
+    if(SHADER_FILES)
+        file(COPY ${SHADER_FILES} DESTINATION ${CMAKE_BINARY_DIR}/shaders)
+        list(LENGTH SHADER_FILES SHADER_COUNT)
+        message(STATUS "Copied ${SHADER_COUNT} shader file(s) to ${CMAKE_BINARY_DIR}/shaders")
+    else()
+        message(STATUS "No .vert or .frag files found in ${SHADER_DIR}")
+    endif()
+else()
+    message(STATUS "Shader directory ${CMAKE_SOURCE_DIR}/src/shaders not found")
 endif()
 
 # Find external dependencies (find_package only - no building here)

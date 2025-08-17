@@ -1,9 +1,12 @@
 #include "SequencerView.hpp"
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include "../events/Events.hpp"
 
 namespace GUI {
-SequencerView::SequencerView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {}
+SequencerView::SequencerView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {
+	viewName = "SequencerView";
+}
 
 void SequencerView::AddTrack(const std::string &name, ECS::EntityID entity) {
     tracks.push_back({name, entity, 0, 100, false}); // Default start/end frames
@@ -49,36 +52,40 @@ const char *SequencerView::GetItemLabel(int index) const {
 }
 
 void SequencerView::Render() {
-    ImGui::Begin("Sequencer View");
+	if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+		
+		if (!windowOpen) {
+			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+		}
 
-    // Playback control buttons
-    if (ImGui::Button("Play"))
-        Play();
-    ImGui::SameLine();
-    if (ImGui::Button("Pause"))
-        Pause();
-    ImGui::SameLine();
-    if (ImGui::Button("Stop"))
-        Stop();
+		// Playback control buttons
+		if (ImGui::Button("Play"))
+			Play();
+		ImGui::SameLine();
+		if (ImGui::Button("Pause"))
+			Pause();
+		ImGui::SameLine();
+		if (ImGui::Button("Stop"))
+			Stop();
 
-    // Adjust playback speed
-    ImGui::SliderFloat("Playback Speed", &playbackSpeed, 1.0f, 120.0f);
+		// Adjust playback speed
+		ImGui::SliderFloat("Playback Speed", &playbackSpeed, 1.0f, 120.0f);
 
-    // Update current frame if playing
-    if (playing) {
-        double now = glfwGetTime();
-        double deltaTime = now - lastTime;
-        lastTime = now;
-        currentFrame += static_cast<int>(deltaTime * playbackSpeed);
-    }
+		// Update current frame if playing
+		if (playing) {
+			double now = glfwGetTime();
+			double deltaTime = now - lastTime;
+			lastTime = now;
+			currentFrame += static_cast<int>(deltaTime * playbackSpeed);
+		}
 
-    // Render the sequencer
-    int selectedEntry = -1;
-    bool expanded = true;
-    int firstFrame = 0;
-    ImSequencer::Sequencer(this, &currentFrame, &expanded, &selectedEntry, &firstFrame,
-                           ImSequencer::SEQUENCER_EDIT_ALL);
-
+		// Render the sequencer
+		int selectedEntry = -1;
+		bool expanded = true;
+		int firstFrame = 0;
+		ImSequencer::Sequencer(this, &currentFrame, &expanded, &selectedEntry, &firstFrame,
+			ImSequencer::SEQUENCER_EDIT_ALL);
+	}
     ImGui::End();
 }
 } // namespace GUI

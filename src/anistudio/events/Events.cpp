@@ -1,6 +1,6 @@
+#include <GL/glew.h>
 #include "Events.hpp"
-#include "AllViews.h"
-#include "PluginManager.hpp"
+#include "ViewManager.hpp"
 #include "GUI.h"
 #include <iostream>
 #include "../core/Core.hpp"
@@ -44,29 +44,108 @@ namespace ANI {
 
 			switch (event.type) {
 			case ViewEventType::AddView: {
-				std::cout << "[Events] Adding view: " << event.viewTypeName << std::endl;
+				std::cout << "[Events] Adding view: " << event.viewTypeName
+					<< " to workspace: " << event.workspaceID << std::endl;
 
-				GUI::WorkspaceID newViewID = viewManager.CreateViewByName(event.viewTypeName,
-					appCore.GetEntityManager());
+				try {
+					// Get the view type ID from the name
+					GUI::ViewTypeID viewType = viewManager.GetViewType(event.viewTypeName);
 
-				if (newViewID != 0) {
+					// Ensure the workspace exists
+					auto allWorkspaces = viewManager.GetAllWorkspaces();
+					if (std::find(allWorkspaces.begin(), allWorkspaces.end(), event.workspaceID) == allWorkspaces.end()) {
+						std::cerr << "[Events] Workspace " << event.workspaceID << " does not exist!" << std::endl;
+						break;
+					}
+
+					// Add the view type to the specified workspace
+					viewManager.AddViewByType(event.workspaceID, viewType);
+
 					std::cout << "[Events] Successfully added view: " << event.viewTypeName
-						<< " with ID: " << newViewID << std::endl;
+						<< " to workspace: " << event.workspaceID << std::endl;
 				}
-				else {
-					std::cerr << "[Events] Failed to add view: " << event.viewTypeName << std::endl;
+				catch (const std::exception& e) {
+					std::cerr << "[Events] Failed to add view: " << event.viewTypeName
+						<< " - " << e.what() << std::endl;
 				}
 				break;
 			}
 
 			case ViewEventType::RemoveView: {
 				std::cout << "[Events] Removing view: " << event.viewTypeName
-					<< " (ID: " << event.viewID << ")" << std::endl;
+					<< " from workspace: " << event.workspaceID << std::endl;
 
-				// Destroy the view
-				viewManager.DestroyView(event.viewID);
+				try {
+					// Get the view type ID from the name
+					GUI::ViewTypeID viewType = viewManager.GetViewType(event.viewTypeName);
 
-				std::cout << "[Events] Successfully removed view: " << event.viewTypeName << std::endl;
+					// Remove the view type from the specified workspace
+					viewManager.RemoveViewByType(event.workspaceID, viewType);
+
+					std::cout << "[Events] Successfully removed view: " << event.viewTypeName
+						<< " from workspace: " << event.workspaceID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Events] Failed to remove view: " << event.viewTypeName
+						<< " - " << e.what() << std::endl;
+				}
+				break;
+			}
+
+			case ViewEventType::SetActiveWorkspace: {
+				std::cout << "[Events] Setting active workspace to: " << event.workspaceID << std::endl;
+
+				// Verify the workspace exists
+				auto allWorkspaces = viewManager.GetAllWorkspaces();
+				if (std::find(allWorkspaces.begin(), allWorkspaces.end(), event.workspaceID) != allWorkspaces.end()) {
+					// Notify any systems that need to know about workspace changes
+					// For now, just log the change
+					std::cout << "[Events] Active workspace set to: " << event.workspaceID << std::endl;
+				}
+				else {
+					std::cerr << "[Events] Cannot set active workspace - ID " << event.workspaceID << " does not exist" << std::endl;
+				}
+				break;
+			}
+
+			case ViewEventType::CreateWorkspace: {
+				std::cout << "[Events] Creating new workspace: " << event.workspaceName << std::endl;
+
+				try {
+					GUI::WorkspaceID newWorkspaceID = viewManager.CreateView();
+					std::cout << "[Events] Created new workspace: " << newWorkspaceID
+						<< " (" << event.workspaceName << ")" << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Events] Failed to create workspace: " << e.what() << std::endl;
+				}
+				break;
+			}
+
+			case ViewEventType::DeleteWorkspace: {
+				std::cout << "[Events] Deleting workspace: " << event.workspaceID << std::endl;
+
+				try {
+					// Check if this is the last workspace
+					auto allWorkspaces = viewManager.GetAllWorkspaces();
+					if (allWorkspaces.size() <= 1) {
+						std::cerr << "[Events] Cannot delete the last workspace" << std::endl;
+						break;
+					}
+
+					// Verify the workspace exists
+					if (std::find(allWorkspaces.begin(), allWorkspaces.end(), event.workspaceID) == allWorkspaces.end()) {
+						std::cerr << "[Events] Cannot delete workspace - ID " << event.workspaceID << " does not exist" << std::endl;
+						break;
+					}
+
+					// Delete the workspace
+					viewManager.DestroyView(event.workspaceID);
+					std::cout << "[Events] Successfully deleted workspace: " << event.workspaceID << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Events] Failed to delete workspace: " << e.what() << std::endl;
+				}
 				break;
 			}
 
@@ -76,12 +155,6 @@ namespace ANI {
 			}
 		}
 	}
-
-	static GUI::WorkspaceID debugID = 0;
-	static GUI::WorkspaceID settingsID = 0;
-	static GUI::WorkspaceID viewsID = 0;
-	static GUI::WorkspaceID pluginsID = 0;
-	static GUI::WorkspaceID helpID = 0;
 
 	// Handle events based on its EventType
 	void Events::ProcessEvents() {
