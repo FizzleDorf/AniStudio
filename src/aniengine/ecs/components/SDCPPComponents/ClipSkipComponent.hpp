@@ -39,7 +39,7 @@ namespace ECS {
 						{"type", "number"},
 						{"title", "Clip Skip"},
 						{"description", "Skip the last N layers of CLIP text encoder. Higher values can produce more artistic/abstract results but may reduce prompt adherence. Range: 0-12, typical: 1-2."},
-						{"ui:widget", "drag_float"},
+						{"ui:widget", "input_float"},
 						{"ui:options", {
 							{"min", 0.0f},
 							{"max", 12.0f},

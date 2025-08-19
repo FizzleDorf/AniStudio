@@ -62,16 +62,15 @@ namespace ANI {
 		const std::string& GetCurrentProjectPath() const { return m_currentProjectPath; }
 		const std::string& GetCurrentProjectName() const { return m_projectSettings.projectName; }
 
-		// ViewState with active workspace tracking
+		// CRITICAL: ViewState access for workspace management
 		GUI::ViewState& GetViewState() { return m_viewState; }
 		const GUI::ViewState& GetViewState() const { return m_viewState; }
 
-		// Set the last active workspace (called by MenuBar or other workspace managers)
+		// Convenience methods for workspace management
 		void SetLastActiveWorkspace(GUI::WorkspaceID workspaceID) {
 			m_viewState.SetLastActiveWorkspace(workspaceID);
 		}
 
-		// Get the last active workspace
 		GUI::WorkspaceID GetLastActiveWorkspace() const {
 			return m_viewState.GetLastActiveWorkspace();
 		}
@@ -109,7 +108,7 @@ namespace ANI {
 			m_onProjectClosedCallback = callback;
 		}
 
-		// NEW: Callback for when ViewState is loaded with active workspace
+		// CRITICAL: Callback for when ViewState is loaded with active workspace
 		void SetViewStateLoadedCallback(std::function<void(GUI::WorkspaceID)> callback) {
 			m_onViewStateLoadedCallback = callback;
 		}
@@ -121,7 +120,7 @@ namespace ANI {
 		bool m_isProjectOpen = false;
 		std::string m_currentProjectPath;
 		ProjectSettings m_projectSettings;
-		GUI::ViewState m_viewState;
+		GUI::ViewState m_viewState;  // CRITICAL: Contains workspace state
 		std::string m_lastError;
 
 		// Window handle for window state management
@@ -131,7 +130,7 @@ namespace ANI {
 		std::function<void(const std::string&)> m_onProjectLoadedCallback;
 		std::function<void(const std::string&)> m_onProjectCreatedCallback;
 		std::function<void()> m_onProjectClosedCallback;
-		std::function<void(GUI::WorkspaceID)> m_onViewStateLoadedCallback;  // NEW
+		std::function<void(GUI::WorkspaceID)> m_onViewStateLoadedCallback;  // CRITICAL: For workspace restoration
 
 		// File operations
 		bool SaveViewState();

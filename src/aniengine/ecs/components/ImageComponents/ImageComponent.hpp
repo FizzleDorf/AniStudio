@@ -30,7 +30,7 @@
 namespace ECS {
 	struct ImageComponent : public BaseComponent {
 		std::string fileName = "AniStudio";                  // Default file name
-		std::string filePath = 
+		std::string filePath =
 			!Utils::FilePaths::outputFolderPath.empty()
 			? Utils::FilePaths::outputFolderPath			 // Output folder if one is found
 			: Utils::FilePaths::defaultProjectPath;			 // Directory containing the Image
@@ -42,6 +42,7 @@ namespace ECS {
 
 		ImageComponent() {
 			compName = "Image";
+			setupBaseSchema();
 		}
 
 		virtual ~ImageComponent() {
@@ -51,6 +52,14 @@ namespace ECS {
 				glDeleteTextures(1, &textureID);
 				textureID = 0;
 			}
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+			properties["fileName"] = &fileName;
+			properties["filePath"] = &filePath;
+			return properties;
 		}
 
 		// Serialize the component to JSON
@@ -122,21 +131,51 @@ namespace ECS {
 			channels = other.channels;
 			imageData = nullptr; // Don't copy raw pointer
 			textureID = 0; // Don't copy texture ID
+			setupBaseSchema();
+		}
+
+	protected:
+		void setupBaseSchema() {
+			schema = {
+				{"title", "Image"},
+				{"type", "object"},
+				{"properties", {
+					{"fileName", {
+						{"type", "string"},
+						{"title", "File Name"},
+						{"description", "Name of the image file"}
+					}},
+					{"filePath", {
+						{"type", "string"},
+						{"title", "File Path"},
+						{"description", "Directory path for the image file"}
+					}}
+				}}
+			};
 		}
 	};
 
 	struct InputImageComponent : public ImageComponent {
 		std::shared_ptr<unsigned char[]> ownedImageData; // Smart pointer for owned data
+		std::string inputFilePath = "";  // Full path to input image file
 
 		InputImageComponent() {
 			compName = "InputImage";
 			fileName = "";
 			filePath = "";
+			setupInputSchema();
 		}
 
 		virtual ~InputImageComponent() {
 			// Cleanup happens automatically via shared_ptr
 			// Texture cleanup handled by base class
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+			properties["inputFilePath"] = &inputFilePath;
+			return properties;
 		}
 
 		void SetImageData(unsigned char* data, int w, int h, int ch) {
@@ -176,6 +215,9 @@ namespace ECS {
 		// Copy constructor
 		InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
 			compName = "InputImage";
+			inputFilePath = other.inputFilePath;
+			setupInputSchema();
+
 			if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
 				// Create a deep copy of the image data
 				size_t dataSize = other.width * other.height * other.channels;
@@ -192,6 +234,7 @@ namespace ECS {
 				// Call base assignment
 				ImageComponent::operator=(other);
 				compName = "InputImage";
+				inputFilePath = other.inputFilePath;
 
 				// Deep copy image data if it exists
 				if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
@@ -205,20 +248,108 @@ namespace ECS {
 				else {
 					ClearImageData();
 				}
+				setupInputSchema();
 			}
 			return *this;
+		}
+
+	private:
+		void setupInputSchema() {
+			schema = {
+				{"title", "Input Image"},
+				{"type", "object"},
+				{"properties", {
+					{"inputFilePath", {
+						{"type", "string"},
+						{"title", "Input Image File"},
+						{"description", "Select an image file to load as input"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+							{"filterName", "Image Files"}
+						}}
+					}}
+				}}
+			};
 		}
 	};
 
 	struct OutputImageComponent : public ImageComponent {
+		std::string outputDirectory = "";  // Output directory path
+		std::string fileExtension = ".png";  // Selected file extension
+		std::vector<std::string> supportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
+		int selectedExtensionIndex = 0;  // Index for combo widget
+
 		OutputImageComponent() {
 			compName = "OutputImage";
+			// Set default output directory
+			outputDirectory = !Utils::FilePaths::outputFolderPath.empty()
+				? Utils::FilePaths::outputFolderPath
+				: Utils::FilePaths::defaultProjectPath;
+			fileName = "AniStudio_output";
+			setupOutputSchema();
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+			properties["outputDirectory"] = &outputDirectory;
+			properties["fileName"] = &fileName;
+			properties["selectedExtensionIndex"] = &selectedExtensionIndex;
+			properties["supportedExtensions"] = &supportedExtensions;
+			return properties;
+		}
+
+		// Get the full output path
+		std::string GetFullOutputPath() const {
+			std::string extension = fileExtension;
+			if (selectedExtensionIndex >= 0 && selectedExtensionIndex < supportedExtensions.size()) {
+				extension = supportedExtensions[selectedExtensionIndex];
+			}
+
+			std::string baseName = fileName;
+			if (baseName.empty()) baseName = "AniStudio_output";
+
+			std::filesystem::path outputPath = std::filesystem::path(outputDirectory) / (baseName + extension);
+			return outputPath.string();
+		}
+
+		// Serialize the component to JSON
+		virtual nlohmann::json Serialize() const override {
+			nlohmann::json j = ImageComponent::Serialize();
+			j[compName]["outputDirectory"] = outputDirectory;
+			j[compName]["fileExtension"] = fileExtension;
+			j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
+			return j;
+		}
+
+		// Deserialize the component from JSON
+		virtual void Deserialize(const nlohmann::json& j) override {
+			ImageComponent::Deserialize(j);
+
+			nlohmann::json componentData;
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+
+			if (componentData.contains("outputDirectory"))
+				outputDirectory = componentData["outputDirectory"];
+			if (componentData.contains("fileExtension"))
+				fileExtension = componentData["fileExtension"];
+			if (componentData.contains("selectedExtensionIndex"))
+				selectedExtensionIndex = componentData["selectedExtensionIndex"];
 		}
 
 		OutputImageComponent &operator=(const OutputImageComponent &other) {
 			if (this != &other) {
 				ImageComponent::operator=(other);
 				compName = "OutputImage";
+				outputDirectory = other.outputDirectory;
+				fileExtension = other.fileExtension;
+				selectedExtensionIndex = other.selectedExtensionIndex;
+				supportedExtensions = other.supportedExtensions;
+				setupOutputSchema();
 			}
 			return *this;
 		}
@@ -226,6 +357,55 @@ namespace ECS {
 		// Copy constructor
 		OutputImageComponent(const OutputImageComponent& other) : ImageComponent(other) {
 			compName = "OutputImage";
+			outputDirectory = other.outputDirectory;
+			fileExtension = other.fileExtension;
+			selectedExtensionIndex = other.selectedExtensionIndex;
+			supportedExtensions = other.supportedExtensions;
+			setupOutputSchema();
+		}
+
+	private:
+		void setupOutputSchema() {
+			schema = {
+				{"title", "Output Image"},
+				{"type", "object"},
+				{"properties", {
+					{"outputDirectory", {
+						{"type", "string"},
+						{"title", "Output Directory"},
+						{"description", "Select the directory where the image will be saved"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "directory"},
+							{"defaultPath", Utils::FilePaths::outputFolderPath.empty()
+								? Utils::FilePaths::defaultProjectPath
+								: Utils::FilePaths::outputFolderPath}
+						}}
+					}},
+					{"fileName", {
+						{"type", "string"},
+						{"title", "File Name"},
+						{"description", "Name for the output image file (without extension)"},
+						{"ui:widget", "input_text"}
+					}},
+					{"selectedExtensionIndex", {
+						{"type", "integer"},
+						{"title", "File Format"},
+						{"description", "Select the image file format"},
+						{"ui:widget", "combo"},
+						{"minimum", 0},
+						{"maximum", 4},
+						{"items", {
+							{{"label", "PNG (.png)"}},
+							{{"label", "JPEG (.jpg)"}},
+							{{"label", "JPEG (.jpeg)"}},
+							{{"label", "Bitmap (.bmp)"}},
+							{{"label", "Targa (.tga)"}}
+						}}
+					}}
+				}},
+				{"propertyOrder", {"outputDirectory", "fileName", "selectedExtensionIndex"}}
+			};
 		}
 	};
 
@@ -239,11 +419,44 @@ namespace ECS {
 
 	struct MaskImageComponent : public ImageComponent {
 		float value = 0.75f;
+		std::string maskFilePath = "";  // Full path to mask image file
 
 		MaskImageComponent() {
 			compName = "MaskImageComponent";
 			fileName = "";
 			filePath = "";
+			setupMaskSchema();
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+			properties["maskFilePath"] = &maskFilePath;
+			properties["value"] = &value;
+			return properties;
+		}
+
+		// Serialize the component to JSON
+		virtual nlohmann::json Serialize() const override {
+			nlohmann::json j = ImageComponent::Serialize();
+			j[compName]["value"] = value;
+			j[compName]["maskFilePath"] = maskFilePath;
+			return j;
+		}
+
+		// Deserialize the component from JSON
+		virtual void Deserialize(const nlohmann::json& j) override {
+			ImageComponent::Deserialize(j);
+
+			nlohmann::json componentData;
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+
+			if (componentData.contains("value"))
+				value = componentData["value"];
+			if (componentData.contains("maskFilePath"))
+				maskFilePath = componentData["maskFilePath"];
 		}
 
 		MaskImageComponent &operator=(const MaskImageComponent &other) {
@@ -251,6 +464,8 @@ namespace ECS {
 				ImageComponent::operator=(other);
 				compName = "MaskImageComponent";
 				value = other.value;
+				maskFilePath = other.maskFilePath;
+				setupMaskSchema();
 			}
 			return *this;
 		}
@@ -259,6 +474,42 @@ namespace ECS {
 		MaskImageComponent(const MaskImageComponent& other) : ImageComponent(other) {
 			compName = "MaskImageComponent";
 			value = other.value;
+			maskFilePath = other.maskFilePath;
+			setupMaskSchema();
+		}
+
+	private:
+		void setupMaskSchema() {
+			schema = {
+				{"title", "Mask Image"},
+				{"type", "object"},
+				{"properties", {
+					{"maskFilePath", {
+						{"type", "string"},
+						{"title", "Mask Image File"},
+						{"description", "Select a mask image file (grayscale)"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+							{"filterName", "Image Files"}
+						}}
+					}},
+					{"value", {
+						{"type", "number"},
+						{"title", "Mask Strength"},
+						{"description", "Strength of the mask effect (0.0 to 1.0)"},
+						{"ui:widget", "slider_float"},
+						{"minimum", 0.0},
+						{"maximum", 1.0},
+						{"ui:options", {
+							{"step", 0.01},
+							{"format", "%.2f"}
+						}}
+					}}
+				}},
+				{"propertyOrder", {"maskFilePath", "value"}}
+			};
 		}
 	};
 } // namespace ECS

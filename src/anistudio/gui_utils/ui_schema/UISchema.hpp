@@ -28,6 +28,8 @@
 #include <vector>
 #include <iostream>
 
+ // Include centralized Engine property types
+#include "PropertyTypes.hpp"
 #include "ui_schema/UISchemaUtils.hpp"
 #include "ui_schema/BoolWidgets.hpp"
 #include "ui_schema/IntWidgets.hpp"
@@ -37,11 +39,9 @@
 #include "ui_schema/Vec2Widgets.hpp"
 #include "ui_schema/Vec4Widgets.hpp"
 #include "ui_schema/StringArrayWidgets.hpp"
+#include "ui_schema/FileDialogWidgets.hpp"
 
 namespace UISchema {
-
-	using PropertyVariant = std::variant<bool*, int*, float*, double*, std::string*, ImVec2*, ImVec4*, std::vector<std::string>*>;
-	using PropertyMap = std::unordered_map<std::string, PropertyVariant>;
 
 	// Window state management for separate windows
 	static std::unordered_map<std::string, bool>& GetWindowStates() {
@@ -91,6 +91,9 @@ namespace UISchema {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid schema: not an object");
 			return false;
 		}
+
+		// Process any file dialogs first
+		FileDialogWidgets::ProcessDialog();
 
 		PushStyleFromSchema(schema);
 		bool modified = false;
@@ -273,7 +276,12 @@ namespace UISchema {
 		}
 		else if (std::holds_alternative<std::string*>(propVariant)) {
 			std::string* value = std::get<std::string*>(propVariant);
-			modified = StringWidgets::Render(label, value, widgetType, propSchema);
+			if (widgetType == "file_selector") {
+				modified = FileDialogWidgets::Render(label, value, widgetType, propSchema);
+			}
+			else {
+				modified = StringWidgets::Render(label, value, widgetType, propSchema);
+			}
 			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
 		}
 		else if (std::holds_alternative<ImVec2*>(propVariant)) {

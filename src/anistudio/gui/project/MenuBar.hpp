@@ -55,12 +55,21 @@ namespace GUI {
 		bool showNewProjectDialog = false;
 		bool showLoadProjectDialog = false;
 
+		// Workspace dialog state
+		bool showCreateWorkspaceDialog = false;
+		bool showRenameWorkspaceDialog = false;
+		char createWorkspaceBuffer[256] = "New Workspace";
+		char renameWorkspaceBuffer[256] = "";
+
 		// Menu sections
 		void ShowFileMenu();
 		void ShowEditMenu();
 		void ShowViewMenus();
 		void ShowWorkspaceMenu();
 		void ShowHelpMenu();
+
+		// Workspace dialog rendering
+		void RenderWorkspaceDialogs();
 
 		// Hierarchical menu building
 		std::vector<std::string> SplitCategoryPath(const std::string& category);

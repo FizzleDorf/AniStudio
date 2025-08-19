@@ -1,5 +1,5 @@
 /*
- * AniStudio.hpp - Enhanced version with proper view state management
+ * AniStudio.hpp - Simplified version with ViewManager handling workspace state
  */
 #pragma once
 
@@ -48,6 +48,7 @@ namespace ANI {
 		GUI::ViewManager& GetViewManager() { return viewManager; }
 		Plugin::StudioPluginManager& GetStudioPluginManager() { return *studioPluginManager; }
 		Plugin::EnginePluginManager& GetEnginePluginManager() { return engineCore.GetEnginePluginManager(); }
+		ANI::ProjectManager& GetProjectManager() { return m_projectManager; }
 
 		// Studio state
 		bool IsRunning() const { return running && engineCore.IsRunning(); }
@@ -60,7 +61,7 @@ namespace ANI {
 		void SetWindowHandle(void* window);
 		void SetImGuiContext(void* context) { imguiContext = context; }
 
-		// Workspace management
+		//Workspace management
 		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
 		GUI::WorkspaceID GetActiveWorkspace() const;
 
@@ -77,7 +78,7 @@ namespace ANI {
 	private:
 		bool initialized;
 		bool running;
-		bool m_isShuttingDown; // NEW: Prevent callbacks during shutdown
+		bool m_isShuttingDown; // Prevent callbacks during shutdown
 
 		// Pointers to the imgui and glfw instances
 		void* windowHandle;
@@ -87,9 +88,6 @@ namespace ANI {
 		EngineCore engineCore;
 		GUI::ViewManager viewManager;
 		ANI::ProjectManager m_projectManager;
-
-		// Active workspace tracking
-		GUI::WorkspaceID m_activeWorkspaceID;
 
 		// Studio plugin manager (supports all plugin types)
 		std::unique_ptr<Plugin::StudioPluginManager> studioPluginManager;
@@ -105,12 +103,6 @@ namespace ANI {
 		// Internal setup
 		void RegisterCoreViews();
 		void SetupProjectCallbacks();
-
-		// Rendering methods
-		void RenderActiveWorkspaceViews();
-
-		// Workspace management methods
-		void EnsureValidActiveWorkspace();
 
 		// Window state management
 		void InitializeWindowState();

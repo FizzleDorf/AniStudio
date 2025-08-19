@@ -16,6 +16,7 @@
 #include "StudioPluginManager.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
+#include "Events.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -25,7 +26,7 @@ namespace ANI {
 
 	StudioCore::StudioCore()
 		: initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
-		m_projectManager(viewManager, engineCore.GetEntityManager()), m_activeWorkspaceID(0), m_isShuttingDown(false) {
+		m_projectManager(viewManager, engineCore.GetEntityManager()), m_isShuttingDown(false) {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
 		studioPluginManager = std::make_unique<Plugin::StudioPluginManager>(
@@ -92,57 +93,12 @@ namespace ANI {
 			}
 		});
 
-		// NEW: Handle ViewState loading to set active workspace
+		// SIMPLIFIED: Handle ViewState loading to sync ViewManager with restored active workspace
 		m_projectManager.SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
-			std::cout << "[StudioCore] Setting active workspace from loaded ViewState: " << activeWorkspaceID << std::endl;
-			SetActiveWorkspace(activeWorkspaceID);
+			std::cout << "[StudioCore] Syncing ViewManager with loaded active workspace: " << activeWorkspaceID << std::endl;
+			// ViewManager is now the single source of truth for active workspace
+			viewManager.SetActiveWorkspace(activeWorkspaceID);
 		});
-	}
-
-	void StudioCore::RenderActiveWorkspaceViews() {
-		if (!m_projectManager.IsProjectOpen()) return;
-
-		// Render only the active workspace managed by StudioCore
-		viewManager.Render(m_activeWorkspaceID);
-	}
-
-	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {
-		auto allWorkspaces = viewManager.GetAllWorkspaces();
-		if (std::find(allWorkspaces.begin(), allWorkspaces.end(), workspaceID) != allWorkspaces.end()) {
-			m_activeWorkspaceID = workspaceID;
-
-			// CRITICAL: Update ProjectManager's ViewState with the new active workspace
-			if (m_projectManager.IsProjectOpen()) {
-				m_projectManager.SetLastActiveWorkspace(workspaceID);
-			}
-
-			std::cout << "[StudioCore] Set active workspace to: " << workspaceID << std::endl;
-		}
-		else {
-			std::cerr << "[StudioCore] Cannot set active workspace - ID " << workspaceID << " does not exist" << std::endl;
-			EnsureValidActiveWorkspace();
-		}
-	}
-
-	GUI::WorkspaceID StudioCore::GetActiveWorkspace() const {
-		return m_activeWorkspaceID;
-	}
-
-	void StudioCore::EnsureValidActiveWorkspace() {
-		auto allWorkspaces = viewManager.GetAllWorkspaces();
-
-		// If no workspaces exist, create one
-		if (allWorkspaces.empty()) {
-			m_activeWorkspaceID = viewManager.CreateView();
-			std::cout << "[StudioCore] Created default workspace: " << m_activeWorkspaceID << std::endl;
-			return;
-		}
-
-		// If current active workspace doesn't exist, switch to the first available
-		if (std::find(allWorkspaces.begin(), allWorkspaces.end(), m_activeWorkspaceID) == allWorkspaces.end()) {
-			m_activeWorkspaceID = allWorkspaces[0];
-			std::cout << "[StudioCore] Switched to valid workspace: " << m_activeWorkspaceID << std::endl;
-		}
 	}
 
 	void StudioCore::InitializeWindowState() {
@@ -240,6 +196,11 @@ namespace ANI {
 			RegisterCoreViews();
 			SetupProjectCallbacks();
 
+			// Set managers for Events system so it can handle workspace events
+			std::cout << "[StudioCore] Setting managers for Events system..." << std::endl;
+			ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
+			std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
+
 			std::cout << "[StudioCore] Initializing studio plugin manager..." << std::endl;
 			std::string pluginsDir = Utils::FilePaths::pluginPath;
 			if (!pluginsDir.empty()) {
@@ -314,9 +275,10 @@ namespace ANI {
 			if (m_projectManager.IsProjectOpen()) {
 				std::cout << "[StudioCore] Saving open project BEFORE shutdown: " << m_projectManager.GetCurrentProjectName() << std::endl;
 
-				// Update the active workspace in project manager BEFORE saving
-				m_projectManager.SetLastActiveWorkspace(m_activeWorkspaceID);
-				std::cout << "[StudioCore] Set active workspace " << m_activeWorkspaceID << " in project before saving" << std::endl;
+				// SIMPLIFIED: Sync ProjectManager with ViewManager's active workspace before saving
+				GUI::WorkspaceID currentActive = viewManager.GetActiveWorkspace();
+				m_projectManager.SetLastActiveWorkspace(currentActive);
+				std::cout << "[StudioCore] Synced active workspace " << currentActive << " to project before saving" << std::endl;
 
 				try {
 					// SAVE PROJECT DIRECTLY - DON'T CALL CloseProject() which triggers callbacks
@@ -467,7 +429,8 @@ namespace ANI {
 					ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
 					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-					RenderActiveWorkspaceViews();
+					// SIMPLIFIED: ViewManager handles everything internally - just call Render()
+					viewManager.Render();
 				}
 				else {
 					ImGui::PopStyleVar(3);
@@ -511,6 +474,19 @@ namespace ANI {
 			return studioPluginManager->GetLoadedPluginNames();
 		}
 		return {};
+	}
+
+	// SIMPLIFIED: Remove workspace management methods - ViewManager handles everything internally
+	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {
+		viewManager.SetActiveWorkspace(workspaceID);
+		// Sync with ProjectManager for persistence
+		if (m_projectManager.IsProjectOpen()) {
+			m_projectManager.SetLastActiveWorkspace(workspaceID);
+		}
+	}
+
+	GUI::WorkspaceID StudioCore::GetActiveWorkspace() const {
+		return viewManager.GetActiveWorkspace();
 	}
 
 } // namespace ANI

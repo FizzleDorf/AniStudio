@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -25,99 +25,98 @@
 
 namespace ECS {
 
-    struct GuidanceComponent : public ECS::BaseComponent {
-        GuidanceComponent() {
-            compName = "Guidance";
+	struct GuidanceComponent : public ECS::BaseComponent {
+		GuidanceComponent() {
+			compName = "Guidance";
 
-            // Define the component schema
-            schema = {
-                {"title", "Guidance Settings"},
-                {"type", "object"},
-                {"propertyOrder", {"guidance", "eta"}},
-                {"ui:table", {
-                    {"columns", 2},
-                    {"flags", ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp},
-                    {"columnSetup", {
-                        {"Param", ImGuiTableColumnFlags_WidthFixed, 64.0f},
-                        {"Value", ImGuiTableColumnFlags_WidthStretch}
-                    }}
-                }},
-                {"properties", {
-                    {"guidance", {
-                        {"type", "number"},
-                        {"title", "Guidance Scale"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {
-                            {"step", 0.05f},
-                            {"step_fast", 0.5f},
-                            {"format", "%.2f"}
-                        }}
-                    }},
-                    {"eta", {
-                        {"type", "number"},
-                        {"title", "ETA"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {
-                            {"step", 0.05f},
-                            {"step_fast", 0.1f},
-                            {"format", "%.2f"}
-                        }}
-                    }}
-                }}
-            };
-        }
+			// Define the component schema WITHOUT table layout + with tooltips
+			schema = {
+				{"title", "Guidance Settings"},
+				{"type", "object"},
+				{"propertyOrder", {"guidance", "eta"}},
+				// REMOVED: {"ui:table", {...}} section entirely
+				{"properties", {
+					{"guidance", {
+						{"type", "number"},
+						{"title", "Guidance Scale"},
+						{"description", "Controls how closely the model follows the prompt. Higher values increase prompt adherence but may reduce image quality and creativity. Typical range: 1-20, recommended: 7-12."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.5f},
+							{"format", "%.2f"},
+							{"min", 1.0f},
+							{"max", 30.0f}
+						}}
+					}},
+					{"eta", {
+						{"type", "number"},
+						{"title", "ETA"},
+						{"description", "Eta parameter for DDIM scheduler. Controls the amount of noise added during sampling. 0.0 = deterministic (DDIM), 1.0 = stochastic (DDPM). Higher values add more randomness."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.1f},
+							{"format", "%.2f"},
+							{"min", 0.0f},
+							{"max", 1.0f}
+						}}
+					}}
+				}}
+			};
+		}
 
-        float guidance = 2.0f;
-        float eta = 0.0f;
+		float guidance = 2.0f;
+		float eta = 0.0f;
 
-        // Override the GetPropertyMap method
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["guidance"] = &guidance;
-            properties["eta"] = &eta;
-            return properties;
-        }
+		// Override the GetPropertyMap method
+		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+			properties["guidance"] = &guidance;
+			properties["eta"] = &eta;
+			return properties;
+		}
 
-        GuidanceComponent& operator=(const GuidanceComponent& other) {
-            if (this != &other) {
-                guidance = other.guidance;
-                eta = other.eta;
-            }
-            return *this;
-        }
+		GuidanceComponent& operator=(const GuidanceComponent& other) {
+			if (this != &other) {
+				guidance = other.guidance;
+				eta = other.eta;
+			}
+			return *this;
+		}
 
-        nlohmann::json Serialize() const override {
-            return { {compName,
-                     {{"guidance", guidance},
-                      {"eta", eta}
-                     }} };
-        }
+		nlohmann::json Serialize() const override {
+			return { {compName,
+					 {{"guidance", guidance},
+					  {"eta", eta}
+					 }} };
+		}
 
-        void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+		void Deserialize(const nlohmann::json& j) override {
+			BaseComponent::Deserialize(j);
 
-            nlohmann::json componentData;
+			nlohmann::json componentData;
 
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+			else {
+				for (auto it = j.begin(); it != j.end(); ++it) {
+					if (it.key() == compName) {
+						componentData = it.value();
+						break;
+					}
+				}
+				if (componentData.empty()) {
+					componentData = j;
+				}
+			}
 
-            if (componentData.contains("guidance"))
-                guidance = componentData["guidance"];
-            if (componentData.contains("eta"))
-                eta = componentData["eta"];
-        }
-    };
+			if (componentData.contains("guidance"))
+				guidance = componentData["guidance"];
+			if (componentData.contains("eta"))
+				eta = componentData["eta"];
+		}
+	};
 
 } // namespace ECS

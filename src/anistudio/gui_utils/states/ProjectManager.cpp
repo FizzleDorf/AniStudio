@@ -135,6 +135,11 @@ namespace ANI {
 			// Reset ViewState and create default workspace
 			m_viewState.Reset();
 
+			// CRITICAL: Create a default workspace when creating new project
+			GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
+			m_viewState.SetLastActiveWorkspace(defaultWorkspace);
+			std::cout << "[ProjectManager] Created default workspace: " << defaultWorkspace << std::endl;
+
 			// Save project files
 			if (!SaveProject()) {
 				m_lastError = "Failed to save new project";
@@ -212,10 +217,18 @@ namespace ANI {
 			m_currentProjectPath = projectPath;
 			m_isProjectOpen = true;
 
-			// Load ViewState
+			// CRITICAL: Load ViewState which includes workspace configuration
 			if (!LoadViewState()) {
-				std::cout << "[ProjectManager] No ViewState found, using defaults" << std::endl;
+				std::cout << "[ProjectManager] No ViewState found, creating default workspace" << std::endl;
 				m_viewState.Reset();
+
+				// Create a default workspace if none exist
+				auto allWorkspaces = m_viewManager.GetAllWorkspaces();
+				if (allWorkspaces.empty()) {
+					GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
+					m_viewState.SetLastActiveWorkspace(defaultWorkspace);
+					std::cout << "[ProjectManager] Created default workspace: " << defaultWorkspace << std::endl;
+				}
 			}
 
 			// Load ImGui layout (if exists)
@@ -278,7 +291,7 @@ namespace ANI {
 			file << projectJson.dump(4);
 			file.close();
 
-			// Save ViewState
+			// CRITICAL: Save ViewState which includes active workspace and all workspace configurations
 			if (!SaveViewState()) {
 				std::cout << "[ProjectManager] Warning: Failed to save ViewState" << std::endl;
 			}
@@ -311,9 +324,10 @@ namespace ANI {
 		// Save project before closing (this will save ViewState, ImGui layout, etc.)
 		SaveProject();
 
-		// Reset the ViewManager and EntityManager to clean state
-		std::cout << "[ProjectManager] Resetting ViewManager and EntityManager..." << std::endl;
-		
+		// Reset the ViewManager to clean state
+		std::cout << "[ProjectManager] Resetting ViewManager..." << std::endl;
+		m_viewManager.Reset(); // Soft reset - keeps registered views
+
 		// Clear project-specific paths
 		ClearProjectSpecificPaths();
 
@@ -438,7 +452,6 @@ namespace ANI {
 			std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
 
 			// CRITICAL: Save the current active workspace before serializing
-			// This should be set by StudioCore when the active workspace changes
 			std::cout << "[ProjectManager] Saving ViewState with active workspace: " << m_viewState.GetLastActiveWorkspace() << std::endl;
 
 			return m_viewState.SaveViewManagerState(m_viewManager, viewStatePath);
@@ -455,11 +468,28 @@ namespace ANI {
 			bool success = m_viewState.LoadViewManagerState(m_viewManager, viewStatePath);
 
 			if (success) {
-				// CRITICAL FIX: After loading ViewState, notify callback about the active workspace
+				// CRITICAL: After loading ViewState, ensure the active workspace is valid
 				GUI::WorkspaceID lastActiveWorkspace = m_viewState.GetLastActiveWorkspace();
+				auto allWorkspaces = m_viewManager.GetAllWorkspaces();
+
+				if (std::find(allWorkspaces.begin(), allWorkspaces.end(), lastActiveWorkspace) == allWorkspaces.end()) {
+					// Active workspace doesn't exist, use the first available or create one
+					if (!allWorkspaces.empty()) {
+						lastActiveWorkspace = allWorkspaces[0];
+						m_viewState.SetLastActiveWorkspace(lastActiveWorkspace);
+						std::cout << "[ProjectManager] Corrected active workspace to: " << lastActiveWorkspace << std::endl;
+					}
+					else {
+						// No workspaces exist, create a default one
+						lastActiveWorkspace = m_viewManager.CreateView();
+						m_viewState.SetLastActiveWorkspace(lastActiveWorkspace);
+						std::cout << "[ProjectManager] Created default workspace: " << lastActiveWorkspace << std::endl;
+					}
+				}
+
 				std::cout << "[ProjectManager] Loaded ViewState with active workspace: " << lastActiveWorkspace << std::endl;
 
-				// Trigger callback to set the active workspace in StudioCore
+				// Trigger callback to set the active workspace
 				if (m_onViewStateLoadedCallback) {
 					m_onViewStateLoadedCallback(lastActiveWorkspace);
 				}

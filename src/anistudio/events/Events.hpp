@@ -8,11 +8,19 @@
 #include <queue>
 #include <string>
 
-// Forward declaration
+// Forward declarations
 namespace ANI {
 	class Core;
 	extern Core &appCore;
 	void WindowCloseCallback(GLFWwindow *window);
+}
+
+namespace GUI {
+	class ViewManager;
+}
+
+namespace ANI {
+	class ProjectManager;
 }
 
 namespace ANI {
@@ -90,6 +98,9 @@ namespace ANI {
 		void QueueViewEvent(const ViewEvent &event);
 		void ProcessViewEvents();
 
+		// Set managers (called by StudioCore)
+		void SetManagers(GUI::ViewManager* viewMgr, ANI::ProjectManager* projectMgr);
+
 		// Helper functions for view events
 		void RequestAddView(GUI::WorkspaceID workspaceID, const std::string& viewTypeName) {
 			ViewEvent event;
@@ -132,6 +143,10 @@ namespace ANI {
 		Events();
 		std::queue<Event> eventQueue;
 		std::queue<ViewEvent> viewEventQueue;
+
+		// Manager references (set by StudioCore)
+		GUI::ViewManager* viewManager = nullptr;
+		ANI::ProjectManager* projectManager = nullptr;
 	};
 
 } // namespace ANI

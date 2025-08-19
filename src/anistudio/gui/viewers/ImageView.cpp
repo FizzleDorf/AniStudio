@@ -82,9 +82,7 @@ namespace GUI {
 			ImGui::SameLine();
 			ImGui::Checkbox("Show History", &showHistory);
 
-			if (showHistory) {
-				RenderHistory();
-			}
+			
 
 			ImGui::Separator();
 
@@ -94,6 +92,10 @@ namespace GUI {
 			ImGui::EndChild();
 		}
 		ImGui::End();
+		
+		if (showHistory) {
+			RenderHistory();
+		}
 	}
 
 	void ImageView::OnImageLoaded(ECS::EntityID entityID) {

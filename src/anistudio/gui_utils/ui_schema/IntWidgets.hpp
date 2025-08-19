@@ -24,15 +24,14 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
-#include <unordered_map>
-#include <variant>
 #include <iostream>
+#include <unordered_map>
+
+ // Include centralized Engine property types
+#include "PropertyTypes.hpp"
 #include "UISchemaUtils.hpp"
 
 namespace UISchema {
-
-	using PropertyVariant = std::variant<bool*, int*, float*, double*, std::string*, ImVec2*, ImVec4*, std::vector<std::string>*>;
-	using PropertyMap = std::unordered_map<std::string, PropertyVariant>;
 
 	static const std::string DEFAULT_INT_WIDGET = "input_int";
 
@@ -42,13 +41,43 @@ namespace UISchema {
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
 			int step = GetSchemaValue<int>(options, "step", 1);
 			int step_fast = GetSchemaValue<int>(options, "step_fast", 100);
-			return ImGui::InputInt(label.c_str(), value, step, step_fast, flags);
+			int min = GetSchemaValue<int>(options, "min", INT_MIN);
+			int max = GetSchemaValue<int>(options, "max", INT_MAX);
+
+			// Create a unique ID for this specific input using the memory address
+			std::string uniqueId = label + "##" + std::to_string(reinterpret_cast<uintptr_t>(value));
+			ImGui::PushID(uniqueId.c_str());
+
+			// Store the original value
+			int originalValue = *value;
+
+			// Use ImGui::InputInt 
+			bool changed = ImGui::InputInt("", value, step, step_fast, flags);
+
+			// Apply constraints
+			if (*value < min) *value = min;
+			if (*value > max) *value = max;
+
+			ImGui::PopID();
+
+			// Show label on same line
+			ImGui::SameLine();
+			ImGui::Text("%s", label.c_str());
+
+			// Only return true if the value actually changed
+			return changed && (*value != originalValue);
 		}
 
 		static bool RenderSliderInt(const std::string& label, int* value, int min, int max, const nlohmann::json& options = {}) {
 			ImGuiSliderFlags flags = GetSliderFlags(options);
 			std::string format = GetSchemaValue<std::string>(options, "format", "%d");
-			return ImGui::SliderInt(label.c_str(), value, min, max, format.c_str(), flags);
+
+			// Store the original value to detect actual changes
+			int originalValue = *value;
+			bool changed = ImGui::SliderInt(label.c_str(), value, min, max, format.c_str(), flags);
+
+			// Only return true if the value actually changed
+			return changed && (*value != originalValue);
 		}
 
 		static bool RenderDragInt(const std::string& label, int* value, const nlohmann::json& options = {}) {
@@ -56,7 +85,75 @@ namespace UISchema {
 			int min = GetSchemaValue<int>(options, "minimum", 0);
 			int max = GetSchemaValue<int>(options, "maximum", 0);
 			std::string format = GetSchemaValue<std::string>(options, "format", "%d");
-			return ImGui::DragInt(label.c_str(), value, speed, min, max, format.c_str());
+
+			// Store the original value to detect actual changes
+			int originalValue = *value;
+			bool changed = ImGui::DragInt(label.c_str(), value, speed, min, max, format.c_str());
+
+			// Only return true if the value actually changed
+			return changed && (*value != originalValue);
+		}
+
+		// Special dimension input that prevents cross-interference
+		static bool RenderDimensionInput(const std::string& label, int* value, const nlohmann::json& options = {}, const std::string& uniqueId = "") {
+			// Use a static map to track individual input states per unique pointer AND frame
+			static std::unordered_map<void*, std::pair<int, int>> valueTracking; // value, lastFrame
+			static int frameCounter = 0;
+			frameCounter++;
+
+			// Use the pointer address as unique identifier
+			void* valuePtr = static_cast<void*>(value);
+
+			// Initialize or update tracking
+			if (valueTracking.find(valuePtr) == valueTracking.end()) {
+				valueTracking[valuePtr] = { *value, frameCounter };
+			}
+
+			int step = GetSchemaValue<int>(options, "step", 8);
+			int step_fast = GetSchemaValue<int>(options, "step_fast", 32);
+			int min = GetSchemaValue<int>(options, "min", 64);
+			int max = GetSchemaValue<int>(options, "max", 2048);
+
+			// Get last known value
+			int lastKnownValue = valueTracking[valuePtr].first;
+			int lastFrame = valueTracking[valuePtr].second;
+
+			// Create unique ImGui ID using pointer address and label
+			std::string uniqueImGuiId = label + "##" + std::to_string(reinterpret_cast<uintptr_t>(valuePtr));
+			ImGui::PushID(uniqueImGuiId.c_str());
+
+			// Use a local copy to prevent external interference
+			int localValue = *value;
+
+			// Only update local value if external change happened in a different frame
+			if (frameCounter != lastFrame && *value != lastKnownValue) {
+				localValue = *value;
+			}
+			else {
+				localValue = lastKnownValue;
+			}
+
+			bool changed = ImGui::InputInt(label.c_str(), &localValue, step, step_fast);
+
+			ImGui::PopID();
+
+			// Apply constraints
+			if (localValue < min) localValue = min;
+			if (localValue > max) localValue = max;
+
+			// Only update the actual value if InputInt reported a change AND the value actually differs
+			if (changed && localValue != lastKnownValue) {
+				*value = localValue;
+				valueTracking[valuePtr] = { localValue, frameCounter };
+				return true;
+			}
+
+			// Update tracking for external changes without reporting as UI change
+			if (*value != lastKnownValue && !changed) {
+				valueTracking[valuePtr] = { *value, frameCounter };
+			}
+
+			return false;
 		}
 
 		static bool RenderCombo(const std::string& label, int* selectedIndex, const std::vector<std::string>* items, const nlohmann::json& options = {}) {
@@ -69,15 +166,21 @@ namespace UISchema {
 				return true;
 			};
 
-			return ImGui::Combo(label.c_str(), selectedIndex, itemGetter,
+			int originalValue = *selectedIndex;
+			bool changed = ImGui::Combo(label.c_str(), selectedIndex, itemGetter,
 				const_cast<void*>(static_cast<const void*>(items)),
 				static_cast<int>(items->size()));
+
+			// Only return true if the value actually changed
+			return changed && (*selectedIndex != originalValue);
 		}
 
 		static bool RenderRadioButtons(const std::string& label, int* value, const std::vector<std::string>* items, const nlohmann::json& options = {}) {
 			if (!items || items->empty()) return false;
 
+			int originalValue = *value;
 			bool changed = false;
+
 			if (!label.empty()) {
 				ImGui::Text("%s", label.c_str());
 			}
@@ -93,7 +196,8 @@ namespace UISchema {
 				}
 			}
 
-			return changed;
+			// Only return true if the value actually changed
+			return changed && (*value != originalValue);
 		}
 
 		static bool Render(const std::string& label, int* value, const std::string& widgetType, const nlohmann::json& schema, const PropertyMap& allProps = {}) {

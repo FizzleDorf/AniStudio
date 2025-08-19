@@ -20,8 +20,13 @@ namespace GUI {
 		// Update all view lists
 		void Update(const float deltaT);
 
-		// Render all views in the active workspace
-		void Render(WorkspaceID activeWorkspaceID);
+		// Render views in the active workspace (NO PARAMETER - uses internal active workspace)
+		void Render();
+
+		// Active workspace management - INTERNAL TO VIEWMANAGER
+		void SetActiveWorkspace(WorkspaceID workspaceID);
+		WorkspaceID GetActiveWorkspace() const;
+		void EnsureValidActiveWorkspace();
 
 		// Adds a viewlist
 		const WorkspaceID CreateView();
@@ -114,6 +119,12 @@ namespace GUI {
 		// Removes a view in the view list by type
 		void RemoveViewByType(const WorkspaceID viewList, const ViewTypeID viewType);
 
+		// Workspace naming methods
+		void SetWorkspaceName(WorkspaceID workspaceID, const std::string& name);
+		std::string GetWorkspaceName(WorkspaceID workspaceID) const;
+		bool IsWorkspaceNameTaken(const std::string& name, WorkspaceID excludeID = 0) const;
+		std::string GenerateUniqueWorkspaceName(const std::string& baseName) const;
+
 		// Serialization
 
 		// Serialize JSON into view lists
@@ -140,7 +151,7 @@ namespace GUI {
 		// Returns view signatures
 		std::shared_ptr<ViewSignature> GetViewSignature(const WorkspaceID viewList);
 
-		// Create/remove view instances for workspaces
+		// Create/remove view instances for workspaces - NEW METHODS
 		void CreateViewInstanceForWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID);
 		void RemoveViewInstanceFromWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID);
 
@@ -165,8 +176,14 @@ namespace GUI {
 		// View storage for views created by name - map workspace to map of view types to views
 		std::unordered_map<WorkspaceID, std::unordered_map<ViewTypeID, std::unique_ptr<BaseView>>> workspaces;
 
+		// Workspace naming
+		std::unordered_map<WorkspaceID, std::string> workspaceNames;
+
 		// Entity manager reference for view creation
 		ECS::EntityManager* entityManager = nullptr;
+
+		// ACTIVE WORKSPACE TRACKING - INTERNAL TO VIEWMANAGER
+		WorkspaceID m_activeWorkspaceID = 0;
 	};
 
 	// Template implementations

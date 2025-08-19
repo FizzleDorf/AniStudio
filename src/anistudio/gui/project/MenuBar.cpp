@@ -47,6 +47,9 @@ namespace GUI {
 			ShowHelpMenu();
 			ImGui::EndMenuBar();
 		}
+
+		// Render workspace dialogs
+		RenderWorkspaceDialogs();
 	}
 
 	void MenuBar::ShowFileMenu() {
@@ -147,18 +150,21 @@ namespace GUI {
 
 		if (ImGui::BeginMenu("Workspace")) {
 			auto allWorkspaces = viewManager.GetAllWorkspaces();
+			GUI::WorkspaceID currentActiveWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
 
 			// Show current active workspace
-			ImGui::Text("Active: Workspace %zu", projectManager.GetViewState().GetLastActiveWorkspace());
+			std::string activeName = viewManager.GetWorkspaceName(currentActiveWorkspace);
+			ImGui::Text("Active: %s", activeName.c_str());
 			ImGui::Separator();
 
-			// List all workspaces as radio buttons
+			// List all workspaces as radio buttons with their names
 			for (GUI::WorkspaceID workspaceID : allWorkspaces) {
-				bool isActive = (workspaceID == projectManager.GetViewState().GetLastActiveWorkspace());
-				std::string label = "Workspace " + std::to_string(workspaceID);
+				bool isActive = (workspaceID == currentActiveWorkspace);
+				std::string workspaceName = viewManager.GetWorkspaceName(workspaceID);
 
-				if (ImGui::MenuItem(label.c_str(), nullptr, isActive)) {
+				if (ImGui::MenuItem(workspaceName.c_str(), nullptr, isActive)) {
 					if (!isActive) {
+						// Use the Events system to change active workspace
 						ANI::ViewEvent event;
 						event.type = ANI::ViewEventType::SetActiveWorkspace;
 						event.workspaceID = workspaceID;
@@ -169,8 +175,15 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			if (ImGui::MenuItem("New Workspace")) {
-				CreateNewWorkspace();
+			if (ImGui::MenuItem("New Workspace...")) {
+				showCreateWorkspaceDialog = true;
+			}
+
+			if (ImGui::MenuItem("Rename Current Workspace...")) {
+				showRenameWorkspaceDialog = true;
+				std::string currentName = viewManager.GetWorkspaceName(currentActiveWorkspace);
+				strncpy(renameWorkspaceBuffer, currentName.c_str(), sizeof(renameWorkspaceBuffer) - 1);
+				renameWorkspaceBuffer[sizeof(renameWorkspaceBuffer) - 1] = '\0';
 			}
 
 			// Delete current workspace (only if more than one exists)
@@ -190,6 +203,92 @@ namespace GUI {
 				// TODO: Show about dialog
 			}
 			ImGui::EndMenu();
+		}
+	}
+
+	void MenuBar::RenderWorkspaceDialogs() {
+		// Create Workspace Dialog
+		if (showCreateWorkspaceDialog) {
+			ImGui::OpenPopup("Create Workspace");
+		}
+
+		if (ImGui::BeginPopupModal("Create Workspace", &showCreateWorkspaceDialog, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Enter workspace name:");
+			ImGui::InputText("##workspace_name", createWorkspaceBuffer, sizeof(createWorkspaceBuffer));
+
+			// Check if name is taken and show warning
+			std::string proposedName(createWorkspaceBuffer);
+			bool nameTaken = viewManager.IsWorkspaceNameTaken(proposedName);
+			if (nameTaken && !proposedName.empty()) {
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+				ImGui::Text("Warning: Name already exists!");
+				ImGui::PopStyleColor();
+			}
+
+			ImGui::Separator();
+
+			// Disable create button if name is empty or taken
+			bool canCreate = !proposedName.empty() && !nameTaken;
+			if (!canCreate) ImGui::BeginDisabled();
+
+			if (ImGui::Button("Create")) {
+				ANI::ViewEvent event;
+				event.type = ANI::ViewEventType::CreateWorkspace;
+				event.workspaceName = std::string(createWorkspaceBuffer);
+				events.QueueViewEvent(event);
+				showCreateWorkspaceDialog = false;
+				strcpy(createWorkspaceBuffer, "New Workspace"); // Reset for next time
+			}
+
+			if (!canCreate) ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel")) {
+				showCreateWorkspaceDialog = false;
+				strcpy(createWorkspaceBuffer, "New Workspace"); // Reset
+			}
+
+			ImGui::EndPopup();
+		}
+
+		// Rename Workspace Dialog
+		if (showRenameWorkspaceDialog) {
+			ImGui::OpenPopup("Rename Workspace");
+		}
+
+		if (ImGui::BeginPopupModal("Rename Workspace", &showRenameWorkspaceDialog, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Enter new workspace name:");
+			ImGui::InputText("##rename_workspace", renameWorkspaceBuffer, sizeof(renameWorkspaceBuffer));
+
+			// Check if name is taken and show warning
+			std::string proposedName(renameWorkspaceBuffer);
+			GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+			bool nameTaken = viewManager.IsWorkspaceNameTaken(proposedName, currentWorkspace);
+			if (nameTaken && !proposedName.empty()) {
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
+				ImGui::Text("Warning: Name already exists!");
+				ImGui::PopStyleColor();
+			}
+
+			ImGui::Separator();
+
+			// Disable rename button if name is empty or taken
+			bool canRename = !proposedName.empty() && !nameTaken;
+			if (!canRename) ImGui::BeginDisabled();
+
+			if (ImGui::Button("Rename")) {
+				viewManager.SetWorkspaceName(currentWorkspace, std::string(renameWorkspaceBuffer));
+				showRenameWorkspaceDialog = false;
+			}
+
+			if (!canRename) ImGui::EndDisabled();
+
+			ImGui::SameLine();
+			if (ImGui::Button("Cancel")) {
+				showRenameWorkspaceDialog = false;
+			}
+
+			ImGui::EndPopup();
 		}
 	}
 
@@ -255,6 +354,7 @@ namespace GUI {
 	void MenuBar::CreateNewWorkspace() {
 		ANI::ViewEvent event;
 		event.type = ANI::ViewEventType::CreateWorkspace;
+		event.workspaceName = "New Workspace";
 		events.QueueViewEvent(event);
 	}
 
@@ -265,9 +365,11 @@ namespace GUI {
 			return;
 		}
 
+		GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+
 		ANI::ViewEvent event;
 		event.type = ANI::ViewEventType::DeleteWorkspace;
-		event.workspaceID = projectManager.GetViewState().GetLastActiveWorkspace();
+		event.workspaceID = currentWorkspace;
 		events.QueueViewEvent(event);
 	}
 
@@ -275,8 +377,9 @@ namespace GUI {
 		try {
 			GUI::ViewTypeID viewTypeID = viewManager.GetViewType(viewTypeName);
 			const auto& workspaceSignatures = viewManager.GetWorkspaceSignatures();
+			GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
 
-			auto it = workspaceSignatures.find(projectManager.GetViewState().GetLastActiveWorkspace());
+			auto it = workspaceSignatures.find(currentWorkspace);
 			if (it != workspaceSignatures.end()) {
 				return it->second->count(viewTypeID) > 0;
 			}
@@ -289,13 +392,13 @@ namespace GUI {
 
 	void MenuBar::ToggleViewInCurrentWorkspace(const std::string& viewTypeName) {
 		try {
-			GUI::ViewTypeID viewTypeID = viewManager.GetViewType(viewTypeName);
+			GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
 
 			if (IsViewActiveInCurrentWorkspace(viewTypeName)) {
 				// Remove the view using events
 				ANI::ViewEvent event;
 				event.type = ANI::ViewEventType::RemoveView;
-				event.workspaceID = projectManager.GetViewState().GetLastActiveWorkspace();
+				event.workspaceID = currentWorkspace;
 				event.viewTypeName = viewTypeName;
 				events.QueueViewEvent(event);
 			}
@@ -303,7 +406,7 @@ namespace GUI {
 				// Add the view using events
 				ANI::ViewEvent event;
 				event.type = ANI::ViewEventType::AddView;
-				event.workspaceID = projectManager.GetViewState().GetLastActiveWorkspace();
+				event.workspaceID = currentWorkspace;
 				event.viewTypeName = viewTypeName;
 				events.QueueViewEvent(event);
 			}
