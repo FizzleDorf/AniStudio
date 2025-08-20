@@ -55,8 +55,8 @@ namespace ECS {
 		}
 
 		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["fileName"] = &fileName;
 			properties["filePath"] = &filePath;
 			return properties;
@@ -142,13 +142,11 @@ namespace ECS {
 				{"properties", {
 					{"fileName", {
 						{"type", "string"},
-						{"title", "File Name"},
-						{"description", "Name of the image file"}
+						{"title", "File Name"}
 					}},
 					{"filePath", {
 						{"type", "string"},
-						{"title", "File Path"},
-						{"description", "Directory path for the image file"}
+						{"title", "File Path"}
 					}}
 				}}
 			};
@@ -172,8 +170,8 @@ namespace ECS {
 		}
 
 		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["inputFilePath"] = &inputFilePath;
 			return properties;
 		}
@@ -262,12 +260,14 @@ namespace ECS {
 					{"inputFilePath", {
 						{"type", "string"},
 						{"title", "Input Image File"},
-						{"description", "Select an image file to load as input"},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "file"},
 							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
-							{"filterName", "Image Files"}
+							{"filterName", "Image Files"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for image files (.png, .jpg, .jpeg, .bmp, .tga)"}
 						}}
 					}}
 				}}
@@ -292,8 +292,8 @@ namespace ECS {
 		}
 
 		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["outputDirectory"] = &outputDirectory;
 			properties["fileName"] = &fileName;
 			properties["selectedExtensionIndex"] = &selectedExtensionIndex;
@@ -373,25 +373,25 @@ namespace ECS {
 					{"outputDirectory", {
 						{"type", "string"},
 						{"title", "Output Directory"},
-						{"description", "Select the directory where the image will be saved"},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
 							{"defaultPath", Utils::FilePaths::outputFolderPath.empty()
 								? Utils::FilePaths::defaultProjectPath
-								: Utils::FilePaths::outputFolderPath}
+								: Utils::FilePaths::outputFolderPath},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Reset"},
+							{"browseTooltip", "Browse to select output directory for saving images"}
 						}}
 					}},
 					{"fileName", {
 						{"type", "string"},
 						{"title", "File Name"},
-						{"description", "Name for the output image file (without extension)"},
 						{"ui:widget", "input_text"}
 					}},
 					{"selectedExtensionIndex", {
 						{"type", "integer"},
 						{"title", "File Format"},
-						{"description", "Select the image file format"},
 						{"ui:widget", "combo"},
 						{"minimum", 0},
 						{"maximum", 4},
@@ -429,8 +429,8 @@ namespace ECS {
 		}
 
 		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, Engine::PropertyVariant> properties;
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["maskFilePath"] = &maskFilePath;
 			properties["value"] = &value;
 			return properties;
@@ -487,12 +487,14 @@ namespace ECS {
 					{"maskFilePath", {
 						{"type", "string"},
 						{"title", "Mask Image File"},
-						{"description", "Select a mask image file (grayscale)"},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "file"},
 							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
-							{"filterName", "Image Files"}
+							{"filterName", "Image Files"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for mask image files (grayscale images)"}
 						}}
 					}},
 					{"value", {

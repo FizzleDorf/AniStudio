@@ -25,7 +25,6 @@
 #include <unordered_map>
 #include <variant>
 #include <string>
-#include <imgui.h>
 
  // Include centralized Engine property types
 #include "PropertyTypes.hpp"

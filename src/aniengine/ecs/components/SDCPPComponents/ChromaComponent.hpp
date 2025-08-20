@@ -22,7 +22,6 @@
 
 #include "BaseComponent.hpp"
 #include "FilePaths.hpp"
-#include "imgui.h"
 
 namespace ECS {
 

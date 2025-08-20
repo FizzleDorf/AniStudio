@@ -41,13 +41,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     find_package(pybind11 REQUIRED)
     find_package(semver REQUIRED)
     
-    # Add ImGui subdirectory
-    if(EXISTS "${CMAKE_SOURCE_DIR}/../../external/imgui")
-        add_subdirectory(${CMAKE_SOURCE_DIR}/../../external/imgui ${CMAKE_BINARY_DIR}/imgui)
-    else()
-        message(FATAL_ERROR "ImGui not found. Required for AniEngine.")
-    endif()
-    
     # Add external dependencies when building standalone
     if(EXISTS "${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp")
         add_subdirectory(${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp ${CMAKE_BINARY_DIR}/stable-diffusion)
@@ -58,9 +51,6 @@ else()
     # Parent project build - add external dependencies here to avoid rebuilding
     if(NOT TARGET stable-diffusion)
         add_subdirectory(${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp ${CMAKE_BINARY_DIR}/external/stable-diffusion)
-    endif()
-    if(NOT TARGET ImGui)
-        add_subdirectory(${CMAKE_SOURCE_DIR}/external/imgui ${CMAKE_BINARY_DIR}/external/imgui)
     endif()
 endif()
 
@@ -149,8 +139,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
         ${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp
         ${CMAKE_SOURCE_DIR}/../../external/nlohmann_json
         ${CMAKE_SOURCE_DIR}/../../external/cr/cr
-        ${CMAKE_SOURCE_DIR}/../../external/imgui
-        ${CMAKE_SOURCE_DIR}/../../external/imgui/backends
     )
 else()
     # Parent project includes
@@ -159,8 +147,6 @@ else()
         ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
         ${CMAKE_SOURCE_DIR}/external/nlohmann_json
         ${CMAKE_SOURCE_DIR}/external/cr/cr
-        ${CMAKE_SOURCE_DIR}/external/imgui
-        ${CMAKE_SOURCE_DIR}/external/imgui/backends
     )
 endif()
 
@@ -179,7 +165,6 @@ target_link_libraries(AniEngineCore PUBLIC
     pybind11::embed
     semver::semver
     stable-diffusion
-    ImGui
 )
 
 # CUDA support

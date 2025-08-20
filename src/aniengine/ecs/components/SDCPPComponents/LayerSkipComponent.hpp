@@ -34,7 +34,7 @@ namespace ECS {
                     {"slg_scale", {
                         {"type", "number"},
                         {"title", "SLG Scale"},
-                        {"ui:widget", "drag_float"},
+                        {"ui:widget", "input_float"},
                         {"ui:options", {
                             {"min", 0.0f},
                             {"max", 1.0f},
@@ -45,7 +45,7 @@ namespace ECS {
                     {"skip_layer_start", {
                         {"type", "number"},
                         {"title", "Start"},
-                        {"ui:widget", "drag_float"},
+                        {"ui:widget", "input_float"},
                         {"ui:options", {
                             {"min", 0.0f},
                             {"max", 1.0f},
@@ -56,7 +56,7 @@ namespace ECS {
                     {"skip_layer_end", {
                         {"type", "number"},
                         {"title", "End"},
-                        {"ui:widget", "drag_float"},
+                        {"ui:widget", "input_float"},
                         {"ui:options", {
                             {"min", 0.0f},
                             {"max", 1.0f},

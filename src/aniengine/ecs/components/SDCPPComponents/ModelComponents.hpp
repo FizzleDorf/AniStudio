@@ -78,12 +78,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "Model"},
-						{"description", "Complete checkpoint model containing UNet, VAE, and text encoders (.safetensors, .ckpt, .pt, .gguf)"},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "checkpoint"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "Checkpoint Models"},
+							{"dialogDefaultPath", Utils::FilePaths::checkpointDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
 						}}
 					}}
 				}}
@@ -119,12 +122,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "UNet"},
-						{"description", "Diffusion model/UNet for FLUX or other transformer-based models. Contains the core denoising network."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "unet"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "UNet Models"},
+							{"dialogDefaultPath", Utils::FilePaths::unetDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for UNet/Diffusion model files for FLUX or transformer models"}
 						}}
 					}}
 				}}
@@ -160,12 +166,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "CLIP-G"},
-						{"description", "CLIP-G text encoder for FLUX and SDXL models. Provides semantic text understanding for image generation."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "clip"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "CLIP Models"},
+							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for CLIP-G text encoder files"}
 						}}
 					}}
 				}}
@@ -201,12 +210,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "CLIP-L"},
-						{"description", "CLIP-L text encoder for FLUX and SDXL models. Works with CLIP-G for comprehensive text encoding."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "clip"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "CLIP Models"},
+							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for CLIP-L text encoder files"}
 						}}
 					}}
 				}}
@@ -242,12 +254,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "T5-XXL"},
-						{"description", "T5-XXL text encoder for FLUX models. Provides enhanced text understanding and supports longer, more complex prompts."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "t5"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "T5 Models"},
+							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for T5-XXL text encoder files for FLUX models"}
 						}}
 					}}
 				}}
@@ -283,12 +298,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "VAE"},
-						{"description", "Variational AutoEncoder for encoding/decoding images to/from latent space. Override the model's built-in VAE."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "vae"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "VAE Models"},
+							{"dialogDefaultPath", Utils::FilePaths::vaeDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for VAE model files (.safetensors, .ckpt, .pt)"}
 						}}
 					}},
 					{"isTiled", {
@@ -392,12 +410,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "TAESD"},
-						{"description", "Tiny AutoEncoder for Stable Diffusion. Fast but lower quality VAE alternative for quick previews."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "vae"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "TAESD Models"},
+							{"dialogDefaultPath", Utils::FilePaths::vaeDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for TAESD fast VAE files"}
 						}}
 					}}
 				}}
@@ -433,12 +454,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "LoRA"},
-						{"description", "Low-Rank Adaptation model for fine-tuning specific styles or subjects without changing the base model."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "lora"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "LoRA Models"},
+							{"dialogDefaultPath", Utils::FilePaths::loraDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for LoRA adaptation files"}
 						}}
 					}},
 					{"loraStrength", {
@@ -543,12 +567,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "ControlNet"},
-						{"description", "ControlNet model for guided image generation using input conditions (edges, depth, pose, etc.)."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "controlnet"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "ControlNet Models"},
+							{"dialogDefaultPath", Utils::FilePaths::controlnetDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for ControlNet model files"}
 						}}
 					}},
 					{"cnStrength", {
@@ -672,12 +699,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "Upscale Model"},
-						{"description", "ESRGAN model for AI upscaling. Different models are trained for different content types (photos, anime, etc.)."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "upscale"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "Å~"}
+							{"mode", "file"},
+							{"filters", ".pth,.safetensors,.pt"},
+							{"filterName", "Upscale Models"},
+							{"dialogDefaultPath", Utils::FilePaths::upscaleDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for ESRGAN upscale model files (.pth, .safetensors, .pt)"}
 						}}
 					}},
 					{"upscaleFactor", {
@@ -774,12 +804,15 @@ namespace ECS {
 					{"modelName", {
 						{"type", "string"},
 						{"title", "Embedding"},
-						{"description", "Textual inversion embedding for adding custom concepts, styles, or subjects to your prompts."},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
-							{"filterType", "embedding"},
-							{"buttonLabel", "..."},
-							{"clearLabel", "x"}
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.bin"},
+							{"filterName", "Embedding Files"},
+							{"dialogDefaultPath", Utils::FilePaths::checkpointDir},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for textual inversion embedding files"}
 						}}
 					}}
 				}}

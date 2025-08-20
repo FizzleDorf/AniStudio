@@ -112,8 +112,22 @@ namespace UISchema {
 					currentCallback(result);
 				}
 
-				// Clean up
+				// Clean up and PROPERLY clear search filter
 				ImGuiFileDialog::Instance()->Close();
+
+				// Try different methods to clear search filter depending on version
+				try {
+					// Clear any search/filter state
+					ImGuiFileDialog::Instance()->SetFileStyle(IGFD_FileStyleByFullName, "", ImVec4(0, 0, 0, 0));
+
+					// Force refresh the dialog state
+					ImGuiFileDialog::Instance()->OpenDialog("__dummy__", "Clear", nullptr, IGFD::FileDialogConfig{});
+					ImGuiFileDialog::Instance()->Close();
+				}
+				catch (...) {
+					// Ignore any errors - just ensure dialog is closed
+				}
+
 				isDialogOpen = false;
 				currentDialogKey = "";
 				currentCallback = nullptr;
@@ -137,7 +151,7 @@ namespace UISchema {
 			}
 		}
 
-		// Simplified file selector widget without table
+		// Simplified file selector widget - always shows path above, wraps text
 		static bool RenderFileSelector(
 			const std::string& label,
 			std::string* value,
@@ -150,18 +164,71 @@ namespace UISchema {
 			std::string filters = GetSchemaValue<std::string>(options, "filters", "");
 			std::string filterName = GetSchemaValue<std::string>(options, "filterName", "Files");
 			std::string defaultPath = GetSchemaValue<std::string>(options, "defaultPath", "");
+			std::string dialogDefaultPath = GetSchemaValue<std::string>(options, "dialogDefaultPath", defaultPath);
 			std::string buttonText = GetSchemaValue<std::string>(options, "buttonText", "Browse...");
-			bool showClear = GetSchemaValue<bool>(options, "showClear", true);
-			bool showPath = GetSchemaValue<bool>(options, "showPath", true);
+			std::string resetButtonText = GetSchemaValue<std::string>(options, "resetButtonText", "Clear");
+			std::string browseTooltip = GetSchemaValue<std::string>(options, "browseTooltip", "");
+
+			// Initialize value to default path if empty and default exists
+			if (value->empty() && !defaultPath.empty()) {
+				*value = defaultPath;
+				modified = true;
+			}
 
 			// Create unique ID for this widget
 			std::string uniqueId = label + "##" + std::to_string(reinterpret_cast<uintptr_t>(value));
+
+			// ALWAYS show current path above buttons with text wrapping
+			if (!value->empty()) {
+				// Show the current path/filename with wrapping
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+
+				// Smart path truncation for very long paths
+				std::string displayPath = *value;
+				if (displayPath.length() > 80) {
+					std::filesystem::path p(displayPath);
+					std::string filename = p.filename().string();
+					std::string directory = p.parent_path().string();
+
+					if (directory.length() > 50) {
+						// Truncate directory but keep beginning and end
+						std::string truncated = directory.substr(0, 25) + "..." + directory.substr(directory.length() - 22);
+						displayPath = truncated + "/" + filename;
+					}
+				}
+
+				ImGui::TextWrapped("%s", displayPath.c_str());
+				ImGui::PopStyleColor();
+			}
+			else {
+				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 0.5f, 0.5f, 1.0f));
+				ImGui::TextWrapped("No %s selected", mode.c_str());
+				ImGui::PopStyleColor();
+			}
+			ImGui::Spacing();
+
+			// Determine the actual dialog path to use - prefer last selected path
+			std::string actualDialogPath;
+			if (!value->empty()) {
+				// Use the directory of the current file (last selected path)
+				std::filesystem::path currentPath(*value);
+				if (std::filesystem::exists(currentPath.parent_path())) {
+					actualDialogPath = currentPath.parent_path().string();
+				}
+			}
+
+			// Fallback to dialog default path, then current directory
+			if (actualDialogPath.empty()) {
+				actualDialogPath = dialogDefaultPath;
+			}
+			if (actualDialogPath.empty()) {
+				actualDialogPath = ".";
+			}
 
 			// Render the browse button
 			if (ImGui::Button((buttonText + "##" + uniqueId).c_str())) {
 				std::string dialogKey = "FileDialog_" + uniqueId;
 				std::string dialogTitle = mode == "directory" ? "Select Directory" : "Select File";
-				std::string dialogPath = defaultPath.empty() ? "." : defaultPath;
 				bool isDirectoryMode = (mode == "directory");
 
 				// Format filters for ImGuiFileDialog
@@ -174,7 +241,7 @@ namespace UISchema {
 					dialogKey,
 					dialogTitle,
 					formattedFilters,
-					dialogPath,
+					actualDialogPath,
 					isDirectoryMode,
 					[value, &modified, isDirectoryMode](const FileDialogResult& result) {
 					if (result.wasOkPressed) {
@@ -189,9 +256,41 @@ namespace UISchema {
 				}
 				);
 			}
+			// Add browse button tooltip based on schema or default
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				if (!browseTooltip.empty()) {
+					ImGui::Text("%s", browseTooltip.c_str());
+				}
+				else if (mode == "directory") {
+					ImGui::Text("Browse to select a directory path");
+				}
+				else {
+					ImGui::Text("Browse to select a file");
+				}
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
+			}
 
-			// Show clear button if enabled
-			if (showClear) {
+			// Show reset button if default path exists
+			if (!defaultPath.empty()) {
+				ImGui::SameLine();
+				if (ImGui::Button((resetButtonText + "##" + uniqueId).c_str())) {
+					*value = defaultPath;  // Reset to default path
+					modified = true;
+				}
+				// Add tooltip for reset button
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);  // Set explicit wrap width
+					ImGui::Text("Reset to default: %s", defaultPath.c_str());
+					ImGui::PopTextWrapPos();
+					ImGui::EndTooltip();
+				}
+			}
+			else {
+				// Only show clear button if no default path exists
 				ImGui::SameLine();
 				if (ImGui::Button(("Clear##" + uniqueId).c_str())) {
 					*value = "";
@@ -199,49 +298,43 @@ namespace UISchema {
 				}
 			}
 
-			// Show the current path/file if enabled
-			if (showPath && !value->empty()) {
-				ImGui::SameLine();
-				ImGui::Text("%s", value->c_str());
-			}
-			else if (showPath) {
-				ImGui::SameLine();
-				ImGui::TextDisabled("No %s selected", mode.c_str());
-			}
-
 			return modified;
 		}
 
-		// Simplified directory selector
+		// Enhanced directory selector with default path support
 		static bool RenderDirectorySelector(
 			const std::string& label,
 			std::string* value,
-			const std::string& defaultPath = ""
+			const std::string& defaultPath = "",
+			const std::string& dialogDefaultPath = ""
 		) {
 			nlohmann::json options = {
 				{"mode", "directory"},
 				{"defaultPath", defaultPath},
+				{"dialogDefaultPath", dialogDefaultPath.empty() ? defaultPath : dialogDefaultPath},
 				{"buttonText", "Browse..."},
-				{"showClear", true},
-				{"showPath", true}
+				{"resetButtonText", "Reset"}
 			};
 			return RenderFileSelector(label, value, options);
 		}
 
-		// Simplified file selector
+		// Enhanced file selector with default path support
 		static bool RenderFileSelectorSimple(
 			const std::string& label,
 			std::string* value,
 			const std::string& filters = "",
-			const std::string& filterName = "Files"
+			const std::string& filterName = "Files",
+			const std::string& defaultPath = "",
+			const std::string& dialogDefaultPath = ""
 		) {
 			nlohmann::json options = {
 				{"mode", "file"},
 				{"filters", filters},
 				{"filterName", filterName},
+				{"defaultPath", defaultPath},
+				{"dialogDefaultPath", dialogDefaultPath.empty() ? defaultPath : dialogDefaultPath},
 				{"buttonText", "Browse..."},
-				{"showClear", true},
-				{"showPath", true}
+				{"resetButtonText", "Reset"}
 			};
 			return RenderFileSelector(label, value, options);
 		}
