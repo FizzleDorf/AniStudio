@@ -30,14 +30,6 @@ namespace ECS {
                 {"title", "Layer Skip Settings"},
                 {"type", "object"},
                 {"propertyOrder", {"slg_scale", "skip_layer_start", "skip_layer_end"}},
-                {"ui:table", {
-                    {"columns", 2},
-                    {"flags", ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp},
-                    {"columnSetup", {
-                        {"Param", ImGuiTableColumnFlags_WidthFixed, 64.0f},
-                        {"Value", ImGuiTableColumnFlags_WidthStretch}
-                    }}
-                }},
                 {"properties", {
                     {"slg_scale", {
                         {"type", "number"},

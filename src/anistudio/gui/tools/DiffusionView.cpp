@@ -307,9 +307,12 @@ namespace GUI {
 					auto& comp = mgr.GetComponent<LatentComponent>(entity);
 					if (!comp.schema.empty()) {
 						try {
+							// Render schema
 							auto properties = comp.GetPropertyMap();
-							bool modified = UISchema::RenderSchema(comp.schema, properties);
-							if (modified || ImGui::Button("Swap Width/Height")) {
+							UISchema::RenderSchema(comp.schema, properties);
+
+							// Render swap button separately
+							if (ImGui::Button("Swap Width/Height", ImVec2(-1.0f, 0))) {
 								int temp = comp.latentWidth;
 								comp.latentWidth = comp.latentHeight;
 								comp.latentHeight = temp;

@@ -98,10 +98,10 @@ namespace UISchema {
 		PushStyleFromSchema(schema);
 		bool modified = false;
 
-		if (schema.contains("title") && schema["title"].is_string()) {
-			ImGui::Text("%s", schema["title"].get<std::string>().c_str());
-			ImGui::Separator();
-		}
+		//if (schema.contains("title") && schema["title"].is_string()) {
+		//	ImGui::Text("%s", schema["title"].get<std::string>().c_str());
+		//	ImGui::Separator();
+		//}
 
 		// NEW: Check if this schema should create separate windows
 		if (schema.contains("ui:separate_windows") && schema["ui:separate_windows"].get<bool>()) {

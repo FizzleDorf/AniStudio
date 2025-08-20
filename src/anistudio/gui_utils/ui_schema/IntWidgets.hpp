@@ -44,25 +44,15 @@ namespace UISchema {
 			int min = GetSchemaValue<int>(options, "min", INT_MIN);
 			int max = GetSchemaValue<int>(options, "max", INT_MAX);
 
-			// Create a unique ID for this specific input using the memory address
-			std::string uniqueId = label + "##" + std::to_string(reinterpret_cast<uintptr_t>(value));
-			ImGui::PushID(uniqueId.c_str());
-
 			// Store the original value
 			int originalValue = *value;
 
-			// Use ImGui::InputInt 
-			bool changed = ImGui::InputInt("", value, step, step_fast, flags);
+			// Use ImGui::InputInt normally with the label
+			bool changed = ImGui::InputInt(label.c_str(), value, step, step_fast, flags);
 
 			// Apply constraints
 			if (*value < min) *value = min;
 			if (*value > max) *value = max;
-
-			ImGui::PopID();
-
-			// Show label on same line
-			ImGui::SameLine();
-			ImGui::Text("%s", label.c_str());
 
 			// Only return true if the value actually changed
 			return changed && (*value != originalValue);
@@ -92,68 +82,6 @@ namespace UISchema {
 
 			// Only return true if the value actually changed
 			return changed && (*value != originalValue);
-		}
-
-		// Special dimension input that prevents cross-interference
-		static bool RenderDimensionInput(const std::string& label, int* value, const nlohmann::json& options = {}, const std::string& uniqueId = "") {
-			// Use a static map to track individual input states per unique pointer AND frame
-			static std::unordered_map<void*, std::pair<int, int>> valueTracking; // value, lastFrame
-			static int frameCounter = 0;
-			frameCounter++;
-
-			// Use the pointer address as unique identifier
-			void* valuePtr = static_cast<void*>(value);
-
-			// Initialize or update tracking
-			if (valueTracking.find(valuePtr) == valueTracking.end()) {
-				valueTracking[valuePtr] = { *value, frameCounter };
-			}
-
-			int step = GetSchemaValue<int>(options, "step", 8);
-			int step_fast = GetSchemaValue<int>(options, "step_fast", 32);
-			int min = GetSchemaValue<int>(options, "min", 64);
-			int max = GetSchemaValue<int>(options, "max", 2048);
-
-			// Get last known value
-			int lastKnownValue = valueTracking[valuePtr].first;
-			int lastFrame = valueTracking[valuePtr].second;
-
-			// Create unique ImGui ID using pointer address and label
-			std::string uniqueImGuiId = label + "##" + std::to_string(reinterpret_cast<uintptr_t>(valuePtr));
-			ImGui::PushID(uniqueImGuiId.c_str());
-
-			// Use a local copy to prevent external interference
-			int localValue = *value;
-
-			// Only update local value if external change happened in a different frame
-			if (frameCounter != lastFrame && *value != lastKnownValue) {
-				localValue = *value;
-			}
-			else {
-				localValue = lastKnownValue;
-			}
-
-			bool changed = ImGui::InputInt(label.c_str(), &localValue, step, step_fast);
-
-			ImGui::PopID();
-
-			// Apply constraints
-			if (localValue < min) localValue = min;
-			if (localValue > max) localValue = max;
-
-			// Only update the actual value if InputInt reported a change AND the value actually differs
-			if (changed && localValue != lastKnownValue) {
-				*value = localValue;
-				valueTracking[valuePtr] = { localValue, frameCounter };
-				return true;
-			}
-
-			// Update tracking for external changes without reporting as UI change
-			if (*value != lastKnownValue && !changed) {
-				valueTracking[valuePtr] = { *value, frameCounter };
-			}
-
-			return false;
 		}
 
 		static bool RenderCombo(const std::string& label, int* selectedIndex, const std::vector<std::string>* items, const nlohmann::json& options = {}) {

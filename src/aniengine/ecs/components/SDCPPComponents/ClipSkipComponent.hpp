@@ -33,7 +33,6 @@ namespace ECS {
 			schema = {
 				{"title", "Clip Skip Settings"},
 				{"type", "object"},
-				// REMOVED: {"ui:table", {...}} section entirely
 				{"properties", {
 					{"clipSkip", {
 						{"type", "number"},
@@ -41,9 +40,9 @@ namespace ECS {
 						{"description", "Skip the last N layers of CLIP text encoder. Higher values can produce more artistic/abstract results but may reduce prompt adherence. Range: 0-12, typical: 1-2."},
 						{"ui:widget", "input_float"},
 						{"ui:options", {
-							{"min", 0.0f},
-							{"max", 12.0f},
-							{"speed", 0.1f}
+							{"min", -5.0f},
+							{"max", 15.0f},
+							{"step", 1.0f}
 						}}
 					}}
 				}}

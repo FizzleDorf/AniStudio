@@ -82,11 +82,10 @@ namespace ECS {
 
 		// Additional properties for DiffusionView to use
 		bool useAspectRatio = false;
-		bool constrainDivisible = true;
-		int aspectRatioMode = 0;
+		bool isDivisibleBy64 = true;
 		int longestSide = 768;
 
-		// Override the GetPropertyMap method
+		// Override the GetPropertyMap method - FIXED: Use same pattern as SamplerComponent
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["latentWidth"] = &latentWidth;
@@ -104,8 +103,7 @@ namespace ECS {
 				{"latentHeight", latentHeight},
 				{"batchSize", batchSize},
 				{"useAspectRatio", useAspectRatio},
-				{"constrainDivisible", constrainDivisible},
-				{"aspectRatioMode", aspectRatioMode},
+				{"isDivisibleBy64", isDivisibleBy64},
 				{"longestSide", longestSide}
 			};
 			return j;
@@ -140,10 +138,8 @@ namespace ECS {
 				batchSize = componentData["batchSize"];
 			if (componentData.contains("useAspectRatio"))
 				useAspectRatio = componentData["useAspectRatio"];
-			if (componentData.contains("constrainDivisible"))
-				constrainDivisible = componentData["constrainDivisible"];
-			if (componentData.contains("aspectRatioMode"))
-				aspectRatioMode = componentData["aspectRatioMode"];
+			if (componentData.contains("isDivisibleBy64"))
+				isDivisibleBy64 = componentData["isDivisibleBy64"];
 			if (componentData.contains("longestSide"))
 				longestSide = componentData["longestSide"];
 		}
