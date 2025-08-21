@@ -85,7 +85,7 @@ namespace UISchema {
 			);
 		}
 
-		// Process the dialog and return result (call this in your render loop)
+		// FIXED: Process the dialog and return result (call this in your render loop)
 		static FileDialogResult ProcessDialog() {
 			FileDialogResult result;
 
@@ -102,9 +102,42 @@ namespace UISchema {
 				// Dialog was closed
 				if (ImGuiFileDialog::Instance()->IsOk()) {
 					result.wasOkPressed = true;
-					result.selectedFileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-					result.selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-					result.fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
+
+					// FIXED: Get the components separately and construct properly
+					std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
+					std::string currentPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+
+					// Remove any trailing slashes from currentPath
+					while (!currentPath.empty() && (currentPath.back() == '/' || currentPath.back() == '\\')) {
+						currentPath.pop_back();
+					}
+
+					// Set the results properly
+					result.selectedFileName = fileName;
+					result.selectedPath = currentPath;
+
+					// FIXED: Construct fullPath manually to avoid duplication
+					if (!fileName.empty() && !currentPath.empty()) {
+						// Use appropriate path separator for the platform
+						char pathSeparator = '/';
+#ifdef _WIN32
+						pathSeparator = '\\';
+#endif
+						result.fullPath = currentPath + pathSeparator + fileName;
+					}
+					else if (!currentPath.empty()) {
+						// Directory mode - use the current path as full path
+						result.fullPath = currentPath;
+					}
+					else {
+						result.fullPath = fileName; // Fallback
+					}
+
+					// Debug output to verify the fix
+					std::cout << "FileDialog Result:" << std::endl;
+					std::cout << "  Selected Path: " << result.selectedPath << std::endl;
+					std::cout << "  Selected Filename: " << result.selectedFileName << std::endl;
+					std::cout << "  Full Path: " << result.fullPath << std::endl;
 				}
 
 				// Execute callback if provided
@@ -115,7 +148,7 @@ namespace UISchema {
 				// Clean up and PROPERLY clear search filter
 				ImGuiFileDialog::Instance()->Close();
 
-				// Try different methods to clear search filter depending on version
+				// Try different methods to clear search/filter state depending on version
 				try {
 					// Clear any search/filter state
 					ImGuiFileDialog::Instance()->SetFileStyle(IGFD_FileStyleByFullName, "", ImVec4(0, 0, 0, 0));
@@ -249,7 +282,19 @@ namespace UISchema {
 							*value = result.selectedPath;
 						}
 						else {
-							*value = result.fullPath;
+							// Split the full path into directory and filename
+							std::filesystem::path fullPath(result.fullPath);
+							std::string directory = fullPath.parent_path().string();
+							std::string filename = fullPath.filename().string();
+
+							// Set the value to just the filename
+							*value = filename;
+
+							std::cout << "FileDialog split result:" << std::endl;
+							std::cout << "  Full Path: " << result.fullPath << std::endl;
+							std::cout << "  Directory: " << directory << std::endl;
+							std::cout << "  Filename: " << filename << std::endl;
+							std::cout << "  Setting value to: " << filename << std::endl;
 						}
 						modified = true;
 					}
