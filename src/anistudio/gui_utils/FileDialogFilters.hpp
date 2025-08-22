@@ -22,6 +22,9 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <algorithm>
+#include "FilePaths.hpp"
 
 namespace FileDialog {
 
@@ -29,28 +32,73 @@ namespace FileDialog {
 		PATH_SELECTION,      // For selecting directories/paths
 		DIFFUSION_MODEL,     // For diffusion model files
 		IMAGE_FILE,          // For image files
-		METADATA_FILE        // For JSON/metadata files
+		METADATA_FILE,       // For JSON/metadata files
+		ALL_FILES           // Show all files
 	};
 
 	class FileFilters {
 	public:
-		// Get filter string for ImGuiFileDialog
+		// Get filter string for ImGuiFileDialog with separate filters and All Files option
 		static std::string GetFilter(FilterType type) {
 			switch (type) {
 			case FilterType::PATH_SELECTION:
 				return ""; // No filter for directory selection
 
 			case FilterType::DIFFUSION_MODEL:
-				return ".safetensors,.ckpt,.pt,.gguf,.bin,.pth";
+				return "All Model Files{.safetensors,.ckpt,.pt,.gguf,.bin,.pth},"
+					"SafeTensors{.safetensors},"
+					"Checkpoint{.ckpt},"
+					"PyTorch{.pt,.pth},"
+					"GGUF{.gguf},"
+					"Binary{.bin},"
+					"All Files{.*}";
 
 			case FilterType::IMAGE_FILE:
-				return ".png,.jpg,.jpeg,.bmp,.tga,.webp,.tiff,.gif";
+				return "All Image Files{.png,.jpg,.jpeg,.bmp,.tga,.webp,.tiff,.gif},"
+					"PNG{.png},"
+					"JPEG{.jpg,.jpeg},"
+					"Bitmap{.bmp},"
+					"Targa{.tga},"
+					"WebP{.webp},"
+					"TIFF{.tiff},"
+					"GIF{.gif},"
+					"All Files{.*}";
 
 			case FilterType::METADATA_FILE:
-				return ".json,.png,.jpg,.jpeg"; // JSON files + images with metadata
+				return "All Metadata Files{.json,.png,.jpg,.jpeg},"
+					"JSON{.json},"
+					"PNG with Metadata{.png},"
+					"JPEG with Metadata{.jpg,.jpeg},"
+					"All Files{.*}";
+
+			case FilterType::ALL_FILES:
+				return "All Files{.*}";
 
 			default:
-				return "";
+				return "All Files{.*}";
+			}
+		}
+
+		// Get simple extension list (for validation)
+		static std::vector<std::string> GetExtensions(FilterType type) {
+			switch (type) {
+			case FilterType::PATH_SELECTION:
+				return {}; // No extensions for directory selection
+
+			case FilterType::DIFFUSION_MODEL:
+				return { ".safetensors", ".ckpt", ".pt", ".gguf", ".bin", ".pth" };
+
+			case FilterType::IMAGE_FILE:
+				return { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp", ".tiff", ".gif" };
+
+			case FilterType::METADATA_FILE:
+				return { ".json", ".png", ".jpg", ".jpeg" };
+
+			case FilterType::ALL_FILES:
+				return {}; // All files allowed
+
+			default:
+				return {};
 			}
 		}
 
@@ -68,6 +116,9 @@ namespace FileDialog {
 
 			case FilterType::METADATA_FILE:
 				return "Select Metadata File";
+
+			case FilterType::ALL_FILES:
+				return "Select File";
 
 			default:
 				return "Select File";
@@ -89,6 +140,9 @@ namespace FileDialog {
 			case FilterType::METADATA_FILE:
 				return "Metadata files (.json) or images with embedded metadata (.png, .jpg, .jpeg)";
 
+			case FilterType::ALL_FILES:
+				return "All files (no filter applied)";
+
 			default:
 				return "All supported files";
 			}
@@ -96,14 +150,21 @@ namespace FileDialog {
 
 		// Check if a file extension is valid for the given filter type
 		static bool IsValidExtension(FilterType type, const std::string& extension) {
-			std::string filter = GetFilter(type);
-			if (filter.empty()) return true; // No filter means all files allowed
+			if (type == FilterType::ALL_FILES) return true; // All files allowed
+
+			auto extensions = GetExtensions(type);
+			if (extensions.empty()) return true; // No filter means all files allowed
 
 			// Convert to lowercase for comparison
 			std::string lowerExt = extension;
 			std::transform(lowerExt.begin(), lowerExt.end(), lowerExt.begin(), ::tolower);
 
-			return filter.find(lowerExt) != std::string::npos;
+			// Ensure extension starts with dot
+			if (!lowerExt.empty() && lowerExt[0] != '.') {
+				lowerExt = "." + lowerExt;
+			}
+
+			return std::find(extensions.begin(), extensions.end(), lowerExt) != extensions.end();
 		}
 
 		// Get recommended default paths for each filter type
@@ -119,6 +180,9 @@ namespace FileDialog {
 				return Utils::FilePaths::defaultProjectPath;
 
 			case FilterType::METADATA_FILE:
+				return Utils::FilePaths::defaultProjectPath;
+
+			case FilterType::ALL_FILES:
 				return Utils::FilePaths::defaultProjectPath;
 
 			default:
@@ -142,6 +206,68 @@ namespace FileDialog {
 
 			auto it = modelPaths.find(modelType);
 			return (it != modelPaths.end()) ? it->second : Utils::FilePaths::checkpointDir;
+		}
+
+		// Get filter for specific model type with separate categories
+		static std::string GetModelFilter(const std::string& modelType) {
+			std::string lowerType = modelType;
+			std::transform(lowerType.begin(), lowerType.end(), lowerType.begin(), ::tolower);
+
+			if (lowerType == "checkpoint" || lowerType == "model") {
+				return "All Model Files{.safetensors,.ckpt,.pt,.bin,.pth},"
+					"SafeTensors{.safetensors},"
+					"Checkpoint{.ckpt},"
+					"PyTorch{.pt,.pth},"
+					"Binary{.bin},"
+					"All Files{.*}";
+			}
+			else if (lowerType == "vae" || lowerType == "clip" || lowerType == "t5" || lowerType == "unet") {
+				return "All Model Files{.safetensors,.pt,.bin,.pth},"
+					"SafeTensors{.safetensors},"
+					"PyTorch{.pt,.pth},"
+					"Binary{.bin},"
+					"All Files{.*}";
+			}
+			else if (lowerType == "lora") {
+				return "All LoRA Files{.safetensors,.ckpt,.pt,.bin},"
+					"SafeTensors{.safetensors},"
+					"Checkpoint{.ckpt},"
+					"PyTorch{.pt},"
+					"Binary{.bin},"
+					"All Files{.*}";
+			}
+			else if (lowerType == "upscale" || lowerType == "esrgan") {
+				return "All Upscale Models{.safetensors,.pt,.pth,.bin},"
+					"SafeTensors{.safetensors},"
+					"PyTorch{.pt,.pth},"
+					"Binary{.bin},"
+					"All Files{.*}";
+			}
+			else {
+				// Default to general model filter
+				return GetFilter(FilterType::DIFFUSION_MODEL);
+			}
+		}
+
+		// Convenience method to get both filter and default path for model types
+		struct ModelFilterInfo {
+			std::string filter;
+			std::string defaultPath;
+			std::string description;
+		};
+
+		static ModelFilterInfo GetModelFilterInfo(const std::string& modelType) {
+			ModelFilterInfo info;
+			info.filter = GetModelFilter(modelType);
+			info.defaultPath = GetModelPath(modelType);
+			info.description = "Select " + modelType + " model file";
+
+			// Capitalize first letter for description
+			if (!info.description.empty()) {
+				info.description[7] = std::toupper(info.description[7]); // Position of modelType in "Select "
+			}
+
+			return info;
 		}
 	};
 
