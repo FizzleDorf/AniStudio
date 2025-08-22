@@ -1,23 +1,3 @@
-/*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
-   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
- d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
- */
-
 #pragma once
 
 #include <imgui.h>
@@ -26,8 +6,6 @@
 #include <vector>
 #include <iostream>
 #include <unordered_map>
-
- // Include centralized Engine property types
 #include "PropertyTypes.hpp"
 #include "UISchemaUtils.hpp"
 
@@ -87,17 +65,15 @@ namespace UISchema {
 		static bool RenderCombo(const std::string& label, int* selectedIndex, const std::vector<std::string>* items, const nlohmann::json& options = {}) {
 			if (!items || items->empty()) return false;
 
-			auto itemGetter = [](void* data, int idx, const char** out_text) -> bool {
-				auto* items = static_cast<const std::vector<std::string>*>(data);
-				if (idx < 0 || idx >= static_cast<int>(items->size())) return false;
-				*out_text = (*items)[idx].c_str();
-				return true;
-			};
+			// ImGui::Combo requires a const char* const*
+			std::vector<const char*> c_items;
+			for (const auto& item : *items) {
+				c_items.push_back(item.c_str());
+			}
 
 			int originalValue = *selectedIndex;
-			bool changed = ImGui::Combo(label.c_str(), selectedIndex, itemGetter,
-				const_cast<void*>(static_cast<const void*>(items)),
-				static_cast<int>(items->size()));
+			// The new ImGui::Combo overload takes a const char* const* for the items
+			bool changed = ImGui::Combo(label.c_str(), selectedIndex, c_items.data(), c_items.size());
 
 			// Only return true if the value actually changed
 			return changed && (*selectedIndex != originalValue);

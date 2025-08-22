@@ -82,7 +82,7 @@ namespace GUI {
 			ImGui::SameLine();
 			ImGui::Checkbox("Show History", &showHistory);
 
-			
+
 
 			ImGui::Separator();
 
@@ -92,7 +92,7 @@ namespace GUI {
 			ImGui::EndChild();
 		}
 		ImGui::End();
-		
+
 		if (showHistory) {
 			RenderHistory();
 		}
@@ -356,7 +356,7 @@ namespace GUI {
 
 				if (imageComp.textureID != 0) {
 					if (ImGui::ImageButton(("##img" + std::to_string(i)).c_str(),
-						reinterpret_cast<void*>(static_cast<intptr_t>(imageComp.textureID)),
+						(ImTextureID)(intptr_t)imageComp.textureID,
 						imageSize)) {
 						imgIndex = static_cast<int>(i);
 						selectedEntityID = entityID;
@@ -428,13 +428,15 @@ namespace GUI {
 
 			DrawGrid(imageComp.width, imageComp.height);
 
+			// FIXED: Establish window boundaries first, then draw image
 			ImGui::SetCursorPos(imagePos);
+			ImGui::Dummy(imageSize); // Establish the window boundaries
+
+			ImGui::SetCursorPos(imagePos); // Reset cursor to draw the image
 
 			ImGui::Image(
-				reinterpret_cast<void*>(static_cast<intptr_t>(imageComp.textureID)),
-				imageSize,
-				ImVec2(0, 0), ImVec2(1, 1),
-				ImVec4(1, 1, 1, 1)
+				(ImTextureID)(intptr_t)imageComp.textureID,
+				imageSize
 			);
 
 			if (zoom > 1.0f && ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
@@ -442,7 +444,9 @@ namespace GUI {
 				offsetY += ImGui::GetIO().MouseDelta.y;
 			}
 
+			// FIXED: Set cursor after the image content to properly establish boundaries
 			ImGui::SetCursorPos(ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y));
+			ImGui::Dummy(ImVec2(0, 0)); // Final dummy to establish the full content area
 		}
 		catch (const std::exception& e) {
 			ImGui::Text("Error rendering image: %s", e.what());

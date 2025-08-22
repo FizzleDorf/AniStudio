@@ -201,7 +201,7 @@ namespace GUI {
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
 			}
 
-			ImGui::Image((void*)(intptr_t)imageComp.textureID, imageSize);
+			ImGui::Image(ImTextureRef((ImTextureID)(intptr_t)imageComp.textureID), imageSize);
 
 			ImGui::EndChild();
 

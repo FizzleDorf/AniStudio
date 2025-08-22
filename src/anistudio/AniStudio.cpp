@@ -50,7 +50,6 @@ namespace ANI {
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
 		viewManager.RegisterView<GUI::DiffusionView>("DiffusionView");
 		viewManager.RegisterView<GUI::ImageView>("ImageView");
-		viewManager.RegisterView<GUI::NodeGraphView>("NodeGraphView");
 		viewManager.RegisterView<GUI::ConvertView>("ConvertView");
 		viewManager.RegisterView<GUI::SequencerView>("SequencerView");
 		viewManager.RegisterView<GUI::NodeView>("NodeView");
@@ -58,7 +57,7 @@ namespace ANI {
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
-		viewManager.RegisterView<GUI::ModelView>("ModelView");
+		// viewManager.RegisterView<GUI::ModelView>("ModelView");
 
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {

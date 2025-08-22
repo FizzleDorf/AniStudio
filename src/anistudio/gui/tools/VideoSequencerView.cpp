@@ -148,7 +148,7 @@ namespace GUI {
 
 				// Draw the thumbnail
 				draw_list->AddImage(
-					reinterpret_cast<void*>(static_cast<intptr_t>(clips[index].thumbnailTexture)),
+					(ImTextureID)(intptr_t)clips[index].thumbnailTexture,
 					pos,
 					pos + thumbnailSize,
 					ImVec2(0, 1),  // UV coordinates
@@ -503,7 +503,7 @@ namespace GUI {
 		// If we have a preview texture, draw it
 		if (previewTexture != 0 && glIsTexture(previewTexture)) {
 			ImGui::Image(
-				reinterpret_cast<void*>(static_cast<intptr_t>(previewTexture)),
+				ImTextureRef((ImTextureID)(intptr_t)previewTexture),
 				previewSize,
 				ImVec2(0, 1),  // UV0: top-left with Y flipped
 				ImVec2(1, 0)   // UV1: bottom-right with Y flipped
@@ -763,7 +763,7 @@ namespace GUI {
 
 				// Display thumbnail as a button
 				if (ImGui::ImageButton(("##video" + std::to_string(entityID)).c_str(),
-					reinterpret_cast<void*>(static_cast<intptr_t>(videoComp.currentTexture)),
+					ImTextureRef((ImTextureID)(intptr_t)previewTexture),
 					imgSize,
 					ImVec2(0, 1),  // UV0: top-left with Y flipped
 					ImVec2(1, 0),  // UV1: bottom-right with Y flipped
@@ -896,7 +896,7 @@ namespace GUI {
 
 				// Display thumbnail as a button
 				if (ImGui::ImageButton(("##image" + std::to_string(entityID)).c_str(),
-					reinterpret_cast<void*>(static_cast<intptr_t>(imageComp.textureID)),
+					ImTextureRef((ImTextureID)(intptr_t)previewTexture),
 					imgSize,
 					ImVec2(0, 1),  // UV0: top-left with Y flipped
 					ImVec2(1, 0),  // UV1: bottom-right with Y flipped

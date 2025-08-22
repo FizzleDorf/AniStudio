@@ -302,8 +302,8 @@ namespace GUI {
 				if (ImGui::RadioButton("Opaque", alpha_flags == ImGuiColorEditFlags_None))
 					alpha_flags = ImGuiColorEditFlags_None;
 				ImGui::SameLine();
-				if (ImGui::RadioButton("Alpha", alpha_flags == ImGuiColorEditFlags_AlphaPreview))
-					alpha_flags = ImGuiColorEditFlags_AlphaPreview;
+				if (ImGui::RadioButton("Alpha", alpha_flags == ImGuiColorEditFlags_AlphaPreviewHalf))
+					alpha_flags = ImGuiColorEditFlags_AlphaPreviewHalf;
 				ImGui::SameLine();
 				if (ImGui::RadioButton("Both", alpha_flags == ImGuiColorEditFlags_AlphaPreviewHalf))
 					alpha_flags = ImGuiColorEditFlags_AlphaPreviewHalf;

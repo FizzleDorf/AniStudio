@@ -67,7 +67,7 @@ namespace ANI {
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
 
-		entityManager.RegisterSystem<ECS::RenderSystem>();
+		// entityManager.RegisterSystem<ECS::RenderSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}

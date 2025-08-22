@@ -978,101 +978,97 @@ namespace ImGui
         case MarkdownFormatType::NORMAL_TEXT:
             break;
 		case MarkdownFormatType::EMPHASIS:
-        {
-            MarkdownHeadingFormat fmt;
-            // default styling for emphasis uses last headingFormats - for your own styling
-            // implement EMPHASIS in your formatCallback
-            if( markdownFormatInfo_.level == 1 )
-            {
-                // normal emphasis
- 			    if( start_ )
-			    {
-                    ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyle().Colors[ ImGuiCol_TextDisabled ] );
-			    }
-                else
-			    {
-                    ImGui::PopStyleColor();
-			    }
-            }
-            else
-            {
-                // strong emphasis
-                fmt = markdownFormatInfo_.config->headingFormats[ MarkdownConfig::NUMHEADINGS - 1 ];
-			    if( start_ )
-			    {
-				    if( fmt.font )
-				    {
-					    ImGui::PushFont( fmt.font );
-				    }
-			    }
-                else
-			    {
-				    if( fmt.font )
-				    {
-					    ImGui::PopFont();
-				    }
-			    }
-            }
-            break;
-        }
-        case MarkdownFormatType::HEADING:
-        {
-            MarkdownHeadingFormat fmt;
-            if( markdownFormatInfo_.level > MarkdownConfig::NUMHEADINGS )
-            {
-                fmt = markdownFormatInfo_.config->headingFormats[ MarkdownConfig::NUMHEADINGS - 1 ];
-            }
-            else
-            {
-                fmt = markdownFormatInfo_.config->headingFormats[ markdownFormatInfo_.level - 1 ];
-            }
-            if( start_ )
-            {
-                if( fmt.font  )
-                {
-                    ImGui::PushFont( fmt.font );
-                }
-                ImGui::NewLine();
-            }
-            else
-            {
-                if( fmt.separator )
-                {
-                    ImGui::Separator();
-                    ImGui::NewLine();
-                }
-                else
-                {
-                    ImGui::NewLine();
-                }
-                if( fmt.font )
-                {
-                    ImGui::PopFont();
-                }
-            }
-            break;
-        }
+		{
+			MarkdownHeadingFormat fmt;
+			if (markdownFormatInfo_.level == 1)
+			{
+				if (start_)
+				{
+					ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+				}
+				else
+				{
+					ImGui::PopStyleColor();
+				}
+			}
+			else
+			{
+				fmt = markdownFormatInfo_.config->headingFormats[MarkdownConfig::NUMHEADINGS - 1];
+				if (start_)
+				{
+					if (fmt.font)
+					{
+						ImGui::PushFont(fmt.font, fmt.font->LegacySize);
+					}
+				}
+				else
+				{
+					if (fmt.font)
+					{
+						ImGui::PopFont();
+					}
+				}
+			}
+			break;
+		}
+		case MarkdownFormatType::HEADING:
+		{
+			MarkdownHeadingFormat fmt;
+			if (markdownFormatInfo_.level > MarkdownConfig::NUMHEADINGS)
+			{
+				fmt = markdownFormatInfo_.config->headingFormats[MarkdownConfig::NUMHEADINGS - 1];
+			}
+			else
+			{
+				fmt = markdownFormatInfo_.config->headingFormats[markdownFormatInfo_.level - 1];
+			}
+			if (start_)
+			{
+				if (fmt.font)
+				{
+					ImGui::PushFont(fmt.font, fmt.font->LegacySize);
+				}
+				ImGui::NewLine();
+			}
+			else
+			{
+				if (fmt.separator)
+				{
+					ImGui::Separator();
+					ImGui::NewLine();
+				}
+				else
+				{
+					ImGui::NewLine();
+				}
+				if (fmt.font)
+				{
+					ImGui::PopFont();
+				}
+			}
+			break;
+		}
         case MarkdownFormatType::UNORDERED_LIST:
             break;
-        case MarkdownFormatType::LINK:
-            if( start_ )
-            {
-                ImGui::PushStyleColor( ImGuiCol_Text, ImGui::GetStyle().Colors[ ImGuiCol_ButtonHovered ] );
-            }
-            else
-            {
-                ImGui::PopStyleColor();
-                if( markdownFormatInfo_.itemHovered )
-                {
-                    ImGui::UnderLine( ImGui::GetStyle().Colors[ ImGuiCol_ButtonHovered ] );
-                }
-                else
-                {
-                    ImGui::UnderLine( ImGui::GetStyle().Colors[ ImGuiCol_Button ] );
-                }
-            }
-            break;
-        }
+		case MarkdownFormatType::LINK:
+			if (start_)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]);
+			}
+			else
+			{
+				ImGui::PopStyleColor();
+				if (markdownFormatInfo_.itemHovered)
+				{
+					ImGui::UnderLine(ImGui::GetStyle().Colors[ImGuiCol_ButtonHovered]);
+				}
+				else
+				{
+					ImGui::UnderLine(ImGui::GetStyle().Colors[ImGuiCol_Button]);
+				}
+			}
+			break;
+		}
     }
 
 }

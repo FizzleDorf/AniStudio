@@ -46,7 +46,6 @@
 #include "editors/ZepView.hpp"
 
 // Node Editor views
-#include "editors/NodeGraphView.hpp"
 #include "editors/NodeView.hpp"
 
 //3D
