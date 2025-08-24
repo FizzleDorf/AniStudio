@@ -203,6 +203,7 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/base>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/editors>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/project>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/settings>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/tools>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/viewers>
 	# gui_utils

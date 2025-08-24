@@ -1,0 +1,63 @@
+/*
+ * This file is part of AniStudio.
+ * Copyright (C) 2025 FizzleDorf (AnimAnon)
+ */
+
+#pragma once
+
+#include "GUI.h"
+#include "SettingsManager.hpp"
+#include <string>
+
+namespace GUI {
+
+	class SettingsView : public BaseView {
+	public:
+		static constexpr const char* GetMetadataJSON() {
+			return R"({
+            "displayName": "Settings",
+            "category": "Edit",
+            "description": "Manage application and project settings."
+        })";
+		}
+
+		SettingsView(ECS::EntityManager &mgr);
+		virtual ~SettingsView() = default;
+
+		void Render() override;
+
+		// Plugin interface - expose manager for plugin registration
+		Settings::SettingsManager& GetSettingsManager() { return settingsManager; }
+
+		// Get proper window title like HelpView
+		std::string GetWindowTitle() const;
+
+	private:
+		// Settings manager owned by this view
+		Settings::SettingsManager settingsManager;
+
+		// UI state
+		std::string selectedCategory;
+
+		// Dialog state
+		bool showSavePopup;
+		bool showUnsavedChangesDialog;
+		bool pendingClose;
+		bool windowOpen; // Track window open state like HelpView
+
+		// Register core tabs
+		void RegisterCoreTabs();
+
+		// Handle window close attempts
+		void HandleWindowClose();
+
+		// UI rendering methods
+		void RenderMainContent();
+		void RenderCategoryFilter();
+		void RenderSettingsContent();
+		void RenderActionButtons();
+		void RenderSaveConfirmationPopup();
+		void RenderUnsavedChangesDialog();
+	};
+
+} // namespace GUI
