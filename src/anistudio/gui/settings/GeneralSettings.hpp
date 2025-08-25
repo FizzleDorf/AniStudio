@@ -16,19 +16,25 @@ namespace Settings {
 	class GeneralSettingsTab : public BaseTabObject {
 	public:
 		GeneralSettingsTab() : BaseTabObject("General", "Application") {
+			LoadSettings();
 			CreateBackup();
 		}
 
 		void RenderUI() override {
-			RenderStartupSettings();
-			ImGui::Separator();
-			RenderAutoSaveSettings();
-			ImGui::Separator();
-			RenderConfirmationSettings();
-			ImGui::Separator();
-			RenderPerformanceSettings();
-			ImGui::Separator();
-			RenderLoggingSettings();
+			if (ImGui::BeginChild("GeneralSettings", ImVec2(0, 0), false)) {
+				RenderStartupSettings();
+				ImGui::Separator();
+				RenderAutoSaveSettings();
+				ImGui::Separator();
+				RenderConfirmationSettings();
+				ImGui::Separator();
+				RenderPerformanceSettings();
+				ImGui::Separator();
+				RenderLoggingSettings();
+				ImGui::Separator();
+				RenderActionButtons();
+			}
+			ImGui::EndChild();
 		}
 
 		bool SaveSettings() override {
@@ -71,8 +77,14 @@ namespace Settings {
 		bool LoadSettings() override {
 			try {
 				std::string filePath = GetSettingsDirectory() + "/general_settings.json";
+
+				// Try settings file first, then defaults
 				if (!std::filesystem::exists(filePath)) {
-					return true; // Use defaults
+					filePath = GetDefaultsDirectory() + "/general_defaults.json";
+				}
+
+				if (!std::filesystem::exists(filePath)) {
+					return true; // Use hardcoded defaults
 				}
 
 				std::ifstream file(filePath);
@@ -126,7 +138,6 @@ namespace Settings {
 		}
 
 		void CreateBackup() override {
-			// Store backup values in separate variables to avoid circular dependency
 			backupShowStartupScreen = showStartupScreen;
 			backupLoadLastProject = loadLastProject;
 			backupAutoSaveProjects = autoSaveProjects;
@@ -182,7 +193,7 @@ namespace Settings {
 		bool logToFile = true;
 		int maxLogFileSize = 10;
 
-		// Backup data - using separate variables instead of self-referencing savedState
+		// Backup data
 		bool backupShowStartupScreen = true;
 		bool backupLoadLastProject = true;
 		bool backupAutoSaveProjects = true;
@@ -244,6 +255,24 @@ namespace Settings {
 						if (ImGui::SliderInt("Max Log File Size (MB)", &maxLogFileSize, 1, 100)) hasChanges = true;
 					}
 				}
+			}
+		}
+
+		void RenderActionButtons() {
+			if (ImGui::Button("Save Settings")) {
+				SaveSettings();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Reset to Defaults")) {
+				ResetToDefaults();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Revert Changes")) {
+				RestoreFromBackup();
+			}
+
+			if (hasChanges) {
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
 			}
 		}
 	};

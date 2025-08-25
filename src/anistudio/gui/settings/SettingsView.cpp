@@ -2,13 +2,15 @@
 #include "PathsSettings.hpp"
 #include "GeneralSettings.hpp"
 #include "SDCPPSettings.hpp"
+#include "ImGuiStyleSettings.hpp"
+#include "ImGuiRenderSettings.hpp"
 #include "../events/Events.hpp"
 #include <iostream>
 
 namespace GUI {
 
 	SettingsView::SettingsView(ECS::EntityManager &mgr)
-		: BaseView(mgr), selectedCategory("All"), showSavePopup(false),
+		: BaseView(mgr), showSavePopup(false),
 		showUnsavedChangesDialog(false), pendingClose(false), windowOpen(true) {
 		viewName = "SettingsView";
 
@@ -26,6 +28,8 @@ namespace GUI {
 		settingsManager.RegisterTab(std::make_unique<Settings::GeneralSettingsTab>());
 		settingsManager.RegisterTab(std::make_unique<Settings::PathsSettingsTab>());
 		settingsManager.RegisterTab(std::make_unique<Settings::SDCPPSettingsTab>());
+		settingsManager.RegisterTab(std::make_unique<Settings::ImGuiStyleSettingsTab>());
+		settingsManager.RegisterTab(std::make_unique<Settings::ImGuiRenderSettingsTab>());
 
 		std::cout << "[SettingsView] Registered core tabs" << std::endl;
 	}
@@ -57,22 +61,27 @@ namespace GUI {
 	}
 
 	void SettingsView::RenderMainContent() {
-		// Create horizontal layout with category filter on left
-		if (ImGui::BeginTable("SettingsLayout", 2, ImGuiTableFlags_Resizable)) {
-			ImGui::TableSetupColumn("Categories", ImGuiTableColumnFlags_WidthFixed, 180.0f);
-			ImGui::TableSetupColumn("Settings", ImGuiTableColumnFlags_WidthStretch);
+		// Create tabs for each BaseTabObject
+		if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
 
-			ImGui::TableNextRow();
+			// Iterate through all registered tabs and create ImGui tabs
+			const auto& tabs = settingsManager.GetTabs();
+			for (const auto& tab : tabs) {
+				std::string tabTitle = tab->GetTabName() + " Settings";
 
-			// Left column - Category filter
-			ImGui::TableNextColumn();
-			RenderCategoryFilter();
+				if (ImGui::BeginTabItem(tabTitle.c_str())) {
+					// Render the tab content in a scrollable child window
+					ImGui::BeginChild("TabContent", ImVec2(0, -50), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
-			// Right column - Settings content
-			ImGui::TableNextColumn();
-			RenderSettingsContent();
+					// Let the tab object render its UI
+					tab->RenderUI();
 
-			ImGui::EndTable();
+					ImGui::EndChild();
+					ImGui::EndTabItem();
+				}
+			}
+
+			ImGui::EndTabBar();
 		}
 
 		ImGui::Separator();
@@ -89,60 +98,6 @@ namespace GUI {
 			// No unsaved changes, close immediately
 			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
 		}
-	}
-
-	void SettingsView::RenderCategoryFilter() {
-		ImGui::Text("Categories");
-		ImGui::Separator();
-
-		// "All" option at top
-		bool isAllSelected = (selectedCategory == "All");
-		if (ImGui::Selectable("All", isAllSelected)) {
-			selectedCategory = "All";
-			settingsManager.SetActiveCategory("All");
-		}
-
-		ImGui::Separator();
-
-		// Get categories and render them
-		std::vector<std::string> categories = settingsManager.GetCategories();
-
-		for (const auto& category : categories) {
-			bool isCategorySelected = (selectedCategory == category);
-			if (ImGui::Selectable(category.c_str(), isCategorySelected)) {
-				selectedCategory = category;
-				settingsManager.SetActiveCategory(category);
-			}
-			ImGui::Separator();
-		}
-	}
-
-	void SettingsView::RenderSettingsContent() {
-		ImGui::BeginChild("SettingsContent", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-
-		if (selectedCategory == "All") {
-			// Render all tabs with category headers
-			std::vector<std::string> categories = settingsManager.GetCategories();
-			for (const auto& category : categories) {
-				ImGui::TextColored(ImVec4(0.7f, 0.9f, 1.0f, 1.0f), "%s Settings", category.c_str());
-
-				auto tabsInCategory = settingsManager.GetTabsInCategory(category);
-				for (auto* tab : tabsInCategory) {
-					tab->RenderUI();
-				}
-
-				ImGui::Separator();
-			}
-		}
-		else {
-			// Render tabs in selected category
-			auto tabsInCategory = settingsManager.GetTabsInCategory(selectedCategory);
-			for (auto* tab : tabsInCategory) {
-				tab->RenderUI();
-			}
-		}
-
-		ImGui::EndChild();
 	}
 
 	void SettingsView::RenderActionButtons() {

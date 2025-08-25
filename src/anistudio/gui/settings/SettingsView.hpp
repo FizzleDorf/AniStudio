@@ -36,9 +36,6 @@ namespace GUI {
 		// Settings manager owned by this view
 		Settings::SettingsManager settingsManager;
 
-		// UI state
-		std::string selectedCategory;
-
 		// Dialog state
 		bool showSavePopup;
 		bool showUnsavedChangesDialog;
@@ -53,8 +50,6 @@ namespace GUI {
 
 		// UI rendering methods
 		void RenderMainContent();
-		void RenderCategoryFilter();
-		void RenderSettingsContent();
 		void RenderActionButtons();
 		void RenderSaveConfirmationPopup();
 		void RenderUnsavedChangesDialog();

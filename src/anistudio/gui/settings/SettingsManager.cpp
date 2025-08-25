@@ -5,7 +5,7 @@
 namespace Settings {
 
 	void SettingsManager::RegisterTab(std::unique_ptr<BaseTabObject> tab) {
-		std::cout << "[SettingsManager] Registering tab: " << tab->GetTabName() << " in category: " << tab->GetCategoryName() << std::endl;
+		std::cout << "[SettingsManager] Registering tab: " << tab->GetTabName() << " in category: " << tab->GetTabCategory() << std::endl;
 		tabs.push_back(std::move(tab));
 	}
 
@@ -96,7 +96,7 @@ namespace Settings {
 		std::vector<std::string> categories;
 
 		for (const auto& tab : tabs) {
-			const std::string& category = tab->GetCategoryName();
+			const std::string& category = tab->GetTabCategory();
 			if (std::find(categories.begin(), categories.end(), category) == categories.end()) {
 				categories.push_back(category);
 			}
@@ -109,7 +109,7 @@ namespace Settings {
 		std::vector<BaseTabObject*> result;
 
 		for (const auto& tab : tabs) {
-			if (tab->GetCategoryName() == category) {
+			if (tab->GetTabCategory() == category) {
 				result.push_back(tab.get());
 			}
 		}
@@ -123,7 +123,7 @@ namespace Settings {
 		// Set active category based on tab
 		for (const auto& tab : tabs) {
 			if (tab->GetTabName() == tabName) {
-				activeCategory = tab->GetCategoryName();
+				activeCategory = tab->GetTabCategory();
 				break;
 			}
 		}

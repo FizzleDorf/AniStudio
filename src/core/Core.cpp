@@ -43,13 +43,9 @@ namespace ANI {
 			throw std::runtime_error("Failed to initialize StudioCore");
 		}
 
-		// Setup window context for plugins
+		// Setup window context
 		studioCore.SetWindowHandle(window);
 		studioCore.SetImGuiContext(ImGui::GetCurrentContext());
-
-		// REMOVED: NO MORE LoadDefaultPlugins call
-		// EngineCore already loaded its plugins
-		// StudioCore plugins are loaded manually via GUI
 
 		std::cout << "[Core] Initialization complete!" << std::endl;
 	}
@@ -88,20 +84,6 @@ namespace ANI {
 		ImGui::CreateContext();
 
 		std::string iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
-
-		ImGuiIO& io = ImGui::GetIO();
-		io.IniFilename = iniFilePath.c_str();
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-
-		ImGui::StyleColorsDark();
-		ImGuiStyle& style = ImGui::GetStyle();
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
-			style.WindowRounding = 0.0f;
-			style.Colors[ImGuiCol_WindowBg].w = 1.0f;
-		}
 
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 330");

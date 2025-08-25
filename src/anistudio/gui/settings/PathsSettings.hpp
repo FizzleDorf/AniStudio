@@ -19,61 +19,70 @@ namespace Settings {
 	public:
 		PathsSettingsTab() : BaseTabObject("Paths", "Application") {
 			LoadFromFilePaths();
+			LoadSettings();
 			CreateBackup();
 		}
 
 		void RenderUI() override {
-			// General Paths Section
-			if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-					ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-					ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableHeadersRow();
+			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
+				// General Paths Section
+				if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+						ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableHeadersRow();
 
-					RenderPathRow("Last Open Project", lastOpenProjectPath);
-					RenderPathRow("Default Project", defaultProjectPath);
-					RenderPathRow("Assets Folder", assetsFolderPath);
+						RenderPathRow("Last Open Project", lastOpenProjectPath);
+						RenderPathRow("Default Project", defaultProjectPath);
+						RenderPathRow("Assets Folder", assetsFolderPath);
 
-					ImGui::EndTable();
+						ImGui::EndTable();
+					}
 				}
-			}
 
-			ImGui::Separator();
+				ImGui::Separator();
 
-			if (ImGui::Button("Reset Model Paths to Root")) {
-				if (!defaultModelRootPath.empty()) {
-					checkpointDir = defaultModelRootPath + "/checkpoints";
-					encoderDir = defaultModelRootPath + "/text_encoders";
-					vaeDir = defaultModelRootPath + "/vae";
-					unetDir = defaultModelRootPath + "/unet";
-					loraDir = defaultModelRootPath + "/lora";
-					controlnetDir = defaultModelRootPath + "/controlnet";
-					upscaleDir = defaultModelRootPath + "/upscale";
-					hasChanges = true;
+				if (ImGui::Button("Reset Model Paths to Root")) {
+					if (!defaultModelRootPath.empty()) {
+						checkpointDir = defaultModelRootPath + "/checkpoints";
+						encoderDir = defaultModelRootPath + "/text_encoders";
+						vaeDir = defaultModelRootPath + "/vae";
+						unetDir = defaultModelRootPath + "/unet";
+						loraDir = defaultModelRootPath + "/lora";
+						controlnetDir = defaultModelRootPath + "/controlnet";
+						upscaleDir = defaultModelRootPath + "/upscale";
+						hasChanges = true;
+					}
 				}
-			}
 
-			// Model Paths Section
-			if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-					ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-					ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableHeadersRow();
+				ImGui::Separator();
 
-					RenderPathRow("Model Root", defaultModelRootPath);
-					RenderPathRow("Checkpoints", checkpointDir);
-					RenderPathRow("Text Encoders", encoderDir);
-					RenderPathRow("VAE", vaeDir);
-					RenderPathRow("UNet", unetDir);
-					RenderPathRow("LORA", loraDir);
-					RenderPathRow("ControlNet", controlnetDir);
-					RenderPathRow("Upscale", upscaleDir);
+				// Model Paths Section
+				if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+						ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableHeadersRow();
 
-					ImGui::EndTable();
+						RenderPathRow("Model Root", defaultModelRootPath);
+						RenderPathRow("Checkpoints", checkpointDir);
+						RenderPathRow("Text Encoders", encoderDir);
+						RenderPathRow("VAE", vaeDir);
+						RenderPathRow("UNet", unetDir);
+						RenderPathRow("LORA", loraDir);
+						RenderPathRow("ControlNet", controlnetDir);
+						RenderPathRow("Upscale", upscaleDir);
+
+						ImGui::EndTable();
+					}
 				}
+
+				ImGui::Separator();
+				RenderActionButtons();
 			}
+			ImGui::EndChild();
 		}
 
 		bool SaveSettings() override {
@@ -116,6 +125,12 @@ namespace Settings {
 		bool LoadSettings() override {
 			try {
 				std::string filePath = GetSettingsDirectory() + "/paths_settings.json";
+
+				// Try settings file first, then defaults
+				if (!std::filesystem::exists(filePath)) {
+					filePath = GetDefaultsDirectory() + "/paths_defaults.json";
+				}
+
 				if (!std::filesystem::exists(filePath)) {
 					LoadFromFilePaths();
 					return true;
@@ -166,7 +181,6 @@ namespace Settings {
 		}
 
 		void CreateBackup() override {
-			// Store backup data in separate member variables to avoid circular dependency
 			backupLastOpenProjectPath = lastOpenProjectPath;
 			backupDefaultProjectPath = defaultProjectPath;
 			backupAssetsFolderPath = assetsFolderPath;
@@ -213,7 +227,7 @@ namespace Settings {
 		std::string controlnetDir;
 		std::string upscaleDir;
 
-		// Backup data - using separate variables instead of self-referencing savedState
+		// Backup data
 		std::string backupLastOpenProjectPath;
 		std::string backupDefaultProjectPath;
 		std::string backupAssetsFolderPath;
@@ -298,6 +312,24 @@ namespace Settings {
 
 			ImGui::TableNextColumn();
 			ImGui::Text("%s", path.c_str());
+		}
+
+		void RenderActionButtons() {
+			if (ImGui::Button("Save Settings")) {
+				SaveSettings();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Reset to Defaults")) {
+				ResetToDefaults();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Revert Changes")) {
+				RestoreFromBackup();
+			}
+
+			if (hasChanges) {
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
+			}
 		}
 	};
 

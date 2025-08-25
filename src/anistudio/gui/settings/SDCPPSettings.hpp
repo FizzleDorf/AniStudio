@@ -19,32 +19,46 @@ namespace Settings {
 	public:
 		SDCPPSettingsTab() : BaseTabObject("SDCPP", "Models") {
 			LoadFromFilePaths();
+			LoadSettings();
 			CreateBackup();
 		}
 
 		void RenderUI() override {
-			// SDCPP-specific settings
-			if (ImGui::CollapsingHeader("SDCPP Configuration", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::BeginTable("SDCPPTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-					ImGui::TableSetupColumn("Setting Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableHeadersRow();
+			if (ImGui::BeginChild("SDCPPSettings", ImVec2(0, 0), false)) {
+				// SDCPP-specific settings
+				if (ImGui::CollapsingHeader("SDCPP Configuration", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::BeginTable("SDCPPTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+						ImGui::TableSetupColumn("Setting Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+						ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableHeadersRow();
 
-					RenderPathRow("SDCPP Models Root", sdcppModelsRoot);
-					RenderPathRow("SDCPP Config Path", sdcppConfigPath);
+						RenderPathRow("SDCPP Models Root", sdcppModelsRoot);
+						RenderPathRow("SDCPP Config Path", sdcppConfigPath);
 
-					ImGui::EndTable();
+						ImGui::EndTable();
+					}
 				}
-			}
 
-			ImGui::Separator();
+				ImGui::Separator();
 
-			// SDCPP-specific controls
-			if (ImGui::Button("Initialize SDCPP")) {
-				// SDCPP initialization logic here
-				hasChanges = true;
+				// SDCPP-specific controls
+				if (ImGui::CollapsingHeader("SDCPP Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+					if (ImGui::Button("Initialize SDCPP")) {
+						// SDCPP initialization logic here
+						hasChanges = true;
+					}
+
+					ImGui::SameLine();
+					if (ImGui::Button("Test Connection")) {
+						// Test SDCPP connection logic here
+					}
+				}
+
+				ImGui::Separator();
+				RenderActionButtons();
 			}
+			ImGui::EndChild();
 		}
 
 		bool SaveSettings() override {
@@ -75,6 +89,12 @@ namespace Settings {
 		bool LoadSettings() override {
 			try {
 				std::string filePath = GetSettingsDirectory() + "/sdcpp_settings.json";
+
+				// Try settings file first, then defaults
+				if (!std::filesystem::exists(filePath)) {
+					filePath = GetDefaultsDirectory() + "/sdcpp_defaults.json";
+				}
+
 				if (!std::filesystem::exists(filePath)) {
 					LoadFromFilePaths();
 					return true;
@@ -107,7 +127,6 @@ namespace Settings {
 		}
 
 		void CreateBackup() override {
-			// Store backup data in separate member variables to avoid circular dependency
 			backupSdcppModelsRoot = sdcppModelsRoot;
 			backupSdcppConfigPath = sdcppConfigPath;
 		}
@@ -127,7 +146,7 @@ namespace Settings {
 		std::string sdcppModelsRoot;
 		std::string sdcppConfigPath;
 
-		// Backup data - using separate variables instead of self-referencing savedState
+		// Backup data
 		std::string backupSdcppModelsRoot;
 		std::string backupSdcppConfigPath;
 
@@ -179,6 +198,24 @@ namespace Settings {
 
 			ImGui::TableNextColumn();
 			ImGui::Text("%s", path.c_str());
+		}
+
+		void RenderActionButtons() {
+			if (ImGui::Button("Save Settings")) {
+				SaveSettings();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Reset to Defaults")) {
+				ResetToDefaults();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Revert Changes")) {
+				RestoreFromBackup();
+			}
+
+			if (hasChanges) {
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
+			}
 		}
 	};
 

@@ -16,6 +16,7 @@
 #include "StudioPluginManager.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
+#include "ImGuiSettingsUtil.hpp"
 #include "Events.hpp"
 #include <iostream>
 #include <thread>
@@ -188,6 +189,26 @@ namespace ANI {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
+
+			// Set ImGui ini file path to data directory BEFORE loading settings
+			std::cout << "[StudioCore] Setting ImGui ini file path..." << std::endl;
+			ImGuiIO& io = ImGui::GetIO();
+
+			// Set ini file to save in data directory
+			std::string dataDir = Utils::FilePaths::GetExecutableDirectory() + "/../data";
+			std::string iniPath = dataDir + "/imgui.ini";
+
+			// Create data directory if needed
+			std::filesystem::create_directories(dataDir);
+
+			// Set persistent path for ImGui (must be static/global string)
+			static std::string persistentIniPath = std::filesystem::absolute(iniPath).string();
+			io.IniFilename = persistentIniPath.c_str();
+			std::cout << "[StudioCore] ImGui ini will save to: " << persistentIniPath << std::endl;
+
+			// Load ImGui IO settings AFTER setting ini path
+			std::cout << "[StudioCore] Loading ImGui IO settings..." << std::endl;
+			Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
 
 			// Set entity manager reference for the ViewManager
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
