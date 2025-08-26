@@ -1,10 +1,17 @@
-# CMakeLists.txt for AniEngine - Updated with Engine Plugin Manager
+# CMakeLists.txt for AniEngine - Updated with Engine Plugin Manager and All SD Backends
 cmake_minimum_required(VERSION 3.12)
 project(AniEngine VERSION 1.0.0 LANGUAGES CXX)
 
 # Build options
 option(ANIENGINE_BUILD_SHARED "Build AniEngine as shared library" OFF)
 option(ANIENGINE_ENABLE_CUDA "Enable CUDA support" OFF)
+option(ANIENGINE_ENABLE_VULKAN "Enable Vulkan support" OFF)
+option(ANIENGINE_ENABLE_HIPBLAS "Enable HipBLAS support for AMD GPUs" OFF)
+option(ANIENGINE_ENABLE_METAL "Enable Metal support for Apple devices" OFF)
+option(ANIENGINE_ENABLE_OPENCL "Enable OpenCL support" OFF)
+option(ANIENGINE_ENABLE_SYCL "Enable SYCL support for Intel GPUs" OFF)
+option(ANIENGINE_ENABLE_MUSA "Enable MUSA support for Moore Threads GPUs" OFF)
+option(ANIENGINE_ENABLE_FAST_SOFTMAX "Enable fast softmax (may be less deterministic)" OFF)
 option(ANIENGINE_BUILD_EXAMPLES "Build AniEngine examples" OFF)
 
 # C++ Standard
@@ -18,12 +25,66 @@ if(WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# CUDA setup
+# Set stable-diffusion.cpp backend options based on AniEngine options
+set(SD_CUDA ${ANIENGINE_ENABLE_CUDA})
+set(SD_VULKAN ${ANIENGINE_ENABLE_VULKAN})
+set(SD_HIPBLAS ${ANIENGINE_ENABLE_HIPBLAS})
+set(SD_METAL ${ANIENGINE_ENABLE_METAL})
+set(SD_OPENCL ${ANIENGINE_ENABLE_OPENCL})
+set(SD_SYCL ${ANIENGINE_ENABLE_SYCL})
+set(SD_MUSA ${ANIENGINE_ENABLE_MUSA})
+set(SD_FAST_SOFTMAX ${ANIENGINE_ENABLE_FAST_SOFTMAX})
+
+# Backend setup and validation
 if(ANIENGINE_ENABLE_CUDA)
     enable_language(CUDA)
     set(CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures")
     add_definitions(-DSD_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
+    message(STATUS "AniEngine: CUDA backend enabled")
+endif()
+
+if(ANIENGINE_ENABLE_VULKAN)
+    add_definitions(-DSD_USE_VULKAN)
+    find_package(Vulkan REQUIRED)
+    if(NOT Vulkan_FOUND)
+        message(FATAL_ERROR "Vulkan SDK not found! Install from https://www.lunarg.com/vulkan-sdk/")
+    endif()
+    message(STATUS "AniEngine: Vulkan backend enabled")
+endif()
+
+if(ANIENGINE_ENABLE_HIPBLAS)
+    add_definitions(-DSD_USE_CUDA)  # HipBLAS uses same define as CUDA
+    message(STATUS "AniEngine: HipBLAS backend enabled")
+endif()
+
+if(ANIENGINE_ENABLE_METAL)
+    add_definitions(-DSD_USE_METAL)
+    message(STATUS "AniEngine: Metal backend enabled")
+    if(NOT APPLE)
+        message(WARNING "Metal backend is only supported on Apple platforms")
+    endif()
+endif()
+
+if(ANIENGINE_ENABLE_OPENCL)
+    add_definitions(-DSD_USE_OPENCL)
+    find_package(OpenCL QUIET)
+    if(NOT OpenCL_FOUND)
+        message(WARNING "OpenCL not found - make sure OpenCL headers and ICD loader are installed")
+    endif()
+    message(STATUS "AniEngine: OpenCL backend enabled")
+endif()
+
+if(ANIENGINE_ENABLE_SYCL)
+    add_definitions(-DSD_USE_SYCL)
+    message(STATUS "AniEngine: SYCL backend enabled")
+    message(STATUS "Run 'source /opt/intel/oneapi/setvars.sh' before building (Linux)")
+    message(STATUS "Run oneAPI setvars.bat before building (Windows)")
+endif()
+
+if(ANIENGINE_ENABLE_MUSA)
+    add_definitions(-DSD_USE_CUDA)  # MUSA uses same define as CUDA
+    message(STATUS "AniEngine: MUSA backend enabled")
 endif()
 
 # Find dependencies if building standalone
@@ -43,6 +104,16 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     
     # Add external dependencies when building standalone
     if(EXISTS "${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp")
+        # Pass backend options to stable-diffusion.cpp before adding subdirectory
+        set(SD_CUDA ${SD_CUDA} CACHE BOOL "CUDA backend for stable-diffusion" FORCE)
+        set(SD_VULKAN ${SD_VULKAN} CACHE BOOL "Vulkan backend for stable-diffusion" FORCE)
+        set(SD_HIPBLAS ${SD_HIPBLAS} CACHE BOOL "HipBLAS backend for stable-diffusion" FORCE)
+        set(SD_METAL ${SD_METAL} CACHE BOOL "Metal backend for stable-diffusion" FORCE)
+        set(SD_OPENCL ${SD_OPENCL} CACHE BOOL "OpenCL backend for stable-diffusion" FORCE)
+        set(SD_SYCL ${SD_SYCL} CACHE BOOL "SYCL backend for stable-diffusion" FORCE)
+        set(SD_MUSA ${SD_MUSA} CACHE BOOL "MUSA backend for stable-diffusion" FORCE)
+        set(SD_FAST_SOFTMAX ${SD_FAST_SOFTMAX} CACHE BOOL "Fast softmax for stable-diffusion" FORCE)
+        
         add_subdirectory(${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp ${CMAKE_BINARY_DIR}/stable-diffusion)
     else()
         message(FATAL_ERROR "stable-diffusion.cpp not found. Required for AniEngine.")
@@ -50,6 +121,16 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
 else()
     # Parent project build - add external dependencies here to avoid rebuilding
     if(NOT TARGET stable-diffusion)
+        # Pass backend options to stable-diffusion.cpp before adding subdirectory
+        set(SD_CUDA ${SD_CUDA} CACHE BOOL "CUDA backend for stable-diffusion" FORCE)
+        set(SD_VULKAN ${SD_VULKAN} CACHE BOOL "Vulkan backend for stable-diffusion" FORCE)
+        set(SD_HIPBLAS ${SD_HIPBLAS} CACHE BOOL "HipBLAS backend for stable-diffusion" FORCE)
+        set(SD_METAL ${SD_METAL} CACHE BOOL "Metal backend for stable-diffusion" FORCE)
+        set(SD_OPENCL ${SD_OPENCL} CACHE BOOL "OpenCL backend for stable-diffusion" FORCE)
+        set(SD_SYCL ${SD_SYCL} CACHE BOOL "SYCL backend for stable-diffusion" FORCE)
+        set(SD_MUSA ${SD_MUSA} CACHE BOOL "MUSA backend for stable-diffusion" FORCE)
+        set(SD_FAST_SOFTMAX ${SD_FAST_SOFTMAX} CACHE BOOL "Fast softmax for stable-diffusion" FORCE)
+        
         add_subdirectory(${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp ${CMAKE_BINARY_DIR}/external/stable-diffusion)
     endif()
 endif()
@@ -173,6 +254,11 @@ if(ANIENGINE_ENABLE_CUDA)
     target_link_libraries(AniEngineCore PUBLIC CUDA::cudart)
 endif()
 
+# OpenCL support
+if(ANIENGINE_ENABLE_OPENCL AND OpenCL_FOUND)
+    target_link_libraries(AniEngineCore PUBLIC OpenCL::OpenCL)
+endif()
+
 # Compile definitions
 target_compile_definitions(AniEngineCore PUBLIC
     GLEW_STATIC
@@ -180,9 +266,45 @@ target_compile_definitions(AniEngineCore PUBLIC
     $<$<CONFIG:Release>:NDEBUG>
 )
 
+# Backend-specific compile definitions
+if(ANIENGINE_ENABLE_VULKAN)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_VULKAN)
+endif()
+
+if(ANIENGINE_ENABLE_HIPBLAS)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # HipBLAS uses CUDA define
+endif()
+
+if(ANIENGINE_ENABLE_METAL)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_METAL)
+endif()
+
+if(ANIENGINE_ENABLE_OPENCL)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_OPENCL)
+endif()
+
+if(ANIENGINE_ENABLE_SYCL)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_SYCL)
+endif()
+
+if(ANIENGINE_ENABLE_MUSA)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # MUSA uses CUDA define
+endif()
+
 message(STATUS "AniEngine configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Library type: ${BUILD_SHARED_LIBS}")
-message(STATUS "  CUDA support: ${ANIENGINE_ENABLE_CUDA}")
 message(STATUS "  Engine Plugin Manager: Included")
+message(STATUS "")
+message(STATUS "Stable Diffusion Backends:")
+message(STATUS "  CUDA: ${ANIENGINE_ENABLE_CUDA}")
+message(STATUS "  Vulkan: ${ANIENGINE_ENABLE_VULKAN}")
+message(STATUS "  HipBLAS: ${ANIENGINE_ENABLE_HIPBLAS}")
+message(STATUS "  Metal: ${ANIENGINE_ENABLE_METAL}")
+message(STATUS "  OpenCL: ${ANIENGINE_ENABLE_OPENCL}")
+message(STATUS "  SYCL: ${ANIENGINE_ENABLE_SYCL}")
+message(STATUS "  MUSA: ${ANIENGINE_ENABLE_MUSA}")
+if(ANIENGINE_ENABLE_FAST_SOFTMAX)
+    message(STATUS "  Fast Softmax: ENABLED")
+endif()
