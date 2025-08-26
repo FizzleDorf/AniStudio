@@ -273,16 +273,16 @@ namespace UISchema {
 			if (widgetType == "input_text") {
 				return RenderInputText(label, value, schema);
 			}
-			else if (widgetType == "zep_editor" || widgetType == "dynamic_textarea") {
+			else if (widgetType == "text_editor") {
 				return RenderZepEditor(label, value, schema);
 			}
-			else if (widgetType == "zep_editor_vim") {
+			else if (widgetType == "text_editor_vim") {
 				return RenderZepEditorVim(label, value, schema);
 			}
-			else if (widgetType == "zep_editor_standard") {
+			else if (widgetType == "text_editor_standard") {
 				return RenderZepEditorStandard(label, value, schema);
 			}
-			else if (widgetType == "textarea") {
+			else if (widgetType == "text_area") {
 				// Use regular ImGui textarea for simple multiline input
 				return RenderTextArea(label, value, schema);
 			}

@@ -10,6 +10,7 @@ option(BUILD_ANIPLUGINS "Build AniPlugins library" ON)
 option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries instead of static" OFF)
 option(SD_CUDA "Enable CUDA support for Stable Diffusion" OFF)
+option(SD_VULKAN "Enable CUDA support for Stable Diffusion" OFF)
 
 # Project-wide settings
 set(CMAKE_CXX_STANDARD 17)
@@ -35,6 +36,10 @@ if(SD_CUDA)
     if(NOT CUDAToolkit_FOUND)
         message(FATAL_ERROR "CUDA toolkit not found!")
     endif()
+endif()
+
+if(SD_VULKAN)
+    add_definitions(-DSD_USE_VULKAN)
 endif()
 
 # Include Conan toolchain

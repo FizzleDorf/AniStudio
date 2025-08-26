@@ -7,6 +7,7 @@ set PARALLEL_JOBS=8
 set CLEAN_BUILD=false
 set BUILD_SHARED=OFF
 set ENABLE_CUDA=OFF
+set ENABLE_VULKAN=OFF
 
 :: Parse command line arguments
 :parse_args
@@ -28,6 +29,11 @@ if /i "%~1"=="--shared" (
 )
 if /i "%~1"=="--cuda" (
     set ENABLE_CUDA=ON
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="--vk" (
+    set ENABLE_VULKAN=ON
     shift
     goto :parse_args
 )
@@ -94,7 +100,7 @@ cmake .. ^
     -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
     -DBUILD_SHARED_LIBS=%BUILD_SHARED% ^
     -DSD_CUDA=%ENABLE_CUDA% ^
-    -DSD_VULKAN=ON ^
+    -DSD_VULKAN=%ENABLE_VULKAN% ^
     -DBUILD_ANIENGINE=ON ^
     -DBUILD_ANISTUDIO=ON ^
     -DBUILD_ANIPLUGINS=ON ^

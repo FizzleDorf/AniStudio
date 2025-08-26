@@ -39,8 +39,8 @@ namespace ECS {
 					{"posPrompt", {
 						{"type", "string"},
 						{"title", "Positive"},
-						{"ui:widget", "zep_editor"},  // Use Zep editor with full functionality
-						{"ui:window", true},  // Create separate window for this property
+						{"ui:widget", "text_editor"},
+						{"ui:window", true},
 						{"ui:window_name", "Positive Prompt"},  // Window name
 						{"ui:options", {
 							{"maxLength", 8192},
@@ -50,7 +50,7 @@ namespace ECS {
 					{"negPrompt", {
 						{"type", "string"},
 						{"title", "Negative"},
-						{"ui:widget", "zep_editor"},  // Use Zep editor with full functionality
+						{"ui:widget", "text_editor"},
 						{"ui:window", true},  // Create separate window for this property
 						{"ui:window_name", "Negative Prompt"},  // Window name
 						{"ui:options", {
