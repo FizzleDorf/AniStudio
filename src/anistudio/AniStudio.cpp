@@ -13,7 +13,6 @@
  */
 
 #include "AniStudio.hpp"
-#include "StudioPluginManager.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
 #include "ImGuiSettingsUtil.hpp"
@@ -29,11 +28,6 @@ namespace ANI {
 		: initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
 		m_projectManager(viewManager, engineCore.GetEntityManager()), m_isShuttingDown(false) {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
-
-		studioPluginManager = std::make_unique<Plugin::StudioPluginManager>(
-			engineCore.GetEntityManager(),
-			viewManager
-			);
 
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
 	}
@@ -58,7 +52,6 @@ namespace ANI {
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
-		// viewManager.RegisterView<GUI::ModelView>("ModelView");
 
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
@@ -67,12 +60,7 @@ namespace ANI {
 			[]() -> GUI::ViewMetadata { return GUI::WorkspaceView::GetMetadata(); }
 		);
 
-		viewManager.RegisterViewWithFactory("PluginView", "Development",
-			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-			return std::make_unique<GUI::PluginView>(mgr, *studioPluginManager);
-		},
-			[]() -> GUI::ViewMetadata { return GUI::PluginView::GetMetadata(); }
-		);
+		// REMOVED: PluginView registration since we're not using plugins
 
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
 	}
@@ -221,12 +209,7 @@ namespace ANI {
 			ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
 			std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
 
-			std::cout << "[StudioCore] Initializing studio plugin manager..." << std::endl;
-			std::string pluginsDir = Utils::FilePaths::pluginPath;
-			if (!pluginsDir.empty()) {
-				studioPluginManager->StartHotReload(pluginsDir);
-				std::cout << "[StudioCore] Started studio plugin hot reload for: " << pluginsDir << std::endl;
-			}
+			// REMOVED: Plugin manager initialization
 
 			m_projectManagerView->Init();
 			m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
@@ -340,14 +323,7 @@ namespace ANI {
 
 			std::cout << "[StudioCore] Critical saves completed" << std::endl;
 
-			// STEP 3: NOW shutdown systems (after everything is saved)
-			std::cout << "[StudioCore] Shutting down plugin managers..." << std::endl;
-			if (studioPluginManager) {
-				studioPluginManager->StopHotReload();
-				studioPluginManager->UnloadAllPlugins();
-				studioPluginManager.reset();
-				std::cout << "[StudioCore] Studio plugin manager shutdown complete" << std::endl;
-			}
+			// STEP 3: REMOVED plugin manager shutdown
 
 			// STEP 4: Destroy UI components
 			m_menuBar.reset();
@@ -378,9 +354,7 @@ namespace ANI {
 		try {
 			engineCore.Update(deltaTime);
 
-			if (studioPluginManager) {
-				studioPluginManager->Update(deltaTime);
-			}
+			// REMOVED: Plugin manager update
 
 			if (m_menuBar) m_menuBar->Update(deltaTime);
 
@@ -475,26 +449,6 @@ namespace ANI {
 		}
 	}
 
-	bool StudioCore::LoadPlugin(const std::string& path) {
-		if (studioPluginManager) {
-			return studioPluginManager->LoadPlugin(path);
-		}
-		return false;
-	}
-
-	bool StudioCore::UnloadPlugin(const std::string& pluginName) {
-		if (studioPluginManager) {
-			return studioPluginManager->UnloadPlugin(pluginName);
-		}
-		return false;
-	}
-
-	std::vector<std::string> StudioCore::GetLoadedPlugins() const {
-		if (studioPluginManager) {
-			return studioPluginManager->GetLoadedPluginNames();
-		}
-		return {};
-	}
 
 	// SIMPLIFIED: Remove workspace management methods - ViewManager handles everything internally
 	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {

@@ -1,5 +1,5 @@
 /*
- * AniStudio.hpp - Simplified version with ViewManager handling workspace state
+ * AniStudio.hpp - Simplified version without PluginManager
  */
 #pragma once
 
@@ -18,11 +18,6 @@
 #include <unordered_map>
 
 #define ANI_STUDIO_API
-
- // Forward declarations
-namespace Plugin {
-	class StudioPluginManager;
-}
 
 namespace GUI {
 	class MenuBar;
@@ -46,8 +41,6 @@ namespace ANI {
 		// Manager access
 		ECS::EntityManager& GetEntityManager() { return engineCore.GetEntityManager(); }
 		GUI::ViewManager& GetViewManager() { return viewManager; }
-		Plugin::StudioPluginManager& GetStudioPluginManager() { return *studioPluginManager; }
-		Plugin::EnginePluginManager& GetEnginePluginManager() { return engineCore.GetEnginePluginManager(); }
 		ANI::ProjectManager& GetProjectManager() { return m_projectManager; }
 
 		// Studio state
@@ -64,11 +57,6 @@ namespace ANI {
 		//Workspace management
 		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
 		GUI::WorkspaceID GetActiveWorkspace() const;
-
-		// Plugin management (auto-detects and loads any plugin type)
-		bool LoadPlugin(const std::string& path);
-		bool UnloadPlugin(const std::string& pluginName);
-		std::vector<std::string> GetLoadedPlugins() const;
 
 		// Project event handlers
 		void OnProjectLoaded(const std::string& projectPath);
@@ -88,9 +76,6 @@ namespace ANI {
 		EngineCore engineCore;
 		GUI::ViewManager viewManager;
 		ANI::ProjectManager m_projectManager;
-
-		// Studio plugin manager (supports all plugin types)
-		std::unique_ptr<Plugin::StudioPluginManager> studioPluginManager;
 
 		// Standalone views
 		std::unique_ptr<GUI::MenuBar> m_menuBar;

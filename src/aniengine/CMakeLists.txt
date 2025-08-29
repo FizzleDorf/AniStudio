@@ -141,14 +141,6 @@ file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
 )
 
-# Add engine plugin manager source
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/EnginePluginManager.cpp")
-    list(APPEND ANIENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/EnginePluginManager.cpp")
-    message(STATUS "Added EnginePluginManager.cpp to AniEngineCore")
-else()
-    message(FATAL_ERROR "EnginePluginManager.cpp not found at ${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/")
-endif()
-
 # Add the main AniEngine implementation
 list(APPEND ANIENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/AniEngine.cpp")
 

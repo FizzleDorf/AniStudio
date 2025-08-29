@@ -64,7 +64,7 @@ namespace Plugin {
 	private:
 		ECS::EntityManager* entityManager;
 		GUI::ViewManager* viewManager;
-		PluginContext context;
+		PluginContext context; // This line was causing the error due to missing access specifier
 
 		std::unordered_map<std::string, PluginInfo> plugins;
 		mutable std::mutex pluginMutex;

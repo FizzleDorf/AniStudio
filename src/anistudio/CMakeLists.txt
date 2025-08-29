@@ -165,13 +165,6 @@ file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
 )
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/StudioPluginManager.cpp")
-    list(APPEND ANISTUDIO_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/StudioPluginManager.cpp")
-    message(STATUS "Added StudioPluginManager.cpp to AniStudioCore")
-else()
-    message(FATAL_ERROR "StudioPluginManager.cpp not found at ${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/")
-endif()
-
 # Add the main AniStudio implementation
 list(APPEND ANISTUDIO_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/AniStudio.cpp")
 

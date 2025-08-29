@@ -1,7 +1,6 @@
 #define ANI_ENGINE_EXPORTS
 
 #include "AniEngine.hpp"
-#include "EnginePluginManager.hpp"
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
@@ -15,9 +14,6 @@ namespace ANI {
 	EngineCore::EngineCore()
 		: initialized(false), running(false) {
 		std::cout << "[EngineCore] Constructor called" << std::endl;
-
-		// Create engine-only plugin manager (no GUI support)
-		enginePluginManager = std::make_unique<Plugin::EnginePluginManager>(entityManager);
 	}
 
 	EngineCore::~EngineCore() {
@@ -67,8 +63,6 @@ namespace ANI {
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
 
-		// entityManager.RegisterSystem<ECS::RenderSystem>();
-
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}
 
@@ -93,15 +87,10 @@ namespace ANI {
 			RegisterCoreComponents();
 			RegisterCoreSystems();
 
-			// The engine plugin manager is already initialized in constructor
-			std::cout << "[EngineCore] Engine plugin manager ready" << std::endl;
-
-			// NO auto-loading of plugins - they are loaded manually by user choice
-
 			initialized = true;
 			running = true;
 
-			std::cout << "[EngineCore] Initialized successfully with engine plugin system" << std::endl;
+			std::cout << "[EngineCore] Initialized successfully" << std::endl;
 			std::cout << "[EngineCore] EntityManager address: " << &entityManager << std::endl;
 			return true;
 		}
@@ -118,11 +107,6 @@ namespace ANI {
 
 		running = false;
 
-		// Shutdown plugins first
-		if (enginePluginManager) {
-			enginePluginManager->UnloadAllPlugins();
-		}
-
 		entityManager.Reset();
 		initialized = false;
 
@@ -133,33 +117,6 @@ namespace ANI {
 		if (!initialized) return;
 
 		entityManager.Update(deltaTime);
-
-		// Update engine plugin systems
-		if (enginePluginManager) {
-			enginePluginManager->Update(deltaTime);
-		}
 	}
 
-	bool EngineCore::LoadPlugin(const std::string& path) {
-		if (!enginePluginManager) {
-			std::cerr << "[EngineCore] Engine plugin manager not initialized!" << std::endl;
-			return false;
-		}
-		return enginePluginManager->LoadPlugin(path);
-	}
-
-	bool EngineCore::UnloadPlugin(const std::string& pluginName) {
-		if (!enginePluginManager) {
-			std::cerr << "[EngineCore] Engine plugin manager not initialized!" << std::endl;
-			return false;
-		}
-		return enginePluginManager->UnloadPlugin(pluginName);
-	}
-
-	std::vector<std::string> EngineCore::GetLoadedPlugins() const {
-		if (!enginePluginManager) {
-			return {};
-		}
-		return enginePluginManager->GetLoadedPluginNames();
-	}
 }

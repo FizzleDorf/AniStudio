@@ -26,21 +26,14 @@
 #include <memory>
 #include <string>
 
- // Forward declarations
-namespace Plugin {
-	class EnginePluginManager;
-}
-
-/*
-The ECS backend for AniStudio. The engine contains all the classes and logic for performing
-asset IO, machine learning inference and stored data structures. Components are the structured
-data that systems process asynchronously. Entities are vectors of components for ID and system
-processes. Entities and components can be accessed, added or removed via the EntityManager.
-The EntityManager should only be accessed on the thread it was created on (just like imgui
-and OpenGL).
-
-NOW INCLUDES: Engine-only plugin system for ECS components and systems.
-*/
+ /*
+ The ECS backend for AniStudio. The engine contains all the classes and logic for performing
+ asset IO, machine learning inference and stored data structures. Components are the structured
+ data that systems process asynchronously. Entities are vectors of components for ID and system
+ processes. Entities and components can be accessed, added or removed via the EntityManager.
+ The EntityManager should only be accessed on the thread it was created on (just like imgui
+ and OpenGL).
+ */
 
 namespace ANI {
 
@@ -57,12 +50,6 @@ namespace ANI {
 
 		// Manager access
 		ECS::EntityManager& GetEntityManager() { return entityManager; }
-		Plugin::EnginePluginManager& GetEnginePluginManager() { return *enginePluginManager; }
-
-		// Engine plugin management
-		bool LoadPlugin(const std::string& path);
-		bool UnloadPlugin(const std::string& pluginName);
-		std::vector<std::string> GetLoadedPlugins() const;
 
 		// Engine state
 		bool IsRunning() const { return running; }
@@ -77,7 +64,6 @@ namespace ANI {
 		bool running;
 
 		ECS::EntityManager entityManager;
-		std::unique_ptr<Plugin::EnginePluginManager> enginePluginManager;
 	};
 
 }

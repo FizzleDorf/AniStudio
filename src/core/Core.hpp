@@ -61,10 +61,6 @@ namespace ANI {
 		ECS::EntityManager& GetEntityManager() { return studioCore.GetEntityManager(); }
 		GUI::ViewManager& GetViewManager() { return studioCore.GetViewManager(); }
 
-		// FIXED: Use the correct plugin manager accessor methods
-		Plugin::StudioPluginManager& GetStudioPluginManager() { return studioCore.GetStudioPluginManager(); }
-		Plugin::EnginePluginManager& GetEnginePluginManager() { return studioCore.GetEnginePluginManager(); }
-
 		GLFWwindow* Window() const { return window; }
 		bool Run() const { return run; }
 
