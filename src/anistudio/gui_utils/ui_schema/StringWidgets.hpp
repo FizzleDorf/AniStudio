@@ -315,17 +315,11 @@ namespace UISchema {
 			configuredEditors.erase(uniqueKey);
 		}
 
-		// Clear focus
-		static void ClearFocus() {
-			Utils::ZepFocusTracker::ClearFocus();
-		}
-
 		// Cleanup all
 		static void Cleanup() {
 			GetEditorMap().clear();
 			GetConfigMap().clear();
 			GetConfiguredEditors().clear();
-			Utils::ZepFocusTracker::ClearFocus();
 		}
 	};
 

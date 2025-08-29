@@ -60,8 +60,6 @@ namespace ANI {
 			[]() -> GUI::ViewMetadata { return GUI::WorkspaceView::GetMetadata(); }
 		);
 
-		// REMOVED: PluginView registration since we're not using plugins
-
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
 	}
 
@@ -173,34 +171,28 @@ namespace ANI {
 		try {
 			std::cout << "[StudioCore] Initializing..." << std::endl;
 
+			// Initialize engine core first
 			if (!engineCore.Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
 
-			// Set ImGui ini file path to data directory BEFORE loading settings
-			std::cout << "[StudioCore] Setting ImGui ini file path..." << std::endl;
-			ImGuiIO& io = ImGui::GetIO();
-
-			// Set ini file to save in data directory
-			std::string dataDir = Utils::FilePaths::GetExecutableDirectory() + "/../data";
-			std::string iniPath = dataDir + "/imgui.ini";
-
-			// Create data directory if needed
-			std::filesystem::create_directories(dataDir);
-
-			// Set persistent path for ImGui (must be static/global string)
-			static std::string persistentIniPath = std::filesystem::absolute(iniPath).string();
-			io.IniFilename = persistentIniPath.c_str();
-			std::cout << "[StudioCore] ImGui ini will save to: " << persistentIniPath << std::endl;
-
-			// Load ImGui IO settings AFTER setting ini path
-			std::cout << "[StudioCore] Loading ImGui IO settings..." << std::endl;
-			Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
+			// CRITICAL: Load ImGui settings using the existing utility
+			// This must happen before any ImGui rendering or view creation
+			std::cout << "[StudioCore] Loading ImGui settings using existing utility..." << std::endl;
+			try {
+				Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
+				std::cout << "[StudioCore] ImGui settings loaded successfully" << std::endl;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] Warning: Failed to load ImGui settings: " << e.what() << std::endl;
+				std::cout << "[StudioCore] Using default ImGui settings" << std::endl;
+			}
 
 			// Set entity manager reference for the ViewManager
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
 
+			// Register views and setup callbacks
 			RegisterCoreViews();
 			SetupProjectCallbacks();
 
@@ -209,8 +201,7 @@ namespace ANI {
 			ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
 			std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
 
-			// REMOVED: Plugin manager initialization
-
+			// Initialize UI components
 			m_projectManagerView->Init();
 			m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
 
@@ -292,14 +283,14 @@ namespace ANI {
 						std::cout << "[StudioCore] Project saved successfully with all workspaces" << std::endl;
 					}
 
-					Utils::ImGuiStateUtils::SaveProjectImGuiLayout(m_projectManager.GetCurrentProjectPath());
+					// Project ImGui layout saving - method doesn't exist in current utility
 				}
 				catch (const std::exception& e) {
 					std::cerr << "[StudioCore] Exception saving project: " << e.what() << std::endl;
 				}
 			}
 
-			// STEP 2: Save application state
+			// STEP 2: Save application state including ImGui settings
 			std::cout << "[StudioCore] Saving application state..." << std::endl;
 
 			SyncWindowStateFromGLFW();
@@ -307,6 +298,17 @@ namespace ANI {
 			std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
 			m_windowState.SaveToFile(defaultPath);
 			std::cout << "[StudioCore] Saved window state as default" << std::endl;
+
+			// Save ImGui settings using existing utility
+			try {
+				ImGuiIO& io = ImGui::GetIO();
+				std::string settingsPath = Utils::FilePaths::dataPath + "/settings/imgui_render_settings.json";
+				Utils::ImGuiSettingsUtil::SaveToFile(settingsPath, io);
+				std::cout << "[StudioCore] ImGui settings saved successfully" << std::endl;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] Warning: Failed to save ImGui settings: " << e.what() << std::endl;
+			}
 
 			std::cout << "[StudioCore] ImGui will auto-save layout on shutdown" << std::endl;
 
@@ -323,17 +325,15 @@ namespace ANI {
 
 			std::cout << "[StudioCore] Critical saves completed" << std::endl;
 
-			// STEP 3: REMOVED plugin manager shutdown
-
-			// STEP 4: Destroy UI components
+			// STEP 3: Destroy UI components
 			m_menuBar.reset();
 			m_projectManagerView.reset();
 
-			// STEP 5: ONLY NOW reset the view manager (after everything is saved)
+			// STEP 4: ONLY NOW reset the view manager (after everything is saved)
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
 			viewManager.FullReset();
 
-			// STEP 6: Finally shutdown engine core
+			// STEP 5: Finally shutdown engine core
 			std::cout << "[StudioCore] Shutting down engine core..." << std::endl;
 			engineCore.Shutdown();
 
@@ -353,8 +353,6 @@ namespace ANI {
 
 		try {
 			engineCore.Update(deltaTime);
-
-			// REMOVED: Plugin manager update
 
 			if (m_menuBar) m_menuBar->Update(deltaTime);
 
@@ -448,7 +446,6 @@ namespace ANI {
 			std::cerr << "[StudioCore] Render error: " << e.what() << std::endl;
 		}
 	}
-
 
 	// SIMPLIFIED: Remove workspace management methods - ViewManager handles everything internally
 	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {

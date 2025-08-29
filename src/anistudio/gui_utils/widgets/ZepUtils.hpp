@@ -37,37 +37,12 @@
 
 namespace Utils {
 
-	class ZepFocusTracker {
-	private:
-		static uintptr_t& GetFocusedInstance() {
-			static uintptr_t focusedInstance = 0;
-			return focusedInstance;
-		}
-
+	class ZepTextEditor {
 	public:
-		static void SetFocused(uintptr_t id) {
-			GetFocusedInstance() = id;
+		ZepTextEditor() : isInitialized(false) {
 		}
 
-		static bool IsFocused(uintptr_t id) {
-			return GetFocusedInstance() == id;
-		}
-
-		static void ClearFocus() {
-			GetFocusedInstance() = 0;
-		}
-	};
-
-	class ZepTextEditor : public Zep::IZepComponent {
-	public:
-		ZepTextEditor() : instanceId(reinterpret_cast<uintptr_t>(this)), isInitialized(false) {
-		}
-
-		~ZepTextEditor() {
-			if (editor) {
-				editor->UnRegisterCallback(this);
-			}
-		}
+		~ZepTextEditor() = default;
 
 		bool Initialize() {
 			if (isInitialized) {
@@ -81,9 +56,6 @@ namespace Utils {
 					rootPath,
 					Zep::NVec2f(1.0f, 1.0f)
 					);
-
-				// Register callback
-				editor->RegisterCallback(this);
 
 				// Initialize with default buffer from data/defaults/buffer.txt
 				LoadDefaultBuffer();
@@ -110,8 +82,6 @@ namespace Utils {
 
 			if (createChildWindow) {
 				// Schema rendering path - create child window with menu bar support
-				std::string childId = "ZepEditor##" + std::to_string(instanceId);
-
 				ImGuiWindowFlags childFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 				if (showMenuBar) {
 					childFlags |= ImGuiWindowFlags_MenuBar;
@@ -124,7 +94,7 @@ namespace Utils {
 				availableSize.x = std::max(100.0f, availableSize.x);
 				availableSize.y = std::max(100.0f, availableSize.y);
 
-				if (ImGui::BeginChild(childId.c_str(), availableSize, true, childFlags)) {
+				if (ImGui::BeginChild("ZepEditor", availableSize, true, childFlags)) {
 					RenderEditor();
 				}
 				ImGui::EndChild();
@@ -482,28 +452,6 @@ namespace Utils {
 			return currentSearchIndex;
 		}
 
-		// Required by IZepComponent interface
-		Zep::ZepEditor& GetEditor() const override {
-			return *editor;
-		}
-
-		uintptr_t GetInstanceId() const { return instanceId; }
-
-		// Handle clipboard messages
-		void Notify(std::shared_ptr<Zep::ZepMessage> message) override {
-			if (message->messageId == Zep::Msg::GetClipBoard) {
-				const char* clipboardText = ImGui::GetClipboardText();
-				if (clipboardText) {
-					message->str = std::string(clipboardText);
-					message->handled = true;
-				}
-			}
-			else if (message->messageId == Zep::Msg::SetClipBoard) {
-				ImGui::SetClipboardText(message->str.c_str());
-				message->handled = true;
-			}
-		}
-
 	private:
 		// Load default buffer from data/defaults/buffer.txt
 		void LoadDefaultBuffer() {
@@ -664,16 +612,9 @@ namespace Utils {
 
 		// Internal render method that handles the actual editor rendering
 		void RenderEditor() {
-			// Handle focus
-			bool isFocused = ZepFocusTracker::IsFocused(instanceId);
-			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0)) {
-				ZepFocusTracker::SetFocused(instanceId);
-				isFocused = true;
-			}
-
-			// Handle Ctrl+F hotkey for search toggle (only when editor is focused and search input is not active)
-			if (isFocused && !searchInputFocused && ImGui::IsKeyPressed(ImGuiKey_F) && ImGui::GetIO().KeyCtrl) {
-				ToggleSearchBox();
+			// Handle keyboard shortcuts when window is focused
+			if (ImGui::IsWindowFocused()) {
+				HandleKeyboardShortcuts();
 			}
 
 			// Handle right-click context menu
@@ -696,13 +637,6 @@ namespace Utils {
 				RenderSearchPanel();
 			}
 
-			editor->isFocused = isFocused;
-
-			// Process mouse selection if focused
-			if (isFocused) {
-				HandleMouseSelection();
-			}
-
 			// Get display region
 			auto min = ImGui::GetCursorScreenPos();
 			auto max = ImGui::GetContentRegionAvail();
@@ -713,24 +647,407 @@ namespace Utils {
 			max.y = min.y + max.y;
 			editor->SetDisplayRegion(Zep::NVec2f(min.x, min.y), Zep::NVec2f(max.x, max.y));
 
-			// Handle input capture for hotkeys - but only when search input is not focused
-			if (isFocused && !searchInputFocused) {
-				auto& io = ImGui::GetIO();
-				io.WantCaptureKeyboard = false;
-				io.WantCaptureMouse = false;
-			}
+			// Handle mouse input for text selection
+			HandleMouseInput();
 
-			// Render Zep editor
+			// Render Zep editor with vanilla implementation
 			editor->Display();
-			if (isFocused && !searchInputFocused) {
-				editor->HandleInput();
+			editor->HandleInput();
+
+			// Apply any scheduled selections after Zep has processed input
+			HandleScheduledSelections();
+		}
+
+		// Handle mouse input for text selection
+		void HandleMouseInput() {
+			if (!ImGui::IsWindowHovered()) return;
+
+			auto& io = ImGui::GetIO();
+			Zep::NVec2f mousePos(io.MousePos.x, io.MousePos.y);
+			double currentTime = ImGui::GetTime();
+
+			// Handle single clicks with multi-click detection
+			if (ImGui::IsMouseClicked(0)) {
+				HandleMouseClick(mousePos, currentTime);
 			}
 
-			// Restore input capture - but only when search input is not focused
-			if (isFocused && !searchInputFocused) {
-				auto& io = ImGui::GetIO();
-				io.WantCaptureKeyboard = true;
-				io.WantCaptureMouse = true;
+			// Let Zep handle all mouse input for proper drag selection
+			// This will override our multi-click selection if the user drags
+			if (ImGui::IsMouseClicked(0)) {
+				editor->OnMouseDown(mousePos, Zep::ZepMouseButton::Left);
+			}
+
+			if (ImGui::IsMouseDragging(0)) {
+				editor->OnMouseMove(mousePos);
+			}
+
+			if (ImGui::IsMouseReleased(0)) {
+				editor->OnMouseUp(mousePos, Zep::ZepMouseButton::Left);
+			}
+		}
+
+		// Handle mouse clicks with multi-click detection
+		void HandleMouseClick(const Zep::NVec2f& mousePos, double currentTime) {
+			// Check if this is a consecutive click
+			float distance = 0.0f;
+			bool isConsecutiveClick = false;
+
+			if (currentTime - lastClickTime < DOUBLE_CLICK_TIME) {
+				distance = std::sqrt(
+					(mousePos.x - lastClickPosition.x) * (mousePos.x - lastClickPosition.x) +
+					(mousePos.y - lastClickPosition.y) * (mousePos.y - lastClickPosition.y)
+				);
+
+				if (distance < CLICK_POSITION_TOLERANCE) {
+					consecutiveClicks++;
+					isConsecutiveClick = true;
+				}
+			}
+
+			if (!isConsecutiveClick) {
+				consecutiveClicks = 1;
+			}
+
+			lastClickTime = currentTime;
+			lastClickPosition = mousePos;
+
+			// Handle multi-click selections after a short delay to ensure Zep has positioned the cursor
+			if (consecutiveClicks == 2) {
+				// Schedule word selection for next frame
+				scheduleWordSelection = true;
+			}
+			else if (consecutiveClicks >= 3) {
+				// Schedule line selection for next frame  
+				scheduleLineSelection = true;
+				consecutiveClicks = 3; // Cap at 3
+			}
+		}
+
+		// Apply scheduled selections (called after Zep processes input)
+		void HandleScheduledSelections() {
+			if (scheduleWordSelection) {
+				SelectWordAtCursor();
+				scheduleWordSelection = false;
+			}
+
+			if (scheduleLineSelection) {
+				SelectLineAtCursor();
+				scheduleLineSelection = false;
+			}
+		}
+
+		// Select word at current cursor position
+		void SelectWordAtCursor() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				auto* window = editor->GetActiveWindow();
+				if (!buffer || !window) return;
+
+				auto cursorPos = window->GetBufferCursor();
+
+				// Find word boundaries
+				auto wordStart = cursorPos;
+				auto wordEnd = cursorPos;
+
+				// Find start of word
+				while (wordStart > buffer->Begin()) {
+					auto prevIter = wordStart;
+					prevIter.Move(-1);
+					char ch = *prevIter;
+					if (!IsWordCharacter(ch)) break;
+					wordStart = prevIter;
+				}
+
+				// Find end of word
+				while (wordEnd < buffer->End()) {
+					char ch = *wordEnd;
+					if (!IsWordCharacter(ch)) break;
+					wordEnd.Move(1);
+				}
+
+				// Select the word
+				if (wordStart != wordEnd) {
+					buffer->SetSelection(Zep::GlyphRange(wordStart, wordEnd));
+					window->SetBufferCursor(wordEnd);
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error selecting word: " << e.what() << std::endl;
+			}
+		}
+
+		// Select line at current cursor position
+		void SelectLineAtCursor() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				auto* window = editor->GetActiveWindow();
+				if (!buffer || !window) return;
+
+				auto cursorPos = window->GetBufferCursor();
+
+				// Find line boundaries
+				auto lineStart = cursorPos;
+				auto lineEnd = cursorPos;
+
+				// Find start of line
+				while (lineStart > buffer->Begin()) {
+					auto prevIter = lineStart;
+					prevIter.Move(-1);
+					if (*prevIter == '\n') {
+						break;
+					}
+					lineStart = prevIter;
+				}
+
+				// Find end of line (include the newline character)
+				while (lineEnd < buffer->End()) {
+					if (*lineEnd == '\n') {
+						lineEnd.Move(1); // Include the newline
+						break;
+					}
+					lineEnd.Move(1);
+				}
+
+				// Select the entire line
+				if (lineStart != lineEnd) {
+					buffer->SetSelection(Zep::GlyphRange(lineStart, lineEnd));
+					window->SetBufferCursor(lineEnd);
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error selecting line: " << e.what() << std::endl;
+			}
+		}
+
+		// Check if character is part of a word (for word selection)
+		bool IsWordCharacter(char ch) {
+			return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
+		}
+
+		// Handle keyboard shortcuts
+		void HandleKeyboardShortcuts() {
+			auto& io = ImGui::GetIO();
+
+			// Handle Delete and Backspace for selected text first
+			if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+				DeleteSelection();
+				return; // Don't process other shortcuts
+			}
+
+			if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+				DeleteSelection();
+				return; // Don't process other shortcuts
+			}
+
+			// Ctrl+F - Toggle search
+			if (ImGui::IsKeyPressed(ImGuiKey_F) && io.KeyCtrl) {
+				ToggleSearchBox();
+			}
+
+			// Ctrl+A - Select all
+			if (ImGui::IsKeyPressed(ImGuiKey_A) && io.KeyCtrl) {
+				SelectAll();
+			}
+
+			// Ctrl+C - Copy
+			if (ImGui::IsKeyPressed(ImGuiKey_C) && io.KeyCtrl) {
+				CopySelection();
+			}
+
+			// Ctrl+V - Paste
+			if (ImGui::IsKeyPressed(ImGuiKey_V) && io.KeyCtrl) {
+				PasteAtCursor();
+			}
+
+			// Ctrl+X - Cut
+			if (ImGui::IsKeyPressed(ImGuiKey_X) && io.KeyCtrl) {
+				CutSelection();
+			}
+
+			// Ctrl+Z - Undo
+			if (ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyCtrl && !io.KeyShift) {
+				Undo();
+			}
+
+			// Ctrl+Y or Ctrl+Shift+Z - Redo
+			if ((ImGui::IsKeyPressed(ImGuiKey_Y) && io.KeyCtrl) ||
+				(ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyCtrl && io.KeyShift)) {
+				Redo();
+			}
+
+			// Ctrl+N - New file
+			if (ImGui::IsKeyPressed(ImGuiKey_N) && io.KeyCtrl) {
+				NewFile();
+			}
+
+			// Ctrl+O - Open file
+			if (ImGui::IsKeyPressed(ImGuiKey_O) && io.KeyCtrl) {
+				OpenLoadDialog();
+			}
+
+			// Ctrl+S - Save file
+			if (ImGui::IsKeyPressed(ImGuiKey_S) && io.KeyCtrl && !io.KeyShift) {
+				SaveFile();
+			}
+
+			// Ctrl+Shift+S - Save As
+			if (ImGui::IsKeyPressed(ImGuiKey_S) && io.KeyCtrl && io.KeyShift) {
+				OpenSaveDialog();
+			}
+		}
+
+		// Delete current selection or single character
+		void DeleteSelection() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					if (buffer->HasSelection()) {
+						// Delete the selected text
+						auto selection = buffer->GetInclusiveSelection();
+						Zep::ChangeRecord record;
+						buffer->Delete(selection.first, selection.second, record);
+						buffer->ClearSelection();
+					}
+					else {
+						// Delete single character at cursor (like normal delete key)
+						auto* window = editor->GetActiveWindow();
+						if (window) {
+							auto cursor = window->GetBufferCursor();
+							if (cursor < buffer->End()) {
+								auto nextChar = cursor;
+								nextChar.Move(1);
+								Zep::ChangeRecord record;
+								buffer->Delete(cursor, nextChar, record);
+							}
+						}
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error deleting selection: " << e.what() << std::endl;
+			}
+		}
+
+		// Undo last action
+		void Undo() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					auto& undoStack = buffer->GetUndoStack();
+					auto& redoStack = buffer->GetRedoStack();
+
+					if (!undoStack.empty()) {
+						auto command = undoStack.top();
+						undoStack.pop();
+
+						command->Undo();
+						redoStack.push(command);
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error during undo: " << e.what() << std::endl;
+			}
+		}
+
+		// Redo last undone action
+		void Redo() {
+			if (!editor || !isInitialized) return;
+
+			try {
+				auto* buffer = editor->GetActiveBuffer();
+				if (buffer) {
+					auto& undoStack = buffer->GetUndoStack();
+					auto& redoStack = buffer->GetRedoStack();
+
+					if (!redoStack.empty()) {
+						auto command = redoStack.top();
+						redoStack.pop();
+
+						command->Redo();
+						undoStack.push(command);
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Error during redo: " << e.what() << std::endl;
+			}
+		}
+
+		// Check if undo is available
+		bool CanUndo() const {
+			if (!editor || !isInitialized) return false;
+			auto* buffer = editor->GetActiveBuffer();
+			return buffer ? !buffer->GetUndoStack().empty() : false;
+		}
+
+		// Check if redo is available
+		bool CanRedo() const {
+			if (!editor || !isInitialized) return false;
+			auto* buffer = editor->GetActiveBuffer();
+			return buffer ? !buffer->GetRedoStack().empty() : false;
+		}
+
+		// Copy current selection to clipboard
+		void CopySelection() {
+			if (!editor || !isInitialized) return;
+
+			auto* buffer = editor->GetActiveBuffer();
+			if (buffer && buffer->HasSelection()) {
+				auto selection = buffer->GetInclusiveSelection();
+				std::string selectedText = buffer->GetBufferText(selection.first, selection.second);
+				ImGui::SetClipboardText(selectedText.c_str());
+			}
+		}
+
+		// Cut current selection to clipboard
+		void CutSelection() {
+			if (!editor || !isInitialized) return;
+
+			auto* buffer = editor->GetActiveBuffer();
+			if (buffer && buffer->HasSelection()) {
+				auto selection = buffer->GetInclusiveSelection();
+				std::string selectedText = buffer->GetBufferText(selection.first, selection.second);
+				ImGui::SetClipboardText(selectedText.c_str());
+
+				// Delete the selected text
+				Zep::ChangeRecord record;
+				buffer->Delete(selection.first, selection.second, record);
+				buffer->ClearSelection();
+			}
+		}
+
+		// Paste clipboard content at current cursor position
+		void PasteAtCursor() {
+			if (!editor || !isInitialized) return;
+
+			const char* clipText = ImGui::GetClipboardText();
+			if (clipText) {
+				auto* buffer = editor->GetActiveBuffer();
+				auto* window = editor->GetActiveWindow();
+				if (buffer && window) {
+					auto cursorPos = window->GetBufferCursor();
+					Zep::ChangeRecord record;
+					buffer->Insert(cursorPos, std::string(clipText), record);
+				}
+			}
+		}
+
+		// Select all text in the buffer
+		void SelectAll() {
+			if (!editor || !isInitialized) return;
+
+			auto* buffer = editor->GetActiveBuffer();
+			if (buffer) {
+				buffer->SetSelection(Zep::GlyphRange(buffer->Begin(), buffer->End()));
 			}
 		}
 
@@ -759,9 +1076,6 @@ namespace Utils {
 				}
 
 				bool inputChanged = ImGui::InputText("##SearchInput", searchBuffer, sizeof(searchBuffer), ImGuiInputTextFlags_EnterReturnsTrue);
-				bool searchInputActive = ImGui::IsItemActive();
-
-				searchInputFocused = searchInputActive;
 
 				if (inputChanged) {
 					SetSearchTerm(searchBuffer);
@@ -831,11 +1145,11 @@ namespace Utils {
 					ImGui::SetTooltip("Close Search (Escape)");
 				}
 
-				if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !searchInputActive) {
+				if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 					ShowSearchBox(false);
 				}
 
-				if (!searchInputActive && ImGui::IsKeyPressed(ImGuiKey_F3)) {
+				if (ImGui::IsKeyPressed(ImGuiKey_F3)) {
 					if (ImGui::GetIO().KeyShift) {
 						FindPrevious();
 					}
@@ -885,31 +1199,25 @@ namespace Utils {
 				}
 
 				if (ImGui::BeginMenu("Edit")) {
+					if (ImGui::MenuItem("Undo", "Ctrl+Z", false, CanUndo())) {
+						Undo();
+					}
+					if (ImGui::MenuItem("Redo", "Ctrl+Y", false, CanRedo())) {
+						Redo();
+					}
+					ImGui::Separator();
 					if (ImGui::MenuItem("Copy", "Ctrl+C")) {
-						auto* buffer = editor->GetActiveBuffer();
-						if (buffer && buffer->HasSelection()) {
-							auto selection = buffer->GetInclusiveSelection();
-							std::string selectedText = buffer->GetBufferText(selection.first, selection.second);
-							ImGui::SetClipboardText(selectedText.c_str());
-						}
+						CopySelection();
+					}
+					if (ImGui::MenuItem("Cut", "Ctrl+X")) {
+						CutSelection();
 					}
 					if (ImGui::MenuItem("Paste", "Ctrl+V")) {
-						const char* clipText = ImGui::GetClipboardText();
-						if (clipText) {
-							auto* buffer = editor->GetActiveBuffer();
-							auto* window = editor->GetActiveWindow();
-							if (buffer && window) {
-								auto cursorPos = window->GetBufferCursor();
-								Zep::ChangeRecord record;
-								buffer->Insert(cursorPos, std::string(clipText), record);
-							}
-						}
+						PasteAtCursor();
 					}
+					ImGui::Separator();
 					if (ImGui::MenuItem("Select All", "Ctrl+A")) {
-						auto* buffer = editor->GetActiveBuffer();
-						if (buffer) {
-							buffer->SetSelection(Zep::GlyphRange(buffer->Begin(), buffer->End()));
-						}
+						SelectAll();
 					}
 					ImGui::EndMenu();
 				}
@@ -1089,33 +1397,29 @@ namespace Utils {
 
 			ImGui::Separator();
 
+			if (ImGui::MenuItem("Undo", "Ctrl+Z", false, CanUndo())) {
+				Undo();
+			}
+			if (ImGui::MenuItem("Redo", "Ctrl+Y", false, CanRedo())) {
+				Redo();
+			}
+
+			ImGui::Separator();
+
 			if (ImGui::MenuItem("Copy", "Ctrl+C")) {
-				auto* buffer = editor->GetActiveBuffer();
-				if (buffer && buffer->HasSelection()) {
-					auto selection = buffer->GetInclusiveSelection();
-					std::string selectedText = buffer->GetBufferText(selection.first, selection.second);
-					ImGui::SetClipboardText(selectedText.c_str());
-				}
+				CopySelection();
+			}
+
+			if (ImGui::MenuItem("Cut", "Ctrl+X")) {
+				CutSelection();
 			}
 
 			if (ImGui::MenuItem("Paste", "Ctrl+V")) {
-				const char* clipText = ImGui::GetClipboardText();
-				if (clipText) {
-					auto* buffer = editor->GetActiveBuffer();
-					auto* window = editor->GetActiveWindow();
-					if (buffer && window) {
-						auto cursorPos = window->GetBufferCursor();
-						Zep::ChangeRecord record;
-						buffer->Insert(cursorPos, std::string(clipText), record);
-					}
-				}
+				PasteAtCursor();
 			}
 
 			if (ImGui::MenuItem("Select All", "Ctrl+A")) {
-				auto* buffer = editor->GetActiveBuffer();
-				if (buffer) {
-					buffer->SetSelection(Zep::GlyphRange(buffer->Begin(), buffer->End()));
-				}
+				SelectAll();
 			}
 
 			ImGui::Separator();
@@ -1281,275 +1585,8 @@ namespace Utils {
 			}
 		}
 
-		void HandleMouseSelection() {
-			auto& io = ImGui::GetIO();
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return;
-
-			Zep::NVec2f mousePos = Zep::NVec2f(io.MousePos.x, io.MousePos.y);
-			double currentTime = ImGui::GetTime();
-
-			if (ImGui::IsMouseClicked(0)) {
-				HandleMouseClick(mousePos, currentTime);
-			}
-
-			if (ImGui::IsMouseDragging(0, 2.0f) && !isDoubleClickPending && !isTripleClickPending) {
-				HandleMouseDrag(mousePos);
-			}
-
-			if (ImGui::IsMouseReleased(0)) {
-				HandleMouseRelease();
-			}
-		}
-
-		void HandleMouseClick(const Zep::NVec2f& mousePos, double currentTime) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return;
-
-			bool isConsecutiveClick = false;
-			float distance = std::sqrt(
-				(mousePos.x - lastClickPosition.x) * (mousePos.x - lastClickPosition.x) +
-				(mousePos.y - lastClickPosition.y) * (mousePos.y - lastClickPosition.y)
-			);
-
-			if (currentTime - lastClickTime < DOUBLE_CLICK_TIME && distance < CLICK_POSITION_TOLERANCE) {
-				consecutiveClicks++;
-				isConsecutiveClick = true;
-			}
-			else {
-				consecutiveClicks = 1;
-			}
-
-			lastClickTime = currentTime;
-			lastClickPosition = mousePos;
-
-			if (editor->OnMouseDown(mousePos, Zep::ZepMouseButton::Left)) {
-				auto* window = editor->GetActiveWindow();
-				if (window) {
-					Zep::GlyphIterator clickPos = window->GetBufferCursor();
-
-					switch (consecutiveClicks) {
-					case 1:
-						HandleSingleClick(clickPos);
-						break;
-					case 2:
-						HandleDoubleClick(clickPos);
-						break;
-					case 3:
-					default:
-						HandleTripleClick(clickPos);
-						consecutiveClicks = 3;
-						break;
-					}
-				}
-			}
-			else {
-				auto* window = editor->GetActiveWindow();
-				if (window) {
-					Zep::GlyphIterator clickPos = GetIteratorFromMousePos(mousePos);
-
-					switch (consecutiveClicks) {
-					case 1:
-						HandleSingleClick(clickPos);
-						break;
-					case 2:
-						HandleDoubleClick(clickPos);
-						break;
-					case 3:
-					default:
-						HandleTripleClick(clickPos);
-						consecutiveClicks = 3;
-						break;
-					}
-				}
-			}
-		}
-
-		void HandleSingleClick(const Zep::GlyphIterator& clickPos) {
-			auto* window = editor->GetActiveWindow();
-			if (!window) return;
-
-			window->SetBufferCursor(clickPos);
-
-			auto* buffer = editor->GetActiveBuffer();
-			if (buffer) {
-				buffer->ClearSelection();
-			}
-
-			dragStartPos = clickPos;
-			dragCurrentPos = clickPos;
-			isDragging = false;
-		}
-
-		void HandleDoubleClick(const Zep::GlyphIterator& clickPos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return;
-
-			auto wordStart = FindWordStart(clickPos);
-			auto wordEnd = FindWordEnd(clickPos);
-
-			if (wordStart != wordEnd) {
-				buffer->SetSelection(Zep::GlyphRange(wordStart, wordEnd));
-			}
-
-			auto* window = editor->GetActiveWindow();
-			if (window) {
-				window->SetBufferCursor(wordEnd);
-			}
-
-			isDoubleClickPending = true;
-		}
-
-		void HandleTripleClick(const Zep::GlyphIterator& clickPos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return;
-
-			auto lineStart = FindLineStart(clickPos);
-			auto lineEnd = FindLineEnd(clickPos);
-
-			if (lineStart != lineEnd) {
-				buffer->SetSelection(Zep::GlyphRange(lineStart, lineEnd));
-			}
-
-			auto* window = editor->GetActiveWindow();
-			if (window) {
-				window->SetBufferCursor(lineEnd);
-			}
-
-			isTripleClickPending = true;
-		}
-
-		void HandleMouseDrag(const Zep::NVec2f& mousePos) {
-			if (isDoubleClickPending || isTripleClickPending) {
-				return;
-			}
-
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return;
-
-			isDragging = true;
-
-			Zep::GlyphIterator currentPos = GetIteratorFromMousePos(mousePos);
-			dragCurrentPos = currentPos;
-
-			Zep::GlyphIterator selStart = dragStartPos;
-			Zep::GlyphIterator selEnd = dragCurrentPos;
-
-			if (selEnd < selStart) {
-				std::swap(selStart, selEnd);
-			}
-
-			buffer->SetSelection(Zep::GlyphRange(selStart, selEnd));
-
-			auto* window = editor->GetActiveWindow();
-			if (window) {
-				window->SetBufferCursor(dragCurrentPos);
-			}
-		}
-
-		void HandleMouseRelease() {
-			isDragging = false;
-			isDoubleClickPending = false;
-			isTripleClickPending = false;
-		}
-
-		Zep::GlyphIterator GetIteratorFromMousePos(const Zep::NVec2f& mousePos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return buffer->Begin();
-
-			auto* window = editor->GetActiveWindow();
-			if (!window) return buffer->Begin();
-
-			try {
-				auto currentCursor = window->GetBufferCursor();
-				return currentCursor;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "Error converting mouse position: " << e.what() << std::endl;
-				return buffer->Begin();
-			}
-		}
-
-		Zep::GlyphIterator FindWordStart(const Zep::GlyphIterator& pos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return pos;
-
-			auto iter = pos;
-
-			while (iter > buffer->Begin()) {
-				auto prevIter = iter;
-				prevIter.Move(-1);
-				char ch = *prevIter;
-
-				if (!IsWordCharacter(ch)) {
-					break;
-				}
-				iter = prevIter;
-			}
-
-			return iter;
-		}
-
-		Zep::GlyphIterator FindWordEnd(const Zep::GlyphIterator& pos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return pos;
-
-			auto iter = pos;
-
-			while (iter < buffer->End()) {
-				char ch = *iter;
-
-				if (!IsWordCharacter(ch)) {
-					break;
-				}
-				iter.Move(1);
-			}
-
-			return iter;
-		}
-
-		Zep::GlyphIterator FindLineStart(const Zep::GlyphIterator& pos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return pos;
-
-			auto iter = pos;
-
-			while (iter > buffer->Begin()) {
-				auto prevIter = iter;
-				prevIter.Move(-1);
-				if (*prevIter == '\n') {
-					break;
-				}
-				iter = prevIter;
-			}
-
-			return iter;
-		}
-
-		Zep::GlyphIterator FindLineEnd(const Zep::GlyphIterator& pos) {
-			auto* buffer = editor->GetActiveBuffer();
-			if (!buffer) return pos;
-
-			auto iter = pos;
-
-			while (iter < buffer->End()) {
-				if (*iter == '\n') {
-					iter.Move(1);
-					break;
-				}
-				iter.Move(1);
-			}
-
-			return iter;
-		}
-
-		bool IsWordCharacter(char ch) {
-			return std::isalnum(ch) || ch == '_';
-		}
-
 	private:
 		std::unique_ptr<Zep::ZepEditor_ImGui> editor;
-		uintptr_t instanceId;
 		bool isInitialized;
 
 		// Configuration state
@@ -1564,7 +1601,6 @@ namespace Utils {
 		std::string currentMode = "standard";
 		bool showSearchBox = false;
 		bool searchBoxJustOpened = false;
-		bool searchInputFocused = false;
 		std::string currentSearchTerm;
 		float currentFontSize = 14.0f;
 
@@ -1578,19 +1614,15 @@ namespace Utils {
 		std::vector<std::pair<size_t, size_t>> searchResults;
 		int currentSearchIndex = -1;
 
-		// Mouse selection state
-		bool isDragging = false;
-		bool isDoubleClickPending = false;
-		bool isTripleClickPending = false;
-		Zep::GlyphIterator dragStartPos;
-		Zep::GlyphIterator dragCurrentPos;
+		// Mouse click tracking for multi-click selection
 		double lastClickTime = 0.0;
 		int consecutiveClicks = 0;
 		Zep::NVec2f lastClickPosition;
+		bool scheduleWordSelection = false;
+		bool scheduleLineSelection = false;
 
-		// Mouse selection timing constants
+		// Click timing constants
 		static constexpr double DOUBLE_CLICK_TIME = 0.5;
-		static constexpr double TRIPLE_CLICK_TIME = 0.5;
 		static constexpr float CLICK_POSITION_TOLERANCE = 5.0f;
 	};
 
