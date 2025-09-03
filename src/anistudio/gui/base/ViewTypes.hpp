@@ -20,6 +20,11 @@
 
 #pragma once
 #include <set>
+#include <typeindex>
+#include <unordered_map>
+#include <string>
+#include <iostream>
+#include <atomic>
 
 namespace GUI {
 	class BaseView;
@@ -30,37 +35,112 @@ namespace GUI {
 	using ViewTypeID = size_t;
 	using ViewSignature = std::set<ViewTypeID>;
 
-	// Non-template function - implemented in TypesImpl.cpp
-	static ViewTypeID GetRuntimeViewTypeID() {
-		static ViewTypeID typeID = 0u;
-		return typeID++;
-	}
+	// External counter - defined in ViewManager.cpp
+	extern std::atomic<ViewTypeID> g_nextViewTypeId;
 
-	// Template function - must be implemented in header
+	// View Type Registry for consistent view IDs
+	class ViewTypeRegistry {
+	private:
+		static std::unordered_map<std::type_index, ViewTypeID> typeToID;
+		static std::unordered_map<ViewTypeID, std::string> idToName;
+
+	public:
+		// Register a view type with a name - EACH TYPE GETS UNIQUE ID
+		template <typename T>
+		static ViewTypeID RegisterType(const std::string& name) {
+			std::type_index typeIdx = std::type_index(typeid(T));
+			auto it = typeToID.find(typeIdx);
+
+			if (it != typeToID.end()) {
+				// Already registered, return existing ID
+				ViewTypeID existingId = it->second;
+
+				// Update name if different
+				auto currentNameIt = idToName.find(existingId);
+				if (currentNameIt != idToName.end() && currentNameIt->second != name) {
+					idToName[existingId] = name;
+					std::cout << "Updated view name: ID " << existingId
+						<< " to '" << name << "'" << std::endl;
+				}
+				return existingId;
+			}
+
+			// Check if name is already used - ERROR
+			for (const auto& pair : idToName) {
+				if (pair.second == name) {
+					std::cerr << "ERROR: View name '" << name << "' already used for ID: "
+						<< pair.first << ". View names must be unique!" << std::endl;
+					// Use fallback name
+					std::string fallbackName = name + "_" + std::to_string(typeid(T).hash_code());
+					return RegisterType<T>(fallbackName);
+				}
+			}
+
+			// Register new view type with unique ID using external counter
+			ViewTypeID newId = g_nextViewTypeId++;
+			typeToID[typeIdx] = newId;
+			idToName[newId] = name;
+
+			std::cout << "Registered view: " << name << " with ID: " << newId << std::endl;
+			return newId;
+		}
+
+		// Get view type ID
+		template <typename T>
+		static ViewTypeID GetIDByType() {
+			std::type_index typeIdx = std::type_index(typeid(T));
+			auto it = typeToID.find(typeIdx);
+			if (it != typeToID.end()) {
+				return it->second;
+			}
+			return MAX_VIEW_COUNT; // Invalid ID
+		}
+
+		// Get view name by ID
+		static std::string GetNameByID(ViewTypeID id) {
+			auto it = idToName.find(id);
+			if (it != idToName.end()) {
+				return it->second;
+			}
+			return "Unknown";
+		}
+
+		// Reset registry
+		static void Reset() {
+			typeToID.clear();
+			idToName.clear();
+		}
+	};
+
+	// Initialize static members
+	inline std::unordered_map<std::type_index, ViewTypeID> ViewTypeRegistry::typeToID;
+	inline std::unordered_map<ViewTypeID, std::string> ViewTypeRegistry::idToName;
+
+	// Get view type ID - always use the registry
 	template <typename T>
 	inline static const ViewTypeID ViewType() noexcept {
 		static_assert((std::is_base_of<BaseView, T>::value && !std::is_same<BaseView, T>::value),
-			"INVALID VIEW TYPE: T must inherit from BaseView but cannot be BaseView itself. Use a derived view class like DiffusionView, ImageView, etc.");
+			"INVALID VIEW TYPE: T must inherit from BaseView but cannot be BaseView itself.");
 
-		static const ViewTypeID typeID = GetRuntimeViewTypeID();
-		return typeID;
+		// Check if type is registered
+		ViewTypeID id = ViewTypeRegistry::GetIDByType<T>();
+		if (id != MAX_VIEW_COUNT) {
+			return id;
+		}
+
+		// If not registered yet, register with C++ type name
+		std::string typeName = typeid(T).name();
+		return ViewTypeRegistry::RegisterType<T>(typeName);
 	}
 
 	template <>
 	inline static const ViewTypeID ViewType<BaseView>() noexcept {
-		// Special case for BaseView - return a reserved ID but don't increment counter
-		// This allows dynamic_cast checks without breaking the type system
 		static const ViewTypeID INVALID_VIEW_TYPE_ID = SIZE_MAX;
 		return INVALID_VIEW_TYPE_ID;
 	}
 
 	inline bool IsValidViewTypeID(ViewTypeID typeID) {
-		return typeID != SIZE_MAX;
-	}
-
-	template <typename T>
-	inline const char* GetViewTypeName() {
-		return typeid(T).name();
+		return typeID != SIZE_MAX && typeID < MAX_VIEW_COUNT;
 	}
 
 } // namespace GUI

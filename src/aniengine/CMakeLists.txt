@@ -1,4 +1,4 @@
-# CMakeLists.txt for AniEngine - Updated with Engine Plugin Manager and All SD Backends
+# CMakeLists.txt for AniEngine - Updated with integrated plugin system
 cmake_minimum_required(VERSION 3.12)
 project(AniEngine VERSION 1.0.0 LANGUAGES CXX)
 
@@ -135,10 +135,11 @@ else()
     endif()
 endif()
 
-# Collect source files
+# Collect source files including plugin system
 file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"  # Include integrated plugin system
 )
 
 # Add the main AniEngine implementation
@@ -177,6 +178,8 @@ target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ImageComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/VideoComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ScriptComponents>
+    # plugins (integrated)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
     # utils
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/defaults>
@@ -199,12 +202,6 @@ else()
     )
 endif()
 
-# Plugin interface include
-target_include_directories(AniEngineCore PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins>
-    $<INSTALL_INTERFACE:include/aniplugins>
-)
-
 # External includes (when building standalone)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     target_include_directories(AniEngineCore PUBLIC
@@ -223,8 +220,9 @@ else()
     )
 endif()
 
-# Link libraries
+# Link libraries - INTEGRATED PLUGIN SYSTEM
 target_link_libraries(AniEngineCore PUBLIC
+    # External dependencies
     opencv::opencv
     ZLIB::ZLIB
     PNG::PNG
@@ -283,11 +281,14 @@ if(ANIENGINE_ENABLE_MUSA)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # MUSA uses CUDA define
 endif()
 
+# Create an alias for consistent naming
+add_library(AniEngine::AniEngineCore ALIAS AniEngineCore)
+
 message(STATUS "AniEngine configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Library type: ${BUILD_SHARED_LIBS}")
-message(STATUS "  Engine Plugin Manager: Included")
+message(STATUS "  Plugin Support: INTEGRATED (engine/plugins)")
 message(STATUS "")
 message(STATUS "Stable Diffusion Backends:")
 message(STATUS "  CUDA: ${ANIENGINE_ENABLE_CUDA}")

@@ -21,7 +21,15 @@
 #pragma once
 
 #include "ViewTypes.hpp"
-#include "pch.h"
+#include <memory>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <algorithm>
+#include <functional>
+#include <stdexcept>
+#include <exception>
+#include <typeinfo>
 
 namespace GUI {
 

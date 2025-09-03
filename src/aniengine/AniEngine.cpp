@@ -12,7 +12,7 @@ using namespace ECS;
 namespace ANI {
 
 	EngineCore::EngineCore()
-		: initialized(false), running(false) {
+		: initialized(false), running(false), pluginDirectory("./plugins") {
 		std::cout << "[EngineCore] Constructor called" << std::endl;
 	}
 
@@ -66,6 +66,35 @@ namespace ANI {
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}
 
+	void EngineCore::InitializePlugins() {
+		if (!pluginManager) {
+			std::cerr << "[EngineCore] PluginManager not created!" << std::endl;
+			return;
+		}
+
+		std::cout << "[EngineCore] Initializing plugins from: " << pluginDirectory << std::endl;
+
+		// Create plugin directory if it doesn't exist
+		if (!std::filesystem::exists(pluginDirectory)) {
+			std::filesystem::create_directories(pluginDirectory);
+			std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
+		}
+
+		// Scan and load plugins - FIXED: changed to camelCase
+		pluginManager->scanPluginDirectory(pluginDirectory);
+
+		// Enable hot reload for development - FIXED: changed to camelCase
+		pluginManager->enableHotReload(true);
+
+		// Auto-enable all loaded plugins - FIXED: changed to camelCase
+		auto plugins = pluginManager->getLoadedPlugins();
+		for (const auto& plugin : plugins) {
+			pluginManager->enablePlugin(plugin.name); // FIXED: changed to camelCase
+		}
+
+		std::cout << "[EngineCore] Plugin system initialized with " << plugins.size() << " plugins" << std::endl;
+	}
+
 	bool EngineCore::Initialize() {
 		if (initialized) {
 			std::cerr << "[EngineCore] Already initialized!" << std::endl;
@@ -87,6 +116,13 @@ namespace ANI {
 			RegisterCoreComponents();
 			RegisterCoreSystems();
 
+			// Create plugin manager (ENGINE ONLY VERSION)
+			pluginManager = std::make_unique<Plugins::PluginManager>(entityManager);
+			std::cout << "[EngineCore] Plugin manager created" << std::endl;
+
+			// Initialize plugins
+			InitializePlugins();
+
 			initialized = true;
 			running = true;
 
@@ -107,6 +143,12 @@ namespace ANI {
 
 		running = false;
 
+		// Shutdown plugins first
+		if (pluginManager) {
+			std::cout << "[EngineCore] Shutting down plugin manager..." << std::endl;
+			pluginManager.reset();
+		}
+
 		entityManager.Reset();
 		initialized = false;
 
@@ -117,6 +159,12 @@ namespace ANI {
 		if (!initialized) return;
 
 		entityManager.Update(deltaTime);
+
+		// Update plugins - FIXED: changed to camelCase
+		if (pluginManager) {
+			pluginManager->checkForChanges(); // Hot reload check - FIXED: changed to camelCase
+			pluginManager->updatePlugins(deltaTime); // FIXED: changed to camelCase
+		}
 	}
 
-}
+} // namespace ANI

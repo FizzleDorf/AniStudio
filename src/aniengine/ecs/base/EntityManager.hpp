@@ -22,6 +22,7 @@
 #include <queue>
 #include <functional>
 #include <unordered_map>
+#include <memory>
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"
@@ -118,6 +119,7 @@ namespace ECS {
 			const SystemTypeID systemType = SystemType<T>();
 			auto it = registeredSystems.find(systemType);
 			if (it != registeredSystems.end()) {
+				it->second->Destroy();
 				registeredSystems.erase(it);
 			}
 			std::cout << "Unregistered system: " << typeid(T).name() << " with ID: " << systemType << std::endl;
@@ -190,6 +192,35 @@ namespace ECS {
 		using ComponentGetter = std::function<BaseComponent* (EntityID)>;
 		void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter);
 
+		// NEW: Plugin component support - hash-based registration
+		void RegisterPluginComponent(ComponentTypeID typeId,
+			size_t componentSize,
+			std::function<void(void*, EntityID)> constructor,
+			std::function<void(void*)> destructor);
+
+		void* GetPluginComponent(EntityID entity, ComponentTypeID typeId);
+		void* AddPluginComponent(EntityID entity, ComponentTypeID typeId);
+		void RemovePluginComponent(EntityID entity, ComponentTypeID typeId);
+		bool HasPluginComponent(EntityID entity, ComponentTypeID typeId);
+
+		// NEW: Plugin system support
+		void RegisterPluginSystem(SystemTypeID typeId,
+			std::function<void*(EntityManager*)> creator,
+			std::function<void(void*)> destructor,
+			std::function<void(void*, float)> updater,
+			std::function<void(void*)> starter,
+			const std::vector<ComponentTypeID>& requiredComponents);
+
+		void* GetPluginSystem(SystemTypeID typeId);
+		void UpdatePluginSystems(float deltaTime);
+
+		// Make entity signature access public for plugins
+		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
+
+		// Required for PluginInterface.cpp to access these methods
+		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
+		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
+
 		// Getters for private variables
 		EntityID GetEntityCount() const;
 		std::queue<EntityID> GetAvailableEntities() const;
@@ -204,12 +235,9 @@ namespace ECS {
 	private:
 		// Private helper methods
 		void AddEntitySignature(const EntityID entity);
-		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
 		void UpdateEntityTargetSystem(const EntityID entity);
 		void AddEntityToSystem(const EntityID entity, BaseSystem* system);
 		bool IsEntityInSystem(const EntityID entity, const EntitySignature& system_signature);
-		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
-		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
 		void CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId);
 
 		// Private member variables
@@ -220,5 +248,15 @@ namespace ECS {
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;
 		std::unordered_map<ComponentTypeID, ComponentCreator> componentCreators;
 		std::unordered_map<ComponentTypeID, ComponentGetter> componentGetters;
+
+		// NEW: Plugin system storage
+		struct PluginSystemInfo {
+			void* instance;
+			std::function<void(void*)> destructor;
+			std::function<void(void*, float)> updater;
+			std::vector<ComponentTypeID> requiredComponents;
+			std::set<EntityID> entities;
+		};
+		std::map<SystemTypeID, PluginSystemInfo> pluginSystems;
 	};
 }

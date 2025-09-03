@@ -1,7 +1,20 @@
 #pragma once
 #include "BaseView.hpp"
 #include "Workspace.hpp"
-#include "pch.h"
+#include "ViewTypes.hpp"
+#include <memory>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <algorithm>
+#include <functional>
+#include <stdexcept>
+#include <exception>
+#include <typeinfo>
+#include <unordered_map>
+#include <map>
+#include <queue>
+#include <set>
 
 using json = nlohmann::json;
 
@@ -134,6 +147,9 @@ namespace GUI {
 		void DeserializeViewLists(const json &viewListsJson);
 
 	private:
+		// Type ID counter - owned by the manager
+		static inline std::atomic<ViewTypeID> g_nextViewTypeId{ 0 };
+
 		// Adds a new view list
 		template <typename T>
 		void AddWorkspace();
@@ -184,6 +200,10 @@ namespace GUI {
 
 		// ACTIVE WORKSPACE TRACKING - INTERNAL TO VIEWMANAGER
 		WorkspaceID m_activeWorkspaceID = 0;
+
+		// Delete copy constructor and assignment operator
+		ViewManager(const ViewManager&) = delete;
+		ViewManager& operator=(const ViewManager&) = delete;
 	};
 
 	// Template implementations
@@ -245,18 +265,8 @@ namespace GUI {
 
 	template <typename T>
 	void ViewManager::RegisterView(const std::string &name, const std::string& source) {
-		ViewTypeID typeId = ViewType<T>();
+		ViewTypeID typeId = ViewTypeRegistry::RegisterType<T>(name);
 		registeredViews[name] = typeId;
-
-		// DEBUG: Test the metadata during registration
-		std::cout << "[DEBUG REG] Registering " << name << " (type: " << typeid(T).name() << ")" << std::endl;
-
-		const char* json = T::GetMetadataJSON();
-		std::cout << "[DEBUG REG] JSON: " << json << std::endl;
-
-		// Use the template method to get the correct metadata
-		auto testMeta = BaseView::GetMetadataFor<T>();
-		std::cout << "[DEBUG REG] Parsed: " << testMeta.displayName << " [" << testMeta.category << "] - " << testMeta.description << std::endl;
 
 		// Register metadata getter using the template method
 		viewMetadata[name] = []() -> ViewMetadata {

@@ -158,11 +158,12 @@ if(EXISTS "${EXTERNAL_DIR}/imgui_tex_inspect")
     message(STATUS "Found imgui_tex_inspect (manual inclusion)")
 endif()
 
-# Collect source files
+# Collect source files including plugins
 file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"  # Include integrated studio plugin system
 )
 
 # Add the main AniStudio implementation
@@ -206,6 +207,8 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/ui_schema>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/widgets>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/events>
+    # plugins (integrated)
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
 	# interface
     $<INSTALL_INTERFACE:include/anistudio>
 )
@@ -221,7 +224,6 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/imgui_nodes"
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"
-    "${EXTERNAL_DIR}/ImJSchema"
     "${EXTERNAL_DIR}/imgui_markdown"
 )
 
@@ -231,12 +233,6 @@ if(ZEP_AVAILABLE)
         "${EXTERNAL_DIR}/zep/include"
     )
 endif()
-
-# Plugin interface include
-target_include_directories(AniStudioCore PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins>
-    $<INSTALL_INTERFACE:include/aniplugins>
-)
 
 # Core required libraries
 target_link_libraries(AniStudioCore PUBLIC
@@ -273,12 +269,6 @@ if(TARGET ImGuizmo)
     target_link_libraries(AniStudioCore PUBLIC ImGuizmo)
     target_compile_definitions(AniStudioCore PUBLIC IMGUIZMO_AVAILABLE)
     message(STATUS "Linking ImGuizmo")
-endif()
-
-if(TARGET ImJSchema)
-    target_link_libraries(AniStudioCore PUBLIC ImJSchema)
-    target_compile_definitions(AniStudioCore PUBLIC IMJSCHEMA_AVAILABLE)
-    message(STATUS "Linking ImJSchema")
 endif()
 
 if(TARGET immvision)
@@ -342,12 +332,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     )
     
-    # Install plugin headers
-    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../aniplugins/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/aniplugins
-        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
-    )
-    
     # Install public headers from include directory
     if(EXISTS ${CMAKE_SOURCE_DIR}/../../include)
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/../../include/
@@ -398,4 +382,9 @@ if(NOT TARGET ImGui)
     message(FATAL_ERROR "ImGui target not found - check external/imgui")
 endif()
 
+message(STATUS "AniStudio configuration:")
+message(STATUS "  Version: ${PROJECT_VERSION}")
+message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")  
+message(STATUS "  Plugin Support: INTEGRATED (studio/plugins)")
+message(STATUS "  Zep Editor: ${ZEP_AVAILABLE}")
 message(STATUS "All required targets found - ready to build")

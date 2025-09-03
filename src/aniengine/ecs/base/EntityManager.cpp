@@ -4,16 +4,101 @@
 
 namespace ECS {
 
+	// STATIC MEMBER DEFINITIONS - These must be here to ensure single instance
+	ComponentTypeID ComponentTypeRegistry::nextTypeID = 0;
+	std::unordered_map<std::string, ComponentTypeID> ComponentTypeRegistry::nameToID;
+	std::unordered_map<ComponentTypeID, std::string> ComponentTypeRegistry::idToName;
+	std::unordered_map<std::type_index, ComponentTypeID> ComponentTypeRegistry::typeToID;
+
+	SystemTypeID SystemTypeRegistry::nextTypeID = 0;
+	std::unordered_map<std::type_index, SystemTypeID> SystemTypeRegistry::typeToID;
+
+	// Plugin Component Array - Manages raw memory components for plugins
+	class PluginComponentArray : public ICompList {
+	private:
+		std::unordered_map<EntityID, void*> m_components;
+		size_t m_componentSize;
+		std::function<void(void*, EntityID)> m_constructor;
+		std::function<void(void*)> m_destructor;
+
+	public:
+		PluginComponentArray(size_t componentSize,
+			std::function<void(void*, EntityID)> constructor,
+			std::function<void(void*)> destructor)
+			: m_componentSize(componentSize), m_constructor(constructor), m_destructor(destructor) {}
+
+		~PluginComponentArray() {
+			// Clean up all components
+			for (auto&[entityId, ptr] : m_components) {
+				if (ptr) {
+					m_destructor(ptr);
+					std::free(ptr);
+				}
+			}
+		}
+
+		void* Insert(EntityID entity) {
+			// Remove existing component if present
+			Erase(entity);
+
+			// Allocate memory for component
+			void* ptr = std::malloc(m_componentSize);
+			if (ptr) {
+				m_constructor(ptr, entity);
+				m_components[entity] = ptr;
+			}
+			return ptr;
+		}
+
+		void* Get(EntityID entity) {
+			auto it = m_components.find(entity);
+			return (it != m_components.end()) ? it->second : nullptr;
+		}
+
+		void Erase(EntityID entity) override {
+			auto it = m_components.find(entity);
+			if (it != m_components.end()) {
+				m_destructor(it->second);
+				std::free(it->second);
+				m_components.erase(it);
+			}
+		}
+
+		size_t Size() const {
+			return m_components.size();
+		}
+	};
+
 	EntityManager::EntityManager() : entityCount(0) {
 		Reset();
 	}
 
-	EntityManager::~EntityManager() {}
+	EntityManager::~EntityManager() {
+		// Destroy all plugin systems first
+		for (auto&[systemId, systemInfo] : pluginSystems) {
+			if (systemInfo.instance && systemInfo.destructor) {
+				systemInfo.destructor(systemInfo.instance);
+			}
+		}
+		pluginSystems.clear();
+
+		// Destroy all regular systems
+		for (auto& system : registeredSystems) {
+			if (system.second) {
+				system.second->Destroy();
+			}
+		}
+		registeredSystems.clear();
+	}
 
 	void EntityManager::Update(const float deltaT) {
+		// Update regular systems
 		for (auto& system : registeredSystems) {
 			system.second->Update(deltaT);
 		}
+
+		// Update plugin systems
+		UpdatePluginSystems(deltaT);
 	}
 
 	void EntityManager::Reset() {
@@ -31,6 +116,14 @@ namespace ECS {
 
 		// Clear all registered systems
 		registeredSystems.clear();
+
+		// Clear plugin systems
+		for (auto&[systemId, systemInfo] : pluginSystems) {
+			if (systemInfo.instance && systemInfo.destructor) {
+				systemInfo.destructor(systemInfo.instance);
+			}
+		}
+		pluginSystems.clear();
 
 		// Clear all component arrays
 		componentsArrays.clear();
@@ -77,6 +170,11 @@ namespace ECS {
 
 		for (auto& system : registeredSystems) {
 			system.second->RemoveEntity(entity);
+		}
+
+		// Remove from plugin systems
+		for (auto&[systemId, systemInfo] : pluginSystems) {
+			systemInfo.entities.erase(entity);
 		}
 
 		entityCount--;
@@ -307,6 +405,152 @@ namespace ECS {
 		componentGetters[typeId] = getter;
 	}
 
+	// NEW: Plugin component registration
+	void EntityManager::RegisterPluginComponent(ComponentTypeID typeId,
+		size_t componentSize,
+		std::function<void(void*, EntityID)> constructor,
+		std::function<void(void*)> destructor) {
+
+		// Create plugin component array
+		auto pluginArray = std::make_shared<PluginComponentArray>(componentSize, constructor, destructor);
+		componentsArrays[typeId] = pluginArray;
+
+		// Register component creator and getter
+		RegisterComponentType(
+			typeId,
+			[this, typeId, pluginArray](EntityID entity) {
+			// Add component to entity signature
+			GetEntitySignature(entity)->insert(typeId);
+			// Insert into plugin array
+			pluginArray->Insert(entity);
+			// Update systems
+			UpdateEntityTargetSystem(entity);
+		},
+			[pluginArray](EntityID entity) -> BaseComponent* {
+			// Plugin components don't derive from BaseComponent, so return nullptr
+			// The plugin system will use direct void* access
+			return nullptr;
+		}
+		);
+
+		std::cout << "[EntityManager] Registered plugin component with ID: " << typeId
+			<< " (size: " << componentSize << " bytes)" << std::endl;
+	}
+
+	void* EntityManager::GetPluginComponent(EntityID entity, ComponentTypeID typeId) {
+		auto arrayIt = componentsArrays.find(typeId);
+		if (arrayIt != componentsArrays.end()) {
+			auto pluginArray = std::dynamic_pointer_cast<PluginComponentArray>(arrayIt->second);
+			if (pluginArray) {
+				return pluginArray->Get(entity);
+			}
+		}
+		return nullptr;
+	}
+
+	void* EntityManager::AddPluginComponent(EntityID entity, ComponentTypeID typeId) {
+		auto arrayIt = componentsArrays.find(typeId);
+		if (arrayIt != componentsArrays.end()) {
+			auto pluginArray = std::dynamic_pointer_cast<PluginComponentArray>(arrayIt->second);
+			if (pluginArray) {
+				// Add component to entity signature
+				GetEntitySignature(entity)->insert(typeId);
+				// Insert into plugin array
+				void* component = pluginArray->Insert(entity);
+				// Update systems (including plugin systems)
+				UpdateEntityTargetSystem(entity);
+
+				std::cout << "[EntityManager] Added plugin component to entity " << entity
+					<< " with type ID: " << typeId << std::endl;
+				return component;
+			}
+		}
+		return nullptr;
+	}
+
+	void EntityManager::RemovePluginComponent(EntityID entity, ComponentTypeID typeId) {
+		auto it = entitiesSignatures.find(entity);
+		if (it != entitiesSignatures.end()) {
+			it->second->erase(typeId);
+
+			auto arrayIt = componentsArrays.find(typeId);
+			if (arrayIt != componentsArrays.end()) {
+				arrayIt->second->Erase(entity);
+			}
+
+			UpdateEntityTargetSystem(entity);
+
+			std::cout << "[EntityManager] Removed plugin component from entity " << entity
+				<< " with type ID: " << typeId << std::endl;
+		}
+	}
+
+	bool EntityManager::HasPluginComponent(EntityID entity, ComponentTypeID typeId) {
+		return GetPluginComponent(entity, typeId) != nullptr;
+	}
+
+	// NEW: Plugin system registration
+	void EntityManager::RegisterPluginSystem(SystemTypeID typeId,
+		std::function<void*(EntityManager*)> creator,
+		std::function<void(void*)> destructor,
+		std::function<void(void*, float)> updater,
+		std::function<void(void*)> starter,
+		const std::vector<ComponentTypeID>& requiredComponents) {
+
+		// Create system instance
+		void* systemInstance = creator(this);
+		if (!systemInstance) {
+			std::cerr << "[EntityManager] Failed to create plugin system with ID: " << typeId << std::endl;
+			return;
+		}
+
+		// Store system info
+		PluginSystemInfo systemInfo;
+		systemInfo.instance = systemInstance;
+		systemInfo.destructor = destructor;
+		systemInfo.updater = updater;
+		systemInfo.requiredComponents = requiredComponents;
+
+		// Add existing entities that match system signature
+		for (const auto&[entityId, entitySignature] : entitiesSignatures) {
+			bool matches = true;
+			for (ComponentTypeID compType : requiredComponents) {
+				if (entitySignature->count(compType) == 0) {
+					matches = false;
+					break;
+				}
+			}
+			if (matches) {
+				systemInfo.entities.insert(entityId);
+			}
+		}
+
+		// Store the system
+		pluginSystems[typeId] = std::move(systemInfo);
+
+		// Start the system
+		if (starter) {
+			starter(systemInstance);
+		}
+
+		std::cout << "[EntityManager] Registered plugin system with ID: " << typeId
+			<< " requiring " << requiredComponents.size() << " components"
+			<< " with " << systemInfo.entities.size() << " initial entities" << std::endl;
+	}
+
+	void* EntityManager::GetPluginSystem(SystemTypeID typeId) {
+		auto it = pluginSystems.find(typeId);
+		return (it != pluginSystems.end()) ? it->second.instance : nullptr;
+	}
+
+	void EntityManager::UpdatePluginSystems(float deltaTime) {
+		for (auto&[systemId, systemInfo] : pluginSystems) {
+			if (systemInfo.instance && systemInfo.updater) {
+				systemInfo.updater(systemInfo.instance, deltaTime);
+			}
+		}
+	}
+
 	EntityID EntityManager::GetEntityCount() const {
 		return entityCount;
 	}
@@ -371,8 +615,28 @@ namespace ECS {
 	}
 
 	void EntityManager::UpdateEntityTargetSystem(const EntityID entity) {
+		// Update regular systems
 		for (auto& system : registeredSystems) {
 			AddEntityToSystem(entity, system.second.get());
+		}
+
+		// Update plugin systems
+		auto entitySignature = GetEntitySignature(entity);
+		for (auto&[systemId, systemInfo] : pluginSystems) {
+			bool matches = true;
+			for (ComponentTypeID compType : systemInfo.requiredComponents) {
+				if (entitySignature->count(compType) == 0) {
+					matches = false;
+					break;
+				}
+			}
+
+			if (matches) {
+				systemInfo.entities.insert(entity);
+			}
+			else {
+				systemInfo.entities.erase(entity);
+			}
 		}
 	}
 

@@ -156,7 +156,7 @@ namespace ECS {
 		}
 	};
 
-	// FIXED: System Type Registry for consistent system IDs
+	// System Type Registry for consistent system IDs
 	class SystemTypeRegistry {
 	private:
 		static SystemTypeID nextTypeID;
@@ -212,16 +212,6 @@ namespace ECS {
 			}
 		}
 	};
-
-	// Initialize static members for ComponentTypeRegistry
-	inline ComponentTypeID ComponentTypeRegistry::nextTypeID = 0;
-	inline std::unordered_map<std::string, ComponentTypeID> ComponentTypeRegistry::nameToID;
-	inline std::unordered_map<ComponentTypeID, std::string> ComponentTypeRegistry::idToName;
-	inline std::unordered_map<std::type_index, ComponentTypeID> ComponentTypeRegistry::typeToID;
-
-	// Initialize static members for SystemTypeRegistry
-	inline SystemTypeID SystemTypeRegistry::nextTypeID = 0;
-	inline std::unordered_map<std::type_index, SystemTypeID> SystemTypeRegistry::typeToID;
 
 	// Get component type ID - always use the registry
 	template <typename T>

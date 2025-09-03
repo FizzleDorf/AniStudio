@@ -1,170 +1,203 @@
-/*
- * ExamplePlugin.cpp - SIMPLE VERSION THAT ACTUALLY WORKS
- * No fancy architecture, just get the damn thing running
- */
-
-#include "PluginAPI.hpp"
+#include "BasePlugin.hpp"
+#include "PluginRegistry.hpp"
+#include "EntityManager.hpp"
+#include "ViewManager.hpp"
 #include <iostream>
 #include <string>
 
- // ECS includes - only what we ACTUALLY need
-#include "BaseComponent.hpp"
-#include "BaseSystem.hpp"
-#include "EntityManager.hpp"
-#include "Types.hpp"
-#include "nlohmann/json.hpp"
+// Custom Component
+struct ExampleComponent {
+	ECS::EntityID entityID;
+	std::string message;
+	float value;
 
-// ============================================================================
-// SIMPLE COMPONENT
-// ============================================================================
-
-struct SimpleComponent : public ECS::BaseComponent {
-	float value = 42.0f;
-	std::string message = "Hello from plugin!";
-	bool enabled = true;
-
-	SimpleComponent() {
-		compName = "SimpleComponent";
-		compCategory = "Plugin";
-	}
-
-	nlohmann::json Serialize() const override {
-		nlohmann::json json;
-		json[compName]["value"] = value;
-		json[compName]["message"] = message;
-		json[compName]["enabled"] = enabled;
-		return json;
-	}
-
-	void Deserialize(const nlohmann::json& json) override {
-		if (json.contains(compName)) {
-			const auto& comp = json[compName];
-			if (comp.contains("value")) value = comp["value"];
-			if (comp.contains("message")) message = comp["message"];
-			if (comp.contains("enabled")) enabled = comp["enabled"];
-		}
-	}
+	ExampleComponent() : message("Hello from plugin!"), value(0.0f) {}
 };
 
-// ============================================================================
-// SIMPLE SYSTEM
-// ============================================================================
-
-class SimpleSystem : public ECS::BaseSystem {
-private:
-	float timer = 0.0f;
-
+// Custom System
+class ExampleSystem {
 public:
-	SimpleSystem(ECS::EntityManager& entityMgr) : BaseSystem(entityMgr) {
-		sysName = "SimpleSystem";
-
-		// Get component ID and add to signature
-		ECS::ComponentTypeID compId = ECS::ComponentTypeRegistry::GetIDByName("SimpleComponent");
-		if (compId != ECS::MAX_COMPONENT_COUNT) {
-			signature.insert(compId);
-			std::cout << "[SimpleSystem] Registered for SimpleComponent" << std::endl;
-		}
+	ExampleSystem(ECS::EntityManager& entityMgr) : m_entityManager(entityMgr) {
+		std::cout << "[ExampleSystem] Created" << std::endl;
 	}
 
-	void Start() override {
-		std::cout << "[SimpleSystem] Started with " << entities.size() << " entities" << std::endl;
-	}
-
-	void Update(float deltaTime) override {
+	void Update(float deltaTime) {
+		// System update logic
+		static float timer = 0.0f;
 		timer += deltaTime;
 
-		// Do something every 5 seconds
-		if (timer >= 5.0f) {
+		if (timer > 1.0f) {
+			std::cout << "[ExampleSystem] Update tick" << std::endl;
 			timer = 0.0f;
-
-			std::cout << "[SimpleSystem] Processing " << entities.size() << " entities:" << std::endl;
-
-			for (ECS::EntityID entity : entities) {
-				SimpleComponent& comp = mgr.GetComponent<SimpleComponent>(entity);
-				if (comp.enabled) {
-					comp.value += 1.0f;
-					std::cout << "  Entity " << entity << ": " << comp.message
-						<< " (value: " << comp.value << ")" << std::endl;
-				}
-			}
 		}
 	}
 
-	void Destroy() override {
-		std::cout << "[SimpleSystem] Destroyed" << std::endl;
+	void Destroy() {
+		std::cout << "[ExampleSystem] Destroyed" << std::endl;
 	}
-};
 
-// ============================================================================
-// SIMPLE PLUGIN
-// ============================================================================
-
-class SimplePlugin : public Plugin::IPlugin {
 private:
-	Plugin::PluginContext* context = nullptr;
-	bool initialized = false;
+	ECS::EntityManager& m_entityManager;
+};
 
+// Custom View
+class ExampleView : public GUI::BaseView {
 public:
-	bool Initialize(Plugin::PluginContext* ctx) override {
-		if (!ctx || !ctx->entityManager) {
-			std::cerr << "[SimplePlugin] ERROR: No EntityManager!" << std::endl;
-			return false;
+	static constexpr const char* GetMetadataJSON() {
+		return R"({
+            "displayName": "Example Plugin View",
+            "category": "Tools",
+            "description": "Example view from the plugin system"
+        })";
+	}
+
+	ExampleView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
+		viewName = "ExamplePluginView";
+		windowOpen = true;
+	}
+
+	void Init() override {
+		std::cout << "[ExampleView] Initialized" << std::endl;
+	}
+
+	void Update(float deltaT) override {
+		// View update logic
+	}
+
+	void Render() override {
+		if (!windowOpen) return;
+
+		if (ImGui::Begin("Example Plugin View", &windowOpen)) {
+			ImGui::Text("This is a custom view from the ExamplePlugin!");
+			ImGui::Text("Total entities: %zu", mgr.GetEntityCount());
+
+			if (ImGui::Button("Create Example Entity")) {
+				ECS::EntityID entity = mgr.AddNewEntity();
+				ImGui::Text("Created entity: %zu", entity);
+			}
+
+			// Show plugin info
+			ImGui::Separator();
+			ImGui::Text("Plugin: ExamplePlugin v1.0.0");
+			ImGui::Text("Registration: Direct Manager Pass-Through");
 		}
-
-		context = ctx;
-		std::cout << "[SimplePlugin] Initializing..." << std::endl;
-
-		try {
-			// Register component
-			context->entityManager->RegisterComponentName<SimpleComponent>("SimpleComponent");
-			std::cout << "[SimplePlugin] SimpleComponent registered" << std::endl;
-
-			// Register system
-			context->entityManager->RegisterSystem<SimpleSystem>();
-			std::cout << "[SimplePlugin] SimpleSystem registered" << std::endl;
-
-			// Create test entity
-			ECS::EntityID entity = context->entityManager->AddNewEntity();
-			SimpleComponent& comp = context->entityManager->AddComponent<SimpleComponent>(entity);
-			comp.message = "Plugin working!";
-			comp.value = 100.0f;
-
-			std::cout << "[SimplePlugin] Created test entity " << entity << std::endl;
-
-			initialized = true;
-			std::cout << "[SimplePlugin] *** PLUGIN LOADED SUCCESSFULLY! ***" << std::endl;
-			return true;
-
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[SimplePlugin] Exception: " << e.what() << std::endl;
-			return false;
-		}
-	}
-
-	void Shutdown() override {
-		if (initialized) {
-			std::cout << "[SimplePlugin] Shutting down..." << std::endl;
-			initialized = false;
-			context = nullptr;
-		}
-	}
-
-	void Update(float deltaTime) override {
-		// Optional: do plugin-level updates
-	}
-
-	const char* GetName() const override {
-		return "Simple Plugin";
-	}
-
-	const char* GetVersion() const override {
-		return "1.0.0";
-	}
-
-	const char* GetDescription() const override {
-		return "Simple plugin that just fucking works";
+		ImGui::End();
 	}
 };
 
-IMPLEMENT_PLUGIN(SimplePlugin, "Simple Plugin", "1.0.0", "Simple plugin that just fucking works")
+// Plugin implementation
+class ExamplePlugin : public Plugins::BasePlugin {
+public:
+	ExamplePlugin() : BasePlugin("ExamplePlugin", "1.0.0") {}
+
+	bool OnEngineInit(ECS::EntityManager& entityMgr, Plugins::IPluginRegistry& registry) override {
+		LogInfo("Initializing in engine with direct registry access...");
+
+		// NO MORE STATIC VARIABLES! Registry is passed directly!
+		std::cout << "[ExamplePlugin] Registry available: " << &registry << std::endl;
+		std::cout << "[ExamplePlugin] Plugin name from registry: " << registry.GetCurrentPluginName() << std::endl;
+
+		// Register custom component using the registry
+		m_componentId = registry.RegisterComponent({
+			"ExampleComponent",
+			sizeof(ExampleComponent),
+			[](void* memory, ECS::EntityID entity) {
+				new(memory) ExampleComponent();
+				static_cast<ExampleComponent*>(memory)->entityID = entity;
+				std::cout << "[ExamplePlugin] Constructed ExampleComponent for entity: " << entity << std::endl;
+			},
+			[](void* memory) {
+				std::cout << "[ExamplePlugin] Destroying ExampleComponent" << std::endl;
+				static_cast<ExampleComponent*>(memory)->~ExampleComponent();
+			}
+			});
+
+		if (m_componentId == 0) {
+			LogError("Failed to register ExampleComponent");
+			return false;
+		}
+
+		LogInfo("ExampleComponent registered with ID: " + std::to_string(m_componentId));
+
+		// Register custom system using the registry
+		m_systemId = registry.RegisterSystem({
+			"ExampleSystem",
+			[](ECS::EntityManager* mgr) -> void* {
+				return new ExampleSystem(*mgr);
+			},
+			[](void* system) {
+				delete static_cast<ExampleSystem*>(system);
+			},
+			[](void* system, float deltaTime) {
+				static_cast<ExampleSystem*>(system)->Update(deltaTime);
+			},
+			{m_componentId}
+			});
+
+		if (m_systemId == 0) {
+			LogError("Failed to register ExampleSystem");
+			return false;
+		}
+
+		LogInfo("ExampleSystem registered with ID: " + std::to_string(m_systemId));
+		LogInfo("Engine initialization successful!");
+		return true;
+	}
+
+	bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr, Plugins::IPluginRegistry& registry) override {
+		LogInfo("Initializing in studio with direct registry access...");
+
+		std::cout << "[ExamplePlugin] StudioInit - Registry available: " << &registry << std::endl;
+		std::cout << "[ExamplePlugin] StudioInit - ViewManager available: " << &viewMgr << std::endl;
+
+		// Register custom view using the registry
+		m_viewId = registry.RegisterView({
+			"ExampleView",
+			"Tools",
+			[](ECS::EntityManager* mgr) -> void* {
+				return new ExampleView(*mgr);
+			},
+			[](void* view) {
+				delete static_cast<ExampleView*>(view);
+			}
+			});
+
+		if (m_viewId == 0) {
+			LogError("Failed to register ExampleView");
+			return false;
+		}
+
+		LogInfo("ExampleView registered with ID: " + std::to_string(m_viewId));
+		LogInfo("Studio initialization successful!");
+		return true;
+	}
+
+	void OnUpdate(float deltaTime) override {
+		static float timer = 0.0f;
+		timer += deltaTime;
+
+		if (timer > 5.0f) { // Less frequent logging
+			LogInfo("Plugin is running smoothly");
+			timer = 0.0f;
+		}
+	}
+
+	void OnShutdown() override {
+		LogInfo("Shutting down plugin...");
+		LogInfo("Components, systems, and views will be automatically cleaned up");
+	}
+
+private:
+	ECS::ComponentTypeID m_componentId = 0;
+	ECS::SystemTypeID m_systemId = 0;
+	GUI::ViewTypeID m_viewId = 0;
+};
+
+// Plugin exports
+extern "C" __declspec(dllexport) Plugins::BasePlugin* CreatePlugin() {
+	return new ExamplePlugin();
+}
+
+extern "C" __declspec(dllexport) void DestroyPlugin(Plugins::BasePlugin* plugin) {
+	delete plugin;
+}

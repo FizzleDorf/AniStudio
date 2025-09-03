@@ -6,7 +6,6 @@ project(AniStudio VERSION 1.0.0)
 # Build options
 option(BUILD_ANIENGINE "Build AniEngine library" ON)
 option(BUILD_ANISTUDIO "Build AniStudio library" ON)
-option(BUILD_ANIPLUGINS "Build AniPlugins library" ON)
 option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries instead of static" OFF)
 
@@ -228,13 +227,8 @@ set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS})
 set(ANIENGINE_ENABLE_CUDA ${SD_CUDA})
 set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS})
 set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE})
-set(ANIPLUGINS_BUILD_SHARED ${BUILD_SHARED_LIBS})
 
-# Add subdirectory libraries
-if(BUILD_ANIPLUGINS)
-    add_subdirectory(src/aniplugins)
-endif()
-
+# Add subdirectory libraries (removed aniplugins)
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
 endif()
@@ -288,20 +282,22 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     message(STATUS "Main application will be built")
 endif()
 
-# Plugin utility function for the main project
-function(add_cr_plugin TARGET_NAME)
+# Plugin utility function for external plugins (if needed)
+function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
     
     add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
     
     target_include_directories(${TARGET_NAME} PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/aniplugins
+        ${CMAKE_SOURCE_DIR}/src/aniengine/plugins
+        ${CMAKE_SOURCE_DIR}/src/anistudio/plugins
         ${CMAKE_SOURCE_DIR}/external/cr/cr
         ${PLUGIN_INCLUDE_DIRS}
     )
     
     target_link_libraries(${TARGET_NAME} PRIVATE
         AniEngineCore
+        AniStudioCore
         ${PLUGIN_LIBRARIES}
     )
     
@@ -326,7 +322,7 @@ function(add_cr_plugin TARGET_NAME)
         LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${PLUGINS_DIR}
     )
     
-    message(STATUS "Added CR plugin: ${TARGET_NAME}")
+    message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
 # Install configuration (when building full project)
@@ -382,7 +378,6 @@ if(SD_FAST_SOFTMAX)
 endif()
 message(STATUS "")
 message(STATUS "Components:")
-message(STATUS "  AniPlugins: ${BUILD_ANIPLUGINS}")
 message(STATUS "  AniEngine: ${BUILD_ANIENGINE}")
 message(STATUS "  AniStudio: ${BUILD_ANISTUDIO}")
 message(STATUS "  Main App: ${BUILD_MAIN_APP}")

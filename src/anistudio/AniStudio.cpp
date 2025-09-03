@@ -53,6 +53,16 @@ namespace ANI {
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
 
+		// Register PluginView with StudioPluginManager
+		viewManager.RegisterViewWithFactory("PluginView", "Tools",
+			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+			return std::make_unique<GUI::PluginView>(mgr, *studioPluginManager);
+		},
+			[]() -> GUI::ViewMetadata {
+			return GUI::BaseView::GetMetadataFor<GUI::PluginView>();
+		}
+		);
+
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
 			return std::make_unique<GUI::WorkspaceView>(mgr, viewManager);
@@ -61,6 +71,37 @@ namespace ANI {
 		);
 
 		std::cout << "[StudioCore] Core view types registered successfully!" << std::endl;
+	}
+
+	void StudioCore::InitializeStudioPlugins() {
+		std::cout << "[StudioCore] Initializing studio plugin system..." << std::endl;
+
+		// Create the studio plugin manager
+		studioPluginManager = std::make_unique<Plugins::StudioPluginManager>(
+			engineCore.GetEntityManager(), viewManager);
+
+		// Set default plugin directory
+		std::string pluginDirectory = "./plugins";
+
+		// Create plugin directory if it doesn't exist
+		if (!std::filesystem::exists(pluginDirectory)) {
+			std::filesystem::create_directories(pluginDirectory);
+			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
+		}
+
+		// Scan and load plugins
+		studioPluginManager->scanPluginDirectory(pluginDirectory);
+
+		// Enable hot reload for development
+		studioPluginManager->enableHotReload(true);
+
+		// Auto-enable all loaded plugins
+		auto plugins = studioPluginManager->getLoadedPlugins();
+		for (const auto& plugin : plugins) {
+			studioPluginManager->enablePlugin(plugin.name);
+		}
+
+		std::cout << "[StudioCore] Studio plugin system initialized with " << plugins.size() << " plugins" << std::endl;
 	}
 
 	void StudioCore::SetupProjectCallbacks() {
@@ -191,6 +232,9 @@ namespace ANI {
 
 			// Set entity manager reference for the ViewManager
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
+
+			// Initialize studio plugin system
+			InitializeStudioPlugins();
 
 			// Register views and setup callbacks
 			RegisterCoreViews();
@@ -329,6 +373,12 @@ namespace ANI {
 			m_menuBar.reset();
 			m_projectManagerView.reset();
 
+			// STEP 3.5: Shutdown studio plugins
+			if (studioPluginManager) {
+				std::cout << "[StudioCore] Shutting down studio plugin manager..." << std::endl;
+				studioPluginManager.reset();
+			}
+
 			// STEP 4: ONLY NOW reset the view manager (after everything is saved)
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
 			viewManager.FullReset();
@@ -353,6 +403,11 @@ namespace ANI {
 
 		try {
 			engineCore.Update(deltaTime);
+
+			// Update studio plugins
+			if (studioPluginManager) {
+				studioPluginManager->updatePlugins(deltaTime);
+			}
 
 			if (m_menuBar) m_menuBar->Update(deltaTime);
 
@@ -418,8 +473,8 @@ namespace ANI {
 						m_menuBar->Render();
 					}
 
-					ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
-					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+					ImGuiID docksspace_id = ImGui::GetID("MainDockSpace");
+					ImGui::DockSpace(docksspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 					// SIMPLIFIED: ViewManager handles everything internally - just call Render()
 					viewManager.Render();

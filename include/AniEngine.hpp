@@ -23,6 +23,7 @@
 #define ANI_ENGINE_API
 
 #include "ECS.h"
+#include "PluginManager.hpp"  // Add plugin support
 #include <memory>
 #include <string>
 
@@ -50,6 +51,7 @@ namespace ANI {
 
 		// Manager access
 		ECS::EntityManager& GetEntityManager() { return entityManager; }
+		Plugins::PluginManager& GetPluginManager() { return *pluginManager; }
 
 		// Engine state
 		bool IsRunning() const { return running; }
@@ -59,11 +61,17 @@ namespace ANI {
 		void RegisterCoreComponents();
 		void RegisterCoreSystems();
 
+		// Plugin management
+		void InitializePlugins();
+		void SetPluginDirectory(const std::string& directory) { pluginDirectory = directory; }
+
 	private:
 		bool initialized;
 		bool running;
+		std::string pluginDirectory;
 
 		ECS::EntityManager entityManager;
+		std::unique_ptr<Plugins::PluginManager> pluginManager;
 	};
 
 }

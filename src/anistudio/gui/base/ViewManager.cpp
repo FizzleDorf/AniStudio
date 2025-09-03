@@ -8,6 +8,9 @@
 
 namespace GUI {
 
+	// Define the atomic counter
+	std::atomic<ViewTypeID> g_nextViewTypeId{ 0 };
+
 	ViewManager::ViewManager() : workspaceCount(0), m_activeWorkspaceID(0) {
 		// Initialize available view IDs
 		for (WorkspaceID view = 0u; view < MAX_VIEW_COUNT; view++) {
