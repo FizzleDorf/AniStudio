@@ -76,6 +76,8 @@ namespace GUI {
 
 		// Unregister views from a source (for plugin cleanup)
 		void UnregisterViewSource(const std::string& source);
+		bool UnregisterViewType(const std::string& viewName);
+		void CloseAllViewsOfType(const std::string& viewName);
 
 		// Get metadata for a view type
 		ViewMetadata GetViewMetadata(const std::string& viewTypeName) const;
@@ -105,6 +107,10 @@ namespace GUI {
 
 		// Set entity manager reference for view creation
 		void SetEntityManager(ECS::EntityManager& mgr) { entityManager = &mgr; }
+
+		// NEW: ImGui context management for plugin support
+		void SetImGuiContext(void* context);
+		void* GetImGuiContext() const;
 
 		// Returns a designated view type by string name
 		ViewTypeID GetViewType(const std::string &name) const;
@@ -200,6 +206,9 @@ namespace GUI {
 
 		// ACTIVE WORKSPACE TRACKING - INTERNAL TO VIEWMANAGER
 		WorkspaceID m_activeWorkspaceID = 0;
+
+		// NEW: ImGui context storage for plugin compatibility
+		void* m_imguiContext = nullptr;
 
 		// Delete copy constructor and assignment operator
 		ViewManager(const ViewManager&) = delete;

@@ -21,6 +21,7 @@
 #include <thread>
 #include <chrono>
 #include <filesystem>
+#include <imgui.h>
 
 namespace ANI {
 
@@ -53,15 +54,17 @@ namespace ANI {
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
 
-		// Register PluginView with StudioPluginManager
-		viewManager.RegisterViewWithFactory("PluginView", "Tools",
-			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-			return std::make_unique<GUI::PluginView>(mgr, *studioPluginManager);
-		},
-			[]() -> GUI::ViewMetadata {
-			return GUI::BaseView::GetMetadataFor<GUI::PluginView>();
+		// Register PluginView with StudioPluginManager - ONLY AFTER PLUGIN MANAGER EXISTS
+		if (studioPluginManager) {
+			viewManager.RegisterViewWithFactory("PluginView", "Tools",
+				[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
+				return std::make_unique<GUI::PluginView>(mgr, *studioPluginManager);
+			},
+				[]() -> GUI::ViewMetadata {
+				return GUI::BaseView::GetMetadataFor<GUI::PluginView>();
+			}
+			);
 		}
-		);
 
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
@@ -76,9 +79,35 @@ namespace ANI {
 	void StudioCore::InitializeStudioPlugins() {
 		std::cout << "[StudioCore] Initializing studio plugin system..." << std::endl;
 
-		// Create the studio plugin manager
+		// CRITICAL: Capture the current ImGui context AFTER ImGui is fully ready
+		imguiContext = ImGui::GetCurrentContext();
+		std::cout << "[StudioCore] Captured ImGui context for plugins: " << imguiContext << std::endl;
+
+		if (!imguiContext) {
+			std::cerr << "[StudioCore] ERROR: ImGui context is null!" << std::endl;
+			return;
+		}
+
+		// CRITICAL: Verify the context is fully initialized
+		ImGuiIO& io = ImGui::GetIO();
+		if (!io.Fonts) {
+			std::cerr << "[StudioCore] ERROR: ImGui fonts not initialized!" << std::endl;
+			return;
+		}
+
+		if (io.Fonts->Fonts.Size == 0) {
+			std::cerr << "[StudioCore] ERROR: No fonts loaded in ImGui!" << std::endl;
+			return;
+		}
+
+		std::cout << "[StudioCore] ImGui context verified - fonts loaded: " << io.Fonts->Fonts.Size << std::endl;
+
+		// Create the studio plugin manager with the fully validated ImGui context
 		studioPluginManager = std::make_unique<Plugins::StudioPluginManager>(
-			engineCore.GetEntityManager(), viewManager);
+			engineCore.GetEntityManager(),
+			viewManager,
+			static_cast<ImGuiContext*>(imguiContext)
+			);
 
 		// Set default plugin directory
 		std::string pluginDirectory = "./plugins";
@@ -98,6 +127,7 @@ namespace ANI {
 		// Auto-enable all loaded plugins
 		auto plugins = studioPluginManager->getLoadedPlugins();
 		for (const auto& plugin : plugins) {
+			std::cout << "[StudioCore] Auto-enabling plugin: " << plugin.name << std::endl;
 			studioPluginManager->enablePlugin(plugin.name);
 		}
 
@@ -212,53 +242,24 @@ namespace ANI {
 		try {
 			std::cout << "[StudioCore] Initializing..." << std::endl;
 
-			// Initialize engine core first
+			// Initialize engine core first - WITHOUT PLUGIN INITIALIZATION YET
 			if (!engineCore.Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
 
-			// CRITICAL: Load ImGui settings using the existing utility
-			// This must happen before any ImGui rendering or view creation
-			std::cout << "[StudioCore] Loading ImGui settings using existing utility..." << std::endl;
-			try {
-				Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
-				std::cout << "[StudioCore] ImGui settings loaded successfully" << std::endl;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[StudioCore] Warning: Failed to load ImGui settings: " << e.what() << std::endl;
-				std::cout << "[StudioCore] Using default ImGui settings" << std::endl;
-			}
-
 			// Set entity manager reference for the ViewManager
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
 
-			// Initialize studio plugin system
-			InitializeStudioPlugins();
-
-			// Register views and setup callbacks
-			RegisterCoreViews();
+			// Setup callbacks early
 			SetupProjectCallbacks();
 
-			// Set managers for Events system so it can handle workspace events
-			std::cout << "[StudioCore] Setting managers for Events system..." << std::endl;
-			ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
-			std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
-
-			// Initialize UI components
-			m_projectManagerView->Init();
-			m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
-
-			// Show startup view if needed
-			if (m_projectManager.ShouldShowStartup()) {
-				m_showProjectManagerView = true;
-				std::cout << "[StudioCore] Will show startup view - no project to auto-load" << std::endl;
-			}
+			std::cout << "[StudioCore] Basic initialization complete, waiting for full ImGui setup..." << std::endl;
 
 			initialized = true;
 			running = true;
 
-			std::cout << "[StudioCore] Initialized successfully!" << std::endl;
+			std::cout << "[StudioCore] Core initialized successfully - plugins will be loaded after first render!" << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -266,6 +267,66 @@ namespace ANI {
 			Shutdown();
 			return false;
 		}
+	}
+
+	// NEW: Method to complete initialization after ImGui is fully ready
+	void StudioCore::CompleteInitialization() {
+		static bool completedInitialization = false;
+		if (completedInitialization) return;
+
+		std::cout << "[StudioCore] Completing initialization after ImGui is ready..." << std::endl;
+
+		// Verify ImGui is now fully initialized
+		ImGuiContext* currentContext = ImGui::GetCurrentContext();
+		if (!currentContext) {
+			std::cerr << "[StudioCore] ERROR: ImGui context still null!" << std::endl;
+			return;
+		}
+
+		ImGuiIO& io = ImGui::GetIO();
+		if (!io.Fonts || io.Fonts->Fonts.Size == 0) {
+			std::cerr << "[StudioCore] ERROR: ImGui fonts still not loaded!" << std::endl;
+			return;
+		}
+
+		std::cout << "[StudioCore] ImGui is now fully ready - proceeding with plugin initialization" << std::endl;
+
+		// Load ImGui settings using the existing utility
+		try {
+			Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
+			std::cout << "[StudioCore] ImGui settings loaded successfully" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[StudioCore] Warning: Failed to load ImGui settings: " << e.what() << std::endl;
+		}
+
+		// CRITICAL: Set the ImGui context on the ViewManager BEFORE initializing plugins
+		viewManager.SetImGuiContext(currentContext);
+		std::cout << "[StudioCore] Set ImGui context on ViewManager: " << currentContext << std::endl;
+
+		// NOW initialize studio plugin system with fully ready ImGui
+		InitializeStudioPlugins();
+
+		// Register views (including plugin view now that plugin manager exists)
+		RegisterCoreViews();
+
+		// Set managers for Events system
+		std::cout << "[StudioCore] Setting managers for Events system..." << std::endl;
+		ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
+		std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
+
+		// Initialize UI components
+		m_projectManagerView->Init();
+		m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
+
+		// Show startup view if needed
+		if (m_projectManager.ShouldShowStartup()) {
+			m_showProjectManagerView = true;
+			std::cout << "[StudioCore] Will show startup view - no project to auto-load" << std::endl;
+		}
+
+		completedInitialization = true;
+		std::cout << "[StudioCore] Complete initialization finished!" << std::endl;
 	}
 
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
@@ -430,6 +491,9 @@ namespace ANI {
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
+
+			// CRITICAL: Complete initialization after first ImGui frame
+			CompleteInitialization();
 
 			static bool startupShown = false;
 			if (!m_projectManager.IsProjectOpen() && !startupShown) {

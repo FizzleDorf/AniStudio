@@ -201,6 +201,38 @@ namespace ECS {
 		}
 	}
 
+	void EntityManager::UnregisterPluginSystem(SystemTypeID systemId) {
+		auto it = pluginSystems.find(systemId);
+		if (it == pluginSystems.end()) {
+			return;
+		}
+
+		PluginSystemInfo& systemInfo = it->second;
+
+		// Destroy system instance
+		if (systemInfo.instance && systemInfo.destructor) {
+			systemInfo.destructor(systemInfo.instance);
+		}
+
+		pluginSystems.erase(it);
+		std::cout << "[EntityManager] Unregistered plugin system ID: " << systemId << std::endl;
+	}
+
+	// Add this method to EntityManager.cpp
+	void EntityManager::UnregisterPluginComponent(ComponentTypeID componentId) {
+		// Remove from component arrays
+		auto arrayIt = componentsArrays.find(componentId);
+		if (arrayIt != componentsArrays.end()) {
+			componentsArrays.erase(arrayIt);
+		}
+
+		// Remove from creators and getters
+		componentCreators.erase(componentId);
+		componentGetters.erase(componentId);
+
+		std::cout << "[EntityManager] Unregistered plugin component ID: " << componentId << std::endl;
+	}
+
 	bool EntityManager::HasComponentById(const EntityID entity, ComponentTypeID componentId) {
 		assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 		// Check if the entity exists in the map

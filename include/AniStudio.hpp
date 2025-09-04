@@ -1,5 +1,5 @@
 /*
- * AniStudio.hpp - Updated with StudioPluginManager
+ * AniStudio.hpp - Fixed version with proper plugin integration
  */
 #pragma once
 
@@ -10,7 +10,7 @@
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"
 #include "ViewTypes.hpp"
-#include "StudioPluginManager.hpp"  // Add studio plugin support
+#include "StudioPluginManager.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -43,7 +43,6 @@ namespace ANI {
 		ECS::EntityManager& GetEntityManager() { return engineCore.GetEntityManager(); }
 		GUI::ViewManager& GetViewManager() { return viewManager; }
 		ANI::ProjectManager& GetProjectManager() { return m_projectManager; }
-		Plugins::StudioPluginManager& GetStudioPluginManager() { return *studioPluginManager; }
 
 		// Studio state
 		bool IsRunning() const { return running && engineCore.IsRunning(); }
@@ -79,7 +78,7 @@ namespace ANI {
 		GUI::ViewManager viewManager;
 		ANI::ProjectManager m_projectManager;
 
-		// Plugin system
+		// Plugin system - NOW WITH PROPER IMGUI CONTEXT INTEGRATION
 		std::unique_ptr<Plugins::StudioPluginManager> studioPluginManager;
 
 		// Standalone views
@@ -94,6 +93,9 @@ namespace ANI {
 		void RegisterCoreViews();
 		void SetupProjectCallbacks();
 		void InitializeStudioPlugins();
+
+		// NEW: Method for completing initialization after ImGui is ready
+		void CompleteInitialization();
 
 		// Window state management
 		void InitializeWindowState();

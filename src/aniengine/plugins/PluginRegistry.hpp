@@ -2,6 +2,10 @@
 #include <string>
 #include <functional>
 #include <vector>
+#include <memory>
+
+// Forward declaration for ImGui
+struct ImGuiContext;
 
 namespace ECS {
 	class EntityManager;
@@ -12,12 +16,13 @@ namespace ECS {
 
 namespace GUI {
 	class ViewManager;
+	class BaseView;
 	using ViewTypeID = size_t;
 }
 
 namespace Plugins {
 
-	// Descriptors remain the same
+	// Component and System descriptors remain unchanged
 	struct ComponentDescriptor {
 		std::string name;
 		size_t size;
@@ -36,11 +41,10 @@ namespace Plugins {
 	struct ViewDescriptor {
 		std::string name;
 		std::string category;
-		void*(*creator)(ECS::EntityManager*);
-		void(*destructor)(void*);
+		std::function<std::unique_ptr<GUI::BaseView>(ECS::EntityManager&, ImGuiContext*)> factory;
 	};
 
-	// Plugin Registry Interface - passed directly to plugins
+	// Plugin Registry Interface - updated to handle ImGui context
 	class IPluginRegistry {
 	public:
 		virtual ~IPluginRegistry() = default;
@@ -52,6 +56,9 @@ namespace Plugins {
 
 		// Utility methods
 		virtual const std::string& GetCurrentPluginName() const = 0;
+
+		// NEW: Allow plugins to get the ImGui context
+		virtual ImGuiContext* GetImGuiContext() const = 0;
 	};
 
 } // namespace Plugins

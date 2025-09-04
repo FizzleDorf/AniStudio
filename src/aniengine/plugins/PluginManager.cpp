@@ -12,9 +12,11 @@
 
 namespace Plugins {
 
-	// PluginRegistry implementation
-	PluginRegistry::PluginRegistry(const std::string& pluginName, PluginManager* manager)
-		: pluginName(pluginName), manager(manager) {
+	// PluginRegistry implementation - NOW WITH IMGUI CONTEXT
+	PluginRegistry::PluginRegistry(const std::string& pluginName, PluginManager* manager, ImGuiContext* imguiContext)
+		: pluginName(pluginName), manager(manager), imguiContext(imguiContext) {
+		std::cout << "[PluginRegistry] Constructor - plugin: " << pluginName
+			<< ", ImGui context: " << imguiContext << std::endl;
 	}
 
 	ECS::ComponentTypeID PluginRegistry::RegisterComponent(const ComponentDescriptor& desc) {
@@ -28,13 +30,15 @@ namespace Plugins {
 	}
 
 	GUI::ViewTypeID PluginRegistry::RegisterView(const ViewDescriptor& desc) {
-		std::cout << "[PluginRegistry] Registering view: " << desc.name << " for plugin: " << pluginName << std::endl;
+		std::cout << "[PluginRegistry] Registering view: " << desc.name << " for plugin: " << pluginName
+			<< " with context: " << imguiContext << std::endl;
 		return manager->registerView(pluginName, desc);
 	}
 
-	// PluginManager implementation
-	PluginManager::PluginManager(ECS::EntityManager& entityMgr) : entityManager(entityMgr) {
-		std::cout << "[PluginManager] Constructor - manager created" << std::endl;
+	// PluginManager implementation - NOW WITH IMGUI CONTEXT STORAGE
+	PluginManager::PluginManager(ECS::EntityManager& entityMgr, ImGuiContext* imguiContext)
+		: entityManager(entityMgr), imguiContext(imguiContext) {
+		std::cout << "[PluginManager] Constructor - manager created with ImGui context: " << imguiContext << std::endl;
 	}
 
 	PluginManager::~PluginManager() {
@@ -123,13 +127,15 @@ namespace Plugins {
 				return false;
 			}
 
-			std::cout << "[PluginManager] Plugin instance created successfully" << std::endl;
+			// Get version from plugin instance
+			plugin.version = plugin.instance->GetVersion();
 
-			// Create a registry for this plugin - NO STATIC VARIABLES!
-			PluginRegistry registry(pluginName, this);
+			// Create a registry for this plugin - NOW WITH IMGUI CONTEXT
+			PluginRegistry registry(pluginName, this, imguiContext);
 
 			// Call OnEngineInit with direct registry access
-			std::cout << "[PluginManager] Calling OnEngineInit with direct registry access" << std::endl;
+			std::cout << "[PluginManager] Calling OnEngineInit with registry that has ImGui context: "
+				<< imguiContext << std::endl;
 
 			if (!plugin.instance->OnEngineInit(entityManager, registry)) {
 				std::cerr << "[PluginManager] Plugin initialization failed: " << pluginName << std::endl;
@@ -163,10 +169,13 @@ namespace Plugins {
 
 		PluginInfo& plugin = it->second;
 
+		std::cout << "[PluginManager] Disabling plugin: " << pluginName << std::endl;
+
+		// Call plugin shutdown
 		plugin.instance->OnShutdown();
 		plugin.instance->SetInitialized(false);
 
-		// Cleanup all plugin registrations
+		// IMPORTANT: Cleanup all plugin registrations BEFORE destroying the instance
 		cleanupPluginComponents(pluginName);
 		cleanupPluginSystems(pluginName);
 		cleanupPluginViews(pluginName);
@@ -175,7 +184,7 @@ namespace Plugins {
 		plugin.instance = nullptr;
 		plugin.enabled = false;
 
-		std::cout << "[PluginManager] Plugin disabled: " << pluginName << std::endl;
+		std::cout << "[PluginManager] Plugin disabled and cleaned up: " << pluginName << std::endl;
 		return true;
 	}
 
@@ -277,11 +286,11 @@ namespace Plugins {
 	ECS::ComponentTypeID PluginManager::registerComponent(const std::string& pluginName, const ComponentDescriptor& desc) {
 		std::cout << "[PluginManager] registerComponent called for plugin: " << pluginName << ", component: " << desc.name << std::endl;
 
-		// Register with EntityManager's component registry
+		// Use proper component type registration with next sequential ID
 		ECS::ComponentTypeID id = ECS::ComponentTypeRegistry::RegisterType<void>(desc.name);
 		if (id == ECS::MAX_COMPONENT_COUNT) {
 			std::cerr << "[PluginManager] Failed to register component: " << desc.name << std::endl;
-			return 0;
+			return ECS::MAX_COMPONENT_COUNT;
 		}
 
 		// Register with EntityManager for plugin component support
@@ -301,7 +310,7 @@ namespace Plugins {
 	ECS::SystemTypeID PluginManager::registerSystem(const std::string& pluginName, const SystemDescriptor& desc) {
 		std::cout << "[PluginManager] registerSystem called for plugin: " << pluginName << ", system: " << desc.name << std::endl;
 
-		// Register with SystemTypeRegistry
+		// Use the main SystemTypeRegistry to get proper sequential IDs
 		ECS::SystemTypeID id = ECS::SystemTypeRegistry::RegisterType<void>();
 
 		// Register with EntityManager for plugin system support
@@ -324,8 +333,21 @@ namespace Plugins {
 		auto it = pluginComponents.find(pluginName);
 		if (it == pluginComponents.end()) return;
 
+		std::cout << "[PluginManager] Cleaning up components for plugin: " << pluginName << std::endl;
+
 		for (ECS::ComponentTypeID id : it->second) {
-			std::cout << "[PluginManager] Cleaned up component ID: " << id << std::endl;
+			// Remove any entities that have this component
+			auto entities = entityManager.GetAllEntities();
+			for (ECS::EntityID entity : entities) {
+				if (entityManager.HasPluginComponent(entity, id)) {
+					std::cout << "[PluginManager] Removing component " << id << " from entity " << entity << std::endl;
+					entityManager.RemovePluginComponent(entity, id);
+				}
+			}
+
+			// Unregister the component type
+			entityManager.UnregisterPluginComponent(id);
+			std::cout << "[PluginManager] Unregistered component ID: " << id << std::endl;
 		}
 
 		pluginComponents.erase(it);
@@ -335,8 +357,18 @@ namespace Plugins {
 		auto it = pluginSystems.find(pluginName);
 		if (it == pluginSystems.end()) return;
 
+		std::cout << "[PluginManager] Cleaning up systems for plugin: " << pluginName << std::endl;
+
 		for (ECS::SystemTypeID id : it->second) {
-			std::cout << "[PluginManager] Cleaned up system ID: " << id << std::endl;
+			// Stop and destroy the system
+			void* systemInstance = entityManager.GetPluginSystem(id);
+			if (systemInstance) {
+				std::cout << "[PluginManager] Destroying system instance for ID: " << id << std::endl;
+			}
+
+			// Unregister the system
+			entityManager.UnregisterPluginSystem(id);
+			std::cout << "[PluginManager] Unregistered system ID: " << id << std::endl;
 		}
 
 		pluginSystems.erase(it);

@@ -191,6 +191,8 @@ namespace ECS {
 		using ComponentCreator = std::function<void(EntityID)>;
 		using ComponentGetter = std::function<BaseComponent* (EntityID)>;
 		void RegisterComponentType(ComponentTypeID typeId, ComponentCreator creator, ComponentGetter getter);
+		void UnregisterPluginSystem(SystemTypeID systemId);
+		void UnregisterPluginComponent(ComponentTypeID componentId);
 
 		// NEW: Plugin component support - hash-based registration
 		void RegisterPluginComponent(ComponentTypeID typeId,
