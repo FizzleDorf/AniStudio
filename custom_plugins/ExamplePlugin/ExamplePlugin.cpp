@@ -4,6 +4,7 @@
 #include "ViewManager.hpp"
 #include "BaseView.hpp"
 #include "ViewTypes.hpp"
+// #include "Events.hpp"
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -88,7 +89,6 @@ private:
 	ECS::ComponentTypeID m_componentId = ECS::MAX_COMPONENT_COUNT;
 };
 
-// SELF-CONTAINED PLUGIN VIEW - Manages its own ImGui context like Blender/Godot plugins
 class ExamplePluginView : public GUI::BaseView {
 public:
 	static constexpr const char* GetMetadataJSON() {
@@ -115,45 +115,25 @@ public:
 		std::cout << "[ExamplePluginView] Destroyed" << std::endl;
 	}
 
-	void Init() override {
-		std::cout << "[ExamplePluginView] Initialized" << std::endl;
-		BaseView::Init();
+	void Init() override {}
 
-		// Re-validate context during initialization
-		ValidateContext();
-
-		std::cout << "[ExamplePluginView] Context validation result: " << (m_contextValid ? "VALID" : "INVALID") << std::endl;
-	}
-
-	void Update(float deltaT) override {
-		// Minimal update - just ensure context is still valid
-		if (!m_contextValid) {
-			ValidateContext();
-		}
-	}
+	void Update(float deltaT) override {}
 
 	void Render() override {
 		if (!windowOpen) return;
 
-		// CRITICAL: Ensure we have a valid ImGui context before ANY ImGui calls
 		if (!EnsureValidContext()) {
 			std::cerr << "[ExamplePluginView] Cannot render - no valid ImGui context" << std::endl;
 			return;
 		}
 
-		// NOW we can safely make ImGui calls
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			ImGui::Text("ExamplePlugin View - SELF-CONTAINED SUCCESS!");
-			ImGui::Text("Plugin context management: WORKING");
-
-			ImGui::Separator();
-			ImGui::Text("Context Info:");
-			ImGui::Text("Main Context: %p", m_mainImGuiContext);
-			ImGui::Text("Current Context: %p", ImGui::GetCurrentContext());
-			ImGui::Text("Context Valid: %s", m_contextValid ? "YES" : "NO");
-
-			// Safe entity operations
 			try {
+				ImGui::Text("Test");
+				// if (!windowOpen) {
+				// 	ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+				// }
+
 				size_t entityCount = mgr.GetEntityCount();
 				ImGui::Text("Total entities: %zu", entityCount);
 
@@ -168,11 +148,6 @@ public:
 			catch (const std::exception& e) {
 				ImGui::Text("Error: %s", e.what());
 			}
-
-			ImGui::Separator();
-			ImGui::Text("Plugin: ExamplePlugin v1.0.0");
-			ImGui::Text("Status: SELF-CONTAINED SUCCESS");
-			ImGui::Text("Architecture: Like Blender/Godot plugins");
 		}
 		ImGui::End();
 	}
@@ -215,27 +190,22 @@ private:
 	ImGuiContext* m_mainImGuiContext;
 	bool m_contextValid;
 
-	// CRITICAL: Self-contained context validation and management
 	void ValidateContext() {
 		m_contextValid = false;
 
-		// Check if we have a main context
 		if (!m_mainImGuiContext) {
 			std::cout << "[ExamplePluginView] No main context provided" << std::endl;
 			return;
 		}
 
-		// Check if the main context is still valid by trying to use it
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 
 		if (currentContext == m_mainImGuiContext) {
-			// Already using the right context
 			m_contextValid = true;
 			std::cout << "[ExamplePluginView] Already using correct context" << std::endl;
 			return;
 		}
 
-		// Try to switch to the main context
 		try {
 			ImGui::SetCurrentContext(m_mainImGuiContext);
 			ImGuiContext* newCurrent = ImGui::GetCurrentContext();
@@ -253,13 +223,11 @@ private:
 		}
 	}
 
-	// CRITICAL: Ensure valid context before any ImGui operations
 	bool EnsureValidContext() {
 		if (m_contextValid) {
 			return true;
 		}
 
-		// Try to validate/fix the context
 		ValidateContext();
 		return m_contextValid;
 	}

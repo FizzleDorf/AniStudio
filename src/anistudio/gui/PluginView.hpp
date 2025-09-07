@@ -1,5 +1,5 @@
 /*
- * PluginView.hpp - GUI for managing plugins
+ * PluginView.hpp - Enhanced GUI for managing plugins with versioned hot reload support
  * Located in src/anistudio/gui/tools/
  */
 #pragma once
@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <chrono>
 
 namespace GUI {
 
@@ -19,7 +20,7 @@ namespace GUI {
 			return R"({
                 "displayName": "Plugin Manager",
                 "category": "Tools",
-                "description": "Manage and configure plugins"
+                "description": "Manage and configure plugins with versioned hot reload support"
             })";
 		}
 
@@ -37,6 +38,8 @@ namespace GUI {
 		std::string m_pluginDirectory;
 		std::string m_statusMessage;
 		float m_statusTimer = 0.0f;
+
+		// Hot reload settings
 		bool m_hotReloadEnabled = true;
 
 		// Plugin directories found
@@ -57,6 +60,10 @@ namespace GUI {
 		void DisablePlugin(const std::string& pluginName);
 		void ReloadPlugin(const std::string& pluginName);
 		void UnloadPlugin(const std::string& pluginName);
+
+		// Versioned DLL helper functions
+		uint32_t GetHighestVersionInDirectory(const std::filesystem::path& pluginDir, const std::string& pluginName) const;
+		size_t CountVersionedDlls(const std::filesystem::path& pluginDir, const std::string& pluginName) const;
 
 		// UI rendering
 		void RenderToolbar();
