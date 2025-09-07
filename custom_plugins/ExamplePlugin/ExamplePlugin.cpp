@@ -99,7 +99,6 @@ public:
         })";
 	}
 
-	// CRITICAL FIX: Plugin view is self-contained and context-aware
 	ExamplePluginView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext = nullptr)
 		: BaseView(entityMgr), m_mainImGuiContext(mainContext), m_contextValid(false) {
 		viewName = "ExamplePluginView";

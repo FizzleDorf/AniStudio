@@ -15,7 +15,7 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
+ * For commercial license information, please contact legal@kframe.ai.
  */
 
 #pragma once
@@ -26,7 +26,12 @@
 #include "ImageUtils.hpp"
 #include "ImageSystem.hpp"
 #include "SDCPPComponents.h"
-#include "SDcppUtils.hpp"
+#include "Txt2Img.hpp"
+#include "Img2Img.hpp"
+#include "Img2Vid.hpp"
+#include "Edit.hpp"
+#include "Upscaling.hpp"
+#include "Conversion.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
@@ -47,10 +52,12 @@ namespace ECS {
 	class SDCPPSystem : public BaseSystem {
 	public:
 		enum class TaskType {
-			Inference,
-			Conversion,
-			Img2Img,
-			Upscaling
+			Inference,     // txt2img
+			Conversion,    // GGUF conversion
+			Img2Img,       // img2img
+			Img2Vid,       // img2vid
+			Edit,          // edit
+			Upscaling      // upscaling
 		};
 
 		// Simplified queue item for public interface
@@ -185,15 +192,16 @@ namespace ECS {
 				taskData.taskType = taskType;
 				taskData.isClonedEntity = true;
 
-				// Check if we need to generate a random seed
-				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img) {
+				// Check if we need to generate a random seed for certain task types
+				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
+					taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
 
 					if (mgr.HasComponent<SamplerComponent>(clonedEntity)) {
 						auto& samplerComp = mgr.GetComponent<SamplerComponent>(clonedEntity);
 
 						// Generate random seed if needed
 						if (samplerComp.seed < 0) {
-							uint64_t newSeed = Utils::SDCPPUtils::generateRandomSeed();
+							uint64_t newSeed = Utils::generateRandomSeed();
 							samplerComp.seed = static_cast<int>(newSeed);
 							std::cout << "Generated random seed: " << samplerComp.seed << std::endl;
 						}
@@ -518,7 +526,7 @@ namespace ECS {
 		// Static task functions
 		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
-				return Utils::SDCPPUtils::RunInference(metadata, fullPath);
+				return Utils::Txt2Img::RunInference(metadata, fullPath);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during inference: " << e.what() << std::endl;
@@ -528,7 +536,7 @@ namespace ECS {
 
 		static bool RunConversion(const nlohmann::json& metadata) {
 			try {
-				return Utils::SDCPPUtils::ConvertToGGUF(metadata);
+				return Utils::Conversion::ConvertToGGUF(metadata);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during conversion: " << e.what() << std::endl;
@@ -538,7 +546,7 @@ namespace ECS {
 
 		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
-				return Utils::SDCPPUtils::RunImg2Img(metadata, fullPath);
+				return Utils::Img2Img::RunImg2Img(metadata, fullPath);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
@@ -546,9 +554,29 @@ namespace ECS {
 			}
 		}
 
+		static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath) {
+			try {
+				return Utils::Img2Vid::RunImg2Vid(metadata, fullPath);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception during img2vid: " << e.what() << std::endl;
+				return false;
+			}
+		}
+
+		static bool RunEdit(const nlohmann::json& metadata, const std::string& fullPath) {
+			try {
+				return Utils::Edit::RunEdit(metadata, fullPath);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "Exception during edit: " << e.what() << std::endl;
+				return false;
+			}
+		}
+
 		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
-				return Utils::SDCPPUtils::RunUpscaling(metadata, fullPath);
+				return Utils::Upscaling::RunUpscaling(metadata, fullPath);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during upscaling: " << e.what() << std::endl;
@@ -601,6 +629,18 @@ namespace ECS {
 						case TaskType::Img2Img:
 							task.result = diffusionPool.submit(
 								CreateTaskWrapper(task.entityID, RunImg2Img, task.metadata, task.fullPath)
+							);
+							break;
+
+						case TaskType::Img2Vid:
+							task.result = diffusionPool.submit(
+								CreateTaskWrapper(task.entityID, RunImg2Vid, task.metadata, task.fullPath)
+							);
+							break;
+
+						case TaskType::Edit:
+							task.result = diffusionPool.submit(
+								CreateTaskWrapper(task.entityID, RunEdit, task.metadata, task.fullPath)
 							);
 							break;
 

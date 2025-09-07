@@ -185,6 +185,7 @@ target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/defaults>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/media>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/scripts>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/sdcpp>
     # interface
     $<INSTALL_INTERFACE:include/aniengine>
 )
