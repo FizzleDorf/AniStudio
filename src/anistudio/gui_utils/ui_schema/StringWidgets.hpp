@@ -70,10 +70,17 @@ namespace UISchema {
 			return configuredEditors;
 		}
 
+		// Track last known component values to detect external changes
+		static std::unordered_map<uintptr_t, std::string>& GetLastKnownValues() {
+			static std::unordered_map<uintptr_t, std::string> lastKnownValues;
+			return lastKnownValues;
+		}
+
 		// Create or get existing editor
 		static std::shared_ptr<Utils::ZepTextEditor> GetOrCreateEditor(std::string* value) {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
+			auto& lastKnownValues = GetLastKnownValues();
 			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
 
 			auto it = editorMap.find(uniqueKey);
@@ -87,6 +94,7 @@ namespace UISchema {
 				editor->SetText(*value);
 				editorMap[uniqueKey] = editor;
 				configMap[uniqueKey] = ZepEditorConfig{};
+				lastKnownValues[uniqueKey] = *value; // Track initial value
 
 				return editor;
 			}
@@ -128,7 +136,7 @@ namespace UISchema {
 			return config;
 		}
 
-		// Main Zep editor render function
+		// Main Zep editor render function with bidirectional synchronization
 		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			auto editor = GetOrCreateEditor(value);
 			if (!editor) {
@@ -138,14 +146,24 @@ namespace UISchema {
 
 			auto& configMap = GetConfigMap();
 			auto& configuredEditors = GetConfiguredEditors();
+			auto& lastKnownValues = GetLastKnownValues();
 			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
 
 			// ONLY apply schema config ONCE when editor is first created
 			if (configuredEditors.find(uniqueKey) == configuredEditors.end()) {
 				ZepEditorConfig schemaConfig = ParseSchemaOptions(options);
-				configMap[uniqueKey] = schemaConfig;  // Set initial config from schema
+				configMap[uniqueKey] = schemaConfig;
 				ApplyConfig(editor, schemaConfig);
-				configuredEditors.insert(uniqueKey);  // Mark as configured
+				configuredEditors.insert(uniqueKey);
+			}
+
+			// CRITICAL FIX: Check if component value changed externally (e.g., from metadata loading)
+			auto lastValueIt = lastKnownValues.find(uniqueKey);
+			if (lastValueIt != lastKnownValues.end() && lastValueIt->second != *value) {
+				// Component value changed externally - update editor to match
+				editor->SetText(*value);
+				lastKnownValues[uniqueKey] = *value;
+				std::cout << "[StringWidgets] Component value changed externally, updating editor" << std::endl;
 			}
 
 			bool modified = false;
@@ -158,11 +176,13 @@ namespace UISchema {
 			// Let ZepUtils handle child window creation, menu bar, focus, etc.
 			editor->Render(ImVec2(0, 0), contentSize, true);  // true = create child window
 
-			// Check if content changed
-			std::string currentText = editor->GetText();
-			if (currentText != *value) {
-				*value = currentText;
+			// Check if editor content changed and update component
+			std::string currentEditorText = editor->GetText();
+			if (currentEditorText != *value) {
+				*value = currentEditorText;
+				lastKnownValues[uniqueKey] = *value; // Update last known value
 				modified = true;
+				std::cout << "[StringWidgets] Editor content changed, updating component" << std::endl;
 			}
 
 			return modified;
@@ -292,14 +312,18 @@ namespace UISchema {
 			}
 		}
 
-		// Update editor content when deserializing
+		// Update editor content when deserializing - ENHANCED
 		static void UpdateEditorContent(std::string* value) {
 			auto& editorMap = GetEditorMap();
+			auto& lastKnownValues = GetLastKnownValues();
 			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
 
 			auto it = editorMap.find(uniqueKey);
 			if (it != editorMap.end()) {
+				// Force update the editor content
 				it->second->SetText(*value);
+				lastKnownValues[uniqueKey] = *value; // Update tracked value
+				std::cout << "[StringWidgets] UpdateEditorContent: Force synced editor with component value" << std::endl;
 			}
 		}
 
@@ -308,11 +332,13 @@ namespace UISchema {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
 			auto& configuredEditors = GetConfiguredEditors();
+			auto& lastKnownValues = GetLastKnownValues();
 			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
 
 			editorMap.erase(uniqueKey);
 			configMap.erase(uniqueKey);
 			configuredEditors.erase(uniqueKey);
+			lastKnownValues.erase(uniqueKey);
 		}
 
 		// Cleanup all
@@ -320,6 +346,7 @@ namespace UISchema {
 			GetEditorMap().clear();
 			GetConfigMap().clear();
 			GetConfiguredEditors().clear();
+			GetLastKnownValues().clear();
 		}
 	};
 
