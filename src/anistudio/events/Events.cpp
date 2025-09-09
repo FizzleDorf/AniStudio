@@ -244,6 +244,34 @@ namespace ANI {
 				break;
 			}
 
+			case EventType::Img2VidRequest: {
+				std::cout << "Handling Img2Vid request for Entity ID: " << event.entityID << '\n';
+
+				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+				if (sdcppSystem) {
+					std::cout << "SDCPPSystem is registered, queueing img2vid task." << std::endl;
+					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Vid);
+				}
+				else {
+					std::cerr << "SDCPPSystem is not registered, cannot process img2vid request." << std::endl;
+				}
+				break;
+			}
+
+			case EventType::EditRequest: {
+				std::cout << "Handling Edit request for Entity ID: " << event.entityID << '\n';
+
+				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+				if (sdcppSystem) {
+					std::cout << "SDCPPSystem is registered, queueing edit task." << std::endl;
+					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Edit);
+				}
+				else {
+					std::cerr << "SDCPPSystem is not registered, cannot process edit request." << std::endl;
+				}
+				break;
+			}
+
 			case EventType::UpscaleRequest: {
 				std::cout << "Handling Upscale request for Entity ID: " << event.entityID << '\n';
 

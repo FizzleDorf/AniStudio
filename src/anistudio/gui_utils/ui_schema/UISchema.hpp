@@ -40,6 +40,7 @@
 #include "ui_schema/Vec4Widgets.hpp"
 #include "ui_schema/StringArrayWidgets.hpp"
 #include "ui_schema/FileDialogWidgets.hpp"
+#include "ui_schema/MediaLoadingWidgets.hpp"
 
 namespace UISchema {
 
@@ -49,7 +50,7 @@ namespace UISchema {
 		return windowStates;
 	}
 
-	// NEW: Tooltip rendering utility function
+	// Tooltip rendering utility function
 	static void RenderTooltipIfPresent(const nlohmann::json& propSchema, float delay = 0.5f) {
 		std::string tooltipText;
 
@@ -92,18 +93,14 @@ namespace UISchema {
 			return false;
 		}
 
-		// Process any file dialogs first
-		FileDialogWidgets::ProcessDialog();
+		// Process any file dialogs and media loaders first and track if they caused modifications
+		bool fileDialogModified = FileDialogWidgets::ProcessDialog();
+		bool mediaLoadModified = MediaLoadingWidgets::ProcessDialog();
 
 		PushStyleFromSchema(schema);
 		bool modified = false;
 
-		//if (schema.contains("title") && schema["title"].is_string()) {
-		//	ImGui::Text("%s", schema["title"].get<std::string>().c_str());
-		//	ImGui::Separator();
-		//}
-
-		// NEW: Check if this schema should create separate windows
+		// Check if this schema should create separate windows
 		if (schema.contains("ui:separate_windows") && schema["ui:separate_windows"].get<bool>()) {
 			modified = RenderSeparateWindows(schema, properties);
 		}
@@ -115,10 +112,12 @@ namespace UISchema {
 		}
 
 		PopStyleFromSchema(schema);
-		return modified;
+
+		// Return true if any widgets or dialogs were modified
+		return modified || fileDialogModified || mediaLoadModified || FileDialogWidgets::WasModified() || MediaLoadingWidgets::WasModified();
 	}
 
-	// NEW: Handle separate window rendering - COMPLETELY SELF-CONTAINED
+	// Handle separate window rendering
 	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties) {
 		bool modified = false;
 		auto& windowStates = GetWindowStates();
@@ -162,7 +161,6 @@ namespace UISchema {
 					// Render checkbox to toggle window
 					std::string checkboxLabel = windowName + " Editor";
 					ImGui::Checkbox(checkboxLabel.c_str(), &windowStates[windowId]);
-					// NEW: Add tooltip to checkbox as well
 					RenderTooltipIfPresent(propSchema);
 
 					// Show status
@@ -172,7 +170,7 @@ namespace UISchema {
 						ImGui::Text("(%zu chars)", strPtr->length());
 					}
 
-					// RENDER THE WINDOW IMMEDIATELY IF IT SHOULD BE SHOWN
+					// Render the window immediately if it should be shown
 					if (windowStates[windowId]) {
 						bool& showWindow = windowStates[windowId];
 
@@ -257,47 +255,51 @@ namespace UISchema {
 		if (std::holds_alternative<bool*>(propVariant)) {
 			bool* value = std::get<bool*>(propVariant);
 			modified = BoolWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<int*>(propVariant)) {
 			int* value = std::get<int*>(propVariant);
 			modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<float*>(propVariant)) {
 			float* value = std::get<float*>(propVariant);
 			modified = FloatWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<double*>(propVariant)) {
 			double* value = std::get<double*>(propVariant);
 			modified = DoubleWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<std::string*>(propVariant)) {
 			std::string* value = std::get<std::string*>(propVariant);
 			if (widgetType == "file_selector") {
 				modified = FileDialogWidgets::Render(label, value, widgetType, propSchema);
 			}
+			else if (widgetType == "media_loader") {
+				// Media loader updates component properties directly through PropertyMap
+				modified = MediaLoadingWidgets::Render(label, widgetType, propSchema, allProperties);
+			}
 			else {
 				modified = StringWidgets::Render(label, value, widgetType, propSchema);
 			}
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<ImVec2*>(propVariant)) {
 			ImVec2* value = std::get<ImVec2*>(propVariant);
 			modified = Vec2Widgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<ImVec4*>(propVariant)) {
 			ImVec4* value = std::get<ImVec4*>(propVariant);
 			modified = Vec4Widgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<std::vector<std::string>*>(propVariant)) {
 			std::vector<std::string>* value = std::get<std::vector<std::string>*>(propVariant);
 			modified = StringArrayWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema); // NEW: Add tooltip support
+			RenderTooltipIfPresent(propSchema);
 		}
 		else {
 			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unsupported property type");
@@ -341,7 +343,6 @@ namespace UISchema {
 
 					ImGui::TableNextColumn();
 					ImGui::Text("%s", label.c_str());
-					// NEW: Add tooltip to table labels as well
 					RenderTooltipIfPresent(propSchema);
 
 					ImGui::TableNextColumn();
@@ -372,7 +373,6 @@ namespace UISchema {
 		const nlohmann::json& propSchema, const PropertyMap& allProperties) {
 		// Use empty label for table widgets since label is in first column
 		bool modified = RenderPropertyWidget("##value", widgetType, propVariant, propSchema, allProperties);
-		// Note: Tooltip is already handled in RenderPropertyWidget, so no need to add it here again
 		return modified;
 	}
 
@@ -397,48 +397,5 @@ namespace UISchema {
 			}
 		}
 	}
-
-	/*
-	// Example usage for a prompt component with separate windows:
-	// The UISchema handles EVERYTHING automatically - no additional calls needed!
-
-	nlohmann::json promptSchema = {
-		{"title", "Prompt Settings"},
-		{"type", "object"},
-		{"propertyOrder", {"posPrompt", "negPrompt"}},
-		{"ui:separate_windows", true},  // Enable separate window mode
-		{"properties", {
-			{"posPrompt", {
-				{"type", "string"},
-				{"title", "Positive"},
-				{"description", "Enter your positive prompt here to describe what you want to generate"},
-				{"ui:widget", "zep_editor_toolbar"},
-				{"ui:window", true},  // Create separate window
-				{"ui:window_name", "Positive"},  // Window name
-				{"ui:options", {
-					{"width", 800.0f},
-					{"height", 400.0f}
-				}}
-			}},
-			{"negPrompt", {
-				{"type", "string"},
-				{"title", "Negative"},
-				{"description", "Enter negative prompt to describe what you want to avoid in the generation"},
-				{"ui:widget", "zep_editor_toolbar"},
-				{"ui:window", true},  // Create separate window
-				{"ui:window_name", "Negative"},  // Window name
-				{"ui:options", {
-					{"width", 800.0f},
-					{"height", 300.0f}
-				}}
-			}}
-		}}
-	};
-
-	// Usage in your view - THAT'S IT! UISchema handles everything:
-	auto promptProps = promptComponent.GetPropertyMap();
-	UISchema::RenderSchema(promptSchema, promptProps);
-	// ^ This shows buttons AND automatically renders "Positive" and "Negative" windows with tooltips!
-	*/
 
 } // namespace UISchema

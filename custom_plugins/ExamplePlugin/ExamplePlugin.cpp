@@ -128,7 +128,7 @@ public:
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 			try {
-				ImGui::Text("Test");
+				ImGui::Text("Yeah dude, I made it so you can hot-reload shared libs so you don't have to restart a server or some bullshit. just waiting on wan 2.2 Q8 to finish downloading... in another 2 hours");
 				// if (!windowOpen) {
 				// 	ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
 				// }

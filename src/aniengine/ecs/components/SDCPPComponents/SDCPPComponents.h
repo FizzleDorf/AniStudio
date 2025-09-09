@@ -28,6 +28,7 @@
 
 // Models
 #include "ModelComponents.hpp"
+#include "VideoModelComponents.hpp"
 // #include "PhotomakerComponent.hpp"
 // #include "InputIdComponent.hpp"
 

@@ -25,6 +25,7 @@
 #include "rng.hpp"
 #include "ImageUtils.hpp"
 #include "ImageSystem.hpp"
+#include "VideoSystem.hpp"
 #include "SDCPPComponents.h"
 #include "Txt2Img.hpp"
 #include "Img2Img.hpp"
@@ -345,6 +346,12 @@ namespace ECS {
 			return taskQueue.size();
 		}
 
+		// Get the last generated video entity ID for VideoDiffusionView
+		EntityID GetLastGeneratedVideo() const {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			return lastGeneratedVideoEntity;
+		}
+
 	private:
 		// Private member variables
 		std::vector<TaskData> taskQueue;
@@ -354,6 +361,7 @@ namespace ECS {
 		std::atomic<bool> clearRequested{ false };
 		std::vector<EntityID> entitiesNeedingCleanup;
 		mutable std::mutex queueMutex;
+		EntityID lastGeneratedVideoEntity{ 0 }; // Track last generated video
 
 		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
 			return Utils::ThreadPoolManager::getInstance().getStats();
@@ -444,8 +452,6 @@ namespace ECS {
 			if (entitiesNeedingCleanup.empty()) {
 				return;
 			}
-
-			auto imageSystem = mgr.GetSystem<ImageSystem>();
 
 			// Process a few entities per frame to avoid hitches
 			int maxCleanupPerFrame = 5;
@@ -584,6 +590,22 @@ namespace ECS {
 			}
 		}
 
+		// Helper to determine if a task type produces video output
+		bool IsVideoTask(TaskType taskType) const {
+			return taskType == TaskType::Img2Vid || taskType == TaskType::Edit;
+		}
+
+		// Helper to get appropriate file extension based on task type
+		std::string GetOutputExtension(TaskType taskType) const {
+			switch (taskType) {
+			case TaskType::Img2Vid:
+			case TaskType::Edit:
+				return ".mp4";
+			default:
+				return ".png";
+			}
+		}
+
 		// Queue processing methods
 		void ProcessQueues() {
 			std::lock_guard<std::mutex> lock(queueMutex);
@@ -605,10 +627,22 @@ namespace ECS {
 			// Find the first non-processing item
 			for (auto& task : taskQueue) {
 				if (!task.processing) {
-					// Prepare the output path
+					// Prepare the output path based on task type
 					if (mgr.HasComponent<OutputImageComponent>(task.entityID)) {
 						auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
-						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(output.fileName, output.filePath);
+
+						// Modify filename extension based on task type
+						std::string baseName = output.fileName;
+						std::string extension = GetOutputExtension(task.taskType);
+
+						// Remove existing extension if any
+						size_t lastDot = baseName.find_last_of('.');
+						if (lastDot != std::string::npos) {
+							baseName = baseName.substr(0, lastDot);
+						}
+
+						std::string fullFileName = baseName + extension;
+						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, output.filePath);
 					}
 
 					// Submit appropriate function based on task type using wrapper
@@ -681,7 +715,7 @@ namespace ECS {
 				return;
 			}
 
-			std::vector<std::pair<EntityID, std::string>> completedTasks;
+			std::vector<std::tuple<EntityID, std::string, TaskType>> completedTasks;
 
 			{
 				std::unique_lock<std::mutex> lock(queueMutex);
@@ -696,6 +730,7 @@ namespace ECS {
 
 							EntityID entityID = it->entityID;
 							std::string fullPath = it->fullPath;
+							TaskType taskType = it->taskType;
 							bool success = false;
 
 							try {
@@ -707,7 +742,7 @@ namespace ECS {
 
 							// Process the completed task
 							if (success) {
-								completedTasks.emplace_back(entityID, fullPath);
+								completedTasks.emplace_back(entityID, fullPath, taskType);
 							}
 							else {
 								std::cerr << "Task failed for entity " << entityID << std::endl;
@@ -743,12 +778,12 @@ namespace ECS {
 			} // Lock released here
 
 			// Process completed tasks WITHOUT holding the lock
-			for (const auto&[entityID, fullPath] : completedTasks) {
-				ProcessCompletedTask(entityID, fullPath);
+			for (const auto&[entityID, fullPath, taskType] : completedTasks) {
+				ProcessCompletedTask(entityID, fullPath, taskType);
 			}
 		}
 
-		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath) {
+		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath, TaskType taskType) {
 			try {
 
 				if (shuttingDown) {
@@ -765,19 +800,46 @@ namespace ECS {
 					return;
 				}
 
-				auto imageSystem = mgr.GetSystem<ImageSystem>();
-				if (!imageSystem) {
-					std::cerr << "ImageSystem not found" << std::endl;
-					return;
-				}
+				// Handle video output differently from image output
+				if (IsVideoTask(taskType)) {
+					// Handle video output
+					auto videoSystem = mgr.GetSystem<VideoSystem>();
+					if (!videoSystem) {
+						std::cerr << "VideoSystem not found for video task completion" << std::endl;
+						return;
+					}
 
-				if (!mgr.HasComponent<ImageComponent>(entityID)) {
-					mgr.AddComponent<ImageComponent>(entityID);
-				}
+					// Create a new entity for the generated video
+					EntityID videoEntity = mgr.AddNewEntity();
+					mgr.AddComponent<VideoComponent>(videoEntity);
 
-				// Load the image
-				imageSystem->SetImage(entityID, fullPath);
-				std::cout << "Image loaded successfully for entity " << entityID << std::endl;
+					// Load the video
+					videoSystem->SetVideo(videoEntity, fullPath);
+
+					// Store the last generated video entity for VideoDiffusionView
+					{
+						std::lock_guard<std::mutex> lock(queueMutex);
+						lastGeneratedVideoEntity = videoEntity;
+					}
+
+					std::cout << "Video loaded successfully for entity " << videoEntity << " from " << fullPath << std::endl;
+				}
+				else {
+					// Handle image output (existing logic)
+					auto imageSystem = mgr.GetSystem<ImageSystem>();
+					if (!imageSystem) {
+						std::cerr << "ImageSystem not found" << std::endl;
+						return;
+					}
+
+					if (!mgr.HasComponent<ImageComponent>(entityID)) {
+						mgr.AddComponent<ImageComponent>(entityID);
+					}
+
+					// Load the image
+					imageSystem->SetImage(entityID, fullPath);
+					std::cout << "Image loaded successfully for entity " << entityID << std::endl;
+				}
 
 				std::cout << "Successfully processed completed task for entity " << entityID << std::endl;
 			}

@@ -31,7 +31,6 @@
 
 namespace Utils
 {
-	// Forward declarations for shared utilities
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
 
@@ -51,12 +50,9 @@ namespace Utils
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "upscale_AniStudio.png";
 				uint32_t upscaleFactor = 4;
-				bool preserveAspectRatio = true;
+				bool offload_params_to_cpu = false;
+				bool direct = false;
 				int n_threads = 4;
-
-				// Debug logging for metadata
-				std::cout << "Upscaling metadata:" << std::endl;
-				std::cout << metadata.dump(2) << std::endl;
 
 				// Parse metadata to extract parameters
 				if (metadata.contains("components") && metadata["components"].is_array())
@@ -100,7 +96,7 @@ namespace Utils
 
 							if (esrganData.contains("modelPath") && !esrganData["modelPath"].is_null() && !esrganData["modelPath"].get<std::string>().empty())
 							{
-								modelPath = esrganData["modelPath"];
+								modelPath = esrganData["modelPath"].get<std::string>();
 							}
 							else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null() && !esrganData["modelName"].get<std::string>().empty())
 							{
@@ -109,10 +105,7 @@ namespace Utils
 							}
 
 							if (esrganData.contains("upscaleFactor"))
-								upscaleFactor = esrganData["upscaleFactor"];
-
-							if (esrganData.contains("preserveAspectRatio"))
-								preserveAspectRatio = esrganData["preserveAspectRatio"];
+								upscaleFactor = esrganData["upscaleFactor"].get<uint32_t>();
 						}
 
 						// Sampler component
@@ -121,7 +114,11 @@ namespace Utils
 							nlohmann::json samplerData = comp["Sampler"];
 
 							if (samplerData.contains("n_threads"))
-								n_threads = samplerData["n_threads"];
+								n_threads = samplerData["n_threads"].get<int>();
+							if (samplerData.contains("offload_params_to_cpu"))
+								offload_params_to_cpu = samplerData["offload_params_to_cpu"].get<bool>();
+							if (samplerData.contains("direct"))
+								direct = samplerData["direct"].get<bool>();
 						}
 					}
 				}
@@ -157,8 +154,11 @@ namespace Utils
 				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
 					outputFile.string(), outputDir.string());
 
-				// Initialize upscaler context
-				upscaler_context = new_upscaler_ctx(modelPath.c_str(), n_threads);
+				// Initialize upscaler context with NEW API signature
+				upscaler_context = new_upscaler_ctx(modelPath.c_str(),
+					offload_params_to_cpu,
+					direct,
+					n_threads);
 				if (!upscaler_context)
 				{
 					throw std::runtime_error("Failed to initialize upscaler context!");
@@ -169,9 +169,10 @@ namespace Utils
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
 					static_cast<uint32_t>(inputChannels),
-					inputData };
+					inputData
+				};
 
-				// Perform upscaling
+				// Perform upscaling using the NEW API
 				sd_image_t upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
 				if (!upscaled_image.data)
 				{
@@ -179,23 +180,6 @@ namespace Utils
 				}
 
 				std::cout << "Upscaling successful, saving output to: " << uniqueFilePath << std::endl;
-
-				// Update metadata with correct output path before saving
-				nlohmann::json updatedMetadata = metadata;
-				for (auto &comp : updatedMetadata["components"])
-				{
-					if (comp.contains("OutputImage"))
-					{
-						if (comp["OutputImage"].contains("OutputImage"))
-						{
-							comp["OutputImage"]["OutputImage"]["filePath"] = uniqueFilePath;
-						}
-						else
-						{
-							comp["OutputImage"]["filePath"] = uniqueFilePath;
-						}
-					}
-				}
 
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
@@ -205,14 +189,14 @@ namespace Utils
 				// Cleanup resources
 				if (inputData)
 				{
-					stbi_image_free(inputData);
+					stbi_image_free(inputData);  // stb_image allocation
 					inputData = nullptr;
 				}
 
 				// Free the upscaled image if needed
 				if (upscaled_image.data)
 				{
-					free(upscaled_image.data);
+					free(upscaled_image.data);  // stable-diffusion.cpp allocation
 				}
 
 				// Cleanup upscaler context
@@ -228,7 +212,7 @@ namespace Utils
 				// Clean up resources
 				if (inputData)
 				{
-					stbi_image_free(inputData);
+					stbi_image_free(inputData);  // stb_image allocation
 					inputData = nullptr;
 				}
 
@@ -242,4 +226,4 @@ namespace Utils
 			}
 		}
 	};
-}
+} // namespace Utils

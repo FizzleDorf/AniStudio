@@ -36,6 +36,7 @@ namespace Utils
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
 	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
+	void InitializeSampleParams(sd_sample_params_t &sample_params, const nlohmann::json &metadata);
 
 	class Edit
 	{
@@ -44,26 +45,21 @@ namespace Utils
 		{
 			sd_ctx_t *sd_context = nullptr;
 			std::vector<unsigned char*> refImageData;
-			std::vector<sd_image_t> ref_images;
 			sd_image_t *result_image = nullptr;
 
 			try
 			{
-				// Extract parameters from metadata
+				// Initialize image generation parameters with defaults
+				sd_img_gen_params_t gen_params;
+				sd_img_gen_params_init(&gen_params);
+
+				// Extract parameters from metadata - FIXED: Use local strings
 				std::vector<std::string> refImagePaths;
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "edit_output.png";
-				std::string posPrompt = "", negPrompt = "";
-				float clipSkip = 2.0f, cfg = 7.0f, guidance = 2.0f, eta = 0.0f;
-				int width = 512, height = 512;
-				int steps = 20, seed = -1, batchSize = 1;
-				float strength = 0.8f;
-				sample_method_t sample_method = EULER;
-				int *skipLayers = nullptr;
-				size_t skipLayersCount = 0;
-				float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
-				float control_strength = 0.0f, style_strength = 0.0f;
-				bool normalize_input = false;
+				std::string posPrompt = "";
+				std::string negPrompt = "";
+				std::string idImagesPath = "";
 
 				// Debug logging for metadata
 				std::cout << "Edit metadata:" << std::endl;
@@ -116,7 +112,7 @@ namespace Utils
 							}
 						}
 
-						// Prompt component
+						// Prompt component - FIXED: Use local strings
 						if (comp.contains("Prompt"))
 						{
 							nlohmann::json promptData = comp["Prompt"];
@@ -133,7 +129,7 @@ namespace Utils
 							nlohmann::json clipSkipData = comp["ClipSkip"];
 
 							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
-								clipSkip = clipSkipData["clipSkip"].get<float>();
+								gen_params.clip_skip = clipSkipData["clipSkip"].get<int>();
 						}
 
 						// Sampler component
@@ -141,27 +137,12 @@ namespace Utils
 						{
 							nlohmann::json samplerData = comp["Sampler"];
 
-							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
-								cfg = samplerData["cfg"].get<float>();
-							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
-								steps = samplerData["steps"].get<int>();
 							if (samplerData.contains("seed") && !samplerData["seed"].is_null())
-								seed = samplerData["seed"].get<int>();
+								gen_params.seed = static_cast<int64_t>(samplerData["seed"].get<int>());
 							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
-								strength = samplerData["denoise"].get<float>();
-							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
-								sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
-						}
-
-						// Guidance component
-						if (comp.contains("Guidance"))
-						{
-							nlohmann::json guidanceData = comp["Guidance"];
-
-							if (guidanceData.contains("guidance") && !guidanceData["guidance"].is_null())
-								guidance = guidanceData["guidance"].get<float>();
-							if (guidanceData.contains("eta") && !guidanceData["eta"].is_null())
-								eta = guidanceData["eta"].get<float>();
+								gen_params.strength = samplerData["denoise"].get<float>();
+							if (samplerData.contains("batchSize") && !samplerData["batchSize"].is_null())
+								gen_params.batch_count = samplerData["batchSize"].get<int>();
 						}
 
 						// Latent component
@@ -170,11 +151,9 @@ namespace Utils
 							nlohmann::json latentData = comp["Latent"];
 
 							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
-								width = latentData["latentWidth"].get<int>();
+								gen_params.width = latentData["latentWidth"].get<int>();
 							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
-								height = latentData["latentHeight"].get<int>();
-							if (latentData.contains("batchSize") && !latentData["batchSize"].is_null())
-								batchSize = latentData["batchSize"].get<int>();
+								gen_params.height = latentData["latentHeight"].get<int>();
 						}
 
 						// ControlNet component for edit operations
@@ -183,27 +162,31 @@ namespace Utils
 							nlohmann::json controlData = comp["Controlnet"];
 
 							if (controlData.contains("control_strength") && !controlData["control_strength"].is_null())
-								control_strength = controlData["control_strength"].get<float>();
+								gen_params.control_strength = controlData["control_strength"].get<float>();
 							if (controlData.contains("style_strength") && !controlData["style_strength"].is_null())
-								style_strength = controlData["style_strength"].get<float>();
+								gen_params.style_strength = controlData["style_strength"].get<float>();
 							if (controlData.contains("normalize_input") && !controlData["normalize_input"].is_null())
-								normalize_input = controlData["normalize_input"].get<bool>();
+								gen_params.normalize_input = controlData["normalize_input"].get<bool>();
 						}
 
-						// Layer Skip component
-						if (comp.contains("LayerSkip"))
+						// ID Images path for PhotoMaker/Chroma - FIXED: Use local string
+						if (comp.contains("IdImages"))
 						{
-							nlohmann::json layerSkipData = comp["LayerSkip"];
+							nlohmann::json idImagesData = comp["IdImages"];
 
-							if (layerSkipData.contains("slg_scale") && !layerSkipData["slg_scale"].is_null())
-								slgScale = layerSkipData["slg_scale"].get<float>();
-							if (layerSkipData.contains("skip_layer_start") && !layerSkipData["skip_layer_start"].is_null())
-								skipLayerStart = layerSkipData["skip_layer_start"].get<float>();
-							if (layerSkipData.contains("skip_layer_end") && !layerSkipData["skip_layer_end"].is_null())
-								skipLayerEnd = layerSkipData["skip_layer_end"].get<float>();
+							if (idImagesData.contains("path") && !idImagesData["path"].is_null())
+								idImagesPath = idImagesData["path"].get<std::string>();
 						}
 					}
 				}
+
+				// Set prompt and ID images path strings - ALWAYS use c_str(), NEVER nullptr
+				gen_params.prompt = posPrompt.c_str();
+				gen_params.negative_prompt = negPrompt.c_str();
+				gen_params.input_id_images_path = idImagesPath.c_str();
+
+				// Initialize sample parameters
+				InitializeSampleParams(gen_params.sample_params, metadata);
 
 				// Validate parameters
 				if (refImagePaths.empty())
@@ -211,7 +194,8 @@ namespace Utils
 					throw std::runtime_error("No reference images provided for edit operation!");
 				}
 
-				// Load reference images
+				// Load reference images - NEW API uses array in gen_params
+				std::vector<sd_image_t> ref_images;
 				for (const std::string& imagePath : refImagePaths)
 				{
 					if (!std::filesystem::exists(imagePath))
@@ -251,9 +235,27 @@ namespace Utils
 						static_cast<uint32_t>(imgWidth),
 						static_cast<uint32_t>(imgHeight),
 						3, // Force 3 channels (RGB)
-						imageData };
+						imageData
+					};
 
 					ref_images.push_back(ref_img);
+				}
+
+				// Set reference images in generation parameters (NEW API approach)
+				if (!ref_images.empty())
+				{
+					// Use the first reference image as init_image for edit operations
+					gen_params.init_image = ref_images[0];
+
+					// Set additional reference images if available
+					if (ref_images.size() > 1)
+					{
+						// For the new API, we need to allocate and set the ref_images array
+						static std::vector<sd_image_t> static_ref_images;
+						static_ref_images = std::vector<sd_image_t>(ref_images.begin() + 1, ref_images.end());
+						gen_params.ref_images = static_ref_images.data();
+						gen_params.ref_images_count = static_cast<int>(static_ref_images.size());
+					}
 				}
 
 				// Create output path
@@ -271,50 +273,25 @@ namespace Utils
 				}
 
 				// Ensure valid seed
-				if (seed < 0)
+				if (gen_params.seed < 0)
 				{
-					seed = static_cast<int>(generateRandomSeed());
-					std::cout << "Generated random seed: " << seed << std::endl;
+					gen_params.seed = static_cast<int64_t>(generateRandomSeed());
+					std::cout << "Generated random seed: " << gen_params.seed << std::endl;
 				}
 
-				// Perform edit operation
-				std::cout << "Calling edit with " << ref_images.size() << " reference images..." << std::endl;
-				result_image = edit(
-					sd_context,
-					ref_images.data(),
-					static_cast<int>(ref_images.size()),
-					posPrompt.c_str(),
-					negPrompt.c_str(),
-					static_cast<int>(clipSkip),
-					cfg,
-					guidance,
-					eta,
-					width,
-					height,
-					sample_method,
-					steps,
-					strength,
-					static_cast<int64_t>(seed),
-					batchSize,
-					nullptr, // control_cond
-					control_strength,
-					style_strength,
-					normalize_input,
-					skipLayers,
-					skipLayersCount,
-					slgScale,
-					skipLayerStart,
-					skipLayerEnd);
+				// Perform edit operation using NEW structured API
+				std::cout << "Calling generate_image for edit with " << ref_images.size() << " reference images..." << std::endl;
+				result_image = generate_image(sd_context, &gen_params);
 
 				if (!result_image)
 				{
-					throw std::runtime_error("edit failed - no output image produced");
+					throw std::runtime_error("generate_image failed - no output image produced");
 				}
 
 				if (!result_image->data)
 				{
 					free(result_image);
-					throw std::runtime_error("edit produced invalid image data");
+					throw std::runtime_error("generate_image produced invalid image data");
 				}
 
 				std::cout << "edit successful: " << result_image->width << "x" << result_image->height
@@ -334,7 +311,6 @@ namespace Utils
 					}
 				}
 				refImageData.clear();
-				ref_images.clear();
 
 				if (result_image)
 				{
@@ -363,7 +339,6 @@ namespace Utils
 					}
 				}
 				refImageData.clear();
-				ref_images.clear();
 
 				if (result_image)
 				{

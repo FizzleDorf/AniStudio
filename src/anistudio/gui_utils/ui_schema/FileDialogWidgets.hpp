@@ -25,9 +25,11 @@
 #include <string>
 #include <functional>
 #include <filesystem>
+#include <GL/glew.h>
 #include "ImGuiFileDialog.h"
 #include "FileDialogFilters.hpp"
 #include "UISchemaUtils.hpp"
+#include <stb_image.h>
 
 namespace UISchema {
 
@@ -45,8 +47,111 @@ namespace UISchema {
 		static inline std::string currentDialogKey = "";
 		static inline bool isDialogOpen = false;
 		static inline FileDialogCallback currentCallback = nullptr;
+		static inline bool pendingModification = false;
+
+		// Cache for image previews
+		static inline std::unordered_map<std::string, GLuint> imagePreviewCache;
+		static inline std::unordered_map<std::string, std::pair<int, int>> imageDimensionsCache;
 
 	public:
+		// Clean up preview textures
+		static void CleanupPreviews() {
+			for (auto&[path, textureID] : imagePreviewCache) {
+				if (textureID != 0) {
+					glDeleteTextures(1, &textureID);
+				}
+			}
+			imagePreviewCache.clear();
+			imageDimensionsCache.clear();
+		}
+
+		// Check if a file dialog operation resulted in a modification
+		static bool WasModified() {
+			bool result = pendingModification;
+			pendingModification = false;
+			return result;
+		}
+
+		// Create preview texture for image
+		static GLuint CreateImagePreview(const std::string& imagePath) {
+			// Check cache first
+			if (imagePreviewCache.count(imagePath)) {
+				return imagePreviewCache[imagePath];
+			}
+
+			if (!std::filesystem::exists(imagePath)) {
+				return 0;
+			}
+
+			// Load image
+			int width, height, channels;
+			unsigned char* data = stbi_load(imagePath.c_str(), &width, &height, &channels, 0);
+			if (!data) {
+				std::cerr << "Failed to load image for preview: " << imagePath << std::endl;
+				return 0;
+			}
+
+			// Create OpenGL texture
+			GLuint textureID;
+			glGenTextures(1, &textureID);
+			glBindTexture(GL_TEXTURE_2D, textureID);
+
+			// Set texture parameters
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+			// Upload texture data
+			GLenum format = (channels == 4) ? GL_RGBA : (channels == 3) ? GL_RGB : GL_RED;
+			glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+			// Cache the texture and dimensions
+			imagePreviewCache[imagePath] = textureID;
+			imageDimensionsCache[imagePath] = { width, height };
+
+			// Free image data
+			stbi_image_free(data);
+
+			std::cout << "Created preview texture for: " << imagePath << " (" << width << "x" << height << ")" << std::endl;
+			return textureID;
+		}
+
+		// Render image preview
+		static void RenderImagePreview(const std::string& imagePath, float maxSize = 256.0f) {
+			if (imagePath.empty() || !std::filesystem::exists(imagePath)) {
+				return;
+			}
+
+			GLuint textureID = CreateImagePreview(imagePath);
+			if (textureID == 0) {
+				return;
+			}
+
+			// Get cached dimensions
+			auto dimIt = imageDimensionsCache.find(imagePath);
+			if (dimIt == imageDimensionsCache.end()) {
+				return;
+			}
+
+			int width = dimIt->second.first;
+			int height = dimIt->second.second;
+
+			// Calculate preview size maintaining aspect ratio
+			float aspectRatio = static_cast<float>(width) / height;
+			ImVec2 previewSize;
+			if (aspectRatio > 1.0f) {
+				previewSize = ImVec2(maxSize, maxSize / aspectRatio);
+			}
+			else {
+				previewSize = ImVec2(maxSize * aspectRatio, maxSize);
+			}
+
+			// Render the preview
+			ImGui::Text("Preview (%dx%d):", width, height);
+			ImGui::Image((ImTextureID)(intptr_t)textureID, previewSize);
+		}
+
 		// Open a file dialog with the specified parameters
 		static void OpenFileDialog(
 			const std::string& dialogKey,
@@ -85,12 +190,12 @@ namespace UISchema {
 			);
 		}
 
-		// FIXED: Process the dialog and return result (call this in your render loop)
-		static FileDialogResult ProcessDialog() {
-			FileDialogResult result;
+		// Process the dialog and return result (call this in your render loop)
+		static bool ProcessDialog() {
+			bool dialogResult = false;
 
 			if (!isDialogOpen || currentDialogKey.empty()) {
-				return result;
+				return dialogResult;
 			}
 
 			// Display the dialog
@@ -101,9 +206,10 @@ namespace UISchema {
 			)) {
 				// Dialog was closed
 				if (ImGuiFileDialog::Instance()->IsOk()) {
+					FileDialogResult result;
 					result.wasOkPressed = true;
 
-					// FIXED: Get the components separately and construct properly
+					// Get the components separately and construct properly
 					std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 					std::string currentPath = ImGuiFileDialog::Instance()->GetCurrentPath();
 
@@ -116,7 +222,7 @@ namespace UISchema {
 					result.selectedFileName = fileName;
 					result.selectedPath = currentPath;
 
-					// FIXED: Construct fullPath manually to avoid duplication
+					// Construct fullPath manually to avoid duplication
 					if (!fileName.empty() && !currentPath.empty()) {
 						// Use appropriate path separator for the platform
 						char pathSeparator = '/';
@@ -138,11 +244,13 @@ namespace UISchema {
 					std::cout << "  Selected Path: " << result.selectedPath << std::endl;
 					std::cout << "  Selected Filename: " << result.selectedFileName << std::endl;
 					std::cout << "  Full Path: " << result.fullPath << std::endl;
-				}
 
-				// Execute callback if provided
-				if (currentCallback) {
-					currentCallback(result);
+					// Execute callback if provided
+					if (currentCallback) {
+						currentCallback(result);
+						pendingModification = true;
+						dialogResult = true;
+					}
 				}
 
 				// Clean up and PROPERLY clear search filter
@@ -166,7 +274,7 @@ namespace UISchema {
 				currentCallback = nullptr;
 			}
 
-			return result;
+			return dialogResult;
 		}
 
 		// Check if any dialog is currently open
@@ -184,7 +292,7 @@ namespace UISchema {
 			}
 		}
 
-		// Simplified file selector widget - always shows path above, wraps text
+		// Enhanced file selector with image preview and proper path handling
 		static bool RenderFileSelector(
 			const std::string& label,
 			std::string* value,
@@ -202,6 +310,18 @@ namespace UISchema {
 			std::string resetButtonText = GetSchemaValue<std::string>(options, "resetButtonText", "Clear");
 			std::string browseTooltip = GetSchemaValue<std::string>(options, "browseTooltip", "");
 
+			// Check if this component needs full path storage
+			bool needsFullPath = options.contains("component_type") &&
+				options["component_type"] == "InputImageComponent";
+
+			// Check if this is an image file selector for preview
+			bool isImageSelector = (filters.find(".png") != std::string::npos ||
+				filters.find(".jpg") != std::string::npos ||
+				filters.find(".jpeg") != std::string::npos ||
+				filters.find(".bmp") != std::string::npos ||
+				filters.find(".tga") != std::string::npos ||
+				needsFullPath);
+
 			// Initialize value to default path if empty and default exists
 			if (value->empty() && !defaultPath.empty()) {
 				*value = defaultPath;
@@ -211,7 +331,13 @@ namespace UISchema {
 			// Create unique ID for this widget
 			std::string uniqueId = label + "##" + std::to_string(reinterpret_cast<uintptr_t>(value));
 
-			// ALWAYS show current path above buttons with text wrapping
+			// Show image preview FIRST if this is an image and we have a valid path
+			if (isImageSelector && !value->empty() && std::filesystem::exists(*value)) {
+				RenderImagePreview(*value, 200.0f);
+				ImGui::Spacing();
+			}
+
+			// Show current path above buttons with text wrapping
 			if (!value->empty()) {
 				// Show the current path/filename with wrapping
 				ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
@@ -276,27 +402,25 @@ namespace UISchema {
 					formattedFilters,
 					actualDialogPath,
 					isDirectoryMode,
-					[value, &modified, isDirectoryMode](const FileDialogResult& result) {
+					[value, isDirectoryMode, needsFullPath](const FileDialogResult& result) {
 					if (result.wasOkPressed) {
 						if (isDirectoryMode) {
 							*value = result.selectedPath;
 						}
 						else {
-							// Split the full path into directory and filename
-							std::filesystem::path fullPath(result.fullPath);
-							std::string directory = fullPath.parent_path().string();
-							std::string filename = fullPath.filename().string();
-
-							// Set the value to just the filename
-							*value = filename;
-
-							std::cout << "FileDialog split result:" << std::endl;
-							std::cout << "  Full Path: " << result.fullPath << std::endl;
-							std::cout << "  Directory: " << directory << std::endl;
-							std::cout << "  Filename: " << filename << std::endl;
-							std::cout << "  Setting value to: " << filename << std::endl;
+							if (needsFullPath) {
+								// Store full path for InputImageComponent
+								*value = result.fullPath;
+								std::cout << "InputImageComponent: Setting FULL PATH: " << result.fullPath << std::endl;
+							}
+							else {
+								// For other components, store just the filename
+								std::filesystem::path fullPath(result.fullPath);
+								std::string filename = fullPath.filename().string();
+								*value = filename;
+								std::cout << "Other component: Setting filename: " << filename << std::endl;
+							}
 						}
-						modified = true;
 					}
 				}
 				);
@@ -328,7 +452,7 @@ namespace UISchema {
 				// Add tooltip for reset button
 				if (ImGui::IsItemHovered()) {
 					ImGui::BeginTooltip();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);  // Set explicit wrap width
+					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
 					ImGui::Text("Reset to default: %s", defaultPath.c_str());
 					ImGui::PopTextWrapPos();
 					ImGui::EndTooltip();

@@ -35,6 +35,7 @@
 
 // AI Generation views
 #include "tools/DiffusionView.hpp"
+#include "tools/VideoDiffusionView.hpp"
 #include "tools/UpscaleView.hpp"
 #include "tools/ConvertView.hpp"
 

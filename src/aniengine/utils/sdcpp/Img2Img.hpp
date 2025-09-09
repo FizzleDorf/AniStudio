@@ -36,6 +36,7 @@ namespace Utils
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
 	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
+	void InitializeSampleParams(sd_sample_params_t &sample_params, const nlohmann::json &metadata);
 
 	class Img2Img
 	{
@@ -50,20 +51,17 @@ namespace Utils
 
 			try
 			{
-				// Extract parameters from metadata
+				// Initialize image generation parameters with defaults
+				sd_img_gen_params_t gen_params;
+				sd_img_gen_params_init(&gen_params);
+
+				// Extract parameters from metadata - FIXED: Use local strings
 				std::string inputImagePath = "";
 				std::string maskImagePath = "";
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "img2img_output.png";
-				std::string posPrompt = "", negPrompt = "";
-				float clipSkip = 2.0f, cfg = 7.0f, guidance = 2.0f, eta = 0.0f;
-				int latentWidth = 512, latentHeight = 512;
-				int steps = 20, seed = -1, batchSize = 1;
-				float denoiseStrength = 0.75f;
-				sample_method_t sample_method = EULER;
-				int *skipLayers = nullptr;
-				size_t skipLayersCount = 0;
-				float slgScale = 0.0f, skipLayerStart = 0.0f, skipLayerEnd = 1.0f;
+				std::string posPrompt = "";
+				std::string negPrompt = "";
 
 				// Debug logging for metadata
 				std::cout << "Img2Img metadata:" << std::endl;
@@ -86,7 +84,7 @@ namespace Utils
 							}
 						}
 
-						// Mask image path (additional for img2img)
+						// Mask image path
 						if (comp.contains("MaskImage"))
 						{
 							nlohmann::json maskImageData = comp["MaskImage"];
@@ -116,7 +114,7 @@ namespace Utils
 							}
 						}
 
-						// Prompt component
+						// Prompt component - FIXED: Use local strings
 						if (comp.contains("Prompt"))
 						{
 							nlohmann::json promptData = comp["Prompt"];
@@ -133,7 +131,7 @@ namespace Utils
 							nlohmann::json clipSkipData = comp["ClipSkip"];
 
 							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
-								clipSkip = clipSkipData["clipSkip"].get<float>();
+								gen_params.clip_skip = clipSkipData["clipSkip"].get<int>();
 						}
 
 						// Sampler component
@@ -141,27 +139,12 @@ namespace Utils
 						{
 							nlohmann::json samplerData = comp["Sampler"];
 
-							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
-								cfg = samplerData["cfg"].get<float>();
-							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
-								steps = samplerData["steps"].get<int>();
 							if (samplerData.contains("seed") && !samplerData["seed"].is_null())
-								seed = samplerData["seed"].get<int>();
+								gen_params.seed = static_cast<int64_t>(samplerData["seed"].get<int>());
 							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
-								denoiseStrength = samplerData["denoise"].get<float>();
-							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
-								sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
-						}
-
-						// Guidance component
-						if (comp.contains("Guidance"))
-						{
-							nlohmann::json guidanceData = comp["Guidance"];
-
-							if (guidanceData.contains("guidance") && !guidanceData["guidance"].is_null())
-								guidance = guidanceData["guidance"].get<float>();
-							if (guidanceData.contains("eta") && !guidanceData["eta"].is_null())
-								eta = guidanceData["eta"].get<float>();
+								gen_params.strength = samplerData["denoise"].get<float>();
+							if (samplerData.contains("batchSize") && !samplerData["batchSize"].is_null())
+								gen_params.batch_count = samplerData["batchSize"].get<int>();
 						}
 
 						// Latent component
@@ -170,27 +153,39 @@ namespace Utils
 							nlohmann::json latentData = comp["Latent"];
 
 							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
-								latentWidth = latentData["latentWidth"].get<int>();
+								gen_params.width = latentData["latentWidth"].get<int>();
 							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
-								latentHeight = latentData["latentHeight"].get<int>();
-							if (latentData.contains("batchSize") && !latentData["batchSize"].is_null())
-								batchSize = latentData["batchSize"].get<int>();
+								gen_params.height = latentData["latentHeight"].get<int>();
 						}
 
-						// Layer Skip component
-						if (comp.contains("LayerSkip"))
+						// ControlNet component
+						if (comp.contains("Controlnet"))
 						{
-							nlohmann::json layerSkipData = comp["LayerSkip"];
+							nlohmann::json controlData = comp["Controlnet"];
 
-							if (layerSkipData.contains("slg_scale") && !layerSkipData["slg_scale"].is_null())
-								slgScale = layerSkipData["slg_scale"].get<float>();
-							if (layerSkipData.contains("skip_layer_start") && !layerSkipData["skip_layer_start"].is_null())
-								skipLayerStart = layerSkipData["skip_layer_start"].get<float>();
-							if (layerSkipData.contains("skip_layer_end") && !layerSkipData["skip_layer_end"].is_null())
-								skipLayerEnd = layerSkipData["skip_layer_end"].get<float>();
+							if (controlData.contains("control_strength") && !controlData["control_strength"].is_null())
+								gen_params.control_strength = controlData["control_strength"].get<float>();
+							if (controlData.contains("style_strength") && !controlData["style_strength"].is_null())
+								gen_params.style_strength = controlData["style_strength"].get<float>();
+							if (controlData.contains("normalize_input") && !controlData["normalize_input"].is_null())
+								gen_params.normalize_input = controlData["normalize_input"].get<bool>();
 						}
 					}
 				}
+
+				// Set prompt strings - ALWAYS use c_str(), NEVER nullptr
+				gen_params.prompt = posPrompt.c_str();
+				gen_params.negative_prompt = negPrompt.c_str();
+
+				// Initialize other required fields for img2img
+				gen_params.ref_images = nullptr;
+				gen_params.ref_images_count = 0;
+				gen_params.increase_ref_index = false;
+				gen_params.control_image = { 0, 0, 0, nullptr };
+				gen_params.input_id_images_path = "";
+
+				// Initialize sample parameters
+				InitializeSampleParams(gen_params.sample_params, metadata);
 
 				// Validate parameters
 				if (inputImagePath.empty())
@@ -229,30 +224,15 @@ namespace Utils
 					throw std::runtime_error("Invalid input image dimensions: " + std::to_string(inputWidth) + "x" + std::to_string(inputHeight));
 				}
 
-				// Create output path
-				std::filesystem::path outputDir(outputPath);
-				std::filesystem::path outputFile(outputFilename);
-				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-					outputFile.string(), outputDir.string());
-
-				// Initialize SD context
-				std::cout << "Initializing Stable Diffusion context..." << std::endl;
-				sd_context = InitializeStableDiffusionContext(metadata);
-				if (!sd_context)
-				{
-					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
-				}
-
-				// Create input image struct - FORCE RGB FORMAT
-				sd_image_t input_image = {
+				// Create input image struct
+				gen_params.init_image = {
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
 					3, // FORCE 3 channels (RGB)
-					inputData };
+					inputData
+				};
 
-				// Initialize mask image struct - IMPROVED MASK HANDLING
-				sd_image_t mask_image = { 0 };
-
+				// Handle mask image
 				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath))
 				{
 					std::cout << "No valid mask provided, creating blank white mask" << std::endl;
@@ -262,10 +242,12 @@ namespace Utils
 					emptyMaskData = new unsigned char[maskSize];
 					std::memset(emptyMaskData, 255, maskSize); // WHITE mask = change whole image
 
-					mask_image.width = static_cast<uint32_t>(inputWidth);
-					mask_image.height = static_cast<uint32_t>(inputHeight);
-					mask_image.channel = 1; // Masks are single channel
-					mask_image.data = emptyMaskData;
+					gen_params.mask_image = {
+						static_cast<uint32_t>(inputWidth),
+						static_cast<uint32_t>(inputHeight),
+						1, // Masks are single channel
+						emptyMaskData
+					};
 
 					std::cout << "Created white mask: " << inputWidth << "x" << inputHeight << std::endl;
 				}
@@ -287,10 +269,12 @@ namespace Utils
 						emptyMaskData = new unsigned char[maskSize];
 						std::memset(emptyMaskData, 255, maskSize); // WHITE mask
 
-						mask_image.width = static_cast<uint32_t>(inputWidth);
-						mask_image.height = static_cast<uint32_t>(inputHeight);
-						mask_image.channel = 1;
-						mask_image.data = emptyMaskData;
+						gen_params.mask_image = {
+							static_cast<uint32_t>(inputWidth),
+							static_cast<uint32_t>(inputHeight),
+							1,
+							emptyMaskData
+						};
 					}
 					else
 					{
@@ -309,17 +293,21 @@ namespace Utils
 							emptyMaskData = new unsigned char[maskSize];
 							std::memset(emptyMaskData, 255, maskSize);
 
-							mask_image.width = static_cast<uint32_t>(inputWidth);
-							mask_image.height = static_cast<uint32_t>(inputHeight);
-							mask_image.channel = 1;
-							mask_image.data = emptyMaskData;
+							gen_params.mask_image = {
+								static_cast<uint32_t>(inputWidth),
+								static_cast<uint32_t>(inputHeight),
+								1,
+								emptyMaskData
+							};
 						}
 						else
 						{
-							mask_image.width = static_cast<uint32_t>(maskWidth);
-							mask_image.height = static_cast<uint32_t>(maskHeight);
-							mask_image.channel = 1; // Force single channel
-							mask_image.data = maskData;
+							gen_params.mask_image = {
+								static_cast<uint32_t>(maskWidth),
+								static_cast<uint32_t>(maskHeight),
+								1, // Force single channel
+								maskData
+							};
 
 							std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
 								<< " with 1 channel (grayscale)" << std::endl;
@@ -327,52 +315,40 @@ namespace Utils
 					}
 				}
 
-				// Ensure valid seed
-				if (seed < 0)
+				// Create output path
+				std::filesystem::path outputDir(outputPath);
+				std::filesystem::path outputFile(outputFilename);
+				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+					outputFile.string(), outputDir.string());
+
+				// Initialize SD context
+				std::cout << "Initializing Stable Diffusion context..." << std::endl;
+				sd_context = InitializeStableDiffusionContext(metadata);
+				if (!sd_context)
 				{
-					seed = static_cast<int>(generateRandomSeed());
-					std::cout << "Generated random seed: " << seed << std::endl;
+					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
 
-				// Perform img2img
-				std::cout << "Calling img2img..." << std::endl;
-				result_image = img2img(
-					sd_context,
-					input_image,
-					mask_image,
-					posPrompt.c_str(),
-					negPrompt.c_str(),
-					static_cast<int>(clipSkip),
-					cfg,
-					guidance,
-					eta,
-					latentWidth,
-					latentHeight,
-					sample_method,
-					steps,
-					denoiseStrength,
-					static_cast<int64_t>(seed),
-					batchSize,
-					nullptr, // control_cond
-					0.0f,	 // control_strength
-					0.0f,	 // style_ratio
-					false,	 // normalize_input
-					"",		 // input_id_images_path
-					skipLayers,
-					skipLayersCount,
-					slgScale,
-					skipLayerStart,
-					skipLayerEnd);
+				// Ensure valid seed
+				if (gen_params.seed < 0)
+				{
+					gen_params.seed = static_cast<int64_t>(generateRandomSeed());
+					std::cout << "Generated random seed: " << gen_params.seed << std::endl;
+				}
+
+				// Perform img2img using NEW structured API
+				std::cout << "Calling generate_image for img2img generation..." << std::endl;
+				result_image = generate_image(sd_context, &gen_params);
 
 				if (!result_image)
 				{
-					throw std::runtime_error("img2img failed - no output image produced");
+					throw std::runtime_error("generate_image failed - no output image produced");
 				}
 
 				if (!result_image->data)
 				{
 					free(result_image);
-					throw std::runtime_error("img2img produced invalid image data");
+					throw std::runtime_error("generate_image produced invalid image data");
 				}
 
 				std::cout << "img2img successful: " << result_image->width << "x" << result_image->height

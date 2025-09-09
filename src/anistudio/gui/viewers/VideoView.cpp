@@ -34,7 +34,8 @@ namespace GUI {
 		offsetY(0.0f),
 		isPlaying(false),
 		playbackSpeed(1.0f),
-		lastEntityCount(0)
+		lastEntityCount(0),
+		lastGeneratedVideoID(0)  // Initialize tracking
 	{
 		viewName = "VideoView";
 		std::cout << "[VideoView] Constructor called" << std::endl;
@@ -60,8 +61,7 @@ namespace GUI {
 	}
 
 	void VideoView::Update(float deltaT) {
-		// CRITICAL FIX: Poll for changes instead of using callbacks
-		// This is GUI polling ECS data, which is the correct architecture
+		// Poll for changes instead of using callbacks
 		auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
 		if (videoSystem) {
 			auto currentEntities = videoSystem->GetAllVideoEntities();
@@ -101,6 +101,33 @@ namespace GUI {
 							videoIndex = 0;
 						}
 					}
+				}
+			}
+		}
+
+		// CRITICAL FIX: Check for newly generated videos from SDCPPSystem
+		auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+		if (sdcppSystem) {
+			ECS::EntityID latestGenerated = sdcppSystem->GetLastGeneratedVideo();
+			if (latestGenerated != 0 && latestGenerated != lastGeneratedVideoID) {
+				// New video was generated! Auto-select it
+				lastGeneratedVideoID = latestGenerated;
+
+				// Find this entity in our video list
+				RefreshVideoEntities(); // Make sure we have the latest list
+
+				auto it = std::find(videoEntities.begin(), videoEntities.end(), latestGenerated);
+				if (it != videoEntities.end()) {
+					videoIndex = static_cast<int>(std::distance(videoEntities.begin(), it));
+					selectedEntityID = latestGenerated;
+					PauseAllVideos(); // Pause all other videos
+
+					std::cout << "[VideoView] AUTO-SELECTED newly generated video: Entity "
+						<< latestGenerated << " at index " << videoIndex << std::endl;
+				}
+				else {
+					std::cout << "[VideoView] Warning: Generated video " << latestGenerated
+						<< " not found in video entities list" << std::endl;
 				}
 			}
 		}
@@ -185,6 +212,12 @@ namespace GUI {
 					videoComp.width, videoComp.height, videoComp.fps, videoComp.frameCount);
 				ImGui::Text("Current Frame: %d / %d", videoComp.currentFrame, videoComp.frameCount);
 				ImGui::Text("Entity ID: %zu", selectedEntityID);
+
+				// Show if this is a newly generated video
+				if (selectedEntityID == lastGeneratedVideoID) {
+					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Åö NEWLY GENERATED");
+				}
+
 				ImGui::Separator();
 			}
 			catch (const std::exception& e) {
@@ -369,8 +402,13 @@ namespace GUI {
 
 				ImGui::BeginGroup();
 
+				// Highlight selected video
 				if (static_cast<int>(i) == videoIndex) {
 					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+				}
+				// Highlight newly generated video with green
+				else if (entityID == lastGeneratedVideoID) {
+					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 255, 0, 255));
 				}
 
 				float aspectRatio = (videoComp.height > 0) ?
@@ -385,10 +423,14 @@ namespace GUI {
 					imageSize = ImVec2(maxSize.y * aspectRatio, maxSize.y);
 				}
 
-				ImGui::Text("%zu: %s", i, TruncateFilename(videoComp.fileName, imageSize.x).c_str());
+				std::string displayText = std::to_string(i) + ": " + TruncateFilename(videoComp.fileName, imageSize.x);
+				if (entityID == lastGeneratedVideoID) {
+					displayText += " Åö";
+				}
+				ImGui::Text("%s", displayText.c_str());
 				ImGui::Text("%.0f fps, %d frames", videoComp.fps, videoComp.frameCount);
 
-				if (static_cast<int>(i) == videoIndex) {
+				if (static_cast<int>(i) == videoIndex || entityID == lastGeneratedVideoID) {
 					ImGui::PopStyleColor();
 				}
 

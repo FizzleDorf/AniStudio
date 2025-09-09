@@ -66,6 +66,9 @@ namespace GUI {
 		// Cached entity list - updated by polling
 		std::vector<ECS::EntityID> videoEntities;
 
+		// CRITICAL FIX: Track last generated video for auto-selection
+		ECS::EntityID lastGeneratedVideoID;
+
 		// File filters
 		const char* filters = "Video files{.mp4,.avi,.mkv,.mov,.webm}"
 			".mp4,.avi,.mkv,.mov,.webm"

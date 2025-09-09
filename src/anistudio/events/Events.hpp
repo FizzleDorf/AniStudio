@@ -35,6 +35,8 @@ namespace ANI {
 		InferenceRequest,
 		Img2ImgRequest,
 		UpscaleRequest,
+		Img2VidRequest,
+		EditRequest,
 		T2VInferenceRequest,
 		ConvertToGGUF,
 

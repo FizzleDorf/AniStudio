@@ -44,20 +44,21 @@ namespace Utils
 		{
 			sd_ctx_t *sd_context = nullptr;
 			unsigned char *inputData = nullptr;
-			sd_image_t *result_image = nullptr;
+			sd_image_t *result_images = nullptr;
+			int num_frames_out = 0;
 
 			try
 			{
-				// Extract parameters from metadata
+				// Initialize video generation parameters with defaults
+				sd_vid_gen_params_t vid_params;
+				sd_vid_gen_params_init(&vid_params);
+
+				// Extract parameters from metadata - FIXED: Use local strings
 				std::string inputImagePath = "";
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
-				std::string outputFilename = "img2vid_output.mp4";
-				int width = 512, height = 512;
-				int video_frames = 25, motion_bucket_id = 127, fps = 6;
-				float augmentation_level = 0.0f, min_cfg = 1.0f, cfg_scale = 2.5f;
-				float strength = 0.8f;
-				int sample_steps = 20, seed = -1;
-				sample_method_t sample_method = EULER;
+				std::string outputFilename = "img2vid_output";
+				std::string posPrompt = "";
+				std::string negPrompt = "";
 
 				// Debug logging for metadata
 				std::cout << "Img2Vid metadata:" << std::endl;
@@ -98,21 +99,35 @@ namespace Utils
 							}
 						}
 
+						// Prompt component - FIXED: Use local strings
+						if (comp.contains("Prompt"))
+						{
+							nlohmann::json promptData = comp["Prompt"];
+
+							if (promptData.contains("posPrompt") && !promptData["posPrompt"].is_null())
+								posPrompt = promptData["posPrompt"].get<std::string>();
+							if (promptData.contains("negPrompt") && !promptData["negPrompt"].is_null())
+								negPrompt = promptData["negPrompt"].get<std::string>();
+						}
+
+						// ClipSkip component
+						if (comp.contains("ClipSkip"))
+						{
+							nlohmann::json clipSkipData = comp["ClipSkip"];
+
+							if (clipSkipData.contains("clipSkip") && !clipSkipData["clipSkip"].is_null())
+								vid_params.clip_skip = clipSkipData["clipSkip"].get<int>();
+						}
+
 						// Video parameters
 						if (comp.contains("VideoParams"))
 						{
 							nlohmann::json videoData = comp["VideoParams"];
 
 							if (videoData.contains("video_frames") && !videoData["video_frames"].is_null())
-								video_frames = videoData["video_frames"].get<int>();
-							if (videoData.contains("motion_bucket_id") && !videoData["motion_bucket_id"].is_null())
-								motion_bucket_id = videoData["motion_bucket_id"].get<int>();
-							if (videoData.contains("fps") && !videoData["fps"].is_null())
-								fps = videoData["fps"].get<int>();
-							if (videoData.contains("augmentation_level") && !videoData["augmentation_level"].is_null())
-								augmentation_level = videoData["augmentation_level"].get<float>();
-							if (videoData.contains("min_cfg") && !videoData["min_cfg"].is_null())
-								min_cfg = videoData["min_cfg"].get<float>();
+								vid_params.video_frames = videoData["video_frames"].get<int>();
+							if (videoData.contains("moe_boundary") && !videoData["moe_boundary"].is_null())
+								vid_params.moe_boundary = videoData["moe_boundary"].get<float>();
 						}
 
 						// Sampler component
@@ -120,16 +135,10 @@ namespace Utils
 						{
 							nlohmann::json samplerData = comp["Sampler"];
 
-							if (samplerData.contains("cfg") && !samplerData["cfg"].is_null())
-								cfg_scale = samplerData["cfg"].get<float>();
-							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
-								sample_steps = samplerData["steps"].get<int>();
 							if (samplerData.contains("seed") && !samplerData["seed"].is_null())
-								seed = samplerData["seed"].get<int>();
+								vid_params.seed = static_cast<int64_t>(samplerData["seed"].get<int>());
 							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
-								strength = samplerData["denoise"].get<float>();
-							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
-								sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
+								vid_params.strength = samplerData["denoise"].get<float>();
 						}
 
 						// Latent component for dimensions
@@ -138,9 +147,58 @@ namespace Utils
 							nlohmann::json latentData = comp["Latent"];
 
 							if (latentData.contains("latentWidth") && !latentData["latentWidth"].is_null())
-								width = latentData["latentWidth"].get<int>();
+								vid_params.width = latentData["latentWidth"].get<int>();
 							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
-								height = latentData["latentHeight"].get<int>();
+								vid_params.height = latentData["latentHeight"].get<int>();
+						}
+					}
+				}
+
+				// Set prompt strings - ALWAYS use c_str(), NEVER nullptr
+				vid_params.prompt = posPrompt.c_str();
+				vid_params.negative_prompt = negPrompt.c_str();
+
+				// Initialize sample parameters from metadata
+				if (metadata.contains("components") && metadata["components"].is_array())
+				{
+					sd_sample_params_init(&vid_params.sample_params);
+					sd_sample_params_init(&vid_params.high_noise_sample_params);
+
+					for (const auto &comp : metadata["components"])
+					{
+						if (comp.contains("Sampler"))
+						{
+							auto sampler = comp["Sampler"];
+							if (sampler.contains("current_sample_method"))
+							{
+								vid_params.sample_params.sample_method = static_cast<sample_method_t>(sampler["current_sample_method"].get<int>());
+								vid_params.high_noise_sample_params.sample_method = vid_params.sample_params.sample_method;
+							}
+							if (sampler.contains("current_scheduler_method"))
+							{
+								vid_params.sample_params.scheduler = static_cast<scheduler_t>(sampler["current_scheduler_method"].get<int>());
+								vid_params.high_noise_sample_params.scheduler = vid_params.sample_params.scheduler;
+							}
+							if (sampler.contains("steps"))
+							{
+								vid_params.sample_params.sample_steps = sampler["steps"].get<int>();
+								vid_params.high_noise_sample_params.sample_steps = vid_params.sample_params.sample_steps;
+							}
+							if (sampler.contains("eta"))
+							{
+								vid_params.sample_params.eta = sampler["eta"].get<float>();
+								vid_params.high_noise_sample_params.eta = vid_params.sample_params.eta;
+							}
+						}
+
+						if (comp.contains("Guidance"))
+						{
+							auto guidance = comp["Guidance"];
+							if (guidance.contains("guidance"))
+							{
+								vid_params.sample_params.guidance.txt_cfg = guidance["guidance"].get<float>();
+								vid_params.high_noise_sample_params.guidance.txt_cfg = vid_params.sample_params.guidance.txt_cfg;
+							}
 						}
 					}
 				}
@@ -182,11 +240,13 @@ namespace Utils
 					throw std::runtime_error("Invalid input image dimensions: " + std::to_string(inputWidth) + "x" + std::to_string(inputHeight));
 				}
 
-				// Create output path
-				std::filesystem::path outputDir(outputPath);
-				std::filesystem::path outputFile(outputFilename);
-				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-					outputFile.string(), outputDir.string());
+				// Set input image in video parameters
+				vid_params.init_image = {
+					static_cast<uint32_t>(inputWidth),
+					static_cast<uint32_t>(inputHeight),
+					3, // Force 3 channels (RGB)
+					inputData
+				};
 
 				// Initialize SD context
 				std::cout << "Initializing Stable Diffusion context..." << std::endl;
@@ -196,82 +256,47 @@ namespace Utils
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
 
-				// Create input image struct
-				sd_image_t input_image = {
-					static_cast<uint32_t>(inputWidth),
-					static_cast<uint32_t>(inputHeight),
-					3, // Force 3 channels (RGB)
-					inputData };
-
 				// Ensure valid seed
-				if (seed < 0)
+				if (vid_params.seed < 0)
 				{
-					seed = static_cast<int>(generateRandomSeed());
-					std::cout << "Generated random seed: " << seed << std::endl;
+					vid_params.seed = static_cast<int64_t>(generateRandomSeed());
+					std::cout << "Generated random seed: " << vid_params.seed << std::endl;
 				}
 
-				// Perform img2vid
-				std::cout << "Calling img2vid..." << std::endl;
-				result_image = img2vid(
-					sd_context,
-					input_image,
-					width,
-					height,
-					video_frames,
-					motion_bucket_id,
-					fps,
-					augmentation_level,
-					min_cfg,
-					cfg_scale,
-					sample_method,
-					sample_steps,
-					strength,
-					static_cast<int64_t>(seed));
+				// Perform img2vid using NEW structured API
+				std::cout << "Calling generate_video for img2vid generation..." << std::endl;
+				result_images = generate_video(sd_context, &vid_params, &num_frames_out);
 
-				if (!result_image)
+				if (!result_images)
 				{
-					throw std::runtime_error("img2vid failed - no output produced");
+					throw std::runtime_error("generate_video failed - no output produced");
 				}
 
-				if (!result_image->data)
+				if (!result_images[0].data)
 				{
-					free(result_image);
-					throw std::runtime_error("img2vid produced invalid data");
+					free(result_images);
+					throw std::runtime_error("generate_video produced invalid data");
 				}
 
-				std::cout << "img2vid successful: " << result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << ", saving frames to: " << fullPath << std::endl;
-
-				// For video output, we need to handle multiple frames
-				// The result_image contains all frames concatenated
-				// We need to save them as individual frames or as a video file
-
-				// Calculate frame dimensions
-				uint32_t frame_width = result_image->width;
-				uint32_t frame_height = result_image->height / video_frames; // Frames are stacked vertically
-				uint32_t frame_channels = result_image->channel;
-
-				std::cout << "Video output: " << video_frames << " frames of "
-					<< frame_width << "x" << frame_height << "x" << frame_channels << std::endl;
+				std::cout << "img2vid successful: " << result_images[0].width << "x" << result_images[0].height
+					<< "x" << result_images[0].channel << ", " << num_frames_out << " frames generated" << std::endl;
 
 				// Save individual frames
-				for (int frame_idx = 0; frame_idx < video_frames; ++frame_idx)
+				for (int frame_idx = 0; frame_idx < num_frames_out; ++frame_idx)
 				{
-					// Calculate frame data offset
-					size_t frame_size = frame_width * frame_height * frame_channels;
-					unsigned char* frame_data = result_image->data + (frame_idx * frame_size);
-
 					// Create frame filename
 					std::filesystem::path frameDir(outputPath);
-					std::string frameFilename = "frame_" + std::to_string(frame_idx) + ".png";
+					std::string frameFilename = outputFilename + "_frame_" + std::to_string(frame_idx) + ".png";
 					std::string frameFullPath = (frameDir / frameFilename).string();
 
 					// Save frame
-					SaveImage(frame_data, frame_width, frame_height, frame_channels, metadata, frameFullPath);
+					SaveImage(result_images[frame_idx].data,
+						result_images[frame_idx].width,
+						result_images[frame_idx].height,
+						result_images[frame_idx].channel,
+						metadata,
+						frameFullPath);
 				}
-
-				// TODO: Optionally combine frames into video file using FFmpeg
-				// This would require additional video encoding functionality
 
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
@@ -282,10 +307,18 @@ namespace Utils
 					inputData = nullptr;
 				}
 
-				if (result_image)
+				if (result_images)
 				{
-					free(result_image);
-					result_image = nullptr;
+					// Free each frame's data
+					for (int i = 0; i < num_frames_out; ++i)
+					{
+						if (result_images[i].data)
+						{
+							free(result_images[i].data);
+						}
+					}
+					free(result_images);
+					result_images = nullptr;
 				}
 
 				if (sd_context)
@@ -307,10 +340,17 @@ namespace Utils
 					inputData = nullptr;
 				}
 
-				if (result_image)
+				if (result_images)
 				{
-					free(result_image);
-					result_image = nullptr;
+					for (int i = 0; i < num_frames_out; ++i)
+					{
+						if (result_images[i].data)
+						{
+							free(result_images[i].data);
+						}
+					}
+					free(result_images);
+					result_images = nullptr;
 				}
 
 				if (sd_context)

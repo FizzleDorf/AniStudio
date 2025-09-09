@@ -1,4 +1,4 @@
-# CMakeLists.txt for AniEngine - Updated with integrated plugin system
+# CMakeLists.txt for AniEngine - Fixed CUDA Backend Linking
 cmake_minimum_required(VERSION 3.12)
 project(AniEngine VERSION 1.0.0 LANGUAGES CXX)
 
@@ -38,10 +38,26 @@ set(SD_FAST_SOFTMAX ${ANIENGINE_ENABLE_FAST_SOFTMAX})
 # Backend setup and validation
 if(ANIENGINE_ENABLE_CUDA)
     enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
     set(CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures")
     add_definitions(-DSD_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "AniEngine: CUDA backend enabled")
+    
+    # Verify CUDA toolkit components
+    if(NOT CUDAToolkit_FOUND)
+        message(FATAL_ERROR "CUDA toolkit not found!")
+    endif()
+    
+    # Check for required CUDA libraries
+    if(NOT TARGET CUDA::cudart)
+        message(FATAL_ERROR "CUDA runtime library not found!")
+    endif()
+    
+    if(NOT TARGET CUDA::cublas)
+        message(FATAL_ERROR "CUDA BLAS library not found!")
+    endif()
 endif()
 
 if(ANIENGINE_ENABLE_VULKAN)
@@ -221,7 +237,7 @@ else()
     )
 endif()
 
-# Link libraries - INTEGRATED PLUGIN SYSTEM
+# Link libraries - FIXED CUDA LINKING
 target_link_libraries(AniEngineCore PUBLIC
     # External dependencies
     opencv::opencv
@@ -239,15 +255,103 @@ target_link_libraries(AniEngineCore PUBLIC
     stable-diffusion
 )
 
-# CUDA support
+# CUDA support - CRITICAL FIX: Link all required CUDA libraries
 if(ANIENGINE_ENABLE_CUDA)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
-    target_link_libraries(AniEngineCore PUBLIC CUDA::cudart)
+    target_link_libraries(AniEngineCore PUBLIC 
+        CUDA::cudart
+        CUDA::cublas
+        CUDA::cublasLt
+        CUDA::curand
+        CUDA::cufft
+    )
+    
+    # For stable-diffusion.cpp CUDA backend, also need these libraries
+    # Check if ggml-cuda target exists (from stable-diffusion.cpp)
+    if(TARGET ggml-cuda)
+        target_link_libraries(AniEngineCore PUBLIC ggml-cuda)
+        message(STATUS "Linked ggml-cuda backend")
+    else()
+        message(WARNING "ggml-cuda target not found - CUDA backend may not link properly")
+    endif()
+    
+    # Alternative: Link the backend library directly if it exists
+    if(TARGET ggml-backend-cuda)
+        target_link_libraries(AniEngineCore PUBLIC ggml-backend-cuda)
+        message(STATUS "Linked ggml-backend-cuda")
+    endif()
+endif()
+
+# Vulkan support
+if(ANIENGINE_ENABLE_VULKAN)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_VULKAN)
+    
+    # Link Vulkan backend if available
+    if(TARGET ggml-vulkan)
+        target_link_libraries(AniEngineCore PUBLIC ggml-vulkan)
+        message(STATUS "Linked ggml-vulkan backend")
+    endif()
+    
+    if(TARGET ggml-backend-vulkan)
+        target_link_libraries(AniEngineCore PUBLIC ggml-backend-vulkan)
+        message(STATUS "Linked ggml-backend-vulkan")
+    endif()
 endif()
 
 # OpenCL support
 if(ANIENGINE_ENABLE_OPENCL AND OpenCL_FOUND)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_OPENCL)
     target_link_libraries(AniEngineCore PUBLIC OpenCL::OpenCL)
+    
+    # Link OpenCL backend if available
+    if(TARGET ggml-opencl)
+        target_link_libraries(AniEngineCore PUBLIC ggml-opencl)
+        message(STATUS "Linked ggml-opencl backend")
+    endif()
+endif()
+
+# Metal support
+if(ANIENGINE_ENABLE_METAL)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_METAL)
+    
+    # Link Metal backend if available
+    if(TARGET ggml-metal)
+        target_link_libraries(AniEngineCore PUBLIC ggml-metal)
+        message(STATUS "Linked ggml-metal backend")
+    endif()
+endif()
+
+# HipBLAS support
+if(ANIENGINE_ENABLE_HIPBLAS)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # HipBLAS uses CUDA define
+    
+    # Link HipBLAS backend if available
+    if(TARGET ggml-hipblas)
+        target_link_libraries(AniEngineCore PUBLIC ggml-hipblas)
+        message(STATUS "Linked ggml-hipblas backend")
+    endif()
+endif()
+
+# SYCL support
+if(ANIENGINE_ENABLE_SYCL)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_SYCL)
+    
+    # Link SYCL backend if available
+    if(TARGET ggml-sycl)
+        target_link_libraries(AniEngineCore PUBLIC ggml-sycl)
+        message(STATUS "Linked ggml-sycl backend")
+    endif()
+endif()
+
+# MUSA support
+if(ANIENGINE_ENABLE_MUSA)
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # MUSA uses CUDA define
+    
+    # Link MUSA backend if available
+    if(TARGET ggml-musa)
+        target_link_libraries(AniEngineCore PUBLIC ggml-musa)
+        message(STATUS "Linked ggml-musa backend")
+    endif()
 endif()
 
 # Compile definitions
@@ -302,3 +406,15 @@ message(STATUS "  MUSA: ${ANIENGINE_ENABLE_MUSA}")
 if(ANIENGINE_ENABLE_FAST_SOFTMAX)
     message(STATUS "  Fast Softmax: ENABLED")
 endif()
+
+# Debug: Print all targets created by stable-diffusion.cpp
+get_directory_property(TARGETS BUILDSYSTEM_TARGETS)
+message(STATUS "Available targets from stable-diffusion.cpp:")
+foreach(TARGET ${TARGETS})
+    if(TARGET ${TARGET})
+        get_target_property(TARGET_TYPE ${TARGET} TYPE)
+        if(TARGET_TYPE MATCHES "STATIC_LIBRARY|SHARED_LIBRARY|EXECUTABLE")
+            message(STATUS "  - ${TARGET} (${TARGET_TYPE})")
+        endif()
+    endif()
+endforeach()

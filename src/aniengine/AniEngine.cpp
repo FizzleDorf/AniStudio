@@ -48,6 +48,10 @@ namespace ANI {
 		entityManager.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 		entityManager.RegisterComponentName<PythonComponent>("Python");
 		entityManager.RegisterComponentName<ChromaComponent>("Chroma");
+		entityManager.RegisterComponentName<HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
+		entityManager.RegisterComponentName<ClipVisionComponent>("ClipVision");
+		entityManager.RegisterComponentName<HighNoiseSamplerComponent>("HighNoiseSampler");
+		entityManager.RegisterComponentName<VideoParamsComponent>("VideoParams");
 		entityManager.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
 
 		entityManager.RegisterComponentName<ECS::TransformComponent>("Transform");

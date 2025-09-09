@@ -30,8 +30,6 @@ namespace ECS {
 	struct SamplerComponent : public ECS::BaseComponent {
 		SamplerComponent() {
 			compName = "Sampler";
-
-			// Enhanced schema WITHOUT table layout - just direct widget rendering
 			schema = {
 		{"title", "Sampler Settings"},
 		{"type", "object"},
@@ -176,10 +174,10 @@ namespace ECS {
 		bool diffusion_flash_attn = false;
 
 		// Method selections
-		sample_method_t current_sample_method = sample_method_t::EULER;
-		schedule_t current_scheduler_method = schedule_t::DEFAULT;
-		sd_type_t current_type_method = sd_type_t::SD_TYPE_F16;
-		rng_type_t current_rng_type = rng_type_t::STD_DEFAULT_RNG;
+		sample_method_t current_sample_method = EULER;
+		scheduler_t current_scheduler_method = DEFAULT;
+		sd_type_t current_type_method = SD_TYPE_F16;
+		rng_type_t current_rng_type = STD_DEFAULT_RNG;
 
 		// Override the GetPropertyMap method
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -215,7 +213,6 @@ namespace ECS {
 				n_threads = other.n_threads;
 				free_params_immediately = other.free_params_immediately;
 
-				// NEW: Copy backend control parameters
 				keep_clip_on_cpu = other.keep_clip_on_cpu;
 				keep_control_net_cpu = other.keep_control_net_cpu;
 				keep_vae_on_cpu = other.keep_vae_on_cpu;
@@ -291,7 +288,7 @@ namespace ECS {
 			if (componentData.contains("current_sample_method"))
 				current_sample_method = static_cast<sample_method_t>(componentData["current_sample_method"]);
 			if (componentData.contains("current_scheduler_method"))
-				current_scheduler_method = static_cast<schedule_t>(componentData["current_scheduler_method"]);
+				current_scheduler_method = static_cast<scheduler_t>(componentData["current_scheduler_method"]);
 			if (componentData.contains("current_type_method"))
 				current_type_method = static_cast<sd_type_t>(componentData["current_type_method"]);
 			if (componentData.contains("current_rng_type"))

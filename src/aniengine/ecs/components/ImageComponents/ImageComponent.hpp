@@ -23,8 +23,8 @@
 #include "BaseComponent.hpp"
 #include "FilePaths.hpp"
 #include "OpenGLWrapper.hpp"
+#include "ImageUtils.hpp"
 #include <string>
-#include <stb_image.h>
 #include <memory>
 
 namespace ECS {
@@ -155,7 +155,6 @@ namespace ECS {
 
 	struct InputImageComponent : public ImageComponent {
 		std::shared_ptr<unsigned char[]> ownedImageData; // Smart pointer for owned data
-		std::string inputFilePath = "";  // Full path to input image file
 
 		InputImageComponent() {
 			compName = "InputImage";
@@ -172,21 +171,36 @@ namespace ECS {
 		// Get property map for UI rendering
 		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["inputFilePath"] = &inputFilePath;
+
+			// Add all the properties that the schema expects to bind to
+			properties["fileName"] = &fileName;
+			properties["filePath"] = &filePath;
+			properties["width"] = &width;
+			properties["height"] = &height;
+			properties["channels"] = &channels;
+
 			return properties;
+		}
+
+		// Serialize the component to JSON
+		virtual nlohmann::json Serialize() const override {
+			nlohmann::json j = ImageComponent::Serialize();
+			return j;
+		}
+
+		// Deserialize the component from JSON
+		virtual void Deserialize(const nlohmann::json& j) override {
+			ImageComponent::Deserialize(j);
 		}
 
 		void SetImageData(unsigned char* data, int w, int h, int ch) {
 			if (data && w > 0 && h > 0 && ch > 0) {
-				// Calculate data size
-				size_t dataSize = w * h * ch;
-
-				// Create shared_ptr with custom deleter
+				// Create shared_ptr with custom deleter using Utils::ImageUtils
 				ownedImageData = std::shared_ptr<unsigned char[]>(
 					data,
 					[](unsigned char* ptr) {
 					if (ptr) {
-						stbi_image_free(ptr);
+						Utils::ImageUtils::FreeImageData(ptr);
 					}
 				}
 				);
@@ -213,15 +227,13 @@ namespace ECS {
 		// Copy constructor
 		InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
 			compName = "InputImage";
-			inputFilePath = other.inputFilePath;
 			setupInputSchema();
 
 			if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-				// Create a deep copy of the image data
-				size_t dataSize = other.width * other.height * other.channels;
-				unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+				// Create a deep copy of the image data using Utils::ImageUtils
+				unsigned char* newData = Utils::ImageUtils::CopyImageData(
+					other.ownedImageData.get(), other.width, other.height, other.channels);
 				if (newData) {
-					memcpy(newData, other.ownedImageData.get(), dataSize);
 					SetImageData(newData, other.width, other.height, other.channels);
 				}
 			}
@@ -232,14 +244,12 @@ namespace ECS {
 				// Call base assignment
 				ImageComponent::operator=(other);
 				compName = "InputImage";
-				inputFilePath = other.inputFilePath;
 
-				// Deep copy image data if it exists
+				// Deep copy image data if it exists using Utils::ImageUtils
 				if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-					size_t dataSize = other.width * other.height * other.channels;
-					unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+					unsigned char* newData = Utils::ImageUtils::CopyImageData(
+						other.ownedImageData.get(), other.width, other.height, other.channels);
 					if (newData) {
-						memcpy(newData, other.ownedImageData.get(), dataSize);
 						SetImageData(newData, other.width, other.height, other.channels);
 					}
 				}
@@ -257,17 +267,22 @@ namespace ECS {
 				{"title", "Input Image"},
 				{"type", "object"},
 				{"properties", {
-					{"inputFilePath", {
+					{"fileName", {
 						{"type", "string"},
-						{"title", "Input Image File"},
-						{"ui:widget", "file_selector"},
+						{"title", "Load Image"},
+						{"ui:widget", "media_loader"},
 						{"ui:options", {
-							{"mode", "file"},
 							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
 							{"filterName", "Image Files"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for image files (.png, .jpg, .jpeg, .bmp, .tga)"}
+							{"buttonText", "Load Image..."},
+							{"browseTooltip", "Browse for image files (.png, .jpg, .jpeg, .bmp, .tga)"},
+							{"updateProperties", {
+								"fileName",
+								"filePath",
+								"width",
+								"height",
+								"channels"
+							}}
 						}}
 					}}
 				}}
@@ -408,8 +423,6 @@ namespace ECS {
 			};
 		}
 	};
-
-	// TODO: these are just placeholders until the node execution is implemented
 
 	struct ControlNetImageComponent : public ImageComponent {
 		ControlNetImageComponent() {

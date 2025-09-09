@@ -35,10 +35,10 @@ namespace ECS {
 				{"type", "object"},
 				{"properties", {
 					{"clipSkip", {
-						{"type", "number"},
+						{"type", "integer"},
 						{"title", "Clip Skip"},
 						{"description", "Skip the last N layers of CLIP text encoder. Higher values can produce more artistic/abstract results but may reduce prompt adherence. Range: 0-12, typical: 1-2."},
-						{"ui:widget", "input_float"},
+						{"ui:widget", "input_int"},
 						{"ui:options", {
 							{"min", -5.0f},
 							{"max", 15.0f},
@@ -49,7 +49,7 @@ namespace ECS {
 			};
 		}
 
-		float clipSkip = 2.0f;
+		int clipSkip = 2;
 
 		// Override the GetPropertyMap method
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
