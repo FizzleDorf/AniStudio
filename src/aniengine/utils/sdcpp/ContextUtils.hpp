@@ -216,6 +216,8 @@ namespace Utils {
 							ctx_params.keep_clip_on_cpu = sampler["keep_clip_on_cpu"].get<bool>();
 						if (sampler.contains("keep_vae_on_cpu"))
 							ctx_params.keep_vae_on_cpu = sampler["keep_vae_on_cpu"].get<bool>();
+						if (sampler.contains("offload_params_to_cpu"))
+							ctx_params.offload_params_to_cpu = sampler["offload_params_to_cpu"].get<bool>();
 						if (sampler.contains("diffusion_flash_attn"))
 							ctx_params.diffusion_flash_attn = sampler["diffusion_flash_attn"].get<bool>();
 						if (sampler.contains("offload_params_to_cpu"))

@@ -257,7 +257,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "file"},
-							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "T5 Models"},
 							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
 							{"buttonText", "Browse..."},

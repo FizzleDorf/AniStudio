@@ -36,7 +36,8 @@ namespace ECS {
 		{"propertyOrder", {
 			"current_sample_method", "current_scheduler_method", "seed",
 			"cfg", "steps", "denoise", "n_threads", "free_params_immediately",
-			"keep_clip_on_cpu", "keep_control_net_cpu", "keep_vae_on_cpu", "diffusion_flash_attn"
+			"keep_clip_on_cpu", "keep_control_net_cpu", "keep_vae_on_cpu",
+			"offload_params_to_cpu", "diffusion_conv_direct", "vae_conv_direct", "diffusion_flash_attn"
 		}},
 		{"properties", {
 			{"current_sample_method", {
@@ -149,6 +150,24 @@ namespace ECS {
 				{"description", "Keep VAE on CPU instead of GPU. Can help with memory issues but significantly slows down encoding/decoding."},
 				{"ui:widget", "checkbox"}
 			}},
+			{"offload_params_to_cpu", {
+				{"type", "boolean"},
+				{"title", "Offload to CPU"},
+				{"description", "Force ALL model parameters to CPU when possible. Critical for large models like Wan2.2 - prevents VRAM allocation issues."},
+				{"ui:widget", "checkbox"}
+			}},
+			{"diffusion_conv_direct", {
+				{"type", "boolean"},
+				{"title", "Direct Diffusion Conv"},
+				{"description", "Use direct CPU convolutions for diffusion model. Forces all diffusion operations to CPU."},
+				{"ui:widget", "checkbox"}
+			}},
+			{"vae_conv_direct", {
+				{"type", "boolean"},
+				{"title", "Direct VAE Conv"},
+				{"description", "Use direct CPU convolutions for VAE. Forces all VAE operations to CPU."},
+				{"ui:widget", "checkbox"}
+			}},
 			{"diffusion_flash_attn", {
 				{"type", "boolean"},
 				{"title", "Flash Attention"},
@@ -167,11 +186,14 @@ namespace ECS {
 		int n_threads = 4;
 		bool free_params_immediately = true;
 
-		// NEW: Backend control parameters for updated API
+		// Backend control parameters for updated API
 		bool keep_clip_on_cpu = true;
 		bool keep_control_net_cpu = false;
 		bool keep_vae_on_cpu = false;
+		bool offload_params_to_cpu = true;  // Critical for large models
 		bool diffusion_flash_attn = false;
+		bool diffusion_conv_direct = true;   // Force CPU convolutions
+		bool vae_conv_direct = true;         // Force CPU VAE convolutions
 
 		// Method selections
 		sample_method_t current_sample_method = EULER;
@@ -189,10 +211,13 @@ namespace ECS {
 			properties["n_threads"] = &n_threads;
 			properties["free_params_immediately"] = &free_params_immediately;
 
-			// NEW: Backend control parameters
+			// Backend control parameters
 			properties["keep_clip_on_cpu"] = &keep_clip_on_cpu;
 			properties["keep_control_net_cpu"] = &keep_control_net_cpu;
 			properties["keep_vae_on_cpu"] = &keep_vae_on_cpu;
+			properties["offload_params_to_cpu"] = &offload_params_to_cpu;
+			properties["diffusion_conv_direct"] = &diffusion_conv_direct;
+			properties["vae_conv_direct"] = &vae_conv_direct;
 			properties["diffusion_flash_attn"] = &diffusion_flash_attn;
 
 			// Need to use reinterpret_cast for the enum types
@@ -216,6 +241,9 @@ namespace ECS {
 				keep_clip_on_cpu = other.keep_clip_on_cpu;
 				keep_control_net_cpu = other.keep_control_net_cpu;
 				keep_vae_on_cpu = other.keep_vae_on_cpu;
+				offload_params_to_cpu = other.offload_params_to_cpu;
+				diffusion_conv_direct = other.diffusion_conv_direct;
+				vae_conv_direct = other.vae_conv_direct;
 				diffusion_flash_attn = other.diffusion_flash_attn;
 
 				current_sample_method = other.current_sample_method;
@@ -237,6 +265,9 @@ namespace ECS {
 					  {"keep_clip_on_cpu", keep_clip_on_cpu},
 					  {"keep_control_net_cpu", keep_control_net_cpu},
 					  {"keep_vae_on_cpu", keep_vae_on_cpu},
+					  {"offload_params_to_cpu", offload_params_to_cpu},
+					  {"diffusion_conv_direct", diffusion_conv_direct},
+					  {"vae_conv_direct", vae_conv_direct},
 					  {"diffusion_flash_attn", diffusion_flash_attn},
 					  {"current_sample_method", static_cast<int>(current_sample_method)},
 					  {"current_scheduler_method", static_cast<int>(current_scheduler_method)},
@@ -282,6 +313,12 @@ namespace ECS {
 				keep_control_net_cpu = componentData["keep_control_net_cpu"].get<bool>();
 			if (componentData.contains("keep_vae_on_cpu"))
 				keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
+			if (componentData.contains("offload_params_to_cpu"))
+				offload_params_to_cpu = componentData["offload_params_to_cpu"].get<bool>();
+			if (componentData.contains("diffusion_conv_direct"))
+				diffusion_conv_direct = componentData["diffusion_conv_direct"].get<bool>();
+			if (componentData.contains("vae_conv_direct"))
+				vae_conv_direct = componentData["vae_conv_direct"].get<bool>();
 			if (componentData.contains("diffusion_flash_attn"))
 				diffusion_flash_attn = componentData["diffusion_flash_attn"].get<bool>();
 
