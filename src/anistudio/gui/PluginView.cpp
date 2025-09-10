@@ -1,7 +1,3 @@
-/*
- * PluginView.cpp - Implementation of PluginView with Versioned Hot Reload Status
- */
-
 #include "PluginView.hpp"
 #include "BasePlugin.hpp"
 #include <iostream>

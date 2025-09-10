@@ -1,7 +1,3 @@
-/*
- * ImageView.cpp - Enhanced version with Events-based window close handling
- */
-
 #include "ImageView.hpp"
 #include "ImageUtils.hpp"
 #include "ImGuiFileDialog.h"

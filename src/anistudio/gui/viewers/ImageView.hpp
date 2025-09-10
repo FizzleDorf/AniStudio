@@ -1,7 +1,3 @@
-/*
- * ImageView.hpp - Enhanced version with Events-based close handling
- */
-
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 

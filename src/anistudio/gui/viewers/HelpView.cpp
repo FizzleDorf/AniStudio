@@ -1,4 +1,3 @@
-// HelpView.cpp
 #include "HelpView.hpp"
 #include "FilePaths.hpp"
 #include <iostream>

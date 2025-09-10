@@ -1,8 +1,3 @@
-/*
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- */
-
 #pragma once
 
 #include <imgui.h>

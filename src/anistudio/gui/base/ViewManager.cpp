@@ -1,7 +1,3 @@
-/*
- * ViewManager.cpp - COMPLETE with ImGui context awareness
- */
-
 #include "ViewManager.hpp"
 #include <iostream>
 #include <cassert>

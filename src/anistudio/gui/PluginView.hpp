@@ -1,7 +1,3 @@
-/*
- * PluginView.hpp - Enhanced GUI for managing plugins with versioned hot reload support
- * Located in src/anistudio/gui/tools/
- */
 #pragma once
 
 #include "BaseView.hpp"

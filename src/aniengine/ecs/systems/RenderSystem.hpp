@@ -17,7 +17,6 @@ namespace ECS {
 		RenderSystem(EntityManager& entityMgr) : BaseSystem(entityMgr) {
 			sysName = "RenderSystem";
 
-			// This system requires Transform and Mesh components for renderable entities
 			AddComponentSignature<TransformComponent>();
 			AddComponentSignature<MeshComponent>();
 		}
@@ -33,10 +32,11 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
+			
 			// Find active camera
 			EntityID cameraEntity = GetActiveCameraEntity();
 			if (cameraEntity == UINT32_MAX) {
-				return; // No camera found
+				return;
 			}
 
 			auto& camera = mgr.GetComponent<CameraComponent>(cameraEntity);

@@ -5,7 +5,6 @@
 
 namespace Plugins {
 
-	// StudioPluginRegistry implementation - NOW PROPERLY HANDLES IMGUI CONTEXT
 	StudioPluginRegistry::StudioPluginRegistry(const std::string& pluginName,
 		StudioPluginManager* manager,
 		GUI::ViewManager& viewMgr,
@@ -22,7 +21,6 @@ namespace Plugins {
 		return studioManager->registerView(GetCurrentPluginName(), desc);
 	}
 
-	// StudioPluginManager implementation - NOW PROPERLY HANDLES IMGUI CONTEXT
 	StudioPluginManager::StudioPluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr, ImGuiContext* mainContext)
 		: PluginManager(entityMgr, mainContext), viewManager(viewMgr), mainImGuiContext(mainContext) {
 		std::cout << "[StudioPluginManager] Constructor - studio manager created with ImGui context: " << mainImGuiContext << std::endl;
@@ -44,7 +42,6 @@ namespace Plugins {
 		}
 
 		try {
-			// Create the plugin instance
 			std::cout << "[StudioPluginManager] Creating plugin instance..." << std::endl;
 			plugin.instance = plugin.createFunc();
 
@@ -70,7 +67,6 @@ namespace Plugins {
 				return false;
 			}
 
-			// Then call OnStudioInit - ALSO WITH PROPER IMGUI CONTEXT
 			std::cout << "[StudioPluginManager] Calling OnStudioInit with registry that has ImGui context: "
 				<< mainImGuiContext << std::endl;
 
@@ -110,7 +106,6 @@ namespace Plugins {
 			return 0;
 		}
 
-		// CRITICAL FIX: Capture the ImGui context by value and ensure it's valid
 		ImGuiContext* contextToUse = mainImGuiContext;
 		if (!contextToUse) {
 			contextToUse = ImGui::GetCurrentContext();
@@ -119,7 +114,6 @@ namespace Plugins {
 
 		std::cout << "[StudioPluginManager] Will use ImGui context: " << contextToUse << std::endl;
 
-		// CRITICAL FIX: Create a wrapper factory that passes the ImGui context to the plugin
 		viewManager.RegisterViewWithFactory(
 			desc.name,
 			"plugin",
@@ -127,7 +121,6 @@ namespace Plugins {
 			std::cout << "[StudioPluginManager] Factory called - passing context " << contextToUse
 				<< " to plugin factory" << std::endl;
 
-			// CRITICAL: Call the plugin's factory function with BOTH EntityManager AND ImGuiContext
 			auto view = desc.factory(mgr, contextToUse);
 
 			std::cout << "[StudioPluginManager] Plugin factory returned view: " << (view ? "SUCCESS" : "NULL") << std::endl;

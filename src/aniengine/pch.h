@@ -45,7 +45,6 @@
 
 // Essential third-party libraries
 #include "nlohmann/json.hpp"
-
 #include "OpenGLWrapper.hpp"
 
 // Math library

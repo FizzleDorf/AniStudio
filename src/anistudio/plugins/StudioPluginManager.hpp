@@ -17,7 +17,7 @@ namespace Plugins {
 	// Forward declaration
 	class StudioPluginManager;
 
-	// Studio-specific registry that also handles views - NOW WITH PROPER IMGUI CONTEXT
+	// Studio-specific registry that also handles views
 	class StudioPluginRegistry : public PluginRegistry {
 	public:
 		StudioPluginRegistry(const std::string& pluginName,
@@ -42,11 +42,11 @@ namespace Plugins {
 		// Override to call both engine and studio init
 		bool enablePlugin(const std::string& pluginName) override;
 
-		// Override to handle view registration - NOW PROPERLY PASSES IMGUI CONTEXT
+		// Override to handle view registration
 		GUI::ViewTypeID registerView(const std::string& pluginName, const ViewDescriptor& desc) override;
 
 	protected:
-		// Override to clean up views - NOW ACTUALLY REMOVES THEM
+		// Override to clean up views
 		void cleanupPluginViews(const std::string& pluginName) override;
 
 	private:

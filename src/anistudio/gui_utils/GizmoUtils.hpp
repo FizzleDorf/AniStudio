@@ -7,10 +7,6 @@
 
 namespace Utils {
 
-	/**
-	 * @brief Utility class for ImGuizmo integration
-	 * This provides a clean interface for 3D transform gizmos in ImGui viewports
-	 */
 	class GizmoUtils {
 	public:
 		enum class Operation {
@@ -32,23 +28,10 @@ namespace Utils {
 			float snapValues[3] = { 1.0f, 1.0f, 1.0f };
 		};
 
-		/**
-		 * @brief Initialize ImGuizmo (call once during startup)
-		 */
 		static void Initialize() {
 			ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
 		}
 
-		/**
-		 * @brief Render a transform gizmo in the current ImGui context
-		 * @param viewMatrix Camera view matrix
-		 * @param projMatrix Camera projection matrix
-		 * @param modelMatrix Object's transform matrix (will be modified if manipulated)
-		 * @param state Gizmo state (operation, mode, snapping)
-		 * @param viewportPos Position of the viewport in screen coordinates
-		 * @param viewportSize Size of the viewport
-		 * @return true if the gizmo was manipulated this frame
-		 */
 		static bool RenderGizmo(const glm::mat4& viewMatrix,
 			const glm::mat4& projMatrix,
 			glm::mat4& modelMatrix,
@@ -71,25 +54,15 @@ namespace Utils {
 			);
 		}
 
-		/**
-		 * @brief Check if ImGuizmo is currently being used
-		 */
 		static bool IsUsing() {
 			return ImGuizmo::IsUsing();
 		}
 
-		/**
-		 * @brief Check if mouse is over any gizmo
-		 */
+
 		static bool IsOver() {
 			return ImGuizmo::IsOver();
 		}
 
-		/**
-		 * @brief Handle common gizmo hotkeys
-		 * @param state Gizmo state to modify
-		 * @return true if any hotkey was pressed
-		 */
 		static bool HandleHotkeys(GizmoState& state) {
 			bool changed = false;
 
@@ -119,10 +92,6 @@ namespace Utils {
 			return changed;
 		}
 
-		/**
-		 * @brief Render gizmo settings UI panel
-		 * @param state Gizmo state to modify
-		 */
 		static void RenderSettingsPanel(GizmoState& state) {
 			if (ImGui::Begin("Gizmo Settings")) {
 				// Operation selection
@@ -192,13 +161,6 @@ namespace Utils {
 			ImGui::End();
 		}
 
-		/**
-		 * @brief Decompose a transform matrix into position, rotation, and scale
-		 * @param matrix Transform matrix to decompose
-		 * @param position Output position vector
-		 * @param rotation Output rotation vector (Euler angles in radians)
-		 * @param scale Output scale vector
-		 */
 		static void DecomposeMatrix(const glm::mat4& matrix,
 			glm::vec3& position,
 			glm::vec3& rotation,
@@ -230,13 +192,6 @@ namespace Utils {
 			}
 		}
 
-		/**
-		 * @brief Compose a transform matrix from position, rotation, and scale
-		 * @param position Position vector
-		 * @param rotation Rotation vector (Euler angles in radians)
-		 * @param scale Scale vector
-		 * @return Composed transform matrix
-		 */
 		static glm::mat4 ComposeMatrix(const glm::vec3& position,
 			const glm::vec3& rotation,
 			const glm::vec3& scale) {
@@ -251,10 +206,6 @@ namespace Utils {
 			return translation * rotationMatrix * scaleMatrix;
 		}
 
-		/**
-		 * @brief Render a simple menu bar with gizmo controls
-		 * @param state Gizmo state to modify
-		 */
 		static void RenderMenuBar(GizmoState& state) {
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("Gizmo")) {

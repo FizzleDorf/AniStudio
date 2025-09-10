@@ -29,7 +29,6 @@ namespace Plugins {
 		void SetInitialized(bool initialized) { initialized = initialized; }
 
 		// Lifecycle - implement these in your plugin
-		// Registry is passed directly - no static variables!
 		virtual bool OnEngineInit(ECS::EntityManager& entityMgr, IPluginRegistry& registry) = 0;
 		virtual bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr, IPluginRegistry& registry) { return true; }
 		virtual void OnShutdown() {}

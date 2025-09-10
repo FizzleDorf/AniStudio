@@ -147,11 +147,9 @@ namespace ECS {
 		}
 
 		std::string CreateTempScriptFile(const std::string& script) {
-			// Use std::filesystem for proper path handling
+			
 			std::filesystem::path tempDir = std::filesystem::temp_directory_path();
 			std::filesystem::path tempFile = tempDir / "anistudio_temp_script.py";
-
-			// Convert to string with proper path separators
 			return tempFile.string();
 		}
 
@@ -164,10 +162,9 @@ namespace ECS {
 
 				std::string pythonExe = GetPythonExecutable(comp);
 
-				// Create a temporary file for the script using proper path handling
+				// Create a temporary file for the script
 				std::string tempFile = CreateTempScriptFile(script);
 
-				// Write script to temp file
 				std::ofstream scriptFile(tempFile);
 				if (!scriptFile.is_open()) {
 					comp.error = "Failed to create temporary script file: " + tempFile;
@@ -176,7 +173,6 @@ namespace ECS {
 				scriptFile << script;
 				scriptFile.close();
 
-				// Construct command with proper quoting
 				std::ostringstream commandStream;
 				commandStream << "\"" << pythonExe << "\" \"" << tempFile << "\"";
 				std::string command = commandStream.str();
@@ -227,8 +223,6 @@ namespace ECS {
 				}
 
 				std::string pythonExe = GetPythonExecutable(comp);
-
-				// Construct command with proper quoting
 				std::ostringstream commandStream;
 				commandStream << "\"" << pythonExe << "\" \"" << filePath << "\"";
 				std::string command = commandStream.str();

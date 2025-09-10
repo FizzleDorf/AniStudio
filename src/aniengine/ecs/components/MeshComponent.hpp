@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "OpenGLWrapper.hpp"  // Include OpenGL headers
+#include "OpenGLWrapper.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>

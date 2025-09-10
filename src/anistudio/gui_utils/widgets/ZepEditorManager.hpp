@@ -1,8 +1,3 @@
-/*
- * ZepEditorManager.hpp - GUI Layer Zep Editor Management
- * Integrates with existing StringWidgets to manage Zep editors for components
- */
-
 #pragma once
 
 #include "ECS.h"
