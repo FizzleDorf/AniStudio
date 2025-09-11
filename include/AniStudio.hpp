@@ -106,7 +106,7 @@ namespace ANI {
 		GUI::ViewManager viewManager;
 		ANI::ProjectManager m_projectManager;
 
-		// Plugin system - NOW WITH PROPER IMGUI CONTEXT INTEGRATION
+		// Plugin system
 		std::unique_ptr<Plugins::StudioPluginManager> studioPluginManager;
 
 		// Standalone views
@@ -122,7 +122,7 @@ namespace ANI {
 		void SetupProjectCallbacks();
 		void InitializeStudioPlugins();
 
-		// NEW: Method for completing initialization after ImGui is ready
+		// Method for completing initialization after ImGui is ready
 		void CompleteInitialization();
 
 		// Window state management

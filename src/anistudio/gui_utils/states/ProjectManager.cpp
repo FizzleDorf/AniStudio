@@ -303,11 +303,16 @@ namespace ANI {
 	}
 
 	void ProjectManager::CloseProject() {
-		if (!m_isProjectOpen) return;
+		if (!m_isProjectOpen) {
+			std::cout << "[ProjectManager] No project to close" << std::endl;
+			return;
+		}
 
+		std::cout << "[ProjectManager] CloseProject() called - project open: " << m_isProjectOpen << std::endl;
 		std::cout << "[ProjectManager] Closing project: " << m_projectSettings.projectName << std::endl;
 
 		// Save project before closing (this will save ViewState, ImGui layout, etc.)
+		std::cout << "[ProjectManager] Saving project before closing..." << std::endl;
 		SaveProject();
 
 		// Reset the ViewManager to clean state
@@ -318,6 +323,7 @@ namespace ANI {
 		ClearProjectSpecificPaths();
 
 		// Reset state
+		std::cout << "[ProjectManager] Clearing project state..." << std::endl;
 		m_isProjectOpen = false;
 		m_currentProjectPath.clear();
 		m_projectSettings = ProjectSettings{};
@@ -325,9 +331,14 @@ namespace ANI {
 
 		std::cout << "[ProjectManager] Project closed and managers reset" << std::endl;
 
-		// Trigger callback
+		// CRITICAL: Trigger callback
+		std::cout << "[ProjectManager] Triggering OnProjectClosed callback..." << std::endl;
 		if (m_onProjectClosedCallback) {
 			m_onProjectClosedCallback();
+			std::cout << "[ProjectManager] OnProjectClosed callback completed" << std::endl;
+		}
+		else {
+			std::cout << "[ProjectManager] ERROR: No OnProjectClosed callback set!" << std::endl;
 		}
 	}
 

@@ -55,7 +55,6 @@ namespace ANI {
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
 
-		// Register PluginView with StudioPluginManager
 		if (studioPluginManager) {
 			viewManager.RegisterViewWithFactory("PluginView", "Tools",
 				[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
@@ -80,7 +79,6 @@ namespace ANI {
 	void StudioCore::InitializeStudioPlugins() {
 		std::cout << "[StudioCore] Initializing studio plugin system..." << std::endl;
 
-		// Capture the current ImGui context AFTER ImGui is fully ready
 		imguiContext = ImGui::GetCurrentContext();
 		std::cout << "[StudioCore] Captured ImGui context for plugins: " << imguiContext << std::endl;
 
@@ -102,29 +100,23 @@ namespace ANI {
 
 		std::cout << "[StudioCore] ImGui context verified - fonts loaded: " << io.Fonts->Fonts.Size << std::endl;
 
-		// Create the studio plugin manager
 		studioPluginManager = std::make_unique<Plugins::StudioPluginManager>(
 			engineCore.GetEntityManager(),
 			viewManager,
 			static_cast<ImGuiContext*>(imguiContext)
 			);
 
-		// Set default plugin directory
 		std::string pluginDirectory = "./plugins";
 
-		// Create plugin directory if it doesn't exist
 		if (!std::filesystem::exists(pluginDirectory)) {
 			std::filesystem::create_directories(pluginDirectory);
 			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		// Scan and load plugins
 		studioPluginManager->scanPluginDirectory(pluginDirectory);
 
-		// Enable hot reload for development
 		studioPluginManager->enableHotReload(true);
 
-		// Auto-enable all loaded plugins
 		auto plugins = studioPluginManager->getLoadedPlugins();
 		for (const auto& plugin : plugins) {
 			std::cout << "[StudioCore] Auto-enabling plugin: " << plugin.name << std::endl;
@@ -144,16 +136,13 @@ namespace ANI {
 		});
 
 		m_projectManager.SetProjectClosedCallback([this]() {
-			// Only handle project close events if we're not shutting down
 			if (!m_isShuttingDown) {
 				OnProjectClosed();
 			}
 		});
 
-		// Handle ViewState loading to sync ViewManager with restored active workspace
 		m_projectManager.SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
 			std::cout << "[StudioCore] Syncing ViewManager with loaded active workspace: " << activeWorkspaceID << std::endl;
-			// ViewManager is now the single source of truth for active workspace
 			viewManager.SetActiveWorkspace(activeWorkspaceID);
 		});
 	}
@@ -242,16 +231,13 @@ namespace ANI {
 		try {
 			std::cout << "[StudioCore] Initializing..." << std::endl;
 
-			// Initialize engine core first
 			if (!engineCore.Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
 
-			// Set entity manager reference for the ViewManager
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
 
-			// Setup callbacks early
 			SetupProjectCallbacks();
 
 			std::cout << "[StudioCore] Basic initialization complete, waiting for full ImGui setup..." << std::endl;
@@ -275,7 +261,6 @@ namespace ANI {
 
 		std::cout << "[StudioCore] Completing initialization after ImGui is ready..." << std::endl;
 
-		// Verify ImGui is initialized
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 		if (!currentContext) {
 			std::cerr << "[StudioCore] ERROR: ImGui context still null!" << std::endl;
@@ -290,7 +275,6 @@ namespace ANI {
 
 		std::cout << "[StudioCore] ImGui is now fully ready - proceeding with plugin initialization" << std::endl;
 
-		// Load ImGui settings using the existing utility
 		try {
 			Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
 			std::cout << "[StudioCore] ImGui settings loaded successfully" << std::endl;
@@ -299,26 +283,20 @@ namespace ANI {
 			std::cerr << "[StudioCore] Warning: Failed to load ImGui settings: " << e.what() << std::endl;
 		}
 
-		// Set the ImGui context on the ViewManager BEFORE initializing plugins
 		viewManager.SetImGuiContext(currentContext);
 		std::cout << "[StudioCore] Set ImGui context on ViewManager: " << currentContext << std::endl;
 
-		// Initialize studio plugin system with fully ready ImGui
 		InitializeStudioPlugins();
 
-		// Register views (including plugin view now that plugin manager exists)
 		RegisterCoreViews();
 
-		// Set managers for Events system
 		std::cout << "[StudioCore] Setting managers for Events system..." << std::endl;
 		ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
 		std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
 
-		// Initialize UI components
 		m_projectManagerView->Init();
 		m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
 
-		// Show startup view if needed
 		if (m_projectManager.ShouldShowStartup()) {
 			m_showProjectManagerView = true;
 			std::cout << "[StudioCore] Will show startup view - no project to auto-load" << std::endl;
@@ -343,10 +321,14 @@ namespace ANI {
 	}
 
 	void StudioCore::OnProjectClosed() {
-		std::cout << "[StudioCore] Project closing..." << std::endl;
+		std::cout << "[StudioCore] OnProjectClosed() called" << std::endl;
+		std::cout << "[StudioCore] m_isShuttingDown: " << m_isShuttingDown << std::endl;
+		std::cout << "[StudioCore] Current m_showProjectManagerView: " << m_showProjectManagerView << std::endl;
 
 		// Show project manager view again
 		m_showProjectManagerView = true;
+
+		std::cout << "[StudioCore] Set m_showProjectManagerView to: " << m_showProjectManagerView << std::endl;
 
 		SyncWindowStateFromGLFW();
 		std::string defaultPath = GetDefaultWindowStatePath();
@@ -366,20 +348,17 @@ namespace ANI {
 
 		std::cout << "[StudioCore] Starting shutdown sequence..." << std::endl;
 		running = false;
-		m_isShuttingDown = true; // Prevent OnProjectClosed callback
+		m_isShuttingDown = true;
 
 		try {
-			// SAVE PROJECT FIRST - BEFORE ANYTHING ELSE IS DESTROYED
 			if (m_projectManager.IsProjectOpen()) {
 				std::cout << "[StudioCore] Saving open project BEFORE shutdown: " << m_projectManager.GetCurrentProjectName() << std::endl;
 
-				// Sync ProjectManager with ViewManager's active workspace before saving
 				GUI::WorkspaceID currentActive = viewManager.GetActiveWorkspace();
 				m_projectManager.SetLastActiveWorkspace(currentActive);
 				std::cout << "[StudioCore] Synced active workspace " << currentActive << " to project before saving" << std::endl;
 
 				try {
-					// DON'T CALL CloseProject() which triggers callbacks
 					if (!m_projectManager.SaveProject()) {
 						std::cerr << "[StudioCore] ERROR: Failed to save project: " << m_projectManager.GetLastError() << std::endl;
 					}
@@ -392,7 +371,6 @@ namespace ANI {
 				}
 			}
 
-			// Save application state including ImGui settings
 			std::cout << "[StudioCore] Saving application state..." << std::endl;
 
 			SyncWindowStateFromGLFW();
@@ -401,7 +379,6 @@ namespace ANI {
 			m_windowState.SaveToFile(defaultPath);
 			std::cout << "[StudioCore] Saved window state as default" << std::endl;
 
-			// Save ImGui settings using existing utility
 			try {
 				ImGuiIO& io = ImGui::GetIO();
 				std::string settingsPath = Utils::FilePaths::dataPath + "/settings/imgui_render_settings.json";
@@ -423,25 +400,21 @@ namespace ANI {
 				std::cerr << "[StudioCore] Warning: Failed to save file paths: " << e.what() << std::endl;
 			}
 
-			std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Give more time for save
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 			std::cout << "[StudioCore] Critical saves completed" << std::endl;
 
-			// Destroy UI components
 			m_menuBar.reset();
 			m_projectManagerView.reset();
 
-			// Shutdown studio plugins
 			if (studioPluginManager) {
 				std::cout << "[StudioCore] Shutting down studio plugin manager..." << std::endl;
 				studioPluginManager.reset();
 			}
 
-			// Reset the view manager (after everything is saved)
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
 			viewManager.FullReset();
 
-			// Shutdown engine core
 			std::cout << "[StudioCore] Shutting down engine core..." << std::endl;
 			engineCore.Shutdown();
 
@@ -462,7 +435,6 @@ namespace ANI {
 		try {
 			engineCore.Update(deltaTime);
 
-			// Update studio plugins
 			if (studioPluginManager) {
 				studioPluginManager->updatePlugins(deltaTime);
 			}
@@ -489,11 +461,15 @@ namespace ANI {
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			// Complete initialization after first ImGui frame
 			CompleteInitialization();
 
+			// FIXED: Track project state changes to avoid interfering with project close
+			static bool wasProjectOpen = false;
 			static bool startupShown = false;
-			if (!m_projectManager.IsProjectOpen() && !startupShown) {
+			bool isProjectCurrentlyOpen = m_projectManager.IsProjectOpen();
+
+			// Show startup view if no project is open and we haven't shown it yet
+			if (!isProjectCurrentlyOpen && !startupShown) {
 				if (!m_showProjectManagerView) {
 					m_showProjectManagerView = true;
 					startupShown = true;
@@ -501,10 +477,22 @@ namespace ANI {
 				}
 			}
 
-			if (m_projectManager.IsProjectOpen()) {
+			// Only hide project manager view when a project actually opens (not every frame)
+			if (isProjectCurrentlyOpen && !wasProjectOpen) {
+				// Project just opened
 				startupShown = false;
 				m_showProjectManagerView = false;
+				std::cout << "[StudioCore] Project opened - hiding startup view" << std::endl;
 			}
+
+			// Reset startup flag when project closes (so it can be shown again)
+			if (!isProjectCurrentlyOpen && wasProjectOpen) {
+				// Project just closed - OnProjectClosed() should have set m_showProjectManagerView = true
+				startupShown = false;
+				std::cout << "[StudioCore] Project closed - startup view should be visible: " << m_showProjectManagerView << std::endl;
+			}
+
+			wasProjectOpen = isProjectCurrentlyOpen;
 
 			if (m_showProjectManagerView) {
 				m_projectManagerView->Render();
@@ -537,7 +525,6 @@ namespace ANI {
 					ImGuiID docksspace_id = ImGui::GetID("MainDockSpace");
 					ImGui::DockSpace(docksspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-					// ViewManager handles everything internally - just call Render()
 					viewManager.Render();
 				}
 				else {
@@ -565,7 +552,6 @@ namespace ANI {
 
 	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {
 		viewManager.SetActiveWorkspace(workspaceID);
-		// Sync with ProjectManager for persistence
 		if (m_projectManager.IsProjectOpen()) {
 			m_projectManager.SetLastActiveWorkspace(workspaceID);
 		}
