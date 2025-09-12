@@ -75,6 +75,8 @@ namespace Utils
 								posPrompt = promptData["posPrompt"].get<std::string>();
 							if (promptData.contains("negPrompt") && !promptData["negPrompt"].is_null())
 								negPrompt = promptData["negPrompt"].get<std::string>();
+							if (promptData.contains("normalize_input") && !promptData["normalize_input"].is_null())
+								gen_params.normalize_input = promptData["normalize_input"].get<bool>();
 						}
 
 						// ClipSkip component

@@ -1,19 +1,13 @@
 #pragma once
 
 #include "BaseView.hpp"
+#include "DiffusionCallbackUtils.hpp"
 #include "components.h"
 #include "systems.h"
 #include <unordered_map>
 #include <functional>
 
 namespace GUI {
-
-	struct ProgressData {
-		int currentStep = 0;
-		int totalSteps = 0;
-		float currentTime = 0.0f;
-		bool isProcessing = false;
-	};
 
 	class DiffusionView : public BaseView {
 	public:
@@ -24,7 +18,7 @@ namespace GUI {
 			return R"({
                 "displayName": "Diffusion",
                 "category": "Generation",
-                "description": "AI image generation using Stable Diffusion models."
+                "description": "AI image and video generation using Stable Diffusion models."
             })";
 		}
 
@@ -43,7 +37,8 @@ namespace GUI {
 		// Entity management
 		ECS::EntityID txt2imgEntity = 0;
 		ECS::EntityID img2imgEntity = 0;
-		bool isTxt2ImgMode = true;
+		ECS::EntityID editEntity = 0;
+		int currentMode = 0; // 0=Txt2Img, 1=Img2Img, 2=Edit
 
 		// Component visibility management
 		std::unordered_map<std::string, bool> componentVisibility;
@@ -65,6 +60,7 @@ namespace GUI {
 		// Event handling
 		void HandleT2IEvent();
 		void HandleI2IEvent();
+		void HandleEditEvent();
 		void HandleUpscaleEvent();
 
 		// Metadata operations

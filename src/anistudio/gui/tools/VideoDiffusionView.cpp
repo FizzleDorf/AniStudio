@@ -1,4 +1,5 @@
 #include "VideoDiffusionView.hpp"
+#include "DiffusionCallbackUtils.hpp"
 #include "../Events/Events.hpp"
 #include "Constants.hpp"
 #include "UISchema.hpp"
@@ -15,19 +16,6 @@
 using namespace ECS;
 using namespace ANI;
 
-// Define ProgressData struct locally since we can't rely on DiffusionView
-namespace GUI {
-	struct ProgressData {
-		int currentStep = 0;
-		int totalSteps = 0;
-		float currentTime = 0.0f;
-		bool isProcessing = false;
-	};
-}
-
-// External progress data for shared progress tracking
-static GUI::ProgressData progressData;
-
 namespace GUI {
 
 	VideoDiffusionView::VideoDiffusionView(EntityManager& entityMgr) : BaseView(entityMgr) {
@@ -41,8 +29,6 @@ namespace GUI {
 	VideoDiffusionView::~VideoDiffusionView() {
 		if (img2vidEntity != 0)
 			mgr.DestroyEntity(img2vidEntity);
-		if (editEntity != 0)
-			mgr.DestroyEntity(editEntity);
 	}
 
 	void VideoDiffusionView::InitializeComponentVisibility() {
@@ -50,30 +36,31 @@ namespace GUI {
 		componentVisibility["ModelComponent"] = true;
 		componentVisibility["ClipLComponent"] = true;
 		componentVisibility["ClipGComponent"] = true;
-		componentVisibility["ClipVisionComponent"] = true;  // NEW: For I2V models
+		componentVisibility["ClipVisionComponent"] = true;  // For I2V models
 		componentVisibility["T5XXLComponent"] = true;
 		componentVisibility["DiffusionModelComponent"] = true;
-		componentVisibility["HighNoiseDiffusionModelComponent"] = true;  // NEW: For Wan 2.2
+		componentVisibility["HighNoiseDiffusionModelComponent"] = true;  // For Wan 2.2
 		componentVisibility["VaeComponent"] = true;
 		componentVisibility["LoraComponent"] = true;
 		componentVisibility["TaesdComponent"] = true;
 		componentVisibility["LatentComponent"] = true;
 		componentVisibility["SamplerComponent"] = true;
-		componentVisibility["HighNoiseSamplerComponent"] = true;  // NEW: For Wan 2.2
-		componentVisibility["VideoParamsComponent"] = true;  // NEW: Video settings
+		componentVisibility["HighNoiseSamplerComponent"] = true;  // For Wan 2.2
+		componentVisibility["VideoParamsComponent"] = true;  // Video settings
 		componentVisibility["GuidanceComponent"] = true;
 		componentVisibility["ClipSkipComponent"] = true;
 		componentVisibility["PromptComponent"] = true;
 		componentVisibility["LayerSkipComponent"] = true;
 		componentVisibility["OutputImageComponent"] = true;
 		componentVisibility["InputImageComponent"] = true;
-		componentVisibility["EndImageComponent"] = true;  // NEW: For FLF2V
+		componentVisibility["EndImageComponent"] = true;  // For FLF2V
 		componentVisibility["ControlnetComponent"] = true;
 		componentVisibility["EmbeddingComponent"] = true;
 		componentVisibility["EsrganComponent"] = true;
 	}
 
 	void VideoDiffusionView::Init() {
+		DiffusionCallbackUtils::InitializeCallbacks();
 		ResetEntities();
 	}
 
@@ -88,29 +75,24 @@ namespace GUI {
 			img2vidEntity = 0;
 		}
 
-		if (editEntity != 0) {
-			mgr.DestroyEntity(editEntity);
-			editEntity = 0;
-		}
-
 		// Create entity for Img2Vid mode (requires input image)
 		img2vidEntity = mgr.AddNewEntity();
 
-		// Add components for Img2Vid - Include NEW video components
+		// Add components for Img2Vid - Include video components
 		mgr.AddComponent<ModelComponent>(img2vidEntity);
 		mgr.AddComponent<ClipLComponent>(img2vidEntity);
 		mgr.AddComponent<ClipGComponent>(img2vidEntity);
-		mgr.AddComponent<ClipVisionComponent>(img2vidEntity);  // NEW: For I2V models
+		mgr.AddComponent<ClipVisionComponent>(img2vidEntity);  // For I2V models
 		mgr.AddComponent<T5XXLComponent>(img2vidEntity);
 		mgr.AddComponent<DiffusionModelComponent>(img2vidEntity);
-		mgr.AddComponent<HighNoiseDiffusionModelComponent>(img2vidEntity);  // NEW: For Wan 2.2
+		mgr.AddComponent<HighNoiseDiffusionModelComponent>(img2vidEntity);  // For Wan 2.2
 		mgr.AddComponent<VaeComponent>(img2vidEntity);
 		mgr.AddComponent<LoraComponent>(img2vidEntity);
 		mgr.AddComponent<TaesdComponent>(img2vidEntity);
 		mgr.AddComponent<LatentComponent>(img2vidEntity);
 		mgr.AddComponent<SamplerComponent>(img2vidEntity);
-		mgr.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);  // NEW: For Wan 2.2
-		mgr.AddComponent<VideoParamsComponent>(img2vidEntity);  // NEW: Video parameters
+		mgr.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);  // For Wan 2.2
+		mgr.AddComponent<VideoParamsComponent>(img2vidEntity);  // Video parameters
 		mgr.AddComponent<GuidanceComponent>(img2vidEntity);
 		mgr.AddComponent<ClipSkipComponent>(img2vidEntity);
 		mgr.AddComponent<PromptComponent>(img2vidEntity);
@@ -118,34 +100,8 @@ namespace GUI {
 		mgr.AddComponent<OutputImageComponent>(img2vidEntity);
 		mgr.AddComponent<InputImageComponent>(img2vidEntity);
 
-		// Create entity for Edit mode (also requires input image)
-		editEntity = mgr.AddNewEntity();
-
-		// Add components for Edit - Include NEW video components
-		mgr.AddComponent<ModelComponent>(editEntity);
-		mgr.AddComponent<ClipLComponent>(editEntity);
-		mgr.AddComponent<ClipGComponent>(editEntity);
-		mgr.AddComponent<ClipVisionComponent>(editEntity);  // NEW: For I2V models
-		mgr.AddComponent<T5XXLComponent>(editEntity);
-		mgr.AddComponent<DiffusionModelComponent>(editEntity);
-		mgr.AddComponent<HighNoiseDiffusionModelComponent>(editEntity);  // NEW: For Wan 2.2
-		mgr.AddComponent<VaeComponent>(editEntity);
-		mgr.AddComponent<LoraComponent>(editEntity);
-		mgr.AddComponent<TaesdComponent>(editEntity);
-		mgr.AddComponent<LatentComponent>(editEntity);
-		mgr.AddComponent<SamplerComponent>(editEntity);
-		mgr.AddComponent<HighNoiseSamplerComponent>(editEntity);  // NEW: For Wan 2.2
-		mgr.AddComponent<VideoParamsComponent>(editEntity);  // NEW: Video parameters
-		mgr.AddComponent<GuidanceComponent>(editEntity);
-		mgr.AddComponent<ClipSkipComponent>(editEntity);
-		mgr.AddComponent<PromptComponent>(editEntity);
-		mgr.AddComponent<LayerSkipComponent>(editEntity);
-		mgr.AddComponent<OutputImageComponent>(editEntity);
-		mgr.AddComponent<InputImageComponent>(editEntity);
-
 		// Set default denoise values
 		mgr.GetComponent<SamplerComponent>(img2vidEntity).denoise = 0.6f;
-		mgr.GetComponent<SamplerComponent>(editEntity).denoise = 0.6f;
 	}
 
 	bool VideoDiffusionView::IsEntitySafeToUse(EntityID entity) const {
@@ -227,7 +183,7 @@ namespace GUI {
 						}
 					});
 
-					// NEW: High Noise Diffusion Model for Wan 2.2
+					// High Noise Diffusion Model for Wan 2.2
 					RenderComponentWithCheckbox(entity, "HighNoiseDiffusionModelComponent", "High Noise Model", [&]() {
 						if (mgr.HasComponent<HighNoiseDiffusionModelComponent>(entity)) {
 							auto& comp = mgr.GetComponent<HighNoiseDiffusionModelComponent>(entity);
@@ -277,7 +233,7 @@ namespace GUI {
 							}
 						});
 
-						// NEW: CLIP Vision for I2V models
+						// CLIP Vision for I2V models
 						RenderComponentWithCheckbox(entity, "ClipVisionComponent", "CLIP Vision", [&]() {
 							if (mgr.HasComponent<ClipVisionComponent>(entity)) {
 								auto& comp = mgr.GetComponent<ClipVisionComponent>(entity);
@@ -357,7 +313,7 @@ namespace GUI {
 				}
 			});
 
-			// NEW: Video Parameters for Wan models
+			// Video Parameters for Wan models
 			RenderComponentWithCheckbox(entity, "VideoParamsComponent", "Video Parameters", [&]() {
 				if (mgr.HasComponent<VideoParamsComponent>(entity)) {
 					auto& comp = mgr.GetComponent<VideoParamsComponent>(entity);
@@ -394,7 +350,7 @@ namespace GUI {
 				}
 			});
 
-			// NEW: High Noise Sampler for Wan 2.2
+			// High Noise Sampler for Wan 2.2
 			RenderComponentWithCheckbox(entity, "HighNoiseSamplerComponent", "High Noise Sampler", [&]() {
 				if (mgr.HasComponent<HighNoiseSamplerComponent>(entity)) {
 					auto& comp = mgr.GetComponent<HighNoiseSamplerComponent>(entity);
@@ -445,7 +401,7 @@ namespace GUI {
 
 		// Input/Output Settings
 		if (ImGui::CollapsingHeader("Input/Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			// Input Image (both modes require this)
+			// Input Image
 			RenderComponentWithCheckbox(entity, "InputImageComponent", "Input Image", [&]() {
 				if (mgr.HasComponent<InputImageComponent>(entity)) {
 					auto& comp = mgr.GetComponent<InputImageComponent>(entity);
@@ -650,47 +606,12 @@ namespace GUI {
 		ANI::Events::Ref().QueueEvent(event);
 	}
 
-	void VideoDiffusionView::HandleEditEvent() {
-		std::cout << "Adding new Edit entity..." << std::endl;
-
-		EntityID newEntity = mgr.CloneEntity(editEntity);
-		if (newEntity == 0) {
-			std::cerr << "Failed to create new entity!" << std::endl;
-			return;
-		}
-
-		// Ensure output path is valid - use .mp4 extension for video
-		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
-			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
-			if (outputComp.filePath.empty()) {
-				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
-			}
-			if (outputComp.fileName.empty()) {
-				outputComp.fileName = "AniStudio_edit.mp4";
-			}
-			// Force .mp4 extension for video
-			std::string filename = outputComp.fileName;
-			size_t lastDot = filename.find_last_of('.');
-			if (lastDot != std::string::npos) {
-				filename = filename.substr(0, lastDot);
-			}
-			outputComp.fileName = filename + ".mp4";
-
-			std::filesystem::create_directories(outputComp.filePath);
-		}
-
-		// Queue event
-		Event event;
-		event.entityID = newEntity;
-		event.type = EventType::EditRequest;
-		ANI::Events::Ref().QueueEvent(event);
-	}
-
 	void VideoDiffusionView::RenderQueueList() {
 		ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Video Queue")) {
 
-			// Get current progress values from the global progressData
+			// Get current progress values from the shared utility
+			auto& progressData = DiffusionCallbackUtils::GetProgressData();
 			int currentStep = progressData.currentStep;
 			int totalSteps = progressData.totalSteps;
 			float time = progressData.currentTime;
@@ -717,19 +638,13 @@ namespace GUI {
 			}
 
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-				EntityID targetEntity = isImg2VidMode ? img2vidEntity : editEntity;
-				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
-					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
+				if (mgr.HasComponent<LoraComponent>(img2vidEntity)) {
+					auto& loraComp = mgr.GetComponent<LoraComponent>(img2vidEntity);
 					loraComp.modelPath = Utils::FilePaths::loraDir;
 				}
 
 				for (int i = 0; i < numQueues; i++) {
-					if (isImg2VidMode) {
-						HandleImg2VidEvent();
-					}
-					else {
-						HandleEditEvent();
-					}
+					HandleImg2VidEvent();
 				}
 			}
 
@@ -845,7 +760,7 @@ namespace GUI {
 		// Render queue controls
 		RenderQueueList();
 
-		// Main window
+		// Main window - now just shows Img2Vid (Edit moved to DiffusionView)
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 
@@ -858,59 +773,38 @@ namespace GUI {
 				RenderMetadataControls();
 			}
 
-			// Tab bar for switching between Img2Vid and Edit
-			if (ImGui::BeginTabBar("VideoDiffusion")) {
-				// Image-to-Video tab
-				if (ImGui::BeginTabItem("Img2Vid")) {
-					isImg2VidMode = true;
-					RenderEntityComponents(img2vidEntity);
-					ImGui::EndTabItem();
-				}
-
-				// Edit tab
-				if (ImGui::BeginTabItem("Edit")) {
-					isImg2VidMode = false;
-					RenderEntityComponents(editEntity);
-					ImGui::EndTabItem();
-				}
-				ImGui::EndTabBar();
-			}
+			// Single mode: Image-to-Video
+			ImGui::Text("Image-to-Video Generation");
+			ImGui::Separator();
+			RenderEntityComponents(img2vidEntity);
 		}
 		ImGui::End();
 	}
 
 	nlohmann::json VideoDiffusionView::Serialize() const {
-		EntityID targetEntity = isImg2VidMode ? img2vidEntity : editEntity;
-		nlohmann::json j = mgr.SerializeEntity(targetEntity);
+		nlohmann::json j = mgr.SerializeEntity(img2vidEntity);
 
 		// Also serialize component visibility states
 		j["componentVisibility"] = componentVisibility;
-		j["isImg2VidMode"] = isImg2VidMode;
 
 		return j;
 	}
 
 	void VideoDiffusionView::Deserialize(const nlohmann::json& j) {
-		EntityID targetEntity = isImg2VidMode ? img2vidEntity : editEntity;
-
-		if (targetEntity == 0) {
+		if (img2vidEntity == 0) {
 			std::cerr << "Error: Invalid target entity for deserialization" << std::endl;
 			return;
 		}
 
 		try {
-			mgr.DeserializeEntity(j, targetEntity);
+			mgr.DeserializeEntity(j, img2vidEntity);
 
 			// Also deserialize component visibility states
 			if (j.contains("componentVisibility")) {
 				componentVisibility = j["componentVisibility"];
 			}
 
-			if (j.contains("isImg2VidMode")) {
-				isImg2VidMode = j["isImg2VidMode"];
-			}
-
-			std::cout << "Successfully deserialized data to entity " << targetEntity << std::endl;
+			std::cout << "Successfully deserialized data to entity " << img2vidEntity << std::endl;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "Exception during deserialization: " << e.what() << std::endl;
@@ -957,7 +851,6 @@ namespace GUI {
 	void VideoDiffusionView::LoadMetadataFromVideo(const std::string& videoPath) {
 		std::cout << "Attempting to load metadata from video: " << videoPath << std::endl;
 		// TODO: Implement video metadata extraction (similar to PNG metadata extraction)
-		// This would require reading video file metadata/comments
 	}
 
 	void VideoDiffusionView::RenderMetadataControls() {

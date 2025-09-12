@@ -265,7 +265,7 @@ namespace ECS {
 		}
 	};
 
-	// Vae Loader (Overrides Model Component Vae)
+	// VAE Component
 	struct VaeComponent : public BaseModelComponent {
 		VaeComponent() {
 			compName = "Vae";
@@ -534,7 +534,8 @@ namespace ECS {
 		}
 	};
 
-	// Controlnet loader
+
+	// ControlNet Component
 	struct ControlnetComponent : public ECS::BaseModelComponent {
 		ControlnetComponent() {
 			compName = "Controlnet";
@@ -542,7 +543,7 @@ namespace ECS {
 			schema = {
 				{"title", "ControlNet Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName", "cnStrength", "applyStart", "applyEnd"}},
+				{"propertyOrder", {"modelName", "cnStrength", "applyStart", "applyEnd", "keep_control_net_cpu"}},
 				{"properties", {
 					{"modelName", {
 						{"type", "string"},
@@ -596,6 +597,12 @@ namespace ECS {
 							{"min", 0.0f},
 							{"max", 1.0f}
 						}}
+					}},
+					{"keep_control_net_cpu", {
+						{"type", "boolean"},
+						{"title", "Keep ControlNet on CPU"},
+						{"description", "Keep ControlNet models on CPU. Saves significant VRAM when using ControlNet but reduces performance."},
+						{"ui:widget", "checkbox"}
 					}}
 				}}
 			};
@@ -604,13 +611,15 @@ namespace ECS {
 		float cnStrength = 1.0f;
 		float applyStart = 0.0f;
 		float applyEnd = 1.0f;
+		bool keep_control_net_cpu = false;
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelName", &modelName},
 				{"cnStrength", &cnStrength},
 				{"applyStart", &applyStart},
-				{"applyEnd", &applyEnd}
+				{"applyEnd", &applyEnd},
+				{"keep_control_net_cpu", &keep_control_net_cpu}
 			};
 		}
 
@@ -622,6 +631,7 @@ namespace ECS {
 				cnStrength = other.cnStrength;
 				applyStart = other.applyStart;
 				applyEnd = other.applyEnd;
+				keep_control_net_cpu = other.keep_control_net_cpu;
 			}
 			return *this;
 		}
@@ -632,7 +642,8 @@ namespace ECS {
 				{"modelPath", modelPath},
 				{"cnStrength", cnStrength},
 				{"applyStart", applyStart},
-				{"applyEnd", applyEnd}
+				{"applyEnd", applyEnd},
+				{"keep_control_net_cpu", keep_control_net_cpu}
 			}} };
 		}
 
@@ -661,6 +672,8 @@ namespace ECS {
 				applyStart = componentData["applyStart"];
 			if (componentData.contains("applyEnd"))
 				applyEnd = componentData["applyEnd"];
+			if (componentData.contains("keep_control_net_cpu"))
+				keep_control_net_cpu = componentData["keep_control_net_cpu"].get<bool>();
 			if (!modelName.empty() && modelPath.empty())
 				modelPath = Utils::FilePaths::controlnetDir + "\\" + modelName;
 		}

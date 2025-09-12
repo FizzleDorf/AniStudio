@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <set>
 
 namespace ANI {
 	class ProjectManager;
@@ -17,7 +18,7 @@ namespace GUI {
 
 	struct MenuNode {
 		std::unordered_map<std::string, std::unique_ptr<MenuNode>> children;
-		std::vector<std::pair<std::string, std::string>> views;
+		std::vector<std::pair<std::string, std::string>> views; // viewTypeName, displayName
 	};
 
 	class MenuBar {
@@ -32,7 +33,7 @@ namespace GUI {
 		ViewManager& viewManager;
 		ANI::Events& events;
 
-		// Simple popup state - no more separate classes!
+		// Simple popup state
 		ProjectPopupState popupState;
 
 		// Workspace dialogs
@@ -41,17 +42,25 @@ namespace GUI {
 		char createWorkspaceBuffer[256] = "New Workspace";
 		char renameWorkspaceBuffer[256] = "";
 
+		// Menu rendering methods
 		void ShowFileMenu();
 		void ShowEditMenu();
-		void ShowViewMenus();
 		void ShowWorkspaceMenu();
+		void ShowCustomCategoryMenus();  // Renders category-based custom menus
 		void ShowHelpMenu();
 
+		// Workspace dialog rendering
 		void RenderWorkspaceDialogs();
 
-		std::vector<std::string> SplitCategoryPath(const std::string& category);
+		// Category-based menu helpers
+		void RenderViewsForCategory(const std::string& categoryName);
+		std::vector<std::string> GetCustomTopLevelCategories() const;
+
+		// Hierarchical menu helpers
+		std::vector<std::string> SplitCategoryPath(const std::string& category) const;
 		void RenderMenuNode(const MenuNode& node);
 
+		// Workspace management
 		void CreateNewWorkspace();
 		void DeleteCurrentWorkspace();
 		bool IsViewActiveInCurrentWorkspace(const std::string& viewTypeName) const;

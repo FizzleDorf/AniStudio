@@ -131,6 +131,9 @@ namespace Utils
 							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
 								vid_params.height = latentData["latentHeight"].get<int>();
 						}
+
+						// REMOVED: The broken VAE parameter code that was trying to access undefined 'params'
+						// VAE parameters are handled in InitializeStableDiffusionContext()
 					}
 				}
 

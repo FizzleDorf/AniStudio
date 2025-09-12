@@ -29,8 +29,8 @@ namespace GUI {
 		if (ImGui::BeginMenuBar()) {
 			ShowFileMenu();
 			ShowEditMenu();
-			ShowViewMenus();
 			ShowWorkspaceMenu();
+			ShowCustomCategoryMenus();  // Render category-based menus
 			ShowHelpMenu();
 			ImGui::EndMenuBar();
 		}
@@ -57,8 +57,12 @@ namespace GUI {
 			}
 
 			if (ImGui::MenuItem("Close Project", "", false, projectOpen)) {
-				// FIXED: Don't exit, just close the project and show ProjectManagerView
 				projectManager.CloseProject();
+			}
+
+			// Render views that have "File" as their top-level category
+			if (projectOpen) {
+				RenderViewsForCategory("File");
 			}
 
 			ImGui::Separator();
@@ -83,45 +87,12 @@ namespace GUI {
 				// TODO: Implement redo
 			}
 
-			ImGui::Separator();
-			ImGui::EndMenu();
-		}
-	}
-
-	void MenuBar::ShowViewMenus() {
-		if (!projectManager.IsProjectOpen()) return;
-
-		if (ImGui::BeginMenu("View")) {
-			auto allViews = viewManager.GetRegisteredViews();
-
-			MenuNode rootMenu;
-
-			for (const auto&[viewTypeName, typeID] : allViews) {
-				auto meta = viewManager.GetViewMetadata(viewTypeName);
-				auto categoryParts = SplitCategoryPath(meta.category);
-
-				if (!categoryParts.empty() && categoryParts[0] == "Hidden") {
-					continue;
-				}
-
-				if (categoryParts.empty()) {
-					categoryParts.push_back("Other");
-				}
-
-				MenuNode* currentNode = &rootMenu;
-				for (const auto& part : categoryParts) {
-					auto it = currentNode->children.find(part);
-					if (it == currentNode->children.end()) {
-						currentNode->children[part] = std::make_unique<MenuNode>();
-					}
-					currentNode = currentNode->children[part].get();
-				}
-
-				currentNode->views.push_back({ viewTypeName, meta.displayName });
+			// Render views that have "Edit" as their top-level category
+			if (projectManager.IsProjectOpen()) {
+				RenderViewsForCategory("Edit");
 			}
 
-			RenderMenuNode(rootMenu);
-
+			ImGui::Separator();
 			ImGui::EndMenu();
 		}
 	}
@@ -151,6 +122,9 @@ namespace GUI {
 				}
 			}
 
+			// Render views that have "Workspace" as their top-level category
+			RenderViewsForCategory("Workspace");
+
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("New Workspace...")) {
@@ -174,13 +148,114 @@ namespace GUI {
 		}
 	}
 
+	void MenuBar::ShowCustomCategoryMenus() {
+		if (!projectManager.IsProjectOpen()) return;
+
+		// Get all unique top-level categories from registered views
+		auto customCategories = GetCustomTopLevelCategories();
+
+		for (const auto& category : customCategories) {
+			if (ImGui::BeginMenu(category.c_str())) {
+				RenderViewsForCategory(category);
+				ImGui::EndMenu();
+			}
+		}
+	}
+
 	void MenuBar::ShowHelpMenu() {
 		if (ImGui::BeginMenu("Help")) {
+			// Render views that have "Help" as their top-level category
+			if (projectManager.IsProjectOpen()) {
+				RenderViewsForCategory("Help");
+			}
+
 			if (ImGui::MenuItem("About")) {
 				// TODO: Show about dialog
 			}
 			ImGui::EndMenu();
 		}
+	}
+
+	void MenuBar::RenderViewsForCategory(const std::string& categoryName) {
+		auto allViews = viewManager.GetRegisteredViews();
+
+		// Build menu tree for this category
+		MenuNode rootMenu;
+		bool hasViewsInCategory = false;
+
+		for (const auto&[viewTypeName, typeID] : allViews) {
+			auto meta = viewManager.GetViewMetadata(viewTypeName);
+			auto categoryParts = SplitCategoryPath(meta.category);
+
+			// Skip views with "Hidden" category
+			if (!categoryParts.empty() && categoryParts[0] == "Hidden") {
+				continue;
+			}
+
+			// Skip if this view doesn't belong to the requested category
+			if (categoryParts.empty() || categoryParts[0] != categoryName) {
+				continue;
+			}
+
+			hasViewsInCategory = true;
+
+			// Remove the top-level category part since we're already in that menu
+			std::vector<std::string> subCategoryParts(categoryParts.begin() + 1, categoryParts.end());
+
+			// Navigate/create the menu tree for subcategories
+			MenuNode* currentNode = &rootMenu;
+			for (const auto& part : subCategoryParts) {
+				auto it = currentNode->children.find(part);
+				if (it == currentNode->children.end()) {
+					currentNode->children[part] = std::make_unique<MenuNode>();
+				}
+				currentNode = currentNode->children[part].get();
+			}
+
+			// Add the view to the final menu level
+			currentNode->views.push_back({ viewTypeName, meta.displayName });
+		}
+
+		// Only render if we have views in this category
+		if (hasViewsInCategory) {
+			// Add separator if menu already has items
+			if (ImGui::GetCursorPosY() > ImGui::GetFrameHeightWithSpacing()) {
+				ImGui::Separator();
+			}
+			RenderMenuNode(rootMenu);
+		}
+	}
+
+	std::vector<std::string> MenuBar::GetCustomTopLevelCategories() const {
+		std::set<std::string> customCategories;
+		auto allViews = viewManager.GetRegisteredViews();
+
+		// Standard menus that shouldn't be created dynamically
+		std::set<std::string> standardMenus = { "File", "Edit", "View", "Workspace", "Help" };
+
+		for (const auto&[viewTypeName, typeID] : allViews) {
+			auto meta = viewManager.GetViewMetadata(viewTypeName);
+			auto categoryParts = SplitCategoryPath(meta.category);
+
+			// Skip hidden views
+			if (!categoryParts.empty() && categoryParts[0] == "Hidden") {
+				continue;
+			}
+
+			// Skip if no category
+			if (categoryParts.empty()) {
+				continue;
+			}
+
+			std::string topLevelCategory = categoryParts[0];
+
+			// Only add if not a standard menu
+			if (standardMenus.find(topLevelCategory) == standardMenus.end()) {
+				customCategories.insert(topLevelCategory);
+			}
+		}
+
+		return std::vector<std::string>(customCategories.begin(), customCategories.end());
 	}
 
 	void MenuBar::RenderWorkspaceDialogs() {
@@ -263,7 +338,7 @@ namespace GUI {
 		}
 	}
 
-	std::vector<std::string> MenuBar::SplitCategoryPath(const std::string& category) {
+	std::vector<std::string> MenuBar::SplitCategoryPath(const std::string& category) const {
 		std::vector<std::string> parts;
 		std::stringstream ss(category);
 		std::string part;
@@ -282,18 +357,21 @@ namespace GUI {
 	}
 
 	void MenuBar::RenderMenuNode(const MenuNode& node) {
+		// Sort children alphabetically
 		std::vector<std::pair<std::string, MenuNode*>> sortedChildren;
 		for (const auto&[name, child] : node.children) {
 			sortedChildren.push_back({ name, child.get() });
 		}
 		std::sort(sortedChildren.begin(), sortedChildren.end());
 
+		// Sort views by display name
 		std::vector<std::pair<std::string, std::string>> sortedViews = node.views;
 		std::sort(sortedViews.begin(), sortedViews.end(),
 			[](const auto& a, const auto& b) {
 			return a.second < b.second;
 		});
 
+		// Render child menus (submenus) first
 		for (const auto&[menuName, childNode] : sortedChildren) {
 			if (ImGui::BeginMenu(menuName.c_str())) {
 				RenderMenuNode(*childNode);
@@ -301,10 +379,12 @@ namespace GUI {
 			}
 		}
 
+		// Add separator if we have both submenus and views
 		if (!sortedChildren.empty() && !sortedViews.empty()) {
 			ImGui::Separator();
 		}
 
+		// Render views in this menu level
 		for (const auto&[viewTypeName, displayName] : sortedViews) {
 			bool isViewActive = IsViewActiveInCurrentWorkspace(viewTypeName);
 

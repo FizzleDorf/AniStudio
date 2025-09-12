@@ -34,10 +34,8 @@ namespace GUI {
 		void Deserialize(const nlohmann::json& j) override;
 
 	private:
-		// Entity management
+		// Entity management - Only Img2Vid now (Edit moved to DiffusionView)
 		ECS::EntityID img2vidEntity = 0;
-		ECS::EntityID editEntity = 0;
-		bool isImg2VidMode = true;
 
 		// Component visibility management
 		std::unordered_map<std::string, bool> componentVisibility;
@@ -56,9 +54,8 @@ namespace GUI {
 		bool IsEntitySafeToUse(ECS::EntityID entity) const;
 		void UpdateModelPath(const ECS::EntityID entity, const std::string& componentName);
 
-		// Event handling
+		// Event handling - Only Img2Vid now
 		void HandleImg2VidEvent();
-		void HandleEditEvent();
 
 		// Metadata operations
 		void SaveMetadataToJson(const std::string& filepath);

@@ -105,7 +105,7 @@ namespace Utils {
 							highNoiseModelPath = FilePaths::unetDir + "/" + highNoise["modelName"].get<std::string>();
 					}
 
-					// Vae component
+					// Vae component - FIXED: Use ctx_params instead of params
 					if (comp.contains("Vae"))
 					{
 						auto vae = comp["Vae"];
@@ -113,11 +113,12 @@ namespace Utils {
 							vaePath = vae["modelPath"].get<std::string>();
 						else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty())
 							vaePath = FilePaths::vaeDir + "/" + vae["modelName"].get<std::string>();
-
-						if (vae.contains("isTiled"))
-							ctx_params.vae_tiling = vae["isTiled"].get<bool>();
 						if (vae.contains("vae_decode_only"))
 							ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
+						if (vae.contains("isTiled"))
+							ctx_params.vae_tiling = vae["isTiled"].get<bool>();
+						if (vae.contains("keep_vae_on_cpu"))
+							ctx_params.keep_vae_on_cpu = vae["keep_vae_on_cpu"].get<bool>();
 					}
 
 					// Taesd component
@@ -194,22 +195,32 @@ namespace Utils {
 							ctx_params.free_params_immediately = sampler["free_params_immediately"].get<bool>();
 						if (sampler.contains("keep_clip_on_cpu"))
 							ctx_params.keep_clip_on_cpu = sampler["keep_clip_on_cpu"].get<bool>();
-						if (sampler.contains("keep_vae_on_cpu"))
-							ctx_params.keep_vae_on_cpu = sampler["keep_vae_on_cpu"].get<bool>();
 						if (sampler.contains("offload_params_to_cpu"))
 							ctx_params.offload_params_to_cpu = sampler["offload_params_to_cpu"].get<bool>();
 						if (sampler.contains("diffusion_flash_attn"))
 							ctx_params.diffusion_flash_attn = sampler["diffusion_flash_attn"].get<bool>();
-						if (sampler.contains("offload_params_to_cpu"))
-							ctx_params.offload_params_to_cpu = sampler["offload_params_to_cpu"].get<bool>();
 						if (sampler.contains("diffusion_conv_direct"))
 							ctx_params.diffusion_conv_direct = sampler["diffusion_conv_direct"].get<bool>();
 						if (sampler.contains("vae_conv_direct"))
 							ctx_params.vae_conv_direct = sampler["vae_conv_direct"].get<bool>();
 						if (sampler.contains("current_type_method"))
 							ctx_params.wtype = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
-						if (sampler.contains("current_rng_type"))
-							ctx_params.rng_type = static_cast<rng_type_t>(sampler["current_rng_type"].get<int>());
+					}
+
+					// Latent Component
+					if (comp.contains("Latent"))
+					{
+						auto latent = comp["Latent"];
+						if (latent.contains("current_rng_type"))
+							ctx_params.rng_type = static_cast<rng_type_t>(latent["current_rng_type"].get<int>());
+					}
+
+					// VideoParams component for flow_shift
+					if (comp.contains("VideoParams"))
+					{
+						auto videoParams = comp["VideoParams"];
+						if (videoParams.contains("flow_shift"))
+							ctx_params.flow_shift = videoParams["flow_shift"].get<float>();
 					}
 
 					// Chroma component for Chroma-specific settings
@@ -222,8 +233,6 @@ namespace Utils {
 							ctx_params.chroma_use_t5_mask = chroma["use_t5_mask"].get<bool>();
 						if (chroma.contains("t5_mask_pad"))
 							ctx_params.chroma_t5_mask_pad = chroma["t5_mask_pad"].get<int>();
-						if (chroma.contains("flow_shift"))
-							ctx_params.flow_shift = chroma["flow_shift"].get<float>();
 					}
 				}
 			}
@@ -253,6 +262,9 @@ namespace Utils {
 			std::cout << "DiffusionModel: " << ctx_params.diffusion_model_path << std::endl;
 			std::cout << "HighNoiseDiffusionModel: " << ctx_params.high_noise_diffusion_model_path << std::endl;
 			std::cout << "Vae: " << ctx_params.vae_path << std::endl;
+			std::cout << "VAE Decode Only: " << (ctx_params.vae_decode_only ? "true" : "false") << std::endl;
+			std::cout << "VAE Tiling: " << (ctx_params.vae_tiling ? "true" : "false") << std::endl;
+			std::cout << "Keep VAE on CPU: " << (ctx_params.keep_vae_on_cpu ? "true" : "false") << std::endl;
 			std::cout << "Taesd: " << ctx_params.taesd_path << std::endl;
 			std::cout << "Controlnet: " << ctx_params.control_net_path << std::endl;
 			std::cout << "Lora: " << ctx_params.lora_model_dir << std::endl;
@@ -263,6 +275,7 @@ namespace Utils {
 			std::cout << "Chroma DiT Mask: " << (ctx_params.chroma_use_dit_mask ? "true" : "false") << std::endl;
 			std::cout << "Chroma T5 Mask: " << (ctx_params.chroma_use_t5_mask ? "true" : "false") << std::endl;
 			std::cout << "Chroma T5 Mask Pad: " << ctx_params.chroma_t5_mask_pad << std::endl;
+			std::cout << "Flow Shift: " << ctx_params.flow_shift << std::endl;
 
 			// Initialize SD context using the NEW structured API
 			return new_sd_ctx(&ctx_params);

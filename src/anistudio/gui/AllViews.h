@@ -28,10 +28,8 @@
 #include "HelpView.hpp"
 #include "MenuBar.hpp"
 
-// Project management views (from gui/projects/)
+// Project management view
 #include "project/ProjectManagerView.hpp"
-#include "project/NewProjectView.hpp"
-#include "project/LoadProjectView.hpp"
 
 // AI Generation views
 #include "tools/DiffusionView.hpp"

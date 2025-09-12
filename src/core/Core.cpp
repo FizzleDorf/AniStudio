@@ -1,4 +1,3 @@
-// Core.cpp - FIXED - No LoadDefaultPlugins call
 #include "Core.hpp"
 #include <iostream>
 #include <sstream>

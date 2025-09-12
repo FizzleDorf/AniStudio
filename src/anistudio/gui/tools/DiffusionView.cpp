@@ -16,35 +16,6 @@
 using namespace ECS;
 using namespace ANI;
 
-static void LogCallback(sd_log_level_t level, const char* text, void* data) {
-	switch (level) {
-	case SD_LOG_DEBUG:
-		std::cout << "[DEBUG]: " << text;
-		break;
-	case SD_LOG_INFO:
-		std::cout << "[INFO]: " << text;
-		break;
-	case SD_LOG_WARN:
-		std::cout << "[WARNING]: " << text;
-		break;
-	case SD_LOG_ERROR:
-		std::cerr << "[ERROR]: " << text;
-		break;
-	default:
-		std::cerr << "[UNKNOWN LOG LEVEL]: " << text;
-		break;
-	}
-}
-
-static GUI::ProgressData progressData;
-static void ProgressCallback(int step, int steps, float time, void* data) {
-	progressData.currentStep = step;
-	progressData.totalSteps = steps;
-	progressData.currentTime = time;
-	progressData.isProcessing = (steps > 0);
-	std::cout << "Progress: Step " << step << " of " << steps << " | Time: " << time << "s" << std::endl;
-}
-
 namespace GUI {
 
 	DiffusionView::DiffusionView(EntityManager& entityMgr) : BaseView(entityMgr) {
@@ -60,6 +31,8 @@ namespace GUI {
 			mgr.DestroyEntity(txt2imgEntity);
 		if (img2imgEntity != 0)
 			mgr.DestroyEntity(img2imgEntity);
+		if (editEntity != 0)
+			mgr.DestroyEntity(editEntity);
 	}
 
 	void DiffusionView::InitializeComponentVisibility() {
@@ -86,8 +59,7 @@ namespace GUI {
 	}
 
 	void DiffusionView::Init() {
-		sd_set_log_callback(LogCallback, nullptr);
-		sd_set_progress_callback(ProgressCallback, nullptr);
+		DiffusionCallbackUtils::InitializeCallbacks();
 		ResetEntities();
 	}
 
@@ -102,6 +74,11 @@ namespace GUI {
 			img2imgEntity = 0;
 		}
 
+		if (editEntity != 0) {
+			mgr.DestroyEntity(editEntity);
+			editEntity = 0;
+		}
+
 		// Create entity for Txt2Img mode
 		txt2imgEntity = mgr.AddNewEntity();
 
@@ -112,7 +89,6 @@ namespace GUI {
 		mgr.AddComponent<T5XXLComponent>(txt2imgEntity);
 		mgr.AddComponent<DiffusionModelComponent>(txt2imgEntity);
 		mgr.AddComponent<VaeComponent>(txt2imgEntity);
-		// mgr.AddComponent<LoraComponent>(txt2imgEntity);
 		mgr.AddComponent<TaesdComponent>(txt2imgEntity);
 		mgr.AddComponent<LatentComponent>(txt2imgEntity);
 		mgr.AddComponent<SamplerComponent>(txt2imgEntity);
@@ -132,7 +108,6 @@ namespace GUI {
 		mgr.AddComponent<T5XXLComponent>(img2imgEntity);
 		mgr.AddComponent<DiffusionModelComponent>(img2imgEntity);
 		mgr.AddComponent<VaeComponent>(img2imgEntity);
-		// mgr.AddComponent<LoraComponent>(img2imgEntity);
 		mgr.AddComponent<TaesdComponent>(img2imgEntity);
 		mgr.AddComponent<LatentComponent>(img2imgEntity);
 		mgr.AddComponent<SamplerComponent>(img2imgEntity);
@@ -143,8 +118,29 @@ namespace GUI {
 		mgr.AddComponent<OutputImageComponent>(img2imgEntity);
 		mgr.AddComponent<InputImageComponent>(img2imgEntity);
 
-		// Default denoise value for Img2Img
+		// Create entity for Edit mode (also requires input image)
+		editEntity = mgr.AddNewEntity();
+
+		// Add components for Edit (WITH InputImageComponent)
+		mgr.AddComponent<ModelComponent>(editEntity);
+		mgr.AddComponent<ClipLComponent>(editEntity);
+		mgr.AddComponent<ClipGComponent>(editEntity);
+		mgr.AddComponent<T5XXLComponent>(editEntity);
+		mgr.AddComponent<DiffusionModelComponent>(editEntity);
+		mgr.AddComponent<VaeComponent>(editEntity);
+		mgr.AddComponent<TaesdComponent>(editEntity);
+		mgr.AddComponent<LatentComponent>(editEntity);
+		mgr.AddComponent<SamplerComponent>(editEntity);
+		mgr.AddComponent<GuidanceComponent>(editEntity);
+		mgr.AddComponent<ClipSkipComponent>(editEntity);
+		mgr.AddComponent<PromptComponent>(editEntity);
+		mgr.AddComponent<LayerSkipComponent>(editEntity);
+		mgr.AddComponent<OutputImageComponent>(editEntity);
+		mgr.AddComponent<InputImageComponent>(editEntity);
+
+		// Default denoise values for Img2Img and Edit
 		mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;
+		mgr.GetComponent<SamplerComponent>(editEntity).denoise = 0.6f;
 	}
 
 	bool DiffusionView::IsEntitySafeToUse(ECS::EntityID entity) const {
@@ -171,7 +167,7 @@ namespace GUI {
 	void DiffusionView::RenderEntityComponents(const EntityID entity) {
 		if (entity == 0 || !IsEntitySafeToUse(entity)) return;
 
-		// Model Selection
+		// Model Selection (same for all modes)
 		if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
 			if (ImGui::BeginTabBar("ModelTabs")) {
 				if (ImGui::BeginTabItem("Full")) {
@@ -376,7 +372,7 @@ namespace GUI {
 
 		// Image Settings
 		if (ImGui::CollapsingHeader("Image Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-			// Input Image (only for img2img)
+			// Input Image (only for img2img and edit)
 			if (mgr.HasComponent<InputImageComponent>(entity)) {
 				RenderComponentWithCheckbox(entity, "InputImageComponent", "Input Image", [&]() {
 					auto& comp = mgr.GetComponent<InputImageComponent>(entity);
@@ -526,7 +522,6 @@ namespace GUI {
 	}
 
 	void DiffusionView::RenderComponentSchema(const EntityID entity, const std::string& componentName, ECS::BaseComponent* component) {
-		// This method is now simplified since everything goes through RenderEntityComponents
 		if (!component || component->schema.empty()) {
 			ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "No schema available for %s", componentName.c_str());
 			return;
@@ -603,6 +598,34 @@ namespace GUI {
 		ANI::Events::Ref().QueueEvent(event);
 	}
 
+	void DiffusionView::HandleEditEvent() {
+		std::cout << "Adding new Edit entity..." << std::endl;
+
+		EntityID newEntity = mgr.CloneEntity(editEntity);
+		if (newEntity == 0) {
+			std::cerr << "Failed to create new entity!" << std::endl;
+			return;
+		}
+
+		// Ensure output path is valid
+		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
+			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+			if (outputComp.filePath.empty()) {
+				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
+			}
+			if (outputComp.fileName.empty()) {
+				outputComp.fileName = "AniStudio_edit.png";
+			}
+			std::filesystem::create_directories(outputComp.filePath);
+		}
+
+		// Queue event
+		Event event;
+		event.entityID = newEntity;
+		event.type = EventType::EditRequest;
+		ANI::Events::Ref().QueueEvent(event);
+	}
+
 	void DiffusionView::HandleUpscaleEvent() {
 		std::cout << "Upscale event not yet implemented" << std::endl;
 	}
@@ -611,7 +634,8 @@ namespace GUI {
 		ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Queue")) {
 
-			// Get current progress values from the global progressData
+			// Get current progress values from the shared utility
+			auto& progressData = DiffusionCallbackUtils::GetProgressData();
 			int currentStep = progressData.currentStep;
 			int totalSteps = progressData.totalSteps;
 			float time = progressData.currentTime;
@@ -638,18 +662,23 @@ namespace GUI {
 			}
 
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-				EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
+				EntityID targetEntity = 0;
+				switch (currentMode) {
+				case 0: targetEntity = txt2imgEntity; break;
+				case 1: targetEntity = img2imgEntity; break;
+				case 2: targetEntity = editEntity; break;
+				}
+
 				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
 					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
 					loraComp.modelPath = Utils::FilePaths::loraDir;
 				}
 
 				for (int i = 0; i < numQueues; i++) {
-					if (isTxt2ImgMode) {
-						HandleT2IEvent();
-					}
-					else {
-						HandleI2IEvent();
+					switch (currentMode) {
+					case 0: HandleT2IEvent(); break;
+					case 1: HandleI2IEvent(); break;
+					case 2: HandleEditEvent(); break;
 					}
 				}
 			}
@@ -769,7 +798,7 @@ namespace GUI {
 		// Main window
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			
+
 			if (!windowOpen) {
 				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
 			}
@@ -779,19 +808,26 @@ namespace GUI {
 				RenderMetadataControls();
 			}
 
-			// Tab bar for switching between Txt2Img and Img2Img
+			// Tab bar for switching between modes
 			if (ImGui::BeginTabBar("Diffusion")) {
 				// Text-to-Image tab
 				if (ImGui::BeginTabItem("Txt2Img")) {
-					isTxt2ImgMode = true;
+					currentMode = 0;
 					RenderEntityComponents(txt2imgEntity);
 					ImGui::EndTabItem();
 				}
 
 				// Image-to-Image tab
 				if (ImGui::BeginTabItem("Img2Img")) {
-					isTxt2ImgMode = false;
+					currentMode = 1;
 					RenderEntityComponents(img2imgEntity);
+					ImGui::EndTabItem();
+				}
+
+				// Edit tab
+				if (ImGui::BeginTabItem("Edit")) {
+					currentMode = 2;
+					RenderEntityComponents(editEntity);
 					ImGui::EndTabItem();
 				}
 				ImGui::EndTabBar();
@@ -801,17 +837,29 @@ namespace GUI {
 	}
 
 	nlohmann::json DiffusionView::Serialize() const {
-		EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
+		EntityID targetEntity = 0;
+		switch (currentMode) {
+		case 0: targetEntity = txt2imgEntity; break;
+		case 1: targetEntity = img2imgEntity; break;
+		case 2: targetEntity = editEntity; break;
+		}
+
 		nlohmann::json j = mgr.SerializeEntity(targetEntity);
 
 		// Also serialize component visibility states
 		j["componentVisibility"] = componentVisibility;
+		j["currentMode"] = currentMode;
 
 		return j;
 	}
 
 	void DiffusionView::Deserialize(const nlohmann::json& j) {
-		EntityID targetEntity = isTxt2ImgMode ? txt2imgEntity : img2imgEntity;
+		EntityID targetEntity = 0;
+		switch (currentMode) {
+		case 0: targetEntity = txt2imgEntity; break;
+		case 1: targetEntity = img2imgEntity; break;
+		case 2: targetEntity = editEntity; break;
+		}
 
 		if (targetEntity == 0) {
 			std::cerr << "Error: Invalid target entity for deserialization" << std::endl;
@@ -824,6 +872,10 @@ namespace GUI {
 			// Also deserialize component visibility states
 			if (j.contains("componentVisibility")) {
 				componentVisibility = j["componentVisibility"];
+			}
+
+			if (j.contains("currentMode")) {
+				currentMode = j["currentMode"];
 			}
 
 			std::cout << "Successfully deserialized data to entity " << targetEntity << std::endl;

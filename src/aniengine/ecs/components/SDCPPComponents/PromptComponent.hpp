@@ -13,15 +13,15 @@ namespace ECS {
 			schema = {
 				{"title", "Prompt Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"posPrompt", "negPrompt"}},
-				{"ui:separate_windows", true},  // Enable separate window mode
+				{"propertyOrder", {"posPrompt", "negPrompt", "normalize_input"}},
+				{"ui:separate_windows", true},
 				{"properties", {
 					{"posPrompt", {
 						{"type", "string"},
 						{"title", "Positive"},
 						{"ui:widget", "text_editor"},
 						{"ui:window", true},
-						{"ui:window_name", "Positive Prompt"},  // Window name
+						{"ui:window_name", "Positive Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},
 							{"showMenuBar", true}
@@ -31,12 +31,18 @@ namespace ECS {
 						{"type", "string"},
 						{"title", "Negative"},
 						{"ui:widget", "text_editor"},
-						{"ui:window", true},  // Create separate window for this property
-						{"ui:window_name", "Negative Prompt"},  // Window name
+						{"ui:window", true},
+						{"ui:window_name", "Negative Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},
 							{"showMenuBar", true}
 						}}
+					}},
+					{"normalize_input", {
+						{"type", "boolean"},
+						{"title", "Normalize Input"},
+						{"description", "Normalize token inputs for more consistent prompt processing. May improve prompt adherence."},
+						{"ui:widget", "checkbox"}
 					}}
 				}}
 			};
@@ -44,12 +50,13 @@ namespace ECS {
 
 		std::string posPrompt = "";
 		std::string negPrompt = "";
+		bool normalize_input = false;
 
-		// CRITICAL: Override GetPropertyMap to return the actual property pointers
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"posPrompt", &posPrompt},
-				{"negPrompt", &negPrompt}
+				{"negPrompt", &negPrompt},
+				{"normalize_input", &normalize_input}
 			};
 		}
 
@@ -57,6 +64,7 @@ namespace ECS {
 			if (this != &other) {
 				posPrompt = other.posPrompt;
 				negPrompt = other.negPrompt;
+				normalize_input = other.normalize_input;
 			}
 			return *this;
 		}
@@ -66,7 +74,8 @@ namespace ECS {
 			j["compName"] = compName;
 			j[compName] = {
 				{"posPrompt", posPrompt},
-				{"negPrompt", negPrompt}
+				{"negPrompt", negPrompt},
+				{"normalize_input", normalize_input}
 			};
 			return j;
 		}
@@ -75,7 +84,6 @@ namespace ECS {
 			BaseComponent::Deserialize(j);
 
 			nlohmann::json componentData;
-
 			if (j.contains(compName)) {
 				componentData = j.at(compName);
 			}
@@ -94,12 +102,13 @@ namespace ECS {
 			if (componentData.contains("posPrompt")) {
 				posPrompt = componentData["posPrompt"].get<std::string>();
 			}
-
 			if (componentData.contains("negPrompt")) {
 				negPrompt = componentData["negPrompt"].get<std::string>();
 			}
+			if (componentData.contains("normalize_input")) {
+				normalize_input = componentData["normalize_input"].get<bool>();
+			}
 		}
-
 	};
 
 } // namespace ECS
