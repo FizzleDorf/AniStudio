@@ -8,6 +8,7 @@ namespace ECS {
 	struct ClipSkipComponent : public ECS::BaseComponent {
 		ClipSkipComponent() {
 			compName = "ClipSkip";
+			compCategory = "Advanced";
 
 			// Define the component schema WITHOUT table layout + with tooltip
 			schema = {

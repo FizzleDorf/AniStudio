@@ -3,7 +3,6 @@
 #include "ImGuiFileDialog.h"
 #include "Events.hpp"
 #include <algorithm>
-#include <iostream>
 #include "../events/Events.hpp"
 
 namespace GUI {
@@ -22,50 +21,38 @@ namespace GUI {
 			"{.png},PNG"
 			"{.jpg,.jpeg},JPEG"
 			"{.bmp},BMP"
-			"{.tga},TGA")
+			"{.tga},TGA"),
+		contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(entityMgr))
 	{
 		viewName = "ImageView";
-		std::cout << "[ImageView] Constructor called" << std::endl;
 	}
 
 	ImageView::~ImageView() {
-		std::cout << "[ImageView] Destructor called - Note: ImageSystem callbacks are stored by value so no cleanup needed" << std::endl;
 	}
 
 	void ImageView::Init() {
-		std::cout << "[ImageView] Initializing..." << std::endl;
-
-		// Ensure ImageSystem exists
 		auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 		if (!imageSystem) {
-			std::cout << "[ImageView] Registering ImageSystem..." << std::endl;
 			mgr.RegisterSystem<ECS::ImageSystem>();
 			imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 		}
 
 		if (imageSystem) {
-			// Register callback for when images are added successfully
 			imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
 				OnImageLoaded(entityID);
 			});
 
-			// Register callback for when images are removed
 			imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entityID) {
 				OnImageRemoved(entityID);
 			});
-
-			std::cout << "[ImageView] Registered callbacks with ImageSystem" << std::endl;
 		}
 
 		RefreshImageEntities();
-
-		std::cout << "[ImageView] Initialization complete - CALLBACKS REGISTERED" << std::endl;
 	}
 
 	void ImageView::Update(const float deltaT) {}
 
 	void ImageView::Render() {
-
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 			if (!windowOpen) {
 				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
@@ -77,8 +64,6 @@ namespace GUI {
 
 			ImGui::SameLine();
 			ImGui::Checkbox("Show History", &showHistory);
-
-
 
 			ImGui::Separator();
 
@@ -95,48 +80,32 @@ namespace GUI {
 	}
 
 	void ImageView::OnImageLoaded(ECS::EntityID entityID) {
-		std::cout << "[ImageView] CALLBACK: Image added for entity " << entityID << std::endl;
-
-		// Refresh the entity list
 		RefreshImageEntities();
 
-		// Set the selection to the newly loaded image (last in the list)
 		if (!imageEntities.empty()) {
-			// Find the index of the loaded entity
 			auto it = std::find(imageEntities.begin(), imageEntities.end(), entityID);
 			if (it != imageEntities.end()) {
 				imgIndex = static_cast<int>(std::distance(imageEntities.begin(), it));
 				selectedEntityID = entityID;
-				std::cout << "[ImageView] Selected newly loaded image: Entity " << entityID << " at index " << imgIndex << std::endl;
 			}
 		}
 	}
 
 	void ImageView::OnImageRemoved(ECS::EntityID entityID) {
-		std::cout << "[ImageView] CALLBACK: Image removed for entity " << entityID << std::endl;
-
-		// Store the current index before refresh
 		int previousIndex = imgIndex;
-
-		// Refresh the entity list
 		RefreshImageEntities();
 
-		// Handle selection changes after removal
 		if (selectedEntityID == entityID) {
-			// The selected image was removed, select previous image or adjust selection
 			if (!imageEntities.empty()) {
-				// If we were at the last image, go to the new last image
 				if (previousIndex >= static_cast<int>(imageEntities.size())) {
 					imgIndex = static_cast<int>(imageEntities.size()) - 1;
 				}
-				// Otherwise try to stay at the same index (which now points to the next image)
 				else {
 					imgIndex = std::max(0, std::min(previousIndex, static_cast<int>(imageEntities.size()) - 1));
 				}
 
 				if (imgIndex >= 0 && imgIndex < static_cast<int>(imageEntities.size())) {
 					selectedEntityID = imageEntities[imgIndex];
-					std::cout << "[ImageView] Selected previous image: Entity " << selectedEntityID << " at index " << imgIndex << std::endl;
 				}
 				else {
 					selectedEntityID = 0;
@@ -144,10 +113,8 @@ namespace GUI {
 				}
 			}
 			else {
-				// No images left
 				selectedEntityID = 0;
 				imgIndex = 0;
-				std::cout << "[ImageView] No images remaining after removal" << std::endl;
 			}
 		}
 	}
@@ -158,16 +125,13 @@ namespace GUI {
 			if (imageSystem) {
 				imageEntities = imageSystem->GetAllImageEntities();
 				lastEntityCount = imageEntities.size();
-				std::cout << "[ImageView] Refreshed entities, found " << imageEntities.size() << " images" << std::endl;
 			}
 			else {
 				imageEntities.clear();
 				lastEntityCount = 0;
-				std::cout << "[ImageView] No ImageSystem found, cleared entity list" << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ImageView] Exception refreshing entities: " << e.what() << std::endl;
 			imageEntities.clear();
 			lastEntityCount = 0;
 		}
@@ -182,6 +146,9 @@ namespace GUI {
 				ImGui::Text("Dimensions: %dx%d", imageComp.width, imageComp.height);
 				ImGui::Text("Channels: %d", imageComp.channels);
 				ImGui::Text("Entity ID: %zu", selectedEntityID);
+
+				contextMenuUtils->RenderImageContextMenu(selectedEntityID);
+
 				ImGui::Separator();
 			}
 			catch (const std::exception& e) {
@@ -244,6 +211,11 @@ namespace GUI {
 
 		if (ImGui::Button("Refresh")) {
 			RefreshImageEntities();
+		}
+
+		if (contextMenuUtils->HasValidClipboardData()) {
+			ImGui::SameLine();
+			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s", contextMenuUtils->GetClipboardPreview().c_str());
 		}
 	}
 
@@ -365,6 +337,8 @@ namespace GUI {
 					}
 				}
 
+				contextMenuUtils->RenderImageContextMenu(entityID);
+
 				ImGui::EndGroup();
 
 				float buttonWidth = imageSize.x + ImGui::GetStyle().ItemSpacing.x;
@@ -424,25 +398,25 @@ namespace GUI {
 
 			DrawGrid(imageComp.width, imageComp.height);
 
-			// FIXED: Establish window boundaries first, then draw image
 			ImGui::SetCursorPos(imagePos);
-			ImGui::Dummy(imageSize); // Establish the window boundaries
+			ImGui::Dummy(imageSize);
 
-			ImGui::SetCursorPos(imagePos); // Reset cursor to draw the image
+			ImGui::SetCursorPos(imagePos);
 
 			ImGui::Image(
 				(ImTextureID)(intptr_t)imageComp.textureID,
 				imageSize
 			);
 
+			contextMenuUtils->RenderImageContextMenu(selectedEntityID);
+
 			if (zoom > 1.0f && ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
 				offsetX += ImGui::GetIO().MouseDelta.x;
 				offsetY += ImGui::GetIO().MouseDelta.y;
 			}
 
-			// FIXED: Set cursor after the image content to properly establish boundaries
 			ImGui::SetCursorPos(ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y));
-			ImGui::Dummy(ImVec2(0, 0)); // Final dummy to establish the full content area
+			ImGui::Dummy(ImVec2(0, 0));
 		}
 		catch (const std::exception& e) {
 			ImGui::Text("Error rendering image: %s", e.what());
@@ -477,11 +451,8 @@ namespace GUI {
 	}
 
 	void ImageView::LoadImages(const std::vector<std::string>& filePaths) {
-		std::cout << "[ImageView] Loading " << filePaths.size() << " images..." << std::endl;
-
 		auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 		if (!imageSystem) {
-			std::cerr << "[ImageView] Error: ImageSystem not found!" << std::endl;
 			return;
 		}
 
@@ -492,12 +463,9 @@ namespace GUI {
 				ECS::EntityID entity = mgr.AddNewEntity();
 				mgr.AddComponent<ECS::ImageComponent>(entity);
 				imageSystem->SetImage(entity, filePath);
-
-				std::cout << "[ImageView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ImageView] Exception loading images: " << e.what() << std::endl;
 		}
 	}
 
@@ -507,20 +475,14 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			if (Utils::ImageUtils::SaveImage(
+			Utils::ImageUtils::SaveImage(
 				imageComp.filePath,
 				imageComp.width,
 				imageComp.height,
 				imageComp.channels,
-				imageComp.imageData)) {
-				std::cout << "[ImageView] Image saved to: " << imageComp.filePath << std::endl;
-			}
-			else {
-				std::cerr << "[ImageView] Failed to save image" << std::endl;
-			}
+				imageComp.imageData);
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ImageView] Exception saving image: " << e.what() << std::endl;
 		}
 	}
 
@@ -530,20 +492,14 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			if (Utils::ImageUtils::SaveImage(
+			Utils::ImageUtils::SaveImage(
 				filePath,
 				imageComp.width,
 				imageComp.height,
 				imageComp.channels,
-				imageComp.imageData)) {
-				std::cout << "[ImageView] Image saved to: " << filePath << std::endl;
-			}
-			else {
-				std::cerr << "[ImageView] Failed to save image to: " << filePath << std::endl;
-			}
+				imageComp.imageData);
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ImageView] Exception saving image: " << e.what() << std::endl;
 		}
 	}
 
@@ -557,11 +513,9 @@ namespace GUI {
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[ImageView] Exception removing image: " << e.what() << std::endl;
 		}
 	}
 
-	// UTILITY METHODS
 	std::string ImageView::TruncateFilename(const std::string& filename, float maxTextWidth) {
 		if (filename.empty()) return "Unknown";
 
@@ -585,6 +539,14 @@ namespace GUI {
 		}
 
 		return truncated;
+	}
+
+	bool ImageView::HasImageComponents(ECS::EntityID entityId) const {
+		return mgr.IsEntityValid(entityId) && (
+			mgr.HasComponent<ECS::ImageComponent>(entityId) ||
+			mgr.HasComponent<ECS::InputImageComponent>(entityId) ||
+			mgr.HasComponent<ECS::OutputImageComponent>(entityId)
+			);
 	}
 
 } // namespace GUI

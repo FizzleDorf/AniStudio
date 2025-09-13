@@ -68,7 +68,7 @@ namespace GUI {
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
             "displayName": "Video Sequencer",
-            "category": "Video",
+            "category": "Tools",
             "description": "Create and edit video sequences with timeline support."
         })";
 		}

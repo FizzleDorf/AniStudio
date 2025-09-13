@@ -42,6 +42,7 @@ namespace ECS {
 
 		ImageComponent() {
 			compName = "Image";
+			compCategory = "Image";
 			setupBaseSchema();
 		}
 

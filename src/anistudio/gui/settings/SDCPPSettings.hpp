@@ -20,8 +20,51 @@ namespace Settings {
 
 		void RenderUI() override {
 			if (ImGui::BeginChild("SDCPPSettings", ImVec2(0, 0), false)) {
-				// SDCPP-specific settings
-				if (ImGui::CollapsingHeader("SDCPP Configuration", ImGuiTreeNodeFlags_DefaultOpen)) {
+				// SDCPP Configuration
+				ImGui::Text("SDCPP Configuration");
+				ImGui::Spacing();
+
+				if (ImGui::BeginTable("SDCPPTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+					ImGui::TableSetupColumn("Setting Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+					ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableHeadersRow();
+
+					RenderPathRow("SDCPP Models Root", sdcppModelsRoot);
+					RenderPathRow("SDCPP Config Path", sdcppConfigPath);
+
+					ImGui::EndTable();
+				}
+
+				ImGui::Separator();
+
+				// SDCPP Controls
+				ImGui::Text("SDCPP Controls");
+				ImGui::Spacing();
+
+				if (ImGui::Button("Initialize SDCPP")) {
+					// SDCPP initialization logic here
+					hasChanges = true;
+				}
+
+				ImGui::SameLine();
+				if (ImGui::Button("Test Connection")) {
+					// Test SDCPP connection logic here
+				}
+
+				ImGui::Separator();
+				RenderActionButtons();
+			}
+			ImGui::EndChild();
+		}
+
+		void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
+			if (ImGui::BeginChild("SDCPPSettings", ImVec2(0, 0), false)) {
+				// SDCPP Configuration
+				if (ShouldRenderCategory("SDCPP Configuration", selectedCategories)) {
+					ImGui::Text("SDCPP Configuration");
+					ImGui::Spacing();
+
 					if (ImGui::BeginTable("SDCPPTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 						ImGui::TableSetupColumn("Setting Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
 						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
@@ -33,12 +76,14 @@ namespace Settings {
 
 						ImGui::EndTable();
 					}
+					ImGui::Separator();
 				}
 
-				ImGui::Separator();
+				// SDCPP Controls
+				if (ShouldRenderCategory("SDCPP Controls", selectedCategories)) {
+					ImGui::Text("SDCPP Controls");
+					ImGui::Spacing();
 
-				// SDCPP-specific controls
-				if (ImGui::CollapsingHeader("SDCPP Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
 					if (ImGui::Button("Initialize SDCPP")) {
 						// SDCPP initialization logic here
 						hasChanges = true;
@@ -48,9 +93,9 @@ namespace Settings {
 					if (ImGui::Button("Test Connection")) {
 						// Test SDCPP connection logic here
 					}
+					ImGui::Separator();
 				}
 
-				ImGui::Separator();
 				RenderActionButtons();
 			}
 			ImGui::EndChild();

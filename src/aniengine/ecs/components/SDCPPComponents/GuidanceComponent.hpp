@@ -8,6 +8,7 @@ namespace ECS {
 	struct GuidanceComponent : public ECS::BaseComponent {
 		GuidanceComponent() {
 			compName = "Guidance";
+			compCategory = "Sampling";
 
 			// Define the component schema WITHOUT table layout + with tooltips
 			schema = {

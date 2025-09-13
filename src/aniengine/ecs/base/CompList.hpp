@@ -22,6 +22,7 @@
 
 #include "Types.hpp"
 #include <deque>
+#include <cassert>
 
 namespace ECS {
 

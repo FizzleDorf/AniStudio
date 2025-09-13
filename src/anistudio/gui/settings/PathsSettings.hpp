@@ -21,19 +21,20 @@ namespace Settings {
 		void RenderUI() override {
 			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
 				// General Paths Section
-				if (ImGui::CollapsingHeader("General Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
-					if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-						ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-						ImGui::TableHeadersRow();
+				ImGui::Text("General Paths");
+				ImGui::Spacing();
 
-						RenderPathRow("Last Open Project", lastOpenProjectPath);
-						RenderPathRow("Default Project", defaultProjectPath);
-						RenderPathRow("Assets Folder", assetsFolderPath);
+				if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+					ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+					ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableHeadersRow();
 
-						ImGui::EndTable();
-					}
+					RenderPathRow("Last Open Project", lastOpenProjectPath);
+					RenderPathRow("Default Project", defaultProjectPath);
+					RenderPathRow("Assets Folder", assetsFolderPath);
+
+					ImGui::EndTable();
 				}
 
 				ImGui::Separator();
@@ -54,7 +55,75 @@ namespace Settings {
 				ImGui::Separator();
 
 				// Model Paths Section
-				if (ImGui::CollapsingHeader("Model Paths", ImGuiTreeNodeFlags_DefaultOpen)) {
+				ImGui::Text("Model Paths");
+				ImGui::Spacing();
+
+				if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+					ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+					ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableHeadersRow();
+
+					RenderPathRow("Model Root", defaultModelRootPath);
+					RenderPathRow("Checkpoints", checkpointDir);
+					RenderPathRow("Text Encoders", encoderDir);
+					RenderPathRow("VAE", vaeDir);
+					RenderPathRow("UNet", unetDir);
+					RenderPathRow("LORA", loraDir);
+					RenderPathRow("ControlNet", controlnetDir);
+					RenderPathRow("Upscale", upscaleDir);
+
+					ImGui::EndTable();
+				}
+
+				ImGui::Separator();
+				RenderActionButtons();
+			}
+			ImGui::EndChild();
+		}
+
+		void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
+			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
+				// General Paths Section
+				if (ShouldRenderCategory("General Paths", selectedCategories)) {
+					ImGui::Text("General Paths");
+					ImGui::Spacing();
+
+					if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+						ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableHeadersRow();
+
+						RenderPathRow("Last Open Project", lastOpenProjectPath);
+						RenderPathRow("Default Project", defaultProjectPath);
+						RenderPathRow("Assets Folder", assetsFolderPath);
+
+						ImGui::EndTable();
+					}
+					ImGui::Separator();
+				}
+
+				if (ImGui::Button("Reset Model Paths to Root")) {
+					if (!defaultModelRootPath.empty()) {
+						checkpointDir = defaultModelRootPath + "/checkpoints";
+						encoderDir = defaultModelRootPath + "/text_encoders";
+						vaeDir = defaultModelRootPath + "/vae";
+						unetDir = defaultModelRootPath + "/unet";
+						loraDir = defaultModelRootPath + "/lora";
+						controlnetDir = defaultModelRootPath + "/controlnet";
+						upscaleDir = defaultModelRootPath + "/upscale";
+						hasChanges = true;
+					}
+				}
+
+				ImGui::Separator();
+
+				// Model Paths Section
+				if (ShouldRenderCategory("Model Paths", selectedCategories)) {
+					ImGui::Text("Model Paths");
+					ImGui::Spacing();
+
 					if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
 						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
 						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
@@ -72,9 +141,9 @@ namespace Settings {
 
 						ImGui::EndTable();
 					}
+					ImGui::Separator();
 				}
 
-				ImGui::Separator();
 				RenderActionButtons();
 			}
 			ImGui::EndChild();

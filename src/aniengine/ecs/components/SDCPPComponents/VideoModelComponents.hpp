@@ -13,6 +13,7 @@ namespace ECS {
 	struct HighNoiseDiffusionModelComponent : public BaseModelComponent {
 		HighNoiseDiffusionModelComponent() {
 			compName = "HighNoiseDiffusionModel";
+			compCategory = "Sampling";
 
 			schema = {
 				{"title", "High Noise Diffusion Model"},

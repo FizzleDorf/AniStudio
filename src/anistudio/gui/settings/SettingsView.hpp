@@ -1,8 +1,12 @@
+// SettingsView.hpp
 #pragma once
 
 #include "GUI.h"
 #include "SettingsManager.hpp"
+#include "BaseTabObject.hpp"
 #include <string>
+#include <vector>
+#include <set>
 
 namespace GUI {
 
@@ -35,7 +39,13 @@ namespace GUI {
 		bool showSavePopup;
 		bool showUnsavedChangesDialog;
 		bool pendingClose;
-		bool windowOpen; // Track window open state like HelpView
+		bool windowOpen;
+
+		// Filter list state
+		float filterListWidth;
+		std::set<std::string> availableCategories;
+		std::set<std::string> selectedCategories;
+		std::string lastSelectedCategory;
 
 		// Register core tabs
 		void RegisterCoreTabs();
@@ -45,9 +55,19 @@ namespace GUI {
 
 		// UI rendering methods
 		void RenderMainContent();
+		void RenderFilterList();
+		void RenderSelectedCategoriesContent();
 		void RenderActionButtons();
 		void RenderSaveConfirmationPopup();
 		void RenderUnsavedChangesDialog();
+
+		// Helper methods for dynamic category filtering
+		void UpdateCategoriesForActiveTab(const std::string& activeTabName);
+		std::vector<std::string> GetCategoriesFromTab(Settings::BaseTabObject* tab);
+		void RenderFilteredTabContent(Settings::BaseTabObject* tab, const std::set<std::string>& selectedCategories);
+		void HandleCategorySelection(const std::string& categoryName, bool ctrlHeld, bool shiftHeld);
+		void SelectAllCategories();
+		void DeselectAll();
 	};
 
 } // namespace GUI

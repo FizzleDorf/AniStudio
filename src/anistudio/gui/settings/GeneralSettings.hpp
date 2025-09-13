@@ -32,6 +32,33 @@ namespace Settings {
 			ImGui::EndChild();
 		}
 
+		void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
+			if (ImGui::BeginChild("GeneralSettings", ImVec2(0, 0), false)) {
+				if (ShouldRenderCategory("Startup Settings", selectedCategories)) {
+					RenderStartupSettings();
+					ImGui::Separator();
+				}
+				if (ShouldRenderCategory("Auto-Save Settings", selectedCategories)) {
+					RenderAutoSaveSettings();
+					ImGui::Separator();
+				}
+				if (ShouldRenderCategory("Confirmation Dialogs", selectedCategories)) {
+					RenderConfirmationSettings();
+					ImGui::Separator();
+				}
+				if (ShouldRenderCategory("Performance Settings", selectedCategories)) {
+					RenderPerformanceSettings();
+					ImGui::Separator();
+				}
+				if (ShouldRenderCategory("Logging Settings", selectedCategories)) {
+					RenderLoggingSettings();
+					ImGui::Separator();
+				}
+				RenderActionButtons();
+			}
+			ImGui::EndChild();
+		}
+
 		bool SaveSettings() override {
 			try {
 				nlohmann::json j;
@@ -208,47 +235,52 @@ namespace Settings {
 		bool hasChanges = false;
 
 		void RenderStartupSettings() {
-			if (ImGui::CollapsingHeader("Startup Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::Checkbox("Show Startup Screen", &showStartupScreen)) hasChanges = true;
-				if (ImGui::Checkbox("Load Last Project on Startup", &loadLastProject)) hasChanges = true;
-			}
+			ImGui::Text("Startup Settings");
+			ImGui::Spacing();
+
+			if (ImGui::Checkbox("Show Startup Screen", &showStartupScreen)) hasChanges = true;
+			if (ImGui::Checkbox("Load Last Project on Startup", &loadLastProject)) hasChanges = true;
 		}
 
 		void RenderAutoSaveSettings() {
-			if (ImGui::CollapsingHeader("Auto-Save Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-				if (ImGui::Checkbox("Auto-Save Projects", &autoSaveProjects)) hasChanges = true;
-				if (autoSaveProjects) {
-					if (ImGui::SliderInt("Auto-Save Interval (minutes)", &autoSaveIntervalMinutes, 1, 60)) hasChanges = true;
-				}
+			ImGui::Text("Auto-Save Settings");
+			ImGui::Spacing();
+
+			if (ImGui::Checkbox("Auto-Save Projects", &autoSaveProjects)) hasChanges = true;
+			if (autoSaveProjects) {
+				if (ImGui::SliderInt("Auto-Save Interval (minutes)", &autoSaveIntervalMinutes, 1, 60)) hasChanges = true;
 			}
 		}
 
 		void RenderConfirmationSettings() {
-			if (ImGui::CollapsingHeader("Confirmation Dialogs")) {
-				if (ImGui::Checkbox("Confirm Before Exit", &confirmBeforeExit)) hasChanges = true;
-				if (ImGui::Checkbox("Confirm Before Delete Assets", &confirmBeforeDeleteAssets)) hasChanges = true;
-				if (ImGui::Checkbox("Confirm Before Overwrite Files", &confirmBeforeOverwriteFiles)) hasChanges = true;
-			}
+			ImGui::Text("Confirmation Dialogs");
+			ImGui::Spacing();
+
+			if (ImGui::Checkbox("Confirm Before Exit", &confirmBeforeExit)) hasChanges = true;
+			if (ImGui::Checkbox("Confirm Before Delete Assets", &confirmBeforeDeleteAssets)) hasChanges = true;
+			if (ImGui::Checkbox("Confirm Before Overwrite Files", &confirmBeforeOverwriteFiles)) hasChanges = true;
 		}
 
 		void RenderPerformanceSettings() {
-			if (ImGui::CollapsingHeader("Performance Settings")) {
-				if (ImGui::SliderInt("Max Recent Projects", &maxRecentProjects, 5, 50)) hasChanges = true;
-				if (ImGui::SliderInt("Max Undo Levels", &maxUndoLevels, 10, 1000)) hasChanges = true;
-				if (ImGui::Checkbox("Enable Hardware Acceleration", &enableHardwareAcceleration)) hasChanges = true;
-			}
+			ImGui::Text("Performance Settings");
+			ImGui::Spacing();
+
+			if (ImGui::SliderInt("Max Recent Projects", &maxRecentProjects, 5, 50)) hasChanges = true;
+			if (ImGui::SliderInt("Max Undo Levels", &maxUndoLevels, 10, 1000)) hasChanges = true;
+			if (ImGui::Checkbox("Enable Hardware Acceleration", &enableHardwareAcceleration)) hasChanges = true;
 		}
 
 		void RenderLoggingSettings() {
-			if (ImGui::CollapsingHeader("Logging Settings")) {
-				if (ImGui::Checkbox("Enable Logging", &enableLogging)) hasChanges = true;
-				if (enableLogging) {
-					const char* logLevels[] = { "Error", "Warning", "Info", "Debug" };
-					if (ImGui::Combo("Log Level", &logLevel, logLevels, 4)) hasChanges = true;
-					if (ImGui::Checkbox("Log to File", &logToFile)) hasChanges = true;
-					if (logToFile) {
-						if (ImGui::SliderInt("Max Log File Size (MB)", &maxLogFileSize, 1, 100)) hasChanges = true;
-					}
+			ImGui::Text("Logging Settings");
+			ImGui::Spacing();
+
+			if (ImGui::Checkbox("Enable Logging", &enableLogging)) hasChanges = true;
+			if (enableLogging) {
+				const char* logLevels[] = { "Error", "Warning", "Info", "Debug" };
+				if (ImGui::Combo("Log Level", &logLevel, logLevels, 4)) hasChanges = true;
+				if (ImGui::Checkbox("Log to File", &logToFile)) hasChanges = true;
+				if (logToFile) {
+					if (ImGui::SliderInt("Max Log File Size (MB)", &maxLogFileSize, 1, 100)) hasChanges = true;
 				}
 			}
 		}

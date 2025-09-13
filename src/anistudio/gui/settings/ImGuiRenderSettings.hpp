@@ -16,7 +16,12 @@ namespace Settings {
 			CreateBackup();
 		}
 
+		// REQUIRED: Implement the pure virtual RenderUI method
 		void RenderUI() override {
+			RenderFilteredUI({}); // Call filtered UI with empty categories (show all)
+		}
+
+		void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
 			if (ImGui::BeginChild("ImGuiRenderSettings", ImVec2(0, 0), false)) {
 				ImGuiIO& io = ImGui::GetIO();
 
@@ -24,7 +29,10 @@ namespace Settings {
 				ImGui::Separator();
 
 				// Display Settings
-				if (ImGui::CollapsingHeader("Display Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ShouldRenderCategory("Display Settings", selectedCategories)) {
+					ImGui::Text("Display Settings");
+					ImGui::Spacing();
+
 					if (ImGui::SliderFloat("Global Font Scale", &io.FontGlobalScale, 0.5f, 2.0f, "%.2f")) {
 						hasChanges = true;
 					}
@@ -33,10 +41,15 @@ namespace Settings {
 						(float*)&io.DisplayFramebufferScale, 0.5f, 3.0f, "%.1f")) {
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Input Settings
-				if (ImGui::CollapsingHeader("Input Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ShouldRenderCategory("Input Settings", selectedCategories)) {
+					ImGui::Text("Input Settings");
+					ImGui::Spacing();
+
 					if (ImGui::SliderFloat("Mouse Double Click Time", &io.MouseDoubleClickTime, 0.1f, 1.0f, "%.2f")) {
 						hasChanges = true;
 					}
@@ -52,10 +65,15 @@ namespace Settings {
 					if (ImGui::SliderFloat("Key Repeat Rate", &io.KeyRepeatRate, 0.01f, 0.5f, "%.3f")) {
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Window Behavior
-				if (ImGui::CollapsingHeader("Window Behavior", ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ShouldRenderCategory("Window Behavior", selectedCategories)) {
+					ImGui::Text("Window Behavior");
+					ImGui::Spacing();
+
 					bool changed = false;
 					changed |= ImGui::Checkbox("Windows Resize From Edges", &configWindowsResizeFromEdges);
 					changed |= ImGui::Checkbox("Windows Move From Title Bar Only", &configWindowsMoveFromTitleBarOnly);
@@ -65,10 +83,15 @@ namespace Settings {
 						ApplyWindowBehaviorToImGui();
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Navigation Settings
-				if (ImGui::CollapsingHeader("Navigation Settings")) {
+				if (ShouldRenderCategory("Navigation Settings", selectedCategories)) {
+					ImGui::Text("Navigation Settings");
+					ImGui::Spacing();
+
 					bool changed = false;
 					changed |= ImGui::Checkbox("Enable Keyboard Navigation", &configNavEnableKeyboard);
 					changed |= ImGui::Checkbox("Enable Gamepad Navigation", &configNavEnableGamepad);
@@ -80,10 +103,15 @@ namespace Settings {
 						ApplyNavigationToImGui();
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Docking Settings
-				if (ImGui::CollapsingHeader("Docking Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+				if (ShouldRenderCategory("Docking Settings", selectedCategories)) {
+					ImGui::Text("Docking Settings");
+					ImGui::Spacing();
+
 					bool changed = false;
 					changed |= ImGui::Checkbox("Enable Docking", &configDockingEnable);
 
@@ -99,12 +127,16 @@ namespace Settings {
 						ApplyDockingToImGui();
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Viewport Settings
-				if (ImGui::CollapsingHeader("Multi-Viewport Settings")) {
+				if (ShouldRenderCategory("Multi-Viewport Settings", selectedCategories)) {
+					ImGui::Text("Multi-Viewport Settings");
 					ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.0f, 1.0f),
 						"Warning: Viewports may cause performance issues");
+					ImGui::Spacing();
 
 					bool changed = false;
 					changed |= ImGui::Checkbox("Enable Viewports", &configViewportsEnable);
@@ -122,10 +154,15 @@ namespace Settings {
 						ApplyViewportsToImGui();
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Memory & Performance
-				if (ImGui::CollapsingHeader("Memory & Performance")) {
+				if (ShouldRenderCategory("Memory & Performance", selectedCategories)) {
+					ImGui::Text("Memory & Performance");
+					ImGui::Spacing();
+
 					bool memoryCompactEnabled = (configMemoryCompactTimer >= 0.0f);
 					if (ImGui::Checkbox("Memory Compact Timer", &memoryCompactEnabled)) {
 						configMemoryCompactTimer = memoryCompactEnabled ? 60.0f : -1.0f;
@@ -145,10 +182,15 @@ namespace Settings {
 						io.ConfigDebugHighlightIdConflicts = configDebugHighlightIdConflicts;
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
 				// Input Text Settings
-				if (ImGui::CollapsingHeader("Input Text Settings")) {
+				if (ShouldRenderCategory("Input Text Settings", selectedCategories)) {
+					ImGui::Text("Input Text Settings");
+					ImGui::Spacing();
+
 					bool changed = false;
 					changed |= ImGui::Checkbox("Input Text Cursor Blink", &configInputTextCursorBlink);
 					changed |= ImGui::Checkbox("Input Text Enter Keep Active", &configInputTextEnterKeepActive);
@@ -158,9 +200,10 @@ namespace Settings {
 						io.ConfigInputTextEnterKeepActive = configInputTextEnterKeepActive;
 						hasChanges = true;
 					}
+
+					ImGui::Separator();
 				}
 
-				ImGui::Separator();
 				RenderActionButtons();
 			}
 			ImGui::EndChild();
@@ -232,6 +275,7 @@ namespace Settings {
 
 		void CreateBackup() override {
 			backupConfigFlags = ImGui::GetIO().ConfigFlags;
+			// Backup other settings as needed
 		}
 
 		void RestoreFromBackup() override {
@@ -357,7 +401,7 @@ namespace Settings {
 			if (j.contains("configNavEnableGamepad")) configNavEnableGamepad = j["configNavEnableGamepad"];
 			if (j.contains("configNavMoveSetMousePos")) configNavMoveSetMousePos = j["configNavMoveSetMousePos"];
 			if (j.contains("configNavCaptureKeyboard")) configNavCaptureKeyboard = j["configNavCaptureKeyboard"];
-			if (j.contains("configNavEscapeClearFocusItem")) configNavEscapeClearFocusItem = j["configNavEscapeClearFocusItem"];
+			if (j.contains("configNavEescapeClearFocusItem")) configNavEscapeClearFocusItem = j["configNavEscapeClearFocusItem"];
 			if (j.contains("configMemoryCompactTimer")) configMemoryCompactTimer = j["configMemoryCompactTimer"];
 			if (j.contains("configDebugHighlightIdConflicts")) configDebugHighlightIdConflicts = j["configDebugHighlightIdConflicts"];
 			if (j.contains("configDockingEnable")) configDockingEnable = j["configDockingEnable"];

@@ -79,13 +79,13 @@ namespace GUI {
 
 	void MenuBar::ShowEditMenu() {
 		if (ImGui::BeginMenu("Edit")) {
-			if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
-				// TODO: Implement undo
-			}
-
-			if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
-				// TODO: Implement redo
-			}
+			//if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
+			//	// TODO: Implement undo
+			//}
+			//
+			//if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
+			//	// TODO: Implement redo
+			//}
 
 			// Render views that have "Edit" as their top-level category
 			if (projectManager.IsProjectOpen()) {
@@ -169,9 +169,9 @@ namespace GUI {
 				RenderViewsForCategory("Help");
 			}
 
-			if (ImGui::MenuItem("About")) {
-				// TODO: Show about dialog
-			}
+			//if (ImGui::MenuItem("About")) {
+			//	// TODO: Show about dialog
+			//}
 			ImGui::EndMenu();
 		}
 	}
@@ -231,7 +231,7 @@ namespace GUI {
 		auto allViews = viewManager.GetRegisteredViews();
 
 		// Standard menus that shouldn't be created dynamically
-		std::set<std::string> standardMenus = { "File", "Edit", "View", "Workspace", "Help" };
+		std::set<std::string> standardMenus = { "File", "Edit", "Workspace", "Help" };
 
 		for (const auto&[viewTypeName, typeID] : allViews) {
 			auto meta = viewManager.GetViewMetadata(viewTypeName);

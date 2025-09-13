@@ -15,8 +15,8 @@ namespace GUI {
 
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
-                "displayName": "Video Generation",
-                "category": "Generation",
+                "displayName": "Video Diffusion",
+                "category": "Diffusion",
                 "description": "AI video generation using stable diffusion video models."
             })";
 		}

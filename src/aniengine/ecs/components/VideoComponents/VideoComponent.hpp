@@ -46,6 +46,7 @@ namespace ECS {
 
 		// Video properties
 		std::string fileName = "Untitled";
+
 		std::string filePath = Utils::FilePaths::defaultProjectPath;
 		int width = 0;
 		int height = 0;
@@ -67,6 +68,7 @@ namespace ECS {
 
 		VideoComponent() {
 			compName = "Video";
+			compCategory = "Video";
 		}
 
 		~VideoComponent() {

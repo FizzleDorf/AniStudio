@@ -8,7 +8,10 @@ namespace ECS {
 
 	// Base class for any loaded models
 	struct BaseModelComponent : public BaseComponent {
-		BaseModelComponent() { compName = "BaseModelComponent"; }
+		BaseModelComponent() { 
+			compName = "BaseModelComponent"; 
+			compCategory = "Models";
+		}
 		std::string modelPath = "";
 		std::string modelName = "";
 		bool isModelLoaded = false;
@@ -311,7 +314,7 @@ namespace ECS {
 			};
 		}
 
-		bool isTiled = true;
+		bool isTiled = false;
 		bool keep_vae_on_cpu = false;
 		bool vae_decode_only = false;
 

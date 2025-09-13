@@ -50,8 +50,8 @@ namespace UISchema {
 
 		static bool RenderDragInt(const std::string& label, int* value, const nlohmann::json& options = {}) {
 			float speed = GetSchemaValue<float>(options, "speed", 1.0f);
-			int min = GetSchemaValue<int>(options, "minimum", 0);
-			int max = GetSchemaValue<int>(options, "maximum", 0);
+			int min = GetSchemaValue<int>(options, "min", 0);
+			int max = GetSchemaValue<int>(options, "max", 0);
 			std::string format = GetSchemaValue<std::string>(options, "format", "%d");
 
 			// Store the original value to detect actual changes
@@ -105,16 +105,27 @@ namespace UISchema {
 		}
 
 		static bool Render(const std::string& label, int* value, const std::string& widgetType, const nlohmann::json& schema, const PropertyMap& allProps = {}) {
+			// Extract options from "ui:options" path
+			nlohmann::json options = {};
+			if (schema.contains("ui:options") && schema["ui:options"].is_object()) {
+				options = schema["ui:options"];
+			}
+
 			if (widgetType == "input_int") {
-				return RenderInputInt(label, value, schema);
+				return RenderInputInt(label, value, options);
 			}
 			else if (widgetType == "slider_int") {
-				int min = GetSchemaValue<int>(schema, "minimum", 0);
-				int max = GetSchemaValue<int>(schema, "maximum", 100);
-				return RenderSliderInt(label, value, min, max, schema);
+				// Get min/max from options first, fallback to schema root
+				int min = GetSchemaValue<int>(options, "min", 0);
+				int max = GetSchemaValue<int>(options, "max", 100);
+				if (min == 0 && max == 100) {
+					min = GetSchemaValue<int>(schema, "minimum", 0);
+					max = GetSchemaValue<int>(schema, "maximum", 100);
+				}
+				return RenderSliderInt(label, value, min, max, options);
 			}
 			else if (widgetType == "drag_int") {
-				return RenderDragInt(label, value, schema);
+				return RenderDragInt(label, value, options);
 			}
 			else if (widgetType == "combo") {
 				if (schema.contains("items") && schema["items"].is_array()) {
@@ -127,11 +138,11 @@ namespace UISchema {
 							items.push_back(item["label"].get<std::string>());
 						}
 					}
-					return RenderCombo(label, value, &items, schema);
+					return RenderCombo(label, value, &items, options);
 				}
 				else if (allProps.count("items") && std::holds_alternative<std::vector<std::string>*>(allProps.at("items"))) {
 					std::vector<std::string>* items = std::get<std::vector<std::string>*>(allProps.at("items"));
-					return RenderCombo(label, value, items, schema);
+					return RenderCombo(label, value, items, options);
 				}
 				else {
 					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Combo widget missing items array");
@@ -141,7 +152,7 @@ namespace UISchema {
 			else if (widgetType == "radio") {
 				if (allProps.count("items") && std::holds_alternative<std::vector<std::string>*>(allProps.at("items"))) {
 					std::vector<std::string>* items = std::get<std::vector<std::string>*>(allProps.at("items"));
-					return RenderRadioButtons(label, value, items, schema);
+					return RenderRadioButtons(label, value, items, options);
 				}
 				else {
 					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Radio widget missing items array");
@@ -150,7 +161,7 @@ namespace UISchema {
 			}
 			else {
 				std::cerr << "Unknown widget type '" << widgetType << "' for int property, defaulting to input_int" << std::endl;
-				return RenderInputInt(label, value, schema);
+				return RenderInputInt(label, value, options);
 			}
 		}
 	};

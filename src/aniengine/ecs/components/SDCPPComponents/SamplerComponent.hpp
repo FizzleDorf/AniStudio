@@ -10,6 +10,8 @@ namespace ECS {
 	struct SamplerComponent : public ECS::BaseComponent {
 		SamplerComponent() {
 			compName = "Sampler";
+			compCategory = "Sampling";
+
 			schema = {
 				{"title", "Sampler Settings"},
 				{"type", "object"},
@@ -146,11 +148,11 @@ namespace ECS {
 		bool free_params_immediately = true;
 
 		// System-wide control flags
-		bool offload_params_to_cpu = true;
+		bool offload_params_to_cpu = false;
 		bool keep_clip_on_cpu = true;
 		bool diffusion_flash_attn = false;
-		bool diffusion_conv_direct = true;
-		bool vae_conv_direct = true;
+		bool diffusion_conv_direct = false;
+		bool vae_conv_direct = false;
 
 		// Method selections
 		sample_method_t current_sample_method = EULER;

@@ -12,6 +12,7 @@ namespace ECS {
 	struct LatentComponent : public ECS::BaseComponent {
 		LatentComponent() {
 			compName = "Latent";
+			compCategory = "Sampling";
 
 			schema = {
 				{"title", "Latent Settings"},
@@ -23,8 +24,8 @@ namespace ECS {
 						{"title", "Width"},
 						{"ui:widget", "input_int"},
 						{"ui:options", {
-							{"step", 8},
-							{"step_fast", 32},
+							{"step", 64},
+							{"step_fast", 64},
 							{"min", 64},
 							{"max", 2048}
 						}}
@@ -34,8 +35,8 @@ namespace ECS {
 						{"title", "Height"},
 						{"ui:widget", "input_int"},
 						{"ui:options", {
-							{"step", 8},
-							{"step_fast", 32},
+							{"step", 64},
+							{"step_fast", 64},
 							{"min", 64},
 							{"max", 2048}
 						}}

@@ -1,3 +1,4 @@
+// SettingsView.cpp
 #include "SettingsView.hpp"
 #include "PathsSettings.hpp"
 #include "GeneralSettings.hpp"
@@ -6,12 +7,15 @@
 #include "ImGuiRenderSettings.hpp"
 #include "../events/Events.hpp"
 #include <iostream>
+#include <algorithm>
+#include <imgui_internal.h>
 
 namespace GUI {
 
 	SettingsView::SettingsView(ECS::EntityManager &mgr)
 		: BaseView(mgr), showSavePopup(false),
-		showUnsavedChangesDialog(false), pendingClose(false), windowOpen(true) {
+		showUnsavedChangesDialog(false), pendingClose(false), windowOpen(true),
+		filterListWidth(250.0f) {
 		viewName = "SettingsView";
 
 		// Register core tabs
@@ -19,6 +23,12 @@ namespace GUI {
 
 		// Load all settings on startup
 		settingsManager.LoadAllSettings();
+
+		// Initialize with first tab's categories if available
+		if (!settingsManager.GetTabs().empty()) {
+			UpdateCategoriesForActiveTab(settingsManager.GetTabs()[0]->GetTabName());
+		}
+
 		std::cout << "[SettingsView] Initialized" << std::endl;
 	}
 
@@ -34,12 +44,66 @@ namespace GUI {
 		std::cout << "[SettingsView] Registered core tabs" << std::endl;
 	}
 
+	void SettingsView::UpdateCategoriesForActiveTab(const std::string& activeTabName) {
+		availableCategories.clear();
+
+		// Find the active tab and get its categories dynamically
+		for (const auto& tab : settingsManager.GetTabs()) {
+			if (tab->GetTabName() == activeTabName) {
+				// Get categories from the tab itself - each tab should provide its own categories
+				auto tabCategories = GetCategoriesFromTab(tab.get());
+				for (const auto& category : tabCategories) {
+					availableCategories.insert(category);
+				}
+				break;
+			}
+		}
+
+		// Select all categories by default when switching tabs
+		SelectAllCategories();
+	}
+
+	std::vector<std::string> SettingsView::GetCategoriesFromTab(Settings::BaseTabObject* tab) {
+		// First try to get categories from the tab itself (for plugins)
+		auto tabCategories = tab->GetCategories();
+		if (!tabCategories.empty()) {
+			return tabCategories;
+		}
+
+		// Fall back to hardcoded mapping for core tabs
+		std::string tabName = tab->GetTabName();
+
+		if (tabName == "General") {
+			return { "Startup Settings", "Auto-Save Settings", "Confirmation Dialogs", "Performance Settings", "Logging Settings" };
+		}
+		else if (tabName == "Paths") {
+			return { "General Paths", "Model Paths" };
+		}
+		else if (tabName == "SDCPP") {
+			return { "SDCPP Configuration", "SDCPP Controls" };
+		}
+		else if (tabName == "ImGui Style") {
+			return { "Style Presets", "Font Settings", "Size Settings", "Border Settings", "Rounding Settings", "Color Settings" };
+		}
+		else if (tabName == "ImGui Render") {
+			return { "Display Settings", "Input Settings", "Window Behavior", "Navigation Settings", "Docking Settings", "Multi-Viewport Settings", "Memory & Performance", "Input Text Settings" };
+		}
+
+		// For unknown tabs without GetCategories() override, return empty
+		return {};
+	}
+
+	void SettingsView::RenderFilteredTabContent(Settings::BaseTabObject* tab, const std::set<std::string>& selectedCategories) {
+		// Try to use filtered rendering if the tab supports it
+		tab->RenderFilteredUI(selectedCategories);
+	}
+
 	std::string SettingsView::GetWindowTitle() const {
 		return viewName + "###SettingsWindow" + std::to_string(GetID());
 	}
 
 	void SettingsView::Render() {
-		ImGui::SetNextWindowSize(ImVec2(900, 700), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 
@@ -61,31 +125,148 @@ namespace GUI {
 	}
 
 	void SettingsView::RenderMainContent() {
-		// Create tabs for each BaseTabObject
-		if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
+		// Split the window into filter list and content areas
+		ImGui::BeginChild("SettingsSplit", ImVec2(0, -50), false);
 
-			// Iterate through all registered tabs and create ImGui tabs
-			const auto& tabs = settingsManager.GetTabs();
-			for (const auto& tab : tabs) {
+		// Left side: Filter list
+		ImGui::BeginChild("FilterList", ImVec2(filterListWidth, 0), true);
+		RenderFilterList();
+		ImGui::EndChild();
+
+		ImGui::SameLine();
+
+		// Right side: Selected categories content
+		ImGui::BeginChild("ContentArea", ImVec2(0, 0), true);
+		RenderSelectedCategoriesContent();
+		ImGui::EndChild();
+
+		ImGui::EndChild();
+
+		// Action buttons at the bottom
+		ImGui::Separator();
+		RenderActionButtons();
+	}
+
+	void SettingsView::RenderFilterList() {
+		ImGui::Text("Settings Categories");
+		ImGui::Separator();
+
+		// Show All button
+		if (ImGui::Button("Show All Categories", ImVec2(-1, 0))) {
+			SelectAllCategories();
+		}
+
+		if (ImGui::Button("Deselect All", ImVec2(-1, 0))) {
+			DeselectAll();
+		}
+
+		ImGui::Separator();
+
+		// Render categories list for current tab only
+		for (const auto& category : availableCategories) {
+			bool isSelected = selectedCategories.find(category) != selectedCategories.end();
+
+			ImGui::PushStyleColor(ImGuiCol_Text, isSelected ?
+				ImVec4(0.4f, 0.8f, 1.0f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+
+			bool clicked = ImGui::Selectable(
+				category.c_str(),
+				isSelected,
+				ImGuiSelectableFlags_AllowDoubleClick
+			);
+
+			ImGui::PopStyleColor();
+
+			if (clicked) {
+				HandleCategorySelection(category,
+					ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Selected: %zu categories", selectedCategories.size());
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+			"Ctrl+Click: Multi-select");
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+			"Shift+Click: Range select");
+	}
+
+	void SettingsView::RenderSelectedCategoriesContent() {
+		static std::string currentActiveTab = "";
+
+		// Always render tabs
+		if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
+			for (const auto& tab : settingsManager.GetTabs()) {
 				std::string tabTitle = tab->GetTabName() + " Settings";
+				std::string tabName = tab->GetTabName();
 
 				if (ImGui::BeginTabItem(tabTitle.c_str())) {
-					// Render the tab content in a scrollable child window
-					ImGui::BeginChild("TabContent", ImVec2(0, -50), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+					// Check if we switched to a different tab
+					if (currentActiveTab != tabName) {
+						currentActiveTab = tabName;
+						UpdateCategoriesForActiveTab(tabName);
+					}
 
-					// Let the tab object render its UI
-					tab->RenderUI();
+					ImGui::BeginChild("TabContent", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+
+					// Pass the selected categories to the tab for filtering
+					RenderFilteredTabContent(tab.get(), selectedCategories);
 
 					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
 			}
-
 			ImGui::EndTabBar();
 		}
 
-		ImGui::Separator();
-		RenderActionButtons();
+		// Initialize with first tab if no tab is active yet
+		if (currentActiveTab.empty() && !settingsManager.GetTabs().empty()) {
+			currentActiveTab = settingsManager.GetTabs()[0]->GetTabName();
+			UpdateCategoriesForActiveTab(currentActiveTab);
+		}
+	}
+
+	void SettingsView::HandleCategorySelection(const std::string& categoryName, bool ctrlHeld, bool shiftHeld) {
+		if (!ctrlHeld && !shiftHeld) {
+			// Single selection - clear others and select this category
+			selectedCategories.clear();
+			selectedCategories.insert(categoryName);
+			lastSelectedCategory = categoryName;
+		}
+		else if (ctrlHeld) {
+			// Toggle selection
+			if (selectedCategories.count(categoryName)) {
+				selectedCategories.erase(categoryName);
+			}
+			else {
+				selectedCategories.insert(categoryName);
+			}
+			lastSelectedCategory = categoryName;
+		}
+		else if (shiftHeld && !lastSelectedCategory.empty()) {
+			// Range selection
+			std::vector<std::string> categoryOrder(availableCategories.begin(), availableCategories.end());
+			std::sort(categoryOrder.begin(), categoryOrder.end());
+
+			auto startIt = std::find(categoryOrder.begin(), categoryOrder.end(), lastSelectedCategory);
+			auto endIt = std::find(categoryOrder.begin(), categoryOrder.end(), categoryName);
+
+			if (startIt != categoryOrder.end() && endIt != categoryOrder.end()) {
+				if (startIt > endIt) std::swap(startIt, endIt);
+
+				for (auto it = startIt; it <= endIt; ++it) {
+					selectedCategories.insert(*it);
+				}
+			}
+		}
+	}
+
+	void SettingsView::SelectAllCategories() {
+		selectedCategories = availableCategories;
+	}
+
+	void SettingsView::DeselectAll() {
+		selectedCategories.clear();
 	}
 
 	void SettingsView::HandleWindowClose() {

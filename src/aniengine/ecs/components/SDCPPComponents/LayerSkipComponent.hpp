@@ -4,6 +4,7 @@ namespace ECS {
     struct LayerSkipComponent : public ECS::BaseComponent {
         LayerSkipComponent() {
             compName = "LayerSkip";
+			compCategory = "Advanced";
 
             // Define the component schema
             schema = {

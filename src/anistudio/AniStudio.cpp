@@ -48,8 +48,8 @@ namespace ANI {
 		viewManager.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView");
 		viewManager.RegisterView<GUI::ImageView>("ImageView");
 		viewManager.RegisterView<GUI::ConvertView>("ConvertView");
-		viewManager.RegisterView<GUI::SequencerView>("SequencerView");
-		viewManager.RegisterView<GUI::NodeView>("NodeView");
+		// viewManager.RegisterView<GUI::SequencerView>("SequencerView");
+		// viewManager.RegisterView<GUI::NodeView>("NodeView");
 		viewManager.RegisterView<GUI::UpscaleView>("UpscaleView");
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");

@@ -9,6 +9,7 @@ namespace ECS {
 	struct PromptComponent : public BaseComponent {
 		PromptComponent() {
 			compName = "Prompt";
+			compCategory = "Sampling";
 
 			schema = {
 				{"title", "Prompt Settings"},

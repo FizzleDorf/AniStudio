@@ -16,7 +16,7 @@ namespace GUI {
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
             "displayName": "Video View",
-            "category": "Views",
+            "category": "Viewers",
             "description": "A simple video viewer."
         })";
 		}

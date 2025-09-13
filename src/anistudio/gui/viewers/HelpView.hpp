@@ -33,7 +33,7 @@ namespace GUI {
 	public:
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
-            "displayName": "Docs",
+            "displayName": "Documentation",
             "category": "Help",
             "description": "Documentation for development and usage."
         })";
