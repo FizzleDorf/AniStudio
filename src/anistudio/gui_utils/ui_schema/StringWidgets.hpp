@@ -9,6 +9,7 @@
 #include <memory>
 #include <iostream>
 #include "UISchemaUtils.hpp"
+#include "UISchemaContext.hpp"
 #include "ZepUtils.hpp"
 
 namespace UISchema {
@@ -33,42 +34,47 @@ namespace UISchema {
 
 	class StringWidgets {
 	public:
-		// Simple editor map
-		static std::unordered_map<uintptr_t, std::shared_ptr<Utils::ZepTextEditor>>& GetEditorMap() {
-			static std::unordered_map<uintptr_t, std::shared_ptr<Utils::ZepTextEditor>> editorMap;
+		// Simple editor map - now uses context-generated unique keys
+		static std::unordered_map<std::string, std::shared_ptr<Utils::ZepTextEditor>>& GetEditorMap() {
+			static std::unordered_map<std::string, std::shared_ptr<Utils::ZepTextEditor>> editorMap;
 			return editorMap;
 		}
 
 		// Simple config map
-		static std::unordered_map<uintptr_t, ZepEditorConfig>& GetConfigMap() {
-			static std::unordered_map<uintptr_t, ZepEditorConfig> configMap;
+		static std::unordered_map<std::string, ZepEditorConfig>& GetConfigMap() {
+			static std::unordered_map<std::string, ZepEditorConfig> configMap;
 			return configMap;
 		}
 
 		// Track which editors have been configured from schema
-		static std::unordered_set<uintptr_t>& GetConfiguredEditors() {
-			static std::unordered_set<uintptr_t> configuredEditors;
+		static std::unordered_set<std::string>& GetConfiguredEditors() {
+			static std::unordered_set<std::string> configuredEditors;
 			return configuredEditors;
 		}
 
 		// Track last known component values to detect external changes
-		static std::unordered_map<uintptr_t, std::string>& GetLastKnownValues() {
-			static std::unordered_map<uintptr_t, std::string> lastKnownValues;
+		static std::unordered_map<std::string, std::string>& GetLastKnownValues() {
+			static std::unordered_map<std::string, std::string> lastKnownValues;
 			return lastKnownValues;
 		}
 
-		// Create or get existing editor
-		static std::shared_ptr<Utils::ZepTextEditor> GetOrCreateEditor(std::string* value) {
+		// Create or get existing editor using the full unique label as the key
+		static std::shared_ptr<Utils::ZepTextEditor> GetOrCreateEditor(std::string* value, const std::string& uniqueLabel) {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
 			auto& lastKnownValues = GetLastKnownValues();
-			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
+
+			// Use the full unique label (minus ##) as the key
+			std::string uniqueKey = uniqueLabel;
+			if (uniqueKey.substr(0, 2) == "##") {
+				uniqueKey = uniqueKey.substr(2) + "_zep_editor";
+			}
 
 			auto it = editorMap.find(uniqueKey);
 			if (it == editorMap.end()) {
 				auto editor = std::make_shared<Utils::ZepTextEditor>();
 				if (!editor->Initialize()) {
-					std::cerr << "Failed to initialize Zep editor" << std::endl;
+					std::cerr << "Failed to initialize Zep editor for " << uniqueKey << std::endl;
 					return nullptr;
 				}
 
@@ -118,9 +124,17 @@ namespace UISchema {
 			return config;
 		}
 
+		// Get unique base ID from label - handles ##compName_propName_entityId format
+		static std::string GetUniqueBaseId(const std::string& label) {
+			if (label.substr(0, 2) == "##") {
+				return label.substr(2); // Remove ## prefix
+			}
+			return label;
+		}
+
 		// Main Zep editor render function with bidirectional synchronization - ALWAYS renders inline
-		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
-			auto editor = GetOrCreateEditor(value);
+		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
+			auto editor = GetOrCreateEditor(value, label);
 			if (!editor) {
 				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Failed to create Zep editor");
 				return false;
@@ -129,7 +143,9 @@ namespace UISchema {
 			auto& configMap = GetConfigMap();
 			auto& configuredEditors = GetConfiguredEditors();
 			auto& lastKnownValues = GetLastKnownValues();
-			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
+
+			// Generate unique key using the full label
+			std::string uniqueKey = GetUniqueBaseId(label) + "_zep_editor";
 
 			// ONLY apply schema config ONCE when editor is first created
 			if (configuredEditors.find(uniqueKey) == configuredEditors.end()) {
@@ -146,9 +162,10 @@ namespace UISchema {
 				return false;
 			}
 
-			// Display parameter name above the editor (no label on the widget itself)
-			if (!label.empty() && label != "##value") {
-				ImGui::Text("%s", label.c_str());
+			// Display parameter name if provided in schema
+			if (schema.contains("ui:displayName") && schema["ui:displayName"].is_string()) {
+				std::string displayName = schema["ui:displayName"].get<std::string>();
+				ImGui::Text("%s", displayName.c_str());
 			}
 
 			// CRITICAL FIX: Check if component value changed externally (e.g., from metadata loading)
@@ -183,16 +200,16 @@ namespace UISchema {
 		}
 
 		// Separate widget types for different modes
-		static bool RenderZepEditorVim(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+		static bool RenderZepEditorVim(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
 			nlohmann::json vimOptions = options;
 			vimOptions["mode"] = "vim";
-			return RenderZepEditor(label, value, vimOptions);
+			return RenderZepEditor(label, value, vimOptions, schema);
 		}
 
-		static bool RenderZepEditorStandard(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+		static bool RenderZepEditorStandard(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
 			nlohmann::json standardOptions = options;
 			standardOptions["mode"] = "standard";
-			return RenderZepEditor(label, value, standardOptions);
+			return RenderZepEditor(label, value, standardOptions, schema);
 		}
 
 		// Helper to get InputTextFlags properly
@@ -229,7 +246,7 @@ namespace UISchema {
 			return flags;
 		}
 
-		static bool RenderInputText(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+		static bool RenderInputText(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
 			// Proper handling of readOnly flag from schema
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
 
@@ -240,6 +257,7 @@ namespace UISchema {
 			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
 			buffer[bufferSize - 1] = '\0';
 
+			// NO DISPLAY LABEL - StringWidgets should not show any text before ##
 			bool changed = ImGui::InputText(label.c_str(), buffer.data(), bufferSize, flags);
 			if (changed) {
 				*value = buffer.data();
@@ -248,7 +266,7 @@ namespace UISchema {
 		}
 
 		// Enhanced textarea implementation with horizontal resizing
-		static bool RenderTextArea(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
+		static bool RenderTextArea(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
 
 			// Calculate max buffer size - default or from schema
@@ -260,10 +278,7 @@ namespace UISchema {
 			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
 			buffer[bufferSize - 1] = '\0';
 
-			// Display label using ImGui::Text if label is not empty and not hidden
-			if (!label.empty() && label != "##value") {
-				ImGui::Text("%s", label.c_str());
-			}
+			// NO DISPLAY LABEL - StringWidgets should not show any text before ##
 
 			// Get minimum height
 			float minHeight = ImGui::GetTextLineHeight() * 3.0f + ImGui::GetStyle().FramePadding.y * 2.0f;
@@ -272,11 +287,18 @@ namespace UISchema {
 			int rows = GetSchemaValue<int>(options, "rows", 5);
 			float initialHeight = ImGui::GetTextLineHeight() * rows + ImGui::GetStyle().FramePadding.y * 2.0f;
 
+			// Generate unique child window ID using the full unique label
+			std::string uniqueBaseId = GetUniqueBaseId(label);
+			std::string childId = uniqueBaseId + "_textarea_child";
+
 			// Use child window for vertical resizing with ResizeY flag
-			if (ImGui::BeginChild(label.c_str(), ImVec2(0, std::max(minHeight, initialHeight)), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY)) {
-				// Render the multiline input widget without label (already displayed above)
+			if (ImGui::BeginChild(childId.c_str(), ImVec2(0, std::max(minHeight, initialHeight)), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY)) {
+				// Generate unique textarea ID
+				std::string textareaId = uniqueBaseId + "_textarea_input";
+
+				// Render the multiline input widget with unique ID
 				bool changed = ImGui::InputTextMultiline(
-					("##textarea"+label).c_str(),
+					textareaId.c_str(),
 					buffer.data(),
 					bufferSize,
 					ImVec2(-1.0f, -1.0f), // Use full child window area
@@ -295,35 +317,42 @@ namespace UISchema {
 			return false;
 		}
 
-		// Enhanced render method with proper widget type handling
-		static bool Render(const std::string& label, std::string* value, const std::string& widgetType, const nlohmann::json& schema) {
+		// Enhanced render method with proper widget type handling and context support
+		static bool Render(const std::string& label, std::string* value, const std::string& widgetType, const nlohmann::json& schema, const UIRenderContext& context) {
+			// Extract options from schema
+			nlohmann::json options = {};
+			if (schema.contains("ui:options") && schema["ui:options"].is_object()) {
+				options = schema["ui:options"];
+			}
+
 			if (widgetType == "input_text") {
-				return RenderInputText(label, value, schema);
+				return RenderInputText(label, value, options, schema);
 			}
 			else if (widgetType == "text_editor") {
-				return RenderZepEditor(label, value, schema);
+				return RenderZepEditor(label, value, options, schema);
 			}
 			else if (widgetType == "text_editor_vim") {
-				return RenderZepEditorVim(label, value, schema);
+				return RenderZepEditorVim(label, value, options, schema);
 			}
 			else if (widgetType == "text_editor_standard") {
-				return RenderZepEditorStandard(label, value, schema);
+				return RenderZepEditorStandard(label, value, options, schema);
 			}
 			else if (widgetType == "text_area") {
-				// Use enhanced textarea with horizontal drag resizing
-				return RenderTextArea(label, value, schema);
+				return RenderTextArea(label, value, options, schema);
 			}
 			else {
 				// Default to input_text for unknown widget types
-				return RenderInputText(label, value, schema);
+				return RenderInputText(label, value, options, schema);
 			}
 		}
 
-		// Update editor content when deserializing - ENHANCED
-		static void UpdateEditorContent(std::string* value) {
+		// Update editor content when deserializing - ENHANCED with unique label support
+		static void UpdateEditorContent(std::string* value, const std::string& uniqueLabel) {
 			auto& editorMap = GetEditorMap();
 			auto& lastKnownValues = GetLastKnownValues();
-			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
+
+			// Generate unique key using the full label
+			std::string uniqueKey = GetUniqueBaseId(uniqueLabel) + "_zep_editor";
 
 			auto it = editorMap.find(uniqueKey);
 			if (it != editorMap.end()) {
@@ -334,13 +363,15 @@ namespace UISchema {
 			}
 		}
 
-		// Cleanup editor
-		static void CleanupEditor(std::string* value) {
+		// Cleanup editor with unique label support
+		static void CleanupEditor(std::string* value, const std::string& uniqueLabel) {
 			auto& editorMap = GetEditorMap();
 			auto& configMap = GetConfigMap();
 			auto& configuredEditors = GetConfiguredEditors();
 			auto& lastKnownValues = GetLastKnownValues();
-			uintptr_t uniqueKey = reinterpret_cast<uintptr_t>(value);
+
+			// Generate unique key using the full label
+			std::string uniqueKey = GetUniqueBaseId(uniqueLabel) + "_zep_editor";
 
 			editorMap.erase(uniqueKey);
 			configMap.erase(uniqueKey);

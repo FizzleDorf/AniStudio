@@ -7,7 +7,7 @@
 
 namespace UISchema {
 
-	static const std::string DEFAULT_BOOL_WIDGET = "checkbox";
+	static const std::string DEFAULT_BOOL_WIDGET = "checkbox";  // FIXED: was DEFAULT_FLOAT_WIDGET
 
 	class BoolWidgets {
 	public:

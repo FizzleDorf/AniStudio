@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include "PropertyTypes.hpp"
 #include "UISchemaUtils.hpp"
+#include "UISchemaContext.hpp"
 
 namespace UISchema {
 
@@ -15,7 +16,7 @@ namespace UISchema {
 
 	class IntWidgets {
 	public:
-		static bool RenderInputInt(const std::string& label, int* value, const nlohmann::json& options = {}) {
+		static bool RenderInputInt(const std::string& label, int* value, const nlohmann::json& options, const UIRenderContext& context) {
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
 			int step = GetSchemaValue<int>(options, "step", 1);
 			int step_fast = GetSchemaValue<int>(options, "step_fast", 100);
@@ -25,7 +26,7 @@ namespace UISchema {
 			// Store the original value
 			int originalValue = *value;
 
-			// Use ImGui::InputInt normally with the label
+			// Use ImGui::InputInt with the unique label from context
 			bool changed = ImGui::InputInt(label.c_str(), value, step, step_fast, flags);
 
 			// Apply constraints
@@ -36,7 +37,7 @@ namespace UISchema {
 			return changed && (*value != originalValue);
 		}
 
-		static bool RenderSliderInt(const std::string& label, int* value, int min, int max, const nlohmann::json& options = {}) {
+		static bool RenderSliderInt(const std::string& label, int* value, int min, int max, const nlohmann::json& options, const UIRenderContext& context) {
 			ImGuiSliderFlags flags = GetSliderFlags(options);
 			std::string format = GetSchemaValue<std::string>(options, "format", "%d");
 
@@ -48,7 +49,7 @@ namespace UISchema {
 			return changed && (*value != originalValue);
 		}
 
-		static bool RenderDragInt(const std::string& label, int* value, const nlohmann::json& options = {}) {
+		static bool RenderDragInt(const std::string& label, int* value, const nlohmann::json& options, const UIRenderContext& context) {
 			float speed = GetSchemaValue<float>(options, "speed", 1.0f);
 			int min = GetSchemaValue<int>(options, "min", 0);
 			int max = GetSchemaValue<int>(options, "max", 0);
@@ -62,7 +63,7 @@ namespace UISchema {
 			return changed && (*value != originalValue);
 		}
 
-		static bool RenderCombo(const std::string& label, int* selectedIndex, const std::vector<std::string>* items, const nlohmann::json& options = {}) {
+		static bool RenderCombo(const std::string& label, int* selectedIndex, const std::vector<std::string>* items, const nlohmann::json& options, const UIRenderContext& context) {
 			if (!items || items->empty()) return false;
 
 			// ImGui::Combo requires a const char* const*
@@ -72,25 +73,43 @@ namespace UISchema {
 			}
 
 			int originalValue = *selectedIndex;
-			// The new ImGui::Combo overload takes a const char* const* for the items
 			bool changed = ImGui::Combo(label.c_str(), selectedIndex, c_items.data(), c_items.size());
 
 			// Only return true if the value actually changed
 			return changed && (*selectedIndex != originalValue);
 		}
 
-		static bool RenderRadioButtons(const std::string& label, int* value, const std::vector<std::string>* items, const nlohmann::json& options = {}) {
+		static bool RenderRadioButtons(const std::string& label, int* value, const std::vector<std::string>* items, const nlohmann::json& options, const UIRenderContext& context) {
 			if (!items || items->empty()) return false;
 
 			int originalValue = *value;
 			bool changed = false;
 
-			if (!label.empty()) {
-				ImGui::Text("%s", label.c_str());
+			// Extract property name for unique radio button IDs
+			std::string propertyName = "radio";
+			size_t hashPos = label.find("##");
+			if (hashPos != std::string::npos) {
+				std::string uniquePart = label.substr(hashPos + 2);
+				size_t underscorePos = uniquePart.find('_');
+				if (underscorePos != std::string::npos) {
+					propertyName = uniquePart.substr(0, underscorePos);
+				}
+			}
+
+			// Display group label if present
+			if (!label.empty() && label.find("##") != std::string::npos) {
+				std::string displayName = label.substr(0, label.find("##"));
+				if (!displayName.empty()) {
+					ImGui::Text("%s", displayName.c_str());
+				}
 			}
 
 			for (int i = 0; i < static_cast<int>(items->size()); i++) {
-				if (ImGui::RadioButton((*items)[i].c_str(), value, i)) {
+				// Generate unique ID for each radio button using context
+				std::string radioId = context.GenerateWidgetId(propertyName, "radio_" + std::to_string(i));
+				std::string radioLabel = (*items)[i] + "##" + radioId;
+
+				if (ImGui::RadioButton(radioLabel.c_str(), value, i)) {
 					changed = true;
 				}
 
@@ -104,7 +123,7 @@ namespace UISchema {
 			return changed && (*value != originalValue);
 		}
 
-		static bool Render(const std::string& label, int* value, const std::string& widgetType, const nlohmann::json& schema, const PropertyMap& allProps = {}) {
+		static bool Render(const std::string& label, int* value, const std::string& widgetType, const nlohmann::json& schema, const PropertyMap& allProps, const UIRenderContext& context) {
 			// Extract options from "ui:options" path
 			nlohmann::json options = {};
 			if (schema.contains("ui:options") && schema["ui:options"].is_object()) {
@@ -112,7 +131,7 @@ namespace UISchema {
 			}
 
 			if (widgetType == "input_int") {
-				return RenderInputInt(label, value, options);
+				return RenderInputInt(label, value, options, context);
 			}
 			else if (widgetType == "slider_int") {
 				// Get min/max from options first, fallback to schema root
@@ -122,10 +141,10 @@ namespace UISchema {
 					min = GetSchemaValue<int>(schema, "minimum", 0);
 					max = GetSchemaValue<int>(schema, "maximum", 100);
 				}
-				return RenderSliderInt(label, value, min, max, options);
+				return RenderSliderInt(label, value, min, max, options, context);
 			}
 			else if (widgetType == "drag_int") {
-				return RenderDragInt(label, value, options);
+				return RenderDragInt(label, value, options, context);
 			}
 			else if (widgetType == "combo") {
 				if (schema.contains("items") && schema["items"].is_array()) {
@@ -138,11 +157,11 @@ namespace UISchema {
 							items.push_back(item["label"].get<std::string>());
 						}
 					}
-					return RenderCombo(label, value, &items, options);
+					return RenderCombo(label, value, &items, options, context);
 				}
 				else if (allProps.count("items") && std::holds_alternative<std::vector<std::string>*>(allProps.at("items"))) {
 					std::vector<std::string>* items = std::get<std::vector<std::string>*>(allProps.at("items"));
-					return RenderCombo(label, value, items, options);
+					return RenderCombo(label, value, items, options, context);
 				}
 				else {
 					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Combo widget missing items array");
@@ -152,7 +171,7 @@ namespace UISchema {
 			else if (widgetType == "radio") {
 				if (allProps.count("items") && std::holds_alternative<std::vector<std::string>*>(allProps.at("items"))) {
 					std::vector<std::string>* items = std::get<std::vector<std::string>*>(allProps.at("items"));
-					return RenderRadioButtons(label, value, items, options);
+					return RenderRadioButtons(label, value, items, options, context);
 				}
 				else {
 					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Radio widget missing items array");
@@ -161,7 +180,7 @@ namespace UISchema {
 			}
 			else {
 				std::cerr << "Unknown widget type '" << widgetType << "' for int property, defaulting to input_int" << std::endl;
-				return RenderInputInt(label, value, options);
+				return RenderInputInt(label, value, options, context);
 			}
 		}
 	};

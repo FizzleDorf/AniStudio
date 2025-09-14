@@ -8,9 +8,10 @@
 #include <vector>
 #include <iostream>
 
- // Include centralized Engine property types
+// Include centralized Engine property types
 #include "PropertyTypes.hpp"
 #include "ui_schema/UISchemaUtils.hpp"
+#include "ui_schema/UISchemaContext.hpp"
 #include "ui_schema/BoolWidgets.hpp"
 #include "ui_schema/IntWidgets.hpp"
 #include "ui_schema/FloatWidgets.hpp"
@@ -56,18 +57,18 @@ namespace UISchema {
 	}
 
 	// Forward declarations
-	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties);
+	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
 	static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
 		PropertyVariant& propVariant, const nlohmann::json& propSchema,
-		const PropertyMap& allProperties = {});
-	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties);
+		const PropertyMap& allProperties, const std::string& componentName, int entityId);
+	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
 	static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
-		const nlohmann::json& propSchema, const PropertyMap& allProperties);
+		const nlohmann::json& propSchema, const PropertyMap& allProperties, const std::string& componentName, int entityId);
 	static void SetupTableColumns(const nlohmann::json& tableSchema, int columns);
-	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties);
+	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
 
-	// Main rendering functions
-	static bool RenderSchema(const nlohmann::json& schema, PropertyMap& properties) {
+	// Main rendering functions - ADD COMPONENT NAME AND ENTITY ID PARAMETERS
+	static bool RenderSchema(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName = "", int entityId = 0) {
 		if (!schema.is_object()) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid schema: not an object");
 			return false;
@@ -82,13 +83,13 @@ namespace UISchema {
 
 		// Check if this schema should create separate windows
 		if (schema.contains("ui:separate_windows") && schema["ui:separate_windows"].get<bool>()) {
-			modified = RenderSeparateWindows(schema, properties);
+			modified = RenderSeparateWindows(schema, properties, componentName, entityId);
 		}
 		else if (schema.contains("ui:table") && schema["ui:table"].is_object()) {
-			modified = RenderTable(schema, properties);
+			modified = RenderTable(schema, properties, componentName, entityId);
 		}
 		else if (schema.contains("properties") && schema["properties"].is_object()) {
-			modified = RenderPropertiesForm(schema, properties);
+			modified = RenderPropertiesForm(schema, properties, componentName, entityId);
 		}
 
 		PopStyleFromSchema(schema);
@@ -98,7 +99,7 @@ namespace UISchema {
 	}
 
 	// Handle separate window rendering
-	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties) {
+	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
 		bool modified = false;
 		auto& windowStates = GetWindowStates();
 
@@ -126,12 +127,8 @@ namespace UISchema {
 						windowName = propSchema["ui:window_name"].get<std::string>();
 					}
 
-					// Create unique window ID
-					uintptr_t propAddress = 0;
-					if (std::holds_alternative<std::string*>(properties[propName])) {
-						propAddress = reinterpret_cast<uintptr_t>(std::get<std::string*>(properties[propName]));
-					}
-					std::string windowId = windowName + "##" + std::to_string(propAddress);
+					// CREATE UNIQUE WINDOW ID USING COMPONENT NAME AND ENTITY ID
+					std::string windowId = componentName + "_" + propName + "_" + std::to_string(entityId) + "_window_" + windowName;
 
 					// Initialize window state
 					if (windowStates.find(windowId) == windowStates.end()) {
@@ -139,7 +136,7 @@ namespace UISchema {
 					}
 
 					// Render checkbox to toggle window
-					std::string checkboxLabel = windowName + " Editor";
+					std::string checkboxLabel = windowName + " Editor##" + componentName + "_" + propName + "_" + std::to_string(entityId);
 					ImGui::Checkbox(checkboxLabel.c_str(), &windowStates[windowId]);
 					RenderTooltipIfPresent(propSchema);
 
@@ -160,7 +157,8 @@ namespace UISchema {
 							PropertyVariant& propVariant = properties[propName];
 
 							try {
-								if (RenderPropertyWidget("##" + propName, widgetType, propVariant, propSchema, properties)) {
+								std::string uniqueLabel = "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+								if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
 									modified = true;
 								}
 							}
@@ -179,7 +177,9 @@ namespace UISchema {
 					PropertyVariant& propVariant = properties[propName];
 
 					try {
-						if (RenderPropertyWidget(label, widgetType, propVariant, propSchema, properties)) {
+						// CREATE UNIQUE LABEL USING COMPONENT NAME AND ENTITY ID
+						std::string uniqueLabel = label + "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+						if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
 							modified = true;
 						}
 					}
@@ -194,7 +194,7 @@ namespace UISchema {
 		return modified;
 	}
 
-	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties) {
+	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
 		bool modified = false;
 		std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
 
@@ -212,7 +212,9 @@ namespace UISchema {
 				PropertyVariant& propVariant = properties[propName];
 
 				try {
-					if (RenderPropertyWidget(label, widgetType, propVariant, propSchema, properties)) {
+					// CREATE UNIQUE LABEL USING COMPONENT NAME AND ENTITY ID
+					std::string uniqueLabel = label + "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+					if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
 						modified = true;
 					}
 				}
@@ -228,9 +230,12 @@ namespace UISchema {
 
 	static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
 		PropertyVariant& propVariant, const nlohmann::json& propSchema,
-		const PropertyMap& allProperties) {
+		const PropertyMap& allProperties, const std::string& componentName, int entityId) {
 
 		bool modified = false;
+
+		// Create context for widgets that need it
+		UIRenderContext context(componentName, entityId);
 
 		if (std::holds_alternative<bool*>(propVariant)) {
 			bool* value = std::get<bool*>(propVariant);
@@ -239,7 +244,8 @@ namespace UISchema {
 		}
 		else if (std::holds_alternative<int*>(propVariant)) {
 			int* value = std::get<int*>(propVariant);
-			modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties);
+			// IntWidgets has context parameter
+			modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties, context);
 			RenderTooltipIfPresent(propSchema);
 		}
 		else if (std::holds_alternative<float*>(propVariant)) {
@@ -255,14 +261,38 @@ namespace UISchema {
 		else if (std::holds_alternative<std::string*>(propVariant)) {
 			std::string* value = std::get<std::string*>(propVariant);
 			if (widgetType == "file_selector") {
-				modified = FileDialogWidgets::Render(label, value, widgetType, propSchema);
+				// FileDialogWidgets has context parameter
+				modified = FileDialogWidgets::Render(label, value, widgetType, propSchema, context);
 			}
 			else if (widgetType == "media_loader") {
-				// Media loader updates component properties directly through PropertyMap
+				// MediaLoadingWidgets doesn't have context parameter
 				modified = MediaLoadingWidgets::Render(label, widgetType, propSchema, allProperties);
 			}
 			else {
-				modified = StringWidgets::Render(label, value, widgetType, propSchema);
+				// StringWidgets gets unique ID with no display text, handles display internally
+				// Extract property name from the unique label
+				std::string propName = "";
+				std::string originalLabel = label;
+
+				size_t hashPos = label.find("##");
+				if (hashPos != std::string::npos) {
+					originalLabel = label.substr(0, hashPos);
+					std::string uniquePart = label.substr(hashPos + 2);
+					size_t firstUnderscore = uniquePart.find('_');
+					size_t secondUnderscore = uniquePart.find('_', firstUnderscore + 1);
+					if (firstUnderscore != std::string::npos && secondUnderscore != std::string::npos) {
+						propName = uniquePart.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1);
+					}
+				}
+
+				// Create unique label with no display text: ##compName_propName_entityId
+				std::string stringWidgetLabel = "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+
+				// Store display name in the schema for StringWidgets to access
+				nlohmann::json modifiedSchema = propSchema;
+				modifiedSchema["ui:displayName"] = originalLabel;
+
+				modified = StringWidgets::Render(stringWidgetLabel, value, widgetType, modifiedSchema, context);
 			}
 			RenderTooltipIfPresent(propSchema);
 		}
@@ -288,7 +318,7 @@ namespace UISchema {
 		return modified;
 	}
 
-	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties) {
+	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
 		if (!schema.contains("ui:table") || !schema["ui:table"].is_object()) {
 			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid table schema");
 			return false;
@@ -298,7 +328,9 @@ namespace UISchema {
 		int columns = GetSchemaValue<int>(tableSchema, "columns", 2);
 		ImGuiTableFlags flags = GetTableFlags(tableSchema);
 
-		bool tableCreated = ImGui::BeginTable("##SchemaTable", columns, flags);
+		// CREATE UNIQUE TABLE ID
+		std::string tableId = componentName + "_table_" + std::to_string(entityId);
+		bool tableCreated = ImGui::BeginTable(tableId.c_str(), columns, flags);
 		if (!tableCreated) return false;
 
 		SetupTableColumns(tableSchema, columns);
@@ -329,10 +361,12 @@ namespace UISchema {
 					std::string widgetType = GetWidgetType(propSchema);
 					PropertyVariant& propVariant = properties[propName];
 
-					ImGui::PushID(propName.c_str());
+					// USE COMPONENT NAME AND ENTITY ID FOR UNIQUE PUSH ID
+					std::string pushId = componentName + "_" + propName + "_" + std::to_string(entityId) + "_table";
+					ImGui::PushID(pushId.c_str());
 
 					try {
-						if (RenderTableWidget(widgetType, propVariant, propSchema, properties)) {
+						if (RenderTableWidget(widgetType, propVariant, propSchema, properties, componentName, entityId)) {
 							modified = true;
 						}
 					}
@@ -350,9 +384,10 @@ namespace UISchema {
 	}
 
 	static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
-		const nlohmann::json& propSchema, const PropertyMap& allProperties) {
+		const nlohmann::json& propSchema, const PropertyMap& allProperties, const std::string& componentName, int entityId) {
 		// Use empty label for table widgets since label is in first column
-		bool modified = RenderPropertyWidget("##value", widgetType, propVariant, propSchema, allProperties);
+		std::string uniqueLabel = "##" + componentName + "_value_" + std::to_string(entityId);
+		bool modified = RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, allProperties, componentName, entityId);
 		return modified;
 	}
 

@@ -2,14 +2,15 @@
 
 #include "BaseComponent.hpp"
 #include "FilePaths.hpp"
+#include "PropertyTypes.hpp"
 #include <string>
 
 namespace ECS {
 
 	// Base class for any loaded models
 	struct BaseModelComponent : public BaseComponent {
-		BaseModelComponent() { 
-			compName = "BaseModelComponent"; 
+		BaseModelComponent() {
+			compName = "BaseModelComponent";
 			compCategory = "Models";
 		}
 		std::string modelPath = "";
@@ -21,6 +22,13 @@ namespace ECS {
 				{"modelName", modelName},
 				{"modelPath", modelPath}
 			}} };
+		}
+
+		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			return {
+				{"modelName", &modelName},
+				{"modelPath", &modelPath}
+			};
 		}
 
 		virtual void Deserialize(const nlohmann::json& j) override {
@@ -45,6 +53,48 @@ namespace ECS {
 				modelName = componentData["modelName"];
 			if (componentData.contains("modelPath"))
 				modelPath = componentData["modelPath"];
+
+			// Auto-populate missing fields
+			UpdatePathsFromName();
+		}
+
+		// Helper to update paths - only as fallback when data is incomplete
+		virtual void UpdatePathsFromName() {
+			// just clear everything if there is no path
+			if (modelPath.empty()) {
+				modelName.clear();
+				return;
+			}
+
+			// If we have a valid full path, just ensure modelName is set
+			if (!modelPath.empty() && std::filesystem::exists(modelPath)) {
+				if (modelName.empty()) {
+					std::filesystem::path pathObj(modelPath);
+					modelName = pathObj.filename().string();
+				}
+				return;
+			}
+
+			// If modelName contains a full path, split it properly
+			if (!modelName.empty()) {
+				std::filesystem::path namePath(modelName);
+				if (namePath.is_absolute()) {
+					modelPath = modelName;
+					modelName = namePath.filename().string();
+					return;
+				}
+			}
+
+			// Fallback: construct path from name using default directory
+			if (!modelName.empty() && modelPath.empty()) {
+				std::filesystem::path fallbackPath = GetDefaultDirectory() / modelName;
+				modelPath = fallbackPath.string();
+			}
+		}
+
+		// Get the appropriate default directory for this model type
+		virtual std::filesystem::path GetDefaultDirectory() const {
+			return Utils::FilePaths::checkpointDir; // Base class default
 		}
 	};
 
@@ -56,9 +106,9 @@ namespace ECS {
 			schema = {
 				{"title", "Checkpoint Model"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "Model"},
 						{"ui:widget", "file_selector"},
@@ -76,10 +126,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::checkpointDir;
 		}
 
 		ModelComponent& operator=(const ModelComponent& other) {
@@ -100,9 +148,9 @@ namespace ECS {
 			schema = {
 				{"title", "UNet/Diffusion Model"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "UNet"},
 						{"ui:widget", "file_selector"},
@@ -120,10 +168,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::unetDir;
 		}
 
 		DiffusionModelComponent& operator=(const DiffusionModelComponent& other) {
@@ -144,9 +190,9 @@ namespace ECS {
 			schema = {
 				{"title", "CLIP-G Text Encoder"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "CLIP-G"},
 						{"ui:widget", "file_selector"},
@@ -164,10 +210,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::encoderDir;
 		}
 
 		ClipGComponent& operator=(const ClipGComponent& other) {
@@ -188,9 +232,9 @@ namespace ECS {
 			schema = {
 				{"title", "CLIP-L Text Encoder"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "CLIP-L"},
 						{"ui:widget", "file_selector"},
@@ -208,10 +252,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::encoderDir;
 		}
 
 		ClipLComponent& operator=(const ClipLComponent& other) {
@@ -232,9 +274,9 @@ namespace ECS {
 			schema = {
 				{"title", "T5-XXL Text Encoder"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "T5-XXL"},
 						{"ui:widget", "file_selector"},
@@ -252,10 +294,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::encoderDir;
 		}
 
 		T5XXLComponent& operator=(const T5XXLComponent& other) {
@@ -276,9 +316,9 @@ namespace ECS {
 			schema = {
 				{"title", "VAE Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName", "isTiled", "keep_vae_on_cpu", "vae_decode_only"}},
+				{"propertyOrder", {"modelPath", "isTiled", "keep_vae_on_cpu", "vae_decode_only"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "VAE"},
 						{"ui:widget", "file_selector"},
@@ -320,11 +360,16 @@ namespace ECS {
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
+				{"modelPath", &modelPath},
 				{"modelName", &modelName},
 				{"isTiled", &isTiled},
 				{"keep_vae_on_cpu", &keep_vae_on_cpu},
 				{"vae_decode_only", &vae_decode_only}
 			};
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::vaeDir;
 		}
 
 		VaeComponent& operator=(const VaeComponent& other) {
@@ -374,9 +419,6 @@ namespace ECS {
 				keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
 			if (componentData.contains("vae_decode_only"))
 				vae_decode_only = componentData["vae_decode_only"].get<bool>();
-
-			if (!modelName.empty() && modelPath.empty())
-				modelPath = Utils::FilePaths::vaeDir + "\\" + modelName;
 		}
 	};
 
@@ -388,9 +430,9 @@ namespace ECS {
 			schema = {
 				{"title", "TAESD Fast VAE"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "TAESD"},
 						{"ui:widget", "file_selector"},
@@ -408,10 +450,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::vaeDir;
 		}
 
 		TaesdComponent& operator=(const TaesdComponent& other) {
@@ -432,9 +472,9 @@ namespace ECS {
 			schema = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName", "loraStrength", "loraClipStrength"}},
+				{"propertyOrder", {"modelPath", "loraStrength", "loraClipStrength"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "LoRA"},
 						{"ui:widget", "file_selector"},
@@ -483,10 +523,15 @@ namespace ECS {
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
+				{"modelPath", &modelPath},
 				{"modelName", &modelName},
 				{"loraStrength", &loraStrength},
 				{"loraClipStrength", &loraClipStrength}
 			};
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::loraDir;
 		}
 
 		LoraComponent& operator=(const LoraComponent& other) {
@@ -532,11 +577,8 @@ namespace ECS {
 				loraStrength = componentData["loraStrength"];
 			if (componentData.contains("loraClipStrength"))
 				loraClipStrength = componentData["loraClipStrength"];
-			if (!modelName.empty() && modelPath.empty())
-				modelPath = Utils::FilePaths::loraDir + "\\" + modelName;
 		}
 	};
-
 
 	// ControlNet Component
 	struct ControlnetComponent : public ECS::BaseModelComponent {
@@ -546,9 +588,9 @@ namespace ECS {
 			schema = {
 				{"title", "ControlNet Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName", "cnStrength", "applyStart", "applyEnd", "keep_control_net_cpu"}},
+				{"propertyOrder", {"modelPath", "cnStrength", "applyStart", "applyEnd", "keep_control_net_cpu"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "ControlNet"},
 						{"ui:widget", "file_selector"},
@@ -618,12 +660,17 @@ namespace ECS {
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
+				{"modelPath", &modelPath},
 				{"modelName", &modelName},
 				{"cnStrength", &cnStrength},
 				{"applyStart", &applyStart},
 				{"applyEnd", &applyEnd},
 				{"keep_control_net_cpu", &keep_control_net_cpu}
 			};
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::controlnetDir;
 		}
 
 		ControlnetComponent& operator=(const ControlnetComponent& other) {
@@ -677,8 +724,6 @@ namespace ECS {
 				applyEnd = componentData["applyEnd"];
 			if (componentData.contains("keep_control_net_cpu"))
 				keep_control_net_cpu = componentData["keep_control_net_cpu"].get<bool>();
-			if (!modelName.empty() && modelPath.empty())
-				modelPath = Utils::FilePaths::controlnetDir + "\\" + modelName;
 		}
 	};
 
@@ -690,9 +735,9 @@ namespace ECS {
 			schema = {
 				{"title", "ESRGAN Upscaler"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName", "upscaleFactor", "preserveAspectRatio"}},
+				{"propertyOrder", {"modelPath", "upscaleFactor", "preserveAspectRatio"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "Upscale Model"},
 						{"ui:widget", "file_selector"},
@@ -733,10 +778,15 @@ namespace ECS {
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
+				{"modelPath", &modelPath},
 				{"modelName", &modelName},
 				{"upscaleFactor", reinterpret_cast<int*>(&upscaleFactor)},
 				{"preserveAspectRatio", &preserveAspectRatio}
 			};
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::upscaleDir;
 		}
 
 		EsrganComponent& operator=(const EsrganComponent& other) {
@@ -782,8 +832,6 @@ namespace ECS {
 				upscaleFactor = componentData["upscaleFactor"];
 			if (componentData.contains("preserveAspectRatio"))
 				preserveAspectRatio = componentData["preserveAspectRatio"].get<bool>();
-			if (!modelName.empty() && modelPath.empty())
-				modelPath = Utils::FilePaths::upscaleDir + "\\" + modelName;
 		}
 	};
 
@@ -795,9 +843,9 @@ namespace ECS {
 			schema = {
 				{"title", "Text Embedding"},
 				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
+				{"propertyOrder", {"modelPath"}},
 				{"properties", {
-					{"modelName", {
+					{"modelPath", {
 						{"type", "string"},
 						{"title", "Embedding"},
 						{"ui:widget", "file_selector"},
@@ -805,7 +853,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.bin"},
 							{"filterName", "Embedding Files"},
-							{"dialogDefaultPath", Utils::FilePaths::checkpointDir},
+							{"dialogDefaultPath", Utils::FilePaths::embedDir},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for textual inversion embedding files"}
@@ -815,10 +863,8 @@ namespace ECS {
 			};
 		}
 
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::embedDir;
 		}
 
 		EmbeddingComponent& operator=(const EmbeddingComponent& other) {
