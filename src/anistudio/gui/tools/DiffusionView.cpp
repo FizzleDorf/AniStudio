@@ -4,6 +4,7 @@
 #include "UISchema.hpp"
 #include "PngMetadataUtils.hpp"
 #include "ContextMenuUtils.hpp"
+#include "DiffusionCallbackUtils.hpp"
 #include "utils.h"
 #include <ImGuiFileDialog.h>
 #include <png.h>
@@ -461,10 +462,12 @@ namespace GUI {
 		ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Queue")) {
 
-			int currentStep = 0;
-			int totalSteps = 0;
-			float time = 0.0f;
-			bool isProcessing = false;
+			// Get progress data from DiffusionCallbackUtils
+			const ProgressData& progressData = DiffusionCallbackUtils::GetProgressData();
+			int currentStep = progressData.currentStep;
+			int totalSteps = progressData.totalSteps;
+			float time = progressData.currentTime;
+			bool isProcessing = progressData.isProcessing;
 
 			if (isProcessing && totalSteps > 0) {
 				float progress = static_cast<float>(currentStep) / totalSteps;
@@ -742,20 +745,6 @@ namespace GUI {
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Exception during deserialization: " << e.what() << std::endl;
-		}
-	}
-
-	void DiffusionView::SaveMetadataToJson(const std::string& filepath) {
-		try {
-			nlohmann::json metadata = Serialize();
-			std::ofstream file(filepath);
-			if (file.is_open()) {
-				file << metadata.dump(4);
-				file.close();
-			}
-		}
-		catch (const std::exception& e) {
 			std::cerr << "Error saving metadata: " << e.what() << std::endl;
 		}
 	}
@@ -898,6 +887,20 @@ namespace GUI {
 		}
 		catch (const std::exception& e) {
 			std::cerr << "Error loading metadata: " << e.what() << std::endl;
+		}
+	}
+
+	void DiffusionView::SaveMetadataToJson(const std::string& filepath) {
+		try {
+			nlohmann::json metadata = Serialize();
+			std::ofstream file(filepath);
+			if (file.is_open()) {
+				file << metadata.dump(4);
+				file.close();
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error saving metadata: " << e.what() << std::endl;
 		}
 	}
 

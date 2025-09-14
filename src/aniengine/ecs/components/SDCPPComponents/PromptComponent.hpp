@@ -15,13 +15,11 @@ namespace ECS {
 				{"title", "Prompt Settings"},
 				{"type", "object"},
 				{"propertyOrder", {"posPrompt", "negPrompt", "normalize_input"}},
-				{"ui:separate_windows", true},
 				{"properties", {
 					{"posPrompt", {
 						{"type", "string"},
 						{"title", "Positive"},
-						{"ui:widget", "text_editor"},
-						{"ui:window", true},
+						{"ui:widget", "text_area"},
 						{"ui:window_name", "Positive Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},
@@ -31,8 +29,7 @@ namespace ECS {
 					{"negPrompt", {
 						{"type", "string"},
 						{"title", "Negative"},
-						{"ui:widget", "text_editor"},
-						{"ui:window", true},
+						{"ui:widget", "text_area"},
 						{"ui:window_name", "Negative Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},

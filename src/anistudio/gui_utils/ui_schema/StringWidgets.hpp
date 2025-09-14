@@ -25,6 +25,7 @@ namespace UISchema {
 		bool autoIndent = true;  // Note: Handled by mode, not directly configurable
 		bool showSearch = false;
 		bool showMenuBar = true;
+		bool showEditor = true;  // Control whether to display the Zep editor
 		std::string theme = "dark";
 		std::string mode = "standard";  // "standard" or "vim"
 		float fontSize = 14.0f;
@@ -109,6 +110,7 @@ namespace UISchema {
 			config.autoIndent = GetSchemaValue<bool>(options, "autoIndent", config.autoIndent);
 			config.showSearch = GetSchemaValue<bool>(options, "showSearch", config.showSearch);
 			config.showMenuBar = GetSchemaValue<bool>(options, "showMenuBar", config.showMenuBar);
+			config.showEditor = GetSchemaValue<bool>(options, "showEditor", config.showEditor);
 			config.theme = GetSchemaValue<std::string>(options, "theme", config.theme);
 			config.mode = GetSchemaValue<std::string>(options, "mode", config.mode);
 			config.fontSize = GetSchemaValue<float>(options, "fontSize", config.fontSize);
@@ -116,7 +118,7 @@ namespace UISchema {
 			return config;
 		}
 
-		// Main Zep editor render function with bidirectional synchronization
+		// Main Zep editor render function with bidirectional synchronization - ALWAYS renders inline
 		static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			auto editor = GetOrCreateEditor(value);
 			if (!editor) {
@@ -137,6 +139,18 @@ namespace UISchema {
 				configuredEditors.insert(uniqueKey);
 			}
 
+			// Check config for display preference
+			const ZepEditorConfig& config = configMap[uniqueKey];
+			if (!config.showEditor) {
+				ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Editor hidden");
+				return false;
+			}
+
+			// Display parameter name above the editor (no label on the widget itself)
+			if (!label.empty() && label != "##value") {
+				ImGui::Text("%s", label.c_str());
+			}
+
 			// CRITICAL FIX: Check if component value changed externally (e.g., from metadata loading)
 			auto lastValueIt = lastKnownValues.find(uniqueKey);
 			if (lastValueIt != lastKnownValues.end() && lastValueIt->second != *value) {
@@ -153,8 +167,8 @@ namespace UISchema {
 			if (contentSize.x < 100) contentSize.x = 100;
 			if (contentSize.y < 100) contentSize.y = 100;
 
-			// Let ZepUtils handle child window creation, menu bar, focus, etc.
-			editor->Render(ImVec2(0, 0), contentSize, true);  // true = create child window
+			// ALWAYS render inline - never create child window
+			editor->Render(ImVec2(0, 0), contentSize, false);  // false = no child window
 
 			// Check if editor content changed and update component
 			std::string currentEditorText = editor->GetText();
@@ -233,14 +247,9 @@ namespace UISchema {
 			return changed;
 		}
 
-		// Add proper textarea implementation for comparison
+		// Enhanced textarea implementation with horizontal resizing
 		static bool RenderTextArea(const std::string& label, std::string* value, const nlohmann::json& options = {}) {
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
-
-			// Calculate height based on rows
-			int rows = GetSchemaValue<int>(options, "rows", 5);
-			float lineHeight = ImGui::GetTextLineHeight();
-			float height = lineHeight * rows + ImGui::GetStyle().FramePadding.y * 2.0f;
 
 			// Calculate max buffer size - default or from schema
 			size_t bufferSize = GetSchemaValue<size_t>(options, "maxLength", 4096);
@@ -251,21 +260,39 @@ namespace UISchema {
 			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
 			buffer[bufferSize - 1] = '\0';
 
-			// Render the multiline input widget
-			bool changed = ImGui::InputTextMultiline(
-				label.c_str(),
-				buffer.data(),
-				bufferSize,
-				ImVec2(-FLT_MIN, height),
-				flags
-			);
-
-			// If changed, update the string
-			if (changed) {
-				*value = buffer.data();
+			// Display label using ImGui::Text if label is not empty and not hidden
+			if (!label.empty() && label != "##value") {
+				ImGui::Text("%s", label.c_str());
 			}
 
-			return changed;
+			// Get minimum height
+			float minHeight = ImGui::GetTextLineHeight() * 3.0f + ImGui::GetStyle().FramePadding.y * 2.0f;
+
+			// Get schema-defined or default height
+			int rows = GetSchemaValue<int>(options, "rows", 5);
+			float initialHeight = ImGui::GetTextLineHeight() * rows + ImGui::GetStyle().FramePadding.y * 2.0f;
+
+			// Use child window for vertical resizing with ResizeY flag
+			if (ImGui::BeginChild(label.c_str(), ImVec2(0, std::max(minHeight, initialHeight)), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY)) {
+				// Render the multiline input widget without label (already displayed above)
+				bool changed = ImGui::InputTextMultiline(
+					("##textarea"+label).c_str(),
+					buffer.data(),
+					bufferSize,
+					ImVec2(-1.0f, -1.0f), // Use full child window area
+					flags | ImGuiInputTextFlags_AllowTabInput
+				);
+
+				if (changed) {
+					*value = buffer.data();
+				}
+
+				ImGui::EndChild();
+				return changed;
+			}
+
+			ImGui::EndChild();
+			return false;
 		}
 
 		// Enhanced render method with proper widget type handling
@@ -283,7 +310,7 @@ namespace UISchema {
 				return RenderZepEditorStandard(label, value, schema);
 			}
 			else if (widgetType == "text_area") {
-				// Use regular ImGui textarea for simple multiline input
+				// Use enhanced textarea with horizontal drag resizing
 				return RenderTextArea(label, value, schema);
 			}
 			else {
