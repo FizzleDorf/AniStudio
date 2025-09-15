@@ -38,12 +38,10 @@ If you use this project under the LGPL-3.0, you must:
 For full details, see the [LICENSE-LGPL-3.0.txt](LICENSE-LGPL-3.0.txt) file.
 
 ### Commercial License
-If you prefer to use this project under a commercial license, please contact us at legal@kframe.ai to discuss terms. The commercial license allows:
+If you prefer to use this project under a commercial license, please contact us at legal@kemonotech.ai to discuss terms. The commercial license allows:
 - Static linking of the library in proprietary software.
 - No obligation to provide source code.
 - Priority support and additional benefits.
-
-For more details, see the [LICENSE-COMMERCIAL.txt](LICENSE-COMMERCIAL.txt) file or contact legal@kframe.ai.
 
 
 ## Purpose

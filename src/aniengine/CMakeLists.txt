@@ -1,4 +1,4 @@
-# CMakeLists.txt for AniEngine - Fixed CUDA Backend Linking
+# CMakeLists.txt for AniEngine - FIXED Backend Linking
 cmake_minimum_required(VERSION 3.12)
 project(AniEngine VERSION 1.0.0 LANGUAGES CXX)
 
@@ -25,38 +25,37 @@ if(WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# Set stable-diffusion.cpp backend options based on AniEngine options
-set(SD_CUDA ${ANIENGINE_ENABLE_CUDA})
-set(SD_VULKAN ${ANIENGINE_ENABLE_VULKAN})
-set(SD_HIPBLAS ${ANIENGINE_ENABLE_HIPBLAS})
-set(SD_METAL ${ANIENGINE_ENABLE_METAL})
-set(SD_OPENCL ${ANIENGINE_ENABLE_OPENCL})
-set(SD_SYCL ${ANIENGINE_ENABLE_SYCL})
-set(SD_MUSA ${ANIENGINE_ENABLE_MUSA})
-set(SD_FAST_SOFTMAX ${ANIENGINE_ENABLE_FAST_SOFTMAX})
+# CRITICAL: Set stable-diffusion.cpp backend options BEFORE adding subdirectory
+set(SD_CUDA ${ANIENGINE_ENABLE_CUDA} CACHE BOOL "CUDA backend for stable-diffusion" FORCE)
+set(SD_VULKAN ${ANIENGINE_ENABLE_VULKAN} CACHE BOOL "Vulkan backend for stable-diffusion" FORCE)
+set(SD_HIPBLAS ${ANIENGINE_ENABLE_HIPBLAS} CACHE BOOL "HipBLAS backend for stable-diffusion" FORCE)
+set(SD_METAL ${ANIENGINE_ENABLE_METAL} CACHE BOOL "Metal backend for stable-diffusion" FORCE)
+set(SD_OPENCL ${ANIENGINE_ENABLE_OPENCL} CACHE BOOL "OpenCL backend for stable-diffusion" FORCE)
+set(SD_SYCL ${ANIENGINE_ENABLE_SYCL} CACHE BOOL "SYCL backend for stable-diffusion" FORCE)
+set(SD_MUSA ${ANIENGINE_ENABLE_MUSA} CACHE BOOL "MUSA backend for stable-diffusion" FORCE)
+set(SD_FAST_SOFTMAX ${ANIENGINE_ENABLE_FAST_SOFTMAX} CACHE BOOL "Fast softmax for stable-diffusion" FORCE)
+
+# CRITICAL: Also set GGML options to match
+set(GGML_CUDA ${ANIENGINE_ENABLE_CUDA} CACHE BOOL "GGML CUDA" FORCE)
+set(GGML_VULKAN ${ANIENGINE_ENABLE_VULKAN} CACHE BOOL "GGML Vulkan" FORCE)
+set(GGML_HIPBLAS ${ANIENGINE_ENABLE_HIPBLAS} CACHE BOOL "GGML HipBLAS" FORCE)
+set(GGML_METAL ${ANIENGINE_ENABLE_METAL} CACHE BOOL "GGML Metal" FORCE)
+set(GGML_OPENCL ${ANIENGINE_ENABLE_OPENCL} CACHE BOOL "GGML OpenCL" FORCE)
+set(GGML_SYCL ${ANIENGINE_ENABLE_SYCL} CACHE BOOL "GGML SYCL" FORCE)
+set(GGML_MUSA ${ANIENGINE_ENABLE_MUSA} CACHE BOOL "GGML MUSA" FORCE)
 
 # Backend setup and validation
 if(ANIENGINE_ENABLE_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    set(CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures")
+    set(CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures" FORCE)
     add_definitions(-DSD_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "AniEngine: CUDA backend enabled")
     
-    # Verify CUDA toolkit components
     if(NOT CUDAToolkit_FOUND)
         message(FATAL_ERROR "CUDA toolkit not found!")
-    endif()
-    
-    # Check for required CUDA libraries
-    if(NOT TARGET CUDA::cudart)
-        message(FATAL_ERROR "CUDA runtime library not found!")
-    endif()
-    
-    if(NOT TARGET CUDA::cublas)
-        message(FATAL_ERROR "CUDA BLAS library not found!")
     endif()
 endif()
 
@@ -67,6 +66,15 @@ if(ANIENGINE_ENABLE_VULKAN)
         message(FATAL_ERROR "Vulkan SDK not found! Install from https://www.lunarg.com/vulkan-sdk/")
     endif()
     message(STATUS "AniEngine: Vulkan backend enabled")
+endif()
+
+if(ANIENGINE_ENABLE_OPENCL)
+    add_definitions(-DSD_USE_OPENCL)
+    find_package(OpenCL REQUIRED)
+    if(NOT OpenCL_FOUND)
+        message(FATAL_ERROR "OpenCL not found - make sure OpenCL headers and ICD loader are installed")
+    endif()
+    message(STATUS "AniEngine: OpenCL backend enabled")
 endif()
 
 if(ANIENGINE_ENABLE_HIPBLAS)
@@ -82,20 +90,9 @@ if(ANIENGINE_ENABLE_METAL)
     endif()
 endif()
 
-if(ANIENGINE_ENABLE_OPENCL)
-    add_definitions(-DSD_USE_OPENCL)
-    find_package(OpenCL QUIET)
-    if(NOT OpenCL_FOUND)
-        message(WARNING "OpenCL not found - make sure OpenCL headers and ICD loader are installed")
-    endif()
-    message(STATUS "AniEngine: OpenCL backend enabled")
-endif()
-
 if(ANIENGINE_ENABLE_SYCL)
     add_definitions(-DSD_USE_SYCL)
     message(STATUS "AniEngine: SYCL backend enabled")
-    message(STATUS "Run 'source /opt/intel/oneapi/setvars.sh' before building (Linux)")
-    message(STATUS "Run oneAPI setvars.bat before building (Windows)")
 endif()
 
 if(ANIENGINE_ENABLE_MUSA)
@@ -118,44 +115,26 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     find_package(pybind11 REQUIRED)
     find_package(semver REQUIRED)
     
-    # Add external dependencies when building standalone
-    if(EXISTS "${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp")
-        # Pass backend options to stable-diffusion.cpp before adding subdirectory
-        set(SD_CUDA ${SD_CUDA} CACHE BOOL "CUDA backend for stable-diffusion" FORCE)
-        set(SD_VULKAN ${SD_VULKAN} CACHE BOOL "Vulkan backend for stable-diffusion" FORCE)
-        set(SD_HIPBLAS ${SD_HIPBLAS} CACHE BOOL "HipBLAS backend for stable-diffusion" FORCE)
-        set(SD_METAL ${SD_METAL} CACHE BOOL "Metal backend for stable-diffusion" FORCE)
-        set(SD_OPENCL ${SD_OPENCL} CACHE BOOL "OpenCL backend for stable-diffusion" FORCE)
-        set(SD_SYCL ${SD_SYCL} CACHE BOOL "SYCL backend for stable-diffusion" FORCE)
-        set(SD_MUSA ${SD_MUSA} CACHE BOOL "MUSA backend for stable-diffusion" FORCE)
-        set(SD_FAST_SOFTMAX ${SD_FAST_SOFTMAX} CACHE BOOL "Fast softmax for stable-diffusion" FORCE)
-        
-        add_subdirectory(${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp ${CMAKE_BINARY_DIR}/stable-diffusion)
-    else()
-        message(FATAL_ERROR "stable-diffusion.cpp not found. Required for AniEngine.")
-    endif()
+    # External path for standalone
+    set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/../../external")
 else()
-    # Parent project build - add external dependencies here to avoid rebuilding
-    if(NOT TARGET stable-diffusion)
-        # Pass backend options to stable-diffusion.cpp before adding subdirectory
-        set(SD_CUDA ${SD_CUDA} CACHE BOOL "CUDA backend for stable-diffusion" FORCE)
-        set(SD_VULKAN ${SD_VULKAN} CACHE BOOL "Vulkan backend for stable-diffusion" FORCE)
-        set(SD_HIPBLAS ${SD_HIPBLAS} CACHE BOOL "HipBLAS backend for stable-diffusion" FORCE)
-        set(SD_METAL ${SD_METAL} CACHE BOOL "Metal backend for stable-diffusion" FORCE)
-        set(SD_OPENCL ${SD_OPENCL} CACHE BOOL "OpenCL backend for stable-diffusion" FORCE)
-        set(SD_SYCL ${SD_SYCL} CACHE BOOL "SYCL backend for stable-diffusion" FORCE)
-        set(SD_MUSA ${SD_MUSA} CACHE BOOL "MUSA backend for stable-diffusion" FORCE)
-        set(SD_FAST_SOFTMAX ${SD_FAST_SOFTMAX} CACHE BOOL "Fast softmax for stable-diffusion" FORCE)
-        
-        add_subdirectory(${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp ${CMAKE_BINARY_DIR}/external/stable-diffusion)
-    endif()
+    # Parent project external path
+    set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
+endif()
+
+# Add stable-diffusion.cpp subdirectory - ONLY if not already added
+if(NOT TARGET stable-diffusion AND EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp")
+    message(STATUS "Adding stable-diffusion.cpp from: ${EXTERNAL_DIR}/stable-diffusion.cpp")
+    add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion")
+else()
+    message(STATUS "stable-diffusion.cpp already available or not found")
 endif()
 
 # Collect source files including plugin system
 file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"  # Include integrated plugin system
+    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"
 )
 
 # Add the main AniEngine implementation
@@ -183,63 +162,44 @@ set_target_properties(AniEngineCore PROPERTIES
 # Include directories
 target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    #ecs base
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/base>
-    # systems
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/systems>
-    # components
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/SDCPPComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ImageComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/VideoComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ScriptComponents>
-    # plugins (integrated)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
-    # utils
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/defaults>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/media>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/scripts>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/sdcpp>
-    # interface
     $<INSTALL_INTERFACE:include/aniengine>
 )
 
 # Add root include directory for public headers
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    # Standalone build - include directory is at ../../include
     target_include_directories(AniEngineCore PUBLIC
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/../../include>
     )
 else()
-    # Parent project build - include directory is at root/include
     target_include_directories(AniEngineCore PUBLIC
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
     )
 endif()
 
-# External includes (when building standalone)
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    target_include_directories(AniEngineCore PUBLIC
-        ${CMAKE_SOURCE_DIR}/../../external/glm
-        ${CMAKE_SOURCE_DIR}/../../external/stable-diffusion.cpp
-        ${CMAKE_SOURCE_DIR}/../../external/nlohmann_json
-        ${CMAKE_SOURCE_DIR}/../../external/cr/cr
-    )
-else()
-    # Parent project includes
-    target_include_directories(AniEngineCore PUBLIC
-        ${CMAKE_SOURCE_DIR}/external/glm
-        ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
-        ${CMAKE_SOURCE_DIR}/external/nlohmann_json
-        ${CMAKE_SOURCE_DIR}/external/cr/cr
-    )
-endif()
+# External includes
+target_include_directories(AniEngineCore PUBLIC
+    "${EXTERNAL_DIR}/glm"
+    "${EXTERNAL_DIR}/stable-diffusion.cpp"
+    "${EXTERNAL_DIR}/nlohmann_json"
+    "${EXTERNAL_DIR}/cr/cr"
+)
 
-# Link libraries - FIXED CUDA LINKING
+# Link base libraries
 target_link_libraries(AniEngineCore PUBLIC
-    # External dependencies
     opencv::opencv
     ZLIB::ZLIB
     PNG::PNG
@@ -255,7 +215,7 @@ target_link_libraries(AniEngineCore PUBLIC
     stable-diffusion
 )
 
-# CUDA support - CRITICAL FIX: Link all required CUDA libraries
+# CUDA support - COMPLETE LINKING
 if(ANIENGINE_ENABLE_CUDA)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
     target_link_libraries(AniEngineCore PUBLIC 
@@ -266,92 +226,89 @@ if(ANIENGINE_ENABLE_CUDA)
         CUDA::cufft
     )
     
-    # For stable-diffusion.cpp CUDA backend, also need these libraries
-    # Check if ggml-cuda target exists (from stable-diffusion.cpp)
-    if(TARGET ggml-cuda)
-        target_link_libraries(AniEngineCore PUBLIC ggml-cuda)
-        message(STATUS "Linked ggml-cuda backend")
-    else()
-        message(WARNING "ggml-cuda target not found - CUDA backend may not link properly")
-    endif()
-    
-    # Alternative: Link the backend library directly if it exists
-    if(TARGET ggml-backend-cuda)
-        target_link_libraries(AniEngineCore PUBLIC ggml-backend-cuda)
-        message(STATUS "Linked ggml-backend-cuda")
-    endif()
+    # Link all possible CUDA backend targets
+    foreach(CUDA_TARGET ggml-cuda ggml_cuda ggml-backend-cuda common-cuda)
+        if(TARGET ${CUDA_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${CUDA_TARGET})
+            message(STATUS "Linked CUDA backend: ${CUDA_TARGET}")
+        endif()
+    endforeach()
 endif()
 
-# Vulkan support
+# Vulkan support - COMPLETE LINKING
 if(ANIENGINE_ENABLE_VULKAN)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_VULKAN)
+    target_link_libraries(AniEngineCore PUBLIC Vulkan::Vulkan)
     
-    # Link Vulkan backend if available
-    if(TARGET ggml-vulkan)
-        target_link_libraries(AniEngineCore PUBLIC ggml-vulkan)
-        message(STATUS "Linked ggml-vulkan backend")
-    endif()
-    
-    if(TARGET ggml-backend-vulkan)
-        target_link_libraries(AniEngineCore PUBLIC ggml-backend-vulkan)
-        message(STATUS "Linked ggml-backend-vulkan")
-    endif()
+    # Link all possible Vulkan backend targets
+    foreach(VULKAN_TARGET ggml-vulkan ggml_vulkan ggml-backend-vulkan common-vulkan)
+        if(TARGET ${VULKAN_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${VULKAN_TARGET})
+            message(STATUS "Linked Vulkan backend: ${VULKAN_TARGET}")
+        endif()
+    endforeach()
 endif()
 
-# OpenCL support
-if(ANIENGINE_ENABLE_OPENCL AND OpenCL_FOUND)
+# OpenCL support - COMPLETE LINKING
+if(ANIENGINE_ENABLE_OPENCL)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_OPENCL)
     target_link_libraries(AniEngineCore PUBLIC OpenCL::OpenCL)
     
-    # Link OpenCL backend if available
-    if(TARGET ggml-opencl)
-        target_link_libraries(AniEngineCore PUBLIC ggml-opencl)
-        message(STATUS "Linked ggml-opencl backend")
-    endif()
+    # Link all possible OpenCL backend targets
+    foreach(OPENCL_TARGET ggml-opencl ggml_opencl ggml-backend-opencl common-opencl)
+        if(TARGET ${OPENCL_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${OPENCL_TARGET})
+            message(STATUS "Linked OpenCL backend: ${OPENCL_TARGET}")
+        endif()
+    endforeach()
 endif()
 
 # Metal support
 if(ANIENGINE_ENABLE_METAL)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_METAL)
     
-    # Link Metal backend if available
-    if(TARGET ggml-metal)
-        target_link_libraries(AniEngineCore PUBLIC ggml-metal)
-        message(STATUS "Linked ggml-metal backend")
-    endif()
+    foreach(METAL_TARGET ggml-metal ggml_metal ggml-backend-metal common-metal)
+        if(TARGET ${METAL_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${METAL_TARGET})
+            message(STATUS "Linked Metal backend: ${METAL_TARGET}")
+        endif()
+    endforeach()
 endif()
 
 # HipBLAS support
 if(ANIENGINE_ENABLE_HIPBLAS)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # HipBLAS uses CUDA define
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
     
-    # Link HipBLAS backend if available
-    if(TARGET ggml-hipblas)
-        target_link_libraries(AniEngineCore PUBLIC ggml-hipblas)
-        message(STATUS "Linked ggml-hipblas backend")
-    endif()
+    foreach(HIPBLAS_TARGET ggml-hipblas ggml_hipblas ggml-backend-hipblas common-hipblas)
+        if(TARGET ${HIPBLAS_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${HIPBLAS_TARGET})
+            message(STATUS "Linked HipBLAS backend: ${HIPBLAS_TARGET}")
+        endif()
+    endforeach()
 endif()
 
 # SYCL support
 if(ANIENGINE_ENABLE_SYCL)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_SYCL)
     
-    # Link SYCL backend if available
-    if(TARGET ggml-sycl)
-        target_link_libraries(AniEngineCore PUBLIC ggml-sycl)
-        message(STATUS "Linked ggml-sycl backend")
-    endif()
+    foreach(SYCL_TARGET ggml-sycl ggml_sycl ggml-backend-sycl common-sycl)
+        if(TARGET ${SYCL_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${SYCL_TARGET})
+            message(STATUS "Linked SYCL backend: ${SYCL_TARGET}")
+        endif()
+    endforeach()
 endif()
 
 # MUSA support
 if(ANIENGINE_ENABLE_MUSA)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # MUSA uses CUDA define
+    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
     
-    # Link MUSA backend if available
-    if(TARGET ggml-musa)
-        target_link_libraries(AniEngineCore PUBLIC ggml-musa)
-        message(STATUS "Linked ggml-musa backend")
-    endif()
+    foreach(MUSA_TARGET ggml-musa ggml_musa ggml-backend-musa common-musa)
+        if(TARGET ${MUSA_TARGET})
+            target_link_libraries(AniEngineCore PUBLIC ${MUSA_TARGET})
+            message(STATUS "Linked MUSA backend: ${MUSA_TARGET}")
+        endif()
+    endforeach()
 endif()
 
 # Compile definitions
@@ -361,39 +318,29 @@ target_compile_definitions(AniEngineCore PUBLIC
     $<$<CONFIG:Release>:NDEBUG>
 )
 
-# Backend-specific compile definitions
-if(ANIENGINE_ENABLE_VULKAN)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_VULKAN)
-endif()
-
-if(ANIENGINE_ENABLE_HIPBLAS)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # HipBLAS uses CUDA define
-endif()
-
-if(ANIENGINE_ENABLE_METAL)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_METAL)
-endif()
-
-if(ANIENGINE_ENABLE_OPENCL)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_OPENCL)
-endif()
-
-if(ANIENGINE_ENABLE_SYCL)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_SYCL)
-endif()
-
-if(ANIENGINE_ENABLE_MUSA)
-    target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)  # MUSA uses CUDA define
-endif()
-
 # Create an alias for consistent naming
 add_library(AniEngine::AniEngineCore ALIAS AniEngineCore)
 
+# Debug: Print all backend targets that were found
+message(STATUS "")
+message(STATUS "AniEngine Backend Linking Summary:")
+get_directory_property(ALL_TARGETS BUILDSYSTEM_TARGETS)
+foreach(TARGET_NAME ${ALL_TARGETS})
+    if(TARGET ${TARGET_NAME})
+        if(${TARGET_NAME} MATCHES ".*ggml.*" OR ${TARGET_NAME} MATCHES ".*cuda.*" OR ${TARGET_NAME} MATCHES ".*vulkan.*" OR ${TARGET_NAME} MATCHES ".*opencl.*")
+            get_target_property(TARGET_TYPE ${TARGET_NAME} TYPE)
+            if(TARGET_TYPE MATCHES "STATIC_LIBRARY|SHARED_LIBRARY")
+                message(STATUS "  Available backend: ${TARGET_NAME} (${TARGET_TYPE})")
+            endif()
+        endif()
+    endif()
+endforeach()
+
+message(STATUS "")
 message(STATUS "AniEngine configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Library type: ${BUILD_SHARED_LIBS}")
-message(STATUS "  Plugin Support: INTEGRATED (engine/plugins)")
 message(STATUS "")
 message(STATUS "Stable Diffusion Backends:")
 message(STATUS "  CUDA: ${ANIENGINE_ENABLE_CUDA}")
@@ -406,15 +353,3 @@ message(STATUS "  MUSA: ${ANIENGINE_ENABLE_MUSA}")
 if(ANIENGINE_ENABLE_FAST_SOFTMAX)
     message(STATUS "  Fast Softmax: ENABLED")
 endif()
-
-# Debug: Print all targets created by stable-diffusion.cpp
-get_directory_property(TARGETS BUILDSYSTEM_TARGETS)
-message(STATUS "Available targets from stable-diffusion.cpp:")
-foreach(TARGET ${TARGETS})
-    if(TARGET ${TARGET})
-        get_target_property(TARGET_TYPE ${TARGET} TYPE)
-        if(TARGET_TYPE MATCHES "STATIC_LIBRARY|SHARED_LIBRARY|EXECUTABLE")
-            message(STATUS "  - ${TARGET} (${TARGET_TYPE})")
-        endif()
-    endif()
-endforeach()

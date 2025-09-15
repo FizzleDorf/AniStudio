@@ -1,5 +1,5 @@
 *Note: this is not the definative ToA, all requests for a commercial license are written on a case to case basis during this time.
-for more info, please contact legal@kframe.ai.
+for more info, please contact legal@kemonotech.ai.
 
 COMMERCIAL LICENSE AGREEMENT
 This Commercial License Agreement ("Agreement") is entered into as of 2025-02-28 by and between:
@@ -56,4 +56,4 @@ This Agreement constitutes the entire understanding between the parties with res
 9. Contact Information
 For inquiries about this Agreement or to purchase a commercial license, please contact:
 
-Email: legal@kframe.ai
+Email: legal@kemonotech.ai

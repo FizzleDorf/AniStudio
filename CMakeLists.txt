@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0091 NEW)
 
-project(AniStudio VERSION 1.0.0)
+project(AniStudio VERSION 0.2.0)
 
 # Build options
 option(BUILD_ANIENGINE "Build AniEngine library" ON)
@@ -75,9 +75,9 @@ endif()
 
 if(SD_OPENCL)
     add_definitions(-DSD_USE_OPENCL)
-    find_package(OpenCL QUIET)
+    find_package(OpenCL REQUIRED)
     if(NOT OpenCL_FOUND)
-        message(WARNING "OpenCL not found - make sure OpenCL headers and ICD loader are installed")
+        message(FATAL_ERROR "OpenCL not found - make sure OpenCL headers and ICD loader are installed")
     endif()
 endif()
 
@@ -222,13 +222,21 @@ endif()
 # External libraries will be built by the individual library CMakeLists
 # This avoids rebuilding them when only one library changes
 
-# Pass options to subdirectories
-set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS})
-set(ANIENGINE_ENABLE_CUDA ${SD_CUDA})
-set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS})
-set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE})
+# Pass options to subdirectories - FIXED TO PROPERLY PASS BACKEND OPTIONS
+set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniEngine shared" FORCE)
+set(ANIENGINE_ENABLE_CUDA ${SD_CUDA} CACHE BOOL "AniEngine CUDA" FORCE)
+set(ANIENGINE_ENABLE_VULKAN ${SD_VULKAN} CACHE BOOL "AniEngine Vulkan" FORCE)
+set(ANIENGINE_ENABLE_HIPBLAS ${SD_HIPBLAS} CACHE BOOL "AniEngine HipBLAS" FORCE)
+set(ANIENGINE_ENABLE_METAL ${SD_METAL} CACHE BOOL "AniEngine Metal" FORCE)
+set(ANIENGINE_ENABLE_OPENCL ${SD_OPENCL} CACHE BOOL "AniEngine OpenCL" FORCE)
+set(ANIENGINE_ENABLE_SYCL ${SD_SYCL} CACHE BOOL "AniEngine SYCL" FORCE)
+set(ANIENGINE_ENABLE_MUSA ${SD_MUSA} CACHE BOOL "AniEngine MUSA" FORCE)
+set(ANIENGINE_ENABLE_FAST_SOFTMAX ${SD_FAST_SOFTMAX} CACHE BOOL "AniEngine Fast Softmax" FORCE)
 
-# Add subdirectory libraries (removed aniplugins)
+set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniStudio shared" FORCE)
+set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE} CACHE BOOL "AniStudio Zep" FORCE)
+
+# Add subdirectory libraries
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
 endif()
