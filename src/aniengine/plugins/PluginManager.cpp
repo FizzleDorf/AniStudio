@@ -663,6 +663,10 @@ namespace Plugins {
 		return id;
 	}
 
+	size_t PluginManager::registerView(const std::string& pluginName, const ViewDescriptor& desc) {
+		return 0;
+	}
+
 	void PluginManager::cleanupPluginComponents(const std::string& pluginName) {
 		auto it = pluginComponents.find(pluginName);
 		if (it == pluginComponents.end()) return;
@@ -687,6 +691,13 @@ namespace Plugins {
 			entityManager.UnregisterPluginSystem(id);
 		}
 		pluginSystems.erase(it);
+	}
+
+	// ADDED: Missing cleanupPluginViews method implementation
+	void PluginManager::cleanupPluginViews(const std::string& pluginName) {
+		// Base implementation - no-op since base PluginManager doesn't handle views
+		// This is overridden in StudioPluginManager for actual cleanup
+		std::cout << "[PluginManager] Base cleanupPluginViews called for: " << pluginName << std::endl;
 	}
 
 	void* PluginManager::loadDynamicLibrary(const std::string& path) {

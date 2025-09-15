@@ -1,5 +1,5 @@
 #include "ConvertView.hpp"
-#include "../events/Events.hpp"
+#include "Events.hpp"
 #include <iostream>
 
 namespace GUI {

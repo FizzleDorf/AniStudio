@@ -16,7 +16,8 @@ namespace GUI {
 		// Set default project path
 		std::string defaultPath = projectMgr.GetDefaultProjectPath();
 		if (!defaultPath.empty()) {
-			strncpy_s(projectPathBuffer, defaultPath.c_str(), sizeof(projectPathBuffer) - 1);
+			strncpy(projectPathBuffer, defaultPath.c_str(), sizeof(projectPathBuffer) - 1);
+			projectPathBuffer[sizeof(projectPathBuffer) - 1] = '\0'; // Ensure null termination
 		}
 	}
 

@@ -196,8 +196,9 @@ namespace GUI {
 		return ViewTypeRegistry::RegisterType<T>(typeName);
 	}
 
+	// FIXED: Template specialization syntax - removed "inline static"
 	template <>
-	inline static const ViewTypeID ViewType<BaseView>() noexcept {
+	const ViewTypeID ViewType<BaseView>() noexcept {
 		static const ViewTypeID INVALID_VIEW_TYPE_ID = SIZE_MAX;
 		return INVALID_VIEW_TYPE_ID;
 	}

@@ -5,7 +5,7 @@
 #include "SDCPPSettings.hpp"
 #include "ImGuiStyleSettings.hpp"
 #include "ImGuiRenderSettings.hpp"
-#include "../events/Events.hpp"
+#include "Events.hpp"
 #include <iostream>
 #include <algorithm>
 #include <imgui_internal.h>

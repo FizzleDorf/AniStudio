@@ -1,7 +1,7 @@
 #include "SequencerView.hpp"
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 SequencerView::SequencerView(ECS::EntityManager &entityMgr) : BaseView(entityMgr), currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {

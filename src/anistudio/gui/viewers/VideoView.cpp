@@ -85,7 +85,7 @@ namespace GUI {
 			}
 		}
 
-		// CRITICAL FIX: Check for newly generated videos from SDCPPSystem
+		// Check for newly generated videos from SDCPPSystem
 		auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
 		if (sdcppSystem) {
 			ECS::EntityID latestGenerated = sdcppSystem->GetLastGeneratedVideo();
@@ -195,7 +195,7 @@ namespace GUI {
 
 				// Show if this is a newly generated video
 				if (selectedEntityID == lastGeneratedVideoID) {
-					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Åö NEWLY GENERATED");
+					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "ÔøΩÔøΩ NEWLY GENERATED");
 				}
 
 				ImGui::Separator();
@@ -405,7 +405,7 @@ namespace GUI {
 
 				std::string displayText = std::to_string(i) + ": " + TruncateFilename(videoComp.fileName, imageSize.x);
 				if (entityID == lastGeneratedVideoID) {
-					displayText += " Åö";
+					displayText += " ÔøΩÔøΩ";
 				}
 				ImGui::Text("%s", displayText.c_str());
 				ImGui::Text("%.0f fps, %d frames", videoComp.fps, videoComp.frameCount);

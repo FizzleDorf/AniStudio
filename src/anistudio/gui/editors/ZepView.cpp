@@ -1,7 +1,7 @@
 #include "ZepView.hpp"
 #include <algorithm>
 #include <iostream>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 

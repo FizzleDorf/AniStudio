@@ -1,5 +1,5 @@
 #include "UpscaleView.hpp"
-#include "../events/Events.hpp"
+#include "Events.hpp"
 #include "Constants.hpp"
 #include "ImageUtils.hpp"
 #include "ImageSystem.hpp"

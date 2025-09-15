@@ -1,7 +1,7 @@
 #include "ModelView.hpp"
 #include <iostream>
 #include <algorithm>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 

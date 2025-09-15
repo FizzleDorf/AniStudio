@@ -1,7 +1,7 @@
 #include "NodeView.hpp"
 #include "imgui.h"
 #include <iostream>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 
@@ -227,8 +227,8 @@ namespace GUI {
         switch (m_operation) {
         case Add: opSymbol = "+"; break;
         case Subtract: opSymbol = "-"; break;
-        case Multiply: opSymbol = "Å~"; break;
-        case Divide: opSymbol = "ÅÄ"; break;
+        case Multiply: opSymbol = "ÔøΩ~"; break;
+        case Divide: opSymbol = "ÔøΩÔøΩ"; break;
         }
 
         float a = 0.0f;

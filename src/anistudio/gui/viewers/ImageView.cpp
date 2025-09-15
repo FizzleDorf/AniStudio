@@ -3,7 +3,7 @@
 #include "ImGuiFileDialog.h"
 #include "Events.hpp"
 #include <algorithm>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 

@@ -1,5 +1,5 @@
 #include "DebugView.hpp"
-#include "../Events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 

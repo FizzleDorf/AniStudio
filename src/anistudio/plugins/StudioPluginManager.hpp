@@ -45,6 +45,9 @@ namespace Plugins {
 		// Override to handle view registration
 		GUI::ViewTypeID registerView(const std::string& pluginName, const ViewDescriptor& desc) override;
 
+		const std::string& getStagingDirectory() const { return stagingDirectory; }
+
+
 	protected:
 		// Override to clean up views
 		void cleanupPluginViews(const std::string& pluginName) override;

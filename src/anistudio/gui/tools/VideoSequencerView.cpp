@@ -4,7 +4,7 @@
 #include "ImGuiFileDialog.h"
 #include <opencv2/opencv.hpp>
 #include <iostream>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 

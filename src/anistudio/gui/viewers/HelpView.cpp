@@ -3,7 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <sstream>
-#include "../Events/Events.hpp"
+#include "Events.hpp"
 
 #ifdef _WIN32
 #include <windows.h>
