@@ -15,6 +15,7 @@
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
+#include "DiffusionCallbackUtils.hpp"
 #include "ImGuiSettingsUtil.hpp"
 #include "Events.hpp"
 #include <iostream>
@@ -31,6 +32,7 @@ namespace ANI {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
+		GUI::DiffusionCallbackUtils::InitializeCallbacks();
 	}
 
 	StudioCore::~StudioCore() {
