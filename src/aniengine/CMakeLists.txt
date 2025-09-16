@@ -1,6 +1,9 @@
-# CMakeLists.txt for AniEngine - FIXED Backend Linking
 cmake_minimum_required(VERSION 3.12)
+cmake_policy(SET CMP0091 NEW)
 project(AniEngine VERSION 1.0.0 LANGUAGES CXX)
+
+# Use dynamic runtime to match parent project
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 # Build options
 option(ANIENGINE_BUILD_SHARED "Build AniEngine as shared library" OFF)
@@ -25,7 +28,7 @@ if(WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# CRITICAL: Set stable-diffusion.cpp backend options BEFORE adding subdirectory
+# CRITICAL: Force stable-diffusion.cpp to use same runtime
 set(SD_CUDA ${ANIENGINE_ENABLE_CUDA} CACHE BOOL "CUDA backend for stable-diffusion" FORCE)
 set(SD_VULKAN ${ANIENGINE_ENABLE_VULKAN} CACHE BOOL "Vulkan backend for stable-diffusion" FORCE)
 set(SD_HIPBLAS ${ANIENGINE_ENABLE_HIPBLAS} CACHE BOOL "HipBLAS backend for stable-diffusion" FORCE)
@@ -49,10 +52,14 @@ if(ANIENGINE_ENABLE_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    set(CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures" FORCE)
+    
+    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+        set(CMAKE_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA architectures" FORCE)
+    endif()
+    
     add_definitions(-DSD_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
-    message(STATUS "AniEngine: CUDA backend enabled")
+    message(STATUS "AniEngine: CUDA backend enabled with architectures: ${CMAKE_CUDA_ARCHITECTURES}")
     
     if(NOT CUDAToolkit_FOUND)
         message(FATAL_ERROR "CUDA toolkit not found!")
@@ -78,7 +85,7 @@ if(ANIENGINE_ENABLE_OPENCL)
 endif()
 
 if(ANIENGINE_ENABLE_HIPBLAS)
-    add_definitions(-DSD_USE_CUDA)  # HipBLAS uses same define as CUDA
+    add_definitions(-DSD_USE_CUDA)
     message(STATUS "AniEngine: HipBLAS backend enabled")
 endif()
 
@@ -96,13 +103,12 @@ if(ANIENGINE_ENABLE_SYCL)
 endif()
 
 if(ANIENGINE_ENABLE_MUSA)
-    add_definitions(-DSD_USE_CUDA)  # MUSA uses same define as CUDA
+    add_definitions(-DSD_USE_CUDA)
     message(STATUS "AniEngine: MUSA backend enabled")
 endif()
 
-# Find dependencies if building standalone
+# Use relative paths for external dependencies
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    # Standalone build - find all dependencies
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL)
     
     find_package(Vulkan REQUIRED)
@@ -115,19 +121,19 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     find_package(pybind11 REQUIRED)
     find_package(semver REQUIRED)
     
-    # External path for standalone
-    set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/../../external")
+    get_filename_component(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/../../external" ABSOLUTE)
 else()
-    # Parent project external path
-    set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
+    get_filename_component(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external" ABSOLUTE)
 endif()
+
+file(TO_CMAKE_PATH "${EXTERNAL_DIR}" EXTERNAL_DIR)
 
 # Add stable-diffusion.cpp subdirectory - ONLY if not already added
 if(NOT TARGET stable-diffusion AND EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp")
     message(STATUS "Adding stable-diffusion.cpp from: ${EXTERNAL_DIR}/stable-diffusion.cpp")
     add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion")
 else()
-    message(STATUS "stable-diffusion.cpp already available or not found")
+    message(STATUS "stable-diffusion.cpp already available or not found at: ${EXTERNAL_DIR}/stable-diffusion.cpp")
 endif()
 
 # Collect source files including plugin system
@@ -159,7 +165,7 @@ set_target_properties(AniEngineCore PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
-# Include directories
+# Include directories using relative paths
 target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs>
@@ -179,18 +185,17 @@ target_include_directories(AniEngineCore PUBLIC
     $<INSTALL_INTERFACE:include/aniengine>
 )
 
-# Add root include directory for public headers
+# Add root include directory for public headers using relative paths
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    target_include_directories(AniEngineCore PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/../../include>
-    )
+    get_filename_component(ROOT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../../include" ABSOLUTE)
 else()
-    target_include_directories(AniEngineCore PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-    )
+    get_filename_component(ROOT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include" ABSOLUTE)
 endif()
+target_include_directories(AniEngineCore PUBLIC
+    $<BUILD_INTERFACE:${ROOT_INCLUDE_DIR}>
+)
 
-# External includes
+# External includes using relative paths
 target_include_directories(AniEngineCore PUBLIC
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/stable-diffusion.cpp"
@@ -340,7 +345,8 @@ message(STATUS "")
 message(STATUS "AniEngine configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Library type: ${BUILD_SHARED_LIBS}")
+message(STATUS "  Runtime library: ${CMAKE_MSVC_RUNTIME_LIBRARY}")
+message(STATUS "  External directory: ${EXTERNAL_DIR}")
 message(STATUS "")
 message(STATUS "Stable Diffusion Backends:")
 message(STATUS "  CUDA: ${ANIENGINE_ENABLE_CUDA}")

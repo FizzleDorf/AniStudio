@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.12)
+cmake_policy(SET CMP0091 NEW)
 project(AniStudio VERSION 1.0.0 LANGUAGES CXX)
+
+# Use dynamic runtime to match parent project
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 # Build options
 option(ANISTUDIO_BUILD_SHARED "Build AniStudio as shared library" OFF)
@@ -23,17 +27,14 @@ endif()
 
 # Find dependencies if building standalone
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    # Standalone build - find all dependencies
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL)
     
     find_package(glew REQUIRED)
     find_package(glfw3 REQUIRED)
     find_package(exiv2 CONFIG REQUIRED)
     
-    # Set external directory
     set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
     
-    # Find or build AniEngineCore
     find_package(AniEngineCore QUIET)
     if(NOT AniEngineCore_FOUND)
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../aniengine")
@@ -44,7 +45,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
         endif()
     endif()
 else()
-    # Parent project build - use root external directory
     set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
 endif()
 
@@ -163,7 +163,7 @@ file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"  # Include integrated studio plugin system
+    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"
 )
 
 # Add the main AniStudio implementation
@@ -190,9 +190,7 @@ set_target_properties(AniStudioCore PROPERTIES
 
 # Include directories
 target_include_directories(AniStudioCore PUBLIC
-	# root
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-	# gui
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/base>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/editors>
@@ -200,16 +198,13 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/settings>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/tools>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/viewers>
-	# gui_utils
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/rendering>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/states>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/ui_schema>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/widgets>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/events>
-    # plugins (integrated)
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
-	# interface
     $<INSTALL_INTERFACE:include/anistudio>
 )
 
@@ -318,7 +313,6 @@ target_compile_definitions(AniStudioCore PUBLIC
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
     
-    # Install the library
     install(TARGETS AniStudioCore
         EXPORT AniStudioCoreTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -326,13 +320,11 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
     
-    # Install headers
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/anistudio
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     )
     
-    # Install public headers from include directory
     if(EXISTS ${CMAKE_SOURCE_DIR}/../../include)
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/../../include/
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
@@ -340,7 +332,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
         )
     endif()
     
-    # Create and install config files
     include(CMakePackageConfigHelpers)
     
     configure_package_config_file(
@@ -384,7 +375,8 @@ endif()
 
 message(STATUS "AniStudio configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")  
+message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Runtime library: ${CMAKE_MSVC_RUNTIME_LIBRARY}")
 message(STATUS "  Plugin Support: INTEGRATED (studio/plugins)")
 message(STATUS "  Zep Editor: ${ZEP_AVAILABLE}")
 message(STATUS "All required targets found - ready to build")

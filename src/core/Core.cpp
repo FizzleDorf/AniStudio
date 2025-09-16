@@ -82,8 +82,47 @@ namespace ANI {
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 
+		// CRITICAL FIX: Set INI filename BEFORE initializing ImGui backends
+		ImGuiIO& io = ImGui::GetIO();
+
+		// Get the absolute path to the imgui.ini file
 		std::string iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
 
+		// Create the directory if it doesn't exist
+		std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
+		if (!std::filesystem::exists(iniDir)) {
+			std::filesystem::create_directories(iniDir);
+			std::cout << "[Core] Created ImGui INI directory: " << iniDir << std::endl;
+		}
+
+		// Convert to C-style string that ImGui can use
+		static std::string persistentIniPath = iniFilePath; // Static to ensure it persists
+		io.IniFilename = persistentIniPath.c_str();
+
+		std::cout << "[Core] ImGui INI file set to: " << io.IniFilename << std::endl;
+
+		// Check if INI file exists, if not copy from defaults
+		if (!std::filesystem::exists(iniFilePath)) {
+			std::cout << "[Core] ImGui INI file not found, checking for default..." << std::endl;
+
+			// Try to copy from defaults directory
+			std::string defaultIniPath = Utils::FilePaths::dataPath + "/defaults/imgui.ini";
+			if (std::filesystem::exists(defaultIniPath)) {
+				try {
+					std::filesystem::copy_file(defaultIniPath, iniFilePath);
+					std::cout << "[Core] Copied default ImGui INI from: " << defaultIniPath << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Warning: Could not copy default ImGui INI: " << e.what() << std::endl;
+				}
+			}
+			else {
+				std::cout << "[Core] No default ImGui INI found at: " << defaultIniPath << std::endl;
+				std::cout << "[Core] ImGui will create a new INI file on first run" << std::endl;
+			}
+		}
+
+		// Now initialize ImGui backends
 		ImGui_ImplGlfw_InitForOpenGL(window, true);
 		ImGui_ImplOpenGL3_Init("#version 330");
 

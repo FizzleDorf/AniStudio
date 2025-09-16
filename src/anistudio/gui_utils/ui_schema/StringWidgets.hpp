@@ -265,7 +265,7 @@ namespace UISchema {
 			return changed;
 		}
 
-		// Enhanced textarea implementation with horizontal resizing
+		// Textarea implementation with horizontal resizing
 		static bool RenderTextArea(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
 			ImGuiInputTextFlags flags = GetInputTextFlags(options);
 
@@ -278,7 +278,11 @@ namespace UISchema {
 			strncpy(buffer.data(), value->c_str(), bufferSize - 1);
 			buffer[bufferSize - 1] = '\0';
 
-			// NO DISPLAY LABEL - StringWidgets should not show any text before ##
+			// Display parameter name if provided in schema (ABOVE the text area)
+			if (schema.contains("ui:displayName") && schema["ui:displayName"].is_string()) {
+				std::string displayName = schema["ui:displayName"].get<std::string>();
+				ImGui::Text("%s", displayName.c_str());
+			}
 
 			// Get minimum height
 			float minHeight = ImGui::GetTextLineHeight() * 3.0f + ImGui::GetStyle().FramePadding.y * 2.0f;
@@ -293,10 +297,10 @@ namespace UISchema {
 
 			// Use child window for vertical resizing with ResizeY flag
 			if (ImGui::BeginChild(childId.c_str(), ImVec2(0, std::max(minHeight, initialHeight)), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY)) {
-				// Generate unique textarea ID
-				std::string textareaId = uniqueBaseId + "_textarea_input";
+				// Generate unique textarea ID with ## prefix to hide the label
+				std::string textareaId = "##" + uniqueBaseId + "_textarea_input";
 
-				// Render the multiline input widget with unique ID
+				// Render the multiline input widget with unique ID (NO LABEL DISPLAYED)
 				bool changed = ImGui::InputTextMultiline(
 					textareaId.c_str(),
 					buffer.data(),
@@ -317,7 +321,6 @@ namespace UISchema {
 			return false;
 		}
 
-		// Enhanced render method with proper widget type handling and context support
 		static bool Render(const std::string& label, std::string* value, const std::string& widgetType, const nlohmann::json& schema, const UIRenderContext& context) {
 			// Extract options from schema
 			nlohmann::json options = {};
