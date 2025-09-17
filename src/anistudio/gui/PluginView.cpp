@@ -15,7 +15,7 @@ namespace GUI {
 	}
 
 	void PluginView::Init() {
-		// Set default plugin directory to ../plugins (where versioned hot reload happens)
+
 		m_pluginDirectory = m_pluginManager.getStagingDirectory();
 
 		if (m_pluginDirectory.empty()) {

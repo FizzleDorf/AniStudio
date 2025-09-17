@@ -56,8 +56,6 @@ namespace Plugins {
 
 		// Utility methods
 		virtual const std::string& GetCurrentPluginName() const = 0;
-
-		// NEW: Allow plugins to get the ImGui context
 		virtual ImGuiContext* GetImGuiContext() const = 0;
 	};
 

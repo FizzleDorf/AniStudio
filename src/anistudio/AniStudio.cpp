@@ -1,17 +1,3 @@
-/*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
-   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
- d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- */
-
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
@@ -315,7 +301,6 @@ namespace ANI {
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
 
-		// CRITICAL: Switch plugin manager to project-specific plugin state
 		if (studioPluginManager) {
 			std::cout << "[StudioCore] Setting plugin manager project context: " << projectPath << std::endl;
 			studioPluginManager->SetProjectContext(projectPath);
@@ -328,7 +313,6 @@ namespace ANI {
 	void StudioCore::OnProjectCreated(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
 
-		// CRITICAL: Switch plugin manager to project-specific plugin state (will start empty for new project)
 		if (studioPluginManager) {
 			std::cout << "[StudioCore] Setting plugin manager project context for new project: " << projectPath << std::endl;
 			studioPluginManager->SetProjectContext(projectPath);
@@ -343,7 +327,6 @@ namespace ANI {
 		std::cout << "[StudioCore] m_isShuttingDown: " << m_isShuttingDown << std::endl;
 		std::cout << "[StudioCore] Current m_showProjectManagerView: " << m_showProjectManagerView << std::endl;
 
-		// CRITICAL: Save current project plugin state before switching back to global
 		if (studioPluginManager) {
 			std::cout << "[StudioCore] Saving project plugin state and reverting to global..." << std::endl;
 			studioPluginManager->SaveProjectPluginState();
@@ -499,7 +482,7 @@ namespace ANI {
 
 			CompleteInitialization();
 
-			// FIXED: Track project state changes to avoid interfering with project close
+			// Track project state changes to avoid interfering with project close
 			static bool wasProjectOpen = false;
 			static bool startupShown = false;
 			bool isProjectCurrentlyOpen = m_projectManager.IsProjectOpen();

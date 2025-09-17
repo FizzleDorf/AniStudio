@@ -123,10 +123,10 @@ namespace Plugins {
 		std::unordered_map<std::string, std::vector<ECS::SystemTypeID>> pluginSystems;
 
 		// Hot reload state
-		bool hotReloadEnabled = false; // Changed: Default to false
-		bool hotReloadForced = false;  // New: Allow developers to force enable
+		bool hotReloadEnabled = false;
+		bool hotReloadForced = false;
 		float timeSinceLastCheck = 0.0f;
-		float hotReloadCheckInterval = 1.0f; // Check every second
+		float hotReloadCheckInterval = 1.0f;
 
 		// Directory management
 		std::string stagingDirectory = "../plugins";

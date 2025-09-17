@@ -12,7 +12,7 @@ using namespace ECS;
 namespace ANI {
 
 	EngineCore::EngineCore()
-		: initialized(false), running(false), pluginDirectory("../plugins") {  // FIXED: use ../plugins
+		: initialized(false), running(false), pluginDirectory("../plugins") { 
 		std::cout << "[EngineCore] Constructor called" << std::endl;
 	}
 
@@ -84,17 +84,12 @@ namespace ANI {
 			std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		// CRITICAL: Set up plugin state management IMMEDIATELY
 		std::cout << "[EngineCore] Setting global data path: " << Utils::FilePaths::dataPath << std::endl;
 		pluginManager->SetGlobalDataPath(Utils::FilePaths::dataPath);
 
 		// Scan plugins directory (but don't auto-load everything)
 		pluginManager->scanPluginDirectory(pluginDirectory);
 
-		// FOR ENGINE-ONLY USAGE: Uncomment this to force hot reload always on
-		// pluginManager->setHotReloadForce(true);
-
-		// CRITICAL: Load ONLY the plugins that were enabled in the last session
 		std::cout << "[EngineCore] Loading global plugin state..." << std::endl;
 		pluginManager->LoadGlobalPluginState();
 
