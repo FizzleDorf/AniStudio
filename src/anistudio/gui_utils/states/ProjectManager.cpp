@@ -8,6 +8,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <set>
 
 namespace ANI {
 
@@ -124,6 +125,7 @@ namespace ANI {
 			// CRITICAL: Create a default workspace when creating new project
 			GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
 			m_viewState.SetLastActiveWorkspace(defaultWorkspace);
+			m_viewManager.SetActiveWorkspace(defaultWorkspace);
 			std::cout << "[ProjectManager] Created default workspace: " << defaultWorkspace << std::endl;
 
 			// Save project files
@@ -213,6 +215,7 @@ namespace ANI {
 				if (allWorkspaces.empty()) {
 					GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
 					m_viewState.SetLastActiveWorkspace(defaultWorkspace);
+					m_viewManager.SetActiveWorkspace(defaultWorkspace);
 					std::cout << "[ProjectManager] Created default workspace: " << defaultWorkspace << std::endl;
 				}
 			}
@@ -359,11 +362,23 @@ namespace ANI {
 
 	std::vector<std::string> ProjectManager::GetRecentProjects() const {
 		std::vector<std::string> recentProjects;
+		std::set<std::string> addedPaths; // Track added paths to prevent duplicates
 
 		// First, check if we have a last opened project
 		if (!Utils::FilePaths::lastOpenProjectPath.empty() &&
 			std::filesystem::exists(Utils::FilePaths::lastOpenProjectPath)) {
-			recentProjects.push_back(Utils::FilePaths::lastOpenProjectPath);
+
+			try {
+				// Normalize the path to handle different representations of the same path
+				std::string normalizedPath = std::filesystem::canonical(Utils::FilePaths::lastOpenProjectPath).string();
+				recentProjects.push_back(normalizedPath);
+				addedPaths.insert(normalizedPath);
+			}
+			catch (const std::exception& e) {
+				// If canonical fails, use the original path
+				recentProjects.push_back(Utils::FilePaths::lastOpenProjectPath);
+				addedPaths.insert(Utils::FilePaths::lastOpenProjectPath);
+			}
 		}
 
 		// Then scan the default project directory for any existing projects
@@ -377,9 +392,22 @@ namespace ANI {
 						// Check if this directory contains a project.ani file (indicating it's a project)
 						std::string projectFile = projectPath + "/project.ani";
 						if (std::filesystem::exists(projectFile)) {
-							// Don't add duplicates
-							if (std::find(recentProjects.begin(), recentProjects.end(), projectPath) == recentProjects.end()) {
-								recentProjects.push_back(projectPath);
+							try {
+								// Normalize the path to handle different representations
+								std::string normalizedPath = std::filesystem::canonical(projectPath).string();
+
+								// Don't add duplicates
+								if (addedPaths.find(normalizedPath) == addedPaths.end()) {
+									recentProjects.push_back(normalizedPath);
+									addedPaths.insert(normalizedPath);
+								}
+							}
+							catch (const std::exception& e) {
+								// If canonical fails, check with original path
+								if (addedPaths.find(projectPath) == addedPaths.end()) {
+									recentProjects.push_back(projectPath);
+									addedPaths.insert(projectPath);
+								}
 							}
 						}
 					}
@@ -443,6 +471,60 @@ namespace ANI {
 		Utils::FilePaths::Init();
 	}
 
+	bool ProjectManager::ApplyProjectTemplate(const GUI::ProjectTemplate& template_) {
+		if (!m_isProjectOpen) {
+			m_lastError = "No project is currently open";
+			return false;
+		}
+
+		try {
+			std::cout << "[ProjectManager] Applying project template: " << template_.name << std::endl;
+
+			// Get the current workspace (should be the default one created during project creation)
+			GUI::WorkspaceID currentWorkspace = m_viewState.GetLastActiveWorkspace();
+
+			// Set the workspace name to the template name if provided
+			if (!template_.name.empty()) {
+				m_viewManager.SetWorkspaceName(currentWorkspace, template_.name);
+			}
+
+			// Add the default views from the template
+			for (const auto& viewTypeName : template_.defaultOpenViews) {
+				try {
+					std::cout << "[ProjectManager] Adding view: " << viewTypeName << " to workspace: " << currentWorkspace << std::endl;
+
+					// Get the view type ID from the name
+					GUI::ViewTypeID viewType = m_viewManager.GetViewType(viewTypeName);
+
+					// Add the view to the current workspace
+					m_viewManager.AddViewByType(currentWorkspace, viewType);
+
+					std::cout << "[ProjectManager] Successfully added view: " << viewTypeName << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[ProjectManager] Failed to add view " << viewTypeName << ": " << e.what() << std::endl;
+				}
+			}
+
+			// Apply any template settings if provided
+			if (!template_.settings.empty()) {
+				// TODO: Apply template-specific settings to project
+				std::cout << "[ProjectManager] Template has settings (not implemented yet)" << std::endl;
+			}
+
+			// Save the project with the new template configuration
+			SaveProject();
+
+			std::cout << "[ProjectManager] Successfully applied template: " << template_.name << std::endl;
+			return true;
+		}
+		catch (const std::exception& e) {
+			m_lastError = "Exception applying project template: " + std::string(e.what());
+			std::cerr << "[ProjectManager] " << m_lastError << std::endl;
+			return false;
+		}
+	}
+
 	// Private methods
 	bool ProjectManager::SaveViewState() {
 		try {
@@ -484,6 +566,8 @@ namespace ANI {
 					}
 				}
 
+				// Set the active workspace in ViewManager
+				m_viewManager.SetActiveWorkspace(lastActiveWorkspace);
 				std::cout << "[ProjectManager] Loaded ViewState with active workspace: " << lastActiveWorkspace << std::endl;
 
 				// Trigger callback to set the active workspace

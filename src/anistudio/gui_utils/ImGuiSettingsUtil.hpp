@@ -238,7 +238,10 @@ namespace Utils {
 			defaultIO.ConfigInputTextCursorBlink = true;
 			defaultIO.ConfigInputTextEnterKeepActive = false;
 
-			// Save defaults
+			// Ensure the defaults directory exists
+			std::filesystem::create_directories(dataPath + "/defaults");
+
+			// Save defaults to correct path
 			std::string defaultPath = dataPath + "/defaults/imgui_render_defaults.json";
 			SaveToFile(defaultPath, defaultIO);
 			std::cout << "[ImGuiSettingsUtil] Created default settings at: " << defaultPath << std::endl;

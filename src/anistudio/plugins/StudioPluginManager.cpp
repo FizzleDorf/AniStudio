@@ -5,7 +5,8 @@
 
 namespace Plugins {
 
-	StudioPluginRegistry::StudioPluginRegistry(const std::string& pluginName,
+	StudioPluginRegistry::StudioPluginRegistry(
+		const std::string& pluginName,
 		StudioPluginManager* manager,
 		GUI::ViewManager& viewMgr,
 		ImGuiContext* mainContext)

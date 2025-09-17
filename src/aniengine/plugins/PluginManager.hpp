@@ -1,6 +1,7 @@
 #pragma once
 #include "PluginRegistry.hpp"
 #include "BasePlugin.hpp"
+#include "PluginState.hpp"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -8,6 +9,7 @@
 #include <functional>
 #include <chrono>
 #include <atomic>
+#include <memory>
 
 // Forward declaration for ImGui
 struct ImGuiContext;
@@ -76,16 +78,27 @@ namespace Plugins {
 
 		// Hot reload functionality
 		void enableHotReload(bool enable = true);
+		void setHotReloadForce(bool force = true); // For developers to force enable
+		bool isHotReloadEnabled() const { return hotReloadEnabled; }
 		void checkForChanges();
 		void updatePlugins(float deltaTime);
 
 		// Directory management
 		void setStagingDirectory(const std::string& basePluginsDir);
 		void scanPluginDirectory(const std::string& directory);
+		void scanPluginDirectoryWithoutAutoLoad(const std::string& directory);
 
 		// Plugin information
 		std::vector<PluginInfo> getLoadedPlugins() const;
 		BasePlugin* getPlugin(const std::string& name) const;
+
+		// Plugin state management
+		void SetGlobalDataPath(const std::string& dataPath);
+		void LoadGlobalPluginState();
+		void SaveGlobalPluginState();
+		void SetProjectContext(const std::string& projectPath);
+		void SaveProjectPluginState();
+		void UseGlobalPluginState();
 
 		// Registration methods (called by PluginRegistry)
 		virtual ECS::ComponentTypeID registerComponent(const std::string& pluginName, const ComponentDescriptor& desc);
@@ -110,15 +123,19 @@ namespace Plugins {
 		std::unordered_map<std::string, std::vector<ECS::SystemTypeID>> pluginSystems;
 
 		// Hot reload state
-		bool hotReloadEnabled = false;
+		bool hotReloadEnabled = false; // Changed: Default to false
+		bool hotReloadForced = false;  // New: Allow developers to force enable
 		float timeSinceLastCheck = 0.0f;
 		float hotReloadCheckInterval = 1.0f; // Check every second
 
 		// Directory management
 		std::string stagingDirectory = "../plugins";
 
+		// Plugin state management
+		std::unique_ptr<PluginState> pluginState;
+
 	private:
-		// Helper methods for plugin loading - FIXED: Added missing method declaration
+		// Helper methods for plugin loading
 		void setupPluginDirectories(const std::string& pluginName);
 		std::string findPluginDll(const std::string& pluginDir, const std::string& pluginName);
 		std::string getVersionedDllName(const std::string& pluginName, uint32_t version);
@@ -131,6 +148,11 @@ namespace Plugins {
 		bool createVersionedDllFromStaging(const std::string& pluginName);
 		bool safeReloadPlugin(const std::string& pluginName);
 		void processPendingReloads();
+
+		// Plugin state management helpers
+		void InitializePluginStateManager();
+		void LoadPluginsFromState();
+		void SaveCurrentPluginState();
 
 		// Platform-specific dynamic library loading
 		void* loadDynamicLibrary(const std::string& path);

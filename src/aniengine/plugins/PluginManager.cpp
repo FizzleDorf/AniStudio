@@ -1,5 +1,6 @@
 #include "PluginManager.hpp"
 #include "EntityManager.hpp"
+#include "PluginState.hpp"
 #include <iostream>
 #include <filesystem>
 #include <vector>
@@ -47,6 +48,14 @@ namespace Plugins {
 		stagingDirectory = "../plugins";
 		std::filesystem::create_directories(stagingDirectory);
 		std::cout << "[PluginManager] Base plugins directory set to: " << stagingDirectory << std::endl;
+
+		// Initialize plugin state management
+		InitializePluginStateManager();
+
+		// Hot reload is disabled by default - only enable when PluginView is open or forced
+		hotReloadEnabled = false;
+		hotReloadForced = false;
+		std::cout << "[PluginManager] Hot reload disabled by default (will enable when PluginView opens)" << std::endl;
 	}
 
 	PluginManager::~PluginManager() {
@@ -66,6 +75,141 @@ namespace Plugins {
 		}
 	}
 
+	void PluginManager::InitializePluginStateManager() {
+		pluginState = std::make_unique<PluginState>();
+		std::cout << "[PluginManager] Plugin state manager created" << std::endl;
+	}
+
+	void PluginManager::SetGlobalDataPath(const std::string& dataPath) {
+		if (pluginState) {
+			pluginState->SetGlobalDataPath(dataPath);
+		}
+	}
+
+	void PluginManager::LoadGlobalPluginState() {
+		if (!pluginState) return;
+
+		std::cout << "[PluginManager] Loading global plugin state..." << std::endl;
+		pluginState->UseGlobalState();
+		pluginState->LoadGlobalPluginState();
+
+		// Load plugins based on saved state
+		LoadPluginsFromState();
+
+		std::cout << "[PluginManager] Global plugin state loaded and applied" << std::endl;
+	}
+
+	void PluginManager::SaveGlobalPluginState() {
+		if (!pluginState) return;
+
+		std::cout << "[PluginManager] Saving global plugin state..." << std::endl;
+		SaveCurrentPluginState();
+		pluginState->SaveGlobalPluginState();
+		std::cout << "[PluginManager] Global plugin state saved" << std::endl;
+	}
+
+	void PluginManager::SetProjectContext(const std::string& projectPath) {
+		if (!pluginState) return;
+
+		std::cout << "[PluginManager] Setting project context: " << projectPath << std::endl;
+
+		// Save current state first
+		SaveCurrentPluginState();
+
+		// Switch to project state
+		pluginState->SetCurrentProjectPath(projectPath);
+		pluginState->UseProjectState();
+		pluginState->LoadProjectPluginState();
+
+		// Apply project-specific plugin state
+		LoadPluginsFromState();
+
+		std::cout << "[PluginManager] Project plugin context applied" << std::endl;
+	}
+
+	void PluginManager::SaveProjectPluginState() {
+		if (!pluginState) return;
+
+		std::cout << "[PluginManager] Saving project plugin state..." << std::endl;
+		SaveCurrentPluginState();
+		pluginState->SaveProjectPluginState();
+		std::cout << "[PluginManager] Project plugin state saved" << std::endl;
+	}
+
+	void PluginManager::UseGlobalPluginState() {
+		if (!pluginState) return;
+
+		std::cout << "[PluginManager] Reverting to global plugin state..." << std::endl;
+
+		// Save current project state first
+		SaveCurrentPluginState();
+
+		// Switch back to global state
+		pluginState->UseGlobalState();
+
+		// Apply global plugin state
+		LoadPluginsFromState();
+
+		std::cout << "[PluginManager] Global plugin state restored" << std::endl;
+	}
+
+	void PluginManager::LoadPluginsFromState() {
+		if (!pluginState) return;
+
+		// Get the plugins that should be loaded according to saved state
+		auto pluginsToLoad = pluginState->GetPluginsToLoad();
+		auto pluginsToEnable = pluginState->GetPluginsToEnable();
+
+		std::cout << "[PluginManager] Loading " << pluginsToLoad.size() << " plugins from saved state" << std::endl;
+
+		// Disable and unload all current plugins first
+		std::vector<std::string> currentPlugins;
+		for (const auto&[name, info] : plugins) {
+			currentPlugins.push_back(name);
+		}
+
+		for (const auto& name : currentPlugins) {
+			if (plugins[name].enabled) {
+				disablePlugin(name);
+			}
+			unloadPlugin(name);
+		}
+
+		// Load plugins from state
+		for (const auto& pluginName : pluginsToLoad) {
+			// Try to find the plugin in the plugins directory
+			std::string pluginPath = stagingDirectory + "/" + pluginName;
+			if (std::filesystem::exists(pluginPath)) {
+				std::cout << "[PluginManager] Loading plugin from state: " << pluginName << std::endl;
+				if (loadPlugin(pluginPath)) {
+					// Enable if it should be enabled
+					if (pluginsToEnable.find(pluginName) != pluginsToEnable.end()) {
+						std::cout << "[PluginManager] Enabling plugin from state: " << pluginName << std::endl;
+						enablePlugin(pluginName);
+					}
+				}
+			}
+			else {
+				std::cout << "[PluginManager] Warning: Plugin path not found for " << pluginName << ": " << pluginPath << std::endl;
+			}
+		}
+	}
+
+	void PluginManager::SaveCurrentPluginState() {
+		if (!pluginState) return;
+
+		// Update state manager with current plugin states
+		for (const auto&[pluginName, info] : plugins) {
+			pluginState->SetPluginState(
+				pluginName,
+				info.loaded,
+				info.enabled,
+				info.path,
+				info.currentVersion
+			);
+		}
+	}
+
 	void PluginManager::setStagingDirectory(const std::string& basePluginsDir) {
 		stagingDirectory = basePluginsDir;
 		std::filesystem::create_directories(stagingDirectory);
@@ -77,6 +221,18 @@ namespace Plugins {
 		std::cout << "[PluginManager] Hot reload " << (enable ? "enabled" : "disabled") << std::endl;
 		if (enable) {
 			std::filesystem::create_directories(stagingDirectory);
+		}
+	}
+
+	void PluginManager::setHotReloadForce(bool force) {
+		hotReloadForced = force;
+		if (force) {
+			hotReloadEnabled = true;
+			std::cout << "[PluginManager] Hot reload FORCE ENABLED (for development)" << std::endl;
+			std::filesystem::create_directories(stagingDirectory);
+		}
+		else {
+			std::cout << "[PluginManager] Hot reload force disabled" << std::endl;
 		}
 	}
 
@@ -463,7 +619,7 @@ namespace Plugins {
 	}
 
 	void PluginManager::checkForChanges() {
-		if (!hotReloadEnabled) return;
+		if (!hotReloadEnabled && !hotReloadForced) return;
 
 		for (auto& pair : plugins) {
 			auto& plugin = pair.second;
@@ -478,7 +634,7 @@ namespace Plugins {
 	}
 
 	void PluginManager::processPendingReloads() {
-		if (!hotReloadEnabled) return;
+		if (!hotReloadEnabled && !hotReloadForced) return;
 
 		for (auto& pair : plugins) {
 			auto& plugin = pair.second;
@@ -490,7 +646,8 @@ namespace Plugins {
 	}
 
 	void PluginManager::updatePlugins(float deltaTime) {
-		if (hotReloadEnabled) {
+		// Only check for hot reload if enabled OR forced
+		if (hotReloadEnabled || hotReloadForced) {
 			timeSinceLastCheck += deltaTime;
 			if (timeSinceLastCheck >= hotReloadCheckInterval) {
 				checkForChanges();
@@ -550,6 +707,12 @@ namespace Plugins {
 
 			plugin.instance->SetInitialized(true);
 			plugin.enabled = true;
+
+			// Save state after successful enable
+			if (pluginState) {
+				pluginState->SetPluginState(pluginName, true, true, plugin.path, plugin.currentVersion);
+			}
+
 			std::cout << "[PluginManager] Plugin enabled: " << pluginName << std::endl;
 		}
 		catch (const std::exception& e) {
@@ -582,6 +745,11 @@ namespace Plugins {
 		plugin.instance = nullptr;
 		plugin.enabled = false;
 
+		// Save state after successful disable
+		if (pluginState) {
+			pluginState->SetPluginState(pluginName, true, false, plugin.path, plugin.currentVersion);
+		}
+
 		std::cout << "[PluginManager] Plugin disabled: " << pluginName << std::endl;
 		return true;
 	}
@@ -597,6 +765,11 @@ namespace Plugins {
 
 		if (plugin.handle) {
 			unloadLibrary(plugin.handle);
+		}
+
+		// Remove from state after successful unload
+		if (pluginState) {
+			pluginState->RemovePluginState(pluginName);
 		}
 
 		plugins.erase(it);
@@ -619,15 +792,24 @@ namespace Plugins {
 	}
 
 	void PluginManager::scanPluginDirectory(const std::string& directory) {
+		// Just discover plugins, don't auto-load them
+		scanPluginDirectoryWithoutAutoLoad(directory);
+	}
+
+	void PluginManager::scanPluginDirectoryWithoutAutoLoad(const std::string& directory) {
 		if (!std::filesystem::exists(directory)) {
 			return;
 		}
+
+		std::cout << "[PluginManager] Scanning plugin directory (discovery only): " << directory << std::endl;
 
 		for (const auto& entry : std::filesystem::directory_iterator(directory)) {
 			if (entry.is_directory()) {
 				std::string pluginName = entry.path().filename().string();
 				if (pluginName == "staging") continue;
-				loadPlugin(entry.path().string());
+
+				// Just log what's available, don't auto-load
+				std::cout << "[PluginManager] Found plugin directory: " << pluginName << std::endl;
 			}
 		}
 	}
@@ -663,7 +845,7 @@ namespace Plugins {
 		return id;
 	}
 
-	size_t PluginManager::registerView(const std::string& pluginName, const ViewDescriptor& desc) {
+	GUI::ViewTypeID PluginManager::registerView(const std::string& pluginName, const ViewDescriptor& desc) {
 		return 0;
 	}
 
@@ -693,7 +875,6 @@ namespace Plugins {
 		pluginSystems.erase(it);
 	}
 
-	// ADDED: Missing cleanupPluginViews method implementation
 	void PluginManager::cleanupPluginViews(const std::string& pluginName) {
 		// Base implementation - no-op since base PluginManager doesn't handle views
 		// This is overridden in StudioPluginManager for actual cleanup

@@ -1,17 +1,26 @@
 #include "ProjectPopups.hpp"
 #include "ProjectManager.hpp"
 #include "FilePaths.hpp"
-#include "Events.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include <set>
+#include <ctime>
 
 namespace GUI {
 
 	void ProjectPopupState::InitializeBuffers(ANI::ProjectManager& projectMgr) {
+		// Generate default project name
+		std::string defaultProjectName = GenerateDefaultProjectName(projectMgr);
+
+		// Initialize buffers
 		memset(projectNameBuffer, 0, sizeof(projectNameBuffer));
 		memset(projectPathBuffer, 0, sizeof(projectPathBuffer));
+
+		// Set default project name
+		strncpy(projectNameBuffer, defaultProjectName.c_str(), sizeof(projectNameBuffer) - 1);
+		projectNameBuffer[sizeof(projectNameBuffer) - 1] = '\0'; // Ensure null termination
 
 		// Set default project path
 		std::string defaultPath = projectMgr.GetDefaultProjectPath();
@@ -19,6 +28,32 @@ namespace GUI {
 			strncpy(projectPathBuffer, defaultPath.c_str(), sizeof(projectPathBuffer) - 1);
 			projectPathBuffer[sizeof(projectPathBuffer) - 1] = '\0'; // Ensure null termination
 		}
+	}
+
+	std::string ProjectPopupState::GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const {
+		std::string baseName = "AniProject";
+		std::string defaultPath = projectMgr.GetDefaultProjectPath();
+
+		if (defaultPath.empty()) {
+			return baseName + "1";
+		}
+
+		// Find the next available project name
+		int counter = 1;
+		std::string candidateName;
+
+		do {
+			candidateName = baseName + std::to_string(counter);
+			counter++;
+
+			// Prevent infinite loop
+			if (counter > 9999) {
+				candidateName = baseName + "_" + std::to_string(time(nullptr));
+				break;
+			}
+		} while (projectMgr.IsProjectNameTaken(candidateName));
+
+		return candidateName;
 	}
 
 	void ProjectPopupState::LoadTemplates() {
@@ -299,29 +334,24 @@ namespace GUI {
 			std::string fullPath = projectPath + "/" + projectName;
 
 			if (projectMgr.CreateNewProject(fullPath, projectName)) {
-				// Use events to create workspace based on selected template
-				auto& events = ANI::Events::Ref();
+				std::cout << "[ProjectPopups] Project created successfully: " << projectName << std::endl;
 
+				// Apply template directly if one is selected
 				if (state.selectedTemplate >= 0 && state.selectedTemplate < state.templates.size()) {
-					// Use selected template - create workspace and add default views
 					const auto& template_ = state.templates[state.selectedTemplate];
 
-					events.RequestCreateWorkspace(template_.name);
+					std::cout << "[ProjectPopups] Applying template: " << template_.name << std::endl;
 
-					// Queue events to add the default views after workspace is created
-					for (const auto& viewTypeName : template_.defaultOpenViews) {
-						std::cout << "[ProjectPopups] Will add view: " << viewTypeName << " to new workspace" << std::endl;
+					if (!projectMgr.ApplyProjectTemplate(template_)) {
+						std::cerr << "[ProjectPopups] Failed to apply template: " << projectMgr.GetLastError() << std::endl;
 					}
-
-					std::cout << "[ProjectPopups] Created workspace from template: " << template_.name << std::endl;
+					else {
+						std::cout << "[ProjectPopups] Template applied successfully" << std::endl;
+					}
 				}
 				else {
-					// Blank project - create empty workspace
-					events.RequestCreateWorkspace("Main");
-					std::cout << "[ProjectPopups] Created blank workspace" << std::endl;
+					std::cout << "[ProjectPopups] Created blank project (no template selected)" << std::endl;
 				}
-
-				std::cout << "[ProjectPopups] Created project: " << projectName << std::endl;
 			}
 			else {
 				std::cerr << "[ProjectPopups] Failed to create project: " << projectMgr.GetLastError() << std::endl;

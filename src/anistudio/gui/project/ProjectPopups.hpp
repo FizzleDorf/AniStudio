@@ -28,6 +28,9 @@ namespace GUI {
 		void InitializeBuffers(ANI::ProjectManager& projectMgr);
 		void LoadTemplates();
 		void RefreshRecentProjects(ANI::ProjectManager& projectMgr);
+
+		// Helper method for generating default project names
+		std::string GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const;
 	};
 
 	// Static popup rendering functions that can be used anywhere

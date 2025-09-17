@@ -12,7 +12,7 @@ using namespace ECS;
 namespace ANI {
 
 	EngineCore::EngineCore()
-		: initialized(false), running(false), pluginDirectory("./plugins") {
+		: initialized(false), running(false), pluginDirectory("../plugins") {  // FIXED: use ../plugins
 		std::cout << "[EngineCore] Constructor called" << std::endl;
 	}
 
@@ -84,19 +84,21 @@ namespace ANI {
 			std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		// Scan and load plugins - FIXED: changed to camelCase
+		// CRITICAL: Set up plugin state management IMMEDIATELY
+		std::cout << "[EngineCore] Setting global data path: " << Utils::FilePaths::dataPath << std::endl;
+		pluginManager->SetGlobalDataPath(Utils::FilePaths::dataPath);
+
+		// Scan plugins directory (but don't auto-load everything)
 		pluginManager->scanPluginDirectory(pluginDirectory);
 
-		// Enable hot reload for development - FIXED: changed to camelCase
-		pluginManager->enableHotReload(true);
+		// FOR ENGINE-ONLY USAGE: Uncomment this to force hot reload always on
+		// pluginManager->setHotReloadForce(true);
 
-		// Auto-enable all loaded plugins - FIXED: changed to camelCase
-		auto plugins = pluginManager->getLoadedPlugins();
-		for (const auto& plugin : plugins) {
-			pluginManager->enablePlugin(plugin.name); // FIXED: changed to camelCase
-		}
+		// CRITICAL: Load ONLY the plugins that were enabled in the last session
+		std::cout << "[EngineCore] Loading global plugin state..." << std::endl;
+		pluginManager->LoadGlobalPluginState();
 
-		std::cout << "[EngineCore] Plugin system initialized with " << plugins.size() << " plugins" << std::endl;
+		std::cout << "[EngineCore] Plugin system initialized with selective loading" << std::endl;
 	}
 
 	bool EngineCore::Initialize() {
@@ -147,9 +149,10 @@ namespace ANI {
 
 		running = false;
 
-		// Shutdown plugins first
+		// Save global plugin state before shutdown
 		if (pluginManager) {
-			std::cout << "[EngineCore] Shutting down plugin manager..." << std::endl;
+			std::cout << "[EngineCore] Saving global plugin state..." << std::endl;
+			pluginManager->SaveGlobalPluginState();
 			pluginManager.reset();
 		}
 
@@ -164,10 +167,10 @@ namespace ANI {
 
 		entityManager.Update(deltaTime);
 
-		// Update plugins - FIXED: changed to camelCase
+		// Update plugins
 		if (pluginManager) {
-			pluginManager->checkForChanges(); // Hot reload check - FIXED: changed to camelCase
-			pluginManager->updatePlugins(deltaTime); // FIXED: changed to camelCase
+			pluginManager->checkForChanges(); // Hot reload check
+			pluginManager->updatePlugins(deltaTime);
 		}
 	}
 

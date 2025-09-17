@@ -149,7 +149,7 @@ namespace ECS {
 
 		// System-wide control flags
 		bool offload_params_to_cpu = false;
-		bool keep_clip_on_cpu = true;
+		bool keep_clip_on_cpu = false;
 		bool diffusion_flash_attn = false;
 		bool diffusion_conv_direct = false;
 		bool vae_conv_direct = false;

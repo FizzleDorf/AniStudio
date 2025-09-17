@@ -1,5 +1,6 @@
 #include "PluginView.hpp"
 #include "BasePlugin.hpp"
+#include "Events.hpp"
 #include <iostream>
 #include <filesystem>
 #include <algorithm>
@@ -24,8 +25,10 @@ namespace GUI {
 		// Scan for plugin directories
 		RefreshPluginDirectories();
 
-		// Enable hot reload by default
+		// Enable hot reload when PluginView initializes
 		m_pluginManager.enableHotReload(m_hotReloadEnabled);
+		m_hotReloadWasEnabled = true;
+		std::cout << "[PluginView] Hot reload enabled because PluginView is open" << std::endl;
 
 		std::cout << "[PluginView] Initialized with plugin directory: " << m_pluginDirectory << std::endl;
 	}
@@ -44,7 +47,23 @@ namespace GUI {
 	}
 
 	void PluginView::Render() {
-		if (!windowOpen) return;
+		if (!windowOpen) {
+			// When window closes, disable hot reload to save resources
+			if (m_hotReloadWasEnabled) {
+				m_pluginManager.enableHotReload(false);
+				m_hotReloadWasEnabled = false;
+				std::cout << "[PluginView] Hot reload disabled because PluginView was closed" << std::endl;
+			}
+			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			return;
+		}
+
+		// Re-enable hot reload when window opens
+		if (!m_hotReloadWasEnabled && m_hotReloadEnabled) {
+			m_pluginManager.enableHotReload(true);
+			m_hotReloadWasEnabled = true;
+			std::cout << "[PluginView] Hot reload re-enabled because PluginView opened" << std::endl;
+		}
 
 		ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_FirstUseEver);
 
@@ -247,6 +266,30 @@ namespace GUI {
 		}
 	}
 
+	void PluginView::SaveGlobalPluginState() {
+		m_pluginManager.SaveGlobalPluginState();
+		ShowStatus("Global plugin state saved", 3.0f);
+		std::cout << "[PluginView] Saved global plugin state" << std::endl;
+	}
+
+	void PluginView::SaveProjectPluginState() {
+		m_pluginManager.SaveProjectPluginState();
+		ShowStatus("Project plugin state saved", 3.0f);
+		std::cout << "[PluginView] Saved project plugin state" << std::endl;
+	}
+
+	void PluginView::LoadGlobalPluginState() {
+		m_pluginManager.LoadGlobalPluginState();
+		ShowStatus("Global plugin state loaded", 3.0f);
+		std::cout << "[PluginView] Loaded global plugin state" << std::endl;
+	}
+
+	void PluginView::LoadProjectPluginState() {
+		// This will be handled through project manager, but we can trigger it manually
+		ShowStatus("Project plugin state loading not implemented in UI", 3.0f);
+		std::cout << "[PluginView] Project plugin state loading should be handled by project manager" << std::endl;
+	}
+
 	void PluginView::RenderToolbar() {
 		ImGui::Text("Plugin Directory:");
 		ImGui::SameLine();
@@ -266,9 +309,11 @@ namespace GUI {
 			m_pluginManager.enableHotReload(m_hotReloadEnabled);
 			if (m_hotReloadEnabled) {
 				ShowStatus("Versioned hot reload enabled - will detect staging changes", 3.0f);
+				m_hotReloadWasEnabled = true;
 			}
 			else {
 				ShowStatus("Versioned hot reload disabled", 2.0f);
+				m_hotReloadWasEnabled = false;
 			}
 		}
 
@@ -277,14 +322,55 @@ namespace GUI {
 			m_showLoadDialog = true;
 		}
 
-		// Hot reload status indicator
+		// New line for state management controls
+		ImGui::Separator();
+
+		ImGui::Text("Plugin State Management:");
+
+		if (ImGui::Button("Save Global State")) {
+			SaveGlobalPluginState();
+		}
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::Text("Save current plugin configuration as global default");
+			ImGui::Text("This will be loaded when no project is open");
+			ImGui::EndTooltip();
+		}
+
 		ImGui::SameLine();
-		if (m_hotReloadEnabled) {
-			ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "[VERSIONED HOT RELOAD: ON]");
+		if (ImGui::Button("Save Project State")) {
+			SaveProjectPluginState();
+		}
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::Text("Save current plugin configuration to the active project");
+			ImGui::Text("This will be loaded when this project opens");
+			ImGui::EndTooltip();
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Load Global State")) {
+			LoadGlobalPluginState();
+		}
+		if (ImGui::IsItemHovered()) {
+			ImGui::BeginTooltip();
+			ImGui::Text("Load the global plugin configuration");
+			ImGui::Text("Warning: This will change currently loaded plugins");
+			ImGui::EndTooltip();
+		}
+
+		// Hot reload status indicator
+		ImGui::Separator();
+		bool actualHotReloadState = m_pluginManager.isHotReloadEnabled();
+		if (actualHotReloadState) {
+			ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "[HOT RELOAD: ON]");
 		}
 		else {
-			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[VERSIONED HOT RELOAD: OFF]");
+			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[HOT RELOAD: OFF]");
 		}
+
+		ImGui::SameLine();
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(auto-disabled when view closes)");
 
 		// Simple file dialog
 		if (m_showLoadDialog) {
@@ -603,7 +689,7 @@ namespace GUI {
 				// Versioned hot reload instructions
 				ImGui::Text("Versioned Hot Reload Instructions:");
 				ImGui::TextWrapped("1. Build your plugin - DLL goes to staging directory");
-				ImGui::TextWrapped("2. PluginManager detects new DLL in staging");
+				ImGui::TextWrapped("2. PluginManager detects new DLL in staging (only when this view is open)");
 				ImGui::TextWrapped("3. Creates new versioned DLL (e.g., %s_v%u.dll)",
 					plugin.name.c_str(), plugin.nextVersion);
 				ImGui::TextWrapped("4. Safely unloads old DLL, loads new versioned DLL");
@@ -627,7 +713,10 @@ namespace GUI {
 			ImGui::PopStyleColor();
 		}
 		else {
-			ImGui::Text("Ready - Versioned hot reload: %s", m_hotReloadEnabled ? "ENABLED" : "DISABLED");
+			bool actualHotReloadState = m_pluginManager.isHotReloadEnabled();
+			ImGui::Text("Ready - Hot reload: %s%s",
+				actualHotReloadState ? "ENABLED" : "DISABLED",
+				actualHotReloadState ? "" : " (auto-enabled when view opens)");
 		}
 	}
 

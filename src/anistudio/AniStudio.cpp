@@ -108,24 +108,28 @@ namespace ANI {
 			static_cast<ImGuiContext*>(imguiContext)
 			);
 
-		std::string pluginDirectory = "./plugins";
+		std::string pluginDirectory = "../plugins";
 
 		if (!std::filesystem::exists(pluginDirectory)) {
 			std::filesystem::create_directories(pluginDirectory);
 			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
+		// CRITICAL: Set up state management FIRST
+		std::cout << "[StudioCore] Setting global data path: " << Utils::FilePaths::dataPath << std::endl;
+		studioPluginManager->SetGlobalDataPath(Utils::FilePaths::dataPath);
+
+		// Scan plugins directory (discover what's available)
 		studioPluginManager->scanPluginDirectory(pluginDirectory);
 
-		studioPluginManager->enableHotReload(true);
+		// Hot reload is disabled by default - will be enabled when PluginView opens
+		studioPluginManager->enableHotReload(false);
 
-		auto plugins = studioPluginManager->getLoadedPlugins();
-		for (const auto& plugin : plugins) {
-			std::cout << "[StudioCore] Auto-enabling plugin: " << plugin.name << std::endl;
-			studioPluginManager->enablePlugin(plugin.name);
-		}
+		// CRITICAL: Load global plugin state AFTER setting the data path
+		std::cout << "[StudioCore] Loading global plugin state..." << std::endl;
+		studioPluginManager->LoadGlobalPluginState();
 
-		std::cout << "[StudioCore] Studio plugin system initialized with " << plugins.size() << " plugins" << std::endl;
+		std::cout << "[StudioCore] Studio plugin system initialized with selective loading" << std::endl;
 	}
 
 	void StudioCore::SetupProjectCallbacks() {
@@ -311,12 +315,24 @@ namespace ANI {
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
 
+		// CRITICAL: Switch plugin manager to project-specific plugin state
+		if (studioPluginManager) {
+			std::cout << "[StudioCore] Setting plugin manager project context: " << projectPath << std::endl;
+			studioPluginManager->SetProjectContext(projectPath);
+		}
+
 		m_showProjectManagerView = false;
 		Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
 	}
 
 	void StudioCore::OnProjectCreated(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
+
+		// CRITICAL: Switch plugin manager to project-specific plugin state (will start empty for new project)
+		if (studioPluginManager) {
+			std::cout << "[StudioCore] Setting plugin manager project context for new project: " << projectPath << std::endl;
+			studioPluginManager->SetProjectContext(projectPath);
+		}
 
 		m_showProjectManagerView = false;
 		Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
@@ -326,6 +342,13 @@ namespace ANI {
 		std::cout << "[StudioCore] OnProjectClosed() called" << std::endl;
 		std::cout << "[StudioCore] m_isShuttingDown: " << m_isShuttingDown << std::endl;
 		std::cout << "[StudioCore] Current m_showProjectManagerView: " << m_showProjectManagerView << std::endl;
+
+		// CRITICAL: Save current project plugin state before switching back to global
+		if (studioPluginManager) {
+			std::cout << "[StudioCore] Saving project plugin state and reverting to global..." << std::endl;
+			studioPluginManager->SaveProjectPluginState();
+			studioPluginManager->UseGlobalPluginState();
+		}
 
 		// Show project manager view again
 		m_showProjectManagerView = true;
@@ -356,6 +379,11 @@ namespace ANI {
 			if (m_projectManager.IsProjectOpen()) {
 				std::cout << "[StudioCore] Saving open project BEFORE shutdown: " << m_projectManager.GetCurrentProjectName() << std::endl;
 
+				// Save project-specific plugin state
+				if (studioPluginManager) {
+					studioPluginManager->SaveProjectPluginState();
+				}
+
 				GUI::WorkspaceID currentActive = viewManager.GetActiveWorkspace();
 				m_projectManager.SetLastActiveWorkspace(currentActive);
 				std::cout << "[StudioCore] Synced active workspace " << currentActive << " to project before saving" << std::endl;
@@ -370,6 +398,12 @@ namespace ANI {
 				}
 				catch (const std::exception& e) {
 					std::cerr << "[StudioCore] Exception saving project: " << e.what() << std::endl;
+				}
+			}
+			else {
+				// No project open, save global plugin state
+				if (studioPluginManager) {
+					studioPluginManager->SaveGlobalPluginState();
 				}
 			}
 

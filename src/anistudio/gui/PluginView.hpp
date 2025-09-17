@@ -35,8 +35,9 @@ namespace GUI {
 		std::string m_statusMessage;
 		float m_statusTimer = 0.0f;
 
-		// Hot reload settings
+		// Hot reload settings - manages enabling/disabling based on view visibility
 		bool m_hotReloadEnabled = true;
+		bool m_hotReloadWasEnabled = false;
 
 		// Plugin directories found
 		std::vector<std::filesystem::path> m_pluginDirectories;
@@ -56,6 +57,12 @@ namespace GUI {
 		void DisablePlugin(const std::string& pluginName);
 		void ReloadPlugin(const std::string& pluginName);
 		void UnloadPlugin(const std::string& pluginName);
+
+		// Plugin state management actions
+		void SaveGlobalPluginState();
+		void SaveProjectPluginState();
+		void LoadGlobalPluginState();
+		void LoadProjectPluginState();
 
 		// Versioned DLL helper functions
 		uint32_t GetHighestVersionInDirectory(const std::filesystem::path& pluginDir, const std::string& pluginName) const;

@@ -1,6 +1,7 @@
 #pragma once
 #include "ViewState.hpp"
 #include "FilePaths.hpp"
+#include "ProjectTemplate.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -39,6 +40,9 @@ namespace ANI {
 		bool LoadProject(const std::string& projectPath);
 		bool SaveProject();
 		void CloseProject();
+
+		// Project template application
+		bool ApplyProjectTemplate(const GUI::ProjectTemplate& template_);
 
 		// Project validation
 		bool IsProjectNameTaken(const std::string& projectName, const std::string& excludePath = "") const;
