@@ -1,30 +1,80 @@
 # Anistudio
-An executable editor for image and video diffusion generation and editing projects written in C/C++ by utilizing [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) backend.
+An executable engine and editor for image, video and edit diffusion models written in C/C++ utilizing the [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) library.
 
 ![Preview](assets/Preview.JPG)
 
 ## Features
-- Entity Component System for modular development with low technical debt
-- Dockable and customizable Views to personalize your UI/UX experience
-- Image inference (StableDiffusion.cpp)
+- Entity Component System for modular development
+- Dockable and customizable Views vie [Dear ImGui](https://github.com/ocornut/imgui)
 - Cross-platform (Windows, Linux)
+- standard media project management
 - Included UI editor for ease of development
-- Extremely lightweight compared to alternatives
+- Supported models:
+  - Image Models
+    - SD1.x, SD2.x, SD-Turbo
+    - SDXL, SDXL-Turbo
+      - !!!The VAE in SDXL encounters NaN issues under FP16, but unfortunately, the ggml_conv_2d only operates under FP16. Hence, a parameter is needed to specify the VAE that has fixed the FP16 NaN issue. You can find it here: [SDXL VAE FP16 Fix](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/blob/main/sdxl_vae.safetensors).
+    - SD3/SD3.5
+    - Flux-dev/Flux-schnell
+    - Chroma
+  - Image Edit Models
+    - FLUX.1-Kontext-dev
+  - Video Models
+    - Wan2.1/Wan2.2
+  - [PhotoMaker](https://github.com/TencentARC/PhotoMaker) support.
+  - Control Net support with SD 1.5
+  - LoRA support, same as [stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#lora)
+  - Latent Consistency Models support (LCM/LCM-LoRA)
+  - Faster and memory efficient latent decoding with [TAESD](https://github.com/madebyollin/taesd)
+  - Upscale images generated with [ESRGAN](https://github.com/xinntao/Real-ESRGAN)
+- 16-bit, 32-bit float support
+- 2-bit, 3-bit, 4-bit, 5-bit and 8-bit integer quantization support
+- Accelerated memory-efficient CPU inference
+    - Only requires ~2.3GB when using txt2img with fp16 precision to generate a 512x512 image, enabling Flash Attention just requires ~1.8GB.
+- AVX, AVX2 and AVX512 support for x86 architectures
+- Full CUDA, Metal, Vulkan, OpenCL and SYCL backend for GPU acceleration.
+- Can load ckpt, safetensors and diffusers models/checkpoints. Standalone VAEs models
+- Flash Attention for memory usage optimization
+- Negative prompts
+- [stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) style tokenizer (not all the features, only token weighting for now)
+- VAE tiling processing for reduce memory usage
+- Sampling method
+    - `Euler A`
+    - `Euler`
+    - `Heun`
+    - `DPM2`
+    - `DPM++ 2M`
+    - [`DPM++ 2M v2`](https://github.com/AUTOMATIC1111/stable-diffusion-webui/discussions/8457)
+    - `DPM++ 2S a`
+    - [`LCM`](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/13952)
+- Cross-platform reproducibility (`--rng cuda`, consistent with the `stable-diffusion-webui GPU RNG`)
 
 ---
-*Disclaimer: the application still has some threading issues so until those get sorted, releases will not be made. please build from source*
 
-[How to build from Source](docs/Installation.md)
+## How To Install
+1. Download the Release for your OS and Platform (Cpu and GPU architecture)
+2. Unzip the compressed file
+3. If you are using Windows and you don't have VS C++ redistributable installed, run the installer included with the release
+4. If you downloaded a GPU specific backend, please consult the documentation: [How to Install GPU Dependencies](docs/installation.md)
+5. Run the .exe in the ```./bin/``` directory
+6. Have fun!
+
+---
+
+## How To Build
+please consult the documentation: [How to build from Source](docs/build.md)
 
 ---
 
 ## TODO:
-- mainly fix critical issues
-- hot reload plugin manager
-- python interop
-- separate sdcpp into a lib
-- fork sdcpp for more frequent updates
-- reduce bad allocations
+- [x] hot reload plugin manager
+- [x] python interop
+- [x] project management
+- [ ] asset and heap managers
+- [ ] separate sdcpp into shared libs
+- [ ] reduce bad allocations
+- [ ] nodegraph execution
+- [ ] basic usage guide
 
 ## License
 
@@ -45,4 +95,4 @@ If you prefer to use this project under a commercial license, please contact us 
 
 
 ## Purpose
-I created this application to leverage C/C++ for a highly modular and parallelized system capable of loading, inferencing, and training machine learning models, all within a unified UI. Existing UI solutions often rely on external tools for refining or editing, or suffer from runtime performance issues due to techstack limitations resulting in inconsistent rendering, slow loading, and cache misses. AniStudio is designed to maintain consistent performance under heavy loads, allowing users to multitask traditional media creation with AI-assistance, all in one seamless application with the freedom of C/C++.
+I created this application to leverage C/C++ for a highly modular and parallelized system capable of loading, inferencing, and training machine learning models, all within a unified UI. Existing UI solutions often rely on external tools for refining or editing, or suffer from runtime performance issues due to techstack limitations resulting in inconsistent rendering, slow loading, and unoptimized implementations. AniStudio is designed to maintain consistent performance under heavy loads allowing users to multitask traditional media creation and AI generated media with the freedom and power of C/C++.
