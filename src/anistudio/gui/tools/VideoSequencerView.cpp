@@ -248,27 +248,11 @@ namespace GUI {
 	}
 
 	void VideoSequencerView::Init() {
-		// Ensure system references are valid
-		auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-		if (!videoSystem) {
-			std::cerr << "VideoSystem not found! The sequencer requires VideoSystem to function properly." << std::endl;
-		}
-		else {
-			// Register callbacks
-			videoSystem->RegisterVideoAddedCallback(std::bind(&VideoSequencerView::HandleVideoAdded, this, std::placeholders::_1));
-			videoSystem->RegisterVideoRemovedCallback(std::bind(&VideoSequencerView::HandleVideoRemoved, this, std::placeholders::_1));
-		}
-
-		auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-		if (!imageSystem) {
-			std::cerr << "ImageSystem not found! Image support in the sequencer will be limited." << std::endl;
-		}
-
-		// Initialize preview texture
+		// Just initialize without callbacks for now
 		InitializePreviewTexture();
-
-		// Update available media
 		UpdateAvailableMedia();
+
+		std::cout << "[VideoSequencerView] Initialized without system callbacks (will be added when systems are updated)" << std::endl;
 	}
 
 	void VideoSequencerView::Update(float deltaT) {
@@ -743,7 +727,7 @@ namespace GUI {
 
 				// Display thumbnail as a button
 				if (ImGui::ImageButton(("##video" + std::to_string(entityID)).c_str(),
-					ImTextureRef((ImTextureID)(intptr_t)previewTexture),
+					(ImTextureID)(intptr_t)videoComp.currentTexture,
 					imgSize,
 					ImVec2(0, 1),  // UV0: top-left with Y flipped
 					ImVec2(1, 0),  // UV1: bottom-right with Y flipped
@@ -876,7 +860,7 @@ namespace GUI {
 
 				// Display thumbnail as a button
 				if (ImGui::ImageButton(("##image" + std::to_string(entityID)).c_str(),
-					ImTextureRef((ImTextureID)(intptr_t)previewTexture),
+					(ImTextureID)(intptr_t)imageComp.textureID,
 					imgSize,
 					ImVec2(0, 1),  // UV0: top-left with Y flipped
 					ImVec2(1, 0),  // UV1: bottom-right with Y flipped
@@ -1012,17 +996,10 @@ namespace GUI {
 			clipFrame = videoComp.frameCount - 1;
 		}
 
-		// Get video system
-		auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-		if (!videoSystem) return;
-
-		// Seek to the desired frame in the video
-		videoSystem->SeekToFrame(videoComp, clipFrame);
-
-		// The video system should have updated the texture in the component
-		// Simply copy that texture to our preview or use it directly
+		// TODO: Implement frame seeking when VideoSystem is updated
+		// For now, just use the current texture
 		if (videoComp.currentTexture != 0 && glIsTexture(videoComp.currentTexture)) {
-			// Copy texture to our preview
+			// Copy texture to our preview or use it directly
 			if (previewTexture != 0) {
 				CopyTexture(videoComp.currentTexture, previewTexture);
 			}
@@ -1063,9 +1040,11 @@ namespace GUI {
 
 	void VideoSequencerView::UpdateAvailableMedia() {
 		// Get videos
-		auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-		if (videoSystem) {
-			availableVideos = videoSystem->GetAllVideoEntities();
+		availableVideos.clear();
+		for (auto entityID : mgr.GetAllEntities()) {
+			if (mgr.HasComponent<ECS::VideoComponent>(entityID)) {
+				availableVideos.push_back(entityID);
+			}
 		}
 
 		// Get images
@@ -1133,67 +1112,77 @@ namespace GUI {
 	}
 
 	void VideoSequencerView::LoadVideoFile(const std::string& filePath) {
-		// Create a new entity with a video component
-		auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-		if (!videoSystem) {
-			std::cerr << "VideoSystem not found, cannot load video" << std::endl;
-			return;
-		}
-
 		ECS::EntityID entityID = mgr.AddNewEntity();
-		mgr.AddComponent<ECS::VideoComponent>(entityID);
+		auto& videoComp = mgr.AddComponent<ECS::VideoComponent>(entityID);
 
-		// Set the video directly using the system
-		videoSystem->SetVideo(entityID, filePath);
+		// Load video using AssetManager
+		auto future = AssetManager::Instance().LoadVideoAsync(filePath,
+			[this, entityID, &videoComp, filePath](ResourceID assetId, bool success) {  // Fix: Capture filePath explicitly
+			if (success) {
+				videoComp.videoAssetId = assetId;
+
+				// Update cached properties from VideoAsset
+				auto videoAsset = AssetManager::Instance().GetAsset<VideoAsset>(assetId);
+				if (videoAsset && videoAsset->IsLoaded()) {
+					videoComp.width = videoAsset->GetWidth();
+					videoComp.height = videoAsset->GetHeight();
+					videoComp.frameCount = videoAsset->GetFrameCount();
+					videoComp.fps = videoAsset->GetFrameRate();
+
+					std::filesystem::path path(videoAsset->GetPath());
+					videoComp.fileName = path.filename().string();
+					videoComp.filePath = videoAsset->GetPath();
+				}
+
+				std::cout << "[VideoSequencerView] Successfully loaded video: " << videoComp.fileName << std::endl;
+			}
+			else {
+				std::cerr << "[VideoSequencerView] Failed to load video from: " << filePath << std::endl;
+				mgr.DestroyEntity(entityID);
+			}
+		});
 	}
 
 	void VideoSequencerView::LoadImageFile(const std::string& filePath) {
-		// Create a new entity with an image component
-		auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-		if (!imageSystem) {
-			std::cerr << "ImageSystem not found, cannot load image" << std::endl;
-			return;
-		}
-
 		ECS::EntityID entityID = mgr.AddNewEntity();
-		mgr.AddComponent<ECS::ImageComponent>(entityID);
-		auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(entityID);
+		auto& imageComp = mgr.AddComponent<ECS::ImageComponent>(entityID);
 
-		// Load the image
-		try {
-			cv::Mat img = cv::imread(filePath);
-			if (img.empty()) {
-				std::cerr << "Failed to load image: " << filePath << std::endl;
-				mgr.DestroyEntity(entityID);
-				return;
+		// Load image using AssetManager
+		auto future = AssetManager::Instance().LoadImageAsync(filePath,
+			[this, entityID, &imageComp, filePath](ResourceID assetId, bool success) {  // Fix: Capture filePath explicitly
+			if (success) {
+				imageComp.imageAssetId = assetId;
+
+				// Create texture from the loaded image
+				imageComp.textureAssetId = AssetManager::Instance().CreateTextureFromImage(assetId);
+
+				// Update cached properties from ImageAsset
+				auto imageAsset = AssetManager::Instance().GetAsset<ImageAsset>(assetId);
+				if (imageAsset && imageAsset->IsLoaded()) {
+					int w, h, c;
+					imageAsset->GetDimensions(w, h, c);
+					imageComp.width = w;
+					imageComp.height = h;
+					imageComp.channels = c;
+
+					std::filesystem::path path(imageAsset->GetPath());
+					imageComp.fileName = path.filename().string();
+					imageComp.filePath = imageAsset->GetPath();
+
+					// Update texture ID from TextureAsset
+					auto textureAsset = AssetManager::Instance().GetAsset<TextureAsset>(imageComp.textureAssetId);
+					if (textureAsset && textureAsset->IsLoaded()) {
+						imageComp.textureID = textureAsset->GetRenderHandle().Get<GLuint>();
+					}
+				}
+
+				std::cout << "[VideoSequencerView] Successfully loaded image: " << imageComp.fileName << std::endl;
 			}
-
-			// Convert to RGB format
-			cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
-
-			// Get file info
-			std::filesystem::path path(filePath);
-			imageComp.fileName = path.filename().string();
-			imageComp.filePath = filePath;
-			imageComp.width = img.cols;
-			imageComp.height = img.rows;
-
-			// Create texture
-			glGenTextures(1, &imageComp.textureID);
-			glBindTexture(GL_TEXTURE_2D, imageComp.textureID);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-			// Upload data
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, imageComp.width, imageComp.height,
-				0, GL_RGB, GL_UNSIGNED_BYTE, img.data);
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Exception while loading image: " << e.what() << std::endl;
-			mgr.DestroyEntity(entityID);
-		}
+			else {
+				std::cerr << "[VideoSequencerView] Failed to load image from: " << filePath << std::endl;
+				mgr.DestroyEntity(entityID);
+			}
+		});
 	}
 
 	void VideoSequencerView::AddVideoToSequence(ECS::EntityID entityID) {

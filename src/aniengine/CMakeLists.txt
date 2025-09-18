@@ -141,6 +141,7 @@ file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/asset_mgr/*.cpp"
 )
 
 # Add the main AniEngine implementation
@@ -177,6 +178,7 @@ target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/VideoComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components/ScriptComponents>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/asset_mgr>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/defaults>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/media>

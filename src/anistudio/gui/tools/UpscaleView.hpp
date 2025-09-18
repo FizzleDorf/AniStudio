@@ -4,9 +4,13 @@
 #include "FilePaths.hpp"
 #include "pch.h"
 #include <components.h>
-#include <SDcppSystem.hpp>
-#include "ImGuiFileDialog.h"
-#include "stable-diffusion.h"
+#include <memory>
+#include <map>
+
+// Forward declarations
+namespace Utils {
+	class ContextMenuUtils;
+}
 
 using namespace ECS;
 
@@ -18,7 +22,7 @@ namespace GUI {
 			return R"({
             "displayName": "Upscale View",
             "category": "Tools",
-            "description": "Upscale images with ESRGAN models."
+            "description": "Upscale images with ESRGAN models using schema-driven UI."
         })";
 		}
 
@@ -31,31 +35,36 @@ namespace GUI {
 		void Deserialize(const nlohmann::json &j) override;
 		void Render() override;
 
-		// Render UI components
-		void RenderInputImageSelector(const EntityID entity);
-		void RenderModelSelector(const EntityID entity);
-		void RenderUpscaleParams(const EntityID entity);
-		void RenderOutputSettings(const EntityID entity);
-		void RenderThreadsSettings(const EntityID entity);
+	private:
+		// Entity for upscaling template (like DiffusionView pattern)
+		EntityID upscaleEntity = 0;
+
+		// Component visibility tracking
+		std::map<std::string, bool> componentVisibility;
+
+		// Context menu utilities
+		std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
+
+		// Legacy state variables (to be removed if not needed)
+		bool isFilenameChanged = false;
+
+		// Core methods following DiffusionView pattern
+		void ResetEntity();
+		bool IsEntitySafeToUse(ECS::EntityID entity) const;
+		std::vector<std::string> GetCategoryRenderOrder() const;
+
+		// Component rendering
+		void RenderEntityComponents(const EntityID entity);
+		void RenderComponent(EntityID entity, ComponentTypeID compId, const std::string& componentName);
+		void RenderMainContextMenu();
 
 		// Event handlers
 		void HandleUpscaleEvent();
-		void ResetEntity();
 
 		// Metadata functions
+		void RenderMetadataControls();
 		void SaveMetadataToJson(const std::string &filepath);
 		void LoadMetadataFromJson(const std::string &filepath);
-		void RenderMetadataControls();
-
-	private:
-		// Entity for upscaling operations
-		EntityID upscaleEntity = 0;
-		char outFileName[256] = "Anistudio-Upscale";
-		char outDirPath[512];
-		int currentExtensionIndex = 0;
-		std::string currentExtension = ".png"; // Default extension
-		// State variables
-		bool isFilenameChanged = false;
 	};
 
 } // namespace GUI

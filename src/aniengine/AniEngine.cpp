@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
+#include "AssetManager.hpp" // Add this include
 #include <iostream>
 #include <filesystem>
 
@@ -12,7 +13,7 @@ using namespace ECS;
 namespace ANI {
 
 	EngineCore::EngineCore()
-		: initialized(false), running(false), pluginDirectory("../plugins") { 
+		: initialized(false), running(false), pluginDirectory("../plugins") {
 		std::cout << "[EngineCore] Constructor called" << std::endl;
 	}
 
@@ -23,6 +24,12 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreComponents() {
+		// Register new asset handle components
+		entityManager.RegisterComponentName<ImageHandleComponent>("ImageHandle");
+		entityManager.RegisterComponentName<VideoHandleComponent>("VideoHandle");
+		entityManager.RegisterComponentName<TextureHandleComponent>("TextureHandle");
+
+		// Keep existing components for backward compatibility during migration
 		entityManager.RegisterComponentName<ModelComponent>("Model");
 		entityManager.RegisterComponentName<ClipLComponent>("ClipL");
 		entityManager.RegisterComponentName<ClipGComponent>("ClipG");
@@ -37,9 +44,12 @@ namespace ANI {
 		entityManager.RegisterComponentName<ClipSkipComponent>("ClipSkip");
 		entityManager.RegisterComponentName<VaeComponent>("Vae");
 		entityManager.RegisterComponentName<TaesdComponent>("Taesd");
+
+		// Keep old image components for backward compatibility
 		entityManager.RegisterComponentName<ImageComponent>("Image");
 		entityManager.RegisterComponentName<InputImageComponent>("InputImage");
 		entityManager.RegisterComponentName<OutputImageComponent>("OutputImage");
+
 		entityManager.RegisterComponentName<EmbeddingComponent>("Embedding");
 		entityManager.RegisterComponentName<ControlnetComponent>("Controlnet");
 		entityManager.RegisterComponentName<LayerSkipComponent>("LayerSkip");
@@ -62,9 +72,13 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreSystems() {
+		// Register new asset management systems (these replace the old ones)
 		entityManager.RegisterSystem<ImageSystem>();
-		entityManager.RegisterSystem<SDCPPSystem>();
 		entityManager.RegisterSystem<VideoSystem>();
+		// Note: TextureSystem not registered since you moved it to AniStudio for headless support
+
+		// Register other systems
+		entityManager.RegisterSystem<SDCPPSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
@@ -104,6 +118,10 @@ namespace ANI {
 
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
+
+			// Initialize asset management system FIRST
+			std::cout << "[EngineCore] Initializing AssetManager..." << std::endl;
+			AssetManager::Instance().Initialize();
 
 			// Initialize file paths properly (sets up defaults AND loads saved paths)
 			std::cout << "[EngineCore] Initializing file paths..." << std::endl;
@@ -152,6 +170,11 @@ namespace ANI {
 		}
 
 		entityManager.Reset();
+
+		// Shutdown asset manager last
+		std::cout << "[EngineCore] Shutting down AssetManager..." << std::endl;
+		AssetManager::Instance().Shutdown();
+
 		initialized = false;
 
 		std::cout << "[EngineCore] Shutdown complete" << std::endl;
@@ -159,6 +182,9 @@ namespace ANI {
 
 	void EngineCore::Update(float deltaTime) {
 		if (!initialized) return;
+
+		// Update asset manager first (handles main-thread texture creation)
+		AssetManager::Instance().Update();
 
 		entityManager.Update(deltaTime);
 

@@ -205,6 +205,9 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/widgets>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/events>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/systems>
     $<INSTALL_INTERFACE:include/anistudio>
 )
 

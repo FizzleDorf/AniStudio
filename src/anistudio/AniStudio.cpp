@@ -1,6 +1,7 @@
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
+#include "guiSystems.h"
 #include "DiffusionCallbackUtils.hpp"
 #include "ImGuiSettingsUtil.hpp"
 #include "Events.hpp"
@@ -29,6 +30,8 @@ namespace ANI {
 
 	void StudioCore::RegisterCoreViews() {
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
+		
+		engineCore.GetEntityManager().RegisterSystem<TextureSystem>();
 
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");

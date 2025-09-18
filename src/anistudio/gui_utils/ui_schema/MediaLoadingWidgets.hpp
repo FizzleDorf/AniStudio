@@ -10,7 +10,7 @@
 #include "FileDialogFilters.hpp"
 #include "UISchemaUtils.hpp"
 #include "ImageUtils.hpp"
-#include "OpenGLWrapper.hpp"
+#include "AssetManager.hpp"
 #include "PropertyTypes.hpp"
 #include <stb_image.h>
 
@@ -46,6 +46,33 @@ namespace UISchema {
 			return result;
 		}
 
+		// Create OpenGL texture manually (since Utils::OpenGLUtils doesn't exist)
+		static GLuint CreateTextureFromImageData(int width, int height, int channels, unsigned char* data) {
+			if (!data || width <= 0 || height <= 0) {
+				return 0;
+			}
+
+			GLuint textureID;
+			glGenTextures(1, &textureID);
+			glBindTexture(GL_TEXTURE_2D, textureID);
+
+			// Set texture parameters
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+			// Upload texture data
+			GLenum format = GL_RGB;
+			if (channels == 4) format = GL_RGBA;
+			else if (channels == 1) format = GL_RED;
+
+			glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+
+			glBindTexture(GL_TEXTURE_2D, 0);
+			return textureID;
+		}
+
 		// Create preview texture for image
 		static GLuint CreateImagePreview(const std::string& imagePath) {
 			// Check cache first
@@ -65,8 +92,8 @@ namespace UISchema {
 				return 0;
 			}
 
-			// Create OpenGL texture using Utils
-			GLuint textureID = Utils::OpenGLUtils::GenerateTexture(width, height, channels, data);
+			// Create OpenGL texture manually
+			GLuint textureID = CreateTextureFromImageData(width, height, channels, data);
 
 			// Cache the texture and dimensions
 			imagePreviewCache[imagePath] = textureID;
@@ -184,8 +211,8 @@ namespace UISchema {
 					unsigned char* imageData = Utils::ImageUtils::LoadImageData(fullPath, width, height, channels);
 
 					if (imageData) {
-						// Create texture using OpenGL wrapper
-						GLuint textureID = Utils::OpenGLUtils::GenerateTexture(width, height, channels, imageData);
+						// Create texture using our local function
+						GLuint textureID = CreateTextureFromImageData(width, height, channels, imageData);
 
 						// Split path into components
 						std::filesystem::path fsPath(fullPath);

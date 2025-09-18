@@ -3,20 +3,27 @@
 #include "Constants.hpp"
 #include "ECS.h"
 #include "rng.hpp"
-#include "ImageUtils.hpp"
-#include "ImageSystem.hpp"
-#include "VideoSystem.hpp"
-#include "SDCPPComponents.h"
+
+// CRITICAL: Include the asset management system
+#include "AssetManager.hpp"
+#include "AssetHandleComponents.hpp"
+
+// Include component headers properly
+#include "components.h"
+
+// Include your processing utilities
 #include "Txt2Img.hpp"
 #include "Img2Img.hpp"
 #include "Img2Vid.hpp"
 #include "Edit.hpp"
 #include "Upscaling.hpp"
 #include "Conversion.hpp"
+#include "PngMetadataUtils.hpp"
+
+// Standard includes
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPool.hpp"
-#include "PngMetadataUtils.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <filesystem>
@@ -106,7 +113,13 @@ namespace ECS {
 			, hasActiveTask(false)
 			, clearRequested(false) {
 			sysName = "SDCPPSystem";
+
+			// Use proper component signatures for the new asset system
 			AddComponentSignature<LatentComponent>();
+			AddComponentSignature<ImageHandleComponent>();
+			AddComponentSignature<VideoHandleComponent>();
+
+			// Add these components - they should exist based on your component files
 			AddComponentSignature<OutputImageComponent>();
 			AddComponentSignature<InputImageComponent>();
 		}
@@ -207,7 +220,6 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
-
 			if (shuttingDown) {
 				return;
 			}
@@ -365,30 +377,54 @@ namespace ECS {
 					return 0;
 				}
 
-				// Special handling for InputImageComponent to preserve image data
+				// Special handling for InputImageComponent with AssetManager integration
 				if (mgr.HasComponent<InputImageComponent>(originalEntity) &&
 					mgr.HasComponent<InputImageComponent>(clonedEntity)) {
 
 					auto& originalInput = mgr.GetComponent<InputImageComponent>(originalEntity);
 					auto& clonedInput = mgr.GetComponent<InputImageComponent>(clonedEntity);
 
-					// Deep copy the image data if it exists
-					if (originalInput.ownedImageData && originalInput.width > 0 &&
-						originalInput.height > 0 && originalInput.channels > 0) {
+					// With the new AssetManager system, we copy the asset references instead of raw data
+					if (originalInput.imageAssetId != INVALID_RESOURCE_ID) {
+						clonedInput.imageAssetId = originalInput.imageAssetId;
+						clonedInput.textureAssetId = originalInput.textureAssetId;
 
-						size_t dataSize = originalInput.width * originalInput.height * originalInput.channels;
-						unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+						// Copy the cached properties
+						clonedInput.width = originalInput.width;
+						clonedInput.height = originalInput.height;
+						clonedInput.channels = originalInput.channels;
+						clonedInput.fileName = originalInput.fileName;
+						clonedInput.filePath = originalInput.filePath;
+						clonedInput.textureID = originalInput.textureID;
 
-						if (newData) {
-							memcpy(newData, originalInput.ownedImageData.get(), dataSize);
-							clonedInput.SetImageData(newData, originalInput.width,
-								originalInput.height, originalInput.channels);
+						std::cout << "Copied asset references for cloned entity " << clonedEntity << std::endl;
+					}
+					else {
+						// Fallback: If no asset is loaded, we can't clone image data
+						// The processing will need to handle this case
+						std::cout << "Warning: No image asset to clone for entity " << clonedEntity << std::endl;
+					}
+				}
 
-							std::cout << "Copied image data for cloned entity " << clonedEntity << std::endl;
-						}
-						else {
-							std::cerr << "Failed to allocate memory for image data copy" << std::endl;
-						}
+				// Handle other image component types similarly
+				if (mgr.HasComponent<ImageComponent>(originalEntity) &&
+					mgr.HasComponent<ImageComponent>(clonedEntity)) {
+
+					auto& originalImg = mgr.GetComponent<ImageComponent>(originalEntity);
+					auto& clonedImg = mgr.GetComponent<ImageComponent>(clonedEntity);
+
+					// Copy asset references
+					if (originalImg.imageAssetId != INVALID_RESOURCE_ID) {
+						clonedImg.imageAssetId = originalImg.imageAssetId;
+						clonedImg.textureAssetId = originalImg.textureAssetId;
+
+						// Copy cached properties
+						clonedImg.width = originalImg.width;
+						clonedImg.height = originalImg.height;
+						clonedImg.channels = originalImg.channels;
+						clonedImg.fileName = originalImg.fileName;
+						clonedImg.filePath = originalImg.filePath;
+						clonedImg.textureID = originalImg.textureID;
 					}
 				}
 
@@ -400,7 +436,6 @@ namespace ECS {
 				return 0;
 			}
 		}
-
 		// The actual clearing logic - called from Update when it's safe
 		void HandleClearRequest() {
 			std::lock_guard<std::mutex> lock(queueMutex);
@@ -622,7 +657,12 @@ namespace ECS {
 						}
 
 						std::string fullFileName = baseName + extension;
-						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, output.filePath);
+
+						// Use proper API signature for CreateUniqueFilename
+						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(
+							output.outputDirectory,  // directory
+							fullFileName             // filename with extension
+						);
 					}
 
 					// Submit appropriate function based on task type using wrapper
@@ -765,7 +805,6 @@ namespace ECS {
 
 		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath, TaskType taskType) {
 			try {
-
 				if (shuttingDown) {
 					return;
 				}
@@ -780,21 +819,34 @@ namespace ECS {
 					return;
 				}
 
-				// Handle video output differently from image output
+				// Handle video output using AssetManager
 				if (IsVideoTask(taskType)) {
-					// Handle video output
-					auto videoSystem = mgr.GetSystem<VideoSystem>();
-					if (!videoSystem) {
-						std::cerr << "VideoSystem not found for video task completion" << std::endl;
-						return;
-					}
-
 					// Create a new entity for the generated video
 					EntityID videoEntity = mgr.AddNewEntity();
+
+					// Add the new asset handle component
+					auto& videoHandle = mgr.AddComponent<VideoHandleComponent>(videoEntity);
+
+					// Also add the old VideoComponent for backward compatibility
 					mgr.AddComponent<VideoComponent>(videoEntity);
 
-					// Load the video
-					videoSystem->SetVideo(videoEntity, fullPath);
+					// Use AssetManager to load the video asynchronously
+					auto future = AssetManager::Instance().LoadVideoAsync(fullPath,
+						[this, videoEntity](ResourceID assetId, bool success) {
+						if (success) {
+							std::cout << "[SDCPPSystem] Video loaded successfully (Entity: "
+								<< videoEntity << ", AssetID: " << assetId << ")" << std::endl;
+
+							// Update the handle component with the asset ID
+							if (mgr.HasComponent<VideoHandleComponent>(videoEntity)) {
+								VideoHandleComponent& handle = mgr.GetComponent<VideoHandleComponent>(videoEntity);
+								handle.videoAssetId = assetId;
+							}
+						}
+						else {
+							std::cerr << "[SDCPPSystem] Failed to load video for entity " << videoEntity << std::endl;
+						}
+					});
 
 					// Store the last generated video entity for VideoDiffusionView
 					{
@@ -802,23 +854,45 @@ namespace ECS {
 						lastGeneratedVideoEntity = videoEntity;
 					}
 
-					std::cout << "Video loaded successfully for entity " << videoEntity << " from " << fullPath << std::endl;
+					std::cout << "Video loading started for entity " << videoEntity << " from " << fullPath << std::endl;
 				}
 				else {
-					// Handle image output (existing logic)
-					auto imageSystem = mgr.GetSystem<ImageSystem>();
-					if (!imageSystem) {
-						std::cerr << "ImageSystem not found" << std::endl;
-						return;
+					// Handle image output using AssetManager
+
+					// Ensure entity has image handle component
+					if (!mgr.HasComponent<ImageHandleComponent>(entityID)) {
+						mgr.AddComponent<ImageHandleComponent>(entityID);
 					}
 
+					// Also add the old ImageComponent for backward compatibility
 					if (!mgr.HasComponent<ImageComponent>(entityID)) {
 						mgr.AddComponent<ImageComponent>(entityID);
 					}
 
-					// Load the image
-					imageSystem->SetImage(entityID, fullPath);
-					std::cout << "Image loaded successfully for entity " << entityID << std::endl;
+					// Use AssetManager to load the image asynchronously
+					auto future = AssetManager::Instance().LoadImageAsync(fullPath,
+						[this, entityID](ResourceID assetId, bool success) {
+						if (success) {
+							std::cout << "[SDCPPSystem] Image loaded successfully (Entity: "
+								<< entityID << ", AssetID: " << assetId << ")" << std::endl;
+
+							// Update the handle component with the asset ID
+							if (mgr.HasComponent<ImageHandleComponent>(entityID)) {
+								ImageHandleComponent& handle = mgr.GetComponent<ImageHandleComponent>(entityID);
+								handle.imageAssetId = assetId;
+
+								// Auto-create texture if needed
+								if (handle.autoCreateTexture) {
+									handle.textureAssetId = AssetManager::Instance().CreateTextureFromImage(assetId);
+								}
+							}
+						}
+						else {
+							std::cerr << "[SDCPPSystem] Failed to load image for entity " << entityID << std::endl;
+						}
+					});
+
+					std::cout << "Image loading started for entity " << entityID << " from " << fullPath << std::endl;
 				}
 
 				std::cout << "Successfully processed completed task for entity " << entityID << std::endl;

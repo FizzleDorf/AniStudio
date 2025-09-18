@@ -22,8 +22,7 @@
 
 #include "BaseComponent.hpp"
 #include "FilePaths.hpp"
-#include "OpenGLWrapper.hpp"
-#include "ImageUtils.hpp"
+#include "AssetTypes.hpp"
 #include <string>
 #include <memory>
 
@@ -34,11 +33,16 @@ namespace ECS {
 			!Utils::FilePaths::outputFolderPath.empty()
 			? Utils::FilePaths::outputFolderPath			 // Output folder if one is found
 			: Utils::FilePaths::defaultProjectPath;			 // Directory containing the Image
-		unsigned char *imageData = nullptr;                  // Pointer to image data - DO NOT FREE in destructor for base class
+
+		// Asset system integration
+		ResourceID imageAssetId = INVALID_RESOURCE_ID;       // ID of ImageAsset in AssetManager
+		ResourceID textureAssetId = INVALID_RESOURCE_ID;     // ID of TextureAsset in AssetManager
+
+		// Cached properties for UI display (updated from assets)
 		int width = 0;                                       // Image width
 		int height = 0;                                      // Image height
 		int channels = 0;                                    // Number of color channels
-		GLuint textureID = 0;                                // OpenGL texture ID
+		GLuint textureID = 0;                                // OpenGL texture ID (cached from TextureAsset)
 
 		ImageComponent() {
 			compName = "Image";
@@ -47,13 +51,12 @@ namespace ECS {
 		}
 
 		virtual ~ImageComponent() {
-			// Base ImageComponent doesn't own imageData - managed by ImageSystem
-			// Only cleanup texture
-			if (textureID != 0) {
-				glDeleteTextures(1, &textureID);
-				textureID = 0;
-			}
+			// Texture cleanup is handled by AssetManager
 		}
+
+		// Check if image asset is loaded
+		bool IsImageLoaded() const { return imageAssetId != INVALID_RESOURCE_ID; }
+		bool IsTextureReady() const { return textureAssetId != INVALID_RESOURCE_ID && textureID != 0; }
 
 		// Get property map for UI rendering
 		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -72,7 +75,9 @@ namespace ECS {
 				{"height", height},
 				{"channels", channels},
 				{"fileName", fileName},
-				{"filePath", filePath}
+				{"filePath", filePath},
+				{"imageAssetId", imageAssetId},
+				{"textureAssetId", textureAssetId}
 			};
 			return j;
 		}
@@ -108,6 +113,10 @@ namespace ECS {
 				fileName = componentData["fileName"];
 			if (componentData.contains("filePath"))
 				filePath = componentData["filePath"];
+			if (componentData.contains("imageAssetId"))
+				imageAssetId = componentData["imageAssetId"];
+			if (componentData.contains("textureAssetId"))
+				textureAssetId = componentData["textureAssetId"];
 		}
 
 		ImageComponent &operator=(const ImageComponent &other) {
@@ -117,8 +126,9 @@ namespace ECS {
 				width = other.width;
 				height = other.height;
 				channels = other.channels;
-				// Don't copy imageData pointer - each component manages its own
-				// Don't copy textureID - each component needs its own texture
+				imageAssetId = other.imageAssetId;
+				textureAssetId = other.textureAssetId;
+				textureID = other.textureID;
 			}
 			return *this;
 		}
@@ -130,8 +140,9 @@ namespace ECS {
 			width = other.width;
 			height = other.height;
 			channels = other.channels;
-			imageData = nullptr; // Don't copy raw pointer
-			textureID = 0; // Don't copy texture ID
+			imageAssetId = other.imageAssetId;
+			textureAssetId = other.textureAssetId;
+			textureID = other.textureID;
 			setupBaseSchema();
 		}
 
@@ -155,8 +166,6 @@ namespace ECS {
 	};
 
 	struct InputImageComponent : public ImageComponent {
-		std::shared_ptr<unsigned char[]> ownedImageData; // Smart pointer for owned data
-
 		InputImageComponent() {
 			compName = "InputImage";
 			fileName = "";
@@ -165,8 +174,7 @@ namespace ECS {
 		}
 
 		virtual ~InputImageComponent() {
-			// Cleanup happens automatically via shared_ptr
-			// Texture cleanup handled by base class
+			// Asset cleanup handled by AssetManager
 		}
 
 		// Get property map for UI rendering
@@ -194,69 +202,16 @@ namespace ECS {
 			ImageComponent::Deserialize(j);
 		}
 
-		void SetImageData(unsigned char* data, int w, int h, int ch) {
-			if (data && w > 0 && h > 0 && ch > 0) {
-				// Create shared_ptr with custom deleter using Utils::ImageUtils
-				ownedImageData = std::shared_ptr<unsigned char[]>(
-					data,
-					[](unsigned char* ptr) {
-					if (ptr) {
-						Utils::ImageUtils::FreeImageData(ptr);
-					}
-				}
-				);
-
-				// Set the raw pointer for backward compatibility
-				imageData = ownedImageData.get();
-				width = w;
-				height = h;
-				channels = ch;
-			}
-			else {
-				ClearImageData();
-			}
-		}
-
-		void ClearImageData() {
-			ownedImageData.reset();
-			imageData = nullptr;
-			width = 0;
-			height = 0;
-			channels = 0;
-		}
-
 		// Copy constructor
 		InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
 			compName = "InputImage";
 			setupInputSchema();
-
-			if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-				// Create a deep copy of the image data using Utils::ImageUtils
-				unsigned char* newData = Utils::ImageUtils::CopyImageData(
-					other.ownedImageData.get(), other.width, other.height, other.channels);
-				if (newData) {
-					SetImageData(newData, other.width, other.height, other.channels);
-				}
-			}
 		}
 
 		InputImageComponent &operator=(const InputImageComponent &other) {
 			if (this != &other) {
-				// Call base assignment
 				ImageComponent::operator=(other);
 				compName = "InputImage";
-
-				// Deep copy image data if it exists using Utils::ImageUtils
-				if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-					unsigned char* newData = Utils::ImageUtils::CopyImageData(
-						other.ownedImageData.get(), other.width, other.height, other.channels);
-					if (newData) {
-						SetImageData(newData, other.width, other.height, other.channels);
-					}
-				}
-				else {
-					ClearImageData();
-				}
 				setupInputSchema();
 			}
 			return *this;

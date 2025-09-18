@@ -2,8 +2,9 @@
 #include "ImageUtils.hpp"
 #include "ImGuiFileDialog.h"
 #include "Events.hpp"
+#include "AssetManager.hpp"
+#include "TextureSystem.hpp"
 #include <algorithm>
-#include "Events.hpp"
 
 namespace GUI {
 
@@ -31,26 +32,58 @@ namespace GUI {
 	}
 
 	void ImageView::Init() {
-		auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-		if (!imageSystem) {
-			mgr.RegisterSystem<ECS::ImageSystem>();
-			imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-		}
-
-		if (imageSystem) {
-			imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
-				OnImageLoaded(entityID);
-			});
-
-			imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entityID) {
-				OnImageRemoved(entityID);
-			});
+		// Ensure TextureSystem is registered for handling image textures
+		auto textureSystem = mgr.GetSystem<ECS::TextureSystem>();
+		if (!textureSystem) {
+			mgr.RegisterSystem<ECS::TextureSystem>();
 		}
 
 		RefreshImageEntities();
 	}
 
-	void ImageView::Update(const float deltaT) {}
+	void ImageView::Update(const float deltaT) {
+		// Poll for changes in image entities
+		size_t currentCount = 0;
+		for (auto entityID : mgr.GetAllEntities()) {
+			if (HasImageComponents(entityID)) {
+				currentCount++;
+			}
+		}
+
+		if (currentCount != lastEntityCount) {
+			RefreshImageEntities();
+			lastEntityCount = currentCount;
+
+			// Handle selection changes when entities are added/removed
+			if (imageEntities.empty()) {
+				selectedEntityID = 0;
+				imgIndex = 0;
+			}
+			else if (selectedEntityID == 0) {
+				// Auto-select first image if none selected
+				selectedEntityID = imageEntities[0];
+				imgIndex = 0;
+			}
+			else {
+				// Update imgIndex if selected entity still exists
+				auto it = std::find(imageEntities.begin(), imageEntities.end(), selectedEntityID);
+				if (it != imageEntities.end()) {
+					imgIndex = static_cast<int>(std::distance(imageEntities.begin(), it));
+				}
+				else {
+					// Selected entity was removed, select first available
+					if (!imageEntities.empty()) {
+						selectedEntityID = imageEntities[0];
+						imgIndex = 0;
+					}
+					else {
+						selectedEntityID = 0;
+						imgIndex = 0;
+					}
+				}
+			}
+		}
+	}
 
 	void ImageView::Render() {
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
@@ -121,15 +154,13 @@ namespace GUI {
 
 	void ImageView::RefreshImageEntities() {
 		try {
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (imageSystem) {
-				imageEntities = imageSystem->GetAllImageEntities();
-				lastEntityCount = imageEntities.size();
+			imageEntities.clear();
+			for (auto entityID : mgr.GetAllEntities()) {
+				if (HasImageComponents(entityID)) {
+					imageEntities.push_back(entityID);
+				}
 			}
-			else {
-				imageEntities.clear();
-				lastEntityCount = 0;
-			}
+			lastEntityCount = imageEntities.size();
 		}
 		catch (const std::exception& e) {
 			imageEntities.clear();
@@ -146,6 +177,27 @@ namespace GUI {
 				ImGui::Text("Dimensions: %dx%d", imageComp.width, imageComp.height);
 				ImGui::Text("Channels: %d", imageComp.channels);
 				ImGui::Text("Entity ID: %zu", selectedEntityID);
+
+				// Show asset loading status
+				if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
+					auto imageAsset = AssetManager::Instance().GetAsset(imageComp.imageAssetId);
+					if (imageAsset) {
+						switch (imageAsset->GetLoadState()) {
+						case LoadState::Loading:
+							ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Loading...");
+							break;
+						case LoadState::Loaded:
+							ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Loaded");
+							break;
+						case LoadState::Failed:
+							ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Status: Failed to load");
+							break;
+						default:
+							ImGui::Text("Status: Unknown");
+							break;
+						}
+					}
+				}
 
 				contextMenuUtils->RenderImageContextMenu(selectedEntityID);
 
@@ -451,8 +503,9 @@ namespace GUI {
 	}
 
 	void ImageView::LoadImages(const std::vector<std::string>& filePaths) {
-		auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-		if (!imageSystem) {
+		auto textureSystem = mgr.GetSystem<ECS::TextureSystem>();
+		if (!textureSystem) {
+			std::cerr << "[ImageView] TextureSystem not found!" << std::endl;
 			return;
 		}
 
@@ -462,10 +515,15 @@ namespace GUI {
 
 				ECS::EntityID entity = mgr.AddNewEntity();
 				mgr.AddComponent<ECS::ImageComponent>(entity);
-				imageSystem->SetImage(entity, filePath);
+
+				// Load image using TextureSystem with AssetManager integration
+				textureSystem->LoadImageTexture(entity, filePath, mgr);
+
+				std::cout << "[ImageView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
+			std::cerr << "[ImageView] Exception loading images: " << e.what() << std::endl;
 		}
 	}
 
@@ -475,14 +533,21 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			Utils::ImageUtils::SaveImage(
-				imageComp.filePath,
-				imageComp.width,
-				imageComp.height,
-				imageComp.channels,
-				imageComp.imageData);
+			if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
+				auto imageAsset = AssetManager::Instance().GetAsset<ImageAsset>(imageComp.imageAssetId);
+				if (imageAsset && imageAsset->IsLoaded()) {
+					int w, h, c;
+					imageAsset->GetDimensions(w, h, c);
+					unsigned char* data = imageAsset->GetImageData();
+
+					if (data) {
+						Utils::ImageUtils::SaveImage(imageComp.filePath, w, h, c, data);
+					}
+				}
+			}
 		}
 		catch (const std::exception& e) {
+			std::cerr << "[ImageView] Exception saving image: " << e.what() << std::endl;
 		}
 	}
 
@@ -492,14 +557,21 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			Utils::ImageUtils::SaveImage(
-				filePath,
-				imageComp.width,
-				imageComp.height,
-				imageComp.channels,
-				imageComp.imageData);
+			if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
+				auto imageAsset = AssetManager::Instance().GetAsset<ImageAsset>(imageComp.imageAssetId);
+				if (imageAsset && imageAsset->IsLoaded()) {
+					int w, h, c;
+					imageAsset->GetDimensions(w, h, c);
+					unsigned char* data = imageAsset->GetImageData();
+
+					if (data) {
+						Utils::ImageUtils::SaveImage(filePath, w, h, c, data);
+					}
+				}
+			}
 		}
 		catch (const std::exception& e) {
+			std::cerr << "[ImageView] Exception saving image: " << e.what() << std::endl;
 		}
 	}
 
@@ -507,12 +579,24 @@ namespace GUI {
 		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
 
 		try {
-			auto imageSystem = mgr.GetSystem<ECS::ImageSystem>();
-			if (imageSystem) {
-				imageSystem->RemoveImage(selectedEntityID);
+			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+
+			// Unload assets from AssetManager
+			if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
+				AssetManager::Instance().UnloadAsset(imageComp.imageAssetId);
 			}
+			if (imageComp.textureAssetId != INVALID_RESOURCE_ID) {
+				AssetManager::Instance().UnloadAsset(imageComp.textureAssetId);
+			}
+
+			// Destroy the entity
+			mgr.DestroyEntity(selectedEntityID);
+
+			// Update the view
+			OnImageRemoved(selectedEntityID);
 		}
 		catch (const std::exception& e) {
+			std::cerr << "[ImageView] Exception removing image: " << e.what() << std::endl;
 		}
 	}
 

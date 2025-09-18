@@ -317,16 +317,19 @@ namespace GUI {
 
 			// Current frame slider
 			int currentFrame = videoComp.currentFrame;
-			if (ImGui::SliderInt("Frame", &currentFrame, 0, videoComp.frameCount - 1)) {
-				auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-				if (videoSystem) {
-					videoSystem->SeekToFrame(videoComp, currentFrame);
-				}
+			if (ImGui::SliderInt("Frame", &currentFrame, 0, std::max(0, videoComp.frameCount - 1))) {
+				videoComp.currentFrame = currentFrame;
+				videoComp.needsTextureUpdate = true;
+				// Note: Frame seeking will be implemented when VideoSystem is updated
 			}
 
 			// Play/Pause button
 			if (ImGui::Button(videoComp.isPlaying ? "Pause" : "Play")) {
 				videoComp.isPlaying = !videoComp.isPlaying;
+				if (videoComp.isPlaying) {
+					PauseAllVideos(); // Pause others
+					videoComp.isPlaying = true; // Resume this one
+				}
 			}
 
 			ImGui::SameLine();
@@ -334,10 +337,9 @@ namespace GUI {
 			// Stop button
 			if (ImGui::Button("Stop")) {
 				videoComp.isPlaying = false;
-				auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-				if (videoSystem) {
-					videoSystem->SeekToFrame(videoComp, 0);
-				}
+				videoComp.currentFrame = 0;
+				videoComp.needsTextureUpdate = true;
+				// Note: Frame seeking will be implemented when VideoSystem is updated
 			}
 
 			ImGui::SameLine();
@@ -349,7 +351,7 @@ namespace GUI {
 
 			// Playback speed slider
 			if (ImGui::SliderFloat("Speed", &videoComp.playbackSpeed, 0.1f, 2.0f, "%.1fx")) {
-				// The VideoSystem will handle the speed change
+				// Speed changes are handled automatically
 			}
 
 			ImGui::Separator();
@@ -578,10 +580,22 @@ namespace GUI {
 		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
 
 		try {
-			auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
-			if (videoSystem) {
-				videoSystem->RemoveVideo(selectedEntityID);
+			const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+
+			// Unload assets from AssetManager
+			if (videoComp.videoAssetId != INVALID_RESOURCE_ID) {
+				AssetManager::Instance().UnloadAsset(videoComp.videoAssetId);
 			}
+			if (videoComp.textureAssetId != INVALID_RESOURCE_ID) {
+				AssetManager::Instance().UnloadAsset(videoComp.textureAssetId);
+			}
+
+			// Destroy the entity
+			mgr.DestroyEntity(selectedEntityID);
+
+			// Reset selection
+			selectedEntityID = 0;
+			videoIndex = 0;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[VideoView] Exception removing video: " << e.what() << std::endl;

@@ -10,22 +10,14 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
-#include <mutex>
 
 namespace Utils {
 
-	// Global mutex for stb_image operations
-	extern std::mutex stbi_mutex;
-
 	class ImageUtils {
 	public:
-		// CRITICAL FIX: Minimize lock scope to prevent deadlocks
+		// Load image data - no longer needs mutex protection since AssetManager handles threading
 		static unsigned char* LoadImageData(const std::string& filePath, int& width, int& height, int& channels) {
-			unsigned char* data;
-			{
-				std::lock_guard<std::mutex> lock(stbi_mutex);
-				data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
-			}
+			unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
 
 			if (!data) {
 				std::cerr << "Failed to load image: " << filePath << " - " << stbi_failure_reason() << std::endl;
@@ -34,10 +26,9 @@ namespace Utils {
 			return data;
 		}
 
-		// CRITICAL FIX: Minimize lock scope
+		// Free image data - no longer needs mutex protection
 		static void FreeImageData(unsigned char* data) {
 			if (data) {
-				std::lock_guard<std::mutex> lock(stbi_mutex);
 				stbi_image_free(data);
 			}
 		}
@@ -56,7 +47,7 @@ namespace Utils {
 			return copy;
 		}
 
-		// CRITICAL FIX: Minimize lock scope for save operations
+		// Save image - no longer needs mutex protection since this is called from main thread
 		static bool SaveImage(const std::string& filePath, int width, int height, int channels, const unsigned char* data) {
 			// Create the directory if it doesn't exist
 			std::filesystem::path path(filePath);
@@ -68,27 +59,22 @@ namespace Utils {
 
 			int result = 0;
 
-			// Protect stb_image_write calls with mutex - minimized scope
-			{
-				std::lock_guard<std::mutex> lock(stbi_mutex);
-
-				if (ext == ".png") {
-					result = stbi_write_png(filePath.c_str(), width, height, channels, data, width * channels);
-				}
-				else if (ext == ".jpg" || ext == ".jpeg") {
-					result = stbi_write_jpg(filePath.c_str(), width, height, channels, data, 90); // 90% quality
-				}
-				else if (ext == ".bmp") {
-					result = stbi_write_bmp(filePath.c_str(), width, height, channels, data);
-				}
-				else if (ext == ".tga") {
-					result = stbi_write_tga(filePath.c_str(), width, height, channels, data);
-				}
-				else {
-					// Default to PNG if extension is not recognized
-					std::string newPath = filePath + ".png";
-					result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
-				}
+			if (ext == ".png") {
+				result = stbi_write_png(filePath.c_str(), width, height, channels, data, width * channels);
+			}
+			else if (ext == ".jpg" || ext == ".jpeg") {
+				result = stbi_write_jpg(filePath.c_str(), width, height, channels, data, 90); // 90% quality
+			}
+			else if (ext == ".bmp") {
+				result = stbi_write_bmp(filePath.c_str(), width, height, channels, data);
+			}
+			else if (ext == ".tga") {
+				result = stbi_write_tga(filePath.c_str(), width, height, channels, data);
+			}
+			else {
+				// Default to PNG if extension is not recognized
+				std::string newPath = filePath + ".png";
+				result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
 			}
 
 			return result != 0;

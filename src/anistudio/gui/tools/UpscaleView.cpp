@@ -1,9 +1,9 @@
 #include "UpscaleView.hpp"
 #include "Events.hpp"
 #include "Constants.hpp"
-#include "ImageUtils.hpp"
-#include "ImageSystem.hpp"
-#include "OpenGLUtils.hpp"
+#include "UISchema.hpp"
+#include "ContextMenuUtils.hpp"
+#include <ImGuiFileDialog.h>
 #include <filesystem>
 
 using namespace ECS;
@@ -15,7 +15,8 @@ namespace GUI {
 	UpscaleView::UpscaleView(EntityManager& entityMgr) : BaseView(entityMgr),
 		isFilenameChanged(false) {
 		viewName = "UpscaleView";
-		strcpy(outDirPath, Utils::FilePaths::defaultProjectPath.c_str());
+		windowOpen = true;
+		contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(entityMgr);
 	}
 
 	UpscaleView::~UpscaleView() {
@@ -34,467 +35,276 @@ namespace GUI {
 			upscaleEntity = 0;
 		}
 
-		// Create a new entity for upscaling
+		// Create a new entity for upscaling with required components
 		upscaleEntity = mgr.AddNewEntity();
 
-		// Add components
-		auto& inputComp = mgr.AddComponent<InputImageComponent>(upscaleEntity);
-		auto& outputComp = mgr.AddComponent<OutputImageComponent>(upscaleEntity);
-		auto& esrganComp = mgr.AddComponent<EsrganComponent>(upscaleEntity);
-		auto& samplerComp = mgr.AddComponent<SamplerComponent>(upscaleEntity);
+		// Add upscaling-specific components
+		mgr.AddComponent<InputImageComponent>(upscaleEntity);
+		mgr.AddComponent<OutputImageComponent>(upscaleEntity);
+		mgr.AddComponent<EsrganComponent>(upscaleEntity);
+		mgr.AddComponent<SamplerComponent>(upscaleEntity);
 
 		// Initialize with default values
-		outputComp.fileName = "upscaled_output.png";
-		outputComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
+		auto& outputComp = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
+		outputComp.fileName = "upscaled_output";
+		outputComp.outputDirectory = !Utils::FilePaths::outputFolderPath.empty()
 			? Utils::FilePaths::outputFolderPath
 			: Utils::FilePaths::defaultProjectPath;
+
+		auto& esrganComp = mgr.GetComponent<EsrganComponent>(upscaleEntity);
 		esrganComp.upscaleFactor = 2;
 		esrganComp.preserveAspectRatio = true;
+
+		auto& samplerComp = mgr.GetComponent<SamplerComponent>(upscaleEntity);
 		samplerComp.n_threads = std::thread::hardware_concurrency();
 	}
-	void UpscaleView::Render() {
 
-		ImGui::SetNextWindowSize(ImVec2(600, 800), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			
-			if (!windowOpen) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-			}
-			
-			
-			if (ImGui::CollapsingHeader("Metadata")) {
-				RenderMetadataControls();
-			}
-
-			if (ImGui::CollapsingHeader("Input Image")) {
-				RenderInputImageSelector(upscaleEntity);
-			}
-
-			if (ImGui::CollapsingHeader("Upscale Model")) {
-				RenderModelSelector(upscaleEntity);
-			}
-
-			if (ImGui::CollapsingHeader("Upscale Parameters")) {
-				RenderUpscaleParams(upscaleEntity);
-			}
-
-			if (ImGui::CollapsingHeader("Output Settings")) {
-				RenderOutputSettings(upscaleEntity);
-			}
-
-			if (ImGui::CollapsingHeader("Processing Settings")) {
-				RenderThreadsSettings(upscaleEntity);
-			}
-
-			// Run button
-			ImGui::Separator();
-			if (ImGui::Button("Run Upscale", ImVec2(-FLT_MIN, 0))) {
-				HandleUpscaleEvent();
-			}
-		}
-		ImGui::End();
+	bool UpscaleView::IsEntitySafeToUse(ECS::EntityID entity) const {
+		return mgr.IsEntityValid(entity);
 	}
 
-	void UpscaleView::RenderInputImageSelector(const EntityID entity) {
-		if (!mgr.HasComponent<InputImageComponent>(entity)) {
-			return;
+	std::vector<std::string> UpscaleView::GetCategoryRenderOrder() const {
+		return {
+			"Image",
+			"Models",
+			"Processing",
+			"Output"
+		};
+	}
+
+	void UpscaleView::RenderEntityComponents(const EntityID entity) {
+		if (entity == 0 || !IsEntitySafeToUse(entity)) return;
+
+		// Get all components and organize by category
+		auto componentIds = mgr.GetEntityComponents(entity);
+		std::map<std::string, std::vector<std::pair<ComponentTypeID, std::string>>> categorizedComponents;
+
+		for (ComponentTypeID compId : componentIds) {
+			std::string componentName = mgr.GetComponentNameById(compId);
+			auto* component = mgr.GetComponentByIdConst(entity, compId);
+			if (!component) continue;
+
+			std::string category = component->compCategory.empty() ? "Uncategorized" : component->compCategory;
+			categorizedComponents[category].emplace_back(compId, componentName);
 		}
 
-		auto& imageComp = mgr.GetComponent<InputImageComponent>(entity);
+		// Get the desired render order
+		std::vector<std::string> renderOrder = GetCategoryRenderOrder();
 
-		// Image selection UI
-		if (ImGui::BeginTable("InputImageTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Image", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-
-			ImGui::TableNextColumn();
-			ImGui::Text("Input Image");
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("...##load_img123")) {
-				IGFD::FileDialogConfig config;
-				config.path = Utils::FilePaths::defaultProjectPath;
-				ImGuiFileDialog::Instance()->OpenDialog("LoadInputImageDialog", "Choose Image",
-					".png,.jpg,.jpeg,.bmp,.tga", config);
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("X##clear_img123")) {
-				// Clear image using the InputImageComponent's built-in method
-				imageComp.ClearImageData();
-
-				if (imageComp.textureID != 0) {
-					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
-					imageComp.textureID = 0;
+		// First render categories in the specified order
+		for (const auto& category : renderOrder) {
+			auto it = categorizedComponents.find(category);
+			if (it != categorizedComponents.end()) {
+				if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+					for (const auto&[compId, componentName] : it->second) {
+						RenderComponent(entity, compId, componentName);
+					}
 				}
-				imageComp.fileName = "";
-				imageComp.filePath = "";
-				imageComp.width = 0;
-				imageComp.height = 0;
+				// Remove from map so it doesn't render again
+				categorizedComponents.erase(it);
 			}
-
-			ImGui::TableNextColumn();
-			ImGui::Text("%s", imageComp.fileName.c_str());
-
-			ImGui::EndTable();
 		}
 
-		// File dialog for loading image
-		if (ImGuiFileDialog::Instance()->Display("LoadInputImageDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-
-				// Clear image using the InputImageComponent's built-in method
-				imageComp.ClearImageData();
-				if (imageComp.textureID != 0) {
-					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);  // Use OpenGLUtils
-					imageComp.textureID = 0;
-				}
-
-				// Load new image
-				int width, height, channels;
-				unsigned char* imageData = Utils::ImageUtils::LoadImageData(filePath, width, height, channels);
-
-				if (imageData) {
-					// Update component data using the safe method
-					imageComp.SetImageData(imageData, width, height, channels);
-					imageComp.fileName = fileName;
-					imageComp.filePath = filePath;
-
-					// Generate texture for preview using OpenGLUtils
-					imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
-						imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
+		// Render remaining categories that weren't in the ordered list
+		for (const auto&[category, components] : categorizedComponents) {
+			if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				for (const auto&[compId, componentName] : components) {
+					RenderComponent(entity, compId, componentName);
 				}
 			}
-			ImGuiFileDialog::Instance()->Close();
+		}
+	}
+
+	void UpscaleView::RenderComponent(EntityID entity, ComponentTypeID compId, const std::string& componentName) {
+		// Component visibility checkbox
+		if (componentVisibility.find(componentName) == componentVisibility.end()) {
+			componentVisibility[componentName] = true;
 		}
 
-		// Image preview section
-		ImGui::Separator();
+		bool isVisible = componentVisibility[componentName];
+		if (ImGui::Checkbox(componentName.c_str(), &isVisible)) {
+			componentVisibility[componentName] = isVisible;
+		}
 
-		if (imageComp.textureID != 0 && imageComp.width > 0 && imageComp.height > 0) {
-			ImGui::Text("Image dimensions: %d x %d", imageComp.width, imageComp.height);
+		if (!isVisible) return;
 
-			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
+		ImGui::Indent();
 
-			float availWidth = ImGui::GetContentRegionAvail().x;
-			float aspectRatio = static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height);
+		// Store cursor position for context menu
+		ImVec2 contentStart = ImGui::GetCursorScreenPos();
 
-			ImVec2 imageSize;
-			if (aspectRatio > 1.0f) {
-				imageSize = ImVec2(availWidth, availWidth / aspectRatio);
+		// Get component and render its UI
+		auto* component = mgr.GetComponentById(entity, compId);
+		if (component && !component->schema.empty()) {
+			try {
+				auto properties = component->GetPropertyMap();
+
+				// Special handling for specific components
+				if (componentName == "InputImage") {
+					UISchema::RenderSchema(component->schema, properties);
+
+					// Add button to use image dimensions for output estimation
+					if (ImGui::Button("Show Output Estimate", ImVec2(-1.0f, 0))) {
+						if (mgr.HasComponent<InputImageComponent>(entity) && mgr.HasComponent<EsrganComponent>(entity)) {
+							auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+							auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+
+							if (inputComp.width > 0 && inputComp.height > 0) {
+								int outWidth = inputComp.width * esrganComp.upscaleFactor;
+								int outHeight = inputComp.height * esrganComp.upscaleFactor;
+								float memoryMB = (outWidth * outHeight * 4) / (1024.0f * 1024.0f);
+
+								ImGui::Text("Estimated output: %dx%d (%.1f MB)", outWidth, outHeight, memoryMB);
+							}
+						}
+					}
+				}
+				else if (componentName == "Esrgan") {
+					UISchema::RenderSchema(component->schema, properties);
+
+					// Display current upscale factor info
+					if (mgr.HasComponent<EsrganComponent>(entity)) {
+						auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+						ImGui::Text("Current factor: %dx", esrganComp.upscaleFactor);
+
+						if (mgr.HasComponent<InputImageComponent>(entity)) {
+							auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+							if (inputComp.width > 0 && inputComp.height > 0) {
+								int outWidth = inputComp.width * esrganComp.upscaleFactor;
+								int outHeight = inputComp.height * esrganComp.upscaleFactor;
+								ImGui::Text("Output will be: %dx%d", outWidth, outHeight);
+							}
+						}
+					}
+				}
+				else {
+					// Standard component rendering
+					UISchema::RenderSchema(component->schema, properties);
+				}
+			}
+			catch (const std::exception& e) {
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering %s: %s",
+					componentName.c_str(), e.what());
+			}
+		}
+
+		// Add context menu for component
+		ImVec2 contentEnd = ImGui::GetCursorScreenPos();
+		ImVec2 contentSize = ImVec2(ImGui::GetContentRegionAvail().x, contentEnd.y - contentStart.y);
+
+		ImGui::SetCursorScreenPos(contentStart);
+		ImGui::InvisibleButton(("##component_context_" + componentName).c_str(), contentSize);
+
+		std::string popupId = "ComponentContextMenu##" + componentName + "_" + std::to_string(entity);
+		if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+			ImGui::OpenPopup(popupId.c_str());
+		}
+
+		if (ImGui::BeginPopup(popupId.c_str())) {
+			ImGui::Text("Component: %s", componentName.c_str());
+			ImGui::Text("Entity: %zu", entity);
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Copy Component")) {
+				contextMenuUtils->CopyComponent(entity, compId);
+			}
+
+			if (ImGui::MenuItem("Copy Entity")) {
+				contextMenuUtils->CopyEntity(entity);
+			}
+
+			ImGui::Separator();
+
+			if (contextMenuUtils->HasValidClipboardData()) {
+				if (contextMenuUtils->CanPasteComponent()) {
+					if (ImGui::MenuItem("Paste Component")) {
+						contextMenuUtils->PasteComponent(entity);
+					}
+				}
+				if (contextMenuUtils->CanPasteEntity()) {
+					if (ImGui::MenuItem("Paste Entity")) {
+						nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
+						if (clipboardData.contains("data")) {
+							mgr.DeserializeEntity(clipboardData["data"], entity);
+						}
+					}
+				}
 			}
 			else {
-				imageSize = ImVec2(availWidth * aspectRatio, availWidth);
+				ImGui::TextDisabled("Nothing to paste");
 			}
 
-			float availHeight = ImGui::GetContentRegionAvail().y;
-			if (imageSize.y > availHeight) {
-				imageSize.y = availHeight;
-				imageSize.x = availHeight * aspectRatio;
+			ImGui::EndPopup();
+		}
+
+		ImGui::SetCursorScreenPos(contentEnd);
+		ImGui::Unindent();
+	}
+
+	void UpscaleView::RenderMainContextMenu() {
+		if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() &&
+			ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+			ImGui::OpenPopup("UpscaleMainContext");
+		}
+
+		if (ImGui::BeginPopup("UpscaleMainContext")) {
+			ImGui::Text("Upscale View");
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Copy Entity")) {
+				contextMenuUtils->CopyEntity(upscaleEntity);
 			}
 
-			float xOffset = (availWidth - imageSize.x) * 0.5f;
-			if (xOffset > 0) {
-				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + xOffset);
-			}
+			ImGui::Separator();
 
-			ImGui::Image(ImTextureRef((ImTextureID)(intptr_t)imageComp.textureID), imageSize);
-
-			ImGui::EndChild();
-
-			// Show estimated output dimensions
-			if (mgr.HasComponent<EsrganComponent>(entity)) {
-				auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
-				int outWidth = imageComp.width * esrganComp.upscaleFactor;
-				int outHeight = imageComp.height * esrganComp.upscaleFactor;
-				ImGui::Text("Estimated output: %d x %d", outWidth, outHeight);
-
-				// Add option to use image dimensions for latent size
-				if (ImGui::Button("Use image dimensions for output")) {
-					if (mgr.HasComponent<LatentComponent>(entity)) {
-						auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
-						// Make dimensions divisible by 8 (required for stable diffusion)
-						latentComp.latentWidth = (imageComp.width / 8) * 8;
-						latentComp.latentHeight = (imageComp.height / 8) * 8;
+			if (contextMenuUtils->HasValidClipboardData()) {
+				if (contextMenuUtils->CanPasteComponent()) {
+					if (ImGui::MenuItem("Paste Component")) {
+						contextMenuUtils->PasteComponent(upscaleEntity);
 					}
 				}
-			}
-		}
-		else {
-			ImGui::BeginChild("ImagePreview", ImVec2(0, 300), true);
-			ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-				"No image loaded. Click the '...' button to select an input image.");
-			ImGui::EndChild();
-		}
-	}
-
-	void UpscaleView::RenderModelSelector(const EntityID entity) {
-		if (!mgr.HasComponent<EsrganComponent>(entity)) {
-			return;
-		}
-
-		auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
-
-		if (ImGui::BeginTable("ModelTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-
-			ImGui::TableNextColumn();
-			ImGui::Text("Upscaler");
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("...##LoadModel")) {
-				IGFD::FileDialogConfig config;
-				config.path = Utils::FilePaths::upscaleDir;
-				ImGuiFileDialog::Instance()->OpenDialog(
-					"LoadModelDialog",
-					"Choose Upscale Model",
-					".pth,.safetensors,.pt,.bin",
-					config
-				);
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("R##ResetModel123")) {
-				esrganComp.modelName = "";
-				esrganComp.modelPath = "";
-			}
-
-			ImGui::TableNextColumn();
-			ImGui::Text("%s", esrganComp.modelName.c_str());
-
-			ImGui::EndTable();
-		}
-
-		// Handle file dialog display and selection
-		if (ImGuiFileDialog::Instance()->Display("LoadModelDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-				std::string fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
-
-				esrganComp.modelPath = fullPath;
-				esrganComp.modelName = fileName;
-				std::cout << "Selected model: " << fullPath << std::endl;
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-	}
-
-	void UpscaleView::RenderUpscaleParams(const EntityID entity) {
-		if (!mgr.HasComponent<EsrganComponent>(entity)) {
-			return;
-		}
-
-		auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
-
-		// Upscale factor
-		ImGui::Text("Upscale Factor:");
-		ImGui::SameLine();
-		int factor = esrganComp.upscaleFactor;
-		if (ImGui::RadioButton("2x", factor == 2)) factor = 2;
-		ImGui::SameLine();
-		if (ImGui::RadioButton("3x", factor == 3)) factor = 3;
-		ImGui::SameLine();
-		if (ImGui::RadioButton("4x", factor == 4)) factor = 4;
-		esrganComp.upscaleFactor = factor;
-
-		// Preserve aspect ratio
-		ImGui::Checkbox("Preserve Aspect Ratio", &esrganComp.preserveAspectRatio);
-
-		// Display memory estimate
-		if (mgr.HasComponent<InputImageComponent>(entity)) {
-			auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
-			if (inputComp.width > 0 && inputComp.height > 0) {
-				int outWidth = inputComp.width * esrganComp.upscaleFactor;
-				int outHeight = inputComp.height * esrganComp.upscaleFactor;
-				float memoryMB = (outWidth * outHeight * 4) / (1024.0f * 1024.0f); // Assuming 4 bytes per pixel
-				ImGui::Text("Estimated memory usage: %.1f MB", memoryMB);
-			}
-		}
-	}
-
-	void UpscaleView::RenderOutputSettings(const EntityID entity) {
-		if (!mgr.HasComponent<OutputImageComponent>(entity)) {
-			return;
-		}
-
-		auto& outputComp = mgr.GetComponent<OutputImageComponent>(entity);
-
-		// Initialize buffer with current filename if changed
-		if (isFilenameChanged) {
-			strncpy(outFileName, outputComp.fileName.c_str(), sizeof(outFileName) - 1);
-			outFileName[sizeof(outFileName) - 1] = '\0';  // Ensure null termination
-
-			strncpy(outDirPath, outputComp.filePath.c_str(), sizeof(outDirPath) - 1);
-			outDirPath[sizeof(outDirPath) - 1] = '\0';  // Ensure null termination
-
-			isFilenameChanged = false;
-		}
-
-		// Filename input
-		if (ImGui::BeginTable("OutputNameTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-			ImGui::TableNextRow();
-			ImGui::TableNextColumn();
-			ImGui::Text("Filename");
-
-			ImGui::TableNextColumn();
-			if (ImGui::InputText("##OutFilename", outFileName, IM_ARRAYSIZE(outFileName))) {
-				outputComp.fileName = outFileName;
-				isFilenameChanged = true;
-			}
-
-			ImGui::EndTable();
-		}
-
-		// File extension selector
-		const char* extensions[] = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".webp" };
-
-		if (ImGui::BeginTable("Extension", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-			ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-			ImGui::TableNextColumn();
-			ImGui::Text("Format");
-
-			ImGui::TableNextColumn();
-			if (ImGui::BeginCombo("##ExtensionCombo", currentExtension.c_str())) {
-				for (int i = 0; i < IM_ARRAYSIZE(extensions); i++) {
-					bool isSelected = (currentExtensionIndex == i);
-					if (ImGui::Selectable(extensions[i], isSelected)) {
-						currentExtensionIndex = i;
-						currentExtension = extensions[i];
-						isFilenameChanged = true; // Trigger update of the file extension
-					}
-					if (isSelected) {
-						ImGui::SetItemDefaultFocus();
+				if (contextMenuUtils->CanPasteEntity()) {
+					if (ImGui::MenuItem("Paste Entity")) {
+						nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
+						if (clipboardData.contains("data")) {
+							mgr.DeserializeEntity(clipboardData["data"], upscaleEntity);
+						}
 					}
 				}
-				ImGui::EndCombo();
+
+				ImGui::Separator();
+				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s",
+					contextMenuUtils->GetClipboardPreview().c_str());
+			}
+			else {
+				ImGui::TextDisabled("Nothing to paste");
 			}
 
-			ImGui::EndTable();
-		}
-
-		// Directory selector
-		if (ImGui::BeginTable("OutputDirTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-			ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 54.0f);
-			ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-			ImGui::TableSetupColumn("Path", ImGuiTableColumnFlags_WidthStretch);
-
-			ImGui::TableNextColumn();
-			ImGui::Text("Dir Path");
-
-			ImGui::TableNextColumn();
-			if (ImGui::Button("...##ChooseDir123123")) {
-				IGFD::FileDialogConfig config;
-				config.path = !Utils::FilePaths::outputFolderPath.empty()
-					? Utils::FilePaths::outputFolderPath
-					: Utils::FilePaths::defaultProjectPath;
-				ImGuiFileDialog::Instance()->OpenDialog("ChooseDirDialog", "Choose Output Directory", nullptr, config);
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("R##ResetDir123123")) {
-				outputComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
-					? Utils::FilePaths::outputFolderPath
-					: Utils::FilePaths::defaultProjectPath;
-				strncpy(outDirPath, outputComp.filePath.c_str(), sizeof(outDirPath) - 1);
-				outDirPath[sizeof(outDirPath) - 1] = '\0';  // Ensure null termination
-			}
-
-			ImGui::TableNextColumn();
-			ImGui::Text("%s", outputComp.filePath.c_str());
-
-			ImGui::EndTable();
-		}
-
-		// Handle directory selection dialog
-		if (ImGuiFileDialog::Instance()->Display("ChooseDirDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string selectedDir = ImGuiFileDialog::Instance()->GetCurrentPath();
-				if (!selectedDir.empty()) {
-					outputComp.filePath = selectedDir;
-					strncpy(outDirPath, selectedDir.c_str(), sizeof(outDirPath) - 1);
-					outDirPath[sizeof(outDirPath) - 1] = '\0';  // Ensure null termination
-					isFilenameChanged = true;
-				}
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-
-		// Update filename with extension if changed
-		if (isFilenameChanged) {
-			std::string newFileName = outputComp.fileName;
-			if (!newFileName.empty()) {
-				std::filesystem::path filePath(newFileName);
-
-				// If the extension is missing or different from the selected one, update it
-				std::string fileExtension = filePath.has_extension() ?
-					filePath.extension().string() : "";
-
-				if (fileExtension != currentExtension) {
-					filePath.replace_extension(currentExtension);
-					outputComp.fileName = filePath.string();
-					strncpy(outFileName, outputComp.fileName.c_str(), sizeof(outFileName) - 1);
-					outFileName[sizeof(outFileName) - 1] = '\0';  // Ensure null termination
-				}
-			}
-			isFilenameChanged = false;
-		}
-	}
-
-	void UpscaleView::RenderThreadsSettings(const EntityID entity) {
-		if (!mgr.HasComponent<SamplerComponent>(entity)) {
-			return;
-		}
-
-		auto& samplerComp = mgr.GetComponent<SamplerComponent>(entity);
-
-		ImGui::Text("Processing Threads:");
-		ImGui::SliderInt("##Threads", &samplerComp.n_threads, 1, std::thread::hardware_concurrency(),
-			"%d threads");
-
-		// CPU thread info
-		ImGui::Text("System has %d logical processors", std::thread::hardware_concurrency());
-
-		// Display a warning if too many threads are selected
-		if (samplerComp.n_threads > std::thread::hardware_concurrency() / 2) {
-			ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.0f, 1.0f),
-				"Warning: Using too many threads may degrade system performance");
+			ImGui::EndPopup();
 		}
 	}
 
 	void UpscaleView::HandleUpscaleEvent() {
 		std::cout << "Creating entity for upscaling..." << std::endl;
 
-		// Create a new entity for processing by cloning the current entity
-		EntityID newEntity = mgr.DeserializeEntity(mgr.SerializeEntity(upscaleEntity));
-
+		// Clone the template entity for processing (like DiffusionView does)
+		EntityID newEntity = mgr.CloneEntity(upscaleEntity);
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
-			mgr.DestroyEntity(newEntity);
 			return;
 		}
 
-		std::cout << "Initialized entity with ID: " << newEntity << std::endl;
-
-		// Ensure the Output component exists and is properly set up
-		if (!mgr.HasComponent<OutputImageComponent>(upscaleEntity)) {
-			std::cerr << "Failed to find output path!" << std::endl;
-			mgr.DestroyEntity(newEntity);
-			return;
+		// Ensure output component is properly configured
+		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
+			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+			if (outputComp.outputDirectory.empty()) {
+				outputComp.outputDirectory = Utils::FilePaths::defaultProjectPath;
+			}
+			if (outputComp.fileName.empty()) {
+				outputComp.fileName = "AniStudio_upscaled";
+			}
+			std::filesystem::create_directories(outputComp.outputDirectory);
 		}
-
-		// Copy the original output component to the new entity
-		mgr.GetComponent<OutputImageComponent>(newEntity) = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
-		mgr.GetComponent<InputImageComponent>(newEntity) = mgr.GetComponent<InputImageComponent>(upscaleEntity);
 
 		// Queue event for upscaling
 		Event event;
@@ -505,14 +315,74 @@ namespace GUI {
 		std::cout << "Upscaling request queued for entity: " << newEntity << std::endl;
 	}
 
+	void UpscaleView::Render() {
+		ImGui::SetNextWindowSize(ImVec2(400, 800), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+
+			if (!windowOpen) {
+				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			}
+
+			if (ImGui::CollapsingHeader("Metadata Controls")) {
+				RenderMetadataControls();
+			}
+
+			if (contextMenuUtils->HasValidClipboardData()) {
+				ImGui::Separator();
+				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s",
+					contextMenuUtils->GetClipboardPreview().c_str());
+				ImGui::Separator();
+			}
+
+			// Render the upscale entity components using UISchema
+			RenderEntityComponents(upscaleEntity);
+
+			// Run button at the bottom
+			ImGui::Separator();
+			if (ImGui::Button("Run Upscale", ImVec2(-FLT_MIN, 0))) {
+				HandleUpscaleEvent();
+			}
+
+			RenderMainContextMenu();
+		}
+		ImGui::End();
+	}
+
+	nlohmann::json UpscaleView::Serialize() const {
+		if (upscaleEntity == 0) {
+			return nlohmann::json();
+		}
+
+		nlohmann::json j = mgr.SerializeEntity(upscaleEntity);
+		j["componentVisibility"] = componentVisibility;
+		return j;
+	}
+
+	void UpscaleView::Deserialize(const nlohmann::json& j) {
+		if (upscaleEntity == 0) {
+			std::cerr << "Error: Invalid upscale entity for deserialization" << std::endl;
+			return;
+		}
+
+		try {
+			mgr.DeserializeEntity(j, upscaleEntity);
+			if (j.contains("componentVisibility")) {
+				componentVisibility = j["componentVisibility"];
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Exception during deserialization: " << e.what() << std::endl;
+		}
+	}
+
 	void UpscaleView::RenderMetadataControls() {
-		if (ImGui::Button("Save Settings##2d", ImVec2(-FLT_MIN, 0))) {
+		if (ImGui::Button("Save Settings", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
 			config.path = Utils::FilePaths::defaultProjectPath;
 			ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Settings", ".json", config);
 		}
 
-		if (ImGui::Button("Load Settings##r1", ImVec2(-FLT_MIN, 0))) {
+		if (ImGui::Button("Load Settings", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
 			config.path = Utils::FilePaths::defaultProjectPath;
 			ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Settings", ".json", config);
@@ -534,43 +404,6 @@ namespace GUI {
 				LoadMetadataFromJson(filepath);
 			}
 			ImGuiFileDialog::Instance()->Close();
-		}
-	}
-
-	nlohmann::json UpscaleView::Serialize() const {
-		if (upscaleEntity == 0) {
-			return nlohmann::json();
-		}
-
-		return mgr.SerializeEntity(upscaleEntity);
-	}
-
-	void UpscaleView::Deserialize(const nlohmann::json& j) {
-		try {
-			// Create a temporary entity with the deserialized data
-			EntityID tempEntity = mgr.DeserializeEntity(j);
-
-			// Copy components from the temporary entity to our upscale entity
-			if (mgr.HasComponent<InputImageComponent>(tempEntity))
-				mgr.GetComponent<InputImageComponent>(upscaleEntity) = mgr.GetComponent<InputImageComponent>(tempEntity);
-
-			if (mgr.HasComponent<OutputImageComponent>(tempEntity))
-				mgr.GetComponent<OutputImageComponent>(upscaleEntity) = mgr.GetComponent<OutputImageComponent>(tempEntity);
-
-			if (mgr.HasComponent<EsrganComponent>(tempEntity))
-				mgr.GetComponent<EsrganComponent>(upscaleEntity) = mgr.GetComponent<EsrganComponent>(tempEntity);
-
-			if (mgr.HasComponent<SamplerComponent>(tempEntity))
-				mgr.GetComponent<SamplerComponent>(upscaleEntity) = mgr.GetComponent<SamplerComponent>(tempEntity);
-
-			// Clean up the temporary entity
-			mgr.DestroyEntity(tempEntity);
-
-			isFilenameChanged = true; // Trigger UI update
-			std::cout << "Successfully deserialized data to entity " << upscaleEntity << std::endl;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "Exception during deserialization: " << e.what() << std::endl;
 		}
 	}
 
