@@ -52,15 +52,15 @@ if(ANIENGINE_ENABLE_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    
+
     if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
         set(CMAKE_CUDA_ARCHITECTURES "native" CACHE STRING "CUDA architectures" FORCE)
     endif()
-    
+
     add_definitions(-DSD_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "AniEngine: CUDA backend enabled with architectures: ${CMAKE_CUDA_ARCHITECTURES}")
-    
+
     if(NOT CUDAToolkit_FOUND)
         message(FATAL_ERROR "CUDA toolkit not found!")
     endif()
@@ -110,7 +110,7 @@ endif()
 # Use relative paths for external dependencies
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL)
-    
+
     find_package(Vulkan REQUIRED)
     find_package(OpenCV REQUIRED)
     find_package(glew REQUIRED)
@@ -119,8 +119,8 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     find_package(PNG REQUIRED)
     find_package(FFmpeg REQUIRED)
     find_package(pybind11 REQUIRED)
-    find_package(semver REQUIRED)
-    
+    # find_package(semver REQUIRED)
+
     get_filename_component(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/../../external" ABSOLUTE)
 else()
     get_filename_component(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external" ABSOLUTE)
@@ -207,32 +207,32 @@ target_include_directories(AniEngineCore PUBLIC
 
 # Link base libraries
 target_link_libraries(AniEngineCore PUBLIC
-    opencv::opencv
+    ${OpenCV_LIBS}
     ZLIB::ZLIB
     PNG::PNG
     Vulkan::Vulkan
     GLEW::GLEW
     glfw
-    ffmpeg::avcodec
-    ffmpeg::avformat
-    ffmpeg::avutil
-    ffmpeg::swscale
+    PkgConfig::LIBAV
+    # ffmpeg::avformat
+    # ffmpeg::avutil
+    # ffmpeg::swscale
     pybind11::embed
-    semver::semver
+    # semver::semver
     stable-diffusion
 )
 
 # CUDA support - COMPLETE LINKING
 if(ANIENGINE_ENABLE_CUDA)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
-    target_link_libraries(AniEngineCore PUBLIC 
+    target_link_libraries(AniEngineCore PUBLIC
         CUDA::cudart
         CUDA::cublas
         CUDA::cublasLt
         CUDA::curand
         CUDA::cufft
     )
-    
+
     # Link all possible CUDA backend targets
     foreach(CUDA_TARGET ggml-cuda ggml_cuda ggml-backend-cuda common-cuda)
         if(TARGET ${CUDA_TARGET})
@@ -246,7 +246,7 @@ endif()
 if(ANIENGINE_ENABLE_VULKAN)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_VULKAN)
     target_link_libraries(AniEngineCore PUBLIC Vulkan::Vulkan)
-    
+
     # Link all possible Vulkan backend targets
     foreach(VULKAN_TARGET ggml-vulkan ggml_vulkan ggml-backend-vulkan common-vulkan)
         if(TARGET ${VULKAN_TARGET})
@@ -260,7 +260,7 @@ endif()
 if(ANIENGINE_ENABLE_OPENCL)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_OPENCL)
     target_link_libraries(AniEngineCore PUBLIC OpenCL::OpenCL)
-    
+
     # Link all possible OpenCL backend targets
     foreach(OPENCL_TARGET ggml-opencl ggml_opencl ggml-backend-opencl common-opencl)
         if(TARGET ${OPENCL_TARGET})
@@ -273,7 +273,7 @@ endif()
 # Metal support
 if(ANIENGINE_ENABLE_METAL)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_METAL)
-    
+
     foreach(METAL_TARGET ggml-metal ggml_metal ggml-backend-metal common-metal)
         if(TARGET ${METAL_TARGET})
             target_link_libraries(AniEngineCore PUBLIC ${METAL_TARGET})
@@ -285,7 +285,7 @@ endif()
 # HipBLAS support
 if(ANIENGINE_ENABLE_HIPBLAS)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
-    
+
     foreach(HIPBLAS_TARGET ggml-hipblas ggml_hipblas ggml-backend-hipblas common-hipblas)
         if(TARGET ${HIPBLAS_TARGET})
             target_link_libraries(AniEngineCore PUBLIC ${HIPBLAS_TARGET})
@@ -297,7 +297,7 @@ endif()
 # SYCL support
 if(ANIENGINE_ENABLE_SYCL)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_SYCL)
-    
+
     foreach(SYCL_TARGET ggml-sycl ggml_sycl ggml-backend-sycl common-sycl)
         if(TARGET ${SYCL_TARGET})
             target_link_libraries(AniEngineCore PUBLIC ${SYCL_TARGET})
@@ -309,7 +309,7 @@ endif()
 # MUSA support
 if(ANIENGINE_ENABLE_MUSA)
     target_compile_definitions(AniEngineCore PUBLIC SD_USE_CUDA)
-    
+
     foreach(MUSA_TARGET ggml-musa ggml_musa ggml-backend-musa common-musa)
         if(TARGET ${MUSA_TARGET})
             target_link_libraries(AniEngineCore PUBLIC ${MUSA_TARGET})

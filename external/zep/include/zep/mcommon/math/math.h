@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <cmath>
 #include <ostream>
 #include <algorithm>
@@ -446,7 +447,7 @@ struct NRect
     {
         bottomRightPx = topLeftPx + size;
     }
-    
+
     void SetHeight(const T height)
     {
         bottomRightPx.y = topLeftPx.y + height;

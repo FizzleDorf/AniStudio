@@ -41,12 +41,12 @@ if(SD_CUDA)
     enable_language(CUDA)
     set(CUDA_ARCHITECTURES "89" CACHE STRING "Override for RTX 4090" FORCE)
     add_definitions(-DSD_USE_CUDA)
-    
+
     find_package(CUDAToolkit REQUIRED)
     if(NOT CUDAToolkit_FOUND)
         message(FATAL_ERROR "CUDA toolkit not found!")
     endif()
-    
+
     if(SD_FAST_SOFTMAX)
         message(STATUS "Fast softmax enabled (CUDA only)")
     endif()
@@ -99,29 +99,29 @@ if(SD_MUSA)
 endif()
 
 # Include Conan toolchain
-include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
-if(NOT CONAN_TOOLCHAIN)
-    message(STATUS "Conan toolchain not found, installing dependencies...")
-    
-    find_program(CONAN_CMD conan)
-    if(NOT CONAN_CMD)
-        message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
-    endif()
-    
-    execute_process(
-        COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}" 
-                --output-folder="${CMAKE_BINARY_DIR}" 
-                --build=missing
-        RESULT_VARIABLE CONAN_RESULT
-        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-    )
-    
-    if(NOT CONAN_RESULT EQUAL 0)
-        message(FATAL_ERROR "Conan install failed!")
-    endif()
-    
-    include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
-endif()
+# include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
+# if(NOT CONAN_TOOLCHAIN)
+#     message(STATUS "Conan toolchain not found, installing dependencies...")
+#
+#     find_program(CONAN_CMD conan)
+#     if(NOT CONAN_CMD)
+#         message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
+#     endif()
+#
+#     execute_process(
+#         COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}"
+#                 --output-folder="${CMAKE_BINARY_DIR}"
+#                 --build=missing
+#         RESULT_VARIABLE CONAN_RESULT
+#         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+#     )
+#
+#     if(NOT CONAN_RESULT EQUAL 0)
+#         message(FATAL_ERROR "Conan install failed!")
+#     endif()
+#
+#     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
+# endif()
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -158,7 +158,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/data/defaults")
     foreach(DEFAULT_FILE ${DEFAULT_FILES})
         file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/data/defaults" "${DEFAULT_FILE}")
         set(DEST_FILE "${DEFAULTS_DIR}/${REL_PATH}")
-        
+
         if(NOT EXISTS "${DEST_FILE}")
             get_filename_component(DEST_DIR "${DEST_FILE}" DIRECTORY)
             file(MAKE_DIRECTORY "${DEST_DIR}")
@@ -173,7 +173,7 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
     foreach(SCRIPT_FILE ${SCRIPT_FILES})
         file(RELATIVE_PATH REL_PATH "${CMAKE_SOURCE_DIR}/scripts" "${SCRIPT_FILE}")
         set(DEST_FILE "${SCRIPTS_DIR}/${REL_PATH}")
-        
+
         get_filename_component(DEST_DIR "${DEST_FILE}" DIRECTORY)
         file(MAKE_DIRECTORY "${DEST_DIR}")
         file(COPY "${SCRIPT_FILE}" DESTINATION "${DEST_DIR}")
@@ -184,9 +184,9 @@ endif()
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/shaders")
     set(SHADER_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
-    
+
     file(GLOB SHADER_FILES "${SHADER_DIR}/*.vert" "${SHADER_DIR}/*.frag")
-    
+
     if(SHADER_FILES)
         file(COPY ${SHADER_FILES} DESTINATION ${CMAKE_BINARY_DIR}/shaders)
         list(LENGTH SHADER_FILES SHADER_COUNT)
@@ -201,14 +201,30 @@ endif()
 # Find external dependencies
 find_package(Vulkan REQUIRED)
 find_package(OpenCV REQUIRED)
-find_package(glew REQUIRED)
+find_package(GLEW REQUIRED)
+# if (GLEW_FOUND)
+#     include_directories(${GLEW_INCLUDE_DIRS})
+# endif()
+
 find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
-find_package(FFmpeg REQUIRED)
+
+# find_package(FFmpeg REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
+    libavdevice
+    libavfilter
+    libavformat
+    libavcodec
+    libswresample
+    libswscale
+    libavutil
+)
+
 find_package(pybind11 REQUIRED)
-find_package(semver REQUIRED)
+# find_package(semver REQUIRED)
 
 # Check for Zep availability
 if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
@@ -263,50 +279,51 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin
     )
 
-    target_compile_definitions(${PROJECT_NAME} PRIVATE 
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
         GLEW_STATIC
         IMGUI_DEFINE_MATH_OPERATORS
     )
-    
+
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/src/core
         ${CMAKE_SOURCE_DIR}/src/timer
         ${CMAKE_SOURCE_DIR}/include
     )
-    
+
     target_link_libraries(${PROJECT_NAME} PRIVATE
         AniStudioCore
+        -lGL
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
-    
+
     message(STATUS "Main application will be built")
 endif()
 
 # Plugin utility function
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
-    
+
     add_library(${TARGET_NAME} SHARED ${PLUGIN_SOURCES})
-    
+
     target_include_directories(${TARGET_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/src/aniengine/plugins
         ${CMAKE_SOURCE_DIR}/src/anistudio/plugins
         ${CMAKE_SOURCE_DIR}/external/cr/cr
         ${PLUGIN_INCLUDE_DIRS}
     )
-    
+
     target_link_libraries(${TARGET_NAME} PRIVATE
         AniEngineCore
         AniStudioCore
         ${PLUGIN_LIBRARIES}
     )
-    
+
     target_compile_definitions(${TARGET_NAME} PRIVATE
         PLUGIN_API=__declspec\(dllexport\)
     )
-    
+
     set_target_properties(${TARGET_NAME} PROPERTIES
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
@@ -322,36 +339,36 @@ function(add_external_plugin TARGET_NAME)
         LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${PLUGINS_DIR}
         LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${PLUGINS_DIR}
     )
-    
+
     message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
 # Install configuration
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
-    
+
     if(BUILD_MAIN_APP AND TARGET ${PROJECT_NAME})
         install(TARGETS ${PROJECT_NAME}
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
-    
+
     install(DIRECTORY ${DATA_DIR}/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
         PATTERN "*.tmp" EXCLUDE
     )
-    
+
     install(DIRECTORY ${SCRIPTS_DIR}/
         DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/scripts
         PATTERN "*.tmp" EXCLUDE
     )
-    
+
     if(EXISTS ${CMAKE_BINARY_DIR}/shaders)
         install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/
             DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/shaders
         )
     endif()
-    
+
     install(DIRECTORY DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins)
 endif()
 

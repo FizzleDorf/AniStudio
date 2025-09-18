@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(ImGui)
 
-find_package(glew)
+# find_package(glew)
+find_package(GLEW REQUIRED)
 find_package(glfw3)
 
 # Add source files for ImGui

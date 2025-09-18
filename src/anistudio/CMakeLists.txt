@@ -28,13 +28,13 @@ endif()
 # Find dependencies if building standalone
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL)
-    
+
     find_package(glew REQUIRED)
     find_package(glfw3 REQUIRED)
     find_package(exiv2 CONFIG REQUIRED)
-    
+
     set(EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
-    
+
     find_package(AniEngineCore QUIET)
     if(NOT AniEngineCore_FOUND)
         if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../aniengine")
@@ -123,10 +123,10 @@ endif()
 if(ANISTUDIO_ENABLE_ZEP AND NOT TARGET Zep::Zep AND EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt")
     # Configure Zep build options
     set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
-    set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE) 
+    set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE)
     set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
     set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)
-    
+
     add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/zep")
     message(STATUS "Added Zep: ${EXTERNAL_DIR}/zep")
     set(ZEP_AVAILABLE TRUE)
@@ -237,7 +237,7 @@ target_link_libraries(AniStudioCore PUBLIC
     AniEngineCore
     glfw
     GLEW::GLEW
-    exiv2::exiv2
+    exiv2
     ImGui
 )
 
@@ -315,46 +315,46 @@ target_compile_definitions(AniStudioCore PUBLIC
 # Install configuration (when building standalone)
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
-    
+
     install(TARGETS AniStudioCore
         EXPORT AniStudioCoreTargets
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
-    
+
     install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/anistudio
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     )
-    
+
     if(EXISTS ${CMAKE_SOURCE_DIR}/../../include)
         install(DIRECTORY ${CMAKE_SOURCE_DIR}/../../include/
             DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
             FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
         )
     endif()
-    
+
     include(CMakePackageConfigHelpers)
-    
+
     configure_package_config_file(
         "${CMAKE_CURRENT_SOURCE_DIR}/AniStudioCoreConfig.cmake.in"
         "${CMAKE_CURRENT_BINARY_DIR}/AniStudioCoreConfig.cmake"
         INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AniStudioCore
     )
-    
+
     write_basic_package_version_file(
         "${CMAKE_CURRENT_BINARY_DIR}/AniStudioCoreConfigVersion.cmake"
         VERSION ${PROJECT_VERSION}
         COMPATIBILITY SameMajorVersion
     )
-    
+
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/AniStudioCoreConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/AniStudioCoreConfigVersion.cmake"
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AniStudioCore
     )
-    
+
     install(EXPORT AniStudioCoreTargets
         FILE AniStudioCoreTargets.cmake
         NAMESPACE AniStudioCore::

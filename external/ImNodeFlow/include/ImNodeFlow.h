@@ -2,6 +2,7 @@
 #define IM_NODE_FLOW
 #pragma once
 
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <utility>
