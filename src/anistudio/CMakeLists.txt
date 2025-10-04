@@ -219,6 +219,7 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/stable-diffusion.cpp"
     "${EXTERNAL_DIR}/stb_image"
     "${EXTERNAL_DIR}/imgui_filedialog"
+    "${EXTERNAL_DIR}/imgui_filedialog/stb"
     "${EXTERNAL_DIR}/imgui_nodes"
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"

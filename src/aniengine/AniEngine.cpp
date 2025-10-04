@@ -4,7 +4,7 @@
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
-#include "AssetManager.hpp" // Add this include
+#include "AssetManager.hpp"
 #include <iostream>
 #include <filesystem>
 
@@ -29,40 +29,15 @@ namespace ANI {
 		entityManager.RegisterComponentName<VideoHandleComponent>("VideoHandle");
 		entityManager.RegisterComponentName<TextureHandleComponent>("TextureHandle");
 
-		// Keep existing components for backward compatibility during migration
-		entityManager.RegisterComponentName<ModelComponent>("Model");
-		entityManager.RegisterComponentName<ClipLComponent>("ClipL");
-		entityManager.RegisterComponentName<ClipGComponent>("ClipG");
-		entityManager.RegisterComponentName<T5XXLComponent>("T5XXL");
-		entityManager.RegisterComponentName<DiffusionModelComponent>("DiffusionModel");
-		entityManager.RegisterComponentName<LatentComponent>("Latent");
-		entityManager.RegisterComponentName<LoraComponent>("Lora");
-		entityManager.RegisterComponentName<PromptComponent>("Prompt");
-		entityManager.RegisterComponentName<SamplerComponent>("Sampler");
-		entityManager.RegisterComponentName<GuidanceComponent>("Guidance");
-		entityManager.RegisterComponentName<EsrganComponent>("Esrgan");
-		entityManager.RegisterComponentName<ClipSkipComponent>("ClipSkip");
-		entityManager.RegisterComponentName<VaeComponent>("Vae");
-		entityManager.RegisterComponentName<TaesdComponent>("Taesd");
-
 		// Keep old image components for backward compatibility
 		entityManager.RegisterComponentName<ImageComponent>("Image");
 		entityManager.RegisterComponentName<InputImageComponent>("InputImage");
 		entityManager.RegisterComponentName<OutputImageComponent>("OutputImage");
 
-		entityManager.RegisterComponentName<EmbeddingComponent>("Embedding");
-		entityManager.RegisterComponentName<ControlnetComponent>("Controlnet");
-		entityManager.RegisterComponentName<LayerSkipComponent>("LayerSkip");
 		entityManager.RegisterComponentName<VideoComponent>("Video");
 		entityManager.RegisterComponentName<InputVideoComponent>("InputVideo");
 		entityManager.RegisterComponentName<OutputVideoComponent>("OutputVideo");
 		entityManager.RegisterComponentName<PythonComponent>("Python");
-		entityManager.RegisterComponentName<ChromaComponent>("Chroma");
-		entityManager.RegisterComponentName<HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
-		entityManager.RegisterComponentName<ClipVisionComponent>("ClipVision");
-		entityManager.RegisterComponentName<HighNoiseSamplerComponent>("HighNoiseSampler");
-		entityManager.RegisterComponentName<VideoParamsComponent>("VideoParams");
-		entityManager.RegisterComponentName<StackedIdEmbedComponent>("StackedIdEmbed");
 
 		entityManager.RegisterComponentName<ECS::TransformComponent>("Transform");
 		entityManager.RegisterComponentName<ECS::MeshComponent>("Mesh");
@@ -75,10 +50,6 @@ namespace ANI {
 		// Register new asset management systems (these replace the old ones)
 		entityManager.RegisterSystem<ImageSystem>();
 		entityManager.RegisterSystem<VideoSystem>();
-		// Note: TextureSystem not registered since you moved it to AniStudio for headless support
-
-		// Register other systems
-		entityManager.RegisterSystem<SDCPPSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;

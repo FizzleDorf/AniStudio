@@ -31,12 +31,6 @@
 // Project management view
 #include "project/ProjectManagerView.hpp"
 
-// AI Generation views
-#include "tools/DiffusionView.hpp"
-#include "tools/VideoDiffusionView.hpp"
-#include "tools/UpscaleView.hpp"
-#include "tools/ConvertView.hpp"
-
 // Media views
 #include "viewers/ImageView.hpp"
 #include "viewers/VideoView.hpp"

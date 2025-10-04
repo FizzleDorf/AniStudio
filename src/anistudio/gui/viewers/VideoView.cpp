@@ -85,32 +85,32 @@ namespace GUI {
 			}
 		}
 
-		// Check for newly generated videos from SDCPPSystem
-		auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
-		if (sdcppSystem) {
-			ECS::EntityID latestGenerated = sdcppSystem->GetLastGeneratedVideo();
-			if (latestGenerated != 0 && latestGenerated != lastGeneratedVideoID) {
-				// New video was generated! Auto-select it
-				lastGeneratedVideoID = latestGenerated;
+		//// Check for newly generated videos from SDCPPSystem
+		//auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+		//if (sdcppSystem) {
+		//	ECS::EntityID latestGenerated = sdcppSystem->GetLastGeneratedVideo();
+		//	if (latestGenerated != 0 && latestGenerated != lastGeneratedVideoID) {
+		//		// New video was generated! Auto-select it
+		//		lastGeneratedVideoID = latestGenerated;
 
-				// Find this entity in our video list
-				RefreshVideoEntities(); // Make sure we have the latest list
+		//		// Find this entity in our video list
+		//		RefreshVideoEntities(); // Make sure we have the latest list
 
-				auto it = std::find(videoEntities.begin(), videoEntities.end(), latestGenerated);
-				if (it != videoEntities.end()) {
-					videoIndex = static_cast<int>(std::distance(videoEntities.begin(), it));
-					selectedEntityID = latestGenerated;
-					PauseAllVideos(); // Pause all other videos
+		//		auto it = std::find(videoEntities.begin(), videoEntities.end(), latestGenerated);
+		//		if (it != videoEntities.end()) {
+		//			videoIndex = static_cast<int>(std::distance(videoEntities.begin(), it));
+		//			selectedEntityID = latestGenerated;
+		//			PauseAllVideos(); // Pause all other videos
 
-					std::cout << "[VideoView] AUTO-SELECTED newly generated video: Entity "
-						<< latestGenerated << " at index " << videoIndex << std::endl;
-				}
-				else {
-					std::cout << "[VideoView] Warning: Generated video " << latestGenerated
-						<< " not found in video entities list" << std::endl;
-				}
-			}
-		}
+		//			std::cout << "[VideoView] AUTO-SELECTED newly generated video: Entity "
+		//				<< latestGenerated << " at index " << videoIndex << std::endl;
+		//		}
+		//		else {
+		//			std::cout << "[VideoView] Warning: Generated video " << latestGenerated
+		//				<< " not found in video entities list" << std::endl;
+		//		}
+		//	}
+		//}
 	}
 
 	void VideoView::Render() {

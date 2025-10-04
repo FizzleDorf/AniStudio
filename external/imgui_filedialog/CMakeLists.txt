@@ -9,7 +9,10 @@ add_library(ImGuiFileDialog STATIC
     ImGuiFileDialogConfig.h
 )
 
-target_include_directories(ImGuiFileDialog PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ../imgui)
+target_include_directories(ImGuiFileDialog PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} 
+../imgui
+stb
+)
 
 if(UNIX)
     target_compile_options(ImGuiFileDialog PUBLIC -Wno-unknown-pragmas)

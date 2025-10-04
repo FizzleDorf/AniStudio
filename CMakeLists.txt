@@ -127,7 +127,7 @@ else()
 endif()
 
 # Find external dependencies
-# find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED)
 find_package(GLEW REQUIRED)
 # if (GLEW_FOUND)
 #     include_directories(${GLEW_INCLUDE_DIRS})

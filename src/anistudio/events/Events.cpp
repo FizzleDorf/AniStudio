@@ -216,121 +216,121 @@ namespace ANI {
 				break;
 			}
 
-			case EventType::InferenceRequest: {
-				std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
+			//case EventType::InferenceRequest: {
+			//	std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
 
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					std::cout << "SDCPPSystem is registered." << std::endl;
-					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Inference);
-				}
-				else {
-					std::cerr << "SDCPPSystem is not registered." << std::endl;
-				}
-				break;
-			}
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		std::cout << "SDCPPSystem is registered." << std::endl;
+			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Inference);
+			//	}
+			//	else {
+			//		std::cerr << "SDCPPSystem is not registered." << std::endl;
+			//	}
+			//	break;
+			//}
 
-			case EventType::Img2ImgRequest: {
-				std::cout << "Handling Img2Img event for Entity ID: " << event.entityID << '\n';
+			//case EventType::Img2ImgRequest: {
+			//	std::cout << "Handling Img2Img event for Entity ID: " << event.entityID << '\n';
 
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					std::cout << "SDCPPSystem is registered." << std::endl;
-					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Img);
-				}
-				else {
-					std::cerr << "SDCPPSystem is not registered." << std::endl;
-				}
-				break;
-			}
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		std::cout << "SDCPPSystem is registered." << std::endl;
+			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Img);
+			//	}
+			//	else {
+			//		std::cerr << "SDCPPSystem is not registered." << std::endl;
+			//	}
+			//	break;
+			//}
 
-			case EventType::Img2VidRequest: {
-				std::cout << "Handling Img2Vid request for Entity ID: " << event.entityID << '\n';
+			//case EventType::Img2VidRequest: {
+			//	std::cout << "Handling Img2Vid request for Entity ID: " << event.entityID << '\n';
 
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					std::cout << "SDCPPSystem is registered, queueing img2vid task." << std::endl;
-					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Vid);
-				}
-				else {
-					std::cerr << "SDCPPSystem is not registered, cannot process img2vid request." << std::endl;
-				}
-				break;
-			}
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		std::cout << "SDCPPSystem is registered, queueing img2vid task." << std::endl;
+			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Vid);
+			//	}
+			//	else {
+			//		std::cerr << "SDCPPSystem is not registered, cannot process img2vid request." << std::endl;
+			//	}
+			//	break;
+			//}
 
-			case EventType::EditRequest: {
-				std::cout << "Handling Edit request for Entity ID: " << event.entityID << '\n';
+			//case EventType::EditRequest: {
+			//	std::cout << "Handling Edit request for Entity ID: " << event.entityID << '\n';
 
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					std::cout << "SDCPPSystem is registered, queueing edit task." << std::endl;
-					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Edit);
-				}
-				else {
-					std::cerr << "SDCPPSystem is not registered, cannot process edit request." << std::endl;
-				}
-				break;
-			}
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		std::cout << "SDCPPSystem is registered, queueing edit task." << std::endl;
+			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Edit);
+			//	}
+			//	else {
+			//		std::cerr << "SDCPPSystem is not registered, cannot process edit request." << std::endl;
+			//	}
+			//	break;
+			//}
 
-			case EventType::UpscaleRequest: {
-				std::cout << "Handling Upscale request for Entity ID: " << event.entityID << '\n';
+			//case EventType::UpscaleRequest: {
+			//	std::cout << "Handling Upscale request for Entity ID: " << event.entityID << '\n';
 
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					std::cout << "SDCPPSystem is registered, queueing upscale task." << std::endl;
-					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
-				}
-				else {
-					std::cerr << "SDCPPSystem is not registered, cannot process upscale request." << std::endl;
-				}
-				break;
-			}
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		std::cout << "SDCPPSystem is registered, queueing upscale task." << std::endl;
+			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
+			//	}
+			//	else {
+			//		std::cerr << "SDCPPSystem is not registered, cannot process upscale request." << std::endl;
+			//	}
+			//	break;
+			//}
 
-			case EventType::ConvertToGGUF: {
-				std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
+			//case EventType::ConvertToGGUF: {
+			//	std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
 
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					std::cout << "SDCPPSystem is registered." << std::endl;
-					sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Conversion);
-				}
-				else {
-					std::cerr << "SDCPPSystem is not registered." << std::endl;
-				}
-				break;
-			}
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		std::cout << "SDCPPSystem is registered." << std::endl;
+			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Conversion);
+			//	}
+			//	else {
+			//		std::cerr << "SDCPPSystem is not registered." << std::endl;
+			//	}
+			//	break;
+			//}
 
-			case EventType::PauseInference: {
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					sdcppSystem->PauseWorker();
-				}
-				break;
-			}
+			//case EventType::PauseInference: {
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		sdcppSystem->PauseWorker();
+			//	}
+			//	break;
+			//}
 
-			case EventType::ResumeInference: {
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					sdcppSystem->ResumeWorker();
-				}
-				break;
-			}
+			//case EventType::ResumeInference: {
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		sdcppSystem->ResumeWorker();
+			//	}
+			//	break;
+			//}
 
-			case EventType::StopCurrentTask: {
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					sdcppSystem->StopCurrentTask();
-				}
-				break;
-			}
+			//case EventType::StopCurrentTask: {
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		sdcppSystem->StopCurrentTask();
+			//	}
+			//	break;
+			//}
 
-			case EventType::ClearInferenceQueue: {
-				auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-				if (sdcppSystem) {
-					sdcppSystem->ClearQueue();
-				}
-				break;
-			}
+			//case EventType::ClearInferenceQueue: {
+			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
+			//	if (sdcppSystem) {
+			//		sdcppSystem->ClearQueue();
+			//	}
+			//	break;
+			//}
 
 			case EventType::SaveImageEvent: {
 				std::cout << "Handling SaveImage event for Entity ID: " << event.entityID << " to path: " << '\n';

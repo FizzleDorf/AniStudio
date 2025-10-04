@@ -2,7 +2,6 @@
 #include "AllViews.h"
 #include "FilePaths.hpp"
 #include "guiSystems.h"
-#include "DiffusionCallbackUtils.hpp"
 #include "ImGuiSettingsUtil.hpp"
 #include "Events.hpp"
 #include <iostream>
@@ -19,7 +18,7 @@ namespace ANI {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
-		GUI::DiffusionCallbackUtils::InitializeCallbacks();
+		//GUI::DiffusionCallbackUtils::InitializeCallbacks();
 	}
 
 	StudioCore::~StudioCore() {
@@ -35,13 +34,9 @@ namespace ANI {
 
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
-		viewManager.RegisterView<GUI::DiffusionView>("DiffusionView");
-		viewManager.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView");
 		viewManager.RegisterView<GUI::ImageView>("ImageView");
-		viewManager.RegisterView<GUI::ConvertView>("ConvertView");
 		// viewManager.RegisterView<GUI::SequencerView>("SequencerView");
 		// viewManager.RegisterView<GUI::NodeView>("NodeView");
-		viewManager.RegisterView<GUI::UpscaleView>("UpscaleView");
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");

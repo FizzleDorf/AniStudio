@@ -23,7 +23,7 @@ endif()
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL)
 
-    # find_package(OpenCV REQUIRED)
+    find_package(OpenCV REQUIRED)
     find_package(glew REQUIRED)
     find_package(glfw3 REQUIRED)
     find_package(ZLIB REQUIRED)
@@ -100,6 +100,8 @@ target_include_directories(AniEngineCore PUBLIC
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/cr/cr"
+	"${EXTERNAL_DIR}/imgui_filedialog/stb"
+	"${EXTERNAL_DIR}/stb_image"
 )
 
 # Link base libraries
