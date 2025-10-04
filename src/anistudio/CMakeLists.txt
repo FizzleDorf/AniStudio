@@ -237,7 +237,7 @@ target_link_libraries(AniStudioCore PUBLIC
     AniEngineCore
     glfw
     GLEW::GLEW
-    exiv2
+    exiv2::exiv2
     ImGui
 )
 

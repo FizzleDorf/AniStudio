@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Constants.hpp"
 #include "FilePaths.hpp"
 #include "ImageUtils.hpp"
 #include "MetadataUtils.hpp"

@@ -12,16 +12,6 @@ option(BUILD_ANISTUDIO "Build AniStudio library" ON)
 option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries instead of static" OFF)
 
-# Stable Diffusion backend options
-option(SD_CUDA "Enable CUDA support for Stable Diffusion" OFF)
-option(SD_VULKAN "Enable Vulkan support for Stable Diffusion" OFF)
-option(SD_HIPBLAS "Enable ROCm/HipBLAS support for AMD GPUs" OFF)
-option(SD_METAL "Enable Metal support for Apple devices" OFF)
-option(SD_OPENCL "Enable OpenCL support" OFF)
-option(SD_SYCL "Enable SYCL support for Intel GPUs" OFF)
-option(SD_MUSA "Enable MUSA support for Moore Threads GPUs" OFF)
-option(SD_FAST_SOFTMAX "Enable fast softmax (CUDA only, may be less deterministic)" OFF)
-
 # Project-wide settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,92 +26,30 @@ if(UNIX AND NOT APPLE)
     set(OpenGL_GL_PREFERENCE GLVND)
 endif()
 
-# Backend setup and validation
-if(SD_CUDA)
-    enable_language(CUDA)
-    set(CUDA_ARCHITECTURES "89" CACHE STRING "Override for RTX 4090" FORCE)
-    add_definitions(-DSD_USE_CUDA)
-
-    find_package(CUDAToolkit REQUIRED)
-    if(NOT CUDAToolkit_FOUND)
-        message(FATAL_ERROR "CUDA toolkit not found!")
-    endif()
-
-    if(SD_FAST_SOFTMAX)
-        message(STATUS "Fast softmax enabled (CUDA only)")
-    endif()
-endif()
-
-if(SD_VULKAN)
-    add_definitions(-DSD_USE_VULKAN)
-    find_package(Vulkan REQUIRED)
-    if(NOT Vulkan_FOUND)
-        message(FATAL_ERROR "Vulkan SDK not found! Install from https://www.lunarg.com/vulkan-sdk/")
-    endif()
-endif()
-
-if(SD_HIPBLAS)
-    add_definitions(-DSD_USE_CUDA)
-    message(STATUS "HipBLAS enabled - make sure ROCm toolkit is installed")
-    if(SD_FAST_SOFTMAX)
-        message(STATUS "Fast softmax enabled for HipBLAS")
-    endif()
-endif()
-
-if(SD_METAL)
-    add_definitions(-DSD_USE_METAL)
-    message(STATUS "Metal enabled")
-    if(NOT APPLE)
-        message(WARNING "Metal backend is only supported on Apple platforms")
-    endif()
-endif()
-
-if(SD_OPENCL)
-    add_definitions(-DSD_USE_OPENCL)
-    find_package(OpenCL REQUIRED)
-    if(NOT OpenCL_FOUND)
-        message(FATAL_ERROR "OpenCL not found - make sure OpenCL headers and ICD loader are installed")
-    endif()
-endif()
-
-if(SD_SYCL)
-    add_definitions(-DSD_USE_SYCL)
-    message(STATUS "SYCL enabled - make sure Intel oneAPI Base toolkit is installed")
-    message(STATUS "Run 'source /opt/intel/oneapi/setvars.sh' before building")
-endif()
-
-if(SD_MUSA)
-    add_definitions(-DSD_USE_CUDA)
-    message(STATUS "MUSA enabled - make sure MUSA toolkit is installed")
-    if(SD_FAST_SOFTMAX)
-        message(STATUS "Fast softmax enabled for MUSA")
-    endif()
-endif()
-
 # Include Conan toolchain
-# include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
-# if(NOT CONAN_TOOLCHAIN)
-#     message(STATUS "Conan toolchain not found, installing dependencies...")
-#
-#     find_program(CONAN_CMD conan)
-#     if(NOT CONAN_CMD)
-#         message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
-#     endif()
-#
-#     execute_process(
-#         COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}"
-#                 --output-folder="${CMAKE_BINARY_DIR}"
-#                 --build=missing
-#         RESULT_VARIABLE CONAN_RESULT
-#         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-#     )
-#
-#     if(NOT CONAN_RESULT EQUAL 0)
-#         message(FATAL_ERROR "Conan install failed!")
-#     endif()
-#
-#     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
-# endif()
+include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
+if(NOT CONAN_TOOLCHAIN)
+    message(STATUS "Conan toolchain not found, installing dependencies...")
+
+    find_program(CONAN_CMD conan)
+    if(NOT CONAN_CMD)
+        message(FATAL_ERROR "Conan not found! Please install it first: pip install conan")
+    endif()
+
+    execute_process(
+        COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}"
+                --output-folder="${CMAKE_BINARY_DIR}"
+                --build=missing
+        RESULT_VARIABLE CONAN_RESULT
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    )
+
+    if(NOT CONAN_RESULT EQUAL 0)
+        message(FATAL_ERROR "Conan install failed!")
+    endif()
+
+    include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
+endif()
 
 # Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -199,8 +127,7 @@ else()
 endif()
 
 # Find external dependencies
-find_package(Vulkan REQUIRED)
-find_package(OpenCV REQUIRED)
+# find_package(OpenCV REQUIRED)
 find_package(GLEW REQUIRED)
 # if (GLEW_FOUND)
 #     include_directories(${GLEW_INCLUDE_DIRS})
@@ -210,18 +137,18 @@ find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
-
-# find_package(FFmpeg REQUIRED)
+find_package(FFmpeg REQUIRED)
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
-    libavdevice
-    libavfilter
-    libavformat
-    libavcodec
-    libswresample
-    libswscale
-    libavutil
-)
+
+# pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
+#     libavdevice
+#     libavfilter
+#     libavformat
+#     libavcodec
+#     libswresample
+#     libswscale
+#     libavutil
+# )
 
 find_package(pybind11 REQUIRED)
 # find_package(semver REQUIRED)
@@ -379,18 +306,6 @@ message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Shared libraries: ${BUILD_SHARED_LIBS}")
 message(STATUS "  Runtime library: ${CMAKE_MSVC_RUNTIME_LIBRARY}")
-message(STATUS "")
-message(STATUS "Stable Diffusion Backends:")
-message(STATUS "  CUDA: ${SD_CUDA}")
-message(STATUS "  Vulkan: ${SD_VULKAN}")
-message(STATUS "  HipBLAS (AMD): ${SD_HIPBLAS}")
-message(STATUS "  Metal (Apple): ${SD_METAL}")
-message(STATUS "  OpenCL: ${SD_OPENCL}")
-message(STATUS "  SYCL (Intel): ${SD_SYCL}")
-message(STATUS "  MUSA: ${SD_MUSA}")
-if(SD_FAST_SOFTMAX)
-    message(STATUS "  Fast Softmax: ENABLED")
-endif()
 message(STATUS "")
 message(STATUS "Components:")
 message(STATUS "  AniEngine: ${BUILD_ANIENGINE}")

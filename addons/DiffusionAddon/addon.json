@@ -1,0 +1,45 @@
+{
+  "name": "stable-diffusion",
+  "displayName": "Stable Diffusion",
+  "description": "Image and video generation using stable-diffusion.cpp",
+  "author": "AniStudio",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "category": "image-generation",
+  "tags": [ "diffusion", "image-generation", "video-generation", "ai" ],
+
+  "availableVersions": [
+    {
+      "version": "1.0.0",
+      "releaseDate": "2025-01-15",
+      "windowsUrl": "https://github.com/yourusername/anistudio/releases/download/addons-v1.0.0/StableDiffusion-windows-v1.0.0.zip",
+      "linuxUrl": "https://github.com/yourusername/anistudio/releases/download/addons-v1.0.0/StableDiffusion-linux-v1.0.0.tar.gz",
+      "checksum": "abc123...",
+      "isPrerelease": false,
+      "isNightly": false,
+      "changelog": [
+        "Initial release",
+        "Support for txt2img, img2img, img2vid",
+        "Support for upscaling with ESRGAN",
+        "Model conversion to GGUF format"
+      ]
+    }
+  ],
+
+  "dependencies": [
+    {
+      "name": "stable-diffusion.cpp",
+      "version": "master",
+      "windowsUrl": "https://github.com/leejet/stable-diffusion.cpp/releases/latest/download/stable-diffusion-windows-cuda.zip",
+      "linuxUrl": "https://github.com/leejet/stable-diffusion.cpp/releases/latest/download/stable-diffusion-linux-cuda.tar.gz",
+      "files": [
+        "stable-diffusion.dll",
+        "ggml.dll",
+        "stable-diffusion.lib"
+      ]
+    }
+  ],
+
+  "installPath": "addons/stable-diffusion",
+  "additionalFiles": []
+}
