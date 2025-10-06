@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GUI.h"
+#include "ViewManager.hpp"
 #include "EntityManager.hpp"
 #include "SDCPPComponents.h"
 #include "ContextMenuUtils.hpp"

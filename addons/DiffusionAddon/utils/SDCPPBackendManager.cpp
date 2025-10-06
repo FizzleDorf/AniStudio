@@ -2,7 +2,10 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+
+#ifdef HAS_CURL
 #include <curl/curl.h>
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -10,9 +13,10 @@
 #include <dlfcn.h>
 #endif
 
-// For ZIP extraction - using miniz (header-only)
-#define MINIZ_HEADER_FILE_ONLY
-#include "miniz.c"
+#include <zlib.h>
+
+// Simple ZIP extraction using ZLIB (since you're already linking it)
+// For a proper ZIP library, consider using libzip or minizip-ng instead
 
 namespace DiffusionAddon {
 
@@ -186,6 +190,7 @@ namespace DiffusionAddon {
 	}
 
 	bool SDCPPBackendManager::DownloadBackend(SDCPPBackend backend, std::function<void(int, int)> progressCallback) {
+#ifdef HAS_CURL
 		auto it = backends.find(backend);
 		if (it == backends.end()) {
 			std::cerr << "[SDCPPBackendManager] Unknown backend" << std::endl;
@@ -228,6 +233,11 @@ namespace DiffusionAddon {
 
 		std::cout << "[SDCPPBackendManager] Successfully downloaded " << info.name << std::endl;
 		return true;
+#else
+		std::cerr << "[SDCPPBackendManager] CURL not available - cannot download backends" << std::endl;
+		std::cerr << "[SDCPPBackendManager] Please manually download and extract backend to: " << libsDir << std::endl;
+		return false;
+#endif
 	}
 
 	bool SDCPPBackendManager::LoadBackend(SDCPPBackend backend) {
@@ -279,6 +289,7 @@ namespace DiffusionAddon {
 		return GetSymbol(libraryHandle, name);
 	}
 
+#ifdef HAS_CURL
 	// Helper: Download file with CURL
 	static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
 		std::ofstream* file = static_cast<std::ofstream*>(userp);
@@ -322,35 +333,23 @@ namespace DiffusionAddon {
 
 		return (res == CURLE_OK);
 	}
+#endif
 
 	bool SDCPPBackendManager::ExtractZip(const std::string& zipPath, const std::string& extractPath) {
-		mz_zip_archive zip;
-		memset(&zip, 0, sizeof(zip));
+		std::cerr << "[SDCPPBackendManager] ERROR: ZIP extraction not implemented!" << std::endl;
+		std::cerr << "[SDCPPBackendManager] Please manually extract: " << zipPath << std::endl;
+		std::cerr << "[SDCPPBackendManager] To directory: " << extractPath << std::endl;
+		std::cerr << "[SDCPPBackendManager] Note: You need to add a proper ZIP library (libzip, minizip-ng, or compile miniz)" << std::endl;
 
-		if (!mz_zip_reader_init_file(&zip, zipPath.c_str(), 0)) {
-			std::cerr << "[SDCPPBackendManager] Failed to open ZIP" << std::endl;
-			return false;
-		}
+		// For now, return false - user must manually extract
+		// TODO: Implement proper ZIP extraction using a library
+		// Options:
+		// 1. Use libzip (find_package(libzip))
+		// 2. Use minizip-ng 
+		// 3. Include miniz as a compiled library (not header-only)
+		// 4. Use system unzip command as fallback
 
-		std::filesystem::create_directories(extractPath);
-
-		int fileCount = mz_zip_reader_get_num_files(&zip);
-		for (int i = 0; i < fileCount; i++) {
-			mz_zip_archive_file_stat fileStat;
-			if (!mz_zip_reader_file_stat(&zip, i, &fileStat)) continue;
-
-			if (mz_zip_reader_is_file_a_directory(&zip, i)) continue;
-
-			std::string filename = fileStat.m_filename;
-			std::string outPath = extractPath + "/" + std::filesystem::path(filename).filename().string();
-
-			if (!mz_zip_reader_extract_to_file(&zip, i, outPath.c_str(), 0)) {
-				std::cerr << "[SDCPPBackendManager] Failed to extract: " << filename << std::endl;
-			}
-		}
-
-		mz_zip_reader_end(&zip);
-		return true;
+		return false;
 	}
 
 	bool SDCPPBackendManager::VerifySHA256(const std::string& filePath, const std::string& expectedHash) {

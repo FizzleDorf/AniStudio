@@ -1,187 +1,199 @@
-# CMakeLists.txt for DiffusionAddon
 cmake_minimum_required(VERSION 3.12)
-project(DiffusionAddon VERSION 1.0.0)
+cmake_policy(SET CMP0091 NEW)
+
+project(DiffusionAddon)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-if(MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
-endif()
-
-# ============================================================================
-# COLLECT SOURCE FILES
-# ============================================================================
-
-file(GLOB_RECURSE DIFFUSION_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
-)
-
-# Add main addon implementation
-list(APPEND DIFFUSION_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/DiffusionAddon.cpp")
-
-# If there's GUI code for the addon
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/gui")
-    file(GLOB_RECURSE GUI_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp")
-    list(APPEND DIFFUSION_SOURCES ${GUI_SOURCES})
-endif()
-
-# Create shared library
-add_library(DiffusionAddon SHARED ${DIFFUSION_SOURCES})
-
-# ============================================================================
-# INCLUDE DIRECTORIES
-# ============================================================================
-
-target_include_directories(DiffusionAddon PRIVATE
-    # Addon internal structure
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/ecs
-    ${CMAKE_CURRENT_SOURCE_DIR}/ecs/base
-    ${CMAKE_CURRENT_SOURCE_DIR}/ecs/components
-    ${CMAKE_CURRENT_SOURCE_DIR}/ecs/systems
-    ${CMAKE_CURRENT_SOURCE_DIR}/utils
-    ${CMAKE_CURRENT_SOURCE_DIR}/utils/sdcpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/utils/media
-    
-    # GUI if present
-    $<$<BOOL:${EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/gui}>:${CMAKE_CURRENT_SOURCE_DIR}/gui>
-    
-    # Plugin interface from main project
-    ${CMAKE_SOURCE_DIR}/src/aniengine/plugins
-    ${CMAKE_SOURCE_DIR}/src/anistudio/plugins
-    
-    # ECS base from AniEngine (for EntityManager, types, etc.)
-    ${CMAKE_SOURCE_DIR}/src/aniengine/ecs
-    ${CMAKE_SOURCE_DIR}/src/aniengine/ecs/base
-    
-    # Asset manager
-    ${CMAKE_SOURCE_DIR}/src/aniengine/asset_mgr
-    
-    # Main project utils (for FilePaths, etc.)
-    ${CMAKE_SOURCE_DIR}/src/aniengine/utils
-    ${CMAKE_SOURCE_DIR}/src/aniengine/utils/defaults
-    
-    # External dependencies
-    ${CMAKE_SOURCE_DIR}/external/stable-diffusion.cpp
-    ${CMAKE_SOURCE_DIR}/external/nlohmann_json
-    ${CMAKE_SOURCE_DIR}/external/stb_image
-    ${CMAKE_SOURCE_DIR}/external/glm
-)
-
-# ============================================================================
-# LINK LIBRARIES
-# ============================================================================
-
-# Find required dependencies for backend management
-find_package(CURL REQUIRED)
-find_package(OpenSSL REQUIRED)  # For SHA256 verification
-
-target_link_libraries(DiffusionAddon PRIVATE
-    # Link to AniEngine for ECS, AssetManager, utilities
-    AniEngineCore
-    
-    # For downloading backends
-    CURL::libcurl
-    OpenSSL::Crypto  # For SHA256
-    
-    # System libraries for dynamic loading
-    ${CMAKE_DL_LIBS}
-    
-    # DO NOT link stable-diffusion static lib - we load .dll/.so dynamically!
-    # We only need headers at compile time for types
-)
-
-# Platform-specific settings
 if(WIN32)
-    target_compile_definitions(DiffusionAddon PRIVATE
-        PLUGIN_API=__declspec\(dllexport\)
-    )
-    target_link_libraries(DiffusionAddon PRIVATE kernel32)
+    add_definitions(-DNOMINMAX)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(DiffusionAddon PRIVATE dl)
+    set(OpenGL_GL_PREFERENCE GLVND)
 endif()
 
-# Add miniz for ZIP extraction (header-only, bundled with project)
+# Get absolute paths
+get_filename_component(ANISTUDIO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+get_filename_component(CONAN_TOOLCHAIN_PATH "${ANISTUDIO_ROOT}/build/conan/conan_toolchain.cmake" ABSOLUTE)
+
+# Include Conan toolchain
+include(${CONAN_TOOLCHAIN_PATH} OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
+if(NOT CONAN_TOOLCHAIN)
+    message(FATAL_ERROR "Conan toolchain not found at ${CONAN_TOOLCHAIN_PATH}")
+endif()
+
+# Find packages
+find_package(glew REQUIRED)
+find_package(glfw3 REQUIRED)
+find_package(OpenGL REQUIRED)
+find_package(ZLIB REQUIRED)
+find_package(PNG REQUIRED)
+find_package(FFmpeg REQUIRED)
+
+# Try CURL
+find_package(CURL QUIET)
+if(CURL_FOUND)
+    message(STATUS "CURL found")
+endif()
+
+# Set external directory
+set(EXTERNAL_DIR "${ANISTUDIO_ROOT}/external")
+
+# Add ImGui
+if(NOT TARGET ImGui AND EXISTS "${EXTERNAL_DIR}/imgui/CMakeLists.txt")
+    add_subdirectory("${EXTERNAL_DIR}/imgui" "${CMAKE_BINARY_DIR}/imgui")
+elseif(TARGET ImGui)
+    message(STATUS "ImGui already available")
+else()
+    message(FATAL_ERROR "ImGui not found at ${EXTERNAL_DIR}/imgui")
+endif()
+
+# Find main libraries
+set(MAIN_LIB_DIR "${ANISTUDIO_ROOT}/build/lib")
+
+if(NOT TARGET AniEngineCore)
+    find_library(AniEngineCore_LIB NAMES AniEngineCore PATHS "${MAIN_LIB_DIR}" NO_DEFAULT_PATH)
+    if(NOT AniEngineCore_LIB)
+        message(FATAL_ERROR "AniEngineCore not found")
+    endif()
+    add_library(AniEngineCore SHARED IMPORTED)
+    set_target_properties(AniEngineCore PROPERTIES
+        IMPORTED_LOCATION "${AniEngineCore_LIB}"
+        IMPORTED_IMPLIB "${AniEngineCore_LIB}")
+endif()
+
+if(NOT TARGET AniStudioCore)
+    find_library(AniStudioCore_LIB NAMES AniStudioCore PATHS "${MAIN_LIB_DIR}" NO_DEFAULT_PATH)
+    if(NOT AniStudioCore_LIB)
+        message(FATAL_ERROR "AniStudioCore not found")
+    endif()
+    add_library(AniStudioCore SHARED IMPORTED)
+    set_target_properties(AniStudioCore PROPERTIES
+        IMPORTED_LOCATION "${AniStudioCore_LIB}"
+        IMPORTED_IMPLIB "${AniStudioCore_LIB}")
+endif()
+
+add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
+
+# Check for stable-diffusion target (should be built by AniEngine)
+if(NOT TARGET stable-diffusion)
+    message(WARNING "stable-diffusion target not found - attempting to find library")
+    find_library(STABLE_DIFFUSION_LIB NAMES stable-diffusion PATHS "${MAIN_LIB_DIR}" NO_DEFAULT_PATH)
+    if(STABLE_DIFFUSION_LIB)
+        add_library(stable-diffusion SHARED IMPORTED)
+        set_target_properties(stable-diffusion PROPERTIES
+            IMPORTED_LOCATION "${STABLE_DIFFUSION_LIB}"
+            IMPORTED_IMPLIB "${STABLE_DIFFUSION_LIB}")
+        message(STATUS "Found stable-diffusion library: ${STABLE_DIFFUSION_LIB}")
+    else()
+        message(WARNING "stable-diffusion library not found - some features may not work")
+    endif()
+endif()
+
+# Collect sources
+file(GLOB_RECURSE DIFFUSION_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
+)
+list(APPEND DIFFUSION_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/DiffusionAddon.cpp")
+
+add_library(DiffusionAddon SHARED ${DIFFUSION_SOURCES})
+
+# Include directories - MATCH ExamplePlugin + stable-diffusion.h path
 target_include_directories(DiffusionAddon PRIVATE
-    ${CMAKE_SOURCE_DIR}/external/miniz
+    ${ANISTUDIO_ROOT}/src/aniengine/ecs
+    ${ANISTUDIO_ROOT}/src/aniengine/ecs/base
+    ${ANISTUDIO_ROOT}/src/aniengine/ecs/components
+    ${ANISTUDIO_ROOT}/src/aniengine/ecs/systems
+    ${ANISTUDIO_ROOT}/src/aniengine/plugins
+    ${ANISTUDIO_ROOT}/src/aniengine/utils
+    ${ANISTUDIO_ROOT}/src/aniengine/utils/media
+    ${ANISTUDIO_ROOT}/src/anistudio/gui/base
+    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils
+    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/ui_schema
+    ${ANISTUDIO_ROOT}/src/anistudio/plugins
+    ${ANISTUDIO_ROOT}/src/anistudio
+    ${ANISTUDIO_ROOT}/src/anistudio/events
+    ${ANISTUDIO_ROOT}/src/aniengine/utils
+    ${ANISTUDIO_ROOT}/src/aniengine/asset_mgr
+    ${ANISTUDIO_ROOT}/include
+    ${EXTERNAL_DIR}/nlohmann_json
+    ${EXTERNAL_DIR}/stable-diffusion.cpp
+    ${EXTERNAL_DIR}/imgui
+    ${EXTERNAL_DIR}/stb_image
+    ${EXTERNAL_DIR}/imgui_filedialog
+    ${EXTERNAL_DIR}/imgui_filedialog/stb
+    ${EXTERNAL_DIR}/glm
+    ${EXTERNAL_DIR}/stable-diffusion.cpp  # This is where stable-diffusion.h lives
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ecs
+    ecs/components
+    ecs/systems
+    utils
+    gui
 )
 
-# ============================================================================
-# OUTPUT DIRECTORIES - Match plugin hot reload structure
-# ============================================================================
+# Link libraries - MATCH ExamplePlugin + stable-diffusion
+target_link_libraries(DiffusionAddon PRIVATE
+    AniStudioCore
+    AniEngineCore
+    GLEW::GLEW
+    ZLIB::ZLIB
+    PNG::PNG
+    glfw
+    OpenGL::GL
+    ImGui
+	stable-diffusion
+    $<$<PLATFORM_ID:Windows>:kernel32>
+    $<$<PLATFORM_ID:Windows>:user32>
+)
 
-set(ADDON_NAME "DiffusionAddon")
-set(ADDON_BASE_DIR "${CMAKE_BINARY_DIR}/addons/${ADDON_NAME}")
+# Link stable-diffusion if available
+if(TARGET stable-diffusion)
+    target_link_libraries(DiffusionAddon PRIVATE stable-diffusion)
+    message(STATUS "Linking stable-diffusion target")
+endif()
+
+if(CURL_FOUND)
+    target_link_libraries(DiffusionAddon PRIVATE CURL::libcurl)
+    target_compile_definitions(DiffusionAddon PRIVATE HAS_CURL)
+endif()
+
+if(WIN32)
+    set_target_properties(DiffusionAddon PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/DiffusionAddon.def")
+    file(WRITE ${DEF_FILE} "EXPORTS\nCreatePlugin\nDestroyPlugin\n")
+    set_target_properties(DiffusionAddon PROPERTIES LINK_FLAGS "/DEF:${DEF_FILE}")
+endif()
+
+target_compile_definitions(DiffusionAddon PRIVATE 
+    GLEW_STATIC
+    IMGUI_DEFINE_MATH_OPERATORS
+    PCH_DISABLED
+    $<$<CONFIG:Debug>:DEBUG>
+    $<$<CONFIG:Release>:NDEBUG>
+)
+
+# Output directories
+set(ADDON_BASE_DIR "${ANISTUDIO_ROOT}/build/addons/DiffusionAddon")
 set(ADDON_STAGING_DIR "${ADDON_BASE_DIR}/staging")
-set(ADDON_LIBS_DIR "${ADDON_BASE_DIR}/libs")
+
+file(MAKE_DIRECTORY "${ADDON_BASE_DIR}")
+file(MAKE_DIRECTORY "${ADDON_STAGING_DIR}")
 
 set_target_properties(DiffusionAddon PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${ADDON_STAGING_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${ADDON_STAGING_DIR}"
-    
     RUNTIME_OUTPUT_DIRECTORY_DEBUG "${ADDON_STAGING_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO "${ADDON_STAGING_DIR}"
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL "${ADDON_STAGING_DIR}"
-    
     LIBRARY_OUTPUT_DIRECTORY_DEBUG "${ADDON_STAGING_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO "${ADDON_STAGING_DIR}"
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL "${ADDON_STAGING_DIR}"
 )
 
-# ============================================================================
-# POST-BUILD SETUP
-# ============================================================================
-
-add_custom_command(TARGET DiffusionAddon POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${ADDON_BASE_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${ADDON_STAGING_DIR}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "${ADDON_LIBS_DIR}"
-    COMMENT "Creating DiffusionAddon directory structure"
-)
-
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/LIBS_README.txt"
-"Place stable-diffusion.cpp shared libraries here:\n\
-\n\
-Windows:\n\
-  - stable-diffusion.dll\n\
-  - ggml.dll\n\
-\n\
-Linux:\n\
-  - libstable-diffusion.so\n\
-  - libggml.so\n\
-\n\
-Download from: https://github.com/leejet/stable-diffusion.cpp/releases\n\
-Or use script: scripts/download_sdcpp_libs.sh\n\
-")
-
-add_custom_command(TARGET DiffusionAddon POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${CMAKE_CURRENT_BINARY_DIR}/LIBS_README.txt"
-        "${ADDON_LIBS_DIR}/README.txt"
-    COMMENT "Creating libs directory README"
-)
-
-message(STATUS "")
-message(STATUS "=== DiffusionAddon Configuration ===")
-message(STATUS "  Addon directory: ${ADDON_BASE_DIR}")
-message(STATUS "  Staging (build): ${ADDON_STAGING_DIR}")
-message(STATUS "  Libraries:       ${ADDON_LIBS_DIR}")
-message(STATUS "")
-message(STATUS "  Structure:")
-message(STATUS "    - ecs/components/")
-message(STATUS "    - ecs/systems/")
-message(STATUS "    - utils/")
-message(STATUS "    - gui/ (optional)")
-message(STATUS "")
-message(STATUS "  IMPORTANT:")
-message(STATUS "    - This addon contains ALL SDCPP code")
-message(STATUS "    - Download stable-diffusion.cpp libs to: ${ADDON_LIBS_DIR}")
-message(STATUS "    - Hot reload enabled via PluginManager")
-message(STATUS "")
+message(STATUS "DiffusionAddon output: ${ADDON_STAGING_DIR}")
+message(STATUS "DiffusionAddon stable-diffusion.h path: ${EXTERNAL_DIR}/stable-diffusion.cpp")

@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseView.hpp"
-#include "components.h"
-#include "systems.h"
+#include "SDCPPComponents.h"
+#include "SDcppSystem.hpp"
 #include <unordered_map>
 #include <functional>
 

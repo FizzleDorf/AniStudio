@@ -1,6 +1,6 @@
 #pragma once
 
-#include "GUI.h"
+#include "ViewManager.hpp"
 #include "FilePaths.hpp"
 #include "pch.h"
 #include <components.h>

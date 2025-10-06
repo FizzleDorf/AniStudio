@@ -355,6 +355,11 @@ namespace ECS {
 		}
 
 		bool isTiled = false;
+		int tile_size_x = 64;
+		int tile_size_y = 64;
+		float target_overlap = 0;
+		float rel_size_x = 64;
+		float rel_size_y = 64;
 		bool keep_vae_on_cpu = false;
 		bool vae_decode_only = false;
 

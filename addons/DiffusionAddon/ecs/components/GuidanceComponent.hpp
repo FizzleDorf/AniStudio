@@ -10,17 +10,41 @@ namespace ECS {
 			compName = "Guidance";
 			compCategory = "Sampling";
 
-			// Define the component schema WITHOUT table layout + with tooltips
 			schema = {
 				{"title", "Guidance Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"guidance", "eta"}},
-				// REMOVED: {"ui:table", {...}} section entirely
+				{"propertyOrder", {"distilled_guidance", "txt_cfg", "img_cfg", "eta"}},
 				{"properties", {
-					{"guidance", {
+					{"distilled_guidance", {
 						{"type", "number"},
-						{"title", "Guidance Scale"},
-						{"description", "Controls how closely the model follows the prompt. Higher values increase prompt adherence but may reduce image quality and creativity. Typical range: 1-20, recommended: 7-12."},
+						{"title", "Distilled Guidance"},
+						{"description", "Guidance scale for distilled models. Controls the strength of guidance from the distilled model. Typical range: 1-20."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.5f},
+							{"format", "%.2f"},
+							{"min", 1.0f},
+							{"max", 30.0f}
+						}}
+					}},
+					{"txt_cfg", {
+						{"type", "number"},
+						{"title", "Text CFG"},
+						{"description", "Classifier-Free Guidance scale for text conditioning. Controls how closely the model follows the text prompt. Higher values increase prompt adherence. Typical range: 1-20, recommended: 7-12."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.5f},
+							{"format", "%.2f"},
+							{"min", 1.0f},
+							{"max", 30.0f}
+						}}
+					}},
+					{"img_cfg", {
+						{"type", "number"},
+						{"title", "Image CFG"},
+						{"description", "Classifier-Free Guidance scale for image conditioning. Controls adherence to reference images when doing image-to-image generation. Typical range: 1-20."},
 						{"ui:widget", "input_float"},
 						{"ui:options", {
 							{"step", 0.05f},
@@ -47,30 +71,41 @@ namespace ECS {
 			};
 		}
 
-		float guidance = 2.0f;
+		// sd_guidance_params_t members
+		float txt_cfg = 7.0f;
+		float img_cfg = 1.5f;
+		float distilled_guidance = 3.5f;
+
+		// eta (part of sd_sample_params_t but grouped here for UI convenience)
 		float eta = 0.0f;
 
 		// Override the GetPropertyMap method
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["guidance"] = &guidance;
+			properties["distilled_guidance"] = &distilled_guidance;
+			properties["img_cfg"] = &img_cfg;
+			properties["txt_cfg"] = &txt_cfg;
 			properties["eta"] = &eta;
 			return properties;
 		}
 
 		GuidanceComponent& operator=(const GuidanceComponent& other) {
 			if (this != &other) {
-				guidance = other.guidance;
+				txt_cfg = other.txt_cfg;
+				img_cfg = other.img_cfg;
+				distilled_guidance = other.distilled_guidance;
 				eta = other.eta;
 			}
 			return *this;
 		}
 
 		nlohmann::json Serialize() const override {
-			return { {compName,
-					 {{"guidance", guidance},
-					  {"eta", eta}
-					 }} };
+			return { {compName, {
+				{"txt_cfg", txt_cfg},
+				{"img_cfg", img_cfg},
+				{"distilled_guidance", distilled_guidance},
+				{"eta", eta}
+			}} };
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
@@ -93,8 +128,12 @@ namespace ECS {
 				}
 			}
 
-			if (componentData.contains("guidance"))
-				guidance = componentData["guidance"];
+			if (componentData.contains("txt_cfg"))
+				txt_cfg = componentData["txt_cfg"];
+			if (componentData.contains("img_cfg"))
+				img_cfg = componentData["img_cfg"];
+			if (componentData.contains("distilled_guidance"))
+				distilled_guidance = componentData["distilled_guidance"];
 			if (componentData.contains("eta"))
 				eta = componentData["eta"];
 		}
