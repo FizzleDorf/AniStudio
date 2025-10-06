@@ -45,14 +45,16 @@ namespace Plugins {
 		: entityManager(entityMgr), imguiContext(imguiContext) {
 		std::cout << "[PluginManager] Constructor - manager created with ImGui context: " << imguiContext << std::endl;
 
-		stagingDirectory = "../plugins";
+		// Use absolute path relative to executable location
+		std::filesystem::path executablePath = std::filesystem::current_path();
+		stagingDirectory = (executablePath / "plugins").string();
 		std::filesystem::create_directories(stagingDirectory);
 		std::cout << "[PluginManager] Base plugins directory set to: " << stagingDirectory << std::endl;
 
 		// Initialize plugin state management
 		InitializePluginStateManager();
 
-		// Hot reload is disabled by default - only enable when PluginView is open or forced
+		// Hot reload is disabled by default
 		hotReloadEnabled = false;
 		hotReloadForced = false;
 		std::cout << "[PluginManager] Hot reload disabled by default (will enable when PluginView opens)" << std::endl;
@@ -211,7 +213,8 @@ namespace Plugins {
 	}
 
 	void PluginManager::setStagingDirectory(const std::string& basePluginsDir) {
-		stagingDirectory = basePluginsDir;
+		std::filesystem::path absPath = std::filesystem::absolute(basePluginsDir);
+		stagingDirectory = absPath.string();
 		std::filesystem::create_directories(stagingDirectory);
 		std::cout << "[PluginManager] Base plugins directory changed to: " << stagingDirectory << std::endl;
 	}
@@ -377,10 +380,12 @@ namespace Plugins {
 			return true;
 		}
 
-		setupPluginDirectories(pluginName);
-
-		std::string pluginMainDir = stagingDirectory + "/" + pluginName;
+		// Use the actual path provided instead of reconstructing from stagingDirectory
+		std::string pluginMainDir = pluginDirPath;
 		std::string pluginStagingDir = pluginMainDir + "/staging";
+
+		// Ensure staging directory exists
+		std::filesystem::create_directories(pluginStagingDir);
 
 		// Look for the newest versioned DLL first
 		std::string newestVersionedDll = findNewestVersionedDll(pluginMainDir, pluginName);
@@ -430,6 +435,9 @@ namespace Plugins {
 		}
 		else {
 			std::cerr << "[PluginManager] No DLL found for plugin: " << pluginName << std::endl;
+			std::cerr << "[PluginManager] Searched in:" << std::endl;
+			std::cerr << "  Main dir: " << pluginMainDir << std::endl;
+			std::cerr << "  Staging dir: " << pluginStagingDir << std::endl;
 			return false;
 		}
 

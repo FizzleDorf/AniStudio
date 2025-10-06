@@ -15,20 +15,22 @@ namespace GUI {
 	}
 
 	void PluginView::Init() {
+		// Get the absolute path to the build plugins directory
+		std::filesystem::path executablePath = std::filesystem::current_path();
+		std::filesystem::path pluginsPath = executablePath / "plugins";
+		m_pluginDirectory = pluginsPath.string();
 
-		m_pluginDirectory = m_pluginManager.getStagingDirectory();
+		// Update the plugin manager's staging directory to match
+		m_pluginManager.setStagingDirectory(m_pluginDirectory);
 
-		if (m_pluginDirectory.empty()) {
-			m_pluginDirectory = "../plugins";
-		}
+		// Create the directory if it doesn't exist
+		std::filesystem::create_directories(m_pluginDirectory);
 
 		// Scan for plugin directories
 		RefreshPluginDirectories();
 
-		// Enable hot reload when PluginView initializes
+		// Enable hot reload by default
 		m_pluginManager.enableHotReload(m_hotReloadEnabled);
-		m_hotReloadWasEnabled = true;
-		std::cout << "[PluginView] Hot reload enabled because PluginView is open" << std::endl;
 
 		std::cout << "[PluginView] Initialized with plugin directory: " << m_pluginDirectory << std::endl;
 	}
@@ -41,9 +43,6 @@ namespace GUI {
 				m_statusMessage.clear();
 			}
 		}
-
-		// Hot reload processing happens in PluginManager
-		// We don't need to call it explicitly here
 	}
 
 	void PluginView::Render() {
