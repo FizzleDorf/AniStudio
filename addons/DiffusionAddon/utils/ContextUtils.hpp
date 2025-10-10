@@ -6,7 +6,7 @@
 
 namespace Utils {
 
-	// SD context initialization - UPDATED for new API with proper string lifetime management
+	// SD context initialization - FIXED to match your stable-diffusion.h API
 	inline sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata)
 	{
 		try
@@ -24,7 +24,7 @@ namespace Utils {
 			std::string controlnetPath = "";
 			std::string loraPath = "";
 			std::string embedPath = "";
-			std::string stackedIdEmbedPath = "";
+			std::string photoMakerPath = "";  // FIXED: Use photo_maker_path instead of stacked_id_embed_dir
 
 			// Initialize context parameters with defaults
 			sd_ctx_params_t ctx_params;
@@ -105,7 +105,7 @@ namespace Utils {
 							highNoiseModelPath = FilePaths::unetDir + "/" + highNoise["modelName"].get<std::string>();
 					}
 
-					// Vae component - FIXED: Use ctx_params instead of params
+					// Vae component - FIXED: Removed vae_tiling (not in your API)
 					if (comp.contains("Vae"))
 					{
 						auto vae = comp["Vae"];
@@ -115,10 +115,8 @@ namespace Utils {
 							vaePath = FilePaths::vaeDir + "/" + vae["modelName"].get<std::string>();
 						if (vae.contains("vae_decode_only"))
 							ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
-						if (vae.contains("isTiled"))
-							ctx_params.vae_tiling = vae["isTiled"].get<bool>();
-						if (vae.contains("keep_vae_on_cpu"))
-							ctx_params.keep_vae_on_cpu = vae["keep_vae_on_cpu"].get<bool>();
+						// REMOVED: vae_tiling - not in your sd_ctx_params_t
+						// REMOVED: keep_vae_on_cpu - not in your sd_ctx_params_t
 					}
 
 					// Taesd component
@@ -175,14 +173,14 @@ namespace Utils {
 							embedPath = FilePaths::embedDir + "/" + embed["modelName"].get<std::string>();
 					}
 
-					// Stacked ID Embedding component for PhotoMaker/Chroma support
-					if (comp.contains("StackedIdEmbed"))
+					// FIXED: Use PhotoMaker component to set photo_maker_path (this is what exists in your API)
+					if (comp.contains("PhotoMaker") || comp.contains("StackedIdEmbed"))
 					{
-						auto stackedEmbed = comp["StackedIdEmbed"];
-						if (stackedEmbed.contains("modelPath") && !stackedEmbed["modelPath"].get<std::string>().empty())
-							stackedIdEmbedPath = stackedEmbed["modelPath"].get<std::string>();
-						else if (stackedEmbed.contains("modelName") && !stackedEmbed["modelName"].get<std::string>().empty())
-							stackedIdEmbedPath = FilePaths::embedDir + "/" + stackedEmbed["modelName"].get<std::string>();
+						auto pm = comp.contains("PhotoMaker") ? comp["PhotoMaker"] : comp["StackedIdEmbed"];
+						if (pm.contains("modelPath") && !pm["modelPath"].get<std::string>().empty())
+							photoMakerPath = pm["modelPath"].get<std::string>();
+						else if (pm.contains("modelName") && !pm["modelName"].get<std::string>().empty())
+							photoMakerPath = FilePaths::embedDir + "/" + pm["modelName"].get<std::string>();
 					}
 
 					// Sampler component
@@ -193,10 +191,10 @@ namespace Utils {
 							ctx_params.n_threads = sampler["n_threads"].get<int>();
 						if (sampler.contains("free_params_immediately"))
 							ctx_params.free_params_immediately = sampler["free_params_immediately"].get<bool>();
-						if (sampler.contains("keep_clip_on_cpu"))
-							ctx_params.keep_clip_on_cpu = sampler["keep_clip_on_cpu"].get<bool>();
 						if (sampler.contains("offload_params_to_cpu"))
 							ctx_params.offload_params_to_cpu = sampler["offload_params_to_cpu"].get<bool>();
+						if (sampler.contains("keep_clip_on_cpu"))
+							ctx_params.keep_clip_on_cpu = sampler["keep_clip_on_cpu"].get<bool>();
 						if (sampler.contains("diffusion_flash_attn"))
 							ctx_params.diffusion_flash_attn = sampler["diffusion_flash_attn"].get<bool>();
 						if (sampler.contains("diffusion_conv_direct"))
@@ -250,7 +248,7 @@ namespace Utils {
 			ctx_params.control_net_path = controlnetPath.c_str();
 			ctx_params.lora_model_dir = loraPath.c_str();
 			ctx_params.embedding_dir = embedPath.c_str();
-			ctx_params.stacked_id_embed_dir = stackedIdEmbedPath.c_str();
+			ctx_params.photo_maker_path = photoMakerPath.c_str();  // FIXED: Use photo_maker_path
 
 			// Log all paths for debugging
 			std::cout << "Initializing SD context with the following parameters:" << std::endl;
@@ -263,13 +261,11 @@ namespace Utils {
 			std::cout << "HighNoiseDiffusionModel: " << ctx_params.high_noise_diffusion_model_path << std::endl;
 			std::cout << "Vae: " << ctx_params.vae_path << std::endl;
 			std::cout << "VAE Decode Only: " << (ctx_params.vae_decode_only ? "true" : "false") << std::endl;
-			std::cout << "VAE Tiling: " << (ctx_params.vae_tiling ? "true" : "false") << std::endl;
-			std::cout << "Keep VAE on CPU: " << (ctx_params.keep_vae_on_cpu ? "true" : "false") << std::endl;
 			std::cout << "Taesd: " << ctx_params.taesd_path << std::endl;
 			std::cout << "Controlnet: " << ctx_params.control_net_path << std::endl;
 			std::cout << "Lora: " << ctx_params.lora_model_dir << std::endl;
 			std::cout << "Embedding: " << ctx_params.embedding_dir << std::endl;
-			std::cout << "StackedIdEmbed: " << ctx_params.stacked_id_embed_dir << std::endl;
+			std::cout << "PhotoMaker: " << ctx_params.photo_maker_path << std::endl;
 
 			// Chroma debug output
 			std::cout << "Chroma DiT Mask: " << (ctx_params.chroma_use_dit_mask ? "true" : "false") << std::endl;
@@ -284,72 +280,6 @@ namespace Utils {
 		{
 			std::cerr << "Error initializing SD context: " << e.what() << std::endl;
 			return nullptr;
-		}
-	}
-
-	// Helper function to initialize sample parameters
-	inline void InitializeSampleParams(sd_sample_params_t &sample_params, const nlohmann::json &metadata)
-	{
-		sd_sample_params_init(&sample_params);
-
-		// Extract sampling parameters from metadata
-		if (metadata.contains("components") && metadata["components"].is_array())
-		{
-			for (const auto &comp : metadata["components"])
-			{
-				if (comp.contains("Sampler"))
-				{
-					auto sampler = comp["Sampler"];
-					if (sampler.contains("current_sample_method"))
-						sample_params.sample_method = static_cast<sample_method_t>(sampler["current_sample_method"].get<int>());
-					if (sampler.contains("current_scheduler_method"))
-						sample_params.scheduler = static_cast<scheduler_t>(sampler["current_scheduler_method"].get<int>());
-					if (sampler.contains("steps"))
-						sample_params.sample_steps = sampler["steps"].get<int>();
-					if (sampler.contains("eta"))
-						sample_params.eta = sampler["eta"].get<float>();
-				}
-
-				if (comp.contains("Guidance"))
-				{
-					auto guidance = comp["Guidance"];
-					if (guidance.contains("guidance"))
-						sample_params.guidance.txt_cfg = guidance["guidance"].get<float>();
-					if (guidance.contains("img_cfg"))
-						sample_params.guidance.img_cfg = guidance["img_cfg"].get<float>();
-					if (guidance.contains("distilled_guidance"))
-						sample_params.guidance.distilled_guidance = guidance["distilled_guidance"].get<float>();
-				}
-
-				// SLG parameters
-				if (comp.contains("LayerSkip"))
-				{
-					auto layerSkip = comp["LayerSkip"];
-					if (layerSkip.contains("slg_scale"))
-						sample_params.guidance.slg.scale = layerSkip["slg_scale"].get<float>();
-					if (layerSkip.contains("skip_layer_start"))
-						sample_params.guidance.slg.layer_start = layerSkip["skip_layer_start"].get<float>();
-					if (layerSkip.contains("skip_layer_end"))
-						sample_params.guidance.slg.layer_end = layerSkip["skip_layer_end"].get<float>();
-
-					// Handle skip layers array
-					if (layerSkip.contains("skip_layers") && layerSkip["skip_layers"].is_array())
-					{
-						static std::vector<int> skip_layers;
-						skip_layers.clear();
-						for (const auto& layer : layerSkip["skip_layers"])
-						{
-							if (layer.is_number_integer())
-								skip_layers.push_back(layer.get<int>());
-						}
-						if (!skip_layers.empty())
-						{
-							sample_params.guidance.slg.layers = skip_layers.data();
-							sample_params.guidance.slg.layer_count = skip_layers.size();
-						}
-					}
-				}
-			}
 		}
 	}
 

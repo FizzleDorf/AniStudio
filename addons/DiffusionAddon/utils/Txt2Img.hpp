@@ -16,7 +16,6 @@ namespace Utils
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
 	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
-	void InitializeSampleParams(sd_sample_params_t &sample_params, const nlohmann::json &metadata);
 
 	class Txt2Img
 	{
@@ -26,13 +25,11 @@ namespace Utils
 		{
 			sd_ctx_t *sd_context = nullptr;
 			sd_image_t *result_images = nullptr;
+			sd_img_gen_params_t gen_params;
+			sd_img_gen_params_init(&gen_params);
 
 			try
 			{
-				// Initialize image generation parameters with defaults
-				sd_img_gen_params_t gen_params;
-				sd_img_gen_params_init(&gen_params);
-
 				// Extract parameters from metadata - use local strings for proper lifetime
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "txt2img_output.png";
@@ -66,7 +63,7 @@ namespace Utils
 							}
 						}
 
-						// Prompt component - FIXED: Use local strings
+						// Prompt component
 						if (comp.contains("Prompt"))
 						{
 							nlohmann::json promptData = comp["Prompt"];
@@ -75,8 +72,6 @@ namespace Utils
 								posPrompt = promptData["posPrompt"].get<std::string>();
 							if (promptData.contains("negPrompt") && !promptData["negPrompt"].is_null())
 								negPrompt = promptData["negPrompt"].get<std::string>();
-							if (promptData.contains("normalize_input") && !promptData["normalize_input"].is_null())
-								gen_params.normalize_input = promptData["normalize_input"].get<bool>();
 						}
 
 						// ClipSkip component
@@ -88,7 +83,7 @@ namespace Utils
 								gen_params.clip_skip = clipSkipData["clipSkip"].get<int>();
 						}
 
-						// Sampler component
+						// Sampler component - extract core sampling parameters
 						if (comp.contains("Sampler"))
 						{
 							nlohmann::json samplerData = comp["Sampler"];
@@ -97,6 +92,64 @@ namespace Utils
 								gen_params.seed = static_cast<int64_t>(samplerData["seed"].get<int>());
 							if (samplerData.contains("batchSize") && !samplerData["batchSize"].is_null())
 								gen_params.batch_count = samplerData["batchSize"].get<int>();
+
+							// Extract sample_params fields
+							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
+								gen_params.sample_params.sample_steps = samplerData["steps"].get<int>();
+							if (samplerData.contains("eta") && !samplerData["eta"].is_null())
+								gen_params.sample_params.eta = samplerData["eta"].get<float>();
+							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
+								gen_params.strength = samplerData["denoise"].get<float>();
+
+							// Extract method selections
+							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
+								gen_params.sample_params.sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
+							if (samplerData.contains("current_scheduler_method") && !samplerData["current_scheduler_method"].is_null())
+								gen_params.sample_params.scheduler = static_cast<scheduler_t>(samplerData["current_scheduler_method"].get<int>());
+						}
+
+						// Guidance component - map to sample_params.guidance
+						if (comp.contains("Guidance"))
+						{
+							nlohmann::json guidanceData = comp["Guidance"];
+
+							if (guidanceData.contains("txt_cfg") && !guidanceData["txt_cfg"].is_null())
+								gen_params.sample_params.guidance.txt_cfg = guidanceData["txt_cfg"].get<float>();
+							if (guidanceData.contains("img_cfg") && !guidanceData["img_cfg"].is_null())
+								gen_params.sample_params.guidance.img_cfg = guidanceData["img_cfg"].get<float>();
+							if (guidanceData.contains("distilled_guidance") && !guidanceData["distilled_guidance"].is_null())
+								gen_params.sample_params.guidance.distilled_guidance = guidanceData["distilled_guidance"].get<float>();
+						}
+
+						// SLG component - map to sample_params.guidance.slg
+						if (comp.contains("SLG"))
+						{
+							nlohmann::json slgData = comp["SLG"];
+
+							if (slgData.contains("layer_start") && !slgData["layer_start"].is_null())
+								gen_params.sample_params.guidance.slg.layer_start = slgData["layer_start"].get<float>();
+							if (slgData.contains("layer_end") && !slgData["layer_end"].is_null())
+								gen_params.sample_params.guidance.slg.layer_end = slgData["layer_end"].get<float>();
+							if (slgData.contains("scale") && !slgData["scale"].is_null())
+								gen_params.sample_params.guidance.slg.scale = slgData["scale"].get<float>();
+
+							// Handle layers array for SLG
+							if (slgData.contains("layers") && slgData["layers"].is_array() &&
+								slgData.contains("layer_count") && !slgData["layer_count"].is_null())
+							{
+								size_t layer_count = slgData["layer_count"].get<size_t>();
+								if (layer_count > 0 && slgData["layers"].size() >= layer_count)
+								{
+									// Allocate and copy layers array
+									gen_params.sample_params.guidance.slg.layers = new int[layer_count];
+									gen_params.sample_params.guidance.slg.layer_count = layer_count;
+
+									for (size_t i = 0; i < layer_count; i++)
+									{
+										gen_params.sample_params.guidance.slg.layers[i] = slgData["layers"][i].get<int>();
+									}
+								}
+							}
 						}
 
 						// Latent component
@@ -123,10 +176,6 @@ namespace Utils
 				gen_params.ref_images = nullptr;
 				gen_params.ref_images_count = 0;
 				gen_params.increase_ref_index = false;
-				gen_params.input_id_images_path = "";
-
-				// Initialize sample parameters
-				InitializeSampleParams(gen_params.sample_params, metadata);
 
 				// Create output path
 				std::filesystem::path outputDir(outputPath);
@@ -172,6 +221,13 @@ namespace Utils
 					result_images->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
+				// Cleanup SLG layers array if it was allocated
+				if (gen_params.sample_params.guidance.slg.layers != nullptr)
+				{
+					delete[] gen_params.sample_params.guidance.slg.layers;
+					gen_params.sample_params.guidance.slg.layers = nullptr;
+				}
+
 				// Cleanup resources
 				if (result_images)
 				{
@@ -190,6 +246,13 @@ namespace Utils
 			catch (const std::exception &e)
 			{
 				std::cerr << "Exception during txt2img: " << e.what() << std::endl;
+
+				// Clean up SLG layers array if it was allocated
+				if (gen_params.sample_params.guidance.slg.layers != nullptr)
+				{
+					delete[] gen_params.sample_params.guidance.slg.layers;
+					gen_params.sample_params.guidance.slg.layers = nullptr;
+				}
 
 				// Clean up resources
 				if (result_images)

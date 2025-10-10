@@ -10,7 +10,7 @@ namespace GUI {
 
 	class VideoDiffusionView : public BaseView {
 	public:
-		VideoDiffusionView(ECS::EntityManager& entityMgr);
+		VideoDiffusionView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext = nullptr);
 		virtual ~VideoDiffusionView();
 
 		static constexpr const char* GetMetadataJSON() {

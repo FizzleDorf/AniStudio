@@ -106,7 +106,7 @@ namespace ECS {
 			schema = {
 				{"title", "Video Generation Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"video_frames", "motion_bucket_id", "fps", "augmentation_level",
+				{"propertyOrder", {"video_frames", "vace_strength", "motion_bucket_id", "fps", "augmentation_level",
 								  "min_cfg", "moe_boundary", "flow_shift"}},
 				{"properties", {
 					{"video_frames", {
@@ -119,6 +119,19 @@ namespace ECS {
 							{"step_fast", 8},
 							{"min", 1},
 							{"max", 120}
+						}}
+					}},
+					{"vace_strength", {
+						{"type", "number"},
+						{"title", "VACE Strength"},
+						{"description", "Video Auto-Conditioning Enhancement strength. Controls temporal consistency between frames. 0.0 = disabled, higher values = stronger consistency."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.1f},
+							{"format", "%.2f"},
+							{"min", 0.0f},
+							{"max", 1.0f}
 						}}
 					}},
 					{"motion_bucket_id", {
@@ -203,6 +216,7 @@ namespace ECS {
 
 		// Video generation parameters
 		int video_frames = 25;
+		float vace_strength = 0.0f;
 		int motion_bucket_id = 127;
 		int fps = 6;
 		float augmentation_level = 0.0f;
@@ -213,6 +227,7 @@ namespace ECS {
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"video_frames", &video_frames},
+				{"vace_strength", &vace_strength},
 				{"motion_bucket_id", &motion_bucket_id},
 				{"fps", &fps},
 				{"augmentation_level", &augmentation_level},
@@ -225,6 +240,7 @@ namespace ECS {
 		VideoParamsComponent& operator=(const VideoParamsComponent& other) {
 			if (this != &other) {
 				video_frames = other.video_frames;
+				vace_strength = other.vace_strength;
 				motion_bucket_id = other.motion_bucket_id;
 				fps = other.fps;
 				augmentation_level = other.augmentation_level;
@@ -238,6 +254,7 @@ namespace ECS {
 		nlohmann::json Serialize() const override {
 			return { {compName, {
 				{"video_frames", video_frames},
+				{"vace_strength", vace_strength},
 				{"motion_bucket_id", motion_bucket_id},
 				{"fps", fps},
 				{"augmentation_level", augmentation_level},
@@ -268,6 +285,8 @@ namespace ECS {
 
 			if (componentData.contains("video_frames"))
 				video_frames = componentData["video_frames"];
+			if (componentData.contains("vace_strength"))
+				vace_strength = componentData["vace_strength"];
 			if (componentData.contains("motion_bucket_id"))
 				motion_bucket_id = componentData["motion_bucket_id"];
 			if (componentData.contains("fps"))
@@ -292,7 +311,7 @@ namespace ECS {
 				{"title", "High Noise Sampler Settings"},
 				{"type", "object"},
 				{"propertyOrder", {"high_noise_sample_method", "high_noise_scheduler_method",
-								  "high_noise_cfg", "high_noise_steps"}},
+								  "high_noise_cfg", "high_noise_steps", "high_noise_eta"}},
 				{"properties", {
 					{"high_noise_sample_method", {
 						{"type", "integer"},
@@ -334,23 +353,38 @@ namespace ECS {
 							{"min", 1},
 							{"max", 50}
 						}}
+					}},
+					{"high_noise_eta", {
+						{"type", "number"},
+						{"title", "High Noise ETA"},
+						{"description", "Eta parameter for high noise sampler. Controls noise addition during sampling."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.1f},
+							{"format", "%.2f"},
+							{"min", 0.0f},
+							{"max", 1.0f}
+						}}
 					}}
 				}}
 			};
 		}
 
-		// High noise sampling parameters - FIXED: Use correct enum name scheduler_t
+		// High noise sampling parameters
 		sample_method_t high_noise_sample_method = EULER;
-		scheduler_t high_noise_scheduler_method = DEFAULT;  // FIXED: Changed from schedule_t to scheduler_t
+		scheduler_t high_noise_scheduler_method = DEFAULT;
 		float high_noise_cfg = 3.5f;
 		int high_noise_steps = 8;
+		float high_noise_eta = 0.0f;
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"high_noise_sample_method", reinterpret_cast<int*>(&high_noise_sample_method)},
 				{"high_noise_scheduler_method", reinterpret_cast<int*>(&high_noise_scheduler_method)},
 				{"high_noise_cfg", &high_noise_cfg},
-				{"high_noise_steps", &high_noise_steps}
+				{"high_noise_steps", &high_noise_steps},
+				{"high_noise_eta", &high_noise_eta}
 			};
 		}
 
@@ -360,6 +394,7 @@ namespace ECS {
 				high_noise_scheduler_method = other.high_noise_scheduler_method;
 				high_noise_cfg = other.high_noise_cfg;
 				high_noise_steps = other.high_noise_steps;
+				high_noise_eta = other.high_noise_eta;
 			}
 			return *this;
 		}
@@ -369,7 +404,8 @@ namespace ECS {
 				{"high_noise_sample_method", static_cast<int>(high_noise_sample_method)},
 				{"high_noise_scheduler_method", static_cast<int>(high_noise_scheduler_method)},
 				{"high_noise_cfg", high_noise_cfg},
-				{"high_noise_steps", high_noise_steps}
+				{"high_noise_steps", high_noise_steps},
+				{"high_noise_eta", high_noise_eta}
 			}} };
 		}
 
@@ -395,11 +431,13 @@ namespace ECS {
 			if (componentData.contains("high_noise_sample_method"))
 				high_noise_sample_method = static_cast<sample_method_t>(componentData["high_noise_sample_method"]);
 			if (componentData.contains("high_noise_scheduler_method"))
-				high_noise_scheduler_method = static_cast<scheduler_t>(componentData["high_noise_scheduler_method"]);  // FIXED: Changed to scheduler_t
+				high_noise_scheduler_method = static_cast<scheduler_t>(componentData["high_noise_scheduler_method"]);
 			if (componentData.contains("high_noise_cfg"))
 				high_noise_cfg = componentData["high_noise_cfg"];
 			if (componentData.contains("high_noise_steps"))
 				high_noise_steps = componentData["high_noise_steps"];
+			if (componentData.contains("high_noise_eta"))
+				high_noise_eta = componentData["high_noise_eta"];
 		}
 	};
 

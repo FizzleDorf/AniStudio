@@ -484,8 +484,6 @@ namespace Plugins {
 
 		PluginInfo& plugin = it->second;
 
-		std::cout << "[PluginManager] Checking staging for: " << pluginName << std::endl;
-
 		if (!std::filesystem::exists(plugin.stagingPath)) {
 			return false;
 		}
@@ -697,6 +695,7 @@ namespace Plugins {
 		}
 
 		try {
+			std::cout << "[PluginManager] Creating plugin instance for: " << pluginName << std::endl;
 			plugin.instance = plugin.createFunc();
 			if (!plugin.instance) {
 				std::cerr << "[PluginManager] Failed to create plugin instance" << std::endl;
@@ -704,8 +703,12 @@ namespace Plugins {
 			}
 
 			plugin.version = plugin.instance->GetVersion();
-			PluginRegistry registry(pluginName, this, imguiContext);
+			std::cout << "[PluginManager] Plugin instance created, version: " << plugin.version << std::endl;
 
+			PluginRegistry registry(pluginName, this, imguiContext);
+			std::cout << "[PluginManager] Created registry for plugin: " << pluginName << std::endl;
+
+			std::cout << "[PluginManager] Calling OnEngineInit for: " << pluginName << std::endl;
 			if (!plugin.instance->OnEngineInit(entityManager, registry)) {
 				std::cerr << "[PluginManager] Plugin initialization failed" << std::endl;
 				plugin.destroyFunc(plugin.instance);
@@ -721,7 +724,13 @@ namespace Plugins {
 				pluginState->SetPluginState(pluginName, true, true, plugin.path, plugin.currentVersion);
 			}
 
-			std::cout << "[PluginManager] Plugin enabled: " << pluginName << std::endl;
+			std::cout << "[PluginManager] Plugin enabled successfully: " << pluginName << std::endl;
+
+			// DEBUG: Print what was registered
+			std::cout << "[PluginManager] === POST-ENABLE DEBUG ===" << std::endl;
+			entityManager.DebugPrintRegisteredComponents();
+			entityManager.DebugPrintPluginSystems();
+			std::cout << "[PluginManager] =======================\n" << std::endl;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[PluginManager] Exception during plugin enable: " << e.what() << std::endl;
@@ -742,6 +751,9 @@ namespace Plugins {
 		}
 
 		PluginInfo& plugin = it->second;
+
+		std::cout << "[PluginManager] Disabling plugin: " << pluginName << std::endl;
+
 		plugin.instance->OnShutdown();
 		plugin.instance->SetInitialized(false);
 
@@ -836,30 +848,72 @@ namespace Plugins {
 	}
 
 	ECS::ComponentTypeID PluginManager::registerComponent(const std::string& pluginName, const ComponentDescriptor& desc) {
-		ECS::ComponentTypeID id = ECS::ComponentTypeRegistry::RegisterType<void>(desc.name);
+		std::cout << "[PluginManager] registerComponent called for: " << desc.name
+			<< " (plugin: " << pluginName << ")" << std::endl;
+
+		// USE NAME-BASED REGISTRATION FOR PLUGIN COMPONENTS
+		ECS::ComponentTypeID id = ECS::ComponentTypeRegistry::RegisterPluginComponent(desc.name);
+
 		if (id == ECS::MAX_COMPONENT_COUNT) {
+			std::cerr << "[PluginManager] Failed to register plugin component: " << desc.name << std::endl;
 			return ECS::MAX_COMPONENT_COUNT;
 		}
 
+		std::cout << "[PluginManager] Component registered with ID: " << id << std::endl;
+
 		entityManager.RegisterPluginComponent(id, desc.size, desc.constructor, desc.destructor);
 		pluginComponents[pluginName].push_back(id);
+
+		std::cout << "[PluginManager] Successfully registered plugin component: "
+			<< desc.name << " with ID: " << id << " for plugin: " << pluginName << std::endl;
+
 		return id;
 	}
 
 	ECS::SystemTypeID PluginManager::registerSystem(const std::string& pluginName, const SystemDescriptor& desc) {
-		ECS::SystemTypeID id = ECS::SystemTypeRegistry::RegisterType<void>();
-		entityManager.RegisterPluginSystem(id, desc.creator, desc.destructor, desc.updater, [](void*) {}, desc.requiredComponents);
+		std::cout << "[PluginManager] registerSystem called for: " << desc.name
+			<< " (plugin: " << pluginName << ")" << std::endl;
+
+		// USE NAME-BASED REGISTRATION FOR PLUGIN SYSTEMS
+		ECS::SystemTypeID id = ECS::SystemTypeRegistry::RegisterPluginSystem(desc.name);
+
+		if (id == ECS::MAX_SYSTEM_COUNT) {
+			std::cerr << "[PluginManager] Failed to register plugin system: " << desc.name << std::endl;
+			return 0;
+		}
+
+		std::cout << "[PluginManager] System registered with ID: " << id
+			<< ", required components: " << desc.requiredComponents.size() << std::endl;
+
+		// Print required components for debugging
+		for (size_t i = 0; i < desc.requiredComponents.size(); i++) {
+			std::string compName = ECS::ComponentTypeRegistry::GetNameByID(desc.requiredComponents[i]);
+			std::cout << "[PluginManager]   Required component " << i << ": "
+				<< compName << " (ID: " << desc.requiredComponents[i] << ")" << std::endl;
+		}
+
+		entityManager.RegisterPluginSystem(id, desc.creator, desc.destructor, desc.updater,
+			[](void*) {}, desc.requiredComponents);
+
 		pluginSystems[pluginName].push_back(id);
+
+		std::cout << "[PluginManager] Successfully registered plugin system: "
+			<< desc.name << " with ID: " << id << " for plugin: " << pluginName << std::endl;
+
 		return id;
 	}
 
 	GUI::ViewTypeID PluginManager::registerView(const std::string& pluginName, const ViewDescriptor& desc) {
+		std::cout << "[PluginManager] Base registerView called - no view support in engine-only mode" << std::endl;
 		return 0;
 	}
 
 	void PluginManager::cleanupPluginComponents(const std::string& pluginName) {
 		auto it = pluginComponents.find(pluginName);
 		if (it == pluginComponents.end()) return;
+
+		std::cout << "[PluginManager] Cleaning up " << it->second.size()
+			<< " components for plugin: " << pluginName << std::endl;
 
 		for (ECS::ComponentTypeID id : it->second) {
 			auto entities = entityManager.GetAllEntities();
@@ -876,6 +930,9 @@ namespace Plugins {
 	void PluginManager::cleanupPluginSystems(const std::string& pluginName) {
 		auto it = pluginSystems.find(pluginName);
 		if (it == pluginSystems.end()) return;
+
+		std::cout << "[PluginManager] Cleaning up " << it->second.size()
+			<< " systems for plugin: " << pluginName << std::endl;
 
 		for (ECS::SystemTypeID id : it->second) {
 			entityManager.UnregisterPluginSystem(id);

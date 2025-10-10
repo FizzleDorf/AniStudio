@@ -17,7 +17,7 @@ namespace ECS {
 				{"type", "object"},
 				{"propertyOrder", {
 					"current_sample_method", "current_scheduler_method", "current_type_method",
-					"seed", "cfg", "steps", "denoise", "n_threads", "free_params_immediately",
+					"seed", "cfg", "steps", "eta", "denoise", "n_threads", "free_params_immediately",
 					"offload_params_to_cpu", "keep_clip_on_cpu", "diffusion_flash_attn", "diffusion_conv_direct", "vae_conv_direct"
 				}},
 				{"properties", {
@@ -72,6 +72,19 @@ namespace ECS {
 							{"step_fast", 5},
 							{"min", 1},
 							{"max", 150}
+						}}
+					}},
+					{"eta", {
+						{"type", "number"},
+						{"title", "ETA"},
+						{"description", "Eta parameter for DDIM scheduler. Controls the amount of noise added during sampling. 0.0 = deterministic (DDIM), 1.0 = stochastic (DDPM). Higher values add more randomness."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.05f},
+							{"step_fast", 0.1f},
+							{"format", "%.2f"},
+							{"min", 0.0f},
+							{"max", 1.0f}
 						}}
 					}},
 					{"denoise", {
@@ -139,9 +152,10 @@ namespace ECS {
 			};
 		}
 
-		// Core sampling parameters
+		// Core sampling parameters (from sd_sample_params_t)
 		int seed = -1;
 		int steps = 20;
+		float eta = 0.0f;  // Added: part of sd_sample_params_t
 		float denoise = 1.0;
 		float cfg = 7.0;
 		int n_threads = 4;
@@ -163,6 +177,7 @@ namespace ECS {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["seed"] = &seed;
 			properties["steps"] = &steps;
+			properties["eta"] = &eta;
 			properties["denoise"] = &denoise;
 			properties["cfg"] = &cfg;
 			properties["n_threads"] = &n_threads;
@@ -184,6 +199,7 @@ namespace ECS {
 			if (this != &other) {
 				seed = other.seed;
 				steps = other.steps;
+				eta = other.eta;
 				denoise = other.denoise;
 				cfg = other.cfg;
 				n_threads = other.n_threads;
@@ -204,6 +220,7 @@ namespace ECS {
 			return { {compName, {
 				{"seed", seed},
 				{"steps", steps},
+				{"eta", eta},
 				{"cfg", cfg},
 				{"denoise", denoise},
 				{"n_threads", n_threads},
@@ -242,6 +259,8 @@ namespace ECS {
 				seed = componentData["seed"];
 			if (componentData.contains("steps"))
 				steps = componentData["steps"];
+			if (componentData.contains("eta"))
+				eta = componentData["eta"];
 			if (componentData.contains("cfg"))
 				cfg = componentData["cfg"];
 			if (componentData.contains("denoise"))

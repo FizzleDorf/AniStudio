@@ -18,12 +18,10 @@ using namespace ANI;
 
 namespace GUI {
 
-	VideoDiffusionView::VideoDiffusionView(EntityManager& entityMgr) : BaseView(entityMgr) {
+	VideoDiffusionView::VideoDiffusionView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext)
+		: BaseView(entityMgr) {
 		viewName = "VideoDiffusionView";
 		windowOpen = true;
-
-		// Initialize component visibility states
-		InitializeComponentVisibility();
 	}
 
 	VideoDiffusionView::~VideoDiffusionView() {
@@ -54,7 +52,7 @@ namespace GUI {
 		componentVisibility["OutputImageComponent"] = true;
 		componentVisibility["InputImageComponent"] = true;
 		componentVisibility["EndImageComponent"] = true;  // For FLF2V
-		componentVisibility["ControlnetComponent"] = true;
+		componentVisibility["ControlNetComponent"] = true;
 		componentVisibility["EmbeddingComponent"] = true;
 		componentVisibility["EsrganComponent"] = true;
 	}
@@ -501,16 +499,16 @@ namespace GUI {
 			});
 
 			// ControlNet
-			RenderComponentWithCheckbox(entity, "ControlnetComponent", "ControlNet", [&]() {
-				if (mgr.HasComponent<ControlnetComponent>(entity)) {
-					auto& comp = mgr.GetComponent<ControlnetComponent>(entity);
+			RenderComponentWithCheckbox(entity, "ControlNetComponent", "ControlNet", [&]() {
+				if (mgr.HasComponent<ControlNetComponent>(entity)) {
+					auto& comp = mgr.GetComponent<ControlNetComponent>(entity);
 					if (!comp.schema.empty()) {
 						try {
 							auto properties = comp.GetPropertyMap();
 							UISchema::RenderSchema(comp.schema, properties);
 						}
 						catch (const std::exception& e) {
-							ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering ControlnetComponent: %s", e.what());
+							ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering ControlNetComponent: %s", e.what());
 						}
 					}
 				}

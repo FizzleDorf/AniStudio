@@ -3,6 +3,7 @@
 #include "ViewManager.hpp"
 #include "EntityManager.hpp"
 #include "SDCPPComponents.h"
+#include "Components.h"
 #include "ContextMenuUtils.hpp"
 #include <memory>
 #include <unordered_map>
@@ -20,15 +21,15 @@ namespace GUI {
         })";
 		}
 
-		DiffusionView(ECS::EntityManager& entityMgr);
+		DiffusionView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext = nullptr);
 		~DiffusionView();
 
 		void Init() override;
 		void Render() override;
 
 		// Serialization methods
-		nlohmann::json Serialize() const;
-		void Deserialize(const nlohmann::json& j);
+		nlohmann::json Serialize() const override;
+		void Deserialize(const nlohmann::json& j) override;
 
 	private:
 		// Entity IDs for different modes

@@ -119,7 +119,7 @@ else()
     message(STATUS "Skipping immvision - missing dependencies or incomplete setup")
 endif()
 
-# Add Zep text editor (optional but preferred) - only add if not already added
+# Add Zep text editor (optional but preferred)
 if(ANISTUDIO_ENABLE_ZEP AND NOT TARGET Zep::Zep AND EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt")
     # Configure Zep build options
     set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
@@ -224,14 +224,8 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"
     "${EXTERNAL_DIR}/imgui_markdown"
+	"${EXTERNAL_DIR}/zep/include"
 )
-
-# Zep include path
-if(ZEP_AVAILABLE)
-    target_include_directories(AniStudioCore PUBLIC
-        "${EXTERNAL_DIR}/zep/include"
-    )
-endif()
 
 # Core required libraries
 target_link_libraries(AniStudioCore PUBLIC

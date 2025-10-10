@@ -222,6 +222,7 @@ namespace ECS {
 		// Required for PluginInterface.cpp to access these methods
 		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
 		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
+		bool IsPluginComponent(ComponentTypeID typeId);
 
 		// Getters for private variables
 		EntityID GetEntityCount() const;
@@ -233,6 +234,7 @@ namespace ECS {
 		// Debug functions
 		void DebugPrintRegisteredComponents() const;
 		void DebugPrintEntityComponents(EntityID entity) const;
+		void DebugPrintPluginSystems() const;
 
 	private:
 		// Private helper methods

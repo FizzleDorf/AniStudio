@@ -16,7 +16,6 @@ namespace Utils
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
 	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
-	void InitializeSampleParams(sd_sample_params_t &sample_params, const nlohmann::json &metadata);
 
 	class Edit
 	{
@@ -26,12 +25,11 @@ namespace Utils
 			sd_ctx_t *sd_context = nullptr;
 			std::vector<unsigned char*> refImageData;
 			sd_image_t *result_image = nullptr;
+			sd_img_gen_params_t gen_params;
+			sd_img_gen_params_init(&gen_params);
 
 			try
 			{
-				// Initialize image generation parameters with defaults
-				sd_img_gen_params_t gen_params;
-				sd_img_gen_params_init(&gen_params);
 
 				// Extract parameters from metadata - FIXED: Use local strings
 				std::vector<std::string> refImagePaths;
@@ -39,7 +37,6 @@ namespace Utils
 				std::string outputFilename = "edit_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
-				std::string idImagesPath = "";
 
 				// Debug logging for metadata
 				std::cout << "Edit metadata:" << std::endl;
@@ -92,7 +89,7 @@ namespace Utils
 							}
 						}
 
-						// Prompt component - FIXED: Use local strings
+						// Prompt component
 						if (comp.contains("Prompt"))
 						{
 							nlohmann::json promptData = comp["Prompt"];
@@ -112,7 +109,7 @@ namespace Utils
 								gen_params.clip_skip = clipSkipData["clipSkip"].get<int>();
 						}
 
-						// Sampler component
+						// Sampler component - extract core sampling parameters
 						if (comp.contains("Sampler"))
 						{
 							nlohmann::json samplerData = comp["Sampler"];
@@ -123,6 +120,62 @@ namespace Utils
 								gen_params.strength = samplerData["denoise"].get<float>();
 							if (samplerData.contains("batchSize") && !samplerData["batchSize"].is_null())
 								gen_params.batch_count = samplerData["batchSize"].get<int>();
+
+							// Extract sample_params fields
+							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
+								gen_params.sample_params.sample_steps = samplerData["steps"].get<int>();
+							if (samplerData.contains("eta") && !samplerData["eta"].is_null())
+								gen_params.sample_params.eta = samplerData["eta"].get<float>();
+
+							// Extract method selections
+							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
+								gen_params.sample_params.sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
+							if (samplerData.contains("current_scheduler_method") && !samplerData["current_scheduler_method"].is_null())
+								gen_params.sample_params.scheduler = static_cast<scheduler_t>(samplerData["current_scheduler_method"].get<int>());
+						}
+
+						// Guidance component - map to sample_params.guidance
+						if (comp.contains("Guidance"))
+						{
+							nlohmann::json guidanceData = comp["Guidance"];
+
+							if (guidanceData.contains("txt_cfg") && !guidanceData["txt_cfg"].is_null())
+								gen_params.sample_params.guidance.txt_cfg = guidanceData["txt_cfg"].get<float>();
+							if (guidanceData.contains("img_cfg") && !guidanceData["img_cfg"].is_null())
+								gen_params.sample_params.guidance.img_cfg = guidanceData["img_cfg"].get<float>();
+							if (guidanceData.contains("distilled_guidance") && !guidanceData["distilled_guidance"].is_null())
+								gen_params.sample_params.guidance.distilled_guidance = guidanceData["distilled_guidance"].get<float>();
+						}
+
+						// SLG component - map to sample_params.guidance.slg
+						if (comp.contains("SLG"))
+						{
+							nlohmann::json slgData = comp["SLG"];
+
+							if (slgData.contains("layer_start") && !slgData["layer_start"].is_null())
+								gen_params.sample_params.guidance.slg.layer_start = slgData["layer_start"].get<float>();
+							if (slgData.contains("layer_end") && !slgData["layer_end"].is_null())
+								gen_params.sample_params.guidance.slg.layer_end = slgData["layer_end"].get<float>();
+							if (slgData.contains("scale") && !slgData["scale"].is_null())
+								gen_params.sample_params.guidance.slg.scale = slgData["scale"].get<float>();
+
+							// Handle layers array for SLG
+							if (slgData.contains("layers") && slgData["layers"].is_array() &&
+								slgData.contains("layer_count") && !slgData["layer_count"].is_null())
+							{
+								size_t layer_count = slgData["layer_count"].get<size_t>();
+								if (layer_count > 0 && slgData["layers"].size() >= layer_count)
+								{
+									// Allocate and copy layers array
+									gen_params.sample_params.guidance.slg.layers = new int[layer_count];
+									gen_params.sample_params.guidance.slg.layer_count = layer_count;
+
+									for (size_t i = 0; i < layer_count; i++)
+									{
+										gen_params.sample_params.guidance.slg.layers[i] = slgData["layers"][i].get<int>();
+									}
+								}
+							}
 						}
 
 						// Latent component
@@ -143,30 +196,28 @@ namespace Utils
 
 							if (controlData.contains("control_strength") && !controlData["control_strength"].is_null())
 								gen_params.control_strength = controlData["control_strength"].get<float>();
-							if (controlData.contains("style_strength") && !controlData["style_strength"].is_null())
-								gen_params.style_strength = controlData["style_strength"].get<float>();
-							if (controlData.contains("normalize_input") && !controlData["normalize_input"].is_null())
-								gen_params.normalize_input = controlData["normalize_input"].get<bool>();
 						}
 
-						// ID Images path for PhotoMaker/Chroma - FIXED: Use local string
-						if (comp.contains("IdImages"))
+						// PhotoMaker component
+						if (comp.contains("PhotoMaker"))
 						{
-							nlohmann::json idImagesData = comp["IdImages"];
+							nlohmann::json pmData = comp["PhotoMaker"];
 
-							if (idImagesData.contains("path") && !idImagesData["path"].is_null())
-								idImagesPath = idImagesData["path"].get<std::string>();
+							if (pmData.contains("style_strength") && !pmData["style_strength"].is_null())
+								gen_params.pm_params.style_strength = pmData["style_strength"].get<float>();
+							if (pmData.contains("id_embed_path") && !pmData["id_embed_path"].is_null())
+								gen_params.pm_params.id_embed_path = pmData["id_embed_path"].get<std::string>().c_str();
 						}
 					}
 				}
 
-				// Set prompt and ID images path strings - ALWAYS use c_str(), NEVER nullptr
+				// Set prompt strings - ALWAYS use c_str(), NEVER nullptr
 				gen_params.prompt = posPrompt.c_str();
 				gen_params.negative_prompt = negPrompt.c_str();
-				gen_params.input_id_images_path = idImagesPath.c_str();
 
-				// Initialize sample parameters
-				InitializeSampleParams(gen_params.sample_params, metadata);
+				// Initialize empty mask and control image for edit operations
+				gen_params.mask_image = { 0, 0, 0, nullptr };
+				gen_params.control_image = { 0, 0, 0, nullptr };
 
 				// Validate parameters
 				if (refImagePaths.empty())
@@ -282,6 +333,13 @@ namespace Utils
 					result_image->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
+				// Cleanup SLG layers array if it was allocated
+				if (gen_params.sample_params.guidance.slg.layers != nullptr)
+				{
+					delete[] gen_params.sample_params.guidance.slg.layers;
+					gen_params.sample_params.guidance.slg.layers = nullptr;
+				}
+
 				// Cleanup resources
 				for (unsigned char* imageData : refImageData)
 				{
@@ -309,6 +367,13 @@ namespace Utils
 			catch (const std::exception &e)
 			{
 				std::cerr << "Exception during edit: " << e.what() << std::endl;
+
+				// Clean up SLG layers array if it was allocated
+				if (gen_params.sample_params.guidance.slg.layers != nullptr)
+				{
+					delete[] gen_params.sample_params.guidance.slg.layers;
+					gen_params.sample_params.guidance.slg.layers = nullptr;
+				}
 
 				// Clean up resources
 				for (unsigned char* imageData : refImageData)

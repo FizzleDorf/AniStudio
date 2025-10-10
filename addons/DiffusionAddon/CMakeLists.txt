@@ -27,12 +27,15 @@ if(NOT CONAN_TOOLCHAIN)
 endif()
 
 # Find packages
+find_package(OpenCV REQUIRED)
 find_package(glew REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(FFmpeg REQUIRED)
+find_package(pybind11 REQUIRED)
+find_package(exiv2 CONFIG REQUIRED)
 
 # Try CURL
 find_package(CURL QUIET)
@@ -50,6 +53,34 @@ elseif(TARGET ImGui)
     message(STATUS "ImGui already available")
 else()
     message(FATAL_ERROR "ImGui not found at ${EXTERNAL_DIR}/imgui")
+endif()
+
+# Add ImGuiFileDialog
+if(NOT TARGET ImGuiFileDialog AND EXISTS "${EXTERNAL_DIR}/imgui_filedialog/CMakeLists.txt")
+    add_subdirectory("${EXTERNAL_DIR}/imgui_filedialog" "${CMAKE_BINARY_DIR}/imgui_filedialog")
+    message(STATUS "Added ImGuiFileDialog: ${EXTERNAL_DIR}/imgui_filedialog")
+elseif(TARGET ImGuiFileDialog)
+    message(STATUS "ImGuiFileDialog already available")
+else()
+    message(WARNING "ImGuiFileDialog not found at ${EXTERNAL_DIR}/imgui_filedialog")
+endif()
+
+# Add Zep text editor
+if(NOT TARGET Zep::Zep AND EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt")
+    set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
+    set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE)
+    set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
+    set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)
+
+    add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/zep")
+    message(STATUS "Added Zep: ${EXTERNAL_DIR}/zep")
+    set(ZEP_AVAILABLE TRUE)
+elseif(TARGET Zep::Zep)
+    message(STATUS "Zep already available")
+    set(ZEP_AVAILABLE TRUE)
+else()
+    set(ZEP_AVAILABLE FALSE)
+    message(WARNING "Zep not found at ${EXTERNAL_DIR}/zep - text editor features will be limited")
 endif()
 
 # Find main libraries
@@ -77,9 +108,17 @@ if(NOT TARGET AniStudioCore)
         IMPORTED_IMPLIB "${AniStudioCore_LIB}")
 endif()
 
+# Find AniStudio executable to link against (for missing symbols)
+set(ANISTUDIO_EXE "${ANISTUDIO_ROOT}/build/bin/AniStudio.exe")
+if(EXISTS "${ANISTUDIO_EXE}")
+    message(STATUS "Found AniStudio executable: ${ANISTUDIO_EXE}")
+else()
+    message(WARNING "AniStudio executable not found at ${ANISTUDIO_EXE}")
+endif()
+
 add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
 
-# Check for stable-diffusion target (should be built by AniEngine)
+# Check for stable-diffusion target
 if(NOT TARGET stable-diffusion)
     message(WARNING "stable-diffusion target not found - attempting to find library")
     find_library(STABLE_DIFFUSION_LIB NAMES stable-diffusion PATHS "${MAIN_LIB_DIR}" NO_DEFAULT_PATH)
@@ -104,7 +143,7 @@ list(APPEND DIFFUSION_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/DiffusionAddon.cpp")
 
 add_library(DiffusionAddon SHARED ${DIFFUSION_SOURCES})
 
-# Include directories - MATCH ExamplePlugin + stable-diffusion.h path
+# Include directories
 target_include_directories(DiffusionAddon PRIVATE
     ${ANISTUDIO_ROOT}/src/aniengine/ecs
     ${ANISTUDIO_ROOT}/src/aniengine/ecs/base
@@ -115,21 +154,13 @@ target_include_directories(DiffusionAddon PRIVATE
     ${ANISTUDIO_ROOT}/src/aniengine/utils/media
     ${ANISTUDIO_ROOT}/src/anistudio/gui/base
     ${ANISTUDIO_ROOT}/src/anistudio/gui_utils
+    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/widgets
     ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/ui_schema
     ${ANISTUDIO_ROOT}/src/anistudio/plugins
     ${ANISTUDIO_ROOT}/src/anistudio
     ${ANISTUDIO_ROOT}/src/anistudio/events
-    ${ANISTUDIO_ROOT}/src/aniengine/utils
     ${ANISTUDIO_ROOT}/src/aniengine/asset_mgr
     ${ANISTUDIO_ROOT}/include
-    ${EXTERNAL_DIR}/nlohmann_json
-    ${EXTERNAL_DIR}/stable-diffusion.cpp
-    ${EXTERNAL_DIR}/imgui
-    ${EXTERNAL_DIR}/stb_image
-    ${EXTERNAL_DIR}/imgui_filedialog
-    ${EXTERNAL_DIR}/imgui_filedialog/stb
-    ${EXTERNAL_DIR}/glm
-    ${EXTERNAL_DIR}/stable-diffusion.cpp  # This is where stable-diffusion.h lives
     ${CMAKE_CURRENT_SOURCE_DIR}
     ecs
     ecs/components
@@ -138,25 +169,46 @@ target_include_directories(DiffusionAddon PRIVATE
     gui
 )
 
-# Link libraries - MATCH ExamplePlugin + stable-diffusion
+# External includes
+target_include_directories(DiffusionAddon PUBLIC
+    "${EXTERNAL_DIR}/glm"
+    "${EXTERNAL_DIR}/nlohmann_json"
+    "${EXTERNAL_DIR}/cr/cr"
+    "${EXTERNAL_DIR}/stable-diffusion.cpp"
+    "${EXTERNAL_DIR}/stb_image"
+    "${EXTERNAL_DIR}/imgui_filedialog"
+    "${EXTERNAL_DIR}/imgui_filedialog/stb"
+    "${EXTERNAL_DIR}/imgui_nodes"
+    "${EXTERNAL_DIR}/ImNodeFlow/include"
+    "${EXTERNAL_DIR}/ImGuizmo"
+    "${EXTERNAL_DIR}/imgui_markdown"
+    "${EXTERNAL_DIR}/zep/include"
+)
+
+# Link libraries
 target_link_libraries(DiffusionAddon PRIVATE
     AniStudioCore
     AniEngineCore
+    ${OpenCV_LIBS}
     GLEW::GLEW
     ZLIB::ZLIB
     PNG::PNG
     glfw
     OpenGL::GL
+    exiv2::exiv2
     ImGui
-	stable-diffusion
+    ImGuiFileDialog
+    stable-diffusion
+    pybind11::embed
     $<$<PLATFORM_ID:Windows>:kernel32>
     $<$<PLATFORM_ID:Windows>:user32>
 )
 
-# Link stable-diffusion if available
-if(TARGET stable-diffusion)
-    target_link_libraries(DiffusionAddon PRIVATE stable-diffusion)
-    message(STATUS "Linking stable-diffusion target")
+# Link Zep if available
+if(ZEP_AVAILABLE AND TARGET Zep::Zep)
+    target_link_libraries(DiffusionAddon PRIVATE Zep::Zep)
+    target_compile_definitions(DiffusionAddon PRIVATE ZEP_AVAILABLE)
+    message(STATUS "Linking Zep text editor to DiffusionAddon")
 endif()
 
 if(CURL_FOUND)
@@ -166,9 +218,18 @@ endif()
 
 if(WIN32)
     set_target_properties(DiffusionAddon PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+    
+    # Create def file with plugin exports only
     set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/DiffusionAddon.def")
     file(WRITE ${DEF_FILE} "EXPORTS\nCreatePlugin\nDestroyPlugin\n")
     set_target_properties(DiffusionAddon PROPERTIES LINK_FLAGS "/DEF:${DEF_FILE}")
+    
+    # Allow unresolved externals for symbols that should come from the host application
+    set_target_properties(DiffusionAddon PROPERTIES 
+        LINK_FLAGS "${LINK_FLAGS} /FORCE:UNRESOLVED"
+    )
+    
+    message(STATUS "Note: Some symbols (WindowCloseCallback, Core::Quit, appCore) will be resolved at runtime by the host application")
 endif()
 
 target_compile_definitions(DiffusionAddon PRIVATE 
@@ -195,5 +256,13 @@ set_target_properties(DiffusionAddon PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
 )
 
-message(STATUS "DiffusionAddon output: ${ADDON_STAGING_DIR}")
-message(STATUS "DiffusionAddon stable-diffusion.h path: ${EXTERNAL_DIR}/stable-diffusion.cpp")
+message(STATUS "===========================================")
+message(STATUS "DiffusionAddon Configuration Summary")
+message(STATUS "===========================================")
+message(STATUS "Output directory: ${ADDON_STAGING_DIR}")
+message(STATUS "Stable-diffusion.h: ${EXTERNAL_DIR}/stable-diffusion.cpp")
+message(STATUS "AniEngineCore: ${AniEngineCore_LIB}")
+message(STATUS "AniStudioCore: ${AniStudioCore_LIB}")
+message(STATUS "Zep available: ${ZEP_AVAILABLE}")
+message(STATUS "CURL available: ${CURL_FOUND}")
+message(STATUS "===========================================")

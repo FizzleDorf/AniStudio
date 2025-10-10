@@ -7,40 +7,37 @@
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #pragma once
-#include <set>
+#include <cstdint>
 #include <typeindex>
+#include <typeinfo>
 #include <unordered_map>
+#include <unordered_set>
 #include <string>
 #include <vector>
 #include <iostream>
 
 namespace ECS {
+	// Forward declarations
+	class BaseComponent;
 	class BaseSystem;
-	struct BaseComponent;
 
-	// Constants
-	const size_t MAX_ENTITY_COUNT = 5000;
-	const size_t MAX_COMPONENT_COUNT = 32;
-
-	// Custom Types
+	// Type aliases
 	using EntityID = size_t;
-	using SystemTypeID = size_t;
 	using ComponentTypeID = size_t;
-	using EntitySignature = std::set<ComponentTypeID>;
+	using SystemTypeID = size_t;
 
-	// Component Type Registry for consistent IDs
+	// Maximum counts
+	constexpr size_t MAX_ENTITY_COUNT = 10000;
+	constexpr size_t MAX_COMPONENT_COUNT = 100;
+	constexpr size_t MAX_SYSTEM_COUNT = 50;
+
+	// Signature types
+	using EntitySignature = std::unordered_set<ComponentTypeID>;
+
+	// Component Type Registry for consistent component IDs across modules
 	class ComponentTypeRegistry {
 	private:
 		static ComponentTypeID nextTypeID;
@@ -49,31 +46,24 @@ namespace ECS {
 		static std::unordered_map<std::type_index, ComponentTypeID> typeToID;
 
 	public:
-		// Register a component type with a name
+		// Register a component type with name (for template types)
 		template <typename T>
 		static ComponentTypeID RegisterType(const std::string& name) {
-			// Check if this type is already registered
 			std::type_index typeIdx = std::type_index(typeid(T));
-			auto typeIt = typeToID.find(typeIdx);
 
-			if (typeIt != typeToID.end()) {
-				// Type already registered, return existing ID
-				ComponentTypeID existingId = typeIt->second;
-
-				// Add name as an alias if not already registered
-				if (nameToID.find(name) == nameToID.end()) {
-					nameToID[name] = existingId;
-					std::cout << "Added alias '" << name << "' for existing component type ID: " << existingId << std::endl;
-				}
-
-				return existingId;
+			// Check if type already registered
+			auto it = typeToID.find(typeIdx);
+			if (it != typeToID.end()) {
+				std::cout << "[ComponentRegistry] Type already registered: " << name
+					<< " with ID: " << it->second << ". Using existing ID." << std::endl;
+				return it->second;
 			}
 
-			// Check if name is already used for a different type
+			// Check if name already registered
 			auto nameIt = nameToID.find(name);
 			if (nameIt != nameToID.end()) {
-				std::cerr << "Warning: Name '" << name << "' already used for component ID: "
-					<< nameIt->second << ". Using existing ID." << std::endl;
+				std::cout << "[ComponentRegistry] Name already registered: " << name
+					<< " with ID: " << nameIt->second << ". Using existing ID." << std::endl;
 				typeToID[typeIdx] = nameIt->second;
 				return nameIt->second;
 			}
@@ -84,7 +74,45 @@ namespace ECS {
 			idToName[newId] = name;
 			typeToID[typeIdx] = newId;
 
+			std::cout << "[ComponentRegistry] Registered NEW component type: " << name
+				<< " with ID: " << newId << std::endl;
+
 			return newId;
+		}
+
+		// NEW: Register plugin component by name only (no C++ type)
+		static ComponentTypeID RegisterPluginComponent(const std::string& name) {
+			// Check if name already registered
+			auto nameIt = nameToID.find(name);
+			if (nameIt != nameToID.end()) {
+				std::cout << "[ComponentRegistry] Plugin component already registered: "
+					<< name << " with ID: " << nameIt->second << std::endl;
+				return nameIt->second;
+			}
+
+			// Register new plugin component with unique ID
+			ComponentTypeID newId = nextTypeID++;
+			nameToID[name] = newId;
+			idToName[newId] = name;
+			// DO NOT add to typeToID since there's no C++ type
+
+			std::cout << "[ComponentRegistry] Registered NEW plugin component: "
+				<< name << " with ID: " << newId << std::endl;
+
+			return newId;
+		}
+
+		// NEW: Register a template type with an EXISTING plugin component ID
+		// This allows CompType<T>() to return the same ID as GetIDByName(name)
+		template <typename T>
+		static void RegisterTypeWithExistingID(const std::string& name, ComponentTypeID existingId) {
+			std::type_index typeIdx = std::type_index(typeid(T));
+
+			// Map the C++ type to the existing plugin component ID
+			typeToID[typeIdx] = existingId;
+
+			std::cout << "[ComponentRegistry] Dual-registered type " << typeid(T).name()
+				<< " with existing ID: " << existingId << " (name: " << name << ")" << std::endl;
 		}
 
 		// Get component ID by name
@@ -161,9 +189,11 @@ namespace ECS {
 	private:
 		static SystemTypeID nextTypeID;
 		static std::unordered_map<std::type_index, SystemTypeID> typeToID;
+		static std::unordered_map<std::string, SystemTypeID> nameToID;
+		static std::unordered_map<SystemTypeID, std::string> idToName;
 
 	public:
-		// Register a system type and get unique ID
+		// Register a system type and get unique ID (for template types)
 		template <typename T>
 		static SystemTypeID RegisterType() {
 			std::type_index typeIdx = std::type_index(typeid(T));
@@ -184,6 +214,28 @@ namespace ECS {
 			return newId;
 		}
 
+		// NEW: Register plugin system by name only (no C++ type)
+		static SystemTypeID RegisterPluginSystem(const std::string& name) {
+			// Check if name already registered
+			auto nameIt = nameToID.find(name);
+			if (nameIt != nameToID.end()) {
+				std::cout << "[SystemRegistry] Plugin system already registered: "
+					<< name << " with ID: " << nameIt->second << std::endl;
+				return nameIt->second;
+			}
+
+			// Register new plugin system with unique ID
+			SystemTypeID newId = nextTypeID++;
+			nameToID[name] = newId;
+			idToName[newId] = name;
+			// DO NOT add to typeToID since there's no C++ type
+
+			std::cout << "[SystemRegistry] Registered NEW plugin system: "
+				<< name << " with ID: " << newId << std::endl;
+
+			return newId;
+		}
+
 		// Get system type ID
 		template <typename T>
 		static SystemTypeID GetIDByType() {
@@ -197,18 +249,39 @@ namespace ECS {
 			return RegisterType<T>();
 		}
 
+		// Get system ID by name
+		static SystemTypeID GetIDByName(const std::string& name) {
+			auto it = nameToID.find(name);
+			if (it != nameToID.end()) {
+				return it->second;
+			}
+			return MAX_SYSTEM_COUNT; // Invalid ID
+		}
+
+		// Get system name by ID
+		static std::string GetNameByID(SystemTypeID id) {
+			auto it = idToName.find(id);
+			if (it != idToName.end()) {
+				return it->second;
+			}
+			return "Unknown";
+		}
+
 		// Reset registry
 		static void Reset() {
 			nextTypeID = 0;
 			typeToID.clear();
+			nameToID.clear();
+			idToName.clear();
 		}
 
 		// Debug print
 		static void DebugPrint() {
 			std::cout << "System Type Registry State:" << std::endl;
 			std::cout << "Total registered systems: " << typeToID.size() << std::endl;
-			for (const auto& pair : typeToID) {
-				std::cout << "Type: " << pair.first.name() << " -> ID: " << pair.second << std::endl;
+			std::cout << "Total registered plugin systems: " << nameToID.size() << std::endl;
+			for (const auto& pair : idToName) {
+				std::cout << "ID: " << pair.first << " -> Name: " << pair.second << std::endl;
 			}
 		}
 	};

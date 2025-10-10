@@ -2,10 +2,10 @@
 
 #include "stable-diffusion.h"
 #include "PngMetadataUtils.hpp"
+#include "pch.h"
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
-#include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -16,7 +16,6 @@ namespace Utils
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
 	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
-	void InitializeSampleParams(sd_sample_params_t &sample_params, const nlohmann::json &metadata);
 
 	class Img2Img
 	{
@@ -25,19 +24,14 @@ namespace Utils
 		{
 			sd_ctx_t *sd_context = nullptr;
 			unsigned char *inputData = nullptr;
-			unsigned char *maskData = nullptr;
-			unsigned char *emptyMaskData = nullptr;
 			sd_image_t *result_image = nullptr;
+			sd_img_gen_params_t gen_params;
+			sd_img_gen_params_init(&gen_params);
 
 			try
 			{
-				// Initialize image generation parameters with defaults
-				sd_img_gen_params_t gen_params;
-				sd_img_gen_params_init(&gen_params);
-
 				// Extract parameters from metadata - FIXED: Use local strings
 				std::string inputImagePath = "";
-				std::string maskImagePath = "";
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "img2img_output.png";
 				std::string posPrompt = "";
@@ -64,18 +58,6 @@ namespace Utils
 							}
 						}
 
-						// Mask image path
-						if (comp.contains("MaskImage"))
-						{
-							nlohmann::json maskImageData = comp["MaskImage"];
-
-							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null() && !maskImageData["filePath"].get<std::string>().empty())
-							{
-								maskImagePath = maskImageData["filePath"].get<std::string>();
-								std::cout << "Found mask path: " << maskImagePath << std::endl;
-							}
-						}
-
 						// Output settings
 						if (comp.contains("OutputImage"))
 						{
@@ -94,7 +76,7 @@ namespace Utils
 							}
 						}
 
-						// Prompt component - FIXED: Use local strings
+						// Prompt component
 						if (comp.contains("Prompt"))
 						{
 							nlohmann::json promptData = comp["Prompt"];
@@ -114,7 +96,7 @@ namespace Utils
 								gen_params.clip_skip = clipSkipData["clipSkip"].get<int>();
 						}
 
-						// Sampler component
+						// Sampler component - extract core sampling parameters
 						if (comp.contains("Sampler"))
 						{
 							nlohmann::json samplerData = comp["Sampler"];
@@ -125,6 +107,62 @@ namespace Utils
 								gen_params.strength = samplerData["denoise"].get<float>();
 							if (samplerData.contains("batchSize") && !samplerData["batchSize"].is_null())
 								gen_params.batch_count = samplerData["batchSize"].get<int>();
+
+							// Extract sample_params fields
+							if (samplerData.contains("steps") && !samplerData["steps"].is_null())
+								gen_params.sample_params.sample_steps = samplerData["steps"].get<int>();
+							if (samplerData.contains("eta") && !samplerData["eta"].is_null())
+								gen_params.sample_params.eta = samplerData["eta"].get<float>();
+
+							// Extract method selections
+							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
+								gen_params.sample_params.sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
+							if (samplerData.contains("current_scheduler_method") && !samplerData["current_scheduler_method"].is_null())
+								gen_params.sample_params.scheduler = static_cast<scheduler_t>(samplerData["current_scheduler_method"].get<int>());
+						}
+
+						// Guidance component - map to sample_params.guidance
+						if (comp.contains("Guidance"))
+						{
+							nlohmann::json guidanceData = comp["Guidance"];
+
+							if (guidanceData.contains("txt_cfg") && !guidanceData["txt_cfg"].is_null())
+								gen_params.sample_params.guidance.txt_cfg = guidanceData["txt_cfg"].get<float>();
+							if (guidanceData.contains("img_cfg") && !guidanceData["img_cfg"].is_null())
+								gen_params.sample_params.guidance.img_cfg = guidanceData["img_cfg"].get<float>();
+							if (guidanceData.contains("distilled_guidance") && !guidanceData["distilled_guidance"].is_null())
+								gen_params.sample_params.guidance.distilled_guidance = guidanceData["distilled_guidance"].get<float>();
+						}
+
+						// SLG component - map to sample_params.guidance.slg
+						if (comp.contains("SLG"))
+						{
+							nlohmann::json slgData = comp["SLG"];
+
+							if (slgData.contains("layer_start") && !slgData["layer_start"].is_null())
+								gen_params.sample_params.guidance.slg.layer_start = slgData["layer_start"].get<float>();
+							if (slgData.contains("layer_end") && !slgData["layer_end"].is_null())
+								gen_params.sample_params.guidance.slg.layer_end = slgData["layer_end"].get<float>();
+							if (slgData.contains("scale") && !slgData["scale"].is_null())
+								gen_params.sample_params.guidance.slg.scale = slgData["scale"].get<float>();
+
+							// Handle layers array for SLG
+							if (slgData.contains("layers") && slgData["layers"].is_array() &&
+								slgData.contains("layer_count") && !slgData["layer_count"].is_null())
+							{
+								size_t layer_count = slgData["layer_count"].get<size_t>();
+								if (layer_count > 0 && slgData["layers"].size() >= layer_count)
+								{
+									// Allocate and copy layers array
+									gen_params.sample_params.guidance.slg.layers = new int[layer_count];
+									gen_params.sample_params.guidance.slg.layer_count = layer_count;
+
+									for (size_t i = 0; i < layer_count; i++)
+									{
+										gen_params.sample_params.guidance.slg.layers[i] = slgData["layers"][i].get<int>();
+									}
+								}
+							}
 						}
 
 						// Latent component
@@ -138,17 +176,12 @@ namespace Utils
 								gen_params.height = latentData["latentHeight"].get<int>();
 						}
 
-						// ControlNet component
-						if (comp.contains("Controlnet"))
+						// FIXED: Use pm_params.style_strength instead of gen_params.style_strength
+						if (comp.contains("PhotoMaker"))
 						{
-							nlohmann::json controlData = comp["Controlnet"];
-
-							if (controlData.contains("control_strength") && !controlData["control_strength"].is_null())
-								gen_params.control_strength = controlData["control_strength"].get<float>();
-							if (controlData.contains("style_strength") && !controlData["style_strength"].is_null())
-								gen_params.style_strength = controlData["style_strength"].get<float>();
-							if (controlData.contains("normalize_input") && !controlData["normalize_input"].is_null())
-								gen_params.normalize_input = controlData["normalize_input"].get<bool>();
+							nlohmann::json pmData = comp["PhotoMaker"];
+							if (pmData.contains("style_strength") && !pmData["style_strength"].is_null())
+								gen_params.pm_params.style_strength = pmData["style_strength"].get<float>();
 						}
 					}
 				}
@@ -157,15 +190,9 @@ namespace Utils
 				gen_params.prompt = posPrompt.c_str();
 				gen_params.negative_prompt = negPrompt.c_str();
 
-				// Initialize other required fields for img2img
-				gen_params.ref_images = nullptr;
-				gen_params.ref_images_count = 0;
-				gen_params.increase_ref_index = false;
+				// Initialize empty mask and control image
+				gen_params.mask_image = { 0, 0, 0, nullptr };
 				gen_params.control_image = { 0, 0, 0, nullptr };
-				gen_params.input_id_images_path = "";
-
-				// Initialize sample parameters
-				InitializeSampleParams(gen_params.sample_params, metadata);
 
 				// Validate parameters
 				if (inputImagePath.empty())
@@ -204,96 +231,13 @@ namespace Utils
 					throw std::runtime_error("Invalid input image dimensions: " + std::to_string(inputWidth) + "x" + std::to_string(inputHeight));
 				}
 
-				// Create input image struct
+				// Set input image in generation parameters
 				gen_params.init_image = {
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
-					3, // FORCE 3 channels (RGB)
+					3, // Force 3 channels (RGB)
 					inputData
 				};
-
-				// Handle mask image
-				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath))
-				{
-					std::cout << "No valid mask provided, creating blank white mask" << std::endl;
-
-					// Create a blank WHITE mask (255 = keep original, 0 = replace with generated)
-					size_t maskSize = inputWidth * inputHeight;
-					emptyMaskData = new unsigned char[maskSize];
-					std::memset(emptyMaskData, 255, maskSize); // WHITE mask = change whole image
-
-					gen_params.mask_image = {
-						static_cast<uint32_t>(inputWidth),
-						static_cast<uint32_t>(inputHeight),
-						1, // Masks are single channel
-						emptyMaskData
-					};
-
-					std::cout << "Created white mask: " << inputWidth << "x" << inputHeight << std::endl;
-				}
-				else
-				{
-					// Load mask from file - FORCE GRAYSCALE
-					int maskWidth, maskHeight, maskChannels;
-					std::cout << "Loading mask image from: " << maskImagePath << std::endl;
-
-					// FORCE 1 channel (grayscale) for mask
-					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1);
-
-					if (!maskData)
-					{
-						std::cerr << "Failed to load mask image: " << maskImagePath << ", using white mask instead" << std::endl;
-
-						// Create white mask as fallback
-						size_t maskSize = inputWidth * inputHeight;
-						emptyMaskData = new unsigned char[maskSize];
-						std::memset(emptyMaskData, 255, maskSize); // WHITE mask
-
-						gen_params.mask_image = {
-							static_cast<uint32_t>(inputWidth),
-							static_cast<uint32_t>(inputHeight),
-							1,
-							emptyMaskData
-						};
-					}
-					else
-					{
-						// Validate mask dimensions match input image
-						if (maskWidth != inputWidth || maskHeight != inputHeight)
-						{
-							std::cout << "Warning: Mask dimensions (" << maskWidth << "x" << maskHeight
-								<< ") don't match input image (" << inputWidth << "x" << inputHeight
-								<< "), using white mask instead" << std::endl;
-
-							// Free the loaded mask and create a white one
-							stbi_image_free(maskData);
-							maskData = nullptr;
-
-							size_t maskSize = inputWidth * inputHeight;
-							emptyMaskData = new unsigned char[maskSize];
-							std::memset(emptyMaskData, 255, maskSize);
-
-							gen_params.mask_image = {
-								static_cast<uint32_t>(inputWidth),
-								static_cast<uint32_t>(inputHeight),
-								1,
-								emptyMaskData
-							};
-						}
-						else
-						{
-							gen_params.mask_image = {
-								static_cast<uint32_t>(maskWidth),
-								static_cast<uint32_t>(maskHeight),
-								1, // Force single channel
-								maskData
-							};
-
-							std::cout << "Mask image loaded successfully: " << maskWidth << "x" << maskHeight
-								<< " with 1 channel (grayscale)" << std::endl;
-						}
-					}
-				}
 
 				// Create output path
 				std::filesystem::path outputDir(outputPath);
@@ -339,23 +283,18 @@ namespace Utils
 					result_image->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
+				// Cleanup SLG layers array if it was allocated
+				if (gen_params.sample_params.guidance.slg.layers != nullptr)
+				{
+					delete[] gen_params.sample_params.guidance.slg.layers;
+					gen_params.sample_params.guidance.slg.layers = nullptr;
+				}
+
 				// Cleanup resources
 				if (inputData)
 				{
 					stbi_image_free(inputData);
 					inputData = nullptr;
-				}
-
-				if (maskData)
-				{
-					stbi_image_free(maskData);
-					maskData = nullptr;
-				}
-
-				if (emptyMaskData)
-				{
-					delete[] emptyMaskData;
-					emptyMaskData = nullptr;
 				}
 
 				if (result_image)
@@ -376,23 +315,18 @@ namespace Utils
 			{
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
 
+				// Clean up SLG layers array if it was allocated
+				if (gen_params.sample_params.guidance.slg.layers != nullptr)
+				{
+					delete[] gen_params.sample_params.guidance.slg.layers;
+					gen_params.sample_params.guidance.slg.layers = nullptr;
+				}
+
 				// Clean up resources
 				if (inputData)
 				{
 					stbi_image_free(inputData);
 					inputData = nullptr;
-				}
-
-				if (maskData)
-				{
-					stbi_image_free(maskData);
-					maskData = nullptr;
-				}
-
-				if (emptyMaskData)
-				{
-					delete[] emptyMaskData;
-					emptyMaskData = nullptr;
 				}
 
 				if (result_image)

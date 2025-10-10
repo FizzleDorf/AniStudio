@@ -12,7 +12,7 @@ using namespace Utils;
 
 namespace GUI {
 
-	UpscaleView::UpscaleView(EntityManager& entityMgr) : BaseView(entityMgr),
+	UpscaleView::UpscaleView(EntityManager& entityMgr, ImGuiContext* mainContext) : BaseView(entityMgr),
 		isFilenameChanged(false) {
 		viewName = "UpscaleView";
 		windowOpen = true;

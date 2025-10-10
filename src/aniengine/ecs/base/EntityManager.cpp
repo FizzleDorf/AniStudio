@@ -12,6 +12,8 @@ namespace ECS {
 
 	SystemTypeID SystemTypeRegistry::nextTypeID = 0;
 	std::unordered_map<std::type_index, SystemTypeID> SystemTypeRegistry::typeToID;
+	std::unordered_map<std::string, SystemTypeID> SystemTypeRegistry::nameToID;
+	std::unordered_map<SystemTypeID, std::string> SystemTypeRegistry::idToName;
 
 	// Plugin Component Array - Manages raw memory components for plugins
 	class PluginComponentArray : public ICompList {
@@ -69,6 +71,16 @@ namespace ECS {
 		}
 	};
 
+	// NEW: Helper method to detect plugin components
+	bool EntityManager::IsPluginComponent(ComponentTypeID typeId) {
+		auto arrayIt = componentsArrays.find(typeId);
+		if (arrayIt != componentsArrays.end()) {
+			// If it's stored as PluginComponentArray, it's a plugin component
+			return std::dynamic_pointer_cast<PluginComponentArray>(arrayIt->second) != nullptr;
+		}
+		return false;
+	}
+
 	EntityManager::EntityManager() : entityCount(0) {
 		Reset();
 	}
@@ -77,6 +89,7 @@ namespace ECS {
 		// Destroy all plugin systems first
 		for (auto&[systemId, systemInfo] : pluginSystems) {
 			if (systemInfo.instance && systemInfo.destructor) {
+				std::cout << "[EntityManager] Destroying plugin system ID: " << systemId << std::endl;
 				systemInfo.destructor(systemInfo.instance);
 			}
 		}
@@ -211,6 +224,7 @@ namespace ECS {
 
 		// Destroy system instance
 		if (systemInfo.instance && systemInfo.destructor) {
+			std::cout << "[EntityManager] Destroying plugin system ID: " << systemId << std::endl;
 			systemInfo.destructor(systemInfo.instance);
 		}
 
@@ -218,7 +232,6 @@ namespace ECS {
 		std::cout << "[EntityManager] Unregistered plugin system ID: " << systemId << std::endl;
 	}
 
-	// Add this method to EntityManager.cpp
 	void EntityManager::UnregisterPluginComponent(ComponentTypeID componentId) {
 		// Remove from component arrays
 		auto arrayIt = componentsArrays.find(componentId);
@@ -529,12 +542,17 @@ namespace ECS {
 		std::function<void(void*)> starter,
 		const std::vector<ComponentTypeID>& requiredComponents) {
 
+		std::cout << "[EntityManager] Registering plugin system ID: " << typeId
+			<< " with " << requiredComponents.size() << " required components" << std::endl;
+
 		// Create system instance
 		void* systemInstance = creator(this);
 		if (!systemInstance) {
 			std::cerr << "[EntityManager] Failed to create plugin system with ID: " << typeId << std::endl;
 			return;
 		}
+
+		std::cout << "[EntityManager] Plugin system instance created successfully" << std::endl;
 
 		// Store system info
 		PluginSystemInfo systemInfo;
@@ -544,6 +562,7 @@ namespace ECS {
 		systemInfo.requiredComponents = requiredComponents;
 
 		// Add existing entities that match system signature
+		int matchingEntities = 0;
 		for (const auto&[entityId, entitySignature] : entitiesSignatures) {
 			bool matches = true;
 			for (ComponentTypeID compType : requiredComponents) {
@@ -554,20 +573,24 @@ namespace ECS {
 			}
 			if (matches) {
 				systemInfo.entities.insert(entityId);
+				matchingEntities++;
 			}
 		}
 
 		// Store the system
 		pluginSystems[typeId] = std::move(systemInfo);
 
+		std::cout << "[EntityManager] Plugin system stored with ID: " << typeId << std::endl;
+
 		// Start the system
 		if (starter) {
+			std::cout << "[EntityManager] Starting plugin system..." << std::endl;
 			starter(systemInstance);
 		}
 
 		std::cout << "[EntityManager] Registered plugin system with ID: " << typeId
 			<< " requiring " << requiredComponents.size() << " components"
-			<< " with " << systemInfo.entities.size() << " initial entities" << std::endl;
+			<< " with " << matchingEntities << " initial entities" << std::endl;
 	}
 
 	void* EntityManager::GetPluginSystem(SystemTypeID typeId) {
@@ -623,6 +646,24 @@ namespace ECS {
 		}
 	}
 
+	void EntityManager::DebugPrintPluginSystems() const {
+		std::cout << "=== PLUGIN SYSTEMS DEBUG ===" << std::endl;
+		std::cout << "Total plugin systems registered: " << pluginSystems.size() << std::endl;
+
+		for (const auto&[systemId, systemInfo] : pluginSystems) {
+			std::string systemName = SystemTypeRegistry::GetNameByID(systemId);
+			std::cout << "\nPlugin System ID: " << systemId << " (" << systemName << ")" << std::endl;
+			std::cout << "  Instance: " << systemInfo.instance << std::endl;
+			std::cout << "  Required components: " << systemInfo.requiredComponents.size() << std::endl;
+			for (ComponentTypeID compId : systemInfo.requiredComponents) {
+				std::cout << "    - " << ComponentTypeRegistry::GetNameByID(compId)
+					<< " (ID: " << compId << ")" << std::endl;
+			}
+			std::cout << "  Entities: " << systemInfo.entities.size() << std::endl;
+		}
+		std::cout << "=========================" << std::endl;
+	}
+
 	// Private helper methods implementation
 
 	void EntityManager::AddEntitySignature(const EntityID entity) {
@@ -664,7 +705,10 @@ namespace ECS {
 			}
 
 			if (matches) {
-				systemInfo.entities.insert(entity);
+				if (systemInfo.entities.insert(entity).second) {
+					std::cout << "[EntityManager] Added entity " << entity
+						<< " to plugin system " << systemId << std::endl;
+				}
 			}
 			else {
 				systemInfo.entities.erase(entity);

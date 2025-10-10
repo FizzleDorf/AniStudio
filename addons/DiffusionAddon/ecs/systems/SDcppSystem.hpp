@@ -4,12 +4,13 @@
 #include "ECS.h"
 #include "rng.hpp"
 
-// CRITICAL: Include the asset management system
+// Include the asset management system
 #include "AssetManager.hpp"
 #include "AssetHandleComponents.hpp"
 
-// Include component headers properly
-#include "components.h"
+// Include component headers
+#include "SDCPPComponents.h"
+#include "Components.h"
 
 // Include your processing utilities
 #include "Txt2Img.hpp"
@@ -114,14 +115,14 @@ namespace ECS {
 			, clearRequested(false) {
 			sysName = "SDCPPSystem";
 
-			// Use proper component signatures for the new asset system
-			AddComponentSignature<LatentComponent>();
-			AddComponentSignature<ImageHandleComponent>();
-			AddComponentSignature<VideoHandleComponent>();
+			//// Use proper component signatures for the new asset system
+			//AddComponentSignature<LatentComponent>();
+			//AddComponentSignature<ImageHandleComponent>();
+			//AddComponentSignature<VideoHandleComponent>();
 
-			// Add these components - they should exist based on your component files
-			AddComponentSignature<OutputImageComponent>();
-			AddComponentSignature<InputImageComponent>();
+			//// Add these components - they should exist based on your component files
+			//AddComponentSignature<OutputImageComponent>();
+			//AddComponentSignature<InputImageComponent>();
 		}
 
 		// Destructor

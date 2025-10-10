@@ -6,6 +6,7 @@
 #include "ContextMenuUtils.hpp"
 #include "DiffusionCallbackUtils.hpp"
 #include "utils.h"
+#include "SDcppSystem.hpp"
 #include <ImGuiFileDialog.h>
 #include <png.h>
 #include <exiv2/exiv2.hpp>
@@ -20,7 +21,7 @@ using namespace ANI;
 
 namespace GUI {
 
-	DiffusionView::DiffusionView(EntityManager& entityMgr) : BaseView(entityMgr) {
+	DiffusionView::DiffusionView(EntityManager& entityMgr, ImGuiContext* mainContext) : BaseView(entityMgr) {
 		viewName = "DiffusionView";
 		windowOpen = true;
 		contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(entityMgr);
@@ -74,7 +75,7 @@ namespace GUI {
 		mgr.AddComponent<PromptComponent>(entity);
 		mgr.AddComponent<LayerSkipComponent>(entity);
 		mgr.AddComponent<OutputImageComponent>(entity);
-		mgr.AddComponent<ControlnetComponent>(entity);
+		mgr.AddComponent<ControlNetComponent>(entity);
 		mgr.AddComponent<EmbeddingComponent>(entity);
 		mgr.AddComponent<ChromaComponent>(entity);
 

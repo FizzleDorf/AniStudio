@@ -13,7 +13,7 @@ namespace ECS {
 			schema = {
 				{"title", "Guidance Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"distilled_guidance", "txt_cfg", "img_cfg", "eta"}},
+				{"propertyOrder", {"distilled_guidance", "txt_cfg", "img_cfg"}},
 				{"properties", {
 					{"distilled_guidance", {
 						{"type", "number"},
@@ -53,19 +53,6 @@ namespace ECS {
 							{"min", 1.0f},
 							{"max", 30.0f}
 						}}
-					}},
-					{"eta", {
-						{"type", "number"},
-						{"title", "ETA"},
-						{"description", "Eta parameter for DDIM scheduler. Controls the amount of noise added during sampling. 0.0 = deterministic (DDIM), 1.0 = stochastic (DDPM). Higher values add more randomness."},
-						{"ui:widget", "input_float"},
-						{"ui:options", {
-							{"step", 0.05f},
-							{"step_fast", 0.1f},
-							{"format", "%.2f"},
-							{"min", 0.0f},
-							{"max", 1.0f}
-						}}
 					}}
 				}}
 			};
@@ -76,16 +63,12 @@ namespace ECS {
 		float img_cfg = 1.5f;
 		float distilled_guidance = 3.5f;
 
-		// eta (part of sd_sample_params_t but grouped here for UI convenience)
-		float eta = 0.0f;
-
 		// Override the GetPropertyMap method
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["distilled_guidance"] = &distilled_guidance;
 			properties["img_cfg"] = &img_cfg;
 			properties["txt_cfg"] = &txt_cfg;
-			properties["eta"] = &eta;
 			return properties;
 		}
 
@@ -94,7 +77,6 @@ namespace ECS {
 				txt_cfg = other.txt_cfg;
 				img_cfg = other.img_cfg;
 				distilled_guidance = other.distilled_guidance;
-				eta = other.eta;
 			}
 			return *this;
 		}
@@ -103,8 +85,7 @@ namespace ECS {
 			return { {compName, {
 				{"txt_cfg", txt_cfg},
 				{"img_cfg", img_cfg},
-				{"distilled_guidance", distilled_guidance},
-				{"eta", eta}
+				{"distilled_guidance", distilled_guidance}
 			}} };
 		}
 
@@ -134,8 +115,6 @@ namespace ECS {
 				img_cfg = componentData["img_cfg"];
 			if (componentData.contains("distilled_guidance"))
 				distilled_guidance = componentData["distilled_guidance"];
-			if (componentData.contains("eta"))
-				eta = componentData["eta"];
 		}
 	};
 

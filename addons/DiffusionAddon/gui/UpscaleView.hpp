@@ -4,6 +4,7 @@
 #include "FilePaths.hpp"
 #include "pch.h"
 #include <components.h>
+#include "SDCPPComponents.h" 
 #include <memory>
 #include <map>
 
@@ -26,7 +27,7 @@ namespace GUI {
         })";
 		}
 
-		UpscaleView(EntityManager &entityMgr);
+		UpscaleView(EntityManager &entityMgr, ImGuiContext* mainContext = nullptr);
 		~UpscaleView();
 
 		// BaseView override functions

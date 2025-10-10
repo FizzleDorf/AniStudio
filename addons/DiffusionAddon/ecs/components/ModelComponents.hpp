@@ -586,8 +586,8 @@ namespace ECS {
 	};
 
 	// ControlNet Component
-	struct ControlnetComponent : public ECS::BaseModelComponent {
-		ControlnetComponent() {
+	struct ControlNetComponent : public ECS::BaseModelComponent {
+		ControlNetComponent() {
 			compName = "Controlnet";
 
 			schema = {
@@ -678,7 +678,7 @@ namespace ECS {
 			return Utils::FilePaths::controlnetDir;
 		}
 
-		ControlnetComponent& operator=(const ControlnetComponent& other) {
+		ControlNetComponent& operator=(const ControlNetComponent& other) {
 			if (this != &other) {
 				modelName = other.modelName;
 				modelPath = other.modelPath;
@@ -843,7 +843,7 @@ namespace ECS {
 	// Embedding
 	struct EmbeddingComponent : public BaseModelComponent {
 		EmbeddingComponent() {
-			compName = "EmbeddingComponent";
+			compName = "Embedding";
 
 			schema = {
 				{"title", "Text Embedding"},
