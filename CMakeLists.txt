@@ -10,7 +10,9 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 option(BUILD_ANIENGINE "Build AniEngine library" ON)
 option(BUILD_ANISTUDIO "Build AniStudio library" ON)
 option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
-option(BUILD_SHARED_LIBS "Build shared libraries instead of static" OFF)
+option(BUILD_SHARED_LIBS "Build shared libraries instead of static" ON)
+
+set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libraries" FORCE)
 
 # Project-wide settings
 set(CMAKE_CXX_STANDARD 17)
@@ -129,29 +131,13 @@ endif()
 # Find external dependencies
 find_package(OpenCV REQUIRED)
 find_package(GLEW REQUIRED)
-# if (GLEW_FOUND)
-#     include_directories(${GLEW_INCLUDE_DIRS})
-# endif()
-
 find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(FFmpeg REQUIRED)
 find_package(PkgConfig REQUIRED)
-
-# pkg_check_modules(LIBAV REQUIRED IMPORTED_TARGET
-#     libavdevice
-#     libavfilter
-#     libavformat
-#     libavcodec
-#     libswresample
-#     libswscale
-#     libavutil
-# )
-
 find_package(pybind11 REQUIRED)
-# find_package(semver REQUIRED)
 
 # Check for Zep availability
 if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
@@ -218,14 +204,18 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/include
     )
 
+    # CRITICAL FIX: Link in correct order with proper visibility
     target_link_libraries(${PROJECT_NAME} PRIVATE
         AniStudioCore
-        -lGL
+        AniEngineCore
+        glfw
+        GLEW::GLEW
     )
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
     message(STATUS "Main application will be built")
+    message(STATUS "  Links against: AniStudioCore, AniEngineCore, glfw, GLEW, OpenGL")
 endif()
 
 # Plugin utility function

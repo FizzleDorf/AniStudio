@@ -1,8 +1,8 @@
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
-#include "guiSystems.h"
 #include "ImGuiSettingsUtil.hpp"
+#include "ImGuiStateUtils.hpp"
 #include "Events.hpp"
 #include <iostream>
 #include <thread>
@@ -18,7 +18,6 @@ namespace ANI {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
-		//GUI::DiffusionCallbackUtils::InitializeCallbacks();
 	}
 
 	StudioCore::~StudioCore() {
@@ -29,14 +28,12 @@ namespace ANI {
 
 	void StudioCore::RegisterCoreViews() {
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
-		
+
 		engineCore.GetEntityManager().RegisterSystem<TextureSystem>();
 
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
 		viewManager.RegisterView<GUI::ImageView>("ImageView");
-		// viewManager.RegisterView<GUI::SequencerView>("SequencerView");
-		// viewManager.RegisterView<GUI::NodeView>("NodeView");
 		viewManager.RegisterView<GUI::VideoView>("VideoView");
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
@@ -65,13 +62,16 @@ namespace ANI {
 	void StudioCore::InitializeStudioPlugins() {
 		std::cout << "[StudioCore] Initializing studio plugin system..." << std::endl;
 
-		imguiContext = ImGui::GetCurrentContext();
-		std::cout << "[StudioCore] Captured ImGui context for plugins: " << imguiContext << std::endl;
-
+		// CRITICAL FIX: Use the stored context instead of getting current
 		if (!imguiContext) {
-			std::cerr << "[StudioCore] ERROR: ImGui context is null!" << std::endl;
+			std::cerr << "[StudioCore] ERROR: ImGui context is null! Cannot initialize plugins." << std::endl;
 			return;
 		}
+
+		// Set the stored context as current
+		ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
+		ImGuiContext* currentContext = ImGui::GetCurrentContext();
+		std::cout << "[StudioCore] Using stored ImGui context for plugins: " << currentContext << std::endl;
 
 		ImGuiIO& io = ImGui::GetIO();
 		if (!io.Fonts) {
@@ -99,17 +99,12 @@ namespace ANI {
 			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		// CRITICAL: Set up state management FIRST
 		std::cout << "[StudioCore] Setting global data path: " << Utils::FilePaths::dataPath << std::endl;
 		studioPluginManager->SetGlobalDataPath(Utils::FilePaths::dataPath);
 
-		// Scan plugins directory (discover what's available)
 		studioPluginManager->scanPluginDirectory(pluginDirectory);
-
-		// Hot reload is disabled by default - will be enabled when PluginView opens
 		studioPluginManager->enableHotReload(false);
 
-		// CRITICAL: Load global plugin state AFTER setting the data path
 		std::cout << "[StudioCore] Loading global plugin state..." << std::endl;
 		studioPluginManager->LoadGlobalPluginState();
 
@@ -227,15 +222,12 @@ namespace ANI {
 			}
 
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
-
 			SetupProjectCallbacks();
-
-			std::cout << "[StudioCore] Basic initialization complete, waiting for full ImGui setup..." << std::endl;
 
 			initialized = true;
 			running = true;
 
-			std::cout << "[StudioCore] Core initialized successfully - plugins will be loaded after first render!" << std::endl;
+			std::cout << "[StudioCore] Core initialized successfully!" << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -249,48 +241,58 @@ namespace ANI {
 		static bool completedInitialization = false;
 		if (completedInitialization) return;
 
-		std::cout << "[StudioCore] Completing initialization after ImGui is ready..." << std::endl;
+		std::cout << "[StudioCore] Completing full initialization..." << std::endl;
 
-		ImGuiContext* currentContext = ImGui::GetCurrentContext();
-		if (!currentContext) {
-			std::cerr << "[StudioCore] ERROR: ImGui context still null!" << std::endl;
+		// CRITICAL FIX: Use the stored context instead of getting current
+		if (!imguiContext) {
+			std::cerr << "[StudioCore] ERROR: ImGui context is null! Cannot complete initialization." << std::endl;
 			return;
 		}
+
+		// Set the stored context as current
+		ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
+		ImGuiContext* currentContext = ImGui::GetCurrentContext();
+		std::cout << "[StudioCore] Using stored ImGui context: " << currentContext << std::endl;
 
 		ImGuiIO& io = ImGui::GetIO();
+		std::cout << "[StudioCore] ImGui fonts pointer: " << io.Fonts << std::endl;
+		if (io.Fonts) {
+			std::cout << "[StudioCore] ImGui fonts count: " << io.Fonts->Fonts.Size << std::endl;
+		}
+
 		if (!io.Fonts || io.Fonts->Fonts.Size == 0) {
-			std::cerr << "[StudioCore] ERROR: ImGui fonts still not loaded!" << std::endl;
+			std::cerr << "[StudioCore] ERROR: ImGui fonts not loaded!" << std::endl;
 			return;
 		}
 
-		std::cout << "[StudioCore] ImGui is now fully ready - proceeding with plugin initialization" << std::endl;
+		std::cout << "[StudioCore] ImGui is ready" << std::endl;
 
 		try {
 			Utils::ImGuiSettingsUtil::LoadImGuiSettingsForApp(Utils::FilePaths::dataPath);
-			std::cout << "[StudioCore] ImGui settings loaded successfully" << std::endl;
+			std::cout << "[StudioCore] ImGui settings loaded" << std::endl;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[StudioCore] Warning: Failed to load ImGui settings: " << e.what() << std::endl;
 		}
 
 		viewManager.SetImGuiContext(currentContext);
-		std::cout << "[StudioCore] Set ImGui context on ViewManager: " << currentContext << std::endl;
+		std::cout << "[StudioCore] ViewManager ImGui context set" << std::endl;
 
 		InitializeStudioPlugins();
+		std::cout << "[StudioCore] Plugins initialized" << std::endl;
 
 		RegisterCoreViews();
-
-		std::cout << "[StudioCore] Setting managers for Events system..." << std::endl;
-		ANI::Events::Ref().SetManagers(&viewManager, &m_projectManager);
-		std::cout << "[StudioCore] Events managers set successfully!" << std::endl;
+		std::cout << "[StudioCore] Core views registered" << std::endl;
 
 		m_projectManagerView->Init();
-		m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
+		std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;
 
-		if (m_projectManager.ShouldShowStartup()) {
-			m_showProjectManagerView = true;
-			std::cout << "[StudioCore] Will show startup view - no project to auto-load" << std::endl;
-		}
+		m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
+		std::cout << "[StudioCore] MenuBar created" << std::endl;
+
+		// Always show startup view on launch - no auto-loading
+		m_showProjectManagerView = true;
+		std::cout << "[StudioCore] Will show startup view on launch" << std::endl;
 
 		completedInitialization = true;
 		std::cout << "[StudioCore] Complete initialization finished!" << std::endl;
@@ -322,8 +324,6 @@ namespace ANI {
 
 	void StudioCore::OnProjectClosed() {
 		std::cout << "[StudioCore] OnProjectClosed() called" << std::endl;
-		std::cout << "[StudioCore] m_isShuttingDown: " << m_isShuttingDown << std::endl;
-		std::cout << "[StudioCore] Current m_showProjectManagerView: " << m_showProjectManagerView << std::endl;
 
 		if (studioPluginManager) {
 			std::cout << "[StudioCore] Saving project plugin state and reverting to global..." << std::endl;
@@ -331,10 +331,7 @@ namespace ANI {
 			studioPluginManager->UseGlobalPluginState();
 		}
 
-		// Show project manager view again
 		m_showProjectManagerView = true;
-
-		std::cout << "[StudioCore] Set m_showProjectManagerView to: " << m_showProjectManagerView << std::endl;
 
 		SyncWindowStateFromGLFW();
 		std::string defaultPath = GetDefaultWindowStatePath();
@@ -360,7 +357,6 @@ namespace ANI {
 			if (m_projectManager.IsProjectOpen()) {
 				std::cout << "[StudioCore] Saving open project BEFORE shutdown: " << m_projectManager.GetCurrentProjectName() << std::endl;
 
-				// Save project-specific plugin state
 				if (studioPluginManager) {
 					studioPluginManager->SaveProjectPluginState();
 				}
@@ -382,7 +378,6 @@ namespace ANI {
 				}
 			}
 			else {
-				// No project open, save global plugin state
 				if (studioPluginManager) {
 					studioPluginManager->SaveGlobalPluginState();
 				}
@@ -474,48 +469,16 @@ namespace ANI {
 		if (!running || !initialized) return;
 
 		try {
-			ImGui_ImplOpenGL3_NewFrame();
-			ImGui_ImplGlfw_NewFrame();
-			ImGui::NewFrame();
+			// Show startup view if no project is open
+			bool IsProjectOpen = m_projectManager.IsProjectOpen();
 
-			CompleteInitialization();
-
-			// Track project state changes to avoid interfering with project close
-			static bool wasProjectOpen = false;
-			static bool startupShown = false;
-			bool isProjectCurrentlyOpen = m_projectManager.IsProjectOpen();
-
-			// Show startup view if no project is open and we haven't shown it yet
-			if (!isProjectCurrentlyOpen && !startupShown) {
-				if (!m_showProjectManagerView) {
-					m_showProjectManagerView = true;
-					startupShown = true;
-					std::cout << "[StudioCore] Showing startup view - no project to auto-load" << std::endl;
-				}
-			}
-
-			// Only hide project manager view when a project actually opens (not every frame)
-			if (isProjectCurrentlyOpen && !wasProjectOpen) {
-				// Project just opened
-				startupShown = false;
-				m_showProjectManagerView = false;
-				std::cout << "[StudioCore] Project opened - hiding startup view" << std::endl;
-			}
-
-			// Reset startup flag when project closes (so it can be shown again)
-			if (!isProjectCurrentlyOpen && wasProjectOpen) {
-				// Project just closed - OnProjectClosed() should have set m_showProjectManagerView = true
-				startupShown = false;
-				std::cout << "[StudioCore] Project closed - startup view should be visible: " << m_showProjectManagerView << std::endl;
-			}
-
-			wasProjectOpen = isProjectCurrentlyOpen;
-
-			if (m_showProjectManagerView) {
+			if (!IsProjectOpen && m_showProjectManagerView && m_projectManagerView) {
+				std::cout << "[StudioCore] Rendering ProjectManagerView" << std::endl;
 				m_projectManagerView->Render();
 			}
 
-			if (m_projectManager.IsProjectOpen()) {
+			// Show main application UI if project is open
+			if (IsProjectOpen) {
 				ImGuiViewport* viewport = ImGui::GetMainViewport();
 				ImGui::SetNextWindowPos(viewport->WorkPos);
 				ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -539,8 +502,8 @@ namespace ANI {
 						m_menuBar->Render();
 					}
 
-					ImGuiID docksspace_id = ImGui::GetID("MainDockSpace");
-					ImGui::DockSpace(docksspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+					ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 					viewManager.Render();
 				}
@@ -550,9 +513,11 @@ namespace ANI {
 				ImGui::End();
 			}
 
+			// End ImGui frame and render
 			ImGui::Render();
 			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+			// Handle multi-viewport if enabled
 			ImGuiIO& io = ImGui::GetIO();
 			if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
 				GLFWwindow* backup_current_context = glfwGetCurrentContext();

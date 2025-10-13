@@ -40,12 +40,10 @@
  /*
  The AniStudio Library is responsible for the AniEngine instance if you choose to use this
  library. You can access any of the managers from the get functions here. Other than holding
- the AniEngine Instance, the library contains all gui logic and utilities. generally it's a
- bad idea to include imgui as a shared library but in cases where the lifetime needed is short
- (game overlays for example) it can do just fine. If you want to use another gui solution
- instead of imgui, you can still access the gui utilities via the AniStudio shared library.
- Otherwise, I would suggest you use the AniEngine shared library instead. Commercial licence
- owners can bypass this by using the static libs or use code directly.
+ the AniEngine Instance, the library contains all gui logic and utilities. If you want to use 
+ another gui solution instead of imgui, you can still access the gui utilities via the 
+ AniStudio shared library. Otherwise, I would suggest you use the AniEngine shared library 
+ instead. Commercial licence holders can use the static libs or use code directly.
  */
 
 namespace GUI {
@@ -63,6 +61,7 @@ namespace ANI {
 
 		// Core lifecycle
 		bool Initialize();
+		void CompleteInitialization();
 		void Shutdown();
 		void Update(float deltaTime);
 		void Render();
@@ -121,9 +120,6 @@ namespace ANI {
 		void RegisterCoreViews();
 		void SetupProjectCallbacks();
 		void InitializeStudioPlugins();
-
-		// Method for completing initialization after ImGui is ready
-		void CompleteInitialization();
 
 		// Window state management
 		void InitializeWindowState();

@@ -5,11 +5,7 @@
 
 namespace GUI {
 
-	// Define the atomic counter
-	std::atomic<ViewTypeID> g_nextViewTypeId{ 0 };
-
 	ViewManager::ViewManager() : workspaceCount(0), m_activeWorkspaceID(0), m_imguiContext(nullptr) {
-		// Initialize available view IDs
 		for (WorkspaceID view = 0u; view < MAX_VIEW_COUNT; view++) {
 			availableWorkspaces.push(view);
 		}
@@ -23,12 +19,10 @@ namespace GUI {
 		for (const auto& workspace : workspaceArrays) {
 			workspace.second->UpdateViews(deltaT);
 		}
-		// Update workspaces
 		UpdateWorkspaces(deltaT);
 	}
 
 	void ViewManager::Render() {
-		// CRITICAL FIX: Set the ImGui context before rendering if we have one
 		ImGuiContext* previousContext = nullptr;
 		bool contextSwitched = false;
 
@@ -37,26 +31,20 @@ namespace GUI {
 			if (previousContext != m_imguiContext) {
 				ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
 				contextSwitched = true;
-				std::cout << "[ViewManager] Switched to stored context: " << m_imguiContext
-					<< " (was: " << previousContext << ")" << std::endl;
 			}
 		}
 
-		// FIXED: Render only the active workspace
 		auto signatureIt = workspaceSignatures.find(m_activeWorkspaceID);
 		if (signatureIt == workspaceSignatures.end()) {
-			// No signature means no views in this workspace
 			goto restore_context;
 		}
 
 		{
 			const auto& signature = *(signatureIt->second);
 
-			// ONLY render views that are explicitly in the active workspace signature
 			for (const auto& viewTypeID : signature) {
 				bool viewRendered = false;
 
-				// Check factory-created views first (these are stored in workspaces map)
 				auto workspaceIt = workspaces.find(m_activeWorkspaceID);
 				if (workspaceIt != workspaces.end()) {
 					auto viewIt = workspaceIt->second.find(viewTypeID);
@@ -71,7 +59,6 @@ namespace GUI {
 					}
 				}
 
-				// If not found in factory views, check template-based views
 				if (!viewRendered) {
 					auto arrayIt = workspaceArrays.find(viewTypeID);
 					if (arrayIt != workspaceArrays.end()) {
@@ -84,7 +71,7 @@ namespace GUI {
 								viewRendered = true;
 							}
 							catch (...) {
-								// View doesn't exist for this workspace, skip silently
+								// View doesn't exist for this workspace
 							}
 						}
 					}
@@ -93,7 +80,6 @@ namespace GUI {
 		}
 
 	restore_context:
-		// CRITICAL FIX: Restore previous context if we switched
 		if (contextSwitched && previousContext) {
 			ImGui::SetCurrentContext(previousContext);
 		}
@@ -117,14 +103,12 @@ namespace GUI {
 	void ViewManager::EnsureValidActiveWorkspace() {
 		auto allWorkspaces = GetAllWorkspaces();
 
-		// If no workspaces exist, create one
 		if (allWorkspaces.empty()) {
 			m_activeWorkspaceID = CreateView();
 			std::cout << "[ViewManager] Created default workspace: " << m_activeWorkspaceID << std::endl;
 			return;
 		}
 
-		// If current active workspace doesn't exist, switch to the first available
 		if (std::find(allWorkspaces.begin(), allWorkspaces.end(), m_activeWorkspaceID) == allWorkspaces.end()) {
 			m_activeWorkspaceID = allWorkspaces[0];
 			std::cout << "[ViewManager] Switched to valid workspace: " << m_activeWorkspaceID << std::endl;
@@ -137,11 +121,9 @@ namespace GUI {
 		availableWorkspaces.pop();
 		workspaceCount++;
 
-		// Set default unique name
 		std::string defaultName = GenerateUniqueWorkspaceName("Workspace");
 		workspaceNames[viewList] = defaultName;
 
-		// If this is the first workspace, make it active
 		if (workspaceCount == 1) {
 			m_activeWorkspaceID = viewList;
 		}
@@ -154,7 +136,6 @@ namespace GUI {
 	void ViewManager::DestroyView(const WorkspaceID viewList) {
 		assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
-		// If we're deleting the active workspace, switch to another one first
 		if (viewList == m_activeWorkspaceID) {
 			auto allWorkspaces = GetAllWorkspaces();
 			for (WorkspaceID id : allWorkspaces) {
@@ -163,39 +144,41 @@ namespace GUI {
 					break;
 				}
 			}
-			// If no other workspace exists, we'll create one later
 			if (allWorkspaces.size() <= 1) {
-				m_activeWorkspaceID = 0; // Will be corrected by EnsureValidActiveWorkspace
+				m_activeWorkspaceID = 0;
 			}
 		}
 
-		// Remove this view's signature
 		workspaceSignatures.erase(viewList);
 
-		// Remove this view from all view arrays
 		for (auto &array : workspaceArrays) {
 			array.second->Erase(viewList);
 		}
 
-		// Remove from workspaces if it's there
 		workspaces.erase(viewList);
-
-		// Remove workspace name
 		workspaceNames.erase(viewList);
 
-		// Return the ID to the available pool
 		workspaceCount--;
 		availableWorkspaces.push(viewList);
 
-		// Ensure we still have a valid active workspace
 		EnsureValidActiveWorkspace();
 	}
 
 	void ViewManager::RegisterViewWithFactory(const std::string& name, const std::string& source,
 		ViewCreationCallback factory, std::function<ViewMetadata()> metadataGetter) {
 
-		// Use name-based registration for factory views to avoid conflicts
-		ViewTypeID typeId = ViewTypeRegistry::RegisterTypeByName(name);
+		std::lock_guard<std::mutex> lock(m_viewRegistryMutex);
+
+		auto nameIt = m_viewNameToID.find(name);
+		ViewTypeID typeId;
+		if (nameIt != m_viewNameToID.end()) {
+			typeId = nameIt->second;
+		}
+		else {
+			typeId = m_nextViewID++;
+			m_viewNameToID[name] = typeId;
+			m_viewIDToName[typeId] = name;
+		}
 
 		registeredViews[name] = typeId;
 		viewSources[name] = source;
@@ -210,14 +193,12 @@ namespace GUI {
 		auto factoryIt = viewFactories.find(viewTypeName);
 		if (factoryIt == viewFactories.end()) {
 			std::cerr << "[ViewManager] No factory registered for view type: " << viewTypeName << std::endl;
-			return 0; // Invalid WorkspaceID
+			return 0;
 		}
 
 		try {
-			// Create the WorkspaceID
 			WorkspaceID id = CreateView();
 
-			// CRITICAL FIX: Set ImGui context before calling factory
 			ImGuiContext* previousContext = nullptr;
 			bool contextSwitched = false;
 
@@ -226,14 +207,11 @@ namespace GUI {
 				if (previousContext != m_imguiContext) {
 					ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
 					contextSwitched = true;
-					std::cout << "[ViewManager] Set context for view creation: " << m_imguiContext << std::endl;
 				}
 			}
 
-			// Create the view instance using the factory
 			auto view = factoryIt->second(entityMgr);
 
-			// Restore context
 			if (contextSwitched && previousContext) {
 				ImGui::SetCurrentContext(previousContext);
 			}
@@ -243,13 +221,9 @@ namespace GUI {
 				return 0;
 			}
 
-			// Set the view ID
 			view->workspaceID = id;
-
-			// Initialize the view immediately
 			view->Init();
 
-			// Store in workspace storage
 			ViewTypeID typeID = GetViewType(viewTypeName);
 			workspaces[id][typeID] = std::move(view);
 
@@ -270,7 +244,6 @@ namespace GUI {
 				std::cout << "Unregistering view: " << viewName
 					<< " from source: " << source << std::endl;
 
-				// Remove from all tracking maps
 				registeredViews.erase(viewName);
 				viewMetadata.erase(viewName);
 				viewFactories.erase(viewName);
@@ -283,10 +256,8 @@ namespace GUI {
 	}
 
 	bool ViewManager::UnregisterViewType(const std::string& viewName) {
-		// First close all instances
 		CloseAllViewsOfType(viewName);
 
-		// Then remove from all registries
 		bool removed = false;
 		if (registeredViews.erase(viewName) > 0) removed = true;
 		if (viewMetadata.erase(viewName) > 0) removed = true;
@@ -313,7 +284,6 @@ namespace GUI {
 		std::cout << "[ViewManager] Closing all instances of view: " << viewName
 			<< " (ID: " << viewTypeID << ")" << std::endl;
 
-		// Close instances in all workspaces
 		std::vector<WorkspaceID> workspacesToRemove;
 
 		for (auto& workspacePair : workspaces) {
@@ -325,23 +295,19 @@ namespace GUI {
 				std::cout << "[ViewManager] Removing view instance from workspace " << workspaceID << std::endl;
 				viewsMap.erase(viewIt);
 
-				// Also remove from signature
 				auto sigIt = workspaceSignatures.find(workspaceID);
 				if (sigIt != workspaceSignatures.end()) {
 					sigIt->second->erase(viewTypeID);
 				}
 			}
 
-			// Mark empty workspaces for removal
 			if (viewsMap.empty()) {
 				workspacesToRemove.push_back(workspaceID);
 			}
 		}
 
-		// Remove empty workspaces
 		for (WorkspaceID workspaceID : workspacesToRemove) {
 			workspaces.erase(workspaceID);
-			// Also remove the workspace signature if it exists
 			workspaceSignatures.erase(workspaceID);
 		}
 	}
@@ -352,7 +318,6 @@ namespace GUI {
 			return it->second();
 		}
 
-		// Return default metadata for unknown types
 		ViewMetadata meta;
 		meta.displayName = viewTypeName;
 		meta.category = "Unknown";
@@ -395,7 +360,6 @@ namespace GUI {
 	}
 
 	void ViewManager::UpdateWorkspaces(float deltaT) {
-		// CRITICAL FIX: Set ImGui context during updates if needed
 		ImGuiContext* previousContext = nullptr;
 		bool contextSwitched = false;
 
@@ -418,14 +382,12 @@ namespace GUI {
 			}
 		}
 
-		// Restore context
 		if (contextSwitched && previousContext) {
 			ImGui::SetCurrentContext(previousContext);
 		}
 	}
 
 	void ViewManager::RenderWorkspaces() {
-		// CRITICAL FIX: Set ImGui context during rendering
 		ImGuiContext* previousContext = nullptr;
 		bool contextSwitched = false;
 
@@ -448,7 +410,6 @@ namespace GUI {
 			}
 		}
 
-		// Restore context
 		if (contextSwitched && previousContext) {
 			ImGui::SetCurrentContext(previousContext);
 		}
@@ -463,27 +424,22 @@ namespace GUI {
 	}
 
 	void ViewManager::Reset() {
-		std::cout << "[ViewManager] Performing soft reset (retaining registered views)..." << std::endl;
+		std::cout << "[ViewManager] Performing soft reset..." << std::endl;
 
-		// Reset workspace-related data only
 		ResetWorkspaceData();
 
-		// Re-initialize
 		Init();
 
-		std::cout << "[ViewManager] Soft reset complete. Registered views retained." << std::endl;
+		std::cout << "[ViewManager] Soft reset complete. View registrations preserved." << std::endl;
+		std::cout << "[ViewManager] Registered views count: " << registeredViews.size() << std::endl;
 	}
 
 	void ViewManager::FullReset() {
 		std::cout << "[ViewManager] Performing full reset..." << std::endl;
 
-		// Reset workspace data
 		ResetWorkspaceData();
-
-		// Reset registration data
 		ResetRegistrationData();
 
-		// Re-initialize
 		Init();
 
 		std::cout << "[ViewManager] Full reset complete." << std::endl;
@@ -508,10 +464,7 @@ namespace GUI {
 	void ViewManager::AddViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
 		assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
-		// Add to signature
 		GetViewSignature(viewList)->insert(viewType);
-
-		// Create the actual view instance
 		CreateViewInstanceForWorkspace(viewList, viewType);
 
 		std::cout << "[ViewManager] Added view type " << viewType << " to workspace " << viewList << std::endl;
@@ -520,66 +473,68 @@ namespace GUI {
 	void ViewManager::RemoveViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
 		assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
-		// Remove from signature
 		GetViewSignature(viewList)->erase(viewType);
-
-		// Remove the view instance
 		RemoveViewInstanceFromWorkspace(viewList, viewType);
 
 		std::cout << "[ViewManager] Removed view type " << viewType << " from workspace " << viewList << std::endl;
 	}
 
 	void ViewManager::CreateViewInstanceForWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID) {
-		// Find the view type name for this ID
-		for (const auto&[viewTypeName, typeID] : registeredViews) {
+		std::string viewTypeName;
+		for (const auto&[name, typeID] : registeredViews) {
 			if (typeID == viewTypeID) {
-				auto factoryIt = viewFactories.find(viewTypeName);
-				if (factoryIt != viewFactories.end() && entityManager) {
-					try {
-						// CRITICAL FIX: Set ImGui context before calling factory
-						ImGuiContext* previousContext = nullptr;
-						bool contextSwitched = false;
-
-						if (m_imguiContext) {
-							previousContext = ImGui::GetCurrentContext();
-							if (previousContext != m_imguiContext) {
-								ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
-								contextSwitched = true;
-								std::cout << "[ViewManager] Set context for view instance creation: " << m_imguiContext << std::endl;
-							}
-						}
-
-						auto view = factoryIt->second(*entityManager);
-
-						// Restore context
-						if (contextSwitched && previousContext) {
-							ImGui::SetCurrentContext(previousContext);
-						}
-
-						if (view) {
-							view->workspaceID = workspaceID;
-							view->Init();
-							workspaces[workspaceID][viewTypeID] = std::move(view);
-							std::cout << "[ViewManager] Created view instance: " << viewTypeName
-								<< " for workspace: " << workspaceID << std::endl;
-						}
-						else {
-							std::cerr << "[ViewManager] Factory returned null view for " << viewTypeName << std::endl;
-						}
-					}
-					catch (const std::exception& e) {
-						std::cerr << "[ViewManager] Failed to create view instance for " << viewTypeName
-							<< ": " << e.what() << std::endl;
-					}
-				}
-				else {
-					std::cout << "[ViewManager] No factory found for view type: " << viewTypeName
-						<< " (template-based view)" << std::endl;
-				}
-				return;
+				viewTypeName = name;
+				break;
 			}
 		}
-		std::cerr << "[ViewManager] Unknown view type ID: " << viewTypeID << std::endl;
+
+		if (viewTypeName.empty()) {
+			std::cerr << "[ViewManager] ERROR: No view name found for type ID " << viewTypeID << std::endl;
+			return;
+		}
+
+		std::cout << "[ViewManager] Found view name '" << viewTypeName << "' for type ID " << viewTypeID << std::endl;
+
+		auto factoryIt = viewFactories.find(viewTypeName);
+		if (factoryIt != viewFactories.end() && entityManager) {
+			try {
+				ImGuiContext* previousContext = nullptr;
+				bool contextSwitched = false;
+
+				if (m_imguiContext) {
+					previousContext = ImGui::GetCurrentContext();
+					if (previousContext != m_imguiContext) {
+						ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
+						contextSwitched = true;
+					}
+				}
+
+				std::cout << "[ViewManager] Calling factory for '" << viewTypeName << "'" << std::endl;
+				auto view = factoryIt->second(*entityManager);
+
+				if (contextSwitched && previousContext) {
+					ImGui::SetCurrentContext(previousContext);
+				}
+
+				if (view) {
+					view->workspaceID = workspaceID;
+					view->Init();
+					workspaces[workspaceID][viewTypeID] = std::move(view);
+					std::cout << "[ViewManager] SUCCESS: Created view instance '" << viewTypeName
+						<< "' for workspace " << workspaceID << std::endl;
+				}
+				else {
+					std::cerr << "[ViewManager] ERROR: Factory returned nullptr for '" << viewTypeName << "'" << std::endl;
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[ViewManager] EXCEPTION creating view '" << viewTypeName
+					<< "': " << e.what() << std::endl;
+			}
+		}
+		else {
+			std::cerr << "[ViewManager] ERROR: No factory found for '" << viewTypeName << "'" << std::endl;
+		}
 	}
 
 	void ViewManager::RemoveViewInstanceFromWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID) {
@@ -591,14 +546,12 @@ namespace GUI {
 					<< ") from workspace " << workspaceID << std::endl;
 				workspaceIt->second.erase(viewIt);
 
-				// If workspace is now empty, clean it up
 				if (workspaceIt->second.empty()) {
 					workspaces.erase(workspaceIt);
 				}
 			}
 		}
 
-		// Also remove from template-based views if they exist
 		for (auto&[typeID, workspace] : workspaceArrays) {
 			if (typeID == viewTypeID) {
 				workspace->Erase(workspaceID);
@@ -607,7 +560,6 @@ namespace GUI {
 		}
 	}
 
-	// NEW METHODS: ImGui context management
 	void ViewManager::SetImGuiContext(void* context) {
 		m_imguiContext = context;
 		std::cout << "[ViewManager] Set ImGui context: " << m_imguiContext << std::endl;
@@ -617,15 +569,12 @@ namespace GUI {
 		return m_imguiContext;
 	}
 
-	// Workspace naming methods
 	void ViewManager::SetWorkspaceName(WorkspaceID workspaceID, const std::string& name) {
-		// Don't allow empty names
 		if (name.empty()) {
 			std::cerr << "[ViewManager] Cannot set empty workspace name" << std::endl;
 			return;
 		}
 
-		// Check if name is already taken by another workspace
 		if (IsWorkspaceNameTaken(name, workspaceID)) {
 			std::cerr << "[ViewManager] Workspace name '" << name << "' is already taken" << std::endl;
 			return;
@@ -663,45 +612,35 @@ namespace GUI {
 
 		return name;
 	}
-
-	// CRITICAL: SERIALIZATION METHODS - THESE WERE MISSING!
 	json ViewManager::SerializeViewLists() const {
 		json workspacesJson = json::object();
 
 		std::cout << "[ViewManager] Serializing workspaces..." << std::endl;
-		std::cout << "[ViewManager] workspaceSignatures size: " << workspaceSignatures.size() << std::endl;
-		std::cout << "[ViewManager] workspaces size: " << workspaces.size() << std::endl;
 
-		// Collect all workspace IDs from both sources
 		std::set<WorkspaceID> allWorkspaceIDs;
 
-		// Add from workspaceSignatures (template views)
 		for (const auto &[workspaceID, signature] : workspaceSignatures) {
 			allWorkspaceIDs.insert(workspaceID);
 		}
 
-		// Add from workspaces (factory views)
 		for (const auto &[workspaceID, viewsMap] : workspaces) {
 			allWorkspaceIDs.insert(workspaceID);
 		}
 
 		std::cout << "[ViewManager] Total unique workspaces found: " << allWorkspaceIDs.size() << std::endl;
 
-		// Serialize each workspace as a JSON object with the workspace ID as key
 		for (WorkspaceID workspaceID : allWorkspaceIDs) {
 			json workspaceJson = json::object();
 			workspaceJson["ID"] = workspaceID;
-			workspaceJson["name"] = GetWorkspaceName(workspaceID); // Add name
+			workspaceJson["name"] = GetWorkspaceName(workspaceID);
 			workspaceJson["views"] = json::array();
 
 			std::cout << "[ViewManager] Serializing workspace " << workspaceID << " (" << GetWorkspaceName(workspaceID) << ")" << std::endl;
 
-			// Add views from workspaces (factory views) - these have serializable data
 			auto workspaceIt = workspaces.find(workspaceID);
 			if (workspaceIt != workspaces.end()) {
 				for (const auto &[viewTypeID, view] : workspaceIt->second) {
 					if (view) {
-						// Find view type name
 						std::string viewTypeName;
 						for (const auto &[name, typeID] : registeredViews) {
 							if (typeID == viewTypeID) {
@@ -711,7 +650,6 @@ namespace GUI {
 						}
 
 						if (!viewTypeName.empty()) {
-							// Create view object with type name as key (like EntityManager does with components)
 							json viewJson = json::object();
 							viewJson[viewTypeName] = view->Serialize();
 							workspaceJson["views"].push_back(viewJson);
@@ -722,17 +660,14 @@ namespace GUI {
 				}
 			}
 
-			// Add views from workspaceSignatures (template views) - these might not have data
 			auto signatureIt = workspaceSignatures.find(workspaceID);
 			if (signatureIt != workspaceSignatures.end()) {
 				for (const auto &viewTypeID : *(signatureIt->second)) {
-					// Skip if we already added this view from factory views
 					auto workspaceIt = workspaces.find(workspaceID);
 					if (workspaceIt != workspaces.end() && workspaceIt->second.find(viewTypeID) != workspaceIt->second.end()) {
-						continue; // Already added from factory views
+						continue;
 					}
 
-					// Find view type name
 					std::string viewTypeName;
 					for (const auto &[name, typeID] : registeredViews) {
 						if (typeID == viewTypeID) {
@@ -742,9 +677,8 @@ namespace GUI {
 					}
 
 					if (!viewTypeName.empty()) {
-						// Create view object with just the type name (no data)
 						json viewJson = json::object();
-						viewJson[viewTypeName] = json::object(); // Empty object for template views
+						viewJson[viewTypeName] = json::object();
 						workspaceJson["views"].push_back(viewJson);
 
 						std::cout << "[ViewManager]   Added template view: " << viewTypeName << " (no data)" << std::endl;
@@ -752,7 +686,6 @@ namespace GUI {
 				}
 			}
 
-			// Add workspace to main object using workspace ID as key (like EntityManager)
 			std::string workspaceKey = std::to_string(workspaceID);
 			workspacesJson[workspaceKey] = workspaceJson;
 
@@ -778,10 +711,8 @@ namespace GUI {
 
 		std::cout << "[ViewManager] Found " << workspacesJson.size() << " workspaces to deserialize" << std::endl;
 
-		// CRITICAL FIX: Track which workspace IDs are being used
 		std::set<WorkspaceID> usedWorkspaceIDs;
 
-		// Iterate through workspace objects (like EntityManager does with entities)
 		for (auto workspaceIt = workspacesJson.begin(); workspaceIt != workspacesJson.end(); ++workspaceIt) {
 			const json& workspaceJson = workspaceIt.value();
 
@@ -793,13 +724,10 @@ namespace GUI {
 			WorkspaceID workspaceID = workspaceJson["ID"];
 			std::cout << "[ViewManager] Deserializing workspace " << workspaceID << std::endl;
 
-			// CRITICAL FIX: Track this workspace ID as used
 			usedWorkspaceIDs.insert(workspaceID);
 
-			// Load workspace name if it exists
 			if (workspaceJson.contains("name")) {
 				std::string loadedName = workspaceJson["name"];
-				// Ensure the name is unique
 				if (IsWorkspaceNameTaken(loadedName, workspaceID)) {
 					loadedName = GenerateUniqueWorkspaceName(loadedName);
 					std::cout << "[ViewManager] Name conflict resolved, using: " << loadedName << std::endl;
@@ -810,7 +738,6 @@ namespace GUI {
 				workspaceNames[workspaceID] = GenerateUniqueWorkspaceName("Workspace");
 			}
 
-			// Create the workspace signature if it doesn't exist
 			if (workspaceSignatures.find(workspaceID) == workspaceSignatures.end()) {
 				AddViewSignature(workspaceID);
 				std::cout << "[ViewManager] Created signature for workspace " << workspaceID << std::endl;
@@ -821,14 +748,12 @@ namespace GUI {
 				continue;
 			}
 
-			// Process views array (like EntityManager does with components)
 			for (const auto &viewJson : workspaceJson["views"]) {
 				if (!viewJson.is_object()) {
 					std::cerr << "[ViewManager] View JSON is not an object" << std::endl;
 					continue;
 				}
 
-				// Iterate through view types in this view object (like EntityManager does with components)
 				for (auto viewIt = viewJson.begin(); viewIt != viewJson.end(); ++viewIt) {
 					std::string viewTypeName = viewIt.key();
 					const json& viewData = viewIt.value();
@@ -838,13 +763,10 @@ namespace GUI {
 					try {
 						ViewTypeID viewTypeID = GetViewType(viewTypeName);
 
-						// Add to workspace signature
 						GetViewSignature(workspaceID)->insert(viewTypeID);
 
-						// Create view instance if we have a factory
 						auto factoryIt = viewFactories.find(viewTypeName);
 						if (factoryIt != viewFactories.end() && entityManager) {
-							// CRITICAL FIX: Set ImGui context before creating view
 							ImGuiContext* previousContext = nullptr;
 							bool contextSwitched = false;
 
@@ -853,13 +775,11 @@ namespace GUI {
 								if (previousContext != m_imguiContext) {
 									ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
 									contextSwitched = true;
-									std::cout << "[ViewManager] Set context for deserialization: " << m_imguiContext << std::endl;
 								}
 							}
 
 							auto view = factoryIt->second(*entityManager);
 
-							// Restore context
 							if (contextSwitched && previousContext) {
 								ImGui::SetCurrentContext(previousContext);
 							}
@@ -868,7 +788,6 @@ namespace GUI {
 								view->workspaceID = workspaceID;
 								view->Init();
 
-								// Deserialize view data if it exists
 								if (!viewData.is_null() && !viewData.empty()) {
 									view->Deserialize(viewData);
 									std::cout << "[ViewManager]     Recreated view: " << viewTypeName << " with data" << std::endl;
@@ -891,17 +810,13 @@ namespace GUI {
 			}
 		}
 
-		// CRITICAL FIX: Update the ViewManager's workspace tracking
 		std::cout << "[ViewManager] Updating workspace tracking..." << std::endl;
 
-		// Clear the available workspaces queue
 		std::queue<WorkspaceID> empty;
 		std::swap(availableWorkspaces, empty);
 
-		// Set workspace count to the number of used workspaces
 		workspaceCount = usedWorkspaceIDs.size();
 
-		// Find the highest used workspace ID to know where to start new ones
 		WorkspaceID maxUsedID = 0;
 		for (WorkspaceID id : usedWorkspaceIDs) {
 			if (id > maxUsedID) {
@@ -909,7 +824,6 @@ namespace GUI {
 			}
 		}
 
-		// Add all unused workspace IDs to the available queue
 		for (WorkspaceID id = 0; id < MAX_VIEW_COUNT; id++) {
 			if (usedWorkspaceIDs.find(id) == usedWorkspaceIDs.end()) {
 				availableWorkspaces.push(id);
@@ -935,7 +849,6 @@ namespace GUI {
 	}
 
 	void ViewManager::ResetWorkspaceData() {
-		// Destroy all views
 		for (auto &viewSignaturePair : workspaceSignatures) {
 			DestroyView(viewSignaturePair.first);
 		}
@@ -943,7 +856,6 @@ namespace GUI {
 		workspaces.clear();
 		workspaceNames.clear();
 
-		// Reset available views queue
 		while (!availableWorkspaces.empty()) {
 			availableWorkspaces.pop();
 		}
@@ -961,6 +873,8 @@ namespace GUI {
 		viewMetadata.clear();
 		viewSources.clear();
 		viewFactories.clear();
+
+		std::cout << "[ViewManager] Registration data cleared" << std::endl;
 	}
 
 } // namespace GUI

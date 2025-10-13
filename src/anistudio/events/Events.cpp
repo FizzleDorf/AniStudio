@@ -4,7 +4,6 @@
 #include "ProjectManager.hpp"
 #include "GUI.h"
 #include <iostream>
-#include "../core/Core.hpp"
 
 namespace ANI {
 
@@ -13,7 +12,7 @@ namespace ANI {
 	Events::~Events() {}
 
 	void Events::Init(GLFWwindow *window) {
-		glfwSetWindowCloseCallback(window, WindowCloseCallback);
+		// glfwSetWindowCloseCallback(window, WindowCloseCallback);
 	}
 
 	void Events::SetManagers(GUI::ViewManager* viewMgr, ANI::ProjectManager* projectMgr) {
@@ -33,18 +32,35 @@ namespace ANI {
 
 	void Events::Poll() {
 		// Poll and handle events (inputs, window resize, etc.)
-		glfwPollEvents();
+		try {
+			glfwPollEvents();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[Events] Exception during glfwPollEvents: " << e.what() << std::endl;
+		}
 
 		// Process all pending events after polling
-		ProcessEvents();
+		try {
+			ProcessEvents();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[Events] Exception during ProcessEvents: " << e.what() << std::endl;
+		}
 
-		// Process view events
-		ProcessViewEvents();
+		// Process view events (only if managers are set)
+		try {
+			ProcessViewEvents();
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[Events] Exception during ProcessViewEvents: " << e.what() << std::endl;
+		}
 	}
 
 	void Events::ProcessViewEvents() {
+		// FIXED: Don't print error every frame - just skip processing if managers aren't ready yet
 		if (!viewManager || !projectManager) {
-			std::cerr << "[Events] ViewManager or ProjectManager not set! Cannot process view events." << std::endl;
+			// Managers not ready yet, skip processing for now
+			// This is normal during startup
 			return;
 		}
 
@@ -108,7 +124,7 @@ namespace ANI {
 				// Verify the workspace exists
 				auto allWorkspaces = viewManager->GetAllWorkspaces();
 				if (std::find(allWorkspaces.begin(), allWorkspaces.end(), event.workspaceID) != allWorkspaces.end()) {
-					// CRITICAL FIX: Set active workspace in ViewManager (single source of truth)
+					// Set active workspace in ViewManager (single source of truth)
 					viewManager->SetActiveWorkspace(event.workspaceID);
 
 					// Also update ProjectManager's ViewState for persistence
@@ -212,162 +228,22 @@ namespace ANI {
 			switch (event.type) {
 
 			case EventType::Quit: {
-				appCore.Quit();
+				// appCore.Quit();
 				break;
 			}
 
-			//case EventType::InferenceRequest: {
-			//	std::cout << "Handling InferenceRequest event for Entity ID: " << event.entityID << '\n';
-
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		std::cout << "SDCPPSystem is registered." << std::endl;
-			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Inference);
-			//	}
-			//	else {
-			//		std::cerr << "SDCPPSystem is not registered." << std::endl;
-			//	}
-			//	break;
-			//}
-
-			//case EventType::Img2ImgRequest: {
-			//	std::cout << "Handling Img2Img event for Entity ID: " << event.entityID << '\n';
-
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		std::cout << "SDCPPSystem is registered." << std::endl;
-			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Img);
-			//	}
-			//	else {
-			//		std::cerr << "SDCPPSystem is not registered." << std::endl;
-			//	}
-			//	break;
-			//}
-
-			//case EventType::Img2VidRequest: {
-			//	std::cout << "Handling Img2Vid request for Entity ID: " << event.entityID << '\n';
-
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		std::cout << "SDCPPSystem is registered, queueing img2vid task." << std::endl;
-			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Img2Vid);
-			//	}
-			//	else {
-			//		std::cerr << "SDCPPSystem is not registered, cannot process img2vid request." << std::endl;
-			//	}
-			//	break;
-			//}
-
-			//case EventType::EditRequest: {
-			//	std::cout << "Handling Edit request for Entity ID: " << event.entityID << '\n';
-
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		std::cout << "SDCPPSystem is registered, queueing edit task." << std::endl;
-			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Edit);
-			//	}
-			//	else {
-			//		std::cerr << "SDCPPSystem is not registered, cannot process edit request." << std::endl;
-			//	}
-			//	break;
-			//}
-
-			//case EventType::UpscaleRequest: {
-			//	std::cout << "Handling Upscale request for Entity ID: " << event.entityID << '\n';
-
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		std::cout << "SDCPPSystem is registered, queueing upscale task." << std::endl;
-			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Upscaling);
-			//	}
-			//	else {
-			//		std::cerr << "SDCPPSystem is not registered, cannot process upscale request." << std::endl;
-			//	}
-			//	break;
-			//}
-
-			//case EventType::ConvertToGGUF: {
-			//	std::cout << "Handling Convert event for Entity ID: " << event.entityID << '\n';
-
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		std::cout << "SDCPPSystem is registered." << std::endl;
-			//		sdcppSystem->QueueTask(event.entityID, ECS::SDCPPSystem::TaskType::Conversion);
-			//	}
-			//	else {
-			//		std::cerr << "SDCPPSystem is not registered." << std::endl;
-			//	}
-			//	break;
-			//}
-
-			//case EventType::PauseInference: {
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		sdcppSystem->PauseWorker();
-			//	}
-			//	break;
-			//}
-
-			//case EventType::ResumeInference: {
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		sdcppSystem->ResumeWorker();
-			//	}
-			//	break;
-			//}
-
-			//case EventType::StopCurrentTask: {
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		sdcppSystem->StopCurrentTask();
-			//	}
-			//	break;
-			//}
-
-			//case EventType::ClearInferenceQueue: {
-			//	auto sdcppSystem = appCore.GetEntityManager().GetSystem<ECS::SDCPPSystem>();
-			//	if (sdcppSystem) {
-			//		sdcppSystem->ClearQueue();
-			//	}
-			//	break;
-			//}
-
 			case EventType::SaveImageEvent: {
 				std::cout << "Handling SaveImage event for Entity ID: " << event.entityID << " to path: " << '\n';
-
-				auto imageSystem = appCore.GetEntityManager().GetSystem<ECS::ImageSystem>();
-				if (imageSystem) {
-					//imageSystem->QueueSaveImage(event.entityID);
-				}
-				else {
-					std::cerr << "ImageSystem is not registered." << std::endl;
-				}
 				break;
 			}
 
 			case EventType::LoadImageEvent: {
 				std::cout << "Handling LoadImage event for Entity ID: " << event.entityID << " from path: " << '\n';
-
-				auto imageSystem = appCore.GetEntityManager().GetSystem<ECS::ImageSystem>();
-				if (imageSystem) {
-					//imageSystem->QueueLoadImage(event.entityID);
-				}
-				else {
-					std::cerr << "ImageSystem is not registered." << std::endl;
-				}
 				break;
 			}
 
 			case EventType::RemoveImageEvent: {
 				std::cout << "Handling RemoveImage event for Entity ID: " << event.entityID << '\n';
-
-				auto imageSystem = appCore.GetEntityManager().GetSystem<ECS::ImageSystem>();
-				if (imageSystem) {
-					//imageSystem->QueueRemoveImage(event.entityID);
-				}
-				else {
-					std::cerr << "ImageSystem is not registered." << std::endl;
-				}
 				break;
 			}
 

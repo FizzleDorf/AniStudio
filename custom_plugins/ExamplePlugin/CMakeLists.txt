@@ -110,22 +110,12 @@ target_include_directories(ExamplePlugin PRIVATE
 
 # Link libraries
 target_link_libraries(ExamplePlugin PRIVATE
-    AniStudioCore
     AniEngineCore
+    AniStudioCore
     GLEW::GLEW
     glfw
     OpenGL::GL
     ImGui
-    $<$<PLATFORM_ID:Windows>:kernel32>
-    $<$<PLATFORM_ID:Windows>:user32>
-    $<$<PLATFORM_ID:Windows>:gdi32>
-    $<$<PLATFORM_ID:Windows>:winspool>
-    $<$<PLATFORM_ID:Windows>:shell32>
-    $<$<PLATFORM_ID:Windows>:ole32>
-    $<$<PLATFORM_ID:Windows>:oleaut32>
-    $<$<PLATFORM_ID:Windows>:uuid>
-    $<$<PLATFORM_ID:Windows>:comdlg32>
-    $<$<PLATFORM_ID:Windows>:advapi32>
 )
 
 # CORRECTED: Plugin directories for versioned DLL system

@@ -24,30 +24,28 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreComponents() {
-		// Register new asset handle components
-		entityManager.RegisterComponentName<ImageHandleComponent>("ImageHandle");
-		entityManager.RegisterComponentName<VideoHandleComponent>("VideoHandle");
-		entityManager.RegisterComponentName<TextureHandleComponent>("TextureHandle");
+		
+		entityManager.RegisterComponent<ImageHandleComponent>("ImageHandle");
+		entityManager.RegisterComponent<VideoHandleComponent>("VideoHandle");
+		entityManager.RegisterComponent<TextureHandleComponent>("TextureHandle");
 
-		// Keep old image components for backward compatibility
-		entityManager.RegisterComponentName<ImageComponent>("Image");
-		entityManager.RegisterComponentName<InputImageComponent>("InputImage");
-		entityManager.RegisterComponentName<OutputImageComponent>("OutputImage");
+		entityManager.RegisterComponent<ImageComponent>("Image");
+		entityManager.RegisterComponent<InputImageComponent>("InputImage");
+		entityManager.RegisterComponent<OutputImageComponent>("OutputImage");
 
-		entityManager.RegisterComponentName<VideoComponent>("Video");
-		entityManager.RegisterComponentName<InputVideoComponent>("InputVideo");
-		entityManager.RegisterComponentName<OutputVideoComponent>("OutputVideo");
-		entityManager.RegisterComponentName<PythonComponent>("Python");
+		entityManager.RegisterComponent<VideoComponent>("Video");
+		entityManager.RegisterComponent<InputVideoComponent>("InputVideo");
+		entityManager.RegisterComponent<OutputVideoComponent>("OutputVideo");
+		entityManager.RegisterComponent<PythonComponent>("Python");
 
-		entityManager.RegisterComponentName<ECS::TransformComponent>("Transform");
-		entityManager.RegisterComponentName<ECS::MeshComponent>("Mesh");
-		entityManager.RegisterComponentName<ECS::CameraComponent>("Camera");
+		entityManager.RegisterComponent<ECS::TransformComponent>("Transform");
+		entityManager.RegisterComponent<ECS::MeshComponent>("Mesh");
+		entityManager.RegisterComponent<ECS::CameraComponent>("Camera");
 
 		std::cout << "[EngineCore] Core components registered" << std::endl;
 	}
 
 	void EngineCore::RegisterCoreSystems() {
-		// Register new asset management systems (these replace the old ones)
 		entityManager.RegisterSystem<ImageSystem>();
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();

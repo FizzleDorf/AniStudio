@@ -3,9 +3,8 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
-#include <functional>
 
-// Forward declaration for ImGui
+// Forward declarations
 struct ImGuiContext;
 
 namespace GUI {
@@ -14,54 +13,35 @@ namespace GUI {
 
 namespace Plugins {
 
-	// Forward declaration
-	class StudioPluginManager;
-
-	// Studio-specific registry that also handles views
-	class StudioPluginRegistry : public PluginRegistry {
-	public:
-		StudioPluginRegistry(const std::string& pluginName,
-			StudioPluginManager* manager,
-			GUI::ViewManager& viewMgr,
-			ImGuiContext* mainContext = nullptr);
-
-		// Override to handle view registration
-		GUI::ViewTypeID RegisterView(const ViewDescriptor& desc) override;
-
-	private:
-		GUI::ViewManager& viewManager;
-		StudioPluginManager* studioManager;
-		ImGuiContext* mainImGuiContext;
-	};
-
 	class StudioPluginManager : public PluginManager {
 	public:
-		StudioPluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr, ImGuiContext* mainContext = nullptr);
+		StudioPluginManager(
+			ECS::EntityManager& entityMgr,
+			GUI::ViewManager& viewMgr,
+			ImGuiContext* mainContext = nullptr
+		);
 		~StudioPluginManager() = default;
 
-		// Override to call both engine and studio init
+		// Override to provide studio-specific initialization
 		bool enablePlugin(const std::string& pluginName) override;
 
-		// Override to handle view registration
-		GUI::ViewTypeID registerView(const std::string& pluginName, const ViewDescriptor& desc) override;
-
-		const std::string& getStagingDirectory() const { return stagingDirectory; }
-
+		// Public accessors for plugins (if needed, but plugins get direct access in init)
+		GUI::ViewManager& GetViewManager() { return viewManager; }
+		ECS::EntityManager& GetEntityManager() { return entityManager; }
+		ImGuiContext* GetImGuiContext() { return mainImGuiContext; }
 
 	protected:
-		// Override to clean up views
+		// Override view cleanup
 		void cleanupPluginViews(const std::string& pluginName) override;
 
 	private:
+		// References to managers
 		GUI::ViewManager& viewManager;
 		ImGuiContext* mainImGuiContext = nullptr;
 
-		// Track views registered by plugins - both IDs and names for proper cleanup
-		std::unordered_map<std::string, std::vector<GUI::ViewTypeID>> pluginViews;
+		// Track plugin views for cleanup
+		// We track view names because plugins register them directly with ViewManager
 		std::unordered_map<std::string, std::vector<std::string>> pluginViewNames;
-
-		// Make StudioPluginRegistry a friend so it can access our registerView method
-		friend class StudioPluginRegistry;
 	};
 
 } // namespace Plugins

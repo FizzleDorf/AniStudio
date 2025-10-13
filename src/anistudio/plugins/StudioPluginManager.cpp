@@ -5,40 +5,30 @@
 
 namespace Plugins {
 
-	StudioPluginRegistry::StudioPluginRegistry(
-		const std::string& pluginName,
-		StudioPluginManager* manager,
+	StudioPluginManager::StudioPluginManager(
+		ECS::EntityManager& entityMgr,
 		GUI::ViewManager& viewMgr,
-		ImGuiContext* mainContext)
-		: PluginRegistry(pluginName, manager, mainContext), viewManager(viewMgr), studioManager(manager), mainImGuiContext(mainContext) {
-		std::cout << "[StudioPluginRegistry] Constructor - plugin: " << pluginName
-			<< ", main ImGui context: " << mainImGuiContext << std::endl;
-	}
-
-	GUI::ViewTypeID StudioPluginRegistry::RegisterView(const ViewDescriptor& desc) {
-		std::cout << "[StudioPluginRegistry] Registering view: " << desc.name
-			<< " for plugin: " << GetCurrentPluginName()
-			<< " with context: " << mainImGuiContext << std::endl;
-		return studioManager->registerView(GetCurrentPluginName(), desc);
-	}
-
-	StudioPluginManager::StudioPluginManager(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr, ImGuiContext* mainContext)
-		: PluginManager(entityMgr, mainContext), viewManager(viewMgr), mainImGuiContext(mainContext) {
-		std::cout << "[StudioPluginManager] Constructor - studio manager created with ImGui context: " << mainImGuiContext << std::endl;
+		ImGuiContext* mainContext
+	) : PluginManager(entityMgr), viewManager(viewMgr), mainImGuiContext(mainContext) {
+		std::cout << "[StudioPluginManager] Constructor - studio manager created with ImGui context: "
+			<< mainImGuiContext << std::endl;
 	}
 
 	bool StudioPluginManager::enablePlugin(const std::string& pluginName) {
-		std::cout << "[StudioPluginManager] Enabling plugin with studio support: " << pluginName << std::endl;
+		std::cout << "[StudioPluginManager] Enabling plugin with studio support: "
+			<< pluginName << std::endl;
 
 		auto it = plugins.find(pluginName);
 		if (it == plugins.end() || !it->second.loaded) {
-			std::cerr << "[StudioPluginManager] Plugin not found or not loaded: " << pluginName << std::endl;
+			std::cerr << "[StudioPluginManager] Plugin not found or not loaded: "
+				<< pluginName << std::endl;
 			return false;
 		}
 
 		PluginInfo& plugin = it->second;
 		if (plugin.enabled) {
-			std::cout << "[StudioPluginManager] Plugin already enabled: " << pluginName << std::endl;
+			std::cout << "[StudioPluginManager] Plugin already enabled: "
+				<< pluginName << std::endl;
 			return true;
 		}
 
@@ -47,32 +37,28 @@ namespace Plugins {
 			plugin.instance = plugin.createFunc();
 
 			if (!plugin.instance) {
-				std::cerr << "[StudioPluginManager] Failed to create plugin instance: " << pluginName << std::endl;
+				std::cerr << "[StudioPluginManager] Failed to create plugin instance: "
+					<< pluginName << std::endl;
 				return false;
 			}
 
-			// Get version from plugin instance
 			plugin.version = plugin.instance->GetVersion();
+			std::cout << "[StudioPluginManager] Plugin instance created, version: "
+				<< plugin.version << std::endl;
 
-			// Create a studio registry for this plugin - NOW WITH PROPER IMGUI CONTEXT
-			StudioPluginRegistry registry(pluginName, this, viewManager, mainImGuiContext);
-
-			// Call OnEngineInit first
-			std::cout << "[StudioPluginManager] Calling OnEngineInit with registry that has ImGui context: "
-				<< mainImGuiContext << std::endl;
-
-			if (!plugin.instance->OnEngineInit(entityManager, registry)) {
-				std::cerr << "[StudioPluginManager] Plugin engine initialization failed: " << pluginName << std::endl;
+			std::cout << "[StudioPluginManager] Calling OnEngineInit..." << std::endl;
+			if (!plugin.instance->OnEngineInit(entityManager)) {
+				std::cerr << "[StudioPluginManager] Plugin engine initialization failed: "
+					<< pluginName << std::endl;
 				plugin.destroyFunc(plugin.instance);
 				plugin.instance = nullptr;
 				return false;
 			}
 
-			std::cout << "[StudioPluginManager] Calling OnStudioInit with registry that has ImGui context: "
-				<< mainImGuiContext << std::endl;
-
-			if (!plugin.instance->OnStudioInit(entityManager, viewManager, registry)) {
-				std::cerr << "[StudioPluginManager] Plugin studio initialization failed: " << pluginName << std::endl;
+			std::cout << "[StudioPluginManager] Calling OnStudioInit..." << std::endl;
+			if (!plugin.instance->OnStudioInit(entityManager, viewManager)) {
+				std::cerr << "[StudioPluginManager] Plugin studio initialization failed: "
+					<< pluginName << std::endl;
 				plugin.destroyFunc(plugin.instance);
 				plugin.instance = nullptr;
 				return false;
@@ -81,10 +67,20 @@ namespace Plugins {
 			plugin.instance->SetInitialized(true);
 			plugin.enabled = true;
 
-			std::cout << "[StudioPluginManager] Plugin enabled with studio support: " << pluginName << std::endl;
+			if (pluginState) {
+				pluginState->SetPluginState(pluginName, true, true, plugin.path, plugin.currentVersion);
+			}
+
+			std::cout << "[StudioPluginManager] Plugin enabled with studio support: "
+				<< pluginName << std::endl;
+
+			std::cout << "[StudioPluginManager] === POST-ENABLE DEBUG ===" << std::endl;
+			entityManager.DebugPrintRegisteredComponents();
+			std::cout << "[StudioPluginManager] =======================\n" << std::endl;
 		}
 		catch (const std::exception& e) {
-			std::cerr << "[StudioPluginManager] Exception during plugin enable: " << e.what() << std::endl;
+			std::cerr << "[StudioPluginManager] Exception during plugin enable: "
+				<< e.what() << std::endl;
 			if (plugin.instance) {
 				plugin.destroyFunc(plugin.instance);
 				plugin.instance = nullptr;
@@ -95,63 +91,16 @@ namespace Plugins {
 		return true;
 	}
 
-	GUI::ViewTypeID StudioPluginManager::registerView(const std::string& pluginName, const ViewDescriptor& desc) {
-		std::cout << "[StudioPluginManager] Registering view: " << desc.name
-			<< " for plugin: " << pluginName
-			<< " with main context: " << mainImGuiContext << std::endl;
-
-		GUI::ViewTypeID viewTypeID = GUI::ViewTypeRegistry::RegisterTypeByName(desc.name);
-
-		if (viewTypeID == GUI::MAX_VIEW_COUNT) {
-			std::cerr << "[StudioPluginManager] Failed to register view type: " << desc.name << std::endl;
-			return 0;
-		}
-
-		ImGuiContext* contextToUse = mainImGuiContext;
-		if (!contextToUse) {
-			contextToUse = ImGui::GetCurrentContext();
-			std::cerr << "[StudioPluginManager] WARNING: mainImGuiContext was null, using current: " << contextToUse << std::endl;
-		}
-
-		std::cout << "[StudioPluginManager] Will use ImGui context: " << contextToUse << std::endl;
-
-		viewManager.RegisterViewWithFactory(
-			desc.name,
-			"plugin",
-			[desc, contextToUse](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-			std::cout << "[StudioPluginManager] Factory called - passing context " << contextToUse
-				<< " to plugin factory" << std::endl;
-
-			auto view = desc.factory(mgr, contextToUse);
-
-			std::cout << "[StudioPluginManager] Plugin factory returned view: " << (view ? "SUCCESS" : "NULL") << std::endl;
-			return view;
-		},
-			[desc]() -> GUI::ViewMetadata {
-			GUI::ViewMetadata meta;
-			meta.displayName = desc.name;
-			meta.category = desc.category;
-			meta.description = "View from plugin: " + desc.name;
-			return meta;
-		}
-		);
-
-		// Store for cleanup
-		pluginViews[pluginName].push_back(viewTypeID);
-		pluginViewNames[pluginName].push_back(desc.name);
-
-		std::cout << "[StudioPluginManager] Successfully registered view " << desc.name
-			<< " with ID " << viewTypeID << " for plugin " << pluginName << std::endl;
-		return viewTypeID;
-	}
-
 	void StudioPluginManager::cleanupPluginViews(const std::string& pluginName) {
 		auto nameIt = pluginViewNames.find(pluginName);
 		if (nameIt == pluginViewNames.end()) {
+			std::cout << "[StudioPluginManager] No views to cleanup for plugin: "
+				<< pluginName << std::endl;
 			return;
 		}
 
-		std::cout << "[StudioPluginManager] Cleaning up views for plugin: " << pluginName << std::endl;
+		std::cout << "[StudioPluginManager] Cleaning up " << nameIt->second.size()
+			<< " views for plugin: " << pluginName << std::endl;
 
 		for (const std::string& viewName : nameIt->second) {
 			std::cout << "[StudioPluginManager] Unregistering view: " << viewName << std::endl;
@@ -159,25 +108,17 @@ namespace Plugins {
 			// Close all instances of this view type
 			viewManager.CloseAllViewsOfType(viewName);
 
-			// Unregister from ViewManager
+			// Unregister from ViewManager - this handles everything
 			viewManager.UnregisterViewType(viewName);
-
-			// Unregister from ViewTypeRegistry
-			GUI::ViewTypeRegistry::UnregisterType(viewName);
 		}
 
-		// Clean up all plugin views from the source
+		// Unregister the plugin as a view source
 		viewManager.UnregisterViewSource("plugin");
 
 		pluginViewNames.erase(nameIt);
 
-		// Also clean up ID tracking
-		auto idIt = pluginViews.find(pluginName);
-		if (idIt != pluginViews.end()) {
-			pluginViews.erase(idIt);
-		}
-
-		std::cout << "[StudioPluginManager] View cleanup completed for plugin: " << pluginName << std::endl;
+		std::cout << "[StudioPluginManager] View cleanup completed for plugin: "
+			<< pluginName << std::endl;
 	}
 
 } // namespace Plugins

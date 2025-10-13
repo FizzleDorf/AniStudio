@@ -17,47 +17,20 @@
 
 namespace Plugins {
 
-	// PluginRegistry implementation
-	PluginRegistry::PluginRegistry(const std::string& pluginName, PluginManager* manager, ImGuiContext* imguiContext)
-		: pluginName(pluginName), manager(manager), imguiContext(imguiContext) {
-		std::cout << "[PluginRegistry] Constructor - plugin: " << pluginName
-			<< ", ImGui context: " << imguiContext << std::endl;
-	}
+	PluginManager::PluginManager(ECS::EntityManager& entityMgr)
+		: entityManager(entityMgr) {
+		std::cout << "[PluginManager] Constructor - simplified manager created" << std::endl;
 
-	ECS::ComponentTypeID PluginRegistry::RegisterComponent(const ComponentDescriptor& desc) {
-		std::cout << "[PluginRegistry] Registering component: " << desc.name << " for plugin: " << pluginName << std::endl;
-		return manager->registerComponent(pluginName, desc);
-	}
-
-	ECS::SystemTypeID PluginRegistry::RegisterSystem(const SystemDescriptor& desc) {
-		std::cout << "[PluginRegistry] Registering system: " << desc.name << " for plugin: " << pluginName << std::endl;
-		return manager->registerSystem(pluginName, desc);
-	}
-
-	GUI::ViewTypeID PluginRegistry::RegisterView(const ViewDescriptor& desc) {
-		std::cout << "[PluginRegistry] Registering view: " << desc.name << " for plugin: " << pluginName
-			<< " with context: " << imguiContext << std::endl;
-		return manager->registerView(pluginName, desc);
-	}
-
-	// PluginManager implementation
-	PluginManager::PluginManager(ECS::EntityManager& entityMgr, ImGuiContext* imguiContext)
-		: entityManager(entityMgr), imguiContext(imguiContext) {
-		std::cout << "[PluginManager] Constructor - manager created with ImGui context: " << imguiContext << std::endl;
-
-		// Use absolute path relative to executable location
 		std::filesystem::path executablePath = std::filesystem::current_path();
 		stagingDirectory = (executablePath / "plugins").string();
 		std::filesystem::create_directories(stagingDirectory);
 		std::cout << "[PluginManager] Base plugins directory set to: " << stagingDirectory << std::endl;
 
-		// Initialize plugin state management
 		InitializePluginStateManager();
 
-		// Hot reload is disabled by default
 		hotReloadEnabled = false;
 		hotReloadForced = false;
-		std::cout << "[PluginManager] Hot reload disabled by default (will enable when PluginView opens)" << std::endl;
+		std::cout << "[PluginManager] Hot reload disabled by default" << std::endl;
 	}
 
 	PluginManager::~PluginManager() {
@@ -95,7 +68,6 @@ namespace Plugins {
 		pluginState->UseGlobalState();
 		pluginState->LoadGlobalPluginState();
 
-		// Load plugins based on saved state
 		LoadPluginsFromState();
 
 		std::cout << "[PluginManager] Global plugin state loaded and applied" << std::endl;
@@ -115,15 +87,12 @@ namespace Plugins {
 
 		std::cout << "[PluginManager] Setting project context: " << projectPath << std::endl;
 
-		// Save current state first
 		SaveCurrentPluginState();
 
-		// Switch to project state
 		pluginState->SetCurrentProjectPath(projectPath);
 		pluginState->UseProjectState();
 		pluginState->LoadProjectPluginState();
 
-		// Apply project-specific plugin state
 		LoadPluginsFromState();
 
 		std::cout << "[PluginManager] Project plugin context applied" << std::endl;
@@ -143,13 +112,10 @@ namespace Plugins {
 
 		std::cout << "[PluginManager] Reverting to global plugin state..." << std::endl;
 
-		// Save current project state first
 		SaveCurrentPluginState();
 
-		// Switch back to global state
 		pluginState->UseGlobalState();
 
-		// Apply global plugin state
 		LoadPluginsFromState();
 
 		std::cout << "[PluginManager] Global plugin state restored" << std::endl;
@@ -158,13 +124,11 @@ namespace Plugins {
 	void PluginManager::LoadPluginsFromState() {
 		if (!pluginState) return;
 
-		// Get the plugins that should be loaded according to saved state
 		auto pluginsToLoad = pluginState->GetPluginsToLoad();
 		auto pluginsToEnable = pluginState->GetPluginsToEnable();
 
 		std::cout << "[PluginManager] Loading " << pluginsToLoad.size() << " plugins from saved state" << std::endl;
 
-		// Disable and unload all current plugins first
 		std::vector<std::string> currentPlugins;
 		for (const auto&[name, info] : plugins) {
 			currentPlugins.push_back(name);
@@ -177,14 +141,11 @@ namespace Plugins {
 			unloadPlugin(name);
 		}
 
-		// Load plugins from state
 		for (const auto& pluginName : pluginsToLoad) {
-			// Try to find the plugin in the plugins directory
 			std::string pluginPath = stagingDirectory + "/" + pluginName;
 			if (std::filesystem::exists(pluginPath)) {
 				std::cout << "[PluginManager] Loading plugin from state: " << pluginName << std::endl;
 				if (loadPlugin(pluginPath)) {
-					// Enable if it should be enabled
 					if (pluginsToEnable.find(pluginName) != pluginsToEnable.end()) {
 						std::cout << "[PluginManager] Enabling plugin from state: " << pluginName << std::endl;
 						enablePlugin(pluginName);
@@ -200,7 +161,6 @@ namespace Plugins {
 	void PluginManager::SaveCurrentPluginState() {
 		if (!pluginState) return;
 
-		// Update state manager with current plugin states
 		for (const auto&[pluginName, info] : plugins) {
 			pluginState->SetPluginState(
 				pluginName,
@@ -303,7 +263,6 @@ namespace Plugins {
 		std::filesystem::path path(dllPath);
 		std::string filename = path.filename().string();
 
-		// Pattern: PluginName_v123.dll
 		std::string pattern = pluginName + "_v(\\d+)\\.dll";
 		std::regex versionRegex(pattern);
 		std::smatch match;
@@ -312,7 +271,7 @@ namespace Plugins {
 			return static_cast<uint32_t>(std::stoul(match[1].str()));
 		}
 
-		return 0; // No version found
+		return 0;
 	}
 
 	void PluginManager::cleanupOldVersionedDlls(const std::string& pluginName, uint32_t keepVersionsCount) {
@@ -324,7 +283,6 @@ namespace Plugins {
 
 		if (!std::filesystem::exists(pluginMainDir)) return;
 
-		// Collect all versioned DLLs
 		std::vector<std::pair<uint32_t, std::string>> versionedDlls;
 
 		try {
@@ -337,15 +295,12 @@ namespace Plugins {
 				}
 			}
 
-			// Sort by version (highest first)
 			std::sort(versionedDlls.begin(), versionedDlls.end(),
 				[](const auto& a, const auto& b) { return a.first > b.first; });
 
-			// Keep only the newest versions, delete the rest
 			for (size_t i = keepVersionsCount; i < versionedDlls.size(); ++i) {
 				const auto&[version, dllPath] = versionedDlls[i];
 
-				// Don't delete the currently active DLL
 				if (dllPath != plugin.activeDllPath) {
 					try {
 						std::filesystem::remove(dllPath);
@@ -380,14 +335,11 @@ namespace Plugins {
 			return true;
 		}
 
-		// Use the actual path provided instead of reconstructing from stagingDirectory
 		std::string pluginMainDir = pluginDirPath;
 		std::string pluginStagingDir = pluginMainDir + "/staging";
 
-		// Ensure staging directory exists
 		std::filesystem::create_directories(pluginStagingDir);
 
-		// Look for the newest versioned DLL first
 		std::string newestVersionedDll = findNewestVersionedDll(pluginMainDir, pluginName);
 		std::string sourceDllPath = findPluginDll(pluginDirPath, pluginName);
 		std::string stagingDllPath = findPluginDll(pluginStagingDir, pluginName);
@@ -396,14 +348,12 @@ namespace Plugins {
 		uint32_t currentVersion = 0;
 
 		if (!newestVersionedDll.empty()) {
-			// Use the newest versioned DLL
 			dllToLoad = newestVersionedDll;
 			currentVersion = extractVersionFromDllName(newestVersionedDll, pluginName);
 			std::cout << "[PluginManager] Loading newest versioned DLL v" << currentVersion
 				<< ": " << newestVersionedDll << std::endl;
 		}
 		else if (!stagingDllPath.empty()) {
-			// Create the first versioned DLL from staging
 			currentVersion = 1;
 			std::string versionedDllName = getVersionedDllName(pluginName, currentVersion);
 			dllToLoad = pluginMainDir + "/" + versionedDllName;
@@ -419,7 +369,6 @@ namespace Plugins {
 			}
 		}
 		else if (!sourceDllPath.empty()) {
-			// Create the first versioned DLL from source
 			currentVersion = 1;
 			std::string versionedDllName = getVersionedDllName(pluginName, currentVersion);
 			dllToLoad = pluginMainDir + "/" + versionedDllName;
@@ -517,7 +466,6 @@ namespace Plugins {
 			return false;
 		}
 
-		// Create new versioned DLL
 		std::string versionedDllName = getVersionedDllName(pluginName, plugin.nextVersion);
 		std::string newVersionedDllPath = plugin.path + "/" + versionedDllName;
 
@@ -525,16 +473,13 @@ namespace Plugins {
 			std::cout << "[PluginManager] Creating versioned DLL v" << plugin.nextVersion
 				<< " from staging..." << std::endl;
 
-			// Copy staging DLL to new versioned location
 			if (!copyFile(stagingDllPath, newVersionedDllPath)) {
 				std::cerr << "[PluginManager] Failed to copy staging DLL to versioned location" << std::endl;
 				return false;
 			}
 
-			// Remove staging DLL after successful copy
 			std::filesystem::remove(stagingDllPath);
 
-			// Update plugin info to point to new versioned DLL
 			plugin.currentVersion = plugin.nextVersion;
 			plugin.nextVersion++;
 			plugin.activeDllPath = newVersionedDllPath;
@@ -542,7 +487,6 @@ namespace Plugins {
 			std::cout << "[PluginManager] Successfully created versioned DLL v" << plugin.currentVersion
 				<< ": " << newVersionedDllPath << std::endl;
 
-			// Clean up old versions (keep only 3 most recent)
 			cleanupOldVersionedDlls(pluginName, 3);
 
 			return true;
@@ -578,7 +522,6 @@ namespace Plugins {
 			plugin.handle = nullptr;
 		}
 
-		// Important: Give Windows time to fully release the DLL handle
 		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
 		std::cout << "[PluginManager] Step 3: Creating new versioned DLL from staging..." << std::endl;
@@ -587,7 +530,6 @@ namespace Plugins {
 			return false;
 		}
 
-		// Clean up old versions automatically (keep only 2 most recent)
 		cleanupOldVersionedDlls(pluginName, 2);
 
 		std::cout << "[PluginManager] Step 4: Loading new versioned DLL..." << std::endl;
@@ -652,7 +594,6 @@ namespace Plugins {
 	}
 
 	void PluginManager::updatePlugins(float deltaTime) {
-		// Only check for hot reload if enabled OR forced
 		if (hotReloadEnabled || hotReloadForced) {
 			timeSinceLastCheck += deltaTime;
 			if (timeSinceLastCheck >= hotReloadCheckInterval) {
@@ -705,11 +646,13 @@ namespace Plugins {
 			plugin.version = plugin.instance->GetVersion();
 			std::cout << "[PluginManager] Plugin instance created, version: " << plugin.version << std::endl;
 
-			PluginRegistry registry(pluginName, this, imguiContext);
-			std::cout << "[PluginManager] Created registry for plugin: " << pluginName << std::endl;
+			// ============================================
+			// WITH SHARED DLLS: No need to pass registry pointers!
+			// The plugin automatically uses the same registries from AniEngineCore.dll
+			// ============================================
 
-			std::cout << "[PluginManager] Calling OnEngineInit for: " << pluginName << std::endl;
-			if (!plugin.instance->OnEngineInit(entityManager, registry)) {
+			std::cout << "[PluginManager] Calling OnEngineInit with direct EntityManager access" << std::endl;
+			if (!plugin.instance->OnEngineInit(entityManager)) {
 				std::cerr << "[PluginManager] Plugin initialization failed" << std::endl;
 				plugin.destroyFunc(plugin.instance);
 				plugin.instance = nullptr;
@@ -719,18 +662,11 @@ namespace Plugins {
 			plugin.instance->SetInitialized(true);
 			plugin.enabled = true;
 
-			// Save state after successful enable
 			if (pluginState) {
 				pluginState->SetPluginState(pluginName, true, true, plugin.path, plugin.currentVersion);
 			}
 
 			std::cout << "[PluginManager] Plugin enabled successfully: " << pluginName << std::endl;
-
-			// DEBUG: Print what was registered
-			std::cout << "[PluginManager] === POST-ENABLE DEBUG ===" << std::endl;
-			entityManager.DebugPrintRegisteredComponents();
-			entityManager.DebugPrintPluginSystems();
-			std::cout << "[PluginManager] =======================\n" << std::endl;
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[PluginManager] Exception during plugin enable: " << e.what() << std::endl;
@@ -744,6 +680,9 @@ namespace Plugins {
 		return true;
 	}
 
+	// ============================================
+	// SIMPLIFIED: No component/system tracking
+	// ============================================
 	bool PluginManager::disablePlugin(const std::string& pluginName) {
 		auto it = plugins.find(pluginName);
 		if (it == plugins.end() || !it->second.enabled) {
@@ -757,15 +696,14 @@ namespace Plugins {
 		plugin.instance->OnShutdown();
 		plugin.instance->SetInitialized(false);
 
-		cleanupPluginComponents(pluginName);
-		cleanupPluginSystems(pluginName);
+		// SIMPLIFIED: Only cleanup views (if overridden by StudioPluginManager)
+		// Components/systems are managed by EntityManager
 		cleanupPluginViews(pluginName);
 
 		plugin.destroyFunc(plugin.instance);
 		plugin.instance = nullptr;
 		plugin.enabled = false;
 
-		// Save state after successful disable
 		if (pluginState) {
 			pluginState->SetPluginState(pluginName, true, false, plugin.path, plugin.currentVersion);
 		}
@@ -787,7 +725,6 @@ namespace Plugins {
 			unloadLibrary(plugin.handle);
 		}
 
-		// Remove from state after successful unload
 		if (pluginState) {
 			pluginState->RemovePluginState(pluginName);
 		}
@@ -812,11 +749,6 @@ namespace Plugins {
 	}
 
 	void PluginManager::scanPluginDirectory(const std::string& directory) {
-		// Just discover plugins, don't auto-load them
-		scanPluginDirectoryWithoutAutoLoad(directory);
-	}
-
-	void PluginManager::scanPluginDirectoryWithoutAutoLoad(const std::string& directory) {
 		if (!std::filesystem::exists(directory)) {
 			return;
 		}
@@ -828,7 +760,6 @@ namespace Plugins {
 				std::string pluginName = entry.path().filename().string();
 				if (pluginName == "staging") continue;
 
-				// Just log what's available, don't auto-load
 				std::cout << "[PluginManager] Found plugin directory: " << pluginName << std::endl;
 			}
 		}
@@ -845,105 +776,6 @@ namespace Plugins {
 	BasePlugin* PluginManager::getPlugin(const std::string& name) const {
 		auto it = plugins.find(name);
 		return (it != plugins.end()) ? it->second.instance : nullptr;
-	}
-
-	ECS::ComponentTypeID PluginManager::registerComponent(const std::string& pluginName, const ComponentDescriptor& desc) {
-		std::cout << "[PluginManager] registerComponent called for: " << desc.name
-			<< " (plugin: " << pluginName << ")" << std::endl;
-
-		// USE NAME-BASED REGISTRATION FOR PLUGIN COMPONENTS
-		ECS::ComponentTypeID id = ECS::ComponentTypeRegistry::RegisterPluginComponent(desc.name);
-
-		if (id == ECS::MAX_COMPONENT_COUNT) {
-			std::cerr << "[PluginManager] Failed to register plugin component: " << desc.name << std::endl;
-			return ECS::MAX_COMPONENT_COUNT;
-		}
-
-		std::cout << "[PluginManager] Component registered with ID: " << id << std::endl;
-
-		entityManager.RegisterPluginComponent(id, desc.size, desc.constructor, desc.destructor);
-		pluginComponents[pluginName].push_back(id);
-
-		std::cout << "[PluginManager] Successfully registered plugin component: "
-			<< desc.name << " with ID: " << id << " for plugin: " << pluginName << std::endl;
-
-		return id;
-	}
-
-	ECS::SystemTypeID PluginManager::registerSystem(const std::string& pluginName, const SystemDescriptor& desc) {
-		std::cout << "[PluginManager] registerSystem called for: " << desc.name
-			<< " (plugin: " << pluginName << ")" << std::endl;
-
-		// USE NAME-BASED REGISTRATION FOR PLUGIN SYSTEMS
-		ECS::SystemTypeID id = ECS::SystemTypeRegistry::RegisterPluginSystem(desc.name);
-
-		if (id == ECS::MAX_SYSTEM_COUNT) {
-			std::cerr << "[PluginManager] Failed to register plugin system: " << desc.name << std::endl;
-			return 0;
-		}
-
-		std::cout << "[PluginManager] System registered with ID: " << id
-			<< ", required components: " << desc.requiredComponents.size() << std::endl;
-
-		// Print required components for debugging
-		for (size_t i = 0; i < desc.requiredComponents.size(); i++) {
-			std::string compName = ECS::ComponentTypeRegistry::GetNameByID(desc.requiredComponents[i]);
-			std::cout << "[PluginManager]   Required component " << i << ": "
-				<< compName << " (ID: " << desc.requiredComponents[i] << ")" << std::endl;
-		}
-
-		entityManager.RegisterPluginSystem(id, desc.creator, desc.destructor, desc.updater,
-			[](void*) {}, desc.requiredComponents);
-
-		pluginSystems[pluginName].push_back(id);
-
-		std::cout << "[PluginManager] Successfully registered plugin system: "
-			<< desc.name << " with ID: " << id << " for plugin: " << pluginName << std::endl;
-
-		return id;
-	}
-
-	GUI::ViewTypeID PluginManager::registerView(const std::string& pluginName, const ViewDescriptor& desc) {
-		std::cout << "[PluginManager] Base registerView called - no view support in engine-only mode" << std::endl;
-		return 0;
-	}
-
-	void PluginManager::cleanupPluginComponents(const std::string& pluginName) {
-		auto it = pluginComponents.find(pluginName);
-		if (it == pluginComponents.end()) return;
-
-		std::cout << "[PluginManager] Cleaning up " << it->second.size()
-			<< " components for plugin: " << pluginName << std::endl;
-
-		for (ECS::ComponentTypeID id : it->second) {
-			auto entities = entityManager.GetAllEntities();
-			for (ECS::EntityID entity : entities) {
-				if (entityManager.HasPluginComponent(entity, id)) {
-					entityManager.RemovePluginComponent(entity, id);
-				}
-			}
-			entityManager.UnregisterPluginComponent(id);
-		}
-		pluginComponents.erase(it);
-	}
-
-	void PluginManager::cleanupPluginSystems(const std::string& pluginName) {
-		auto it = pluginSystems.find(pluginName);
-		if (it == pluginSystems.end()) return;
-
-		std::cout << "[PluginManager] Cleaning up " << it->second.size()
-			<< " systems for plugin: " << pluginName << std::endl;
-
-		for (ECS::SystemTypeID id : it->second) {
-			entityManager.UnregisterPluginSystem(id);
-		}
-		pluginSystems.erase(it);
-	}
-
-	void PluginManager::cleanupPluginViews(const std::string& pluginName) {
-		// Base implementation - no-op since base PluginManager doesn't handle views
-		// This is overridden in StudioPluginManager for actual cleanup
-		std::cout << "[PluginManager] Base cleanupPluginViews called for: " << pluginName << std::endl;
 	}
 
 	void* PluginManager::loadDynamicLibrary(const std::string& path) {
