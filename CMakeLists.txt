@@ -3,10 +3,8 @@ cmake_policy(SET CMP0091 NEW)
 
 project(AniStudio VERSION 0.2.0)
 
-# CRITICAL: Use dynamic runtime everywhere to avoid linking conflicts
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
-# Build options
 option(BUILD_ANIENGINE "Build AniEngine library" ON)
 option(BUILD_ANISTUDIO "Build AniStudio library" ON)
 option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
@@ -14,7 +12,6 @@ option(BUILD_SHARED_LIBS "Build shared libraries instead of static" ON)
 
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libraries" FORCE)
 
-# Project-wide settings
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -28,7 +25,6 @@ if(UNIX AND NOT APPLE)
     set(OpenGL_GL_PREFERENCE GLVND)
 endif()
 
-# Include Conan toolchain
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
     message(STATUS "Conan toolchain not found, installing dependencies...")
@@ -53,12 +49,10 @@ if(NOT CONAN_TOOLCHAIN)
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
 endif()
 
-# Set output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# Force single output directory for all configurations
 foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
     string(TOUPPER ${CONFIG} CONFIG_UPPER)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/bin)
@@ -71,7 +65,16 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
 
-# Create necessary directories
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib)
+
 set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
 set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
 set(DEFAULTS_DIR "${DATA_DIR}/defaults")
@@ -82,7 +85,6 @@ file(MAKE_DIRECTORY ${DATA_DIR})
 file(MAKE_DIRECTORY ${DEFAULTS_DIR})
 file(MAKE_DIRECTORY ${SCRIPTS_DIR})
 
-# Copy default files
 if(EXISTS "${CMAKE_SOURCE_DIR}/data/defaults")
     file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
     foreach(DEFAULT_FILE ${DEFAULT_FILES})
@@ -97,7 +99,6 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/data/defaults")
     endforeach()
 endif()
 
-# Copy scripts
 if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
     file(GLOB_RECURSE SCRIPT_FILES "${CMAKE_SOURCE_DIR}/scripts/*")
     foreach(SCRIPT_FILE ${SCRIPT_FILES})
@@ -110,7 +111,6 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/scripts")
     endforeach()
 endif()
 
-# Copy shaders
 if(EXISTS "${CMAKE_SOURCE_DIR}/src/shaders")
     set(SHADER_DIR "${CMAKE_SOURCE_DIR}/src/shaders")
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/shaders)
@@ -128,7 +128,6 @@ else()
     message(STATUS "Shader directory ${CMAKE_SOURCE_DIR}/src/shaders not found")
 endif()
 
-# Find external dependencies
 find_package(OpenCV REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
@@ -139,7 +138,6 @@ find_package(FFmpeg REQUIRED)
 find_package(PkgConfig REQUIRED)
 find_package(pybind11 REQUIRED)
 
-# Check for Zep availability
 if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
     set(ZEP_AVAILABLE TRUE)
     message(STATUS "Zep text editor source found")
@@ -148,21 +146,10 @@ else()
     set(ZEP_AVAILABLE FALSE)
 endif()
 
-# Pass options to subdirectories
 set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniEngine shared" FORCE)
-set(ANIENGINE_ENABLE_CUDA ${SD_CUDA} CACHE BOOL "AniEngine CUDA" FORCE)
-set(ANIENGINE_ENABLE_VULKAN ${SD_VULKAN} CACHE BOOL "AniEngine Vulkan" FORCE)
-set(ANIENGINE_ENABLE_HIPBLAS ${SD_HIPBLAS} CACHE BOOL "AniEngine HipBLAS" FORCE)
-set(ANIENGINE_ENABLE_METAL ${SD_METAL} CACHE BOOL "AniEngine Metal" FORCE)
-set(ANIENGINE_ENABLE_OPENCL ${SD_OPENCL} CACHE BOOL "AniEngine OpenCL" FORCE)
-set(ANIENGINE_ENABLE_SYCL ${SD_SYCL} CACHE BOOL "AniEngine SYCL" FORCE)
-set(ANIENGINE_ENABLE_MUSA ${SD_MUSA} CACHE BOOL "AniEngine MUSA" FORCE)
-set(ANIENGINE_ENABLE_FAST_SOFTMAX ${SD_FAST_SOFTMAX} CACHE BOOL "AniEngine Fast Softmax" FORCE)
-
 set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniStudio shared" FORCE)
 set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE} CACHE BOOL "AniStudio Zep" FORCE)
 
-# Add subdirectory libraries
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
 endif()
@@ -171,7 +158,6 @@ if(BUILD_ANISTUDIO)
     add_subdirectory(src/anistudio)
 endif()
 
-# Main application
 if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
@@ -185,11 +171,6 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-        RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin
-        RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin
-        RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin
-        RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin
     )
 
     target_compile_definitions(${PROJECT_NAME} PRIVATE
@@ -204,10 +185,10 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/include
     )
 
-    # CRITICAL FIX: Link in correct order with proper visibility
     target_link_libraries(${PROJECT_NAME} PRIVATE
         AniStudioCore
         AniEngineCore
+        ImGui
         glfw
         GLEW::GLEW
     )
@@ -215,10 +196,9 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
     message(STATUS "Main application will be built")
-    message(STATUS "  Links against: AniStudioCore, AniEngineCore, glfw, GLEW, OpenGL")
+    message(STATUS "  Links against: AniStudioCore, AniEngineCore, ImGui, glfw, GLEW")
 endif()
 
-# Plugin utility function
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
 
@@ -260,7 +240,6 @@ function(add_external_plugin TARGET_NAME)
     message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
-# Install configuration
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
 
@@ -289,7 +268,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     install(DIRECTORY DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins)
 endif()
 
-# Summary
 message(STATUS "")
 message(STATUS "AniStudio build configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
@@ -301,7 +279,6 @@ message(STATUS "Components:")
 message(STATUS "  AniEngine: ${BUILD_ANIENGINE}")
 message(STATUS "  AniStudio: ${BUILD_ANISTUDIO}")
 message(STATUS "  Main App: ${BUILD_MAIN_APP}")
-message(STATUS "  Zep Editor: ${ZEP_AVAILABLE}")
 message(STATUS "")
 message(STATUS "Output directories:")
 message(STATUS "  Binaries: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")

@@ -46,16 +46,6 @@ namespace GUI {
 	}
 
 	void PluginView::Render() {
-		if (!windowOpen) {
-			// When window closes, disable hot reload to save resources
-			if (m_hotReloadWasEnabled) {
-				m_pluginManager.enableHotReload(false);
-				m_hotReloadWasEnabled = false;
-				std::cout << "[PluginView] Hot reload disabled because PluginView was closed" << std::endl;
-			}
-			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-			return;
-		}
 
 		// Re-enable hot reload when window opens
 		if (!m_hotReloadWasEnabled && m_hotReloadEnabled) {
@@ -69,6 +59,18 @@ namespace GUI {
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 			RenderToolbar();
 			ImGui::Separator();
+			if (!windowOpen) {
+				if (m_hotReloadWasEnabled) {
+					m_pluginManager.enableHotReload(false);
+					m_hotReloadWasEnabled = false;
+					std::cout << "[PluginView] Hot reload disabled because PluginView was closed" << std::endl;
+				}
+
+				std::unordered_map<std::string, std::any> eventData;
+				eventData["workspaceID"] = GetID();
+				eventData["viewTypeName"] = viewName;
+				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+			}
 
 			// Split view: left panel for plugin directories, middle for loaded plugins, right for details
 			if (ImGui::BeginTable("PluginManagerTable", 3, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {

@@ -1,154 +1,75 @@
 #pragma once
-#include "ECS.h"
-#include "ViewTypes.hpp"
-#include "FilePaths.hpp"
-#include "systems.h"
-#include <GLFW/glfw3.h>
 #include <functional>
-#include <queue>
+#include <unordered_map>
 #include <string>
+#include <vector>
+#include <memory>
+#include <iostream>
+#include <any>
 
-// Forward declarations
+#ifdef _WIN32
+#ifdef BUILDING_ANISTUDIO
+#define ANISTUDIO_API __declspec(dllexport)
+#else
+#define ANISTUDIO_API __declspec(dllimport)
+#endif
+#else
+#define ANISTUDIO_API
+#endif
+
 namespace ANI {
-	class Core;
-	extern Core &appCore;
-	void WindowCloseCallback(GLFWwindow *window);
-}
 
-namespace GUI {
-	class ViewManager;
-}
-
-namespace ANI {
-	class ProjectManager;
-}
-
-namespace ANI {
-
-	enum class EventType {
-		// Application
-		Quit,
-		NewProject,
-		OpenProject,
-
-		// Diffusion
-		InferenceRequest,
-		Img2ImgRequest,
-		UpscaleRequest,
-		Img2VidRequest,
-		EditRequest,
-		T2VInferenceRequest,
-		ConvertToGGUF,
-
-		// Queue Controls
-		ClearInferenceQueue,
-		PauseInference,
-		ResumeInference,
-		StopCurrentTask,
-
-		// IO Events
-		LoadImageEvent,
-		SaveImageEvent,
-		RemoveImageEvent,
-
-		LoadVideoEvent,
-		SaveVideoEvent
-	};
-
-	enum class ViewEventType {
-		AddView,
-		RemoveView,
-		SetActiveWorkspace,
-		CreateWorkspace,
-		DeleteWorkspace
-	};
-
-	struct Event {
-		EventType type;
-		ECS::EntityID entityID;
-	};
-
-	struct ViewEvent {
-		ViewEventType type;
-		GUI::WorkspaceID workspaceID;  // The workspace/view ID
-		std::string viewTypeName;
-
-		// Additional data for specific events
-		std::string workspaceName; // For CreateWorkspace
-
-		// Legacy compatibility (deprecated)
-		GUI::WorkspaceID viewID() const { return workspaceID; }
-	};
-
-	class Events {
+	class ANISTUDIO_API Events {  // <-- ADD EXPORT MACRO
 	public:
+		using EventCallback = std::function<void()>;
+		using EventCallbackWithData = std::function<void(const std::any&)>;
+
 		~Events();
 		Events(const Events &) = delete;
 		Events &operator=(const Events &) = delete;
 
+		// Inline singleton - must be in header to work correctly across DLL boundary
 		static Events &Ref() {
 			static Events instance;
 			return instance;
 		}
 
+		// Export all public methods
+		void RegisterEvent(const std::string& eventName, EventCallback callback);
+		void RegisterEventWithData(const std::string& eventName, EventCallbackWithData callback);
+		void QueueEvent(const std::string& eventName);
+
+		// Template method - must be in header
+		template<typename T>
+		void QueueEventWithData(const std::string& eventName, const T& data) {
+			QueuedEvent event;
+			event.eventName = eventName;
+			event.hasData = true;
+			event.data = std::make_any<T>(data);
+			eventQueue.push_back(event);
+
+			std::cout << "[Events] Queued event with data: " << eventName << std::endl;
+		}
+
 		void Poll();
-		void Init(GLFWwindow *window);
-		void QueueEvent(const Event &event);
-		void ProcessEvents();
-
-		// ViewEvent functions
-		void QueueViewEvent(const ViewEvent &event);
-		void ProcessViewEvents();
-
-		// Set managers (called by StudioCore)
-		void SetManagers(GUI::ViewManager* viewMgr, ANI::ProjectManager* projectMgr);
-
-		// Helper functions for view events
-		void RequestAddView(GUI::WorkspaceID workspaceID, const std::string& viewTypeName) {
-			ViewEvent event;
-			event.type = ViewEventType::AddView;
-			event.workspaceID = workspaceID;
-			event.viewTypeName = viewTypeName;
-			QueueViewEvent(event);
-		}
-
-		void RequestRemoveView(GUI::WorkspaceID workspaceID, const std::string& viewTypeName) {
-			ViewEvent event;
-			event.type = ViewEventType::RemoveView;
-			event.workspaceID = workspaceID;
-			event.viewTypeName = viewTypeName;
-			QueueViewEvent(event);
-		}
-
-		void RequestSetActiveWorkspace(GUI::WorkspaceID workspaceID) {
-			ViewEvent event;
-			event.type = ViewEventType::SetActiveWorkspace;
-			event.workspaceID = workspaceID;
-			QueueViewEvent(event);
-		}
-
-		void RequestCreateWorkspace(const std::string& workspaceName = "New Workspace") {
-			ViewEvent event;
-			event.type = ViewEventType::CreateWorkspace;
-			event.workspaceName = workspaceName;
-			QueueViewEvent(event);
-		}
-
-		void RequestDeleteWorkspace(GUI::WorkspaceID workspaceID) {
-			ViewEvent event;
-			event.type = ViewEventType::DeleteWorkspace;
-			event.workspaceID = workspaceID;
-			QueueViewEvent(event);
-		}
+		void ClearAllEvents();
 
 	private:
 		Events();
-		std::queue<Event> eventQueue;
-		std::queue<ViewEvent> viewEventQueue;
 
-		// Manager references (set by StudioCore)
-		GUI::ViewManager* viewManager = nullptr;
-		ANI::ProjectManager* projectManager = nullptr;
+		struct EventData {
+			std::vector<EventCallback> simpleCallbacks;
+			std::vector<EventCallbackWithData> dataCallbacks;
+		};
+
+		struct QueuedEvent {
+			std::string eventName;
+			bool hasData = false;
+			std::any data;
+		};
+
+		std::unordered_map<std::string, EventData> eventHandlers;
+		std::vector<QueuedEvent> eventQueue;
 	};
 
 } // namespace ANI

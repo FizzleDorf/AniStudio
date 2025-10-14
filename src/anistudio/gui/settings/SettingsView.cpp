@@ -106,15 +106,15 @@ namespace GUI {
 		ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-
-			// Check if window was closed via X button
 			if (!windowOpen) {
-				HandleWindowClose();
+				std::unordered_map<std::string, std::any> eventData;
+				eventData["workspaceID"] = GetID();
+				eventData["viewTypeName"] = viewName;
+				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+				ImGui::End();
 			}
-			else {
-				// Normal rendering
-				RenderMainContent();
-			}
+
+			RenderMainContent();
 
 		}
 		ImGui::End();
@@ -277,7 +277,10 @@ namespace GUI {
 		}
 		else {
 			// No unsaved changes, close immediately
-			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
 		}
 	}
 
@@ -300,7 +303,10 @@ namespace GUI {
 		// Save and Close button - saves settings and closes window
 		if (ImGui::Button("Save and Close")) {
 			if (settingsManager.SaveAllSettings()) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+				std::unordered_map<std::string, std::any> eventData;
+				eventData["workspaceID"] = GetID();
+				eventData["viewTypeName"] = viewName;
+				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
 			}
 		}
 
@@ -351,7 +357,10 @@ namespace GUI {
 			if (ImGui::Button("Apply and Close", ImVec2(120, 0))) {
 				if (settingsManager.SaveAllSettings()) {
 					showUnsavedChangesDialog = false;
-					ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+					std::unordered_map<std::string, std::any> eventData;
+					eventData["workspaceID"] = GetID();
+					eventData["viewTypeName"] = viewName;
+					ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
 				}
 				ImGui::CloseCurrentPopup();
 			}
@@ -360,7 +369,10 @@ namespace GUI {
 			if (ImGui::Button("Discard Changes", ImVec2(120, 0))) {
 				settingsManager.RestoreAllFromBackups();
 				showUnsavedChangesDialog = false;
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+				std::unordered_map<std::string, std::any> eventData;
+				eventData["workspaceID"] = GetID();
+				eventData["viewTypeName"] = viewName;
+				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
 				ImGui::CloseCurrentPopup();
 			}
 

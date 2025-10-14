@@ -87,9 +87,7 @@ namespace GUI {
 
 	void ImageView::Render() {
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			if (!windowOpen) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-			}
+			
 
 			RenderImageInfo();
 			RenderControls();
@@ -107,9 +105,18 @@ namespace GUI {
 		}
 		ImGui::End();
 
+		if (!windowOpen) {
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+		}
+
 		if (showHistory) {
 			RenderHistory();
 		}
+
+		
 	}
 
 	void ImageView::OnImageLoaded(ECS::EntityID entityID) {

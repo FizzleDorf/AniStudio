@@ -40,9 +40,9 @@
  /*
  The AniStudio Library is responsible for the AniEngine instance if you choose to use this
  library. You can access any of the managers from the get functions here. Other than holding
- the AniEngine Instance, the library contains all gui logic and utilities. If you want to use 
- another gui solution instead of imgui, you can still access the gui utilities via the 
- AniStudio shared library. Otherwise, I would suggest you use the AniEngine shared library 
+ the AniEngine Instance, the library contains all gui logic and utilities. If you want to use
+ another gui solution instead of imgui, you can still access the gui utilities via the
+ AniStudio shared library. Otherwise, I would suggest you use the AniEngine shared library
  instead. Commercial licence holders can use the static libs or use code directly.
  */
 
@@ -80,7 +80,7 @@ namespace ANI {
 
 		// Window management
 		void SetWindowHandle(void* window);
-		void SetImGuiContext(void* context) { imguiContext = context; }
+		void SetImGuiContext(void* context);
 
 		//Workspace management
 		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);

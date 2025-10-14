@@ -12,7 +12,7 @@ namespace GUI {
 	}
 
 	void ViewManager::Init() {
-		// Initialization logic if needed
+		// NO AUTOMATIC WORKSPACE CREATION - workspaces must be created externally
 	}
 
 	void ViewManager::Update(const float deltaT) {
@@ -104,8 +104,8 @@ namespace GUI {
 		auto allWorkspaces = GetAllWorkspaces();
 
 		if (allWorkspaces.empty()) {
-			m_activeWorkspaceID = CreateView();
-			std::cout << "[ViewManager] Created default workspace: " << m_activeWorkspaceID << std::endl;
+			// NO AUTOMATIC WORKSPACE CREATION - just reset to 0
+			m_activeWorkspaceID = 0;
 			return;
 		}
 
@@ -425,23 +425,15 @@ namespace GUI {
 
 	void ViewManager::Reset() {
 		std::cout << "[ViewManager] Performing soft reset..." << std::endl;
-
-		ResetWorkspaceData();
-
-		Init();
-
+		ResetWorkspaceData(); // THIS CLEARS ALL WORKSPACES
 		std::cout << "[ViewManager] Soft reset complete. View registrations preserved." << std::endl;
 		std::cout << "[ViewManager] Registered views count: " << registeredViews.size() << std::endl;
 	}
 
 	void ViewManager::FullReset() {
 		std::cout << "[ViewManager] Performing full reset..." << std::endl;
-
-		ResetWorkspaceData();
+		ResetWorkspaceData(); // THIS CLEARS ALL WORKSPACES
 		ResetRegistrationData();
-
-		Init();
-
 		std::cout << "[ViewManager] Full reset complete." << std::endl;
 	}
 

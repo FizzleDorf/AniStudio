@@ -55,7 +55,11 @@ void SequencerView::Render() {
 	if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 		
 		if (!windowOpen) {
-			ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+			ImGui::End();
 		}
 
 		// Playback control buttons

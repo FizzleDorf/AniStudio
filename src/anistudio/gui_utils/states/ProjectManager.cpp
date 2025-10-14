@@ -122,7 +122,7 @@ namespace ANI {
 			// Reset ViewState and create default workspace
 			m_viewState.Reset();
 
-			// CRITICAL: Create a default workspace when creating new project
+			// CRITICAL: ALWAYS CREATE A DEFAULT WORKSPACE WHEN CREATING NEW PROJECT
 			GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
 			m_viewState.SetLastActiveWorkspace(defaultWorkspace);
 			m_viewManager.SetActiveWorkspace(defaultWorkspace);
@@ -206,18 +206,19 @@ namespace ANI {
 			m_isProjectOpen = true;
 
 			// CRITICAL: Load ViewState which includes workspace configuration
-			if (!LoadViewState()) {
-				std::cout << "[ProjectManager] No ViewState found, creating default workspace" << std::endl;
-				m_viewState.Reset();
+			bool viewStateLoaded = LoadViewState();
 
-				// Create a default workspace if none exist
-				auto allWorkspaces = m_viewManager.GetAllWorkspaces();
-				if (allWorkspaces.empty()) {
-					GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
-					m_viewState.SetLastActiveWorkspace(defaultWorkspace);
-					m_viewManager.SetActiveWorkspace(defaultWorkspace);
-					std::cout << "[ProjectManager] Created default workspace: " << defaultWorkspace << std::endl;
-				}
+			// ALWAYS CREATE A DEFAULT WORKSPACE IF NONE EXIST
+			auto allWorkspaces = m_viewManager.GetAllWorkspaces();
+			if (allWorkspaces.empty()) {
+				std::cout << "[ProjectManager] No workspaces found, creating default workspace" << std::endl;
+				GUI::WorkspaceID defaultWorkspace = m_viewManager.CreateView();
+				m_viewState.SetLastActiveWorkspace(defaultWorkspace);
+				m_viewManager.SetActiveWorkspace(defaultWorkspace);
+				std::cout << "[ProjectManager] Created default workspace: " << defaultWorkspace << std::endl;
+			}
+			else {
+				std::cout << "[ProjectManager] Loaded " << allWorkspaces.size() << " workspaces from project" << std::endl;
 			}
 
 			// Load ImGui layout (if exists)
@@ -318,9 +319,9 @@ namespace ANI {
 		std::cout << "[ProjectManager] Saving project before closing..." << std::endl;
 		SaveProject();
 
-		// Reset the ViewManager to clean state
+		// Reset the ViewManager to clean state - THIS CLEARS ALL WORKSPACES
 		std::cout << "[ProjectManager] Resetting ViewManager..." << std::endl;
-		m_viewManager.Reset(); // Soft reset - keeps registered views
+		m_viewManager.Reset(); // Soft reset - keeps registered views BUT CLEARS ALL WORKSPACES
 
 		// Clear project-specific paths
 		ClearProjectSpecificPaths();
@@ -332,7 +333,7 @@ namespace ANI {
 		m_projectSettings = ProjectSettings{};
 		m_viewState.Reset();
 
-		std::cout << "[ProjectManager] Project closed and managers reset" << std::endl;
+		std::cout << "[ProjectManager] Project closed and ALL workspaces cleared" << std::endl;
 
 		// CRITICAL: Trigger callback
 		std::cout << "[ProjectManager] Triggering OnProjectClosed callback..." << std::endl;

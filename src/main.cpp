@@ -19,7 +19,6 @@
  */
 
 #include "core/Core.hpp"
-#include "anistudio/events/Events.hpp"
 #include "timer/Timer.hpp"
 
 /*
@@ -29,13 +28,11 @@ int main(int argc, char* argv[]) {
 
     // Initialize the Application Core
     ANI::Core::Ref().Init();
-    ANI::Events::Ref().Init(ANI::Core::Ref().Window());
     ANI::Timer.Ref().Init();
 
     // Main loop
     while (ANI::Core::Ref().Run()) {
         ANI::Timer.Ref().Tick();
-        ANI::Events::Ref().Poll();
         ANI::Core::Ref().Update(ANI::Timer.Ref().DeltaTime());
         ANI::Core::Ref().Draw();
     }

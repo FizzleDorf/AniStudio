@@ -19,13 +19,7 @@ namespace GUI {
 
 	void DebugView::RenderEntityPanel() {
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-
-			if (!windowOpen) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-				ImGui::End();
-				return;
-			}
-
+			
 			if (ImGui::Button("Refresh Entities")) {
 				RefreshEntities();
 			}
@@ -149,6 +143,13 @@ namespace GUI {
 			}
 		}
 		ImGui::End();
+
+		if (!windowOpen) {
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+		}
 	}
 
 	void DebugView::RenderSystemPanel() {

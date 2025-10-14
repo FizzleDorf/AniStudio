@@ -1,25 +1,17 @@
 #pragma once
-
 #include "ProjectPopups.hpp"
-#include "ViewTypes.hpp"
-#include <unordered_map>
-#include <memory>
 #include <string>
 #include <vector>
+#include <map>
+#include <memory>
 #include <set>
 
 namespace ANI {
 	class ProjectManager;
-	class Events;
 }
 
 namespace GUI {
 	class ViewManager;
-
-	struct MenuNode {
-		std::unordered_map<std::string, std::unique_ptr<MenuNode>> children;
-		std::vector<std::pair<std::string, std::string>> views; // viewTypeName, displayName
-	};
 
 	class MenuBar {
 	public:
@@ -29,42 +21,46 @@ namespace GUI {
 		void Render();
 
 	private:
+		// Menu rendering
+		void ShowFileMenu();
+		void ShowEditMenu();
+		void ShowWorkspaceMenu();
+		void ShowCustomCategoryMenus();
+		void ShowHelpMenu();
+
+		// View category handling
+		void RenderViewsForCategory(const std::string& categoryName);
+		std::vector<std::string> GetCustomTopLevelCategories() const;
+		std::vector<std::string> SplitCategoryPath(const std::string& category) const;
+
+		// Menu tree structure
+		struct MenuNode {
+			std::map<std::string, std::unique_ptr<MenuNode>> children;
+			std::vector<std::pair<std::string, std::string>> views; // viewTypeName, displayName
+		};
+		void RenderMenuNode(const MenuNode& node);
+
+		// Workspace operations
+		void RenderWorkspaceDialogs();
+		void CreateNewWorkspace();
+		void DeleteCurrentWorkspace();
+
+		// View operations
+		bool IsViewActiveInCurrentWorkspace(const std::string& viewTypeName) const;
+		void ToggleViewInCurrentWorkspace(const std::string& viewTypeName);
+
+		// References - no initialization needed for references
 		ANI::ProjectManager& projectManager;
 		ViewManager& viewManager;
-		ANI::Events& events;
 
-		// Simple popup state
+		// Popup state
 		ProjectPopupState popupState;
 
-		// Workspace dialogs
+		// Dialog state
 		bool showCreateWorkspaceDialog = false;
 		bool showRenameWorkspaceDialog = false;
 		char createWorkspaceBuffer[256] = "New Workspace";
 		char renameWorkspaceBuffer[256] = "";
-
-		// Menu rendering methods
-		void ShowFileMenu();
-		void ShowEditMenu();
-		void ShowWorkspaceMenu();
-		void ShowCustomCategoryMenus();  // Renders category-based custom menus
-		void ShowHelpMenu();
-
-		// Workspace dialog rendering
-		void RenderWorkspaceDialogs();
-
-		// Category-based menu helpers
-		void RenderViewsForCategory(const std::string& categoryName);
-		std::vector<std::string> GetCustomTopLevelCategories() const;
-
-		// Hierarchical menu helpers
-		std::vector<std::string> SplitCategoryPath(const std::string& category) const;
-		void RenderMenuNode(const MenuNode& node);
-
-		// Workspace management
-		void CreateNewWorkspace();
-		void DeleteCurrentWorkspace();
-		bool IsViewActiveInCurrentWorkspace(const std::string& viewTypeName) const;
-		void ToggleViewInCurrentWorkspace(const std::string& viewTypeName);
 	};
 
 } // namespace GUI

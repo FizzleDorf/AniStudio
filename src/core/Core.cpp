@@ -6,10 +6,9 @@
 #include <filesystem>
 
 namespace ANI {
-	Core& appCore = Core::Ref();
 
 	void WindowCloseCallback(GLFWwindow* window) {
-		appCore.Quit();
+		Core::Ref().Quit();
 	}
 
 	Core::Core() : run(true), window(nullptr),
@@ -35,7 +34,7 @@ namespace ANI {
 		studioCore.SetRunning(false);
 	}
 
-	void Core::Init() {		
+	void Core::Init() {
 		std::cout << "[Core] Initializing FilePaths..." << std::endl;
 		Utils::FilePaths::Init();
 		std::cout << "[Core] FilePaths initialized" << std::endl;
@@ -52,22 +51,226 @@ namespace ANI {
 		}
 		std::cout << "[Core] StudioCore basic initialization complete" << std::endl;
 
-		// Setup window context
+		// Setup window context and ImGui context
 		studioCore.SetWindowHandle(window);
-		studioCore.SetImGuiContext(ImGui::GetCurrentContext());
+		studioCore.SetImGuiContext(GetImGuiContext());
 		std::cout << "[Core] Window handle and ImGui context set" << std::endl;
 
-		// managers for Events
-		std::cout << "[Core] Setting up Events system..." << std::endl;
-		ANI::Events::Ref().SetManagers(&studioCore.GetViewManager(), &studioCore.GetProjectManager());
-		std::cout << "[Core] Events system configured" << std::endl;
-
-		// Complete StudioCore initialization (plugins, views, etc.)
+		// Complete StudioCore initialization (plugins, views, MenuBar, etc.)
 		std::cout << "[Core] Completing StudioCore initialization..." << std::endl;
 		studioCore.CompleteInitialization();
 		std::cout << "[Core] StudioCore fully initialized" << std::endl;
 
+		// Register ALL event handlers
+		std::cout << "[Core] Registering event handlers..." << std::endl;
+		RegisterEventHandlers();
+		std::cout << "[Core] Event handlers registered" << std::endl;
+
 		std::cout << "[Core] Initialization complete!" << std::endl;
+	}
+
+	void Core::RegisterEventHandlers() {
+		// ========================================
+		// CORE EVENTS
+		// ========================================
+		Events::Ref().RegisterEvent("Quit", [this]() {
+			std::cout << "[Core] Quit event triggered" << std::endl;
+			this->Quit();
+		});
+
+		// ========================================
+		// VIEW MANAGER EVENTS
+		// ========================================
+		Events::Ref().RegisterEventWithData("CreateWorkspace",
+			[this](const std::any& data) {
+			try {
+				auto eventData = std::any_cast<std::unordered_map<std::string, std::string>>(data);
+				std::string workspaceName = eventData.at("workspaceName");
+
+				std::cout << "[Core] CreateWorkspace event: " << workspaceName << std::endl;
+				GUI::WorkspaceID id = studioCore.GetViewManager().CreateView();
+				studioCore.GetViewManager().SetWorkspaceName(id, workspaceName);
+				studioCore.SetActiveWorkspace(id);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in CreateWorkspace: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("DeleteWorkspace",
+			[this](const std::any& data) {
+			try {
+				auto workspaceID = std::any_cast<GUI::WorkspaceID>(data);
+				std::cout << "[Core] DeleteWorkspace event: " << workspaceID << std::endl;
+
+				auto allWorkspaces = studioCore.GetViewManager().GetAllWorkspaces();
+				if (allWorkspaces.size() <= 1) {
+					std::cout << "[Core] Cannot delete last workspace" << std::endl;
+					return;
+				}
+
+				for (auto id : allWorkspaces) {
+					if (id != workspaceID) {
+						studioCore.SetActiveWorkspace(id);
+						break;
+					}
+				}
+
+				studioCore.GetViewManager().DestroyView(workspaceID);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in DeleteWorkspace: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("SetActiveWorkspace",
+			[this](const std::any& data) {
+			try {
+				auto workspaceID = std::any_cast<GUI::WorkspaceID>(data);
+				std::cout << "[Core] SetActiveWorkspace event: " << workspaceID << std::endl;
+				studioCore.SetActiveWorkspace(workspaceID);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in SetActiveWorkspace: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("AddView",
+			[this](const std::any& data) {
+			try {
+				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+				auto workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
+				auto viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
+
+				std::cout << "[Core] AddView event: " << viewTypeName
+					<< " to workspace: " << workspaceID << std::endl;
+
+				GUI::ViewTypeID viewType = studioCore.GetViewManager().GetViewType(viewTypeName);
+				studioCore.GetViewManager().AddViewByType(workspaceID, viewType);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in AddView: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("RemoveView",
+			[this](const std::any& data) {
+			try {
+				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+				auto workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
+				auto viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
+
+				std::cout << "[Core] RemoveView event: " << viewTypeName
+					<< " from workspace: " << workspaceID << std::endl;
+
+				GUI::ViewTypeID viewType = studioCore.GetViewManager().GetViewType(viewTypeName);
+				studioCore.GetViewManager().RemoveViewByType(workspaceID, viewType);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in RemoveView: " << e.what() << std::endl;
+			}
+		});
+
+		// ========================================
+		// ENTITY MANAGER EVENTS
+		// ========================================
+		Events::Ref().RegisterEvent("CreateEntity",
+			[this]() {
+			std::cout << "[Core] CreateEntity event" << std::endl;
+			ECS::EntityID newEntity = studioCore.GetEntityManager().AddNewEntity();
+			std::cout << "[Core] Created entity: " << newEntity << std::endl;
+		});
+
+		Events::Ref().RegisterEventWithData("DestroyEntity",
+			[this](const std::any& data) {
+			try {
+				auto entityID = std::any_cast<ECS::EntityID>(data);
+				std::cout << "[Core] DestroyEntity event: " << entityID << std::endl;
+				studioCore.GetEntityManager().DestroyEntity(entityID);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in DestroyEntity: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("CloneEntity",
+			[this](const std::any& data) {
+			try {
+				auto entityID = std::any_cast<ECS::EntityID>(data);
+				std::cout << "[Core] CloneEntity event: " << entityID << std::endl;
+				ECS::EntityID newEntity = studioCore.GetEntityManager().CloneEntity(entityID);
+				std::cout << "[Core] Cloned entity " << entityID << " to " << newEntity << std::endl;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in CloneEntity: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("AddComponent",
+			[this](const std::any& data) {
+			try {
+				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+				auto entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
+				auto componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
+
+				std::cout << "[Core] AddComponent event: component " << componentTypeID
+					<< " to entity " << entityID << std::endl;
+
+				auto& mgr = studioCore.GetEntityManager();
+				if (mgr.IsPluginComponent(componentTypeID)) {
+					mgr.AddPluginComponent(entityID, componentTypeID);
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in AddComponent: " << e.what() << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEventWithData("RemoveComponent",
+			[this](const std::any& data) {
+			try {
+				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+				auto entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
+				auto componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
+
+				std::cout << "[Core] RemoveComponent event: component " << componentTypeID
+					<< " from entity " << entityID << std::endl;
+
+				studioCore.GetEntityManager().RemoveComponentById(entityID, componentTypeID);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[Core] Error in RemoveComponent: " << e.what() << std::endl;
+			}
+		});
+
+		// ========================================
+		// PROJECT MANAGER EVENTS
+		// ========================================
+		Events::Ref().RegisterEvent("SaveProject",
+			[this]() {
+			std::cout << "[Core] SaveProject event" << std::endl;
+
+			if (studioCore.GetProjectManager().IsProjectOpen()) {
+				if (!studioCore.GetProjectManager().SaveProject()) {
+					std::cerr << "[Core] Failed to save project: "
+						<< studioCore.GetProjectManager().GetLastError() << std::endl;
+				}
+				else {
+					std::cout << "[Core] Project saved successfully" << std::endl;
+				}
+			}
+			else {
+				std::cout << "[Core] No project open to save" << std::endl;
+			}
+		});
+
+		Events::Ref().RegisterEvent("CloseProject",
+			[this]() {
+			std::cout << "[Core] CloseProject event" << std::endl;
+			studioCore.GetProjectManager().CloseProject();
+		});
+
+		std::cout << "[Core] All event handlers registered successfully" << std::endl;
 	}
 
 	bool Core::InitializeWindow() {
@@ -108,7 +311,6 @@ namespace ANI {
 		glViewport(0, 0, videoWidth, videoHeight);
 		std::cout << "[Core] Viewport set" << std::endl;
 
-		// Initialize ImGui
 		std::cout << "[Core] Calling IMGUI_CHECKVERSION()..." << std::endl;
 		IMGUI_CHECKVERSION();
 		std::cout << "[Core] Version check passed" << std::endl;
@@ -125,7 +327,9 @@ namespace ANI {
 		ImGuiIO& io = ImGui::GetIO();
 		std::cout << "[Core] Got ImGuiIO reference" << std::endl;
 
-		// Set INI file path
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		std::cout << "[Core] Enabled docking by default" << std::endl;
+
 		std::cout << "[Core] Setting INI file path..." << std::endl;
 		std::string iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
 		std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
@@ -137,7 +341,6 @@ namespace ANI {
 		io.IniFilename = persistentIniPath.c_str();
 		std::cout << "[Core] INI file path set to: " << io.IniFilename << std::endl;
 
-		// Initialize ImGui backends
 		std::cout << "[Core] Initializing GLFW backend..." << std::endl;
 		bool glfwOk = ImGui_ImplGlfw_InitForOpenGL(window, true);
 		std::cout << "[Core] GLFW backend result: " << (glfwOk ? "SUCCESS" : "FAILED") << std::endl;
@@ -148,7 +351,6 @@ namespace ANI {
 		std::cout << "[Core] OpenGL3 backend result: " << (gl3Ok ? "SUCCESS" : "FAILED") << std::endl;
 		if (!gl3Ok) return false;
 
-		// Add default font
 		std::cout << "[Core] Adding default font..." << std::endl;
 		if (io.Fonts->Fonts.Size == 0) {
 			io.Fonts->AddFontDefault();
@@ -211,13 +413,27 @@ namespace ANI {
 			// Clear and render
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
-			
+
+			// Start ImGui frame - ONLY ONCE per frame
 			ImGui_ImplOpenGL3_NewFrame();
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			// Render studio content
+			// Render studio content - uses the main ImGui context
 			studioCore.Render();
+
+			// End ImGui frame and render - ONLY ONCE per frame
+			ImGui::Render();
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+			// Handle multi-viewport if enabled
+			ImGuiIO& io = ImGui::GetIO();
+			if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+				GLFWwindow* backup_current_context = glfwGetCurrentContext();
+				ImGui::UpdatePlatformWindows();
+				ImGui::RenderPlatformWindowsDefault();
+				glfwMakeContextCurrent(backup_current_context);
+			}
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[Core] Render error: " << e.what() << std::endl;

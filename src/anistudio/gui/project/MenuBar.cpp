@@ -9,7 +9,7 @@
 namespace GUI {
 
 	MenuBar::MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr)
-		: projectManager(projectMgr), viewManager(viewMgr), events(ANI::Events::Ref()) {
+		: projectManager(projectMgr), viewManager(viewMgr) {
 
 		// Initialize popup state
 		popupState.InitializeBuffers(projectMgr);
@@ -45,6 +45,12 @@ namespace GUI {
 			}
 
 			if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
+				// If a project is already open, close it first
+				if (projectManager.IsProjectOpen()) {
+					std::cout << "[MenuBar] Project is open, closing current project before opening new one" << std::endl;
+					ANI::Events::Ref().QueueEvent("CloseProject");
+					// The LoadProjectPopup will be shown after CloseProject completes
+				}
 				popupState.showLoadProjectPopup = true;
 				popupState.RefreshRecentProjects(projectManager);
 			}
@@ -53,11 +59,11 @@ namespace GUI {
 
 			bool projectOpen = projectManager.IsProjectOpen();
 			if (ImGui::MenuItem("Save Project", "Ctrl+S", false, projectOpen)) {
-				projectManager.SaveProject();
+				ANI::Events::Ref().QueueEvent("SaveProject");
 			}
 
 			if (ImGui::MenuItem("Close Project", "", false, projectOpen)) {
-				projectManager.CloseProject();
+				ANI::Events::Ref().QueueEvent("CloseProject");
 			}
 
 			// Render views that have "File" as their top-level category
@@ -68,9 +74,7 @@ namespace GUI {
 			ImGui::Separator();
 
 			if (ImGui::MenuItem("Exit", "Alt+F4")) {
-				ANI::Event exitEvent;
-				exitEvent.type = ANI::EventType::Quit;
-				events.QueueEvent(exitEvent);
+				ANI::Events::Ref().QueueEvent("Quit");
 			}
 
 			ImGui::EndMenu();
@@ -79,14 +83,6 @@ namespace GUI {
 
 	void MenuBar::ShowEditMenu() {
 		if (ImGui::BeginMenu("Edit")) {
-			//if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
-			//	// TODO: Implement undo
-			//}
-			//
-			//if (ImGui::MenuItem("Redo", "Ctrl+Y")) {
-			//	// TODO: Implement redo
-			//}
-
 			// Render views that have "Edit" as their top-level category
 			if (projectManager.IsProjectOpen()) {
 				RenderViewsForCategory("Edit");
@@ -114,10 +110,8 @@ namespace GUI {
 
 				if (ImGui::MenuItem(workspaceName.c_str(), nullptr, isActive)) {
 					if (!isActive) {
-						ANI::ViewEvent event;
-						event.type = ANI::ViewEventType::SetActiveWorkspace;
-						event.workspaceID = workspaceID;
-						events.QueueViewEvent(event);
+						ANI::Events::Ref().QueueEventWithData("SetActiveWorkspace", workspaceID);
+						std::cout << "[MenuBar] Queued SetActiveWorkspace for workspace: " << workspaceID << std::endl;
 					}
 				}
 			}
@@ -169,9 +163,6 @@ namespace GUI {
 				RenderViewsForCategory("Help");
 			}
 
-			//if (ImGui::MenuItem("About")) {
-			//	// TODO: Show about dialog
-			//}
 			ImGui::EndMenu();
 		}
 	}
@@ -281,12 +272,14 @@ namespace GUI {
 			if (!canCreate) ImGui::BeginDisabled();
 
 			if (ImGui::Button("Create")) {
-				ANI::ViewEvent event;
-				event.type = ANI::ViewEventType::CreateWorkspace;
-				event.workspaceName = std::string(createWorkspaceBuffer);
-				events.QueueViewEvent(event);
+				std::unordered_map<std::string, std::string> eventData;
+				eventData["workspaceName"] = std::string(createWorkspaceBuffer);
+				ANI::Events::Ref().QueueEventWithData("CreateWorkspace", eventData);
+
 				showCreateWorkspaceDialog = false;
 				strcpy(createWorkspaceBuffer, "New Workspace");
+
+				std::cout << "[MenuBar] Queued CreateWorkspace event: " << eventData["workspaceName"] << std::endl;
 			}
 
 			if (!canCreate) ImGui::EndDisabled();
@@ -323,6 +316,7 @@ namespace GUI {
 			if (!canRename) ImGui::BeginDisabled();
 
 			if (ImGui::Button("Rename")) {
+				// Direct call - no event needed for simple rename
 				viewManager.SetWorkspaceName(currentWorkspace, std::string(renameWorkspaceBuffer));
 				showRenameWorkspaceDialog = false;
 			}
@@ -395,10 +389,11 @@ namespace GUI {
 	}
 
 	void MenuBar::CreateNewWorkspace() {
-		ANI::ViewEvent event;
-		event.type = ANI::ViewEventType::CreateWorkspace;
-		event.workspaceName = "New Workspace";
-		events.QueueViewEvent(event);
+		std::unordered_map<std::string, std::string> eventData;
+		eventData["workspaceName"] = "New Workspace";
+		ANI::Events::Ref().QueueEventWithData("CreateWorkspace", eventData);
+
+		std::cout << "[MenuBar] Queued CreateWorkspace event: " << eventData["workspaceName"] << std::endl;
 	}
 
 	void MenuBar::DeleteCurrentWorkspace() {
@@ -409,11 +404,9 @@ namespace GUI {
 		}
 
 		GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+		ANI::Events::Ref().QueueEventWithData("DeleteWorkspace", currentWorkspace);
 
-		ANI::ViewEvent event;
-		event.type = ANI::ViewEventType::DeleteWorkspace;
-		event.workspaceID = currentWorkspace;
-		events.QueueViewEvent(event);
+		std::cout << "[MenuBar] Queued DeleteWorkspace event for workspace: " << currentWorkspace << std::endl;
 	}
 
 	bool MenuBar::IsViewActiveInCurrentWorkspace(const std::string& viewTypeName) const {
@@ -437,19 +430,21 @@ namespace GUI {
 		try {
 			GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
 
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = currentWorkspace;
+			eventData["viewTypeName"] = viewTypeName;
+
 			if (IsViewActiveInCurrentWorkspace(viewTypeName)) {
-				ANI::ViewEvent event;
-				event.type = ANI::ViewEventType::RemoveView;
-				event.workspaceID = currentWorkspace;
-				event.viewTypeName = viewTypeName;
-				events.QueueViewEvent(event);
+				// Queue RemoveView event
+				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+				std::cout << "[MenuBar] Queued RemoveView event: " << viewTypeName
+					<< " from workspace: " << currentWorkspace << std::endl;
 			}
 			else {
-				ANI::ViewEvent event;
-				event.type = ANI::ViewEventType::AddView;
-				event.workspaceID = currentWorkspace;
-				event.viewTypeName = viewTypeName;
-				events.QueueViewEvent(event);
+				// Queue AddView event
+				ANI::Events::Ref().QueueEventWithData("AddView", eventData);
+				std::cout << "[MenuBar] Queued AddView event: " << viewTypeName
+					<< " to workspace: " << currentWorkspace << std::endl;
 			}
 		}
 		catch (const std::exception& e) {

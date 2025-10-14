@@ -10,41 +10,44 @@ if(WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# Get external dir
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/../../external")
 else()
     set(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/external")
 endif()
 
-# Add external dependencies
+set(BUILD_SHARED_LIBS_SAVE ${BUILD_SHARED_LIBS})
+set(BUILD_SHARED_LIBS OFF)
+
 if(NOT TARGET ImGui)
-    add_subdirectory("${EXTERNAL_DIR}/imgui" "${CMAKE_BINARY_DIR}/imgui")
+    add_subdirectory("${EXTERNAL_DIR}/imgui" "${CMAKE_BINARY_DIR}/_external/imgui")
 endif()
 
 if(NOT TARGET ImGuiFileDialog)
-    add_subdirectory("${EXTERNAL_DIR}/imgui_filedialog" "${CMAKE_BINARY_DIR}/imgui_filedialog")
+    add_subdirectory("${EXTERNAL_DIR}/imgui_filedialog" "${CMAKE_BINARY_DIR}/_external/imgui_filedialog")
 endif()
 
 if(NOT TARGET ImNodeFlow)
-    add_subdirectory("${EXTERNAL_DIR}/ImNodeFlow" "${CMAKE_BINARY_DIR}/ImNodeFlow")
+    add_subdirectory("${EXTERNAL_DIR}/ImNodeFlow" "${CMAKE_BINARY_DIR}/_external/ImNodeFlow")
 endif()
 
 if(NOT TARGET ImGuizmo)
-    add_subdirectory("${EXTERNAL_DIR}/ImGuizmo" "${CMAKE_BINARY_DIR}/ImGuizmo")
+    add_subdirectory("${EXTERNAL_DIR}/ImGuizmo" "${CMAKE_BINARY_DIR}/_external/ImGuizmo")
 endif()
 
-# Zep (optional)
 set(ZEP_AVAILABLE FALSE)
-if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt")
+if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
     set(BUILD_IMGUI OFF CACHE BOOL "" FORCE)
     set(BUILD_QT OFF CACHE BOOL "" FORCE)
     set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/zep")
+    add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/_external/zep")
+    set(ZEP_AVAILABLE TRUE)
+elseif(TARGET Zep)
     set(ZEP_AVAILABLE TRUE)
 endif()
 
-# Collect sources
+set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVE})
+
 file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/*.cpp"
@@ -53,23 +56,22 @@ file(GLOB_RECURSE ANISTUDIO_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/AniStudio.cpp"
 )
 
-# Create library - uses BUILD_SHARED_LIBS automatically
 add_library(AniStudioCore ${ANISTUDIO_SOURCES})
 
-# CRITICAL FIX: Export symbols when building as DLL
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(AniStudioCore PRIVATE BUILDING_ANISTUDIO)
-    # On Windows, export all symbols automatically
     if(WIN32)
-        set_target_properties(AniStudioCore PROPERTIES
+        set_target_properties(AniStudioCore PROPERTIES 
             WINDOWS_EXPORT_ALL_SYMBOLS ON
+            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
         )
     endif()
 else()
     target_compile_definitions(AniStudioCore PRIVATE BUILDING_ANISTUDIO)
 endif()
 
-# Includes
 target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui>
@@ -88,6 +90,8 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/nlohmann_json"
+    "${EXTERNAL_DIR}/imgui"
+    "${EXTERNAL_DIR}/imgui/backends"
     "${EXTERNAL_DIR}/imgui_filedialog"
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"
@@ -96,12 +100,14 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/stb"
 )
 
-# Link against AniEngineCore!
 target_link_libraries(AniStudioCore PUBLIC
-    AniEngineCore      # <-- CRITICAL: This provides ECS, EntityManager, etc.
+    AniEngineCore
     glfw
     GLEW::GLEW
     exiv2::exiv2
+)
+
+target_link_libraries(AniStudioCore PRIVATE
     ImGui
     ImGuiFileDialog
     ImNodeFlow
@@ -109,7 +115,7 @@ target_link_libraries(AniStudioCore PUBLIC
 )
 
 if(ZEP_AVAILABLE AND TARGET Zep::Zep)
-    target_link_libraries(AniStudioCore PUBLIC Zep::Zep)
+    target_link_libraries(AniStudioCore PRIVATE Zep::Zep)
     target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
 endif()
 
@@ -124,12 +130,13 @@ target_compile_definitions(AniStudioCore PUBLIC
     IMSEQUENCER_AVAILABLE
 )
 
-# Create an alias for cleaner target naming
 add_library(AniStudio::AniStudioCore ALIAS AniStudioCore)
 
 message(STATUS "AniStudio: BUILD_SHARED_LIBS = ${BUILD_SHARED_LIBS}")
 if(BUILD_SHARED_LIBS)
-    message(STATUS "AniStudio: Building as SHARED library (.dll) with symbol export")
+    message(STATUS "AniStudio: Building as SHARED library (.dll)")
+    message(STATUS "AniStudio: Output -> ${CMAKE_BINARY_DIR}/lib")
 else()
     message(STATUS "AniStudio: Building as STATIC library (.lib)")
+    message(STATUS "AniStudio: Output -> ${CMAKE_BINARY_DIR}/lib")
 endif()

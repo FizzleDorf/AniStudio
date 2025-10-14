@@ -10,7 +10,6 @@ if(WIN32)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# Get paths
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     get_filename_component(EXTERNAL_DIR "${CMAKE_SOURCE_DIR}/../../external" ABSOLUTE)
     get_filename_component(ROOT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../../include" ABSOLUTE)
@@ -19,7 +18,6 @@ else()
     get_filename_component(ROOT_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include" ABSOLUTE)
 endif()
 
-# Collect sources
 file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
@@ -28,21 +26,22 @@ file(GLOB_RECURSE ANIENGINE_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/AniEngine.cpp"
 )
 
-# Create library - uses BUILD_SHARED_LIBS automatically
 add_library(AniEngineCore ${ANIENGINE_SOURCES})
 
-# CRITICAL FIX: Export symbols when building as DLL
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(AniEngineCore PRIVATE BUILDING_ANIENGINE)
-    # On Windows, export all symbols automatically
     if(WIN32)
-        set_target_properties(AniEngineCore PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        set_target_properties(AniEngineCore PROPERTIES 
+            WINDOWS_EXPORT_ALL_SYMBOLS ON
+            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+        )
     endif()
 else()
     target_compile_definitions(AniEngineCore PRIVATE BUILDING_ANISTUDIO)
 endif()
 
-# Includes
 target_include_directories(AniEngineCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs>
@@ -63,7 +62,6 @@ target_include_directories(AniEngineCore PUBLIC
     "${EXTERNAL_DIR}/stb_image"
 )
 
-# Link
 target_link_libraries(AniEngineCore PUBLIC
     ${OpenCV_LIBS}
     ZLIB::ZLIB
@@ -86,7 +84,9 @@ add_library(AniEngine::AniEngineCore ALIAS AniEngineCore)
 
 message(STATUS "AniEngine: BUILD_SHARED_LIBS = ${BUILD_SHARED_LIBS}")
 if(BUILD_SHARED_LIBS)
-    message(STATUS "AniEngine: Building as SHARED library (.dll) with symbol export")
+    message(STATUS "AniEngine: Building as SHARED library (.dll)")
+    message(STATUS "AniEngine: Output -> ${CMAKE_BINARY_DIR}/lib")
 else()
     message(STATUS "AniEngine: Building as STATIC library (.lib)")
+    message(STATUS "AniEngine: Output -> ${CMAKE_BINARY_DIR}/lib")
 endif()
