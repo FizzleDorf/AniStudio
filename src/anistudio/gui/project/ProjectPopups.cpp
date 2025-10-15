@@ -1,5 +1,6 @@
 #include "ProjectPopups.hpp"
 #include "ProjectManager.hpp"
+#include "Events.hpp"
 #include "FilePaths.hpp"
 #include <filesystem>
 #include <fstream>
@@ -304,6 +305,7 @@ namespace GUI {
 					std::string displayName = path.filename().string();
 
 					if (ImGui::Selectable(displayName.c_str())) {
+
 						if (projectMgr.LoadProject(projectPath)) {
 							std::cout << "[ProjectPopups] Loaded project: " << projectPath << std::endl;
 							state.showLoadProjectPopup = false;

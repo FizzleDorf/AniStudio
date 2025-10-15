@@ -46,11 +46,6 @@ namespace GUI {
 
 			if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
 				// If a project is already open, close it first
-				if (projectManager.IsProjectOpen()) {
-					std::cout << "[MenuBar] Project is open, closing current project before opening new one" << std::endl;
-					ANI::Events::Ref().QueueEvent("CloseProject");
-					// The LoadProjectPopup will be shown after CloseProject completes
-				}
 				popupState.showLoadProjectPopup = true;
 				popupState.RefreshRecentProjects(projectManager);
 			}
