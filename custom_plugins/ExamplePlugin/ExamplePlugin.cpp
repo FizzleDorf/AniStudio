@@ -11,9 +11,6 @@
 #include <string>
 #include <random>
 
-// ============================================
-// Custom Component - derives from BaseComponent
-// ============================================
 struct ExampleComponent : public ECS::BaseComponent {
 	std::string message;
 	float value;
@@ -43,9 +40,6 @@ struct ExampleComponent : public ECS::BaseComponent {
 	}
 };
 
-// ============================================
-// Custom System - uses template-based ECS
-// ============================================
 class ExampleSystem : public ECS::BaseSystem {
 public:
 	ExampleSystem(ECS::EntityManager& entityMgr) : BaseSystem(entityMgr) {
@@ -86,9 +80,6 @@ public:
 	}
 };
 
-// ============================================
-// Plugin View
-// ============================================
 class ExamplePluginView : public GUI::BaseView {
 public:
 	ExamplePluginView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
@@ -248,9 +239,6 @@ private:
 	}
 };
 
-// ============================================
-// MAIN PLUGIN CLASS - SIMPLIFIED
-// ============================================
 class ExamplePlugin : public Plugins::BasePlugin {
 public:
 	ExamplePlugin() : BasePlugin("ExamplePlugin", "2.1.0"), m_imguiContext(nullptr) {
@@ -261,9 +249,6 @@ public:
 		LogInfo("Plugin destructed");
 	}
 
-	// ============================================
-	// ADDED: IMGUI CONTEXT HANDLING
-	// ============================================
 	void SetImGuiContext(ImGuiContext* context) override {
 		m_imguiContext = context;
 		LogInfo("ImGui context set for plugin: " + std::to_string(reinterpret_cast<uintptr_t>(m_imguiContext)));
@@ -273,15 +258,11 @@ public:
 		return m_imguiContext != nullptr;
 	}
 
-	// ============================================
-	// DIRECT MANAGER ACCESS - NO REGISTRY
-	// ============================================
 	bool OnEngineInit(ECS::EntityManager& entityMgr) override {
 		LogInfo("ENGINE INIT - Direct access v2.1.0");
 
 		m_entityMgr = &entityMgr;
 
-		// REGISTER DIRECTLY WITH ENTITY MANAGER
 		LogInfo("Registering component...");
 		entityMgr.RegisterComponent<ExampleComponent>("ExampleComponent");
 
@@ -295,7 +276,6 @@ public:
 	bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr) override {
 		LogInfo("STUDIO INIT - Direct access v2.1.0");
 
-		// First do engine init
 		if (!OnEngineInit(entityMgr)) {
 			LogError("Failed to initialize engine components");
 			return false;
@@ -303,7 +283,6 @@ public:
 
 		m_viewMgr = &viewMgr;
 
-		// REGISTER DIRECTLY WITH VIEW MANAGER
 		LogInfo("Registering view...");
 		viewMgr.RegisterView<ExamplePluginView>("ExamplePluginView", "ExamplePlugin");
 
@@ -363,9 +342,6 @@ private:
 	ImGuiContext* m_imguiContext = nullptr;
 };
 
-// ============================================
-// EXPORTS
-// ============================================
 extern "C" {
 	__declspec(dllexport) Plugins::BasePlugin* CreatePlugin() {
 		std::cout << "[ExamplePlugin] CREATE PLUGIN v2.1.0" << std::endl;
