@@ -253,12 +253,24 @@ private:
 // ============================================
 class ExamplePlugin : public Plugins::BasePlugin {
 public:
-	ExamplePlugin() : BasePlugin("ExamplePlugin", "2.1.0") {
+	ExamplePlugin() : BasePlugin("ExamplePlugin", "2.1.0"), m_imguiContext(nullptr) {
 		LogInfo("Plugin constructed");
 	}
 
 	~ExamplePlugin() {
 		LogInfo("Plugin destructed");
+	}
+
+	// ============================================
+	// ADDED: IMGUI CONTEXT HANDLING
+	// ============================================
+	void SetImGuiContext(ImGuiContext* context) override {
+		m_imguiContext = context;
+		LogInfo("ImGui context set for plugin: " + std::to_string(reinterpret_cast<uintptr_t>(m_imguiContext)));
+	}
+
+	bool HasValidImGuiContext() const override {
+		return m_imguiContext != nullptr;
 	}
 
 	// ============================================
@@ -310,6 +322,11 @@ public:
 	}
 
 	void OnUpdate(float deltaTime) override {
+		// Set ImGui context before any ImGui operations
+		if (m_imguiContext) {
+			ImGui::SetCurrentContext(m_imguiContext);
+		}
+
 		static float timer = 0.0f;
 		timer += deltaTime;
 
@@ -336,12 +353,14 @@ public:
 		m_entityMgr = nullptr;
 		m_viewMgr = nullptr;
 		m_viewId = GUI::MAX_VIEW_COUNT;
+		m_imguiContext = nullptr;
 	}
 
 private:
 	ECS::EntityManager* m_entityMgr = nullptr;
 	GUI::ViewManager* m_viewMgr = nullptr;
 	GUI::ViewTypeID m_viewId = GUI::MAX_VIEW_COUNT;
+	ImGuiContext* m_imguiContext = nullptr;
 };
 
 // ============================================

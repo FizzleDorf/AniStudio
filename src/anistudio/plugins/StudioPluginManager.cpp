@@ -42,6 +42,15 @@ namespace Plugins {
 				return false;
 			}
 
+			// ============================================
+			// ADDED: PASS IMGUI CONTEXT TO PLUGIN
+			// ============================================
+			if (mainImGuiContext) {
+				std::cout << "[StudioPluginManager] Setting ImGui context for plugin: "
+					<< mainImGuiContext << std::endl;
+				plugin.instance->SetImGuiContext(mainImGuiContext);
+			}
+
 			plugin.version = plugin.instance->GetVersion();
 			std::cout << "[StudioPluginManager] Plugin instance created, version: "
 				<< plugin.version << std::endl;

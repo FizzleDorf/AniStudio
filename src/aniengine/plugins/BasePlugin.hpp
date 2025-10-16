@@ -11,6 +11,9 @@ namespace GUI {
 	class ViewManager;
 }
 
+// Forward declaration for ImGui
+struct ImGuiContext;
+
 namespace Plugins {
 
 	class BasePlugin {
@@ -26,6 +29,18 @@ namespace Plugins {
 
 		// Internal state management - called by PluginManager
 		void SetInitialized(bool init) { this->initialized = init; }
+
+		// ============================================
+		// IMGUI CONTEXT MANAGEMENT - ADD THESE METHODS
+		// ============================================
+		virtual void SetImGuiContext(ImGuiContext* context) {
+			// Default implementation does nothing
+			// Plugins that need ImGui should override this
+		}
+
+		virtual bool HasValidImGuiContext() const {
+			return false;
+		}
 
 		// ============================================
 		// SIMPLIFIED: Direct manager access, no registry!
