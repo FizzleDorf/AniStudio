@@ -17,11 +17,6 @@ namespace GUI {
 		ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-
-			if (!windowOpen) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-			}
-
 			if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 				ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
 				ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -74,6 +69,13 @@ namespace GUI {
 			}
 		}
 		ImGui::End();
+
+		if (!windowOpen) {
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+		}
 	}
 
 	void ConvertView::Convert() {
@@ -91,10 +93,8 @@ namespace GUI {
 		mgr.GetComponent<ECS::SamplerComponent>(entity) = samplerComp;
 		mgr.GetComponent<ECS::VaeComponent>(entity) = vaeComp;
 
-		ANI::Event event;
-		event.entityID = entity;
-		event.type = ANI::EventType::ConvertToGGUF;
-		ANI::Events::Ref().QueueEvent(event);
+		auto taskData = std::make_pair(entity, ECS::SDCPPSystem::TaskType::Conversion);
+		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
 
 	void ConvertView::RenderVaeLoader() {

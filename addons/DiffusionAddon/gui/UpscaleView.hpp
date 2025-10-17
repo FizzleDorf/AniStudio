@@ -53,6 +53,7 @@ namespace GUI {
 		void ResetEntity();
 		bool IsEntitySafeToUse(ECS::EntityID entity) const;
 		std::vector<std::string> GetCategoryRenderOrder() const;
+		void RenderQueueControls();
 
 		// Component rendering
 		void RenderEntityComponents(const EntityID entity);
@@ -66,6 +67,10 @@ namespace GUI {
 		void RenderMetadataControls();
 		void SaveMetadataToJson(const std::string &filepath);
 		void LoadMetadataFromJson(const std::string &filepath);
+
+		// Queue control variables
+		int numQueues = 1;
+		bool isPaused = false;
 	};
 
 } // namespace GUI

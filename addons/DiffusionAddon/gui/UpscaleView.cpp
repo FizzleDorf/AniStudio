@@ -3,6 +3,7 @@
 #include "Constants.hpp"
 #include "UISchema.hpp"
 #include "ContextMenuUtils.hpp"
+#include "SDcppSystem.hpp"
 #include <ImGuiFileDialog.h>
 #include <filesystem>
 
@@ -306,22 +307,82 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.outputDirectory);
 		}
 
-		// Queue event for upscaling
-		Event event;
-		event.entityID = newEntity;
-		event.type = EventType::UpscaleRequest;
-		ANI::Events::Ref().QueueEvent(event);
+		// NEW: Use proper event system with data
+		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Upscaling);
+		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 
 		std::cout << "Upscaling request queued for entity: " << newEntity << std::endl;
 	}
 
+	void UpscaleView::RenderQueueControls() {
+		ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
+		if (ImGui::Begin("Upscale Queue")) {
+			// Queue count input
+			if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
+				if (numQueues < 1) {
+					numQueues = 1;
+				}
+			}
+
+			// Queue button
+			if (ImGui::Button("Queue Upscale", ImVec2(-FLT_MIN, 0))) {
+				for (int i = 0; i < numQueues; i++) {
+					HandleUpscaleEvent();
+				}
+			}
+
+			// Control buttons
+			ImGui::Separator();
+
+			if (isPaused) {
+				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
+					ANI::Events::Ref().QueueEvent("ResumeDiffusionWorker");
+					isPaused = false;
+				}
+			}
+			else {
+				if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
+					ANI::Events::Ref().QueueEvent("PauseDiffusionWorker");
+					isPaused = true;
+				}
+			}
+
+			if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
+				ANI::Events::Ref().QueueEvent("StopCurrentDiffusionTask");
+			}
+
+			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
+				ANI::Events::Ref().QueueEvent("ClearDiffusionQueue");
+			}
+
+			// Display current queue status
+			ImGui::Separator();
+			auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+			if (sdSystem) {
+				auto queueSize = sdSystem->GetQueueSize();
+				bool hasActiveTask = sdSystem->HasActiveTask();
+
+				if (hasActiveTask) {
+					ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Status: Processing");
+				}
+				else if (queueSize > 0) {
+					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Status: Queued (%zu)", queueSize);
+				}
+				else {
+					ImGui::Text("Status: Idle");
+				}
+			}
+		}
+		ImGui::End();
+	}
+
 	void UpscaleView::Render() {
+		// Render queue controls window
+		RenderQueueControls();
+
+		// Main upscale configuration window
 		ImGui::SetNextWindowSize(ImVec2(400, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-
-			if (!windowOpen) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-			}
 
 			if (ImGui::CollapsingHeader("Metadata Controls")) {
 				RenderMetadataControls();
@@ -343,9 +404,25 @@ namespace GUI {
 				HandleUpscaleEvent();
 			}
 
+			// Quick queue button
+			ImGui::SameLine();
+			if (ImGui::Button("Queue 4", ImVec2(-FLT_MIN, 0))) {
+				numQueues = 4;
+				for (int i = 0; i < numQueues; i++) {
+					HandleUpscaleEvent();
+				}
+			}
+
 			RenderMainContextMenu();
 		}
 		ImGui::End();
+
+		if (!windowOpen) {
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+		}
 	}
 
 	nlohmann::json UpscaleView::Serialize() const {

@@ -394,10 +394,9 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		Event event;
-		event.entityID = newEntity;
-		event.type = EventType::InferenceRequest;
-		ANI::Events::Ref().QueueEvent(event);
+		// NEW: Use proper event system with data
+		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Inference);
+		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
 
 	void DiffusionView::HandleI2IEvent() {
@@ -419,10 +418,9 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		Event event;
-		event.entityID = newEntity;
-		event.type = EventType::Img2ImgRequest;
-		ANI::Events::Ref().QueueEvent(event);
+		// NEW: Use proper event system with data
+		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Img2Img);
+		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
 
 	void DiffusionView::HandleEditEvent() {
@@ -444,10 +442,9 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		Event event;
-		event.entityID = newEntity;
-		event.type = EventType::EditRequest;
-		ANI::Events::Ref().QueueEvent(event);
+		// NEW: Use proper event system with data
+		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Edit);
+		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
 
 	ECS::EntityID DiffusionView::GetCurrentEntity() const {
@@ -516,42 +513,35 @@ namespace GUI {
 
 			if (isPaused) {
 				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
-					Event event;
-					event.type = EventType::ResumeInference;
-					ANI::Events::Ref().QueueEvent(event);
+					ANI::Events::Ref().QueueEvent("ResumeDiffusionWorker");
 					isPaused = false;
 				}
 			}
 			else {
 				if (ImGui::Button("Pause", ImVec2(-FLT_MIN, 0))) {
-					Event event;
-					event.type = EventType::PauseInference;
-					ANI::Events::Ref().QueueEvent(event);
+					ANI::Events::Ref().QueueEvent("PauseDiffusionWorker");
 					isPaused = true;
 				}
 			}
 
 			if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
-				Event event;
-				event.type = EventType::StopCurrentTask;
-				ANI::Events::Ref().QueueEvent(event);
+				ANI::Events::Ref().QueueEvent("StopCurrentDiffusionTask");
 			}
 
 			if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
-				Event event;
-				event.type = EventType::ClearInferenceQueue;
-				ANI::Events::Ref().QueueEvent(event);
+				ANI::Events::Ref().QueueEvent("ClearDiffusionQueue");
 			}
 
 			ImGui::Separator();
 
+			// Queue table with move/remove operations
 			if (ImGui::BeginTable("Queue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 				ImGui::TableSetupColumn("ID", ImGuiTableColumnFlags_WidthFixed, 42.0f);
 				ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 44.0f);
 				ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
 				ImGui::TableHeadersRow();
 
-				auto sdSystem = mgr.GetSystem<SDCPPSystem>();
+				auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
 				if (sdSystem) {
 					auto queueItems = sdSystem->GetQueueSnapshot();
 					for (size_t i = 0; i < queueItems.size(); i++) {
@@ -562,60 +552,6 @@ namespace GUI {
 						// ID column with context menu
 						ImGui::TableNextColumn();
 						ImGui::Text("%d", static_cast<int>(item.entityID));
-
-						std::string queuePopupId = "QueueItemContext##" + std::to_string(item.entityID);
-						if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-							ImGui::OpenPopup(queuePopupId.c_str());
-						}
-
-						if (ImGui::BeginPopup(queuePopupId.c_str())) {
-							ImGui::Text("Queue Item: %zu", item.entityID);
-							ImGui::Separator();
-
-							if (ImGui::MenuItem("Copy Entity")) {
-								contextMenuUtils->CopyEntity(item.entityID);
-							}
-
-							if (ImGui::BeginMenu("Copy Component")) {
-								auto componentIds = mgr.GetEntityComponents(item.entityID);
-								if (componentIds.empty()) {
-									ImGui::TextDisabled("No components");
-								}
-								else {
-									for (ECS::ComponentTypeID compId : componentIds) {
-										std::string componentName = mgr.GetComponentNameById(compId);
-										if (ImGui::MenuItem(componentName.c_str())) {
-											contextMenuUtils->CopyComponent(item.entityID, compId);
-										}
-									}
-								}
-								ImGui::EndMenu();
-							}
-
-							ImGui::Separator();
-
-							if (contextMenuUtils->HasValidClipboardData()) {
-								EntityID currentEntity = GetCurrentEntity();
-								if (contextMenuUtils->CanPasteComponent()) {
-									if (ImGui::MenuItem("Paste Component to Template")) {
-										contextMenuUtils->PasteComponent(currentEntity);
-									}
-								}
-								if (contextMenuUtils->CanPasteEntity()) {
-									if (ImGui::MenuItem("Paste Entity to Template")) {
-										nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
-										if (clipboardData.contains("data")) {
-											mgr.DeserializeEntity(clipboardData["data"], currentEntity);
-										}
-									}
-								}
-							}
-							else {
-								ImGui::TextDisabled("Nothing to paste");
-							}
-
-							ImGui::EndPopup();
-						}
 
 						// Status column
 						ImGui::TableNextColumn();
@@ -631,39 +567,39 @@ namespace GUI {
 						if (!item.processing) {
 							if (i > 0) {
 								if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
-									sdSystem->MoveInQueue(i, i - 1);
+									auto moveData = std::make_pair(i, i - 1);
+									ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
 								}
 								ImGui::SameLine();
 							}
 
 							if (i < queueItems.size() - 1) {
 								if (ImGui::ArrowButton(("down##" + std::to_string(i)).c_str(), ImGuiDir_Down)) {
-									sdSystem->MoveInQueue(i, i + 1);
+									auto moveData = std::make_pair(i, i + 1);
+									ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
 								}
 								ImGui::SameLine();
 							}
 
 							if (i > 0) {
 								if (ImGui::Button(("Top##Top" + std::to_string(i)).c_str())) {
-									if (queueItems[0].processing) {
-										sdSystem->MoveInQueue(i, 1);
-									}
-									else {
-										sdSystem->MoveInQueue(i, 0);
-									}
+									size_t targetIndex = queueItems[0].processing ? 1 : 0;
+									auto moveData = std::make_pair(i, targetIndex);
+									ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
 								}
 								ImGui::SameLine();
 							}
 
 							if (i < queueItems.size() - 1) {
 								if (ImGui::Button(("Bottom##Bottom" + std::to_string(i)).c_str())) {
-									sdSystem->MoveInQueue(i, queueItems.size() - 1);
+									auto moveData = std::make_pair(i, queueItems.size() - 1);
+									ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
 								}
 								ImGui::SameLine();
 							}
 
 							if (ImGui::Button(("X##Remove" + std::to_string(i)).c_str())) {
-								sdSystem->RemoveFromQueue(i);
+								ANI::Events::Ref().QueueEventWithData("RemoveFromDiffusionQueue", i);
 							}
 						}
 					}
@@ -679,11 +615,6 @@ namespace GUI {
 
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-
-			if (!windowOpen) {
-				ANI::Events::Ref().RequestRemoveView(GetID(), viewName);
-			}
-
 			if (ImGui::CollapsingHeader("Metadata Controls")) {
 				RenderMetadataControls();
 			}
@@ -719,6 +650,13 @@ namespace GUI {
 			RenderMainContextMenu();
 		}
 		ImGui::End();
+
+		if (!windowOpen) {
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+		}
 	}
 
 	nlohmann::json DiffusionView::Serialize() const {
