@@ -16,6 +16,82 @@ if(UNIX AND NOT APPLE)
     set(OpenGL_GL_PREFERENCE GLVND)
 endif()
 
+# ============================================
+# STABLE DIFFUSION BACKEND OPTIONS
+# ============================================
+option(SD_CUDA "Enable CUDA backend" OFF)
+option(SD_VULKAN "Enable Vulkan backend" OFF)
+option(SD_HIPBLAS "Enable HipBLAS backend" OFF)
+option(SD_METAL "Enable Metal backend" OFF)
+option(SD_OPENCL "Enable OpenCL backend" OFF)
+option(SD_SYCL "Enable SYCL backend" OFF)
+option(SD_MUSA "Enable MUSA backend" OFF)
+option(SD_FAST_SOFTMAX "Enable fast softmax" OFF)
+
+# Backend setup and validation - BEFORE adding stable-diffusion subdirectory
+if(SD_CUDA)
+    enable_language(CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+    set(CMAKE_CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures" FORCE)
+    add_definitions(-DSD_USE_CUDA)
+    find_package(CUDAToolkit REQUIRED)
+    message(STATUS "DiffusionAddon: CUDA backend enabled with architecture ${CMAKE_CUDA_ARCHITECTURES}")
+    
+    if(NOT CUDAToolkit_FOUND)
+        message(FATAL_ERROR "CUDA toolkit not found!")
+    endif()
+    
+    if(SD_FAST_SOFTMAX)
+        message(STATUS "DiffusionAddon: Fast softmax enabled")
+    endif()
+endif()
+
+if(SD_VULKAN)
+    add_definitions(-DSD_USE_VULKAN)
+    find_package(Vulkan REQUIRED)
+    message(STATUS "DiffusionAddon: Vulkan backend enabled")
+    if(NOT Vulkan_FOUND)
+        message(FATAL_ERROR "Vulkan SDK not found!")
+    endif()
+endif()
+
+if(SD_OPENCL)
+    add_definitions(-DSD_USE_OPENCL)
+    find_package(OpenCL REQUIRED)
+    message(STATUS "DiffusionAddon: OpenCL backend enabled")
+    if(NOT OpenCL_FOUND)
+        message(FATAL_ERROR "OpenCL not found!")
+    endif()
+endif()
+
+if(SD_METAL)
+    message(STATUS "DiffusionAddon: Metal backend enabled")
+    add_definitions(-DSD_USE_METAL)
+endif()
+
+if(SD_HIPBLAS)
+    message(STATUS "DiffusionAddon: HipBLAS backend enabled")
+    add_definitions(-DSD_USE_CUDA)
+endif()
+
+if(SD_MUSA)
+    message(STATUS "DiffusionAddon: MUSA backend enabled")
+    add_definitions(-DSD_USE_CUDA)
+endif()
+
+if(SD_SYCL)
+    message(STATUS "DiffusionAddon: SYCL backend enabled")
+    add_definitions(-DSD_USE_SYCL)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-narrowing -fsycl")
+    if(WIN32)
+        set(SYCL_COMPILE_OPTIONS /fp:precise)
+    else()
+        set(SYCL_COMPILE_OPTIONS -fp-model=precise)
+    endif()
+endif()
+
+# ============================================
 # Get absolute paths
 get_filename_component(ANISTUDIO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 get_filename_component(CONAN_TOOLCHAIN_PATH "${ANISTUDIO_ROOT}/build/conan/conan_toolchain.cmake" ABSOLUTE)
@@ -116,6 +192,12 @@ else()
     message(WARNING "AniStudio executable not found at ${ANISTUDIO_EXE}")
 endif()
 
+# Add stable-diffusion.cpp with backend options passed through
+# Force stable-diffusion to build as static library
+set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "Build stable-diffusion as static library" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
+
+# Add the subdirectory - stable-diffusion will be built as static lib
 add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
 
 # Check for stable-diffusion target
@@ -204,6 +286,100 @@ target_link_libraries(DiffusionAddon PRIVATE
     $<$<PLATFORM_ID:Windows>:user32>
 )
 
+# Link backend-specific libraries and targets
+if(SD_CUDA)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_CUDA)
+    target_link_libraries(DiffusionAddon PRIVATE 
+        CUDA::cudart
+        CUDA::cublas
+        CUDA::cublasLt
+        CUDA::curand
+        CUDA::cufft
+    )
+    
+    # Link CUDA backend targets from ggml
+    foreach(CUDA_TARGET ggml-cuda ggml_cuda ggml-backend-cuda common-cuda)
+        if(TARGET ${CUDA_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${CUDA_TARGET})
+            message(STATUS "DiffusionAddon: Linked CUDA backend ${CUDA_TARGET}")
+        endif()
+    endforeach()
+endif()
+
+if(SD_VULKAN)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_VULKAN)
+    target_link_libraries(DiffusionAddon PRIVATE Vulkan::Vulkan)
+    
+    # Link Vulkan backend targets
+    foreach(VULKAN_TARGET ggml-vulkan ggml_vulkan ggml-backend-vulkan common-vulkan)
+        if(TARGET ${VULKAN_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${VULKAN_TARGET})
+            message(STATUS "DiffusionAddon: Linked Vulkan backend ${VULKAN_TARGET}")
+        endif()
+    endforeach()
+endif()
+
+if(SD_OPENCL)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_OPENCL)
+    target_link_libraries(DiffusionAddon PRIVATE OpenCL::OpenCL)
+    
+    # Link OpenCL backend targets
+    foreach(OPENCL_TARGET ggml-opencl ggml_opencl ggml-backend-opencl common-opencl)
+        if(TARGET ${OPENCL_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${OPENCL_TARGET})
+            message(STATUS "DiffusionAddon: Linked OpenCL backend ${OPENCL_TARGET}")
+        endif()
+    endforeach()
+endif()
+
+if(SD_METAL)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_METAL)
+    
+    # Link Metal backend targets
+    foreach(METAL_TARGET ggml-metal ggml_metal ggml-backend-metal common-metal)
+        if(TARGET ${METAL_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${METAL_TARGET})
+            message(STATUS "DiffusionAddon: Linked Metal backend ${METAL_TARGET}")
+        endif()
+    endforeach()
+endif()
+
+if(SD_HIPBLAS)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_CUDA)
+    
+    # Link HipBLAS backend targets
+    foreach(HIPBLAS_TARGET ggml-hipblas ggml_hipblas ggml-backend-hipblas common-hipblas)
+        if(TARGET ${HIPBLAS_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${HIPBLAS_TARGET})
+            message(STATUS "DiffusionAddon: Linked HipBLAS backend ${HIPBLAS_TARGET}")
+        endif()
+    endforeach()
+endif()
+
+if(SD_SYCL)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_SYCL)
+    
+    # Link SYCL backend targets
+    foreach(SYCL_TARGET ggml-sycl ggml_sycl ggml-backend-sycl common-sycl)
+        if(TARGET ${SYCL_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${SYCL_TARGET})
+            message(STATUS "DiffusionAddon: Linked SYCL backend ${SYCL_TARGET}")
+        endif()
+    endforeach()
+endif()
+
+if(SD_MUSA)
+    target_compile_definitions(DiffusionAddon PRIVATE SD_USE_CUDA)
+    
+    # Link MUSA backend targets
+    foreach(MUSA_TARGET ggml-musa ggml_musa ggml-backend-musa common-musa)
+        if(TARGET ${MUSA_TARGET})
+            target_link_libraries(DiffusionAddon PRIVATE ${MUSA_TARGET})
+            message(STATUS "DiffusionAddon: Linked MUSA backend ${MUSA_TARGET}")
+        endif()
+    endforeach()
+endif()
+
 # Link Zep if available
 if(ZEP_AVAILABLE AND TARGET Zep::Zep)
     target_link_libraries(DiffusionAddon PRIVATE Zep::Zep)
@@ -240,6 +416,11 @@ target_compile_definitions(DiffusionAddon PRIVATE
     $<$<CONFIG:Release>:NDEBUG>
 )
 
+# Apply SYCL compile options if enabled
+if(SD_SYCL AND DEFINED SYCL_COMPILE_OPTIONS)
+    target_compile_options(DiffusionAddon PRIVATE ${SYCL_COMPILE_OPTIONS})
+endif()
+
 # Output directories
 set(ADDON_BASE_DIR "${ANISTUDIO_ROOT}/build/addons/DiffusionAddon")
 set(ADDON_STAGING_DIR "${ADDON_BASE_DIR}/staging")
@@ -265,4 +446,16 @@ message(STATUS "AniEngineCore: ${AniEngineCore_LIB}")
 message(STATUS "AniStudioCore: ${AniStudioCore_LIB}")
 message(STATUS "Zep available: ${ZEP_AVAILABLE}")
 message(STATUS "CURL available: ${CURL_FOUND}")
+message(STATUS "")
+message(STATUS "Backend Configuration:")
+message(STATUS "  CUDA: ${SD_CUDA}")
+message(STATUS "  Vulkan: ${SD_VULKAN}")
+message(STATUS "  HipBLAS: ${SD_HIPBLAS}")
+message(STATUS "  Metal: ${SD_METAL}")
+message(STATUS "  OpenCL: ${SD_OPENCL}")
+message(STATUS "  SYCL: ${SD_SYCL}")
+message(STATUS "  MUSA: ${SD_MUSA}")
+if(SD_FAST_SOFTMAX)
+    message(STATUS "  Fast Softmax: ENABLED")
+endif()
 message(STATUS "===========================================")

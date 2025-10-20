@@ -17,6 +17,33 @@ set STAGING_DIR=%ADDON_MAIN_DIR%\staging
 set STAGING_DLL=%STAGING_DIR%\%ADDON_NAME%.dll
 set LIBS_DIR=%ADDON_MAIN_DIR%\libs
 
+REM Backend options (set to ON to enable)
+set SD_CUDA=OFF
+set SD_VULKAN=OFF
+set SD_HIPBLAS=OFF
+set SD_METAL=OFF
+set SD_OPENCL=OFF
+set SD_SYCL=OFF
+set SD_MUSA=OFF
+set SD_FAST_SOFTMAX=OFF
+set CLEAN_BUILD=0
+
+REM Parse command line arguments
+:parse_args
+if "%~1"=="" goto end_parse
+if /i "%~1"=="-clean" set CLEAN_BUILD=1
+if /i "%~1"=="--cuda" set SD_CUDA=ON
+if /i "%~1"=="--vulkan" set SD_VULKAN=ON
+if /i "%~1"=="--hipblas" set SD_HIPBLAS=ON
+if /i "%~1"=="--metal" set SD_METAL=ON
+if /i "%~1"=="--opencl" set SD_OPENCL=ON
+if /i "%~1"=="--sycl" set SD_SYCL=ON
+if /i "%~1"=="--musa" set SD_MUSA=ON
+if /i "%~1"=="--fast-softmax" set SD_FAST_SOFTMAX=ON
+shift
+goto parse_args
+:end_parse
+
 cd /d "%ADDON_DIR%"
 
 echo Directory Configuration:
@@ -28,6 +55,16 @@ echo   Addon Main Dir: %ADDON_MAIN_DIR%
 echo   Staging Dir: %STAGING_DIR%
 echo   Libraries Dir: %LIBS_DIR%
 echo   Build Target: %STAGING_DLL%
+echo.
+echo Backend Configuration:
+echo   CUDA: %SD_CUDA%
+echo   Vulkan: %SD_VULKAN%
+echo   HipBLAS: %SD_HIPBLAS%
+echo   Metal: %SD_METAL%
+echo   OpenCL: %SD_OPENCL%
+echo   SYCL: %SD_SYCL%
+echo   MUSA: %SD_MUSA%
+echo   Fast Softmax: %SD_FAST_SOFTMAX%
 echo.
 
 REM Check if main project is built
@@ -42,7 +79,7 @@ if not exist "%ROOT_DIR%\build\lib\AniEngineCore.lib" (
 echo [OK] Main project libraries found
 
 REM Clean old build if requested
-if "%1"=="-clean" (
+if %CLEAN_BUILD%==1 (
     if exist "%BUILD_DIR%" (
         echo Cleaning old build directory...
         rmdir /s /q "%BUILD_DIR%"
@@ -61,7 +98,22 @@ cd /d "%BUILD_DIR%"
 REM Configure CMake
 if not exist "CMakeCache.txt" (
     echo Configuring CMake...
-    cmake .. -DCMAKE_BUILD_TYPE=Release
+    
+    REM Build CMake command with backend options
+    set CMAKE_CMD=cmake .. -DCMAKE_BUILD_TYPE=Release
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_CUDA=%SD_CUDA%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_VULKAN=%SD_VULKAN%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_HIPBLAS=%SD_HIPBLAS%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_METAL=%SD_METAL%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_OPENCL=%SD_OPENCL%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_SYCL=%SD_SYCL%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_MUSA=%SD_MUSA%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_FAST_SOFTMAX=%SD_FAST_SOFTMAX%
+    
+    echo Running: !CMAKE_CMD!
+    echo.
+    !CMAKE_CMD!
+    
     if %errorlevel% neq 0 (
         echo ERROR: CMake configuration failed!
         pause
@@ -70,6 +122,7 @@ if not exist "CMakeCache.txt" (
     echo [OK] CMake configuration successful
 ) else (
     echo [OK] Using existing CMake configuration
+    echo Note: To reconfigure with different backends, use -clean flag
 )
 
 REM Build the addon
@@ -99,11 +152,44 @@ echo ================================
 echo BUILD COMPLETED SUCCESSFULLY!
 echo ================================
 echo.
-echo Important: Download SDCPP libraries to: %LIBS_DIR%
-echo   - stable-diffusion.dll
-echo   - ggml.dll
+echo Addon DLL: %STAGING_DLL%
 echo.
-echo The addon will dynamically load these at runtime.
+
+REM Check for backend libraries
+echo Checking for backend libraries...
+set LIBS_NEEDED=0
+
+if "%SD_CUDA%"=="ON" (
+    echo   CUDA enabled - ensure CUDA runtime libraries are available
+    set LIBS_NEEDED=1
+)
+
+if "%SD_VULKAN%"=="ON" (
+    echo   Vulkan enabled - ensure Vulkan SDK libraries are available
+    set LIBS_NEEDED=1
+)
+
+if "%SD_OPENCL%"=="ON" (
+    echo   OpenCL enabled - ensure OpenCL runtime is available
+    set LIBS_NEEDED=1
+)
+
+if %LIBS_NEEDED%==1 (
+    echo.
+    echo IMPORTANT: Ensure all required backend libraries are available at runtime!
+    echo Place stable-diffusion.dll and backend-specific DLLs in:
+    echo   - %STAGING_DIR%
+    echo   - %ROOT_DIR%\build\bin
+)
+
+echo.
+echo Usage:
+echo   build.bat [-clean] [--cuda] [--vulkan] [--opencl] [--hipblas] [--metal]
+echo.
+echo Examples:
+echo   build.bat --cuda              Build with CUDA support
+echo   build.bat --vulkan --opencl   Build with Vulkan and OpenCL
+echo   build.bat -clean --cuda       Clean rebuild with CUDA
 echo.
 
 pause
