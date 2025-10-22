@@ -29,6 +29,7 @@
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"
 #include "ViewTypes.hpp"
+#include "guiSystems.h"
 #include "StudioPluginManager.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -81,6 +82,8 @@ namespace ANI {
 		// Window management
 		void SetWindowHandle(void* window);
 		void SetImGuiContext(void* context);
+		void SetCoreCallbacks();
+		void SetCoreEvents();
 
 		//Workspace management
 		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);

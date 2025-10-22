@@ -1,5 +1,6 @@
 #include "Core.hpp"
 #include "Events.hpp"
+#include "guiSystems.h"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -70,17 +71,12 @@ namespace ANI {
 	}
 
 	void Core::RegisterEventHandlers() {
-		// ========================================
-		// CORE EVENTS
-		// ========================================
+
 		Events::Ref().RegisterEvent("Quit", [this]() {
 			std::cout << "[Core] Quit event triggered" << std::endl;
 			this->Quit();
 		});
 
-		// ========================================
-		// VIEW MANAGER EVENTS
-		// ========================================
 		Events::Ref().RegisterEventWithData("CreateWorkspace",
 			[this](const std::any& data) {
 			try {
@@ -171,9 +167,6 @@ namespace ANI {
 			}
 		});
 
-		// ========================================
-		// ENTITY MANAGER EVENTS
-		// ========================================
 		Events::Ref().RegisterEvent("CreateEntity",
 			[this]() {
 			std::cout << "[Core] CreateEntity event" << std::endl;
@@ -243,9 +236,6 @@ namespace ANI {
 			}
 		});
 
-		// ========================================
-		// PROJECT MANAGER EVENTS
-		// ========================================
 		Events::Ref().RegisterEvent("SaveProject",
 			[this]() {
 			std::cout << "[Core] SaveProject event" << std::endl;
@@ -395,8 +385,21 @@ namespace ANI {
 			timeElapsed = 0.0;
 		}
 
-		// Update studio core
+		// Ensure OpenGL context is current before updating studio core
+		glfwMakeContextCurrent(window);
+
+		// Verify context is valid
+		if (!ANI::OpenGLContextHelper::VerifyContext()) {
+			std::cerr << "[Core] ERROR: OpenGL context lost before update!" << std::endl;
+			return;
+		}
+
+		// Update studio core - ALL OpenGL operations happen in this call chain
 		try {
+			auto textureSystem = studioCore.GetEntityManager().GetSystem<ECS::TextureSystem>();
+			if (textureSystem) {
+				textureSystem->ProcessGLOperations();
+			}
 			studioCore.Update(deltaT);
 		}
 		catch (const std::exception& e) {
@@ -409,6 +412,14 @@ namespace ANI {
 
 		try {
 			glfwPollEvents();
+
+			// Ensure context is current before any OpenGL operations
+			glfwMakeContextCurrent(window);
+
+			if (!ANI::OpenGLContextHelper::VerifyContext()) {
+				std::cerr << "[Core] ERROR: OpenGL context lost before render!" << std::endl;
+				return;
+			}
 
 			// Clear and render
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);

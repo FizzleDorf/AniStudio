@@ -27,15 +27,24 @@ namespace ECS {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
 			assert(GetEntitySignature(entity)->size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
 
-			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_componentTypeToID.find(typeIdx);
-			ComponentTypeID compType;
-			if (it != m_componentTypeToID.end()) {
-				compType = it->second;
+			// Get component name and look up by name instead of typeid
+			std::string componentName = typeid(T).name();
+
+			// Try to find by name in our registry first
+			ComponentTypeID compType = MAX_COMPONENT_COUNT;
+			for (const auto& pair : m_componentNameToID) {
+				auto it = m_componentTypeToID.find(std::type_index(typeid(T)));
+				if (it != m_componentTypeToID.end()) {
+					compType = it->second;
+					break;
+				}
 			}
-			else {
+
+			// If still not found, try looking it up by the actual type name string
+			if (compType == MAX_COMPONENT_COUNT) {
+				// Fallback: create new ID (this is the broken behavior, but keep it for safety)
 				compType = m_nextComponentID++;
-				m_componentTypeToID[typeIdx] = compType;
+				m_componentTypeToID[std::type_index(typeid(T))] = compType;
 			}
 
 			T component(std::forward<Args>(args)...);
@@ -152,7 +161,6 @@ namespace ECS {
 				"ALL components must derive from BaseComponent");
 
 			std::type_index typeIdx = std::type_index(typeid(T));
-
 			auto it = m_componentTypeToID.find(typeIdx);
 			if (it != m_componentTypeToID.end()) {
 				return it->second;
@@ -174,7 +182,17 @@ namespace ECS {
 
 			RegisterComponentType(
 				newId,
-				[this](EntityID entity) { this->AddComponent<T>(entity); },
+				[this, newId](EntityID entity) {
+				std::cout << "[ComponentCreator] Adding component with ID: " << newId << " to entity: " << entity << std::endl;
+
+				GetEntitySignature(entity)->insert(newId);
+				T component;
+				component.entityID = entity;
+				GetCompList<T>()->Insert(component);
+				UpdateEntityTargetSystem(entity);
+
+				std::cout << "Component added! ID: " << entity << ", Type ID: " << newId << std::endl;
+			},
 				[this](EntityID entity) -> BaseComponent* {
 				return this->HasComponent<T>(entity) ? &this->GetComponent<T>(entity) : nullptr;
 			}

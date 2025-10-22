@@ -32,10 +32,22 @@ namespace GUI {
 	}
 
 	void ImageView::Init() {
-		// Ensure TextureSystem is registered for handling image textures
-		auto textureSystem = mgr.GetSystem<ECS::TextureSystem>();
-		if (!textureSystem) {
-			mgr.RegisterSystem<ECS::TextureSystem>();
+		// Get or register ImageSystem
+		imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+		if (!imageSystem) {
+			mgr.RegisterSystem<ECS::ImageSystem>();
+			imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+		}
+
+		// Register callbacks with ImageSystem
+		if (imageSystem) {
+			imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
+				OnImageLoaded(entityID);
+			});
+
+			imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entityID) {
+				OnImageRemoved(entityID);
+			});
 		}
 
 		RefreshImageEntities();
@@ -87,7 +99,7 @@ namespace GUI {
 
 	void ImageView::Render() {
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			
+
 
 			RenderImageInfo();
 			RenderControls();
@@ -116,7 +128,7 @@ namespace GUI {
 			RenderHistory();
 		}
 
-		
+
 	}
 
 	void ImageView::OnImageLoaded(ECS::EntityID entityID) {
@@ -185,25 +197,15 @@ namespace GUI {
 				ImGui::Text("Channels: %d", imageComp.channels);
 				ImGui::Text("Entity ID: %zu", selectedEntityID);
 
-				// Show asset loading status
-				if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
-					auto imageAsset = AssetManager::Instance().GetAsset(imageComp.imageAssetId);
-					if (imageAsset) {
-						switch (imageAsset->GetLoadState()) {
-						case LoadState::Loading:
-							ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Loading...");
-							break;
-						case LoadState::Loaded:
-							ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Loaded");
-							break;
-						case LoadState::Failed:
-							ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Status: Failed to load");
-							break;
-						default:
-							ImGui::Text("Status: Unknown");
-							break;
-						}
-					}
+				// Show loading status based on texture ID
+				if (imageComp.textureID != 0) {
+					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Loaded");
+				}
+				else if (!imageComp.filePath.empty()) {
+					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Loading...");
+				}
+				else {
+					ImGui::Text("Status: No image");
 				}
 
 				contextMenuUtils->RenderImageContextMenu(selectedEntityID);
@@ -510,9 +512,8 @@ namespace GUI {
 	}
 
 	void ImageView::LoadImages(const std::vector<std::string>& filePaths) {
-		auto textureSystem = mgr.GetSystem<ECS::TextureSystem>();
-		if (!textureSystem) {
-			std::cerr << "[ImageView] TextureSystem not found!" << std::endl;
+		if (!imageSystem) {
+			std::cerr << "[ImageView] ImageSystem not available!" << std::endl;
 			return;
 		}
 
@@ -520,11 +521,16 @@ namespace GUI {
 			for (const auto& filePath : filePaths) {
 				if (filePath.empty()) continue;
 
+				// Create entity with ImageComponent
 				ECS::EntityID entity = mgr.AddNewEntity();
-				mgr.AddComponent<ECS::ImageComponent>(entity);
+				auto& imageComp = mgr.AddComponent<ECS::ImageComponent>(entity);
 
-				// Load image using TextureSystem with AssetManager integration
-				textureSystem->LoadImageTexture(entity, filePath, mgr);
+				// Set file path - ImageSystem will handle the async loading
+				imageComp.filePath = filePath;
+				imageComp.fileName = std::filesystem::path(filePath).filename().string();
+
+				// Use ImageSystem to load the image
+				imageSystem->SetImage(entity, filePath);
 
 				std::cout << "[ImageView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
 			}
@@ -540,17 +546,13 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
-				auto imageAsset = AssetManager::Instance().GetAsset<ImageAsset>(imageComp.imageAssetId);
-				if (imageAsset && imageAsset->IsLoaded()) {
-					int w, h, c;
-					imageAsset->GetDimensions(w, h, c);
-					unsigned char* data = imageAsset->GetImageData();
-
-					if (data) {
-						Utils::ImageUtils::SaveImage(imageComp.filePath, w, h, c, data);
-					}
-				}
+			// Check if we have image data to save
+			if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
+				Utils::ImageUtils::SaveImage(imageComp.filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
+				std::cout << "[ImageView] Saved image: " << imageComp.filePath << std::endl;
+			}
+			else {
+				std::cerr << "[ImageView] No image data available to save" << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
@@ -564,17 +566,13 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
-				auto imageAsset = AssetManager::Instance().GetAsset<ImageAsset>(imageComp.imageAssetId);
-				if (imageAsset && imageAsset->IsLoaded()) {
-					int w, h, c;
-					imageAsset->GetDimensions(w, h, c);
-					unsigned char* data = imageAsset->GetImageData();
-
-					if (data) {
-						Utils::ImageUtils::SaveImage(filePath, w, h, c, data);
-					}
-				}
+			// Check if we have image data to save
+			if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
+				Utils::ImageUtils::SaveImage(filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
+				std::cout << "[ImageView] Saved image as: " << filePath << std::endl;
+			}
+			else {
+				std::cerr << "[ImageView] No image data available to save" << std::endl;
 			}
 		}
 		catch (const std::exception& e) {
@@ -586,18 +584,14 @@ namespace GUI {
 		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
 
 		try {
-			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
-
-			// Unload assets from AssetManager
-			if (imageComp.imageAssetId != INVALID_RESOURCE_ID) {
-				AssetManager::Instance().UnloadAsset(imageComp.imageAssetId);
+			// Use ImageSystem to remove the image (it handles cleanup properly)
+			if (imageSystem) {
+				imageSystem->RemoveImage(selectedEntityID);
 			}
-			if (imageComp.textureAssetId != INVALID_RESOURCE_ID) {
-				AssetManager::Instance().UnloadAsset(imageComp.textureAssetId);
+			else {
+				// Fallback: destroy entity directly
+				mgr.DestroyEntity(selectedEntityID);
 			}
-
-			// Destroy the entity
-			mgr.DestroyEntity(selectedEntityID);
 
 			// Update the view
 			OnImageRemoved(selectedEntityID);

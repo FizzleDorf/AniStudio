@@ -30,6 +30,7 @@ namespace GUI {
 		ResetEntity();
 	}
 
+	// UpscaleView.cpp - ResetEntity()
 	void UpscaleView::ResetEntity() {
 		if (upscaleEntity != 0) {
 			mgr.DestroyEntity(upscaleEntity);
@@ -48,7 +49,7 @@ namespace GUI {
 		// Initialize with default values
 		auto& outputComp = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
 		outputComp.fileName = "upscaled_output";
-		outputComp.outputDirectory = !Utils::FilePaths::outputFolderPath.empty()
+		outputComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
 			? Utils::FilePaths::outputFolderPath
 			: Utils::FilePaths::defaultProjectPath;
 
@@ -285,6 +286,7 @@ namespace GUI {
 		}
 	}
 
+	// UpscaleView.cpp - HandleUpscaleEvent()
 	void UpscaleView::HandleUpscaleEvent() {
 		std::cout << "Creating entity for upscaling..." << std::endl;
 
@@ -298,13 +300,13 @@ namespace GUI {
 		// Ensure output component is properly configured
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
-			if (outputComp.outputDirectory.empty()) {
-				outputComp.outputDirectory = Utils::FilePaths::defaultProjectPath;
+			if (outputComp.filePath.empty()) {
+				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
 			}
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio_upscaled";
 			}
-			std::filesystem::create_directories(outputComp.outputDirectory);
+			std::filesystem::create_directories(outputComp.filePath);
 		}
 
 		// NEW: Use proper event system with data

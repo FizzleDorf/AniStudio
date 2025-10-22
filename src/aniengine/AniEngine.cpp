@@ -25,10 +25,6 @@ namespace ANI {
 
 	void EngineCore::RegisterCoreComponents() {
 		
-		entityManager.RegisterComponent<ImageHandleComponent>("ImageHandle");
-		entityManager.RegisterComponent<VideoHandleComponent>("VideoHandle");
-		entityManager.RegisterComponent<TextureHandleComponent>("TextureHandle");
-
 		entityManager.RegisterComponent<ImageComponent>("Image");
 		entityManager.RegisterComponent<InputImageComponent>("InputImage");
 		entityManager.RegisterComponent<OutputImageComponent>("OutputImage");

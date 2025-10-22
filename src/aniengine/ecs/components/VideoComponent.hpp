@@ -15,32 +15,42 @@
  * and a commercial license. You may choose to use it under either license.
  *
  * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
+ * For commercial license iformation, please contact legal@kframe.ai.
  */
 
 #pragma once
 
 #include "BaseComponent.hpp"
 #include "FilePaths.hpp"
-#include "AssetTypes.hpp"
+#include <OpenGLWrapper.hpp>
+#include <opencv2/opencv.hpp>
 #include <string>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+#include <libswscale/swscale.h>
+#include <libavutil/imgutils.h>
+}
 
 namespace ECS {
 
 	struct VideoComponent : public BaseComponent {
-		// Asset system integration
-		ResourceID videoAssetId = INVALID_RESOURCE_ID;       // ID of VideoAsset in AssetManager
-		ResourceID textureAssetId = INVALID_RESOURCE_ID;     // ID of TextureAsset for current frame
+		// FFmpeg video context
+		AVFormatContext* formatCtx = nullptr;
+		AVCodecContext* codecCtx = nullptr;
+		SwsContext* swsCtx = nullptr;
+		AVFrame* rgbFrame = nullptr;
+		uint8_t* frameBuffer = nullptr;
+		int videoStreamIdx = -1;
 
-		// Video properties (cached from VideoAsset)
+		// Video properties
 		std::string fileName = "Untitled";
 		std::string filePath = Utils::FilePaths::defaultProjectPath;
 		int width = 0;
 		int height = 0;
 		double fps = 30.0;
 		int frameCount = 0;
-
-		// Playback state
 		int currentFrame = 0;
 		bool isPlaying = false;
 		float playbackSpeed = 1.0f;
@@ -50,22 +60,25 @@ namespace ECS {
 		float frameTime = 0.0f;
 		float frameDuration = 1.0f / 30.0f;
 
-		// OpenGL texture (cached from TextureAsset)
+		// OpenGL texture
 		GLuint currentTexture = 0;
+		cv::Mat currentFrameData;
 		bool needsTextureUpdate = false;
 
 		VideoComponent() {
 			compName = "Video";
-			compCategory = "Video";
 		}
 
 		~VideoComponent() {
-			// Texture cleanup handled by AssetManager
+			ReleaseTexture();
 		}
 
-		// Check if video asset is loaded
-		bool IsVideoLoaded() const { return videoAssetId != INVALID_RESOURCE_ID; }
-		bool IsTextureReady() const { return textureAssetId != INVALID_RESOURCE_ID && currentTexture != 0; }
+		void ReleaseTexture() {
+			if (currentTexture != 0) {
+				glDeleteTextures(1, &currentTexture);
+				currentTexture = 0;
+			}
+		}
 
 		virtual nlohmann::json Serialize() const override {
 			nlohmann::json j;
@@ -77,11 +90,7 @@ namespace ECS {
 				{"frameCount", frameCount},
 				{"fileName", fileName},
 				{"filePath", filePath},
-				{"looping", looping},
-				{"videoAssetId", videoAssetId},
-				{"textureAssetId", textureAssetId},
-				{"currentFrame", currentFrame},
-				{"playbackSpeed", playbackSpeed}
+				{"looping", looping}
 			};
 			return j;
 		}
@@ -104,10 +113,6 @@ namespace ECS {
 			if (componentData.contains("fileName")) fileName = componentData["fileName"];
 			if (componentData.contains("filePath")) filePath = componentData["filePath"];
 			if (componentData.contains("looping")) looping = componentData["looping"];
-			if (componentData.contains("videoAssetId")) videoAssetId = componentData["videoAssetId"];
-			if (componentData.contains("textureAssetId")) textureAssetId = componentData["textureAssetId"];
-			if (componentData.contains("currentFrame")) currentFrame = componentData["currentFrame"];
-			if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
 		}
 
 		VideoComponent& operator=(const VideoComponent& other) {
@@ -122,9 +127,6 @@ namespace ECS {
 				isPlaying = other.isPlaying;
 				playbackSpeed = other.playbackSpeed;
 				looping = other.looping;
-				videoAssetId = other.videoAssetId;
-				textureAssetId = other.textureAssetId;
-				currentTexture = other.currentTexture;
 			}
 			return *this;
 		}

@@ -18,6 +18,7 @@ namespace ANI {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
 
 		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
+		engineCore.GetEntityManager().RegisterSystem<TextureSystem>();
 	}
 
 	StudioCore::~StudioCore() {
@@ -33,8 +34,6 @@ namespace ANI {
 
 	void StudioCore::RegisterCoreViews() {
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
-
-		engineCore.GetEntityManager().RegisterSystem<TextureSystem>();
 
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
@@ -67,13 +66,11 @@ namespace ANI {
 	void StudioCore::InitializeStudioPlugins() {
 		std::cout << "[StudioCore] Initializing studio plugin system..." << std::endl;
 
-		// Use the main ImGui context passed from Core
 		if (!imguiContext) {
 			std::cerr << "[StudioCore] ERROR: ImGui context is null! Cannot initialize plugins." << std::endl;
 			return;
 		}
 
-		// Set the context from Core
 		ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 		std::cout << "[StudioCore] Using main ImGui context for plugins: " << currentContext << std::endl;
@@ -229,6 +226,9 @@ namespace ANI {
 			viewManager.SetEntityManager(engineCore.GetEntityManager());
 			SetupProjectCallbacks();
 
+			SetCoreCallbacks();
+			SetCoreEvents();
+
 			initialized = true;
 			running = true;
 
@@ -253,7 +253,6 @@ namespace ANI {
 			return;
 		}
 
-		// Set the context from Core
 		ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 		std::cout << "[StudioCore] Using main ImGui context: " << currentContext << std::endl;
@@ -368,58 +367,14 @@ namespace ANI {
 					studioPluginManager->SaveProjectPluginState();
 				}
 
-				GUI::WorkspaceID currentActive = viewManager.GetActiveWorkspace();
-				m_projectManager.SetLastActiveWorkspace(currentActive);
-				std::cout << "[StudioCore] Synced active workspace " << currentActive << " to project before saving" << std::endl;
-
-				try {
-					if (!m_projectManager.SaveProject()) {
-						std::cerr << "[StudioCore] ERROR: Failed to save project: " << m_projectManager.GetLastError() << std::endl;
-					}
-					else {
-						std::cout << "[StudioCore] Project saved successfully with all workspaces" << std::endl;
-					}
-				}
-				catch (const std::exception& e) {
-					std::cerr << "[StudioCore] Exception saving project: " << e.what() << std::endl;
-				}
+				m_projectManager.SaveProject();
 			}
 			else {
-				std::cout << "[StudioCore] No project open, saving global state only" << std::endl;
-			}
-
-			// Save global plugin state regardless of project state
-			if (studioPluginManager) {
-				studioPluginManager->SaveGlobalPluginState();
-			}
-
-			std::cout << "[StudioCore] Saving application state..." << std::endl;
-
-			SyncWindowStateFromGLFW();
-			std::string defaultPath = GetDefaultWindowStatePath();
-			std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
-			m_windowState.SaveToFile(defaultPath);
-			std::cout << "[StudioCore] Saved window state as default" << std::endl;
-
-			try {
-				ImGuiIO& io = ImGui::GetIO();
-				std::string settingsPath = Utils::FilePaths::dataPath + "/settings/imgui_render_settings.json";
-				Utils::ImGuiSettingsUtil::SaveToFile(settingsPath, io);
-				std::cout << "[StudioCore] ImGui settings saved successfully" << std::endl;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[StudioCore] Warning: Failed to save ImGui settings: " << e.what() << std::endl;
-			}
-
-			std::cout << "[StudioCore] ImGui will auto-save layout on shutdown" << std::endl;
-
-			std::cout << "[StudioCore] Saving file paths and settings..." << std::endl;
-			try {
-				Utils::FilePaths::SaveFilepathDefaults();
-				std::cout << "[StudioCore] File paths saved" << std::endl;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[StudioCore] Warning: Failed to save file paths: " << e.what() << std::endl;
+				SyncWindowStateFromGLFW();
+				std::string defaultPath = GetDefaultWindowStatePath();
+				std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+				m_windowState.SaveToFile(defaultPath);
+				std::cout << "[StudioCore] Saved default window state during shutdown" << std::endl;
 			}
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -441,7 +396,6 @@ namespace ANI {
 			engineCore.Shutdown();
 
 			std::cout << "[StudioCore] All components shut down successfully" << std::endl;
-
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[StudioCore] Exception during shutdown: " << e.what() << std::endl;
@@ -468,7 +422,6 @@ namespace ANI {
 			}
 
 			viewManager.Update(deltaTime);
-
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[StudioCore] Update error: " << e.what() << std::endl;
@@ -481,14 +434,12 @@ namespace ANI {
 		try {
 			CompleteInitialization();
 
-			// Show startup view if no project is open
 			bool IsProjectOpen = m_projectManager.IsProjectOpen();
 
 			if (!IsProjectOpen && m_showProjectManagerView && m_projectManagerView) {
 				m_projectManagerView->Render();
 			}
 
-			// Show main application UI if project is open
 			if (IsProjectOpen) {
 				ImGuiViewport* viewport = ImGui::GetMainViewport();
 				ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -523,11 +474,106 @@ namespace ANI {
 				}
 				ImGui::End();
 			}
-
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[StudioCore] Render error: " << e.what() << std::endl;
 		}
+	}
+
+	void StudioCore::SetCoreCallbacks() {
+		std::cout << "[StudioCore] Setting up core system callbacks..." << std::endl;
+
+		auto& entityMgr = engineCore.GetEntityManager();
+		auto textureSystem = entityMgr.GetSystem<TextureSystem>();
+		auto imageSystem = entityMgr.GetSystem<ImageSystem>();
+
+		if (textureSystem && imageSystem) {
+			// System callback: When ImageSystem finishes loading, queue texture creation
+			imageSystem->RegisterImageAddedCallback([this, textureSystem](EntityID entityID) {
+				auto& entityMgr = engineCore.GetEntityManager();
+				if (entityMgr.HasComponent<ImageComponent>(entityID)) {
+					auto& imageComp = entityMgr.GetComponent<ImageComponent>(entityID);
+
+					std::cout << "[StudioCore] CALLBACK: Image added for entity " << entityID << std::endl;
+
+					textureSystem->QueueTextureCreation(
+						entityID,
+						imageComp.imageData,
+						imageComp.width,
+						imageComp.height,
+						imageComp.channels
+					);
+
+					std::cout << "[StudioCore] Queued texture creation for entity " << entityID << std::endl;
+
+					// FIRE EVENT FOR IMAGEVIEW
+					ANI::Events::Ref().QueueEventWithData("ImageLoaded", entityID);
+					std::cout << "[StudioCore] Fired ImageLoaded event for entity " << entityID << std::endl;
+				}
+			});
+
+			// System callback: When an image is removed, cleanup its texture
+			imageSystem->RegisterImageRemovedCallback([this, textureSystem](EntityID entityID) {
+				std::cout << "[StudioCore] CALLBACK: Image removed for entity " << entityID << std::endl;
+				textureSystem->RemoveTexture(entityID);
+
+				// FIRE EVENT FOR IMAGEVIEW
+				ANI::Events::Ref().QueueEventWithData("ImageRemoved", entityID);
+				std::cout << "[StudioCore] Fired ImageRemoved event for entity " << entityID << std::endl;
+			});
+
+			std::cout << "[StudioCore] Core system callbacks set up successfully" << std::endl;
+		}
+		else {
+			std::cerr << "[StudioCore] ERROR: Could not find TextureSystem or ImageSystem" << std::endl;
+		}
+	}
+
+	void StudioCore::SetCoreEvents() {
+		std::cout << "[StudioCore] Registering core system events..." << std::endl;
+
+		auto& entityMgr = engineCore.GetEntityManager();
+		auto imageSystem = entityMgr.GetSystem<ImageSystem>();
+
+		if (!imageSystem) {
+			std::cerr << "[StudioCore] ERROR: ImageSystem not found for event registration" << std::endl;
+			return;
+		}
+
+		// Event handler: LoadImageRequest from ImageView
+		// Capture 'this' so we can access engineCore member
+		Events::Ref().RegisterEventWithData("LoadImageRequest", [this, imageSystem](const std::any& data) {
+			try {
+				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+				std::string filePath = std::any_cast<std::string>(eventData.at("filePath"));
+
+				std::cout << "[StudioCore] LoadImageRequest: " << filePath << std::endl;
+
+				auto& entityMgr = engineCore.GetEntityManager();
+				ECS::EntityID entity = entityMgr.AddNewEntity();
+				entityMgr.AddComponent<ImageComponent>(entity);
+				imageSystem->SetImage(entity, filePath);
+
+				std::cout << "[StudioCore] Created entity " << entity << " for image" << std::endl;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] LoadImageRequest error: " << e.what() << std::endl;
+			}
+		});
+
+		// Event handler: RemoveImageRequest from ImageView
+		Events::Ref().RegisterEventWithData("RemoveImageRequest", [imageSystem](const std::any& data) {
+			try {
+				ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+				std::cout << "[StudioCore] RemoveImageRequest: entity " << entityID << std::endl;
+				imageSystem->RemoveImage(entityID);
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] RemoveImageRequest error: " << e.what() << std::endl;
+			}
+		});
+
+		std::cout << "[StudioCore] Core system events registered successfully" << std::endl;
 	}
 
 	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {

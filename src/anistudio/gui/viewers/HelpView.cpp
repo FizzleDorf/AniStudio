@@ -135,13 +135,6 @@ namespace GUI {
 		ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
-			if (!windowOpen) {
-				std::unordered_map<std::string, std::any> eventData;
-				eventData["workspaceID"] = GetID();
-				eventData["viewTypeName"] = viewName;
-				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
-			}
-
 			// Menu bar
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("View")) {
@@ -209,6 +202,13 @@ namespace GUI {
 			}
 		}
 		ImGui::End();
+
+		if (!windowOpen) {
+			std::unordered_map<std::string, std::any> eventData;
+			eventData["workspaceID"] = GetID();
+			eventData["viewTypeName"] = viewName;
+			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+		}
 	}
 
 	void HelpView::RenderNavigationPanel() {

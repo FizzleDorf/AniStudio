@@ -51,6 +51,9 @@ namespace GUI {
 		// Context menu utilities
 		std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
+		// ImageSystem reference for direct operations
+		std::shared_ptr<ECS::ImageSystem> imageSystem;
+
 		// CALLBACK HANDLERS - Called by ImageSystem when images are loaded/removed
 		void OnImageLoaded(ECS::EntityID entityID);
 		void OnImageRemoved(ECS::EntityID entityID);
@@ -63,9 +66,6 @@ namespace GUI {
 		void RenderHistory();
 		void RenderSelectedImage();
 		void DrawGrid(int imageWidth, int imageHeight);
-
-		// Context menu rendering
-		void RenderImageContextMenus();
 
 		// Image operations
 		void SetZoom(float newZoom);

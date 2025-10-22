@@ -4,10 +4,6 @@
 #include "ECS.h"
 #include "rng.hpp"
 
-// Include the asset management system
-#include "AssetManager.hpp"
-#include "AssetHandleComponents.hpp"
-
 // Include component headers
 #include "SDCPPComponents.h"
 #include "Components.h"
@@ -20,6 +16,10 @@
 #include "Upscaling.hpp"
 #include "Conversion.hpp"
 #include "PngMetadataUtils.hpp"
+
+// Include ImageSystem and VideoSystem for direct loading
+#include "ImageSystem.hpp"
+#include "VideoSystem.hpp"
 
 // Standard includes
 #include "pch.h"
@@ -114,15 +114,6 @@ namespace ECS {
 			, hasActiveTask(false)
 			, clearRequested(false) {
 			sysName = "SDCPPSystem";
-
-			//// Use proper component signatures for the new asset system
-			//AddComponentSignature<LatentComponent>();
-			//AddComponentSignature<ImageHandleComponent>();
-			//AddComponentSignature<VideoHandleComponent>();
-
-			//// Add these components - they should exist based on your component files
-			//AddComponentSignature<OutputImageComponent>();
-			//AddComponentSignature<InputImageComponent>();
 		}
 
 		// Destructor
@@ -378,33 +369,22 @@ namespace ECS {
 					return 0;
 				}
 
-				// Special handling for InputImageComponent with AssetManager integration
+				// For ImageSystem compatibility, ensure proper image component setup
 				if (mgr.HasComponent<InputImageComponent>(originalEntity) &&
 					mgr.HasComponent<InputImageComponent>(clonedEntity)) {
 
 					auto& originalInput = mgr.GetComponent<InputImageComponent>(originalEntity);
 					auto& clonedInput = mgr.GetComponent<InputImageComponent>(clonedEntity);
 
-					// With the new AssetManager system, we copy the asset references instead of raw data
-					if (originalInput.imageAssetId != INVALID_RESOURCE_ID) {
-						clonedInput.imageAssetId = originalInput.imageAssetId;
-						clonedInput.textureAssetId = originalInput.textureAssetId;
+					// Copy file path information for ImageSystem
+					clonedInput.filePath = originalInput.filePath;
+					clonedInput.fileName = originalInput.fileName;
+					clonedInput.width = originalInput.width;
+					clonedInput.height = originalInput.height;
+					clonedInput.channels = originalInput.channels;
 
-						// Copy the cached properties
-						clonedInput.width = originalInput.width;
-						clonedInput.height = originalInput.height;
-						clonedInput.channels = originalInput.channels;
-						clonedInput.fileName = originalInput.fileName;
-						clonedInput.filePath = originalInput.filePath;
-						clonedInput.textureID = originalInput.textureID;
-
-						std::cout << "Copied asset references for cloned entity " << clonedEntity << std::endl;
-					}
-					else {
-						// Fallback: If no asset is loaded, we can't clone image data
-						// The processing will need to handle this case
-						std::cout << "Warning: No image asset to clone for entity " << clonedEntity << std::endl;
-					}
+					std::cout << "Copied image path for cloned entity " << clonedEntity
+						<< ": " << originalInput.filePath << std::endl;
 				}
 
 				// Handle other image component types similarly
@@ -414,19 +394,12 @@ namespace ECS {
 					auto& originalImg = mgr.GetComponent<ImageComponent>(originalEntity);
 					auto& clonedImg = mgr.GetComponent<ImageComponent>(clonedEntity);
 
-					// Copy asset references
-					if (originalImg.imageAssetId != INVALID_RESOURCE_ID) {
-						clonedImg.imageAssetId = originalImg.imageAssetId;
-						clonedImg.textureAssetId = originalImg.textureAssetId;
-
-						// Copy cached properties
-						clonedImg.width = originalImg.width;
-						clonedImg.height = originalImg.height;
-						clonedImg.channels = originalImg.channels;
-						clonedImg.fileName = originalImg.fileName;
-						clonedImg.filePath = originalImg.filePath;
-						clonedImg.textureID = originalImg.textureID;
-					}
+					// Copy file path information
+					clonedImg.filePath = originalImg.filePath;
+					clonedImg.fileName = originalImg.fileName;
+					clonedImg.width = originalImg.width;
+					clonedImg.height = originalImg.height;
+					clonedImg.channels = originalImg.channels;
 				}
 
 				std::cout << "Successfully cloned entity " << originalEntity << " to " << clonedEntity << std::endl;
@@ -437,6 +410,53 @@ namespace ECS {
 				return 0;
 			}
 		}
+
+		void LoadImageViaImageSystem(const std::string& filePath) {
+			if (auto imageSystem = mgr.GetSystem<ImageSystem>()) {
+				// Create a NEW entity for the output image
+				EntityID outputEntity = mgr.AddNewEntity();
+				mgr.AddComponent<ImageComponent>(outputEntity);
+
+				// Use ImageSystem's existing async loading mechanism
+				imageSystem->SetImage(outputEntity, filePath);
+
+				std::cout << "[SDCPPSystem] Created new output entity " << outputEntity
+					<< " and queued image load from " << filePath << std::endl;
+			}
+			else {
+				std::cerr << "[SDCPPSystem] ImageSystem not available!" << std::endl;
+			}
+		}
+
+		// Helper to load video via VideoSystem - creates NEW entity for output
+		void LoadVideoViaVideoSystem(const std::string& filePath) {
+			if (auto videoSystem = mgr.GetSystem<VideoSystem>()) {
+				// Create a NEW entity for the generated video
+				EntityID videoEntity = mgr.AddNewEntity();
+				mgr.AddComponent<OutputVideoComponent>(videoEntity);
+
+				// Set the video path
+				auto& videoComp = mgr.GetComponent<OutputVideoComponent>(videoEntity);
+				videoComp.filePath = filePath;
+				videoComp.fileName = std::filesystem::path(filePath).filename().string();
+
+				// Use VideoSystem to load the video
+				videoSystem->SetVideo(videoEntity, filePath);
+
+				// Store the last generated video entity for VideoDiffusionView
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					lastGeneratedVideoEntity = videoEntity;
+				}
+
+				std::cout << "[SDCPPSystem] Created new video entity " << videoEntity
+					<< " and queued video load from " << filePath << std::endl;
+			}
+			else {
+				std::cerr << "[SDCPPSystem] VideoSystem not available!" << std::endl;
+			}
+		}
+
 		// The actual clearing logic - called from Update when it's safe
 		void HandleClearRequest() {
 			std::lock_guard<std::mutex> lock(queueMutex);
@@ -659,10 +679,28 @@ namespace ECS {
 
 						std::string fullFileName = baseName + extension;
 
+						// Use filePath as directory - extract directory if it's a file path
+						std::string outputDir = output.filePath;
+
+						// If filePath contains a filename, extract just the directory
+						if (!outputDir.empty()) {
+							std::filesystem::path p(outputDir);
+							if (p.has_extension()) {
+								outputDir = p.parent_path().string();
+							}
+						}
+
+						// Fallback to default if empty
+						if (outputDir.empty()) {
+							outputDir = Utils::FilePaths::outputFolderPath.empty()
+								? Utils::FilePaths::defaultProjectPath
+								: Utils::FilePaths::outputFolderPath;
+						}
+
 						// Use proper API signature for CreateUniqueFilename
 						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(
-							output.outputDirectory,  // directory
-							fullFileName             // filename with extension
+							fullFileName,  // filename with extension
+							outputDir      // directory
 						);
 					}
 
@@ -736,7 +774,7 @@ namespace ECS {
 				return;
 			}
 
-			std::vector<std::tuple<EntityID, std::string, TaskType>> completedTasks;
+			std::vector<std::tuple<std::string, TaskType>> completedTasks;
 
 			{
 				std::unique_lock<std::mutex> lock(queueMutex);
@@ -763,7 +801,7 @@ namespace ECS {
 
 							// Process the completed task
 							if (success) {
-								completedTasks.emplace_back(entityID, fullPath, taskType);
+								completedTasks.emplace_back(fullPath, taskType);
 							}
 							else {
 								std::cerr << "Task failed for entity " << entityID << std::endl;
@@ -777,9 +815,10 @@ namespace ECS {
 										std::cerr << "Failed to remove partial file: " << e.what() << std::endl;
 									}
 								}
-								// Add failed entity to cleanup list
-								entitiesNeedingCleanup.push_back(entityID);
 							}
+
+							// Clean up the cloned entity
+							entitiesNeedingCleanup.push_back(entityID);
 
 							// Remove the completed task - this will allow the next task to start
 							it = taskQueue.erase(it);
@@ -799,19 +838,14 @@ namespace ECS {
 			} // Lock released here
 
 			// Process completed tasks WITHOUT holding the lock
-			for (const auto&[entityID, fullPath, taskType] : completedTasks) {
-				ProcessCompletedTask(entityID, fullPath, taskType);
+			for (const auto&[fullPath, taskType] : completedTasks) {
+				ProcessCompletedTask(fullPath, taskType);
 			}
 		}
 
-		void ProcessCompletedTask(const EntityID entityID, const std::string& fullPath, TaskType taskType) {
+		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType) {
 			try {
 				if (shuttingDown) {
-					return;
-				}
-
-				if (!mgr.GetEntitiesSignatures().count(entityID)) {
-					std::cerr << "Entity no longer exists: " << entityID << std::endl;
 					return;
 				}
 
@@ -820,87 +854,19 @@ namespace ECS {
 					return;
 				}
 
-				// Handle video output using AssetManager
+				// Handle video output using VideoSystem
 				if (IsVideoTask(taskType)) {
-					// Create a new entity for the generated video
-					EntityID videoEntity = mgr.AddNewEntity();
-
-					// Add the new asset handle component
-					auto& videoHandle = mgr.AddComponent<VideoHandleComponent>(videoEntity);
-
-					// Also add the old VideoComponent for backward compatibility
-					mgr.AddComponent<VideoComponent>(videoEntity);
-
-					// Use AssetManager to load the video asynchronously
-					auto future = AssetManager::Instance().LoadVideoAsync(fullPath,
-						[this, videoEntity](ResourceID assetId, bool success) {
-						if (success) {
-							std::cout << "[SDCPPSystem] Video loaded successfully (Entity: "
-								<< videoEntity << ", AssetID: " << assetId << ")" << std::endl;
-
-							// Update the handle component with the asset ID
-							if (mgr.HasComponent<VideoHandleComponent>(videoEntity)) {
-								VideoHandleComponent& handle = mgr.GetComponent<VideoHandleComponent>(videoEntity);
-								handle.videoAssetId = assetId;
-							}
-						}
-						else {
-							std::cerr << "[SDCPPSystem] Failed to load video for entity " << videoEntity << std::endl;
-						}
-					});
-
-					// Store the last generated video entity for VideoDiffusionView
-					{
-						std::lock_guard<std::mutex> lock(queueMutex);
-						lastGeneratedVideoEntity = videoEntity;
-					}
-
-					std::cout << "Video loading started for entity " << videoEntity << " from " << fullPath << std::endl;
+					LoadVideoViaVideoSystem(fullPath);
 				}
 				else {
-					// Handle image output using AssetManager
-
-					// Ensure entity has image handle component
-					if (!mgr.HasComponent<ImageHandleComponent>(entityID)) {
-						mgr.AddComponent<ImageHandleComponent>(entityID);
-					}
-
-					// Also add the old ImageComponent for backward compatibility
-					if (!mgr.HasComponent<ImageComponent>(entityID)) {
-						mgr.AddComponent<ImageComponent>(entityID);
-					}
-
-					// Use AssetManager to load the image asynchronously
-					auto future = AssetManager::Instance().LoadImageAsync(fullPath,
-						[this, entityID](ResourceID assetId, bool success) {
-						if (success) {
-							std::cout << "[SDCPPSystem] Image loaded successfully (Entity: "
-								<< entityID << ", AssetID: " << assetId << ")" << std::endl;
-
-							// Update the handle component with the asset ID
-							if (mgr.HasComponent<ImageHandleComponent>(entityID)) {
-								ImageHandleComponent& handle = mgr.GetComponent<ImageHandleComponent>(entityID);
-								handle.imageAssetId = assetId;
-
-								// Auto-create texture if needed
-								if (handle.autoCreateTexture) {
-									handle.textureAssetId = AssetManager::Instance().CreateTextureFromImage(assetId);
-								}
-							}
-						}
-						else {
-							std::cerr << "[SDCPPSystem] Failed to load image for entity " << entityID << std::endl;
-						}
-					});
-
-					std::cout << "Image loading started for entity " << entityID << " from " << fullPath << std::endl;
+					// Handle image output using ImageSystem
+					LoadImageViaImageSystem(fullPath);
 				}
 
-				std::cout << "Successfully processed completed task for entity " << entityID << std::endl;
+				std::cout << "Successfully processed completed task: " << fullPath << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error processing completed task: " << e.what() << std::endl;
-				entitiesNeedingCleanup.push_back(entityID);
 
 				try {
 					if (std::filesystem::exists(fullPath)) {
