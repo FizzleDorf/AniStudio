@@ -1,6 +1,7 @@
 #include "PluginView.hpp"
 #include "BasePlugin.hpp"
 #include "Events.hpp"
+#include "ImGuiFileDialog.h"
 #include <iostream>
 #include <filesystem>
 #include <algorithm>
@@ -15,24 +16,41 @@ namespace GUI {
 	}
 
 	void PluginView::Init() {
-		// Get the absolute path to the build plugins directory
+		// Add default search directories - go up from bin to build
 		std::filesystem::path executablePath = std::filesystem::current_path();
-		std::filesystem::path pluginsPath = executablePath / "plugins";
-		m_pluginDirectory = pluginsPath.string();
 
-		// Update the plugin manager's staging directory to match
-		m_pluginManager.setStagingDirectory(m_pluginDirectory);
+		// Go up one directory from bin to build
+		std::filesystem::path buildPath = executablePath.parent_path();
 
-		// Create the directory if it doesn't exist
-		std::filesystem::create_directories(m_pluginDirectory);
+		// Add plugins as default (build/plugins)
+		std::filesystem::path pluginsPath = buildPath / "plugins";
+		m_searchDirectories.push_back(PluginDirectoryInfo(pluginsPath, true));
 
-		// Scan for plugin directories
-		RefreshPluginDirectories();
+		// Add addons as default (build/addons)
+		std::filesystem::path addonsPath = buildPath / "addons";
+		m_searchDirectories.push_back(PluginDirectoryInfo(addonsPath, true));
+
+		// Create the directories if they don't exist
+		std::filesystem::create_directories(pluginsPath);
+		std::filesystem::create_directories(addonsPath);
+
+		// Set the plugin manager's staging directory
+		m_pluginManager.setStagingDirectory(pluginsPath.string());
+
+		// Discover all available plugins
+		RefreshAvailablePlugins();
+
+		// Select all directories by default
+		SelectAllDirectories();
 
 		// Enable hot reload by default
 		m_pluginManager.enableHotReload(m_hotReloadEnabled);
 
-		std::cout << "[PluginView] Initialized with plugin directory: " << m_pluginDirectory << std::endl;
+		std::cout << "[PluginView] Initialized with " << m_searchDirectories.size() << " search directories" << std::endl;
+		std::cout << "[PluginView] Current path: " << executablePath << std::endl;
+		std::cout << "[PluginView] Build path: " << buildPath << std::endl;
+		std::cout << "[PluginView] Plugin search path: " << pluginsPath << std::endl;
+		std::cout << "[PluginView] Addon search path: " << addonsPath << std::endl;
 	}
 
 	void PluginView::Update(float deltaT) {
@@ -46,7 +64,6 @@ namespace GUI {
 	}
 
 	void PluginView::Render() {
-
 		// Re-enable hot reload when window opens
 		if (!m_hotReloadWasEnabled && m_hotReloadEnabled) {
 			m_pluginManager.enableHotReload(true);
@@ -54,11 +71,9 @@ namespace GUI {
 			std::cout << "[PluginView] Hot reload re-enabled because PluginView opened" << std::endl;
 		}
 
-		ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(1400, 800), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			RenderToolbar();
-			ImGui::Separator();
 			if (!windowOpen) {
 				if (m_hotReloadWasEnabled) {
 					m_pluginManager.enableHotReload(false);
@@ -72,520 +87,327 @@ namespace GUI {
 				ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
 			}
 
-			// Split view: left panel for plugin directories, middle for loaded plugins, right for details
-			if (ImGui::BeginTable("PluginManagerTable", 3, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
-				ImGui::TableSetupColumn("Plugin Directories", ImGuiTableColumnFlags_WidthFixed, 300.0f);
-				ImGui::TableSetupColumn("Loaded Plugins", ImGuiTableColumnFlags_WidthFixed, 300.0f);
-				ImGui::TableSetupColumn("Details", ImGuiTableColumnFlags_WidthStretch);
-
-				ImGui::TableNextRow();
-
-				// Plugin directories column
-				ImGui::TableSetColumnIndex(0);
-				RenderPluginDirectoryList();
-
-				// Loaded plugins column
-				ImGui::TableSetColumnIndex(1);
-				RenderLoadedPluginsList();
-
-				// Details column
-				ImGui::TableSetColumnIndex(2);
-				RenderPluginDetails();
-
-				ImGui::EndTable();
-			}
-
-			ImGui::Separator();
-			RenderStatusBar();
+			RenderMainContent();
 		}
 		ImGui::End();
 	}
 
-	void PluginView::RefreshPluginDirectories() {
-		m_pluginDirectories.clear();
+	void PluginView::RenderMainContent() {
+		// Split the window into filter list and content areas
+		ImGui::BeginChild("PluginSplit", ImVec2(0, -30), false);
 
-		try {
-			if (std::filesystem::exists(m_pluginDirectory)) {
-				for (const auto& entry : std::filesystem::directory_iterator(m_pluginDirectory)) {
-					if (entry.is_directory()) {
-						std::string dirName = entry.path().filename().string();
-						if (dirName == "staging") continue;
-						m_pluginDirectories.push_back(entry.path());
-					}
-				}
+		// Left side: Search directories filter list
+		ImGui::BeginChild("FilterList", ImVec2(m_filterListWidth, 0), true);
+		RenderFilterList();
+		ImGui::EndChild();
 
-				std::sort(m_pluginDirectories.begin(), m_pluginDirectories.end());
-				ShowStatus("Found " + std::to_string(m_pluginDirectories.size()) + " plugin directories", 2.0f);
-				std::cout << "[PluginView] Found " << m_pluginDirectories.size() << " plugin directories" << std::endl;
-			}
-			else {
-				ShowStatus("Plugin directory not found: " + m_pluginDirectory, 5.0f);
-				std::cerr << "[PluginView] Plugin directory not found: " << m_pluginDirectory << std::endl;
-			}
-		}
-		catch (const std::exception& e) {
-			ShowStatus("Error scanning plugin directories: " + std::string(e.what()), 5.0f);
-			std::cerr << "[PluginView] Error refreshing plugin directories: " << e.what() << std::endl;
-		}
+		ImGui::SameLine();
+
+		// Right side: Plugin lists and details
+		ImGui::BeginChild("ContentArea", ImVec2(0, 0), true);
+		RenderPluginLists();
+		ImGui::EndChild();
+
+		ImGui::EndChild();
+
+		// Status bar at the bottom
+		ImGui::Separator();
+		RenderStatusBar();
 	}
 
-	uint32_t PluginView::GetHighestVersionInDirectory(const std::filesystem::path& pluginDir, const std::string& pluginName) const {
-		if (!std::filesystem::exists(pluginDir)) return 0;
+	void PluginView::RenderFilterList() {
+		ImGui::Text("Plugin Search Directories");
+		ImGui::Separator();
 
-		uint32_t highestVersion = 0;
-		std::string pattern = pluginName + "_v(\\d+)\\.dll";
-		std::regex versionRegex(pattern);
+		// Add directory button
+		if (ImGui::Button("Add Directory", ImVec2(-1, 0))) {
+			IGFD::FileDialogConfig config;
+			config.path = ".";
+			config.flags = ImGuiFileDialogFlags_Modal;
+			ImGuiFileDialog::Instance()->OpenDialog("AddPluginDirectory", "Select Plugin Directory", nullptr, config);
+		}
 
-		try {
-			for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
-				if (entry.is_regular_file()) {
-					std::string filename = entry.path().filename().string();
-					std::smatch match;
+		// Handle file dialog
+		if (ImGuiFileDialog::Instance()->Display("AddPluginDirectory", 32, ImVec2(600, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+				if (!selectedPath.empty()) {
+					AddSearchDirectory(std::filesystem::path(selectedPath));
+					RefreshAvailablePlugins();
+				}
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
 
-					if (std::regex_search(filename, match, versionRegex)) {
-						uint32_t version = static_cast<uint32_t>(std::stoul(match[1].str()));
-						if (version > highestVersion) {
-							highestVersion = version;
+		if (ImGui::Button("Refresh All", ImVec2(-1, 0))) {
+			RefreshAvailablePlugins();
+			ShowStatus("Refreshed plugin directories", 2.0f);
+		}
+
+		ImGui::Separator();
+
+		// Show All / Deselect All buttons
+		if (ImGui::Button("Show All", ImVec2(-1, 0))) {
+			SelectAllDirectories();
+		}
+		if (ImGui::Button("Deselect All", ImVec2(-1, 0))) {
+			DeselectAllDirectories();
+		}
+
+		ImGui::Separator();
+
+		// Render directory list
+		for (const auto& dirInfo : m_searchDirectories) {
+			std::string displayName = dirInfo.displayName;
+			if (dirInfo.isDefault) {
+				displayName += " [Default]";
+			}
+
+			bool isSelected = m_selectedDirectories.find(dirInfo.displayName) != m_selectedDirectories.end();
+
+			ImGui::PushStyleColor(ImGuiCol_Text, isSelected ?
+				ImVec4(0.4f, 0.8f, 1.0f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
+
+			bool clicked = ImGui::Selectable(
+				displayName.c_str(),
+				isSelected,
+				ImGuiSelectableFlags_AllowDoubleClick
+			);
+
+			ImGui::PopStyleColor();
+
+			if (clicked) {
+				HandleDirectorySelection(dirInfo.displayName,
+					ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
+			}
+
+			// Tooltip with full path
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::Text("Path: %s", dirInfo.path.string().c_str());
+				ImGui::Text("Type: %s", dirInfo.isDefault ? "Default" : "Custom");
+				ImGui::EndTooltip();
+			}
+
+			// Context menu for custom directories
+			if (!dirInfo.isDefault && ImGui::BeginPopupContextItem()) {
+				if (ImGui::MenuItem("Remove Directory")) {
+					RemoveSearchDirectory(dirInfo.path);
+					RefreshAvailablePlugins();
+				}
+				ImGui::EndPopup();
+			}
+		}
+
+		ImGui::Separator();
+		ImGui::Text("Selected: %zu/%zu", m_selectedDirectories.size(), m_searchDirectories.size());
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ctrl+Click: Multi-select");
+		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Right-Click: Options");
+	}
+
+	void PluginView::RenderPluginLists() {
+		// Get available height and split it
+		float availableHeight = ImGui::GetContentRegionAvail().y;
+		float listsHeight = availableHeight * 0.5f; // 50% for lists
+		float detailsHeight = availableHeight * 0.5f; // 50% for details
+
+		// Use a table to show Available and Active plugins side by side
+		ImGui::BeginChild("PluginListsArea", ImVec2(0, listsHeight), true);
+		if (ImGui::BeginTable("PluginListsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
+			ImGui::TableSetupColumn("Available Plugins", ImGuiTableColumnFlags_WidthFixed, 400.0f);
+			ImGui::TableSetupColumn("Active Plugins", ImGuiTableColumnFlags_WidthStretch);
+			ImGui::TableHeadersRow();
+
+			ImGui::TableNextRow();
+
+			// Available plugins column
+			ImGui::TableSetColumnIndex(0);
+			RenderAvailablePluginsList();
+
+			// Active plugins column
+			ImGui::TableSetColumnIndex(1);
+			RenderActivePluginsList();
+
+			ImGui::EndTable();
+		}
+		ImGui::EndChild();
+
+		ImGui::Separator();
+
+		// Plugin details section below - takes remaining space
+		ImGui::BeginChild("PluginDetailsArea", ImVec2(0, 0), true);
+		RenderPluginDetails();
+		ImGui::EndChild();
+	}
+
+	void PluginView::RenderAvailablePluginsList() {
+		ImGui::BeginChild("AvailablePluginsList", ImVec2(0, 0), false);
+		ImGui::Text("Available Plugins in Selected Directories");
+		ImGui::Separator();
+
+		// Filter available plugins based on selected directories
+		std::vector<AvailablePluginInfo*> filteredPlugins;
+		for (auto& plugin : m_availablePlugins) {
+			if (IsPluginInSelectedDirectories(plugin)) {
+				filteredPlugins.push_back(&plugin);
+			}
+		}
+
+		if (filteredPlugins.empty()) {
+			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No plugins found in selected directories");
+		}
+		else {
+			for (auto* plugin : filteredPlugins) {
+				// Color based on status
+				ImVec4 color;
+				if (plugin->isLoaded && plugin->isEnabled) {
+					color = ImVec4(0.5f, 1.0f, 0.5f, 1.0f); // Green - Active
+				}
+				else if (plugin->isLoaded) {
+					color = ImVec4(1.0f, 1.0f, 0.5f, 1.0f); // Yellow - Loaded but disabled
+				}
+				else {
+					color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f); // Gray - Not loaded
+				}
+
+				ImGui::PushStyleColor(ImGuiCol_Text, color);
+				bool isSelected = (m_selectedPluginForDetails == plugin->name);
+
+				if (ImGui::Selectable(plugin->name.c_str(), isSelected)) {
+					m_selectedPluginForDetails = plugin->name;
+				}
+
+				ImGui::PopStyleColor();
+
+				// Tooltip
+				if (ImGui::IsItemHovered()) {
+					ImGui::BeginTooltip();
+					ImGui::Text("Name: %s", plugin->name.c_str());
+					ImGui::Text("Directory: %s", plugin->directory.string().c_str());
+					ImGui::Text("Source: %s", plugin->sourceDirectory.c_str());
+					ImGui::Text("Status: %s", plugin->isLoaded ? (plugin->isEnabled ? "Active" : "Loaded") : "Not Loaded");
+					ImGui::EndTooltip();
+				}
+
+				// Context menu
+				if (ImGui::BeginPopupContextItem()) {
+					if (!plugin->isLoaded) {
+						if (ImGui::MenuItem("Load Plugin")) {
+							LoadPlugin(plugin->name);
 						}
 					}
-				}
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[PluginView] Error scanning versions: " << e.what() << std::endl;
-		}
-
-		return highestVersion;
-	}
-
-	size_t PluginView::CountVersionedDlls(const std::filesystem::path& pluginDir, const std::string& pluginName) const {
-		if (!std::filesystem::exists(pluginDir)) return 0;
-
-		size_t count = 0;
-		std::string pattern = pluginName + "_v\\d+\\.dll";
-		std::regex versionRegex(pattern);
-
-		try {
-			for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
-				if (entry.is_regular_file()) {
-					std::string filename = entry.path().filename().string();
-					if (std::regex_search(filename, versionRegex)) {
-						count++;
-					}
-				}
-			}
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[PluginView] Error counting versions: " << e.what() << std::endl;
-		}
-
-		return count;
-	}
-
-	void PluginView::LoadPlugin(const std::filesystem::path& pluginDir) {
-		std::string pluginName = pluginDir.filename().string();
-		std::cout << "[PluginView] Loading plugin: " << pluginName << " from directory: " << pluginDir << std::endl;
-
-		if (m_pluginManager.loadPlugin(pluginDir.string())) {
-			ShowStatus("Loaded plugin: " + pluginName, 3.0f);
-			std::cout << "[PluginView] Successfully loaded plugin: " << pluginName << std::endl;
-		}
-		else {
-			ShowStatus("Failed to load plugin: " + pluginName, 5.0f);
-			std::cerr << "[PluginView] Failed to load plugin: " << pluginName << std::endl;
-		}
-	}
-
-	void PluginView::LoadPluginFromFile() {
-		if (strlen(m_loadDialogPath) > 0) {
-			std::string path = m_loadDialogPath;
-			std::filesystem::path pluginPath(path);
-
-			if (std::filesystem::is_directory(pluginPath)) {
-				if (m_pluginManager.loadPlugin(path)) {
-					ShowStatus("Plugin loaded: " + pluginPath.filename().string(), 3.0f);
-				}
-				else {
-					ShowStatus("Failed to load plugin: " + pluginPath.filename().string(), 5.0f);
-				}
-			}
-			else if (std::filesystem::is_regular_file(pluginPath) &&
-				(pluginPath.extension() == ".dll" || pluginPath.extension() == ".so")) {
-				std::string parentDir = pluginPath.parent_path().string();
-				if (m_pluginManager.loadPlugin(parentDir)) {
-					ShowStatus("Plugin loaded: " + pluginPath.stem().string(), 3.0f);
-				}
-				else {
-					ShowStatus("Failed to load plugin: " + pluginPath.stem().string(), 5.0f);
-				}
-			}
-			else {
-				ShowStatus("Invalid plugin path: must be directory or DLL file", 5.0f);
-			}
-
-			m_loadDialogPath[0] = '\0';
-			m_showLoadDialog = false;
-		}
-	}
-
-	void PluginView::EnablePlugin(const std::string& pluginName) {
-		if (m_pluginManager.enablePlugin(pluginName)) {
-			ShowStatus("Enabled plugin: " + pluginName, 3.0f);
-		}
-		else {
-			ShowStatus("Failed to enable plugin: " + pluginName, 5.0f);
-		}
-	}
-
-	void PluginView::DisablePlugin(const std::string& pluginName) {
-		if (m_pluginManager.disablePlugin(pluginName)) {
-			ShowStatus("Disabled plugin: " + pluginName, 3.0f);
-		}
-		else {
-			ShowStatus("Failed to disable plugin: " + pluginName, 5.0f);
-		}
-	}
-
-	void PluginView::ReloadPlugin(const std::string& pluginName) {
-		if (m_pluginManager.reloadPlugin(pluginName)) {
-			ShowStatus("Reloaded plugin: " + pluginName, 3.0f);
-		}
-		else {
-			ShowStatus("Failed to reload plugin: " + pluginName, 5.0f);
-		}
-	}
-
-	void PluginView::UnloadPlugin(const std::string& pluginName) {
-		if (m_pluginManager.unloadPlugin(pluginName)) {
-			ShowStatus("Unloaded plugin: " + pluginName, 3.0f);
-			if (m_selectedPlugin == pluginName) {
-				m_selectedPlugin.clear();
-			}
-		}
-		else {
-			ShowStatus("Failed to unload plugin: " + pluginName, 5.0f);
-		}
-	}
-
-	void PluginView::SaveGlobalPluginState() {
-		m_pluginManager.SaveGlobalPluginState();
-		ShowStatus("Global plugin state saved", 3.0f);
-		std::cout << "[PluginView] Saved global plugin state" << std::endl;
-	}
-
-	void PluginView::SaveProjectPluginState() {
-		m_pluginManager.SaveProjectPluginState();
-		ShowStatus("Project plugin state saved", 3.0f);
-		std::cout << "[PluginView] Saved project plugin state" << std::endl;
-	}
-
-	void PluginView::LoadGlobalPluginState() {
-		m_pluginManager.LoadGlobalPluginState();
-		ShowStatus("Global plugin state loaded", 3.0f);
-		std::cout << "[PluginView] Loaded global plugin state" << std::endl;
-	}
-
-	void PluginView::LoadProjectPluginState() {
-		// This will be handled through project manager, but we can trigger it manually
-		ShowStatus("Project plugin state loading not implemented in UI", 3.0f);
-		std::cout << "[PluginView] Project plugin state loading should be handled by project manager" << std::endl;
-	}
-
-	void PluginView::RenderToolbar() {
-		ImGui::Text("Plugin Directory:");
-		ImGui::SameLine();
-		ImGui::PushItemWidth(200);
-		if (ImGui::InputText("##PluginDir", m_pluginDirectory.data(), m_pluginDirectory.capacity() + 1)) {
-			m_pluginDirectory = std::string(m_pluginDirectory.data());
-		}
-		ImGui::PopItemWidth();
-
-		ImGui::SameLine();
-		if (ImGui::Button("Refresh Directories")) {
-			RefreshPluginDirectories();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Checkbox("Hot Reload", &m_hotReloadEnabled)) {
-			m_pluginManager.enableHotReload(m_hotReloadEnabled);
-			if (m_hotReloadEnabled) {
-				ShowStatus("Versioned hot reload enabled - will detect staging changes", 3.0f);
-				m_hotReloadWasEnabled = true;
-			}
-			else {
-				ShowStatus("Versioned hot reload disabled", 2.0f);
-				m_hotReloadWasEnabled = false;
-			}
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Load Plugin...")) {
-			m_showLoadDialog = true;
-		}
-
-		// New line for state management controls
-		ImGui::Separator();
-
-		ImGui::Text("Plugin State Management:");
-
-		if (ImGui::Button("Save Global State")) {
-			SaveGlobalPluginState();
-		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::BeginTooltip();
-			ImGui::Text("Save current plugin configuration as global default");
-			ImGui::Text("This will be loaded when no project is open");
-			ImGui::EndTooltip();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Save Project State")) {
-			SaveProjectPluginState();
-		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::BeginTooltip();
-			ImGui::Text("Save current plugin configuration to the active project");
-			ImGui::Text("This will be loaded when this project opens");
-			ImGui::EndTooltip();
-		}
-
-		ImGui::SameLine();
-		if (ImGui::Button("Load Global State")) {
-			LoadGlobalPluginState();
-		}
-		if (ImGui::IsItemHovered()) {
-			ImGui::BeginTooltip();
-			ImGui::Text("Load the global plugin configuration");
-			ImGui::Text("Warning: This will change currently loaded plugins");
-			ImGui::EndTooltip();
-		}
-
-		// Hot reload status indicator
-		ImGui::Separator();
-		bool actualHotReloadState = m_pluginManager.isHotReloadEnabled();
-		if (actualHotReloadState) {
-			ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "[HOT RELOAD: ON]");
-		}
-		else {
-			ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "[HOT RELOAD: OFF]");
-		}
-
-		ImGui::SameLine();
-		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(auto-disabled when view closes)");
-
-		// Simple file dialog
-		if (m_showLoadDialog) {
-			ImGui::OpenPopup("Load Plugin File");
-		}
-
-		if (ImGui::BeginPopupModal("Load Plugin File", &m_showLoadDialog, ImGuiWindowFlags_AlwaysAutoResize)) {
-			ImGui::Text("Enter plugin directory or DLL file path:");
-			ImGui::InputText("##PluginPath", m_loadDialogPath, sizeof(m_loadDialogPath));
-
-			if (ImGui::Button("Load")) {
-				LoadPluginFromFile();
-			}
-
-			ImGui::SameLine();
-			if (ImGui::Button("Cancel")) {
-				m_showLoadDialog = false;
-				m_loadDialogPath[0] = '\0';
-			}
-
-			ImGui::EndPopup();
-		}
-	}
-
-	void PluginView::RenderPluginDirectoryList() {
-		ImGui::BeginChild("PluginDirectoryList", ImVec2(0, -30), true);
-		ImGui::Text("Plugin Directories");
-		ImGui::Separator();
-
-		if (m_pluginDirectories.empty()) {
-			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No plugin directories found");
-		}
-		else {
-			for (const auto& pluginDir : m_pluginDirectories) {
-				std::string pluginName = pluginDir.filename().string();
-
-				// Check directory contents for versioned hot reload status
-				bool hasDll = false;
-				bool hasStaging = false;
-				bool stagingHasDll = false;
-				uint32_t highestVersion = 0;
-				size_t versionCount = 0;
-
-				try {
-					// Check for staging directory and its contents
-					std::filesystem::path stagingPath = pluginDir / "staging";
-					if (std::filesystem::exists(stagingPath) && std::filesystem::is_directory(stagingPath)) {
-						hasStaging = true;
-						for (const auto& entry : std::filesystem::directory_iterator(stagingPath)) {
-							if (entry.is_regular_file()) {
-								auto ext = entry.path().extension();
-								if (ext == ".dll" || ext == ".so") {
-									stagingHasDll = true;
-									break;
-								}
+					else {
+						if (!plugin->isEnabled) {
+							if (ImGui::MenuItem("Enable Plugin")) {
+								EnablePlugin(plugin->name);
 							}
 						}
-					}
-
-					// Check for versioned DLLs and regular DLLs
-					highestVersion = GetHighestVersionInDirectory(pluginDir, pluginName);
-					versionCount = CountVersionedDlls(pluginDir, pluginName);
-
-					// Check for non-versioned DLL
-					for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
-						if (entry.is_regular_file()) {
-							auto ext = entry.path().extension();
-							std::string filename = entry.path().filename().string();
-							if ((ext == ".dll" || ext == ".so") &&
-								filename.find("_v") == std::string::npos) {
-								hasDll = true;
+						else {
+							if (ImGui::MenuItem("Disable Plugin")) {
+								DisablePlugin(plugin->name);
 							}
 						}
-					}
-				}
-				catch (...) {
-					// Ignore errors during directory scanning
-				}
-
-				ImGui::PushID(pluginName.c_str());
-
-				// Color coding based on versioned hot reload status
-				ImVec4 textColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); // Default white
-				std::string statusSuffix = "";
-
-				if (stagingHasDll) {
-					textColor = ImVec4(1.0f, 1.0f, 0.5f, 1.0f); // Yellow - staging ready
-					statusSuffix = " [STAGING READY]";
-				}
-				else if (versionCount > 0) {
-					textColor = ImVec4(0.5f, 1.0f, 0.5f, 1.0f); // Green - versioned DLLs
-					statusSuffix = " [v" + std::to_string(highestVersion) + " (" + std::to_string(versionCount) + ")]";
-				}
-				else if (hasDll) {
-					textColor = ImVec4(0.8f, 0.8f, 0.5f, 1.0f); // Orange - non-versioned DLL
-					statusSuffix = " [NON-VERSIONED]";
-				}
-				else {
-					textColor = ImVec4(0.6f, 0.6f, 0.6f, 1.0f); // Gray - no DLL
-					statusSuffix = " [NO DLL]";
-				}
-
-				if (hasDll || versionCount > 0 || hasStaging) {
-					ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-					if (ImGui::Selectable((pluginName + statusSuffix).c_str(), false)) {
-						LoadPlugin(pluginDir);
-					}
-					ImGui::PopStyleColor();
-
-					if (ImGui::IsItemHovered()) {
-						ImGui::BeginTooltip();
-						ImGui::Text("Plugin: %s", pluginName.c_str());
-						ImGui::Text("Path: %s", pluginDir.string().c_str());
-						if (versionCount > 0) {
-							ImGui::Text("Versioned DLLs: %zu (highest: v%u)", versionCount, highestVersion);
+						if (ImGui::MenuItem("Reload Plugin")) {
+							ReloadPlugin(plugin->name);
 						}
-						if (hasDll) ImGui::Text("Non-versioned DLL present");
-						if (hasStaging) ImGui::Text("Staging directory present");
-						if (stagingHasDll) ImGui::Text("Staging DLL ready for versioned hot reload");
-						ImGui::Text("Click to load plugin");
-						ImGui::EndTooltip();
+						if (ImGui::MenuItem("Unload Plugin")) {
+							UnloadPlugin(plugin->name);
+						}
 					}
+					ImGui::EndPopup();
 				}
-				else {
-					ImGui::PushStyleColor(ImGuiCol_Text, textColor);
-					ImGui::Text("%s%s", pluginName.c_str(), statusSuffix.c_str());
-					ImGui::PopStyleColor();
-
-					if (ImGui::IsItemHovered()) {
-						ImGui::BeginTooltip();
-						ImGui::Text("No DLL files found");
-						ImGui::Text("Path: %s", pluginDir.string().c_str());
-						ImGui::EndTooltip();
-					}
-				}
-
-				ImGui::PopID();
 			}
 		}
 
 		ImGui::EndChild();
-		ImGui::Text("Directories: %zu", m_pluginDirectories.size());
+		ImGui::Text("Plugins: %zu", filteredPlugins.size());
 	}
 
-	void PluginView::RenderLoadedPluginsList() {
-		ImGui::BeginChild("LoadedPluginsList", ImVec2(0, -30), true);
-		ImGui::Text("Loaded Plugins");
+	void PluginView::RenderActivePluginsList() {
+		ImGui::BeginChild("ActivePluginsList", ImVec2(0, 0), false);
+		ImGui::Text("Active Plugins");
 		ImGui::Separator();
 
 		auto loadedPlugins = m_pluginManager.getLoadedPlugins();
 
-		if (loadedPlugins.empty()) {
-			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No plugins loaded");
+		// Filter for enabled plugins
+		std::vector<const Plugins::PluginInfo*> activePlugins;
+		for (const auto& plugin : loadedPlugins) {
+			if (plugin.enabled) {
+				activePlugins.push_back(&plugin);
+			}
+		}
+
+		if (activePlugins.empty()) {
+			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No active plugins");
 		}
 		else {
-			for (const auto& plugin : loadedPlugins) {
-				ImVec4 stateColor = GetPluginStateColor(plugin);
-				std::string displayName = plugin.name;
+			for (const auto* plugin : activePlugins) {
+				ImVec4 stateColor = GetPluginStateColor(*plugin);
+				std::string displayName = plugin->name;
 
 				// Add versioned hot reload indicator
-				if (plugin.hotReloadPending) {
-					displayName += " [HOT RELOAD PENDING v" + std::to_string(plugin.nextVersion) + "]";
-					stateColor = ImVec4(1.0f, 1.0f, 0.5f, 1.0f); // Yellow
+				if (plugin->hotReloadPending) {
+					displayName += " [HOT RELOAD PENDING v" + std::to_string(plugin->nextVersion) + "]";
+					stateColor = ImVec4(1.0f, 1.0f, 0.5f, 1.0f);
 				}
-				else if (plugin.currentVersion > 0) {
-					displayName += " [v" + std::to_string(plugin.currentVersion) + "]";
+				else if (plugin->currentVersion > 0) {
+					displayName += " [v" + std::to_string(plugin->currentVersion) + "]";
 				}
 
 				ImGui::PushStyleColor(ImGuiCol_Text, stateColor);
-				bool isSelected = (m_selectedPlugin == plugin.name);
+				bool isSelected = (m_selectedPluginForDetails == plugin->name);
 
 				if (ImGui::Selectable(displayName.c_str(), isSelected)) {
-					m_selectedPlugin = plugin.name;
+					m_selectedPluginForDetails = plugin->name;
 				}
 				ImGui::PopStyleColor();
 
+				// Tooltip
 				if (ImGui::IsItemHovered()) {
 					ImGui::BeginTooltip();
-					ImGui::Text("Name: %s", plugin.name.c_str());
-					ImGui::Text("Version: %s", plugin.version.c_str());
-					ImGui::Text("State: %s", GetPluginStateText(plugin));
-					ImGui::Text("DLL Version: v%u (next: v%u)", plugin.currentVersion, plugin.nextVersion);
-					ImGui::Text("Path: %s", plugin.path.c_str());
-					if (!plugin.activeDllPath.empty()) {
-						ImGui::Text("Active DLL: %s", plugin.activeDllPath.c_str());
-					}
-					if (!plugin.stagingPath.empty()) {
-						ImGui::Text("Staging: %s", plugin.stagingPath.c_str());
-					}
-					if (plugin.hotReloadPending) {
-						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f), "Versioned hot reload pending!");
+					ImGui::Text("Name: %s", plugin->name.c_str());
+					ImGui::Text("Version: %s", plugin->version.c_str());
+					ImGui::Text("DLL Version: v%u", plugin->currentVersion);
+					ImGui::Text("Path: %s", plugin->path.c_str());
+					if (plugin->hotReloadPending) {
+						ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f), "Hot reload pending!");
 					}
 					ImGui::EndTooltip();
+				}
+
+				// Context menu
+				if (ImGui::BeginPopupContextItem()) {
+					if (ImGui::MenuItem("Disable Plugin")) {
+						DisablePlugin(plugin->name);
+					}
+					if (ImGui::MenuItem("Reload Plugin")) {
+						ReloadPlugin(plugin->name);
+					}
+					if (ImGui::MenuItem("Unload Plugin")) {
+						UnloadPlugin(plugin->name);
+					}
+					ImGui::EndPopup();
 				}
 			}
 		}
 
 		ImGui::EndChild();
-		ImGui::Text("Plugins: %zu", loadedPlugins.size());
+		ImGui::Text("Active: %zu", activePlugins.size());
 	}
 
 	void PluginView::RenderPluginDetails() {
-		ImGui::BeginChild("PluginDetails");
-
-		if (m_selectedPlugin.empty()) {
+		if (m_selectedPluginForDetails.empty()) {
 			ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Select a plugin to view details");
 		}
 		else {
 			auto loadedPlugins = m_pluginManager.getLoadedPlugins();
 			auto pluginIt = std::find_if(loadedPlugins.begin(), loadedPlugins.end(),
-				[this](const Plugins::PluginInfo& p) { return p.name == m_selectedPlugin; });
+				[this](const Plugins::PluginInfo& p) { return p.name == m_selectedPluginForDetails; });
 
 			if (pluginIt != loadedPlugins.end()) {
 				const auto& plugin = *pluginIt;
+				auto* availPlugin = FindAvailablePlugin(m_selectedPluginForDetails);
 
 				ImGui::Text("Plugin Details");
 				ImGui::Separator();
@@ -599,45 +421,34 @@ namespace GUI {
 
 				ImGui::Separator();
 
+				// Scope selection
+				ImGui::Text("Load Scope:");
+				ImGui::SameLine();
+				if (availPlugin) {
+					bool isProject = availPlugin->isProjectScope;
+					if (ImGui::RadioButton("Global", !isProject)) {
+						SetPluginScope(plugin.name, false);
+					}
+					ImGui::SameLine();
+					if (ImGui::RadioButton("Project", isProject)) {
+						SetPluginScope(plugin.name, true);
+					}
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+						isProject ? "(saved per-project)" : "(saved globally)");
+				}
+
+				ImGui::Separator();
+
 				// Versioned hot reload section
 				ImGui::Text("Versioned Hot Reload Information:");
 				ImGui::Text("Current DLL Version: v%u", plugin.currentVersion);
 				ImGui::Text("Next DLL Version: v%u", plugin.nextVersion);
-				ImGui::Text("Active DLL: %s", plugin.activeDllPath.c_str());
-				ImGui::Text("Staging Dir: %s", plugin.stagingPath.c_str());
-
-				// Check for versioned DLLs in plugin directory
-				size_t versionCount = CountVersionedDlls(plugin.path, plugin.name);
-				uint32_t highestVersion = GetHighestVersionInDirectory(plugin.path, plugin.name);
-
-				if (versionCount > 0) {
-					ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f),
-						"Versioned DLLs: %zu (highest: v%u)", versionCount, highestVersion);
+				if (!plugin.activeDllPath.empty()) {
+					ImGui::Text("Active DLL: %s", plugin.activeDllPath.c_str());
 				}
-				else {
-					ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Versioned DLLs: None");
-				}
-
-				// Check if staging has DLL
-				std::string stagingDllPath;
-				std::vector<std::string> possibleNames = {
-					plugin.name + ".dll",
-					plugin.name + ".so"
-				};
-
-				for (const auto& name : possibleNames) {
-					std::string testPath = plugin.stagingPath + "/" + name;
-					if (std::filesystem::exists(testPath)) {
-						stagingDllPath = testPath;
-						break;
-					}
-				}
-
-				if (!stagingDllPath.empty()) {
-					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f), "Staging DLL: %s", stagingDllPath.c_str());
-				}
-				else {
-					ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Staging DLL: None");
+				if (!plugin.stagingPath.empty()) {
+					ImGui::Text("Staging Dir: %s", plugin.stagingPath.c_str());
 				}
 
 				if (plugin.hotReloadPending) {
@@ -651,22 +462,22 @@ namespace GUI {
 				// Control buttons
 				if (plugin.loaded) {
 					if (plugin.enabled) {
-						if (ImGui::Button("Disable")) {
+						if (ImGui::Button("Disable", ImVec2(100, 0))) {
 							DisablePlugin(plugin.name);
 						}
 						ImGui::SameLine();
-						if (ImGui::Button("Reload")) {
+						if (ImGui::Button("Reload", ImVec2(100, 0))) {
 							ReloadPlugin(plugin.name);
 						}
 					}
 					else {
-						if (ImGui::Button("Enable")) {
+						if (ImGui::Button("Enable", ImVec2(100, 0))) {
 							EnablePlugin(plugin.name);
 						}
 					}
 
 					ImGui::SameLine();
-					if (ImGui::Button("Unload")) {
+					if (ImGui::Button("Unload", ImVec2(100, 0))) {
 						UnloadPlugin(plugin.name);
 					}
 				}
@@ -684,26 +495,47 @@ namespace GUI {
 				else {
 					ImGui::Text("Plugin Instance: None");
 				}
-
-				ImGui::Separator();
-
-				// Versioned hot reload instructions
-				ImGui::Text("Versioned Hot Reload Instructions:");
-				ImGui::TextWrapped("1. Build your plugin - DLL goes to staging directory");
-				ImGui::TextWrapped("2. PluginManager detects new DLL in staging (only when this view is open)");
-				ImGui::TextWrapped("3. Creates new versioned DLL (e.g., %s_v%u.dll)",
-					plugin.name.c_str(), plugin.nextVersion);
-				ImGui::TextWrapped("4. Safely unloads old DLL, loads new versioned DLL");
-				ImGui::TextWrapped("5. Old versions can be cleaned up (not in use)");
-				ImGui::TextWrapped("6. No Windows file locking issues!");
-
 			}
 			else {
-				ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Selected plugin not found");
+				// Check if it's an available but not loaded plugin
+				auto* availablePlugin = FindAvailablePlugin(m_selectedPluginForDetails);
+				if (availablePlugin) {
+					ImGui::Text("Available Plugin Details");
+					ImGui::Separator();
+
+					ImGui::Text("Name: %s", availablePlugin->name.c_str());
+					ImGui::Text("Directory: %s", availablePlugin->directory.string().c_str());
+					ImGui::Text("Source Directory: %s", availablePlugin->sourceDirectory.c_str());
+					ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Status: Not Loaded");
+
+					ImGui::Separator();
+
+					// Scope selection for unloaded plugins
+					ImGui::Text("Load Scope:");
+					ImGui::SameLine();
+					bool isProject = availablePlugin->isProjectScope;
+					if (ImGui::RadioButton("Global", !isProject)) {
+						availablePlugin->isProjectScope = false;
+					}
+					ImGui::SameLine();
+					if (ImGui::RadioButton("Project", isProject)) {
+						availablePlugin->isProjectScope = true;
+					}
+					ImGui::SameLine();
+					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
+						isProject ? "(will save per-project)" : "(will save globally)");
+
+					ImGui::Separator();
+
+					if (ImGui::Button("Load Plugin", ImVec2(150, 0))) {
+						LoadPlugin(availablePlugin->name);
+					}
+				}
+				else {
+					ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Selected plugin not found");
+				}
 			}
 		}
-
-		ImGui::EndChild();
 	}
 
 	void PluginView::RenderStatusBar() {
@@ -715,10 +547,296 @@ namespace GUI {
 		}
 		else {
 			bool actualHotReloadState = m_pluginManager.isHotReloadEnabled();
-			ImGui::Text("Ready - Hot reload: %s%s",
+			ImGui::Text("Ready - Hot reload: %s | Available: %zu | Active: %zu",
 				actualHotReloadState ? "ENABLED" : "DISABLED",
-				actualHotReloadState ? "" : " (auto-enabled when view opens)");
+				m_availablePlugins.size(),
+				std::count_if(m_availablePlugins.begin(), m_availablePlugins.end(),
+					[](const AvailablePluginInfo& p) { return p.isEnabled; }));
 		}
+	}
+
+	void PluginView::RefreshAvailablePlugins() {
+		m_availablePlugins.clear();
+
+		// Discover plugins in all search directories
+		for (const auto& dirInfo : m_searchDirectories) {
+			if (std::filesystem::exists(dirInfo.path)) {
+				DiscoverPluginsInDirectory(dirInfo.path);
+			}
+		}
+
+		// Update loaded/enabled status from plugin manager
+		auto loadedPlugins = m_pluginManager.getLoadedPlugins();
+		for (auto& availPlugin : m_availablePlugins) {
+			auto it = std::find_if(loadedPlugins.begin(), loadedPlugins.end(),
+				[&](const Plugins::PluginInfo& p) { return p.name == availPlugin.name; });
+
+			if (it != loadedPlugins.end()) {
+				availPlugin.isLoaded = it->loaded;
+				availPlugin.isEnabled = it->enabled;
+				availPlugin.currentVersion = it->currentVersion;
+			}
+		}
+
+		std::cout << "[PluginView] Discovered " << m_availablePlugins.size() << " plugins" << std::endl;
+	}
+
+	void PluginView::DiscoverPluginsInDirectory(const std::filesystem::path& searchDir) {
+		try {
+			if (!std::filesystem::exists(searchDir)) {
+				std::cout << "[PluginView] Search directory does not exist: " << searchDir << std::endl;
+				return;
+			}
+
+			std::cout << "[PluginView] Scanning directory: " << searchDir << std::endl;
+
+			// Look for subdirectories - each subdirectory is a potential plugin
+			for (const auto& entry : std::filesystem::directory_iterator(searchDir)) {
+				if (entry.is_directory()) {
+					std::string dirName = entry.path().filename().string();
+
+					std::cout << "[PluginView] Found subdirectory: " << dirName << std::endl;
+
+					// Skip staging directory
+					if (dirName == "staging") {
+						std::cout << "[PluginView] Skipping staging directory" << std::endl;
+						continue;
+					}
+
+					// Check if plugin already in list
+					auto it = std::find_if(m_availablePlugins.begin(), m_availablePlugins.end(),
+						[&](const AvailablePluginInfo& p) { return p.name == dirName; });
+
+					if (it == m_availablePlugins.end()) {
+						// Add new plugin
+						m_availablePlugins.push_back(
+							AvailablePluginInfo(dirName, entry.path(), searchDir.filename().string())
+						);
+						std::cout << "[PluginView] Added plugin: " << dirName << " from " << searchDir.filename().string() << std::endl;
+					}
+					else {
+						std::cout << "[PluginView] Plugin already exists: " << dirName << std::endl;
+					}
+				}
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[PluginView] Error discovering plugins in " << searchDir << ": " << e.what() << std::endl;
+		}
+	}
+
+	void PluginView::AddSearchDirectory(const std::filesystem::path& newDir) {
+		// Check if already exists
+		auto it = std::find_if(m_searchDirectories.begin(), m_searchDirectories.end(),
+			[&](const PluginDirectoryInfo& info) { return info.path == newDir; });
+
+		if (it == m_searchDirectories.end()) {
+			m_searchDirectories.push_back(PluginDirectoryInfo(newDir, false));
+			ShowStatus("Added search directory: " + newDir.filename().string(), 3.0f);
+			std::cout << "[PluginView] Added search directory: " << newDir << std::endl;
+		}
+		else {
+			ShowStatus("Directory already in search list", 3.0f);
+		}
+	}
+
+	void PluginView::RemoveSearchDirectory(const std::filesystem::path& dir) {
+		auto it = std::find_if(m_searchDirectories.begin(), m_searchDirectories.end(),
+			[&](const PluginDirectoryInfo& info) { return info.path == dir; });
+
+		if (it != m_searchDirectories.end() && !it->isDefault) {
+			std::string dirName = it->displayName;
+			m_searchDirectories.erase(it);
+			m_selectedDirectories.erase(dirName);
+			ShowStatus("Removed search directory: " + dirName, 3.0f);
+			std::cout << "[PluginView] Removed search directory: " << dir << std::endl;
+		}
+	}
+
+	void PluginView::LoadPlugin(const std::string& pluginName) {
+		auto* availPlugin = FindAvailablePlugin(pluginName);
+		if (!availPlugin) {
+			ShowStatus("Plugin not found: " + pluginName, 5.0f);
+			return;
+		}
+
+		std::cout << "[PluginView] Loading plugin: " << pluginName << " from " << availPlugin->directory << std::endl;
+
+		if (m_pluginManager.loadPlugin(availPlugin->directory.string())) {
+			availPlugin->isLoaded = true;
+			ShowStatus("Loaded plugin: " + pluginName, 3.0f);
+			std::cout << "[PluginView] Successfully loaded plugin: " << pluginName << std::endl;
+
+			// Auto-save state based on scope
+			if (availPlugin->isProjectScope) {
+				m_pluginManager.SaveProjectPluginState();
+				std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
+			}
+			else {
+				m_pluginManager.SaveGlobalPluginState();
+				std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
+			}
+		}
+		else {
+			ShowStatus("Failed to load plugin: " + pluginName, 5.0f);
+			std::cerr << "[PluginView] Failed to load plugin: " << pluginName << std::endl;
+		}
+	}
+
+	void PluginView::EnablePlugin(const std::string& pluginName) {
+		if (m_pluginManager.enablePlugin(pluginName)) {
+			auto* availPlugin = FindAvailablePlugin(pluginName);
+			if (availPlugin) {
+				availPlugin->isEnabled = true;
+
+				// Auto-save state based on scope
+				if (availPlugin->isProjectScope) {
+					m_pluginManager.SaveProjectPluginState();
+					std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
+				}
+				else {
+					m_pluginManager.SaveGlobalPluginState();
+					std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
+				}
+			}
+			ShowStatus("Enabled plugin: " + pluginName, 3.0f);
+		}
+		else {
+			ShowStatus("Failed to enable plugin: " + pluginName, 5.0f);
+		}
+	}
+
+	void PluginView::DisablePlugin(const std::string& pluginName) {
+		if (m_pluginManager.disablePlugin(pluginName)) {
+			auto* availPlugin = FindAvailablePlugin(pluginName);
+			if (availPlugin) {
+				availPlugin->isEnabled = false;
+
+				// Auto-save state based on scope
+				if (availPlugin->isProjectScope) {
+					m_pluginManager.SaveProjectPluginState();
+					std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
+				}
+				else {
+					m_pluginManager.SaveGlobalPluginState();
+					std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
+				}
+			}
+			ShowStatus("Disabled plugin: " + pluginName, 3.0f);
+		}
+		else {
+			ShowStatus("Failed to disable plugin: " + pluginName, 5.0f);
+		}
+	}
+
+	void PluginView::ReloadPlugin(const std::string& pluginName) {
+		if (m_pluginManager.reloadPlugin(pluginName)) {
+			ShowStatus("Reloaded plugin: " + pluginName, 3.0f);
+		}
+		else {
+			ShowStatus("Failed to reload plugin: " + pluginName, 5.0f);
+		}
+	}
+
+	void PluginView::UnloadPlugin(const std::string& pluginName) {
+		auto* availPlugin = FindAvailablePlugin(pluginName);
+		bool wasProjectScope = availPlugin ? availPlugin->isProjectScope : false;
+
+		if (m_pluginManager.unloadPlugin(pluginName)) {
+			if (availPlugin) {
+				availPlugin->isLoaded = false;
+				availPlugin->isEnabled = false;
+				availPlugin->currentVersion = 0;
+			}
+			ShowStatus("Unloaded plugin: " + pluginName, 3.0f);
+
+			// Auto-save state based on scope
+			if (wasProjectScope) {
+				m_pluginManager.SaveProjectPluginState();
+				std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
+			}
+			else {
+				m_pluginManager.SaveGlobalPluginState();
+				std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
+			}
+		}
+		else {
+			ShowStatus("Failed to unload plugin: " + pluginName, 5.0f);
+		}
+	}
+
+	void PluginView::SetPluginScope(const std::string& pluginName, bool isProjectScope) {
+		auto* availPlugin = FindAvailablePlugin(pluginName);
+		if (availPlugin) {
+			availPlugin->isProjectScope = isProjectScope;
+			ShowStatus(std::string("Set ") + pluginName + " to " + (isProjectScope ? "project" : "global") + " scope", 3.0f);
+			std::cout << "[PluginView] " << pluginName << " scope changed to: " << (isProjectScope ? "project" : "global") << std::endl;
+		}
+	}
+
+	void PluginView::HandleDirectorySelection(const std::string& dirName, bool ctrlHeld, bool shiftHeld) {
+		if (!ctrlHeld && !shiftHeld) {
+			// Single selection
+			m_selectedDirectories.clear();
+			m_selectedDirectories.insert(dirName);
+			m_lastSelectedDirectory = dirName;
+		}
+		else if (ctrlHeld) {
+			// Toggle selection
+			if (m_selectedDirectories.count(dirName)) {
+				m_selectedDirectories.erase(dirName);
+			}
+			else {
+				m_selectedDirectories.insert(dirName);
+			}
+			m_lastSelectedDirectory = dirName;
+		}
+		else if (shiftHeld && !m_lastSelectedDirectory.empty()) {
+			// Range selection
+			std::vector<std::string> dirOrder;
+			for (const auto& dir : m_searchDirectories) {
+				dirOrder.push_back(dir.displayName);
+			}
+
+			auto startIt = std::find(dirOrder.begin(), dirOrder.end(), m_lastSelectedDirectory);
+			auto endIt = std::find(dirOrder.begin(), dirOrder.end(), dirName);
+
+			if (startIt != dirOrder.end() && endIt != dirOrder.end()) {
+				if (startIt > endIt) std::swap(startIt, endIt);
+
+				for (auto it = startIt; it <= endIt; ++it) {
+					m_selectedDirectories.insert(*it);
+				}
+			}
+		}
+	}
+
+	void PluginView::SelectAllDirectories() {
+		m_selectedDirectories.clear();
+		for (const auto& dir : m_searchDirectories) {
+			m_selectedDirectories.insert(dir.displayName);
+		}
+	}
+
+	void PluginView::DeselectAllDirectories() {
+		m_selectedDirectories.clear();
+	}
+
+	bool PluginView::IsPluginInSelectedDirectories(const AvailablePluginInfo& plugin) const {
+		// If no directories selected, show all
+		if (m_selectedDirectories.empty()) {
+			return true;
+		}
+
+		// Check if plugin's source directory is selected
+		return m_selectedDirectories.find(plugin.sourceDirectory) != m_selectedDirectories.end();
+	}
+
+	AvailablePluginInfo* PluginView::FindAvailablePlugin(const std::string& pluginName) {
+		auto it = std::find_if(m_availablePlugins.begin(), m_availablePlugins.end(),
+			[&](const AvailablePluginInfo& p) { return p.name == pluginName; });
+
+		return (it != m_availablePlugins.end()) ? &(*it) : nullptr;
 	}
 
 	void PluginView::ShowStatus(const std::string& message, float duration) {

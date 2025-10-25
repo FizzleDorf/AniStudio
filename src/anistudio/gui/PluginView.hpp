@@ -5,10 +5,32 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
+#include <set>
 #include <filesystem>
-#include <chrono>
 
 namespace GUI {
+
+	struct PluginDirectoryInfo {
+		std::filesystem::path path;
+		bool isDefault;
+		std::string displayName;
+
+		PluginDirectoryInfo(const std::filesystem::path& p, bool def = false)
+			: path(p), isDefault(def), displayName(p.filename().string()) {}
+	};
+
+	struct AvailablePluginInfo {
+		std::string name;
+		std::filesystem::path directory;
+		bool isLoaded;
+		bool isEnabled;
+		uint32_t currentVersion;
+		std::string sourceDirectory; // Which search directory it came from
+		bool isProjectScope; // true = project-specific, false = global
+
+		AvailablePluginInfo(const std::string& n, const std::filesystem::path& dir, const std::string& src)
+			: name(n), directory(dir), isLoaded(false), isEnabled(false), currentVersion(0), sourceDirectory(src), isProjectScope(false) {}
+	};
 
 	class PluginView : public BaseView {
 	public:
@@ -31,54 +53,61 @@ namespace GUI {
 		Plugins::StudioPluginManager& m_pluginManager;
 
 		// UI state
-		std::string m_pluginDirectory;
 		std::string m_statusMessage;
 		float m_statusTimer = 0.0f;
+		float m_filterListWidth = 250.0f;
 
-		// Hot reload settings - manages enabling/disabling based on view visibility
+		// Hot reload settings
 		bool m_hotReloadEnabled = true;
 		bool m_hotReloadWasEnabled = false;
 
-		// Plugin directories found
-		std::vector<std::filesystem::path> m_pluginDirectories;
+		// Plugin search directories
+		std::vector<PluginDirectoryInfo> m_searchDirectories;
+
+		// Available plugins (discovered from all search directories)
+		std::vector<AvailablePluginInfo> m_availablePlugins;
+
+		// Selected items in filter list
+		std::set<std::string> m_selectedDirectories;
+		std::string m_lastSelectedDirectory;
 
 		// Selected plugin for details
-		std::string m_selectedPlugin;
+		std::string m_selectedPluginForDetails;
 
-		// File dialog state
-		bool m_showLoadDialog = false;
-		char m_loadDialogPath[512] = "";
+		// Plugin discovery and management
+		void RefreshAvailablePlugins();
+		void DiscoverPluginsInDirectory(const std::filesystem::path& searchDir);
+		void AddSearchDirectory(const std::filesystem::path& newDir);
+		void RemoveSearchDirectory(const std::filesystem::path& dir);
 
 		// Plugin actions
-		void RefreshPluginDirectories();
-		void LoadPlugin(const std::filesystem::path& pluginDir);
-		void LoadPluginFromFile();
+		void LoadPlugin(const std::string& pluginName);
 		void EnablePlugin(const std::string& pluginName);
 		void DisablePlugin(const std::string& pluginName);
 		void ReloadPlugin(const std::string& pluginName);
 		void UnloadPlugin(const std::string& pluginName);
-
-		// Plugin state management actions
-		void SaveGlobalPluginState();
-		void SaveProjectPluginState();
-		void LoadGlobalPluginState();
-		void LoadProjectPluginState();
-
-		// Versioned DLL helper functions
-		uint32_t GetHighestVersionInDirectory(const std::filesystem::path& pluginDir, const std::string& pluginName) const;
-		size_t CountVersionedDlls(const std::filesystem::path& pluginDir, const std::string& pluginName) const;
+		void SetPluginScope(const std::string& pluginName, bool isProjectScope);
 
 		// UI rendering
-		void RenderToolbar();
-		void RenderPluginDirectoryList();
-		void RenderLoadedPluginsList();
+		void RenderMainContent();
+		void RenderFilterList();
+		void RenderPluginLists();
+		void RenderAvailablePluginsList();
+		void RenderActivePluginsList();
 		void RenderPluginDetails();
 		void RenderStatusBar();
+
+		// Selection handling
+		void HandleDirectorySelection(const std::string& dirName, bool ctrlHeld, bool shiftHeld);
+		void SelectAllDirectories();
+		void DeselectAllDirectories();
 
 		// Utility
 		void ShowStatus(const std::string& message, float duration = 3.0f);
 		const char* GetPluginStateText(const Plugins::PluginInfo& plugin) const;
 		ImVec4 GetPluginStateColor(const Plugins::PluginInfo& plugin) const;
+		bool IsPluginInSelectedDirectories(const AvailablePluginInfo& plugin) const;
+		AvailablePluginInfo* FindAvailablePlugin(const std::string& pluginName);
 	};
 
 } // namespace GUI
