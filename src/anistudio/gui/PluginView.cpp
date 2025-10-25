@@ -2,10 +2,12 @@
 #include "BasePlugin.hpp"
 #include "Events.hpp"
 #include "ImGuiFileDialog.h"
+#include <nlohmann/json.hpp>
 #include <iostream>
 #include <filesystem>
 #include <algorithm>
 #include <regex>
+#include <fstream>
 #include <imgui.h>
 
 namespace GUI {
@@ -39,6 +41,9 @@ namespace GUI {
 
 		// Discover all available plugins
 		RefreshAvailablePlugins();
+
+		// Load saved plugin scope configuration
+		LoadPluginScopeConfig();
 
 		// Select all directories by default
 		SelectAllDirectories();
@@ -516,10 +521,12 @@ namespace GUI {
 					bool isProject = availablePlugin->isProjectScope;
 					if (ImGui::RadioButton("Global", !isProject)) {
 						availablePlugin->isProjectScope = false;
+						SavePluginScopeConfig();
 					}
 					ImGui::SameLine();
 					if (ImGui::RadioButton("Project", isProject)) {
 						availablePlugin->isProjectScope = true;
+						SavePluginScopeConfig();
 					}
 					ImGui::SameLine();
 					ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
@@ -668,13 +675,14 @@ namespace GUI {
 			std::cout << "[PluginView] Successfully loaded plugin: " << pluginName << std::endl;
 
 			// Auto-save state based on scope
+			// First sync current state from PluginManager
 			if (availPlugin->isProjectScope) {
 				m_pluginManager.SaveProjectPluginState();
-				std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
+				std::cout << "[PluginView] Auto-saved project plugin state for: " << pluginName << std::endl;
 			}
 			else {
 				m_pluginManager.SaveGlobalPluginState();
-				std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
+				std::cout << "[PluginView] Auto-saved global plugin state for: " << pluginName << std::endl;
 			}
 		}
 		else {
@@ -740,7 +748,6 @@ namespace GUI {
 
 	void PluginView::UnloadPlugin(const std::string& pluginName) {
 		auto* availPlugin = FindAvailablePlugin(pluginName);
-		bool wasProjectScope = availPlugin ? availPlugin->isProjectScope : false;
 
 		if (m_pluginManager.unloadPlugin(pluginName)) {
 			if (availPlugin) {
@@ -749,16 +756,7 @@ namespace GUI {
 				availPlugin->currentVersion = 0;
 			}
 			ShowStatus("Unloaded plugin: " + pluginName, 3.0f);
-
-			// Auto-save state based on scope
-			if (wasProjectScope) {
-				m_pluginManager.SaveProjectPluginState();
-				std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
-			}
-			else {
-				m_pluginManager.SaveGlobalPluginState();
-				std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
-			}
+			// PluginManager now handles removing from BOTH states
 		}
 		else {
 			ShowStatus("Failed to unload plugin: " + pluginName, 5.0f);
@@ -769,8 +767,70 @@ namespace GUI {
 		auto* availPlugin = FindAvailablePlugin(pluginName);
 		if (availPlugin) {
 			availPlugin->isProjectScope = isProjectScope;
+			SavePluginScopeConfig(); // Auto-save scope config
 			ShowStatus(std::string("Set ") + pluginName + " to " + (isProjectScope ? "project" : "global") + " scope", 3.0f);
 			std::cout << "[PluginView] " << pluginName << " scope changed to: " << (isProjectScope ? "project" : "global") << std::endl;
+		}
+	}
+
+	void PluginView::SavePluginScopeConfig() {
+		try {
+			nlohmann::json j;
+			j["version"] = "1.0";
+			j["pluginScopes"] = nlohmann::json::object();
+
+			for (const auto& plugin : m_availablePlugins) {
+				j["pluginScopes"][plugin.name] = plugin.isProjectScope;
+			}
+
+			std::filesystem::path dataPath = std::filesystem::current_path().parent_path() / "data";
+			std::filesystem::create_directories(dataPath);
+			std::string filepath = (dataPath / "plugin_scopes.json").string();
+
+			std::ofstream file(filepath);
+			if (file.is_open()) {
+				file << j.dump(4);
+				std::cout << "[PluginView] Saved plugin scope configuration to: " << filepath << std::endl;
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[PluginView] Failed to save plugin scope config: " << e.what() << std::endl;
+		}
+	}
+
+	void PluginView::LoadPluginScopeConfig() {
+		try {
+			std::filesystem::path dataPath = std::filesystem::current_path().parent_path() / "data";
+			std::string filepath = (dataPath / "plugin_scopes.json").string();
+
+			if (!std::filesystem::exists(filepath)) {
+				std::cout << "[PluginView] No plugin scope configuration found" << std::endl;
+				return;
+			}
+
+			std::ifstream file(filepath);
+			if (!file.is_open()) {
+				std::cerr << "[PluginView] Failed to open plugin scope config: " << filepath << std::endl;
+				return;
+			}
+
+			nlohmann::json j;
+			file >> j;
+
+			if (j.contains("pluginScopes") && j["pluginScopes"].is_object()) {
+				for (auto& plugin : m_availablePlugins) {
+					if (j["pluginScopes"].contains(plugin.name)) {
+						plugin.isProjectScope = j["pluginScopes"][plugin.name];
+						std::cout << "[PluginView] Loaded scope for " << plugin.name << ": "
+							<< (plugin.isProjectScope ? "project" : "global") << std::endl;
+					}
+				}
+			}
+
+			std::cout << "[PluginView] Plugin scope configuration loaded from: " << filepath << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[PluginView] Failed to load plugin scope config: " << e.what() << std::endl;
 		}
 	}
 

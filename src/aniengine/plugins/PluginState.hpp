@@ -37,6 +37,10 @@ namespace Plugins {
 		std::unordered_set<std::string> GetPluginsToLoad() const;
 		std::unordered_set<std::string> GetPluginsToEnable() const;
 
+		// FIXED: Get plugin path from state
+		std::string GetPluginPath(const std::string& pluginName) const;
+		std::unordered_map<std::string, PluginLoadState> GetAllPluginStates() const;
+
 		// State updates (called by PluginManager)
 		void SetPluginState(const std::string& pluginName, bool loaded, bool enabled, const std::string& path = "", uint32_t version = 0);
 		void RemovePluginState(const std::string& pluginName);

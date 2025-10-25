@@ -88,6 +88,10 @@ namespace GUI {
 		void UnloadPlugin(const std::string& pluginName);
 		void SetPluginScope(const std::string& pluginName, bool isProjectScope);
 
+		// Scope persistence
+		void SavePluginScopeConfig();
+		void LoadPluginScopeConfig();
+
 		// UI rendering
 		void RenderMainContent();
 		void RenderFilterList();

@@ -227,6 +227,22 @@ namespace Plugins {
 		return result;
 	}
 
+	// FIXED: New method to get plugin path
+	std::string PluginState::GetPluginPath(const std::string& pluginName) const {
+		if (!activeState) return "";
+
+		auto it = activeState->find(pluginName);
+		if (it == activeState->end()) return "";
+
+		return it->second.path;
+	}
+
+	// FIXED: New method to get all plugin states
+	std::unordered_map<std::string, PluginLoadState> PluginState::GetAllPluginStates() const {
+		if (!activeState) return {};
+		return *activeState;
+	}
+
 	void PluginState::SetPluginState(const std::string& pluginName, bool loaded, bool enabled, const std::string& path, uint32_t version) {
 		if (!activeState) return;
 
@@ -237,7 +253,7 @@ namespace Plugins {
 		if (version > 0) state.version = version;
 
 		std::cout << "[PluginState] Updated state for " << pluginName
-			<< " - loaded: " << loaded << ", enabled: " << enabled << std::endl;
+			<< " - loaded: " << loaded << ", enabled: " << enabled << ", path: " << path << std::endl;
 	}
 
 	void PluginState::RemovePluginState(const std::string& pluginName) {

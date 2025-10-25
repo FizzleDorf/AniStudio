@@ -14,6 +14,10 @@ namespace ECS {
 	class EntityManager;
 }
 
+namespace GUI {
+	class ViewManager;
+}
+
 namespace Plugins {
 
 	struct PluginInfo {
@@ -70,13 +74,19 @@ namespace Plugins {
 		void SaveProjectPluginState();
 		void UseGlobalPluginState();
 
+		// Plugin cleanup methods
+		void cleanupPluginEntities(const std::string& pluginName);
+		void cleanupPluginSystems(const std::string& pluginName);
+		void cleanupPluginComponents(const std::string& pluginName);
+		void SetViewManager(GUI::ViewManager* viewMgr) { viewManager = viewMgr; }
+
 	protected:
-		// SIMPLIFIED: Only view cleanup remains (overridden by StudioPluginManager)
-		// Components and systems are managed by EntityManager, no tracking needed
-		virtual void cleanupPluginViews(const std::string& pluginName) {}
+		// View cleanup (overridden by StudioPluginManager)
+		virtual void cleanupPluginViews(const std::string& pluginName);
 
 		// Core references
 		ECS::EntityManager& entityManager;
+		GUI::ViewManager* viewManager = nullptr;
 
 		// Plugin registry
 		std::unordered_map<std::string, PluginInfo> plugins;

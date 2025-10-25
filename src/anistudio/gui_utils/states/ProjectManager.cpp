@@ -205,7 +205,20 @@ namespace ANI {
 			m_currentProjectPath = projectPath;
 			m_isProjectOpen = true;
 
-			// CRITICAL: Load ViewState which includes workspace configuration
+			// Update project-specific paths FIRST
+			UpdateProjectSpecificPaths();
+
+			// Add to recent projects
+			AddToRecentProjects(projectPath);
+
+			std::cout << "[ProjectManager] Loaded project: " << m_projectSettings.projectName << " from " << projectPath << std::endl;
+
+			// CRITICAL: Trigger callback FIRST - this loads plugins so view types get registered
+			if (m_onProjectLoadedCallback) {
+				m_onProjectLoadedCallback(projectPath);
+			}
+
+			// NOW load ViewState AFTER plugins are loaded and view types are registered
 			bool viewStateLoaded = LoadViewState();
 
 			// ALWAYS CREATE A DEFAULT WORKSPACE IF NONE EXIST
@@ -226,19 +239,6 @@ namespace ANI {
 
 			// Load and apply project window state
 			LoadAndApplyProjectWindowState();
-
-			// Update project-specific paths
-			UpdateProjectSpecificPaths();
-
-			// Add to recent projects
-			AddToRecentProjects(projectPath);
-
-			std::cout << "[ProjectManager] Loaded project: " << m_projectSettings.projectName << " from " << projectPath << std::endl;
-
-			// Trigger callback
-			if (m_onProjectLoadedCallback) {
-				m_onProjectLoadedCallback(projectPath);
-			}
 
 			return true;
 		}
