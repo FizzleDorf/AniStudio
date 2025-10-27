@@ -739,6 +739,13 @@ namespace Plugins {
 		return true;
 	}
 
+	void PluginManager::cleanupPluginViews(const std::string& pluginName) {
+		// Base implementation - does nothing by default
+		// StudioPluginManager will override this to handle view cleanup
+		std::cout << "[PluginManager] Base cleanupPluginViews for: " << pluginName
+			<< " (no views to clean up in base class)" << std::endl;
+	}
+
 	bool PluginManager::unloadPlugin(const std::string& pluginName) {
 		auto it = plugins.find(pluginName);
 		if (it == plugins.end()) {

@@ -32,14 +32,12 @@ namespace GUI {
 	}
 
 	void ImageView::Init() {
-		// Get or register ImageSystem
 		imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 		if (!imageSystem) {
 			mgr.RegisterSystem<ECS::ImageSystem>();
 			imageSystem = mgr.GetSystem<ECS::ImageSystem>();
 		}
 
-		// Register callbacks with ImageSystem
 		if (imageSystem) {
 			imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
 				OnImageLoaded(entityID);
@@ -54,10 +52,9 @@ namespace GUI {
 	}
 
 	void ImageView::Update(const float deltaT) {
-		// Poll for changes in image entities
 		size_t currentCount = 0;
 		for (auto entityID : mgr.GetAllEntities()) {
-			if (HasImageComponents(entityID)) {
+			if (IsImageComponentOnly(entityID)) {
 				currentCount++;
 			}
 		}
@@ -66,24 +63,20 @@ namespace GUI {
 			RefreshImageEntities();
 			lastEntityCount = currentCount;
 
-			// Handle selection changes when entities are added/removed
 			if (imageEntities.empty()) {
 				selectedEntityID = 0;
 				imgIndex = 0;
 			}
 			else if (selectedEntityID == 0) {
-				// Auto-select first image if none selected
 				selectedEntityID = imageEntities[0];
 				imgIndex = 0;
 			}
 			else {
-				// Update imgIndex if selected entity still exists
 				auto it = std::find(imageEntities.begin(), imageEntities.end(), selectedEntityID);
 				if (it != imageEntities.end()) {
 					imgIndex = static_cast<int>(std::distance(imageEntities.begin(), it));
 				}
 				else {
-					// Selected entity was removed, select first available
 					if (!imageEntities.empty()) {
 						selectedEntityID = imageEntities[0];
 						imgIndex = 0;
@@ -175,7 +168,7 @@ namespace GUI {
 		try {
 			imageEntities.clear();
 			for (auto entityID : mgr.GetAllEntities()) {
-				if (HasImageComponents(entityID)) {
+				if (IsImageComponentOnly(entityID)) {
 					imageEntities.push_back(entityID);
 				}
 			}
@@ -197,7 +190,6 @@ namespace GUI {
 				ImGui::Text("Channels: %d", imageComp.channels);
 				ImGui::Text("Entity ID: %zu", selectedEntityID);
 
-				// Show loading status based on texture ID
 				if (imageComp.textureID != 0) {
 					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Loaded");
 				}
@@ -278,6 +270,14 @@ namespace GUI {
 			ImGui::SameLine();
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s", contextMenuUtils->GetClipboardPreview().c_str());
 		}
+
+		ImGui::SameLine();
+
+		ImGui::Text("Zoom: %.1f", zoom);
+
+		ImGui::SameLine();
+
+		ImGui::Text("Image count: %zu", imageEntities.size());
 	}
 
 	void ImageView::RenderSelector() {
@@ -339,13 +339,9 @@ namespace GUI {
 	}
 
 	void ImageView::RenderHistory() {
-		ImGui::Begin("History", &showHistory);
+		if (imageEntities.empty()) return;
 
-		if (imageEntities.empty()) {
-			ImGui::Text("No images available.");
-			ImGui::End();
-			return;
-		}
+		ImGui::Begin("Image History");
 
 		float currentRowWidth = 0.0f;
 
@@ -362,11 +358,11 @@ namespace GUI {
 				ImGui::BeginGroup();
 
 				if (static_cast<int>(i) == imgIndex) {
-					ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 255, 0, 255));
+					ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 1.0f, 0.0f, 1.0f));
 				}
 
-				float aspectRatio = (imageComp.height > 0) ?
-					static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height) : 1.0f;
+				float aspectRatio = (imageComp.width > 0 && imageComp.height > 0)
+					? static_cast<float>(imageComp.width) / static_cast<float>(imageComp.height) : 1.0f;
 				ImVec2 maxSize(128.0f, 128.0f);
 				ImVec2 imageSize;
 
@@ -521,15 +517,12 @@ namespace GUI {
 			for (const auto& filePath : filePaths) {
 				if (filePath.empty()) continue;
 
-				// Create entity with ImageComponent
 				ECS::EntityID entity = mgr.AddNewEntity();
 				auto& imageComp = mgr.AddComponent<ECS::ImageComponent>(entity);
 
-				// Set file path - ImageSystem will handle the async loading
 				imageComp.filePath = filePath;
 				imageComp.fileName = std::filesystem::path(filePath).filename().string();
 
-				// Use ImageSystem to load the image
 				imageSystem->SetImage(entity, filePath);
 
 				std::cout << "[ImageView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
@@ -546,7 +539,6 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			// Check if we have image data to save
 			if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
 				Utils::ImageUtils::SaveImage(imageComp.filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
 				std::cout << "[ImageView] Saved image: " << imageComp.filePath << std::endl;
@@ -566,7 +558,6 @@ namespace GUI {
 		try {
 			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-			// Check if we have image data to save
 			if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
 				Utils::ImageUtils::SaveImage(filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
 				std::cout << "[ImageView] Saved image as: " << filePath << std::endl;
@@ -584,16 +575,13 @@ namespace GUI {
 		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
 
 		try {
-			// Use ImageSystem to remove the image (it handles cleanup properly)
 			if (imageSystem) {
 				imageSystem->RemoveImage(selectedEntityID);
 			}
 			else {
-				// Fallback: destroy entity directly
 				mgr.DestroyEntity(selectedEntityID);
 			}
 
-			// Update the view
 			OnImageRemoved(selectedEntityID);
 		}
 		catch (const std::exception& e) {
@@ -626,12 +614,12 @@ namespace GUI {
 		return truncated;
 	}
 
-	bool ImageView::HasImageComponents(ECS::EntityID entityId) const {
-		return mgr.IsEntityValid(entityId) && (
-			mgr.HasComponent<ECS::ImageComponent>(entityId) ||
-			mgr.HasComponent<ECS::InputImageComponent>(entityId) ||
-			mgr.HasComponent<ECS::OutputImageComponent>(entityId)
-			);
+	bool ImageView::IsImageComponentOnly(ECS::EntityID entityId) const {
+		if (!mgr.IsEntityValid(entityId)) return false;
+
+		return mgr.HasComponent<ECS::ImageComponent>(entityId) &&
+			!mgr.HasComponent<ECS::InputImageComponent>(entityId) &&
+			!mgr.HasComponent<ECS::OutputImageComponent>(entityId);
 	}
 
 } // namespace GUI

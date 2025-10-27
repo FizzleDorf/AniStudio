@@ -1,7 +1,3 @@
-/*
- * ImageView.hpp - Enhanced version with ContextMenu integration
- */
-
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 
@@ -37,29 +33,22 @@ namespace GUI {
 		bool showHistory;
 		size_t lastEntityCount;
 
-		// Values for zoom and panning
 		float zoom;
 		float offsetX;
 		float offsetY;
 
-		// Cached entity list - updated by callbacks and polling
 		std::vector<ECS::EntityID> imageEntities;
 
-		// File filters
 		const char* filters;
 
-		// Context menu utilities
 		std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
-		// ImageSystem reference for direct operations
 		std::shared_ptr<ECS::ImageSystem> imageSystem;
 
-		// CALLBACK HANDLERS - Called by ImageSystem when images are loaded/removed
 		void OnImageLoaded(ECS::EntityID entityID);
 		void OnImageRemoved(ECS::EntityID entityID);
 		void RefreshImageEntities();
 
-		// Rendering methods
 		void RenderImageInfo();
 		void RenderControls();
 		void RenderSelector();
@@ -67,18 +56,15 @@ namespace GUI {
 		void RenderSelectedImage();
 		void DrawGrid(int imageWidth, int imageHeight);
 
-		// Image operations
 		void SetZoom(float newZoom);
 		void LoadImages(const std::vector<std::string>& filePaths);
 		void SaveSelectedImage();
 		void SaveSelectedImageAs(const std::string& filePath);
 		void RemoveSelectedImage();
 
-		// Utility methods
 		std::string TruncateFilename(const std::string& filename, float maxTextWidth);
 
-		// Helper to check if entity has image components
-		bool HasImageComponents(ECS::EntityID entityId) const;
+		bool IsImageComponentOnly(ECS::EntityID entityId) const;
 	};
 
 } // namespace GUI

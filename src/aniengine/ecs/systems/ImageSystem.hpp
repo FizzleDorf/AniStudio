@@ -213,7 +213,7 @@ namespace ECS {
 								imageComp.fileName = result.fileName;
 								imageComp.filePath = result.filePath;
 
-								// *** CRITICAL: Store image data for TextureSystem to use ***
+								// Store image data pointer for TextureSystem to use
 								imageComp.imageData = result.data;
 
 								// Update InputImageComponent if present

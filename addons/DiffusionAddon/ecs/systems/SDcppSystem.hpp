@@ -194,6 +194,23 @@ namespace ECS {
 					}
 				}
 
+				// DEBUG LOGGING: Check what image data we have
+				std::cout << "=== QUEUE TASK DEBUG ===" << std::endl;
+				std::cout << "Original entity: " << entityID << std::endl;
+				std::cout << "Cloned entity: " << clonedEntity << std::endl;
+
+				if (mgr.HasComponent<InputImageComponent>(clonedEntity)) {
+					auto& input = mgr.GetComponent<InputImageComponent>(clonedEntity);
+					std::cout << "InputImageComponent: '" << input.filePath << "' " << input.width << "x" << input.height << std::endl;
+					std::cout << "InputFilePath: '" << input.inputFilePath << "'" << std::endl;
+				}
+
+				if (mgr.HasComponent<ImageComponent>(clonedEntity)) {
+					auto& img = mgr.GetComponent<ImageComponent>(clonedEntity);
+					std::cout << "ImageComponent: '" << img.filePath << "' " << img.width << "x" << img.height << std::endl;
+				}
+				std::cout << "=== END DEBUG ===" << std::endl;
+
 				// Serialize entity to metadata
 				taskData.metadata = mgr.SerializeEntity(clonedEntity);
 				std::cout << "Successfully serialized cloned entity " << clonedEntity << " (original: " << entityID << ")" << std::endl;
@@ -369,7 +386,27 @@ namespace ECS {
 					return 0;
 				}
 
-				// For ImageSystem compatibility, ensure proper image component setup
+				// Copy ALL image components from original to cloned entity
+
+				// Copy ImageComponent data
+				if (mgr.HasComponent<ImageComponent>(originalEntity) &&
+					mgr.HasComponent<ImageComponent>(clonedEntity)) {
+
+					auto& originalImg = mgr.GetComponent<ImageComponent>(originalEntity);
+					auto& clonedImg = mgr.GetComponent<ImageComponent>(clonedEntity);
+
+					// Copy ALL image data
+					clonedImg.filePath = originalImg.filePath;
+					clonedImg.fileName = originalImg.fileName;
+					clonedImg.width = originalImg.width;
+					clonedImg.height = originalImg.height;
+					clonedImg.channels = originalImg.channels;
+
+					std::cout << "Copied ImageComponent data to cloned entity " << clonedEntity
+						<< ": " << originalImg.filePath << " " << originalImg.width << "x" << originalImg.height << std::endl;
+				}
+
+				// Copy InputImageComponent data
 				if (mgr.HasComponent<InputImageComponent>(originalEntity) &&
 					mgr.HasComponent<InputImageComponent>(clonedEntity)) {
 
@@ -382,24 +419,10 @@ namespace ECS {
 					clonedInput.width = originalInput.width;
 					clonedInput.height = originalInput.height;
 					clonedInput.channels = originalInput.channels;
+					clonedInput.inputFilePath = originalInput.inputFilePath;
 
-					std::cout << "Copied image path for cloned entity " << clonedEntity
-						<< ": " << originalInput.filePath << std::endl;
-				}
-
-				// Handle other image component types similarly
-				if (mgr.HasComponent<ImageComponent>(originalEntity) &&
-					mgr.HasComponent<ImageComponent>(clonedEntity)) {
-
-					auto& originalImg = mgr.GetComponent<ImageComponent>(originalEntity);
-					auto& clonedImg = mgr.GetComponent<ImageComponent>(clonedEntity);
-
-					// Copy file path information
-					clonedImg.filePath = originalImg.filePath;
-					clonedImg.fileName = originalImg.fileName;
-					clonedImg.width = originalImg.width;
-					clonedImg.height = originalImg.height;
-					clonedImg.channels = originalImg.channels;
+					std::cout << "Copied InputImageComponent data to cloned entity " << clonedEntity
+						<< ": " << originalInput.filePath << " " << originalInput.width << "x" << originalInput.height << std::endl;
 				}
 
 				std::cout << "Successfully cloned entity " << originalEntity << " to " << clonedEntity << std::endl;
@@ -411,17 +434,18 @@ namespace ECS {
 			}
 		}
 
-		void LoadImageViaImageSystem(const std::string& filePath) {
+		void LoadImageViaImageSystem(EntityID targetEntity, const std::string& filePath) {
 			if (auto imageSystem = mgr.GetSystem<ImageSystem>()) {
-				// Create a NEW entity for the output image
-				EntityID outputEntity = mgr.AddNewEntity();
-				mgr.AddComponent<ImageComponent>(outputEntity);
+				// Use the existing entity, don't create a new one
+				if (!mgr.HasComponent<ImageComponent>(targetEntity)) {
+					mgr.AddComponent<ImageComponent>(targetEntity);
+				}
 
-				// Use ImageSystem's existing async loading mechanism
-				imageSystem->SetImage(outputEntity, filePath);
+				// Load image directly to the target entity
+				imageSystem->SetImage(targetEntity, filePath);
 
-				std::cout << "[SDCPPSystem] Created new output entity " << outputEntity
-					<< " and queued image load from " << filePath << std::endl;
+				std::cout << "[SDCPPSystem] Set image on entity " << targetEntity
+					<< " from " << filePath << std::endl;
 			}
 			else {
 				std::cerr << "[SDCPPSystem] ImageSystem not available!" << std::endl;
@@ -565,7 +589,7 @@ namespace ECS {
 			};
 		}
 
-		// Static task functions
+		// Static task functions - FIXED Img2Img to handle missing InputImage data
 		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
 				return Utils::Txt2Img::RunInference(metadata, fullPath);
@@ -588,7 +612,63 @@ namespace ECS {
 
 		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
-				return Utils::Img2Img::RunImg2Img(metadata, fullPath);
+				// First try to find InputImageComponent data
+				if (metadata.contains("InputImage")) {
+					auto inputImage = metadata["InputImage"];
+					if (inputImage.contains("filePath") && !inputImage["filePath"].empty()) {
+						// Use InputImageComponent data
+						std::cout << "Using InputImageComponent for img2img: " << inputImage["filePath"] << std::endl;
+						return Utils::Img2Img::RunImg2Img(metadata, fullPath);
+					}
+				}
+
+				// If InputImageComponent is empty, try regular ImageComponent
+				if (metadata.contains("Image")) {
+					auto imageComp = metadata["Image"];
+					if (imageComp.contains("filePath") && !imageComp["filePath"].empty()) {
+						// Create a modified metadata with ImageComponent data in InputImageComponent
+						nlohmann::json modifiedMetadata = metadata;
+
+						if (!modifiedMetadata.contains("InputImage")) {
+							modifiedMetadata["InputImage"] = nlohmann::json::object();
+						}
+
+						// Copy ImageComponent data to InputImageComponent
+						modifiedMetadata["InputImage"]["filePath"] = imageComp["filePath"];
+						modifiedMetadata["InputImage"]["fileName"] = imageComp["fileName"];
+						modifiedMetadata["InputImage"]["width"] = imageComp["width"];
+						modifiedMetadata["InputImage"]["height"] = imageComp["height"];
+						modifiedMetadata["InputImage"]["channels"] = imageComp["channels"];
+
+						// Also update latent size based on image dimensions
+						if (imageComp.contains("width") && imageComp.contains("height")) {
+							int imgWidth = imageComp["width"];
+							int imgHeight = imageComp["height"];
+
+							// Update latent size in metadata if needed
+							if (modifiedMetadata.contains("Latent")) {
+								int roundedWidth = ((imgWidth + 31) / 64) * 64;
+								int roundedHeight = ((imgHeight + 31) / 64) * 64;
+								roundedWidth = std::max(64, roundedWidth);
+								roundedHeight = std::max(64, roundedHeight);
+
+								modifiedMetadata["Latent"]["latentWidth"] = roundedWidth;
+								modifiedMetadata["Latent"]["latentHeight"] = roundedHeight;
+
+								std::cout << "Updated latent size to: " << roundedWidth << "x" << roundedHeight
+									<< " (from image: " << imgWidth << "x" << imgHeight << ")" << std::endl;
+							}
+						}
+
+						std::cout << "Using ImageComponent data for img2img: " << imageComp["filePath"] << std::endl;
+
+						return Utils::Img2Img::RunImg2Img(modifiedMetadata, fullPath);
+					}
+				}
+
+				std::cerr << "No valid image data found for img2img!" << std::endl;
+				return false;
+
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
@@ -774,7 +854,7 @@ namespace ECS {
 				return;
 			}
 
-			std::vector<std::tuple<std::string, TaskType>> completedTasks;
+			std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;
 
 			{
 				std::unique_lock<std::mutex> lock(queueMutex);
@@ -801,7 +881,7 @@ namespace ECS {
 
 							// Process the completed task
 							if (success) {
-								completedTasks.emplace_back(fullPath, taskType);
+								completedTasks.emplace_back(fullPath, taskType, entityID);
 							}
 							else {
 								std::cerr << "Task failed for entity " << entityID << std::endl;
@@ -838,12 +918,12 @@ namespace ECS {
 			} // Lock released here
 
 			// Process completed tasks WITHOUT holding the lock
-			for (const auto&[fullPath, taskType] : completedTasks) {
-				ProcessCompletedTask(fullPath, taskType);
+			for (const auto&[fullPath, taskType, originalEntity] : completedTasks) {
+				ProcessCompletedTask(fullPath, taskType, originalEntity);
 			}
 		}
 
-		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType) {
+		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID originalEntity) {
 			try {
 				if (shuttingDown) {
 					return;
@@ -859,8 +939,8 @@ namespace ECS {
 					LoadVideoViaVideoSystem(fullPath);
 				}
 				else {
-					// Handle image output using ImageSystem
-					LoadImageViaImageSystem(fullPath);
+					// Handle image output using ImageSystem - pass the ORIGINAL entity
+					LoadImageViaImageSystem(originalEntity, fullPath);
 				}
 
 				std::cout << "Successfully processed completed task: " << fullPath << std::endl;
