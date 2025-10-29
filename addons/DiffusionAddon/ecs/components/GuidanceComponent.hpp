@@ -9,7 +9,6 @@ namespace ECS {
 		GuidanceComponent() {
 			compName = "Guidance";
 			compCategory = "Sampling";
-
 			schema = {
 				{"title", "Guidance Settings"},
 				{"type", "object"},

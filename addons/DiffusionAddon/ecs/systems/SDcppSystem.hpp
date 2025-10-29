@@ -143,7 +143,7 @@ namespace ECS {
 			// Clean up any remaining entities
 			{
 				std::lock_guard<std::mutex> lock(queueMutex);
-				HandleClearRequestInternal();
+				HandleClearRequest();
 			}
 		}
 
@@ -244,9 +244,6 @@ namespace ECS {
 
 			// Update status of running task
 			CheckTaskCompletion();
-
-			// Handle deferred entity cleanup
-			HandleDeferredCleanup();
 		}
 
 		void RemoveFromQueue(const size_t index) {
@@ -484,64 +481,19 @@ namespace ECS {
 		// The actual clearing logic - called from Update when it's safe
 		void HandleClearRequest() {
 			std::lock_guard<std::mutex> lock(queueMutex);
-			HandleClearRequestInternal();
-		}
-
-		void HandleClearRequestInternal() {
 			std::cout << "Clearing queue with " << taskQueue.size() << " items" << std::endl;
 
-			// Collect entities from non-processing tasks
+			// Just remove all non-processing tasks - NO CLEANUP
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
 				if (!it->processing) {
-					EntityID entityID = it->entityID;
-					entitiesNeedingCleanup.push_back(entityID);
 					it = taskQueue.erase(it);
-					std::cout << "Queued entity " << entityID << " for cleanup" << std::endl;
 				}
 				else {
-					std::cout << "Keeping processing task for entity " << it->entityID << std::endl;
-					++it;
+					++it;  // Keep active tasks
 				}
 			}
 
-			std::cout << "Queue cleared. " << taskQueue.size() << " items remaining (processing)" << std::endl;
-		}
-
-		// Handle deferred entity cleanup
-		void HandleDeferredCleanup() {
-			if (entitiesNeedingCleanup.empty()) {
-				return;
-			}
-
-			// Process a few entities per frame to avoid hitches
-			int maxCleanupPerFrame = 5;
-			int cleaned = 0;
-
-			for (auto it = entitiesNeedingCleanup.begin();
-				it != entitiesNeedingCleanup.end() && cleaned < maxCleanupPerFrame;) {
-
-				EntityID entityID = *it;
-
-				try {
-					if (mgr.GetEntitiesSignatures().count(entityID)) {
-						// Always destroy cloned entities completely - they are temporary
-						mgr.DestroyEntity(entityID);
-						std::cout << "Cleaned up cloned entity " << entityID << std::endl;
-					}
-					it = entitiesNeedingCleanup.erase(it);
-					cleaned++;
-				}
-				catch (const std::exception& e) {
-					std::cerr << "Error in deferred cleanup: " << e.what() << std::endl;
-					it = entitiesNeedingCleanup.erase(it);
-					cleaned++;
-				}
-			}
-
-			if (cleaned > 0) {
-				std::cout << "Deferred cleanup: processed " << cleaned << " entities, "
-					<< entitiesNeedingCleanup.size() << " remaining" << std::endl;
-			}
+			std::cout << "Queue cleared. " << taskQueue.size() << " items remaining (active)" << std::endl;
 		}
 
 		void TerminateActiveTask() {
@@ -866,7 +818,6 @@ namespace ECS {
 						auto status = it->result.wait_for(std::chrono::milliseconds(0));
 
 						if (status == std::future_status::ready) {
-
 							EntityID entityID = it->entityID;
 							std::string fullPath = it->fullPath;
 							TaskType taskType = it->taskType;
@@ -879,8 +830,8 @@ namespace ECS {
 								std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
 							}
 
-							// Process the completed task
-							if (success) {
+							// Process the completed task ONLY if not shutting down
+							if (!shuttingDown && success) {
 								completedTasks.emplace_back(fullPath, taskType, entityID);
 							}
 							else {
@@ -897,10 +848,12 @@ namespace ECS {
 								}
 							}
 
-							// Clean up the cloned entity
-							entitiesNeedingCleanup.push_back(entityID);
+							// Only clean up cloned entities
+							if (it->isClonedEntity) {
+								entitiesNeedingCleanup.push_back(entityID);
+							}
 
-							// Remove the completed task - this will allow the next task to start
+							// Remove the completed task
 							it = taskQueue.erase(it);
 
 							std::cout << "Task completed. Remaining queue size: " << taskQueue.size() << std::endl;
@@ -918,12 +871,14 @@ namespace ECS {
 			} // Lock released here
 
 			// Process completed tasks WITHOUT holding the lock
-			for (const auto&[fullPath, taskType, originalEntity] : completedTasks) {
-				ProcessCompletedTask(fullPath, taskType, originalEntity);
+			if (!shuttingDown) {
+				for (const auto&[fullPath, taskType, originalEntity] : completedTasks) {
+					ProcessCompletedTask(fullPath, taskType, originalEntity);
+				}
 			}
 		}
 
-		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID originalEntity) {
+		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID clonedEntity) {
 			try {
 				if (shuttingDown) {
 					return;
@@ -939,8 +894,15 @@ namespace ECS {
 					LoadVideoViaVideoSystem(fullPath);
 				}
 				else {
-					// Handle image output using ImageSystem - pass the ORIGINAL entity
-					LoadImageViaImageSystem(originalEntity, fullPath);
+					// Create a NEW entity for the output image
+					EntityID newImageEntity = mgr.AddNewEntity();
+					mgr.AddComponent<ImageComponent>(newImageEntity);
+
+					// Load the output image to the new entity using ImageSystem
+					LoadImageViaImageSystem(newImageEntity, fullPath);
+
+					std::cout << "Created new image entity " << newImageEntity
+						<< " for output: " << fullPath << std::endl;
 				}
 
 				std::cout << "Successfully processed completed task: " << fullPath << std::endl;

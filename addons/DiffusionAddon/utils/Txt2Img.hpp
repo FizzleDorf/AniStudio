@@ -27,7 +27,10 @@ namespace Utils
 			sd_image_t *result_images = nullptr;
 			sd_img_gen_params_t gen_params;
 			sd_img_gen_params_init(&gen_params);
-
+			
+			std::cout << "=== METADATA STRUCTURE DEBUG ===" << std::endl;
+			std::cout << "Full metadata: " << metadata.dump(2) << std::endl;
+			std::cout << "=== END METADATA DEBUG ===" << std::endl;
 			try
 			{
 				// Extract parameters from metadata - use local strings for proper lifetime

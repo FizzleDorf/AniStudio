@@ -24,7 +24,7 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreComponents() {
-		
+
 		entityManager.RegisterComponent<ImageComponent>("Image");
 		entityManager.RegisterComponent<InputImageComponent>("InputImage");
 		entityManager.RegisterComponent<OutputImageComponent>("OutputImage");
@@ -88,9 +88,15 @@ namespace ANI {
 			std::cout << "[EngineCore] Initializing AssetManager..." << std::endl;
 			AssetManager::Instance().Initialize();
 
-			// Initialize file paths properly (sets up defaults AND loads saved paths)
+			// FIX: Initialize file paths BEFORE anything else that might need them
 			std::cout << "[EngineCore] Initializing file paths..." << std::endl;
 			Utils::FilePaths::Init();
+
+			// DEBUG: Verify paths are set
+			std::cout << "[EngineCore] File paths initialized:" << std::endl;
+			std::cout << "[EngineCore]   defaultProjectPath: " << Utils::FilePaths::defaultProjectPath << std::endl;
+			std::cout << "[EngineCore]   dataPath: " << Utils::FilePaths::dataPath << std::endl;
+			std::cout << "[EngineCore]   loraDir: " << Utils::FilePaths::loraDir << std::endl;
 
 			// Invalidate ID 0 for consistency
 			const ECS::EntityID temp = entityManager.AddNewEntity();

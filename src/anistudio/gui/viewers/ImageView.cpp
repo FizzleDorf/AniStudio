@@ -339,7 +339,6 @@ namespace GUI {
 	}
 
 	void ImageView::RenderHistory() {
-		if (imageEntities.empty()) return;
 
 		ImGui::Begin("Image History");
 

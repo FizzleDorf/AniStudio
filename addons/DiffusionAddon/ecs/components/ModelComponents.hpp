@@ -102,7 +102,6 @@ namespace ECS {
 	struct ModelComponent : public BaseModelComponent {
 		ModelComponent() {
 			compName = "Model";
-
 			schema = {
 				{"title", "Checkpoint Model"},
 				{"type", "object"},
@@ -144,7 +143,6 @@ namespace ECS {
 	struct DiffusionModelComponent : public BaseModelComponent {
 		DiffusionModelComponent() {
 			compName = "DiffusionModel";
-
 			schema = {
 				{"title", "UNet/Diffusion Model"},
 				{"type", "object"},
@@ -186,7 +184,6 @@ namespace ECS {
 	struct ClipGComponent : public BaseModelComponent {
 		ClipGComponent() {
 			compName = "ClipG";
-
 			schema = {
 				{"title", "CLIP-G Text Encoder"},
 				{"type", "object"},

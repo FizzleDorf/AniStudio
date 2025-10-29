@@ -5,8 +5,6 @@ namespace ECS {
         LayerSkipComponent() {
             compName = "LayerSkip";
 			compCategory = "Advanced";
-
-            // Define the component schema
             schema = {
                 {"title", "Layer Skip Settings"},
                 {"type", "object"},

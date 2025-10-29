@@ -9,8 +9,6 @@ namespace ECS {
 		ClipSkipComponent() {
 			compName = "ClipSkip";
 			compCategory = "Advanced";
-
-			// Define the component schema WITHOUT table layout + with tooltip
 			schema = {
 				{"title", "Clip Skip Settings"},
 				{"type", "object"},

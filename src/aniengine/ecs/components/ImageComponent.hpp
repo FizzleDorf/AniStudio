@@ -258,7 +258,6 @@ namespace ECS {
 	};
 
 	struct OutputImageComponent : public ImageComponent {
-		std::string outputDirectory = "";  // Output directory path
 		std::string fileExtension = ".png";  // Selected file extension
 		std::vector<std::string> supportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
 		int selectedExtensionIndex = 0;  // Index for combo widget
@@ -266,8 +265,8 @@ namespace ECS {
 		OutputImageComponent() {
 			compName = "OutputImage";
 			compCategory = "Image";
-			// Set default output directory
-			outputDirectory = !Utils::FilePaths::outputFolderPath.empty()
+			// Set default output directory to filePath 
+			filePath = !Utils::FilePaths::outputFolderPath.empty()
 				? Utils::FilePaths::outputFolderPath
 				: Utils::FilePaths::defaultProjectPath;
 			fileName = "AniStudio";
@@ -277,14 +276,14 @@ namespace ECS {
 		// Get property map for UI rendering
 		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["outputDirectory"] = &outputDirectory;
 			properties["fileName"] = &fileName;
+			properties["filePath"] = &filePath;  // ADD FILEPATH TO PROPERTIES!
 			properties["selectedExtensionIndex"] = &selectedExtensionIndex;
 			properties["supportedExtensions"] = &supportedExtensions;
 			return properties;
 		}
 
-		// Get the full output path
+		// Get the full output path - SIMPLIFIED
 		std::string GetFullOutputPath() const {
 			std::string extension = fileExtension;
 			if (selectedExtensionIndex >= 0 && selectedExtensionIndex < supportedExtensions.size()) {
@@ -292,16 +291,23 @@ namespace ECS {
 			}
 
 			std::string baseName = fileName;
-			if (baseName.empty()) baseName = "AniStudio_output";
+			if (baseName.empty()) baseName = "AniStudio";
 
-			std::filesystem::path outputPath = std::filesystem::path(outputDirectory) / (baseName + extension);
+			// JUST USE FILEPATH - NO MORE outputDirectory BULLSHIT
+			std::string outputDir = filePath;
+			if (outputDir.empty()) {
+				outputDir = !Utils::FilePaths::outputFolderPath.empty()
+					? Utils::FilePaths::outputFolderPath
+					: Utils::FilePaths::defaultProjectPath;
+			}
+
+			std::filesystem::path outputPath = std::filesystem::path(outputDir) / (baseName + extension);
 			return outputPath.string();
 		}
 
 		// Serialize the component to JSON
 		virtual nlohmann::json Serialize() const override {
 			nlohmann::json j = ImageComponent::Serialize();
-			j[compName]["outputDirectory"] = outputDirectory;
 			j[compName]["fileExtension"] = fileExtension;
 			j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
 			return j;
@@ -316,8 +322,6 @@ namespace ECS {
 				componentData = j.at(compName);
 			}
 
-			if (componentData.contains("outputDirectory"))
-				outputDirectory = componentData["outputDirectory"];
 			if (componentData.contains("fileExtension"))
 				fileExtension = componentData["fileExtension"];
 			if (componentData.contains("selectedExtensionIndex"))
@@ -328,7 +332,6 @@ namespace ECS {
 			if (this != &other) {
 				ImageComponent::operator=(other);
 				compName = "OutputImage";
-				outputDirectory = other.outputDirectory;
 				fileExtension = other.fileExtension;
 				selectedExtensionIndex = other.selectedExtensionIndex;
 				supportedExtensions = other.supportedExtensions;
@@ -340,7 +343,6 @@ namespace ECS {
 		// Copy constructor
 		OutputImageComponent(const OutputImageComponent& other) : ImageComponent(other) {
 			compName = "OutputImage";
-			outputDirectory = other.outputDirectory;
 			fileExtension = other.fileExtension;
 			selectedExtensionIndex = other.selectedExtensionIndex;
 			supportedExtensions = other.supportedExtensions;
@@ -353,7 +355,7 @@ namespace ECS {
 				{"title", "Output Image"},
 				{"type", "object"},
 				{"properties", {
-					{"outputDirectory", {
+					{"filePath", {  // CHANGE FROM outputDirectory TO filePath!
 						{"type", "string"},
 						{"title", "Output Directory"},
 						{"ui:widget", "file_selector"},
@@ -387,7 +389,7 @@ namespace ECS {
 						}}
 					}}
 				}},
-				{"propertyOrder", {"outputDirectory", "fileName", "selectedExtensionIndex"}}
+				{"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}  // CHANGED HERE TOO
 			};
 		}
 	};

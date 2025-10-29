@@ -468,11 +468,12 @@ namespace ANI {
 					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
 					viewManager.Render();
+					ImGui::End();
 				}
 				else {
 					ImGui::PopStyleVar(3);
+					ImGui::End();
 				}
-				ImGui::End();
 			}
 		}
 		catch (const std::exception& e) {
