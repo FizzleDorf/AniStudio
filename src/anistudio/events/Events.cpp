@@ -68,6 +68,65 @@ namespace ANI {
 		eventQueue.clear();
 	}
 
+	void Events::UnregisterEvent(const std::string& eventName) {
+		auto it = eventHandlers.find(eventName);
+		if (it != eventHandlers.end()) {
+			eventHandlers.erase(it);
+			std::cout << "[Events] Unregistered all handlers for event: " << eventName << std::endl;
+		}
+		else {
+			std::cout << "[Events] No handlers found for event: " << eventName << std::endl;
+		}
+	}
+
+	void Events::UnregisterEvent(const std::string& eventName, EventCallback callback) {
+		auto it = eventHandlers.find(eventName);
+		if (it != eventHandlers.end()) {
+			auto& simpleCallbacks = it->second.simpleCallbacks;
+
+			// Remove the specific callback
+			for (auto cbIt = simpleCallbacks.begin(); cbIt != simpleCallbacks.end(); ) {
+				// Compare function objects - this works for lambdas with the same capture
+				if (cbIt->target_type() == callback.target_type()) {
+					cbIt = simpleCallbacks.erase(cbIt);
+					std::cout << "[Events] Unregistered specific callback for event: " << eventName << std::endl;
+				}
+				else {
+					++cbIt;
+				}
+			}
+
+			// Remove the event entirely if no callbacks left
+			if (simpleCallbacks.empty() && it->second.dataCallbacks.empty()) {
+				eventHandlers.erase(it);
+			}
+		}
+	}
+
+	void Events::UnregisterEventWithData(const std::string& eventName, EventCallbackWithData callback) {
+		auto it = eventHandlers.find(eventName);
+		if (it != eventHandlers.end()) {
+			auto& dataCallbacks = it->second.dataCallbacks;
+
+			// Remove the specific callback
+			for (auto cbIt = dataCallbacks.begin(); cbIt != dataCallbacks.end(); ) {
+				// Compare function objects
+				if (cbIt->target_type() == callback.target_type()) {
+					cbIt = dataCallbacks.erase(cbIt);
+					std::cout << "[Events] Unregistered specific data callback for event: " << eventName << std::endl;
+				}
+				else {
+					++cbIt;
+				}
+			}
+
+			// Remove the event entirely if no callbacks left
+			if (it->second.simpleCallbacks.empty() && dataCallbacks.empty()) {
+				eventHandlers.erase(it);
+			}
+		}
+	}
+
 	void Events::ClearAllEvents() {
 		eventHandlers.clear();
 		eventQueue.clear();

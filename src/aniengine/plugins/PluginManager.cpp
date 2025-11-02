@@ -20,12 +20,8 @@ namespace Plugins {
 	PluginManager::PluginManager(ECS::EntityManager& entityMgr)
 		: entityManager(entityMgr) {
 		std::cout << "[PluginManager] Constructor - simplified manager created" << std::endl;
-
-		// DON'T CREATE DIRECTORIES - PluginView will set this
 		stagingDirectory = "";
-
 		InitializePluginStateManager();
-
 		hotReloadEnabled = false;
 		hotReloadForced = false;
 		std::cout << "[PluginManager] Hot reload disabled by default" << std::endl;
@@ -61,19 +57,15 @@ namespace Plugins {
 
 	void PluginManager::LoadGlobalPluginState() {
 		if (!pluginState) return;
-
 		std::cout << "[PluginManager] Loading global plugin state..." << std::endl;
 		pluginState->UseGlobalState();
 		pluginState->LoadGlobalPluginState();
-
 		LoadPluginsFromState();
-
 		std::cout << "[PluginManager] Global plugin state loaded and applied" << std::endl;
 	}
 
 	void PluginManager::SaveGlobalPluginState() {
 		if (!pluginState) return;
-
 		std::cout << "[PluginManager] Saving global plugin state..." << std::endl;
 		SaveCurrentPluginState();
 		pluginState->SaveGlobalPluginState();
@@ -82,23 +74,17 @@ namespace Plugins {
 
 	void PluginManager::SetProjectContext(const std::string& projectPath) {
 		if (!pluginState) return;
-
 		std::cout << "[PluginManager] Setting project context: " << projectPath << std::endl;
-
 		SaveCurrentPluginState();
-
 		pluginState->SetCurrentProjectPath(projectPath);
 		pluginState->UseProjectState();
 		pluginState->LoadProjectPluginState();
-
 		LoadPluginsFromState();
-
 		std::cout << "[PluginManager] Project plugin context applied" << std::endl;
 	}
 
 	void PluginManager::SaveProjectPluginState() {
 		if (!pluginState) return;
-
 		std::cout << "[PluginManager] Saving project plugin state..." << std::endl;
 		SaveCurrentPluginState();
 		pluginState->SaveProjectPluginState();
@@ -107,23 +93,16 @@ namespace Plugins {
 
 	void PluginManager::UseGlobalPluginState() {
 		if (!pluginState) return;
-
 		std::cout << "[PluginManager] Switching to global plugin state..." << std::endl;
-
 		SaveCurrentPluginState();
-
 		pluginState->UseGlobalState();
-
 		LoadPluginsFromState();
-
 		std::cout << "[PluginManager] Switched to global plugin state" << std::endl;
 	}
 
 	void PluginManager::LoadPluginsFromState() {
 		if (!pluginState) return;
-
 		auto allPluginStates = pluginState->GetAllPluginStates();
-
 		std::cout << "[PluginManager] Loading plugins from state (" << allPluginStates.size() << " plugins)" << std::endl;
 
 		for (const auto&[pluginName, state] : allPluginStates) {
@@ -140,9 +119,7 @@ namespace Plugins {
 						std::cerr << "[PluginManager] No path in state for plugin: " << pluginName << std::endl;
 						continue;
 					}
-
 					std::cout << "[PluginManager] Loading plugin: " << pluginName << " from " << pluginPath << std::endl;
-
 					if (loadPlugin(pluginPath)) {
 						std::cout << "[PluginManager] Successfully loaded plugin: " << pluginName << std::endl;
 					}
@@ -165,25 +142,20 @@ namespace Plugins {
 				}
 			}
 		}
-
 		std::cout << "[PluginManager] Plugin loading from state complete" << std::endl;
 	}
 
 	void PluginManager::SaveCurrentPluginState() {
 		if (!pluginState) return;
-
 		std::cout << "[PluginManager] Saving current plugin state..." << std::endl;
-
 		for (const auto&[pluginName, info] : plugins) {
 			pluginState->SetPluginState(pluginName, info.loaded, info.enabled, info.path, info.currentVersion);
 		}
-
 		std::cout << "[PluginManager] Current plugin state saved to memory" << std::endl;
 	}
 
 	void PluginManager::setStagingDirectory(const std::string& basePluginsDir) {
 		stagingDirectory = basePluginsDir;
-		// DON'T CREATE IT - it should already exist
 		std::cout << "[PluginManager] Staging directory reference set to: " << stagingDirectory << std::endl;
 	}
 
@@ -210,11 +182,9 @@ namespace Plugins {
 			return;
 		}
 
-		// Use the plugin's actual source directory
 		std::string pluginMainDir = it->second.path;
 		std::string pluginStagingDir = pluginMainDir + "/staging";
 
-		// Only create staging subdirectory if it doesn't exist
 		if (!std::filesystem::exists(pluginStagingDir)) {
 			std::filesystem::create_directories(pluginStagingDir);
 			std::cout << "[PluginManager] Created staging directory: " << pluginStagingDir << std::endl;
@@ -223,6 +193,18 @@ namespace Plugins {
 		std::cout << "[PluginManager] Setup directories for plugin: " << pluginName << std::endl;
 		std::cout << "  Main: " << pluginMainDir << std::endl;
 		std::cout << "  Staging: " << pluginStagingDir << std::endl;
+	}
+
+	bool PluginManager::moveFile(const std::string& source, const std::string& destination) {
+		try {
+			std::filesystem::rename(source, destination);
+			std::cout << "[PluginManager] File moved successfully from " << source << " to " << destination << std::endl;
+			return true;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[PluginManager] File move failed: " << e.what() << std::endl;
+			return false;
+		}
 	}
 
 	std::string PluginManager::findPluginDll(const std::string& pluginDir, const std::string& pluginName) {
@@ -246,9 +228,9 @@ namespace Plugins {
 
 	std::string PluginManager::getVersionedDllName(const std::string& pluginName, uint32_t version) {
 #ifdef _WIN32
-		return pluginName + "_v" + std::to_string(version) + ".dll";
+		return pluginName + ".v" + std::to_string(version) + ".dll";
 #else
-		return pluginName + "_v" + std::to_string(version) + ".so";
+		return pluginName + ".v" + std::to_string(version) + ".so";
 #endif
 	}
 
@@ -260,7 +242,7 @@ namespace Plugins {
 			return "";
 		}
 
-		std::regex versionPattern(pluginName + "_v(\\d+)\\.(dll|so)");
+		std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so)");
 
 		for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
 			if (entry.is_regular_file()) {
@@ -288,7 +270,7 @@ namespace Plugins {
 	uint32_t PluginManager::extractVersionFromDllName(const std::string& dllPath, const std::string& pluginName) {
 		std::filesystem::path path(dllPath);
 		std::string filename = path.filename().string();
-		std::regex versionPattern(pluginName + "_v(\\d+)\\.(dll|so)");
+		std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so)");
 		std::smatch matches;
 
 		if (std::regex_match(filename, matches, versionPattern)) {
@@ -310,7 +292,7 @@ namespace Plugins {
 		}
 
 		std::vector<std::pair<uint32_t, std::string>> versionedDlls;
-		std::regex versionPattern(pluginName + "_v(\\d+)\\.(dll|so)");
+		std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so)");
 
 		for (const auto& entry : std::filesystem::directory_iterator(pluginMainDir)) {
 			if (entry.is_regular_file()) {
@@ -348,17 +330,31 @@ namespace Plugins {
 			return false;
 		}
 
-		std::string stagingDllPath = findPluginDll(info.stagingPath, pluginName);
-		if (stagingDllPath.empty()) {
+		std::string stagingDllPath = info.stagingPath + "/" + pluginName;
+#ifdef _WIN32
+		stagingDllPath += ".dll";
+#else
+		stagingDllPath += ".so";
+#endif
+
+		if (!std::filesystem::exists(stagingDllPath)) {
 			return false;
 		}
 
 		try {
-			auto stagingWriteTime = std::filesystem::last_write_time(stagingDllPath);
+			auto currentWriteTime = std::filesystem::last_write_time(stagingDllPath);
+			auto now = std::filesystem::file_time_type::clock::now();
+			auto fileAge = std::chrono::duration_cast<std::chrono::seconds>(now - currentWriteTime).count();
 
-			if (stagingWriteTime > info.stagingWriteTime) {
-				info.stagingWriteTime = stagingWriteTime;
+			if (fileAge < 2) {
+				std::cout << "[PluginManager] Staging DLL is too new (" << fileAge << "s), waiting for build to complete..." << std::endl;
+				return false;
+			}
+
+			if (currentWriteTime > info.stagingWriteTime) {
+				info.stagingWriteTime = currentWriteTime;
 				std::cout << "[PluginManager] Staging DLL updated for: " << pluginName << std::endl;
+				std::cout << "[PluginManager] File age: " << fileAge << " seconds" << std::endl;
 				return true;
 			}
 		}
@@ -381,8 +377,14 @@ namespace Plugins {
 			return false;
 		}
 
-		std::string stagingDllPath = findPluginDll(info.stagingPath, pluginName);
-		if (stagingDllPath.empty()) {
+		std::string stagingDllPath = info.stagingPath + "/" + pluginName;
+#ifdef _WIN32
+		stagingDllPath += ".dll";
+#else
+		stagingDllPath += ".so";
+#endif
+
+		if (!std::filesystem::exists(stagingDllPath)) {
 			std::cerr << "[PluginManager] No staging DLL found for: " << pluginName << std::endl;
 			return false;
 		}
@@ -414,6 +416,10 @@ namespace Plugins {
 		PluginInfo& info = it->second;
 		bool wasEnabled = info.enabled;
 
+		std::cout << "[PluginManager] Starting safe reload for: " << pluginName << std::endl;
+		std::cout << "[PluginManager] Current version: v" << info.currentVersion << std::endl;
+		std::cout << "[PluginManager] Next version: v" << info.nextVersion << std::endl;
+
 		if (wasEnabled) {
 			std::cout << "[PluginManager] Disabling plugin for reload..." << std::endl;
 			if (!disablePlugin(pluginName)) {
@@ -434,50 +440,53 @@ namespace Plugins {
 			info.handle = nullptr;
 		}
 
+		std::cout << "[PluginManager] Waiting for DLL to be released..." << std::endl;
 		std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-		std::string pluginMainDir = info.path;
 		std::string versionedDllName = getVersionedDllName(pluginName, info.nextVersion);
-		std::string newDllPath = pluginMainDir + "/" + versionedDllName;
+		std::string newDllPath = info.path + "/" + versionedDllName;
 
 		if (!std::filesystem::exists(newDllPath)) {
 			std::cerr << "[PluginManager] New DLL not found: " << newDllPath << std::endl;
 			return false;
 		}
 
-		std::cout << "[PluginManager] Loading new DLL v" << info.nextVersion << ": " << newDllPath << std::endl;
+		std::cout << "[PluginManager] Loading new DLL: " << newDllPath << std::endl;
 
-		info.handle = loadDynamicLibrary(newDllPath);
-		if (!info.handle) {
+		void* newHandle = loadDynamicLibrary(newDllPath);
+		if (!newHandle) {
 			std::cerr << "[PluginManager] Failed to load new DLL" << std::endl;
-			info.loaded = false;
 			return false;
 		}
 
-		info.createFunc = reinterpret_cast<BasePlugin * (*)()>(getFunction(info.handle, "CreatePlugin"));
-		info.destroyFunc = reinterpret_cast<void(*)(BasePlugin*)>(getFunction(info.handle, "DestroyPlugin"));
+		auto newCreateFunc = reinterpret_cast<BasePlugin * (*)()>(getFunction(newHandle, "CreatePlugin"));
+		auto newDestroyFunc = reinterpret_cast<void(*)(BasePlugin*)>(getFunction(newHandle, "DestroyPlugin"));
 
-		if (!info.createFunc || !info.destroyFunc) {
+		if (!newCreateFunc || !newDestroyFunc) {
 			std::cerr << "[PluginManager] Failed to load plugin functions from new DLL" << std::endl;
-			unloadLibrary(info.handle);
-			info.handle = nullptr;
-			info.loaded = false;
+			unloadLibrary(newHandle);
 			return false;
 		}
 
-		info.instance = info.createFunc();
-		if (!info.instance) {
+		BasePlugin* newInstance = newCreateFunc();
+		if (!newInstance) {
 			std::cerr << "[PluginManager] Failed to create plugin instance from new DLL" << std::endl;
-			info.loaded = false;
+			unloadLibrary(newHandle);
 			return false;
 		}
 
+		info.handle = newHandle;
+		info.createFunc = newCreateFunc;
+		info.destroyFunc = newDestroyFunc;
+		info.instance = newInstance;
 		info.activeDllPath = newDllPath;
 		info.currentVersion = info.nextVersion;
 		info.nextVersion++;
 		info.loaded = true;
+		info.version = newInstance->GetVersion();
 
-		std::cout << "[PluginManager] Plugin reloaded successfully with new version v" << info.currentVersion << std::endl;
+		std::cout << "[PluginManager] SUCCESS: Plugin reloaded: " << pluginName << std::endl;
+		std::cout << "[PluginManager] New version: v" << info.currentVersion << std::endl;
 
 		if (wasEnabled) {
 			std::cout << "[PluginManager] Re-enabling plugin..." << std::endl;
@@ -576,7 +585,6 @@ namespace Plugins {
 			return false;
 		}
 
-		// Initialize plugin info FIRST
 		PluginInfo& info = plugins[pluginName];
 		info.name = pluginName;
 		info.path = pluginPath;
@@ -590,8 +598,13 @@ namespace Plugins {
 
 		if (std::filesystem::exists(pluginStagingDir)) {
 			try {
-				std::string stagingDll = findPluginDll(pluginStagingDir, pluginName);
-				if (!stagingDll.empty()) {
+				std::string stagingDll = pluginStagingDir + "/" + pluginName;
+#ifdef _WIN32
+				stagingDll += ".dll";
+#else
+				stagingDll += ".so";
+#endif
+				if (std::filesystem::exists(stagingDll)) {
 					info.stagingWriteTime = std::filesystem::last_write_time(stagingDll);
 					std::cout << "[PluginManager] Staging directory found and tracked: " << pluginStagingDir << std::endl;
 				}
@@ -602,18 +615,21 @@ namespace Plugins {
 		}
 
 		std::string newestVersionedDll = findNewestVersionedDll(pluginPath, pluginName);
-
-		std::string dllToLoad;
 		uint32_t loadedVersion = 0;
 
 		if (!newestVersionedDll.empty()) {
-			dllToLoad = newestVersionedDll;
 			loadedVersion = extractVersionFromDllName(newestVersionedDll, pluginName);
 			std::cout << "[PluginManager] Found existing versioned DLL v" << loadedVersion << std::endl;
 		}
 		else {
-			std::string sourceDll = findPluginDll(pluginPath, pluginName);
-			if (sourceDll.empty()) {
+			std::string stagingDll = pluginStagingDir + "/" + pluginName;
+#ifdef _WIN32
+			stagingDll += ".dll";
+#else
+			stagingDll += ".so";
+#endif
+
+			if (!std::filesystem::exists(stagingDll)) {
 				std::cerr << "[PluginManager] ERROR: No DLL found in plugin directory: " << pluginPath << std::endl;
 				plugins.erase(pluginName);
 				return false;
@@ -621,22 +637,23 @@ namespace Plugins {
 
 			loadedVersion = 1;
 			std::string versionedDllName = getVersionedDllName(pluginName, loadedVersion);
-			dllToLoad = pluginPath + "/" + versionedDllName;
+			std::string newDllPath = pluginPath + "/" + versionedDllName;
 
 			std::cout << "[PluginManager] Creating initial versioned DLL v1..." << std::endl;
-			std::cout << "  Source: " << sourceDll << std::endl;
-			std::cout << "  Destination: " << dllToLoad << std::endl;
+			std::cout << "  Source: " << stagingDll << std::endl;
+			std::cout << "  Destination: " << newDllPath << std::endl;
 
-			if (!copyFile(sourceDll, dllToLoad)) {
+			if (!copyFile(stagingDll, newDllPath)) {
 				std::cerr << "[PluginManager] ERROR: Failed to create initial versioned DLL" << std::endl;
 				plugins.erase(pluginName);
 				return false;
 			}
+			newestVersionedDll = newDllPath;
 		}
 
-		std::cout << "[PluginManager] Loading DLL: " << dllToLoad << std::endl;
+		std::cout << "[PluginManager] Loading DLL: " << newestVersionedDll << std::endl;
 
-		info.handle = loadDynamicLibrary(dllToLoad);
+		info.handle = loadDynamicLibrary(newestVersionedDll);
 		if (!info.handle) {
 			std::cerr << "[PluginManager] ERROR: Failed to load plugin DLL" << std::endl;
 			plugins.erase(pluginName);
@@ -662,7 +679,7 @@ namespace Plugins {
 		}
 
 		info.version = info.instance->GetVersion();
-		info.activeDllPath = dllToLoad;
+		info.activeDllPath = newestVersionedDll;
 		info.currentVersion = loadedVersion;
 		info.nextVersion = loadedVersion + 1;
 		info.loaded = true;
@@ -726,9 +743,8 @@ namespace Plugins {
 
 		std::cout << "[PluginManager] Disabling plugin: " << pluginName << std::endl;
 
-		cleanupPluginViews(pluginName);
-
 		if (info.instance) {
+			std::cout << "[PluginManager] Calling OnShutdown for plugin cleanup..." << std::endl;
 			info.instance->OnShutdown();
 			info.instance->SetInitialized(false);
 		}
@@ -740,8 +756,6 @@ namespace Plugins {
 	}
 
 	void PluginManager::cleanupPluginViews(const std::string& pluginName) {
-		// Base implementation - does nothing by default
-		// StudioPluginManager will override this to handle view cleanup
 		std::cout << "[PluginManager] Base cleanupPluginViews for: " << pluginName
 			<< " (no views to clean up in base class)" << std::endl;
 	}

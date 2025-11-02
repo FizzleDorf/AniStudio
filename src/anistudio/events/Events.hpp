@@ -38,7 +38,10 @@ namespace ANI {
 		void RegisterEvent(const std::string& eventName, EventCallback callback);
 		void RegisterEventWithData(const std::string& eventName, EventCallbackWithData callback);
 		void QueueEvent(const std::string& eventName);
-
+		void UnregisterEvent(const std::string& eventName);
+		void UnregisterEvent(const std::string& eventName, EventCallback callback);
+		void UnregisterEventWithData(const std::string& eventName, EventCallbackWithData callback);
+		void UnregisterAllEventsForPlugin(const std::string& pluginName);
 		// Template method - must be in header
 		template<typename T>
 		void QueueEventWithData(const std::string& eventName, const T& data) {

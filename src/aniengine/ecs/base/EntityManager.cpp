@@ -422,6 +422,81 @@ namespace ECS {
 			<< " (size: " << componentSize << " bytes)" << std::endl;
 	}
 
+	template<typename T>
+	void EntityManager::UnregisterComponent() {
+		std::type_index typeIdx = std::type_index(typeid(T));
+		auto it = m_componentTypeToID.find(typeIdx);
+		if (it == m_componentTypeToID.end()) {
+			std::cout << "[EntityManager] Component type not registered: " << typeid(T).name() << std::endl;
+			return;
+		}
+
+		ComponentTypeID typeId = it->second;
+		UnregisterComponentById(typeId);
+	}
+
+	void EntityManager::UnregisterComponentByName(const std::string& name) {
+		ComponentTypeID typeId = GetComponentTypeIdByName(name);
+		if (typeId != MAX_COMPONENT_COUNT) {
+			UnregisterComponentById(typeId);
+		}
+		else {
+			std::cerr << "[EntityManager] Component name not found: " << name << std::endl;
+		}
+	}
+
+	void EntityManager::UnregisterComponentById(ComponentTypeID typeId) {
+		std::cout << "[EntityManager] Unregistering component ID: " << typeId << std::endl;
+
+		RemoveComponentFromAllEntities(typeId);
+
+		auto arrayIt = componentsArrays.find(typeId);
+		if (arrayIt != componentsArrays.end()) {
+			componentsArrays.erase(arrayIt);
+		}
+
+		componentCreators.erase(typeId);
+		componentGetters.erase(typeId);
+
+		std::string componentName;
+
+		auto idToNameIt = m_componentIDToName.find(typeId);
+		if (idToNameIt != m_componentIDToName.end()) {
+			componentName = idToNameIt->second;
+			m_componentIDToName.erase(idToNameIt);
+		}
+
+		if (!componentName.empty()) {
+			m_componentNameToID.erase(componentName);
+		}
+
+		for (auto it = m_componentTypeToID.begin(); it != m_componentTypeToID.end(); ) {
+			if (it->second == typeId) {
+				it = m_componentTypeToID.erase(it);
+			}
+			else {
+				++it;
+			}
+		}
+
+		std::cout << "[EntityManager] Successfully unregistered component ID: " << typeId << std::endl;
+	}
+
+	void EntityManager::RemoveComponentFromAllEntities(ComponentTypeID typeId) {
+		// Remove this component type from all entity signatures
+		for (auto&[entityId, signature] : entitiesSignatures) {
+			if (signature->count(typeId) > 0) {
+				signature->erase(typeId);
+
+				// Remove the actual component data
+				auto arrayIt = componentsArrays.find(typeId);
+				if (arrayIt != componentsArrays.end()) {
+					arrayIt->second->Erase(entityId);
+				}
+			}
+		}
+	}
+
 	void* EntityManager::GetPluginComponent(EntityID entity, ComponentTypeID typeId) {
 		auto arrayIt = componentsArrays.find(typeId);
 		if (arrayIt != componentsArrays.end()) {

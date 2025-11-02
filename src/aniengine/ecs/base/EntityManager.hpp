@@ -25,28 +25,24 @@ namespace ECS {
 		template<typename T, typename... Args>
 		T& AddComponent(const EntityID entity, Args &&...args) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
-			assert(GetEntitySignature(entity)->size() < MAX_COMPONENT_COUNT && "Component count limit reached!");
 
-			// Get component name and look up by name instead of typeid
-			std::string componentName = typeid(T).name();
+			std::type_index typeIdx = std::type_index(typeid(T));
+			auto it = m_componentTypeToID.find(typeIdx);
 
-			// Try to find by name in our registry first
-			ComponentTypeID compType = MAX_COMPONENT_COUNT;
-			for (const auto& pair : m_componentNameToID) {
-				auto it = m_componentTypeToID.find(std::type_index(typeid(T)));
-				if (it != m_componentTypeToID.end()) {
-					compType = it->second;
-					break;
+			if (it == m_componentTypeToID.end()) {
+				std::string typeName = typeid(T).name();
+				std::cerr << "[EntityManager] Component type '" << typeName
+					<< "' not registered! Entity: " << entity << std::endl;
+
+				std::cerr << "[EntityManager] Registered components:" << std::endl;
+				for (const auto&[name, id] : m_componentNameToID) {
+					std::cerr << "  - " << name << " -> " << id << std::endl;
 				}
+
+				throw std::runtime_error("Component type not registered: " + typeName);
 			}
 
-			// If still not found, try looking it up by the actual type name string
-			if (compType == MAX_COMPONENT_COUNT) {
-				// Fallback: create new ID (this is the broken behavior, but keep it for safety)
-				compType = m_nextComponentID++;
-				m_componentTypeToID[std::type_index(typeid(T))] = compType;
-			}
-
+			ComponentTypeID compType = it->second;
 			T component(std::forward<Args>(args)...);
 			component.entityID = entity;
 
@@ -160,46 +156,76 @@ namespace ECS {
 			static_assert(std::is_base_of_v<BaseComponent, T>,
 				"ALL components must derive from BaseComponent");
 
+			std::cout << "[RegisterComponent] START for: " << name
+				<< " (type: " << typeid(T).name() << ")" << std::endl;
+
 			std::type_index typeIdx = std::type_index(typeid(T));
 			auto it = m_componentTypeToID.find(typeIdx);
+
+			ComponentTypeID typeId;
 			if (it != m_componentTypeToID.end()) {
-				return it->second;
+				typeId = it->second;  // Found by type_index
+				std::cout << "[RegisterComponent] ALREADY REGISTERED: " << name
+					<< " with ID: " << typeId << std::endl;
+			}
+			else {
+				// CRITICAL FIX: Add name lookup fallback like ViewManager
+				auto nameIt = m_componentNameToID.find(name);
+				if (nameIt != m_componentNameToID.end()) {
+					typeId = nameIt->second;  // Found by name
+					m_componentTypeToID[typeIdx] = typeId;
+					std::cout << "[RegisterComponent] FOUND BY NAME: " << name
+						<< " with ID: " << typeId << std::endl;
+				}
+				else {
+					typeId = m_nextComponentID++;  // Create new
+					m_componentNameToID[name] = typeId;
+					m_componentIDToName[typeId] = name;
+					m_componentTypeToID[typeIdx] = typeId;
+					std::cout << "[RegisterComponent] ASSIGNING NEW ID: " << typeId
+						<< " to component: " << name << std::endl;
+				}
 			}
 
-			auto nameIt = m_componentNameToID.find(name);
-			if (nameIt != m_componentNameToID.end()) {
-				m_componentTypeToID[typeIdx] = nameIt->second;
-				return nameIt->second;
+			// Only register creators if this is a NEW registration
+			if (componentCreators.find(typeId) == componentCreators.end()) {
+				RegisterComponentType(
+					typeId,
+					[this, typeId, name, typeIdx](EntityID entity) {
+					std::cout << "[ComponentCreator] CREATING " << name
+						<< " (ID: " << typeId << ") for entity: " << entity << std::endl;
+
+					GetEntitySignature(entity)->insert(typeId);
+					T component;
+					component.entityID = entity;
+					GetCompList<T>()->Insert(component);
+					UpdateEntityTargetSystem(entity);
+
+					std::cout << "[ComponentCreator] SUCCESS: Added " << name
+						<< " to entity " << entity << std::endl;
+				},
+					[this, typeIdx](EntityID entity) -> BaseComponent* {
+					auto it = m_componentTypeToID.find(typeIdx);
+					if (it == m_componentTypeToID.end()) return nullptr;
+
+					ComponentTypeID compId = it->second;
+					if (!HasComponentById(entity, compId)) return nullptr;
+
+					return &GetComponent<T>(entity);
+				}
+				);
 			}
 
-			ComponentTypeID newId = m_nextComponentID++;
-			m_componentNameToID[name] = newId;
-			m_componentIDToName[newId] = name;
-			m_componentTypeToID[typeIdx] = newId;
+			std::cout << "[RegisterComponent] COMPLETED: " << name
+				<< " registered with ID: " << typeId << std::endl;
 
-			std::cout << "[EntityManager] Registered component: " << name
-				<< " with ID: " << newId << std::endl;
-
-			RegisterComponentType(
-				newId,
-				[this, newId](EntityID entity) {
-				std::cout << "[ComponentCreator] Adding component with ID: " << newId << " to entity: " << entity << std::endl;
-
-				GetEntitySignature(entity)->insert(newId);
-				T component;
-				component.entityID = entity;
-				GetCompList<T>()->Insert(component);
-				UpdateEntityTargetSystem(entity);
-
-				std::cout << "Component added! ID: " << entity << ", Type ID: " << newId << std::endl;
-			},
-				[this](EntityID entity) -> BaseComponent* {
-				return this->HasComponent<T>(entity) ? &this->GetComponent<T>(entity) : nullptr;
-			}
-			);
-
-			return newId;
+			return typeId;
 		}
+
+		template<typename T>
+		void UnregisterComponent();
+		void UnregisterComponentByName(const std::string& name);
+		void UnregisterComponentById(ComponentTypeID typeId);
 
 		template<typename T>
 		void AddCompList() {
@@ -275,7 +301,8 @@ namespace ECS {
 		void UpdatePluginSystems(float deltaTime);
 
 		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
-
+		
+		void RemoveComponentFromAllEntities(ComponentTypeID typeId);
 		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
 		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;
 		bool IsPluginComponent(ComponentTypeID typeId);

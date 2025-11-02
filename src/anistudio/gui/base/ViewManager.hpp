@@ -58,7 +58,9 @@ namespace GUI {
 			ViewCreationCallback factory, std::function<ViewMetadata()> metadataGetter);
 
 		WorkspaceID CreateViewByName(const std::string& viewTypeName, ECS::EntityManager& entityMgr);
-
+		
+		void UnregisterView(const std::string& name);
+		void UnregisterViewByType(ViewTypeID viewType);
 		void UnregisterViewSource(const std::string& source);
 		bool UnregisterViewType(const std::string& viewName);
 		void CloseAllViewsOfType(const std::string& viewName);
@@ -121,6 +123,7 @@ namespace GUI {
 
 		void ResetWorkspaceData();
 		void ResetRegistrationData();
+		void RemoveViewFromAllWorkspaces(ViewTypeID viewType);
 
 		WorkspaceID workspaceCount;
 		std::queue<WorkspaceID> availableWorkspaces;

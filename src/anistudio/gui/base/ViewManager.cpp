@@ -104,7 +104,6 @@ namespace GUI {
 		auto allWorkspaces = GetAllWorkspaces();
 
 		if (allWorkspaces.empty()) {
-			// NO AUTOMATIC WORKSPACE CREATION - just reset to 0
 			m_activeWorkspaceID = 0;
 			return;
 		}
@@ -233,6 +232,105 @@ namespace GUI {
 		catch (const std::exception& e) {
 			std::cerr << "[ViewManager] Failed to create view " << viewTypeName << ": " << e.what() << std::endl;
 			return 0;
+		}
+	}
+
+	void ViewManager::UnregisterView(const std::string& name) {
+		std::lock_guard<std::mutex> lock(m_viewRegistryMutex);
+
+		ViewTypeID viewType;
+		try {
+			viewType = GetViewType(name);
+		}
+		catch (const std::exception&) {
+			std::cerr << "[ViewManager] View type not registered: " << name << std::endl;
+			return;
+		}
+
+		UnregisterViewByType(viewType);
+	}
+
+	void ViewManager::UnregisterViewByType(ViewTypeID viewType) {
+		std::lock_guard<std::mutex> lock(m_viewRegistryMutex);
+
+		std::cout << "[ViewManager] Unregistering view type ID: " << viewType << std::endl;
+
+		RemoveViewFromAllWorkspaces(viewType);
+
+		auto arrayIt = workspaceArrays.find(viewType);
+		if (arrayIt != workspaceArrays.end()) {
+			workspaceArrays.erase(arrayIt);
+		}
+
+		std::string viewName;
+
+		auto idToNameIt = m_viewIDToName.find(viewType);
+		if (idToNameIt != m_viewIDToName.end()) {
+			viewName = idToNameIt->second;
+			m_viewIDToName.erase(idToNameIt);
+		}
+
+		if (!viewName.empty()) {
+			m_viewNameToID.erase(viewName);
+		}
+
+		for (auto it = registeredViews.begin(); it != registeredViews.end(); ) {
+			if (it->second == viewType) {
+				it = registeredViews.erase(it);
+			}
+			else {
+				++it;
+			}
+		}
+
+		for (auto it = m_viewTypeToID.begin(); it != m_viewTypeToID.end(); ) {
+			if (it->second == viewType) {
+				it = m_viewTypeToID.erase(it);
+			}
+			else {
+				++it;
+			}
+		}
+
+		if (!viewName.empty()) {
+			viewMetadata.erase(viewName);
+			viewSources.erase(viewName);
+			viewFactories.erase(viewName);
+		}
+
+		std::cout << "[ViewManager] Successfully unregistered view type ID: " << viewType << std::endl;
+	}
+
+	void ViewManager::RemoveViewFromAllWorkspaces(ViewTypeID viewType) {
+		// Remove this view type from all workspace signatures and instances
+		for (auto&[workspaceId, signature] : workspaceSignatures) {
+			if (signature->count(viewType) > 0) {
+				signature->erase(viewType);
+
+				// Remove the actual view instance
+				auto workspaceIt = workspaces.find(workspaceId);
+				if (workspaceIt != workspaces.end()) {
+					auto viewIt = workspaceIt->second.find(viewType);
+					if (viewIt != workspaceIt->second.end()) {
+						workspaceIt->second.erase(viewIt);
+
+						// Remove workspace if empty
+						if (workspaceIt->second.empty()) {
+							workspaces.erase(workspaceIt);
+						}
+					}
+				}
+			}
+		}
+
+		for (auto&[typeId, workspaceArray] : workspaceArrays) {
+			if (typeId == viewType) {
+				auto allWorkspaces = GetAllWorkspaces();
+				for (WorkspaceID workspaceId : allWorkspaces) {
+					workspaceArray->Erase(workspaceId);
+				}
+				break;
+			}
 		}
 	}
 
