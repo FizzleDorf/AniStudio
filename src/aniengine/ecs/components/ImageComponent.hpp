@@ -151,11 +151,50 @@ namespace ECS {
 			// Texture cleanup handled by base class
 		}
 
-		// Get property map for UI rendering
 		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["inputFilePath"] = &inputFilePath;
+			properties["width"] = &width; 
+			properties["height"] = &height;
+			properties["channels"] = &channels;
 			return properties;
+		}
+
+		// Serialize the component to JSON
+		virtual nlohmann::json Serialize() const override {
+			nlohmann::json j = ImageComponent::Serialize();
+			j[compName]["inputFilePath"] = inputFilePath;
+			// Note: We don't serialize imageData/ownedImageData as it's managed by ImageSystem
+			return j;
+		}
+
+		// Deserialize the component from JSON
+		virtual void Deserialize(const nlohmann::json& j) override {
+			ImageComponent::Deserialize(j);
+
+			nlohmann::json componentData;
+
+			// Handle different JSON structures
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+			else {
+				// Try to find component data by name
+				for (auto it = j.begin(); it != j.end(); ++it) {
+					if (it.key() == compName) {
+						componentData = it.value();
+						break;
+					}
+				}
+				if (componentData.empty()) {
+					componentData = j;
+				}
+			}
+
+			if (componentData.contains("inputFilePath"))
+				inputFilePath = componentData["inputFilePath"];
+
+			// Note: imageData/ownedImageData will be loaded by ImageSystem when needed
 		}
 
 		void SetImageData(unsigned char* data, int w, int h, int ch) {
@@ -252,7 +291,8 @@ namespace ECS {
 							{"browseTooltip", "Browse for image files (.png, .jpg, .jpeg, .bmp, .tga)"}
 						}}
 					}}
-				}}
+				}},
+				{"propertyOrder", {"inputFilePath", "width", "height", "channels"}}
 			};
 		}
 	};

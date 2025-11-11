@@ -389,6 +389,24 @@ namespace UISchema {
 				ImGui::EndTooltip();
 			}
 
+			// Check if the dialog resulted in a modification
+			if (WasModified()) {
+				modified = true;
+				std::cout << "Media loader: Properties were modified via dialog" << std::endl;
+
+				// Debug output to verify width/height were set
+				if (properties.find("width") != properties.end()) {
+					if (auto widthPtr = std::get_if<int*>(&properties.at("width"))) {
+						std::cout << "Width in properties: " << **widthPtr << std::endl;
+					}
+				}
+				if (properties.find("height") != properties.end()) {
+					if (auto heightPtr = std::get_if<int*>(&properties.at("height"))) {
+						std::cout << "Height in properties: " << **heightPtr << std::endl;
+					}
+				}
+			}
+
 			return modified;
 		}
 

@@ -249,20 +249,43 @@ namespace GUI {
 					}
 				}
 				else if (componentName == "InputImage") {
+					// Render the file selector from schema
 					UISchema::RenderSchema(component->schema, properties);
 
-					// InputImage-specific features
-					if (ImGui::Button("Set Latent to Image Size", ImVec2(-1.0f, 0))) {
-						if (mgr.HasComponent<InputImageComponent>(entity) && mgr.HasComponent<LatentComponent>(entity)) {
-							auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
-							auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+					// Display current file path if set
+					if (mgr.HasComponent<InputImageComponent>(entity)) {
+						auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
 
-							// Round to nearest multiple of 64, minimum 64
-							int roundedWidth = std::max(64, ((inputComp.width + 32) / 64) * 64);
-							int roundedHeight = std::max(64, ((inputComp.height + 32) / 64) * 64);
+						if (!inputComp.inputFilePath.empty()) {
+							ImGui::Text("Selected: %s", inputComp.inputFilePath.c_str());
 
-							latentComp.latentWidth = roundedWidth;
-							latentComp.latentHeight = roundedHeight;
+							// Button to set latent dimensions to image size
+							if (ImGui::Button("Set Latent to Image Size", ImVec2(-1.0f, 0))) {
+								if (mgr.HasComponent<LatentComponent>(entity)) {
+									auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
+
+									// Try to get image dimensions from InputImageComponent
+									if (inputComp.width > 0 && inputComp.height > 0) {
+										// Round to nearest multiple of 64, minimum 64
+										int roundedWidth = std::max(64, ((inputComp.width + 32) / 64) * 64);
+										int roundedHeight = std::max(64, ((inputComp.height + 32) / 64) * 64);
+
+										latentComp.latentWidth = roundedWidth;
+										latentComp.latentHeight = roundedHeight;
+
+										std::cout << "Set latent dimensions to: " << roundedWidth
+											<< "x" << roundedHeight
+											<< " (from image: " << inputComp.width
+											<< "x" << inputComp.height << ")" << std::endl;
+									}
+									else {
+										std::cerr << "Input image dimensions not available!" << std::endl;
+									}
+								}
+							}
+						}
+						else {
+							ImGui::TextDisabled("No image selected");
 						}
 					}
 				}
@@ -394,7 +417,6 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		// NEW: Use proper event system with data
 		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Inference);
 		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
@@ -402,11 +424,23 @@ namespace GUI {
 	void DiffusionView::HandleI2IEvent() {
 		std::cout << "Adding new I2I entity..." << std::endl;
 		EntityID newEntity = mgr.CloneEntity(img2imgEntity);
+
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
 			return;
 		}
 
+		std::cout << "=== ORIGINAL ENTITY INPUTIMAGE DEBUG ===" << std::endl;
+		if (mgr.HasComponent<InputImageComponent>(newEntity)) {
+			auto& origInput = mgr.GetComponent<InputImageComponent>(newEntity);
+			std::cout << "Original entity " << newEntity << " InputImageComponent:" << std::endl;
+			std::cout << "  inputFilePath: '" << origInput.inputFilePath << "'" << std::endl;
+			std::cout << "  filePath: '" << origInput.filePath << "'" << std::endl;
+		}
+		else {
+			std::cout << "NO InputImageComponent on original entity!" << std::endl;
+		}
+		std::cout << "=== END ORIGINAL DEBUG ===" << std::endl;
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 			if (outputComp.filePath.empty()) {
@@ -497,7 +531,8 @@ namespace GUI {
 
 				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
 					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
-					loraComp.modelPath = Utils::FilePaths::loraDir;
+					if(loraComp.modelPath.empty())
+						loraComp.modelPath = Utils::FilePaths::loraDir;
 				}
 
 				for (int i = 0; i < numQueues; i++) {

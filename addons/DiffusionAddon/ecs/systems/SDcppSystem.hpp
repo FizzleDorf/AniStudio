@@ -564,63 +564,7 @@ namespace ECS {
 
 		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
-				// First try to find InputImageComponent data
-				if (metadata.contains("InputImage")) {
-					auto inputImage = metadata["InputImage"];
-					if (inputImage.contains("filePath") && !inputImage["filePath"].empty()) {
-						// Use InputImageComponent data
-						std::cout << "Using InputImageComponent for img2img: " << inputImage["filePath"] << std::endl;
-						return Utils::Img2Img::RunImg2Img(metadata, fullPath);
-					}
-				}
-
-				// If InputImageComponent is empty, try regular ImageComponent
-				if (metadata.contains("Image")) {
-					auto imageComp = metadata["Image"];
-					if (imageComp.contains("filePath") && !imageComp["filePath"].empty()) {
-						// Create a modified metadata with ImageComponent data in InputImageComponent
-						nlohmann::json modifiedMetadata = metadata;
-
-						if (!modifiedMetadata.contains("InputImage")) {
-							modifiedMetadata["InputImage"] = nlohmann::json::object();
-						}
-
-						// Copy ImageComponent data to InputImageComponent
-						modifiedMetadata["InputImage"]["filePath"] = imageComp["filePath"];
-						modifiedMetadata["InputImage"]["fileName"] = imageComp["fileName"];
-						modifiedMetadata["InputImage"]["width"] = imageComp["width"];
-						modifiedMetadata["InputImage"]["height"] = imageComp["height"];
-						modifiedMetadata["InputImage"]["channels"] = imageComp["channels"];
-
-						// Also update latent size based on image dimensions
-						if (imageComp.contains("width") && imageComp.contains("height")) {
-							int imgWidth = imageComp["width"];
-							int imgHeight = imageComp["height"];
-
-							// Update latent size in metadata if needed
-							if (modifiedMetadata.contains("Latent")) {
-								int roundedWidth = ((imgWidth + 31) / 64) * 64;
-								int roundedHeight = ((imgHeight + 31) / 64) * 64;
-								roundedWidth = std::max(64, roundedWidth);
-								roundedHeight = std::max(64, roundedHeight);
-
-								modifiedMetadata["Latent"]["latentWidth"] = roundedWidth;
-								modifiedMetadata["Latent"]["latentHeight"] = roundedHeight;
-
-								std::cout << "Updated latent size to: " << roundedWidth << "x" << roundedHeight
-									<< " (from image: " << imgWidth << "x" << imgHeight << ")" << std::endl;
-							}
-						}
-
-						std::cout << "Using ImageComponent data for img2img: " << imageComp["filePath"] << std::endl;
-
-						return Utils::Img2Img::RunImg2Img(modifiedMetadata, fullPath);
-					}
-				}
-
-				std::cerr << "No valid image data found for img2img!" << std::endl;
-				return false;
-
+				return Utils::Img2Img::RunImg2Img(metadata, fullPath);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;

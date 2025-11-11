@@ -470,7 +470,7 @@ namespace ECS {
 	struct LoraComponent : public ECS::BaseModelComponent {
 		LoraComponent() {
 			compName = "Lora";
-
+			modelPath = Utils::FilePaths::loraDir;
 			schema = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},

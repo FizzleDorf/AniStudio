@@ -9,6 +9,7 @@
 #include <chrono>
 #include <filesystem>
 #include <imgui.h>
+#include "GuiStyleHelpers.hpp"
 
 namespace ANI {
 
@@ -256,6 +257,17 @@ namespace ANI {
 		ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 		std::cout << "[StudioCore] Using main ImGui context: " << currentContext << std::endl;
+
+		std::cout << "[StudioCore] Loading ImGui style..." << std::endl;
+		std::string stylePath = Utils::FilePaths::dataPath + "/settings/imgui_style.json";
+		if (std::filesystem::exists(stylePath)) {
+			LoadStyleFromFile(ImGui::GetStyle(), stylePath);
+			std::cout << "[StudioCore] Loaded custom style from: " << stylePath << std::endl;
+		}
+		else {
+			SetCustomDarkTheme();
+			std::cout << "[StudioCore] Using custom dark theme as default" << std::endl;
+		}
 
 		ImGuiIO& io = ImGui::GetIO();
 		std::cout << "[StudioCore] ImGui fonts pointer: " << io.Fonts << std::endl;

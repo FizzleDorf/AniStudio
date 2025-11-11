@@ -1,13 +1,8 @@
 #pragma once
-
 #include "BaseTabObject.hpp"
-#include <nlohmann/json.hpp>
-#include <fstream>
-#include <filesystem>
-#include <iostream>
+#include "GuiStyleHelpers.hpp"
 
 namespace Settings {
-
 	class ImGuiStyleSettingsTab : public BaseTabObject {
 	public:
 		ImGuiStyleSettingsTab() : BaseTabObject("ImGui Style", "Interface") {
@@ -20,25 +15,15 @@ namespace Settings {
 			if (ImGui::BeginChild("ImGuiStyleSettings", ImVec2(0, 0), false)) {
 				ImGuiStyle& style = ImGui::GetStyle();
 
-				// Style Presets
 				ImGui::Text("Style Presets");
-				ImGui::Spacing();
-				if (ShowStyleSelector("Theme")) {
-					hasChanges = true;
-				}
+				if (ShowStyleSelector("Theme")) hasChanges = true;
 
 				ImGui::Separator();
-
-				// Font Settings
 				ImGui::Text("Font Settings");
-				ImGui::Spacing();
 				ShowFontSelector("Default Font");
 
 				ImGui::Separator();
-
-				// Size Settings
 				ImGui::Text("Size Settings");
-				ImGui::Spacing();
 				if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.1f")) hasChanges = true;
@@ -48,10 +33,7 @@ namespace Settings {
 				if (ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.1f")) hasChanges = true;
 
 				ImGui::Separator();
-
-				// Border Settings
 				ImGui::Text("Border Settings");
-				ImGui::Spacing();
 				if (ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat("Popup Border Size", &style.PopupBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
@@ -59,10 +41,7 @@ namespace Settings {
 				if (ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
 
 				ImGui::Separator();
-
-				// Rounding Settings
 				ImGui::Text("Rounding Settings");
-				ImGui::Spacing();
 				if (ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
@@ -70,55 +49,6 @@ namespace Settings {
 				if (ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
 				if (ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-
-				ImGui::Separator();
-
-				// Color Settings
-				ImGui::Text("Color Settings");
-				ImGui::Spacing();
-
-				static ImGuiTextFilter colorFilter;
-				colorFilter.Draw("Filter Colors", ImGui::GetFontSize() * 16);
-
-				static ImGuiColorEditFlags alphaFlags = ImGuiColorEditFlags_AlphaPreview;
-				if (ImGui::RadioButton("Opaque", alphaFlags == ImGuiColorEditFlags_None)) {
-					alphaFlags = ImGuiColorEditFlags_None;
-				}
-				ImGui::SameLine();
-				if (ImGui::RadioButton("Alpha", alphaFlags == ImGuiColorEditFlags_AlphaPreview)) {
-					alphaFlags = ImGuiColorEditFlags_AlphaPreview;
-				}
-				ImGui::SameLine();
-				if (ImGui::RadioButton("Both", alphaFlags == ImGuiColorEditFlags_AlphaPreviewHalf)) {
-					alphaFlags = ImGuiColorEditFlags_AlphaPreviewHalf;
-				}
-
-				if (ImGui::BeginChild("colors", ImVec2(0, 300), true)) {
-					ImGui::PushItemWidth(-160);
-					for (int i = 0; i < ImGuiCol_COUNT; i++) {
-						const char* name = ImGui::GetStyleColorName(i);
-						if (!colorFilter.PassFilter(name))
-							continue;
-
-						ImGui::PushID(i);
-						if (ImGui::ColorEdit4("##color", (float*)&style.Colors[i], ImGuiColorEditFlags_AlphaBar | alphaFlags)) {
-							hasChanges = true;
-						}
-
-						if (memcmp(&style.Colors[i], &backupStyle.Colors[i], sizeof(ImVec4)) != 0) {
-							ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-							if (ImGui::Button("Revert")) {
-								style.Colors[i] = backupStyle.Colors[i];
-								hasChanges = true;
-							}
-						}
-						ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-						ImGui::TextUnformatted(name);
-						ImGui::PopID();
-					}
-					ImGui::PopItemWidth();
-				}
-				ImGui::EndChild();
 
 				ImGui::Separator();
 				RenderActionButtons();
@@ -133,17 +63,13 @@ namespace Settings {
 				// Style Presets
 				if (ShouldRenderCategory("Style Presets", selectedCategories)) {
 					ImGui::Text("Style Presets");
-					ImGui::Spacing();
-					if (ShowStyleSelector("Theme")) {
-						hasChanges = true;
-					}
+					if (ShowStyleSelector("Theme")) hasChanges = true;
 					ImGui::Separator();
 				}
 
 				// Font Settings
 				if (ShouldRenderCategory("Font Settings", selectedCategories)) {
 					ImGui::Text("Font Settings");
-					ImGui::Spacing();
 					ShowFontSelector("Default Font");
 					ImGui::Separator();
 				}
@@ -151,7 +77,6 @@ namespace Settings {
 				// Size Settings
 				if (ShouldRenderCategory("Size Settings", selectedCategories)) {
 					ImGui::Text("Size Settings");
-					ImGui::Spacing();
 					if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
 					if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
 					if (ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.1f")) hasChanges = true;
@@ -165,7 +90,6 @@ namespace Settings {
 				// Border Settings
 				if (ShouldRenderCategory("Border Settings", selectedCategories)) {
 					ImGui::Text("Border Settings");
-					ImGui::Spacing();
 					if (ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
 					if (ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
 					if (ImGui::SliderFloat("Popup Border Size", &style.PopupBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
@@ -177,7 +101,6 @@ namespace Settings {
 				// Rounding Settings
 				if (ShouldRenderCategory("Rounding Settings", selectedCategories)) {
 					ImGui::Text("Rounding Settings");
-					ImGui::Spacing();
 					if (ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
 					if (ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
 					if (ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
@@ -191,7 +114,6 @@ namespace Settings {
 				// Color Settings
 				if (ShouldRenderCategory("Color Settings", selectedCategories)) {
 					ImGui::Text("Color Settings");
-					ImGui::Spacing();
 
 					static ImGuiTextFilter colorFilter;
 					colorFilter.Draw("Filter Colors", ImGui::GetFontSize() * 16);
@@ -244,45 +166,32 @@ namespace Settings {
 		}
 
 		bool SaveSettings() override {
-			try {
-				ImGuiStyle& style = ImGui::GetStyle();
-				SaveStyleToFile(style, GetSettingsDirectory() + "/imgui_style.json");
-				hasChanges = false;
-				CreateBackup();
-				return true;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[ImGuiStyleSettingsTab] Save error: " << e.what() << std::endl;
-				return false;
-			}
+			ImGuiStyle& style = ImGui::GetStyle();
+			std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
+			SaveStyleToFile(style, filePath);
+			hasChanges = false;
+			CreateBackup();
+			return true;
 		}
 
 		bool LoadSettings() override {
-			try {
-				ImGuiStyle& style = ImGui::GetStyle();
-				std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
+			ImGuiStyle& style = ImGui::GetStyle();
+			std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
 
-				// Try settings file first, then defaults
-				if (!std::filesystem::exists(filePath)) {
-					filePath = GetDefaultsDirectory() + "/imgui_style_defaults.json";
-				}
-
-				if (std::filesystem::exists(filePath)) {
-					LoadStyleFromFile(style, filePath);
-				}
-
-				hasChanges = false;
-				CreateBackup();
-				return true;
+			if (std::filesystem::exists(filePath)) {
+				LoadStyleFromFile(style, filePath);
 			}
-			catch (const std::exception& e) {
-				std::cerr << "[ImGuiStyleSettingsTab] Load error: " << e.what() << std::endl;
-				return false;
+			else {
+				SetCustomDarkTheme();
 			}
+
+			hasChanges = false;
+			CreateBackup();
+			return true;
 		}
 
 		void ResetToDefaults() override {
-			ImGui::StyleColorsDark(); // Default to dark theme
+			SetCustomDarkTheme();
 			hasChanges = true;
 		}
 
@@ -304,12 +213,13 @@ namespace Settings {
 		bool hasChanges = false;
 
 		bool ShowStyleSelector(const char* label) {
-			static int styleIdx = 0; // 0=Dark, 1=Light, 2=Classic
-			if (ImGui::Combo(label, &styleIdx, "Dark\0Light\0Classic\0")) {
+			static int styleIdx = 0;
+			if (ImGui::Combo(label, &styleIdx, "Dark\0Light\0Classic\0Custom Dark\0")) {
 				switch (styleIdx) {
 				case 0: ImGui::StyleColorsDark(); break;
 				case 1: ImGui::StyleColorsLight(); break;
 				case 2: ImGui::StyleColorsClassic(); break;
+				case 3: SetCustomDarkTheme(); break;
 				}
 				return true;
 			}
@@ -329,6 +239,18 @@ namespace Settings {
 					ImGui::PopID();
 				}
 				ImGui::EndCombo();
+			}
+		}
+
+		void RenderActionButtons() {
+			if (ImGui::Button("Save Settings")) SaveSettings();
+			ImGui::SameLine();
+			if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
+			ImGui::SameLine();
+			if (ImGui::Button("Revert Changes")) RestoreFromBackup();
+
+			if (hasChanges) {
+				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
 			}
 		}
 
@@ -418,24 +340,5 @@ namespace Settings {
 				}
 			}
 		}
-
-		void RenderActionButtons() {
-			if (ImGui::Button("Save Settings")) {
-				SaveSettings();
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Reset to Defaults")) {
-				ResetToDefaults();
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Revert Changes")) {
-				RestoreFromBackup();
-			}
-
-			if (hasChanges) {
-				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-			}
-		}
 	};
-
-} // namespace Settings
+}
