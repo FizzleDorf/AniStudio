@@ -187,18 +187,10 @@ namespace GUI {
 				const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
 				ImGui::Text("File: %s", imageComp.fileName.c_str());
 				ImGui::Text("Dimensions: %dx%d", imageComp.width, imageComp.height);
+				ImGui::SameLine();
 				ImGui::Text("Channels: %d", imageComp.channels);
+				ImGui::SameLine();
 				ImGui::Text("Entity ID: %zu", selectedEntityID);
-
-				if (imageComp.textureID != 0) {
-					ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Status: Loaded");
-				}
-				else if (!imageComp.filePath.empty()) {
-					ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Status: Loading...");
-				}
-				else {
-					ImGui::Text("Status: No image");
-				}
 
 				contextMenuUtils->RenderImageContextMenu(selectedEntityID);
 
@@ -289,24 +281,6 @@ namespace GUI {
 		if (ImGui::Button("First")) {
 			if (!imageEntities.empty()) {
 				imgIndex = 0;
-				selectedEntityID = imageEntities[imgIndex];
-			}
-		}
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Previous")) {
-			if (!imageEntities.empty()) {
-				imgIndex = (imgIndex - 1 + static_cast<int>(imageEntities.size())) % static_cast<int>(imageEntities.size());
-				selectedEntityID = imageEntities[imgIndex];
-			}
-		}
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Next")) {
-			if (!imageEntities.empty()) {
-				imgIndex = (imgIndex + 1) % static_cast<int>(imageEntities.size());
 				selectedEntityID = imageEntities[imgIndex];
 			}
 		}

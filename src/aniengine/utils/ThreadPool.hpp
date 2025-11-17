@@ -1,3 +1,4 @@
+// ThreadPool.hpp - Modified for immediate termination
 #pragma once
 
 #include <atomic>
@@ -17,24 +18,14 @@ namespace Utils {
 	class ThreadPool {
 	public:
 		// Constructor: initialize the thread pool with hardware concurrency by default
-		ThreadPool(size_t numThreads = 0) : stop(false), activeThreads(0) {
+		ThreadPool(size_t numThreads = 0) : stop(false), terminateImmediately(false), activeThreads(0) {
 			size_t threadCount = numThreads > 0 ? numThreads : std::thread::hardware_concurrency();
 			startThreads(threadCount);
 		}
 
-		// Destructor: clean shutdown
+		// Destructor: immediate termination
 		~ThreadPool() {
-			{
-				std::unique_lock<std::mutex> lock(queueMutex);
-				stop = true;
-			}
-			condition.notify_all();
-
-			for (auto& worker : workers) {
-				if (worker.joinable()) {
-					worker.join();
-				}
-			}
+			terminate();
 		}
 
 		// Delete copy and move constructors/assignments
@@ -61,7 +52,7 @@ namespace Utils {
 				std::unique_lock<std::mutex> lock(queueMutex);
 
 				// Don't allow enqueueing after stopping the pool
-				if (stop) {
+				if (stop || terminateImmediately) {
 					throw std::runtime_error("Cannot enqueue task on stopped ThreadPool");
 				}
 
@@ -72,6 +63,47 @@ namespace Utils {
 			// Notify a waiting thread
 			condition.notify_one();
 			return result;
+		}
+
+		// Immediate termination - clear queue and stop threads
+		void terminate() {
+			{
+				std::unique_lock<std::mutex> lock(queueMutex);
+				terminateImmediately = true;
+				stop = true;
+
+				// Clear all pending tasks
+				while (!tasks.empty()) {
+					tasks.pop();
+				}
+			}
+
+			// Notify all threads to wake up and exit
+			condition.notify_all();
+
+			// Join all threads
+			for (auto& worker : workers) {
+				if (worker.joinable()) {
+					worker.join();
+				}
+			}
+
+			workers.clear();
+		}
+
+		// Graceful shutdown (if needed occasionally)
+		void shutdownGracefully() {
+			{
+				std::unique_lock<std::mutex> lock(queueMutex);
+				stop = true;
+			}
+			condition.notify_all();
+
+			for (auto& worker : workers) {
+				if (worker.joinable()) {
+					worker.join();
+				}
+			}
 		}
 
 		// Size accessor
@@ -90,12 +122,17 @@ namespace Utils {
 			return activeThreads;
 		}
 
-		// Wait for all currently running tasks to complete
-		void waitForTasks() {
+		// Check if termination was requested
+		bool isTerminating() const {
+			return terminateImmediately;
+		}
+
+		// Clear all pending tasks immediately
+		void clearQueue() {
 			std::unique_lock<std::mutex> lock(queueMutex);
-			completionCondition.wait(lock, [this]() {
-				return (activeThreads == 0) && tasks.empty();
-			});
+			while (!tasks.empty()) {
+				tasks.pop();
+			}
 		}
 
 	private:
@@ -110,8 +147,13 @@ namespace Utils {
 
 							// Wait for a task or stop signal
 							condition.wait(lock, [this] {
-								return stop || !tasks.empty();
+								return terminateImmediately || stop || !tasks.empty();
 							});
+
+							// Exit immediately if termination requested
+							if (terminateImmediately) {
+								return;
+							}
 
 							// Exit if stopped and no more tasks
 							if (stop && tasks.empty()) {
@@ -126,8 +168,8 @@ namespace Utils {
 							}
 						}
 
-						// Execute the task
-						if (task) {
+						// Execute the task (unless terminating)
+						if (task && !terminateImmediately) {
 							try {
 								task();
 							}
@@ -139,13 +181,10 @@ namespace Utils {
 								std::cerr << "Unknown exception in thread pool task" << std::endl;
 							}
 
-							// Decrement active count and notify waiters
+							// Decrement active count
 							{
 								std::unique_lock<std::mutex> lock(queueMutex);
 								--activeThreads;
-								if (tasks.empty() && activeThreads == 0) {
-									completionCondition.notify_all();
-								}
 							}
 						}
 					}
@@ -162,14 +201,14 @@ namespace Utils {
 		// Synchronization
 		mutable std::mutex queueMutex;
 		std::condition_variable condition;
-		std::condition_variable completionCondition;
 
 		// Status flags
-		bool stop;
+		std::atomic<bool> stop;
+		std::atomic<bool> terminateImmediately;
 		std::atomic<size_t> activeThreads;
 	};
 
-	// Singleton ThreadPool Manager
+	// Singleton ThreadPool Manager with immediate termination support
 	class ThreadPoolManager {
 	public:
 		enum class PoolType {
@@ -224,16 +263,44 @@ namespace Utils {
 			};
 		}
 
-		// Shutdown all pools gracefully
-		void shutdown() {
-			std::cout << "Shutting down ThreadPoolManager..." << std::endl;
+		// IMMEDIATE TERMINATION - Clear all queues and stop all threads
+		void terminateAll() {
+			std::cout << "TERMINATING ALL THREAD POOLS IMMEDIATELY..." << std::endl;
 
-			// Wait for all pools to complete their tasks
-			diffusionPool->waitForTasks();
-			ioPool->waitForTasks();
-			generalPool->waitForTasks();
+			// Terminate in reverse order (general first, diffusion last)
+			if (generalPool) {
+				std::cout << "Terminating general pool..." << std::endl;
+				generalPool->terminate();
+			}
 
-			std::cout << "All thread pools shut down successfully." << std::endl;
+			if (ioPool) {
+				std::cout << "Terminating I/O pool..." << std::endl;
+				ioPool->terminate();
+			}
+
+			if (diffusionPool) {
+				std::cout << "Terminating diffusion pool..." << std::endl;
+				diffusionPool->terminate();
+			}
+
+			std::cout << "All thread pools terminated immediately." << std::endl;
+		}
+
+		// Clear all task queues without terminating threads
+		void clearAllQueues() {
+			if (diffusionPool) diffusionPool->clearQueue();
+			if (ioPool) ioPool->clearQueue();
+			if (generalPool) generalPool->clearQueue();
+			std::cout << "Cleared all thread pool queues." << std::endl;
+		}
+
+		// Graceful shutdown (if needed)
+		void shutdownGracefully() {
+			std::cout << "Shutting down ThreadPoolManager gracefully..." << std::endl;
+			if (diffusionPool) diffusionPool->shutdownGracefully();
+			if (ioPool) ioPool->shutdownGracefully();
+			if (generalPool) generalPool->shutdownGracefully();
+			std::cout << "All thread pools shut down gracefully." << std::endl;
 		}
 
 		// Delete copy and move operations for singleton
@@ -248,7 +315,7 @@ namespace Utils {
 			// Initialize pools with appropriate thread counts
 			diffusionPool = std::make_unique<ThreadPool>(1);  // Single thread for diffusion
 			ioPool = std::make_unique<ThreadPool>(2);         // 2 threads for I/O
-			generalPool = std::make_unique<ThreadPool>(std::max(2u, std::thread::hardware_concurrency()/2)); // Rest for general use
+			generalPool = std::make_unique<ThreadPool>(std::max(2u, std::thread::hardware_concurrency() / 2)); // Rest for general use
 
 			std::cout << "ThreadPoolManager initialized with:" << std::endl;
 			std::cout << "  Diffusion pool: " << diffusionPool->size() << " threads" << std::endl;
@@ -256,9 +323,9 @@ namespace Utils {
 			std::cout << "  General pool: " << generalPool->size() << " threads" << std::endl;
 		}
 
-		// Destructor
+		// Destructor - immediate termination
 		~ThreadPoolManager() {
-			shutdown();
+			terminateAll();
 		}
 
 		// Thread pools

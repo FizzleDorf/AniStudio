@@ -103,29 +103,35 @@ public:
 	}
 
 	void DiffusionAddon::OnShutdown() {
-		LogInfo("Shutting down DiffusionAddon - cleaning up all resources");
+		LogInfo("SHUTTING DOWN DIFFUSION ADDON IMMEDIATELY");
 
-		// STEP 1: Stop all active diffusion tasks
+		// STEP 1: IMMEDIATE SYSTEM TERMINATION
 		if (m_entityMgr) {
 			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
 			if (system) {
-				system->StopCurrentTask();
-				system->ClearQueue();
-				LogInfo("Stopped all diffusion tasks");
+				system->TerminateImmediately();
+				LogInfo("SDCPPSystem terminated immediately");
 			}
 		}
 
 		// STEP 2: Unregister event handlers
-		UnregisterEventHandlers();
+		LogInfo("Unregistering diffusion event handlers");
+		auto& events = ANI::Events::Ref();
+		events.UnregisterEvent("QueueDiffusionTask");
+		events.UnregisterEvent("RemoveFromDiffusionQueue");
+		events.UnregisterEvent("MoveInDiffusionQueue");
+		events.UnregisterEvent("StopCurrentDiffusionTask");
+		events.UnregisterEvent("ClearDiffusionQueue");
+		events.UnregisterEvent("PauseDiffusionWorker");
+		events.UnregisterEvent("ResumeDiffusionWorker");
 
-		// STEP 3: DESTROY ALL ENTITIES WITH DIFFUSION COMPONENTS FIRST
+		// STEP 3: DESTROY ALL ENTITIES WITH DIFFUSION COMPONENTS
 		if (m_entityMgr) {
-			// Get all entities and check if they have ANY diffusion component
 			auto allEntities = m_entityMgr->GetAllEntities();
 			std::vector<EntityID> entitiesToDestroy;
 
 			for (EntityID entity : allEntities) {
-				// Check for ANY diffusion component
+				// Check for ANY diffusion component directly
 				if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity) ||
 					m_entityMgr->HasComponent<ECS::SamplerComponent>(entity) ||
 					m_entityMgr->HasComponent<ECS::GuidanceComponent>(entity) ||
@@ -156,20 +162,12 @@ public:
 				}
 			}
 
-			// Destroy the fucking entities
 			for (EntityID entity : entitiesToDestroy) {
 				m_entityMgr->DestroyEntity(entity);
 			}
 			LogInfo("Destroyed " + std::to_string(entitiesToDestroy.size()) + " entities with diffusion components");
 		}
 
-		// STEP 4: Unregister system
-		if (m_entityMgr) {
-			m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-			LogInfo("Unregistered SDCPPSystem");
-		}
-
-		// STEP 5: Unregister ALL diffusion views
 		if (m_viewMgr) {
 			m_viewMgr->UnregisterView("DiffusionView");
 			m_viewMgr->UnregisterView("ConvertView");
@@ -178,7 +176,6 @@ public:
 			LogInfo("Unregistered all diffusion views");
 		}
 
-		// STEP 6: UNREGISTER ALL FUCKING COMPONENTS
 		if (m_entityMgr) {
 			m_entityMgr->UnregisterComponentByName("Prompt");
 			m_entityMgr->UnregisterComponentByName("Sampler");
@@ -207,14 +204,18 @@ public:
 			m_entityMgr->UnregisterComponentByName("Chroma");
 			m_entityMgr->UnregisterComponentByName("Esrgan");
 			LogInfo("Unregistered all diffusion components");
+
+			// Unregister the system
+			m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
+			LogInfo("Unregistered SDCPPSystem");
+		
 		}
 
-		// STEP 7: Clear all references
 		m_entityMgr = nullptr;
 		m_viewMgr = nullptr;
 		m_imguiContext = nullptr;
 
-		LogInfo("DiffusionAddon shutdown complete");
+		LogInfo("DiffusionAddon immediate shutdown complete");
 	}
 
 	void OnUpdate(float deltaTime) override {

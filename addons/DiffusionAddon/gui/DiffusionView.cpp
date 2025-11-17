@@ -43,9 +43,23 @@ namespace GUI {
 		if (editEntity != 0) mgr.DestroyEntity(editEntity);
 
 		// Create entities with core diffusion components
-		txt2imgEntity = CreateEntityWithComponents(false); // No InputImageComponent
-		img2imgEntity = CreateEntityWithComponents(true);  // With InputImageComponent
-		editEntity = CreateEntityWithComponents(true);     // With InputImageComponent
+		txt2imgEntity = CreateEntityWithComponents(false);
+		img2imgEntity = CreateEntityWithComponents(true);
+		editEntity = CreateEntityWithComponents(true);
+
+		// Set default output paths for ALL template entities
+		for (EntityID entity : {txt2imgEntity, img2imgEntity, editEntity}) {
+			if (mgr.HasComponent<OutputImageComponent>(entity)) {
+				auto& output = mgr.GetComponent<OutputImageComponent>(entity);
+				output.filePath = Utils::FilePaths::defaultProjectPath;
+				output.fileName = "AniStudio.png";
+			}
+
+			if (mgr.HasComponent<LoraComponent>(entity)) {
+				auto& lora = mgr.GetComponent<LoraComponent>(entity);
+				lora.modelPath = Utils::FilePaths::loraDir;
+			}
+		}
 
 		// Set default denoise for img2img and edit
 		if (mgr.HasComponent<SamplerComponent>(img2imgEntity)) {
@@ -400,47 +414,45 @@ namespace GUI {
 
 	void DiffusionView::HandleT2IEvent() {
 		std::cout << "Adding new T2I entity..." << std::endl;
-		EntityID newEntity = mgr.CloneEntity(txt2imgEntity);
+
+		// Clone the entity
+		nlohmann::json entityData = mgr.SerializeEntity(txt2imgEntity);
+		EntityID newEntity = mgr.DeserializeEntity(entityData);
+
 		if (newEntity == 0) {
-			std::cerr << "Failed to create new entity!" << std::endl;
+			std::cerr << "Failed to create new entity via serialization!" << std::endl;
 			return;
 		}
 
-		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
-			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
-			if (outputComp.filePath.empty()) {
-				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
-			}
-			if (outputComp.fileName.empty()) {
-				outputComp.fileName = "AniStudio.png";
-			}
-			std::filesystem::create_directories(outputComp.filePath);
-		}
+		std::cout << "Successfully cloned entity " << txt2imgEntity << " to " << newEntity << " via serialization" << std::endl;
 
-		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Inference);
-		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
+		// Get the SDCPPSystem directly and queue the task
+		auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+		if (sdSystem) {
+			sdSystem->QueueTask(newEntity, ECS::SDCPPSystem::TaskType::Inference);
+			std::cout << "Task queued directly to SDCPPSystem" << std::endl;
+		}
+		else {
+			std::cerr << "SDCPPSystem not found!" << std::endl;
+			mgr.DestroyEntity(newEntity); // Clean up if system not available
+		}
 	}
 
 	void DiffusionView::HandleI2IEvent() {
 		std::cout << "Adding new I2I entity..." << std::endl;
-		EntityID newEntity = mgr.CloneEntity(img2imgEntity);
+
+		// SERIALIZE AND DESERIALIZE TO COPY THE TEMPLATE ENTITY
+		nlohmann::json entityData = mgr.SerializeEntity(img2imgEntity);
+		EntityID newEntity = mgr.DeserializeEntity(entityData);
 
 		if (newEntity == 0) {
-			std::cerr << "Failed to create new entity!" << std::endl;
+			std::cerr << "Failed to create new entity via serialization!" << std::endl;
 			return;
 		}
 
-		std::cout << "=== ORIGINAL ENTITY INPUTIMAGE DEBUG ===" << std::endl;
-		if (mgr.HasComponent<InputImageComponent>(newEntity)) {
-			auto& origInput = mgr.GetComponent<InputImageComponent>(newEntity);
-			std::cout << "Original entity " << newEntity << " InputImageComponent:" << std::endl;
-			std::cout << "  inputFilePath: '" << origInput.inputFilePath << "'" << std::endl;
-			std::cout << "  filePath: '" << origInput.filePath << "'" << std::endl;
-		}
-		else {
-			std::cout << "NO InputImageComponent on original entity!" << std::endl;
-		}
-		std::cout << "=== END ORIGINAL DEBUG ===" << std::endl;
+		std::cout << "Successfully cloned entity " << img2imgEntity << " to " << newEntity << " via serialization" << std::endl;
+
+		// Configure the cloned entity
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 			if (outputComp.filePath.empty()) {
@@ -452,19 +464,26 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		// NEW: Use proper event system with data
+		// Send the CLONED entity to the system
 		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Img2Img);
 		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
 
 	void DiffusionView::HandleEditEvent() {
 		std::cout << "Adding new Edit entity..." << std::endl;
-		EntityID newEntity = mgr.CloneEntity(editEntity);
+
+		// SERIALIZE AND DESERIALIZE TO COPY THE TEMPLATE ENTITY
+		nlohmann::json entityData = mgr.SerializeEntity(editEntity);
+		EntityID newEntity = mgr.DeserializeEntity(entityData);
+
 		if (newEntity == 0) {
-			std::cerr << "Failed to create new entity!" << std::endl;
+			std::cerr << "Failed to create new entity via serialization!" << std::endl;
 			return;
 		}
 
+		std::cout << "Successfully cloned entity " << editEntity << " to " << newEntity << " via serialization" << std::endl;
+
+		// Configure the cloned entity
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 			if (outputComp.filePath.empty()) {
@@ -476,7 +495,7 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		// NEW: Use proper event system with data
+		// Send the CLONED entity to the system
 		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Edit);
 		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
@@ -522,16 +541,11 @@ namespace GUI {
 			}
 
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-				EntityID targetEntity = 0;
-				switch (currentMode) {
-				case 0: targetEntity = txt2imgEntity; break;
-				case 1: targetEntity = img2imgEntity; break;
-				case 2: targetEntity = editEntity; break;
-				}
+				EntityID targetEntity = GetCurrentEntity();
 
 				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
 					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
-					if(loraComp.modelPath.empty())
+					if (loraComp.modelPath.empty())
 						loraComp.modelPath = Utils::FilePaths::loraDir;
 				}
 

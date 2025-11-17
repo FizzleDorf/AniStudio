@@ -156,68 +156,77 @@ namespace ECS {
 			static_assert(std::is_base_of_v<BaseComponent, T>,
 				"ALL components must derive from BaseComponent");
 
-			std::cout << "[RegisterComponent] START for: " << name
-				<< " (type: " << typeid(T).name() << ")" << std::endl;
-
 			std::type_index typeIdx = std::type_index(typeid(T));
-			auto it = m_componentTypeToID.find(typeIdx);
 
-			ComponentTypeID typeId;
-			if (it != m_componentTypeToID.end()) {
-				typeId = it->second;  // Found by type_index
-				std::cout << "[RegisterComponent] ALREADY REGISTERED: " << name
-					<< " with ID: " << typeId << std::endl;
-			}
-			else {
-				// CRITICAL FIX: Add name lookup fallback like ViewManager
-				auto nameIt = m_componentNameToID.find(name);
-				if (nameIt != m_componentNameToID.end()) {
-					typeId = nameIt->second;  // Found by name
-					m_componentTypeToID[typeIdx] = typeId;
-					std::cout << "[RegisterComponent] FOUND BY NAME: " << name
-						<< " with ID: " << typeId << std::endl;
-				}
-				else {
-					typeId = m_nextComponentID++;  // Create new
-					m_componentNameToID[name] = typeId;
-					m_componentIDToName[typeId] = name;
-					m_componentTypeToID[typeIdx] = typeId;
-					std::cout << "[RegisterComponent] ASSIGNING NEW ID: " << typeId
-						<< " to component: " << name << std::endl;
-				}
+			// Check existing registration
+			auto typeIt = m_componentTypeToID.find(typeIdx);
+			if (typeIt != m_componentTypeToID.end()) {
+				return typeIt->second;
 			}
 
-			// Only register creators if this is a NEW registration
-			if (componentCreators.find(typeId) == componentCreators.end()) {
-				RegisterComponentType(
-					typeId,
-					[this, typeId, name, typeIdx](EntityID entity) {
-					std::cout << "[ComponentCreator] CREATING " << name
-						<< " (ID: " << typeId << ") for entity: " << entity << std::endl;
-
-					GetEntitySignature(entity)->insert(typeId);
-					T component;
-					component.entityID = entity;
-					GetCompList<T>()->Insert(component);
-					UpdateEntityTargetSystem(entity);
-
-					std::cout << "[ComponentCreator] SUCCESS: Added " << name
-						<< " to entity " << entity << std::endl;
-				},
-					[this, typeIdx](EntityID entity) -> BaseComponent* {
-					auto it = m_componentTypeToID.find(typeIdx);
-					if (it == m_componentTypeToID.end()) return nullptr;
-
-					ComponentTypeID compId = it->second;
-					if (!HasComponentById(entity, compId)) return nullptr;
-
-					return &GetComponent<T>(entity);
-				}
-				);
+			auto nameIt = m_componentNameToID.find(name);
+			if (nameIt != m_componentNameToID.end()) {
+				ComponentTypeID typeId = nameIt->second;
+				m_componentTypeToID[typeIdx] = typeId;
+				return typeId;
 			}
 
-			std::cout << "[RegisterComponent] COMPLETED: " << name
-				<< " registered with ID: " << typeId << std::endl;
+			// New registration
+			ComponentTypeID typeId = m_nextComponentID++;
+			m_componentNameToID[name] = typeId;
+			m_componentIDToName[typeId] = name;
+			m_componentTypeToID[typeIdx] = typeId;
+
+			// Create component array
+			AddCompList<T>();
+
+			// Register creators WITH DEBUG
+			RegisterComponentType(
+				typeId,
+				[this, typeId, name](EntityID entity) {
+				std::cout << "[ComponentCreator] DEBUG: Creating component " << name << " for entity " << entity << std::endl;
+				GetEntitySignature(entity)->insert(typeId);
+
+				// Debug the component list
+				auto compList = GetCompList<T>();
+				std::cout << "[ComponentCreator] DEBUG: Component list pointer: " << compList.get() << std::endl;
+				std::cout << "[ComponentCreator] DEBUG: Before insert - size: " << compList->Size() << std::endl;
+
+				T componentInstance{};
+				componentInstance.entityID = entity;
+				compList->Insert(componentInstance);
+
+				std::cout << "[ComponentCreator] DEBUG: After insert - size: " << compList->Size() << std::endl;
+
+				// Check if component was actually created
+				try {
+					BaseComponent* comp = &compList->Get(entity);
+					std::cout << "[ComponentCreator] DEBUG: Component created - pointer: " << comp << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[ComponentCreator] ERROR: Failed to get component after creation: " << e.what() << std::endl;
+				}
+
+				UpdateEntityTargetSystem(entity);
+				std::cout << "[ComponentCreator] DEBUG: Component creation completed for " << name << std::endl;
+			},
+				[this, typeId, name](EntityID entity) -> BaseComponent* {
+				if (!HasComponentById(entity, typeId)) {
+					std::cout << "[ComponentGetter] DEBUG: Entity " << entity << " doesn't have component " << name << " in signature" << std::endl;
+					return nullptr;
+				}
+
+				try {
+					auto compList = GetCompList<T>();
+					BaseComponent* comp = &compList->Get(entity);
+					return comp;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[ComponentGetter] ERROR: Failed to get component " << name << ": " << e.what() << std::endl;
+					return nullptr;
+				}
+			}
+			);
 
 			return typeId;
 		}

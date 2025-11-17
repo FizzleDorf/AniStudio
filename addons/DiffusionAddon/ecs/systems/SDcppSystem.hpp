@@ -128,15 +128,19 @@ namespace ECS {
 			// Try to terminate the active task if it exists
 			TerminateActiveTask();
 
-			// Get the diffusion pool and wait for tasks to complete
+			// Get the diffusion pool and wait for tasks to complete by polling
 			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
 
-			// Wait for diffusion tasks to complete (with timeout)
-			auto future = std::async(std::launch::async, [&diffusionPool]() {
-				diffusionPool.waitForTasks();
-			});
+			// Wait for diffusion tasks to complete (with timeout) by polling
+			auto startTime = std::chrono::steady_clock::now();
+			while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(5)) {
+				if (diffusionPool.getActiveCount() == 0 && diffusionPool.getQueueSize() == 0) {
+					break;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
 
-			if (future.wait_for(std::chrono::seconds(5)) == std::future_status::timeout) {
+			if (diffusionPool.getActiveCount() > 0 || diffusionPool.getQueueSize() > 0) {
 				std::cerr << "Warning: Diffusion pool did not shut down cleanly within timeout" << std::endl;
 			}
 
@@ -147,11 +151,71 @@ namespace ECS {
 			}
 		}
 
-		// Public methods
+		void Shutdown() {
+			std::cout << "[SDCPPSystem] Shutting down system..." << std::endl;
+
+			// Stop current task and clear queue
+			StopCurrentTask();
+			ClearQueue();
+
+			// Wait for all threads to complete
+			if (workerThread.joinable()) {
+				workerThread.join();
+			}
+
+			// Shutdown any thread pools used by this system
+			// This is crucial - wait for all diffusion tasks to complete by polling
+			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
+			auto startTime = std::chrono::steady_clock::now();
+			while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(5)) {
+				if (diffusionPool.getActiveCount() == 0 && diffusionPool.getQueueSize() == 0) {
+					break;
+				}
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			}
+
+			std::cout << "[SDCPPSystem] Shutdown complete" << std::endl;
+		}
+
+		// Add missing method called from plugin
+		void TerminateImmediately() {
+			std::cout << "[SDCPPSystem] Immediate termination requested" << std::endl;
+
+			// Signal shutdown
+			{
+				std::lock_guard<std::mutex> lock(queueMutex);
+				shuttingDown = true;
+				pauseWorker = true;
+				terminateFlag = true;
+			}
+
+			// Clear the task queue
+			ClearQueue();
+
+			// Terminate the thread pool immediately
+			Utils::ThreadPoolManager::getInstance().getDiffusionPool().terminate();
+
+			std::cout << "[SDCPPSystem] Immediate termination complete" << std::endl;
+		}
+
 		void QueueTask(const EntityID entityID, const TaskType taskType) {
-			// Validate entity exists first
-			if (!mgr.GetEntitiesSignatures().count(entityID)) {
-				std::cerr << "Error: Entity " << entityID << " does not exist!" << std::endl;
+			// FIX: Add comprehensive validation
+			std::cout << "[QueueTask] Starting for entity: " << entityID << std::endl;
+
+			// Validate entity exists and is valid
+			if (!mgr.IsEntityValid(entityID)) {
+				std::cerr << "[QueueTask] ERROR: Entity " << entityID << " is not valid!" << std::endl;
+				return;
+			}
+
+			// Validate entity has required components
+			if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
+				std::cerr << "[QueueTask] ERROR: Entity " << entityID << " missing OutputImageComponent!" << std::endl;
+				return;
+			}
+
+			if (!mgr.HasComponent<PromptComponent>(entityID)) {
+				std::cerr << "[QueueTask] ERROR: Entity " << entityID << " missing PromptComponent!" << std::endl;
 				return;
 			}
 
@@ -164,28 +228,43 @@ namespace ECS {
 					return;
 				}
 
-				// Create a cloned entity for processing to preserve original
-				EntityID clonedEntity = CloneEntityForProcessing(entityID);
-				if (clonedEntity == 0) {
-					std::cerr << "Failed to clone entity " << entityID << " for processing" << std::endl;
-					return;
+				std::cout << "Processing entity: " << entityID << std::endl;
+				std::cout << "Task type: " << static_cast<int>(taskType) << std::endl;
+
+				// DEBUG: Check if entity is valid and get component info
+				std::cout << "DEBUG: Is entity " << entityID << " valid? " << mgr.IsEntityValid(entityID) << std::endl;
+
+				// DEBUG: Get actual component pointers for entity
+				auto componentTypes = mgr.GetEntityComponents(entityID);
+				std::cout << "DEBUG: Entity " << entityID << " has " << componentTypes.size() << " raw components:" << std::endl;
+				for (const auto& compId : componentTypes) {
+					std::string compName = mgr.GetComponentNameById(compId);
+					BaseComponent* comp = mgr.GetComponentById(entityID, compId);
+					std::cout << "  - " << compName << " (ID: " << compId << ") - ptr: " << comp;
+					if (comp) {
+						std::cout << " - VALID";
+					}
+					else {
+						std::cout << " - NULL";
+					}
+					std::cout << std::endl;
 				}
 
-				// Create task data
+				std::cout << "DEBUG: About to call SerializeEntity on entity " << entityID << std::endl;
+
+				// FIX: Create task data safely
 				TaskData taskData;
-				taskData.entityID = clonedEntity;  // Use cloned entity
+				taskData.entityID = entityID;
 				taskData.processing = false;
 				taskData.taskType = taskType;
-				taskData.isClonedEntity = true;
+				taskData.isClonedEntity = false;
 
-				// Check if we need to generate a random seed for certain task types
+				// FIX: Validate and generate seed safely
 				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
 					taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
 
-					if (mgr.HasComponent<SamplerComponent>(clonedEntity)) {
-						auto& samplerComp = mgr.GetComponent<SamplerComponent>(clonedEntity);
-
-						// Generate random seed if needed
+					if (mgr.HasComponent<SamplerComponent>(entityID)) {
+						auto& samplerComp = mgr.GetComponent<SamplerComponent>(entityID);
 						if (samplerComp.seed < 0) {
 							uint64_t newSeed = Utils::generateRandomSeed();
 							samplerComp.seed = static_cast<int>(newSeed);
@@ -194,37 +273,23 @@ namespace ECS {
 					}
 				}
 
-				// DEBUG LOGGING: Check what image data we have
-				std::cout << "=== QUEUE TASK DEBUG ===" << std::endl;
-				std::cout << "Original entity: " << entityID << std::endl;
-				std::cout << "Cloned entity: " << clonedEntity << std::endl;
-
-				if (mgr.HasComponent<InputImageComponent>(clonedEntity)) {
-					auto& input = mgr.GetComponent<InputImageComponent>(clonedEntity);
-					std::cout << "InputImageComponent: '" << input.filePath << "' " << input.width << "x" << input.height << std::endl;
-					std::cout << "InputFilePath: '" << input.inputFilePath << "'" << std::endl;
+				// FIX: Safe serialization
+				try {
+					taskData.metadata = mgr.SerializeEntity(entityID);
+					std::cout << "Serialization successful" << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Serialization failed: " << e.what() << std::endl;
+					return;
 				}
 
-				if (mgr.HasComponent<ImageComponent>(clonedEntity)) {
-					auto& img = mgr.GetComponent<ImageComponent>(clonedEntity);
-					std::cout << "ImageComponent: '" << img.filePath << "' " << img.width << "x" << img.height << std::endl;
-				}
-				std::cout << "=== END DEBUG ===" << std::endl;
-
-				// Serialize entity to metadata
-				taskData.metadata = mgr.SerializeEntity(clonedEntity);
-				std::cout << "Successfully serialized cloned entity " << clonedEntity << " (original: " << entityID << ")" << std::endl;
-
-				// Add to internal task list
+				// FIX: Add to queue safely
 				taskQueue.push_back(std::move(taskData));
 
-				std::cout << "Entity " << clonedEntity << " (cloned from " << entityID << ") queued for processing. Queue position: " << taskQueue.size() << std::endl;
+				std::cout << "Entity " << entityID << " queued for processing. Queue position: " << taskQueue.size() << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception in QueueTask: " << e.what() << std::endl;
-			}
-			catch (...) {
-				std::cerr << "Unknown exception in QueueTask!" << std::endl;
 			}
 		}
 
@@ -361,68 +426,41 @@ namespace ECS {
 		mutable std::mutex queueMutex;
 		EntityID lastGeneratedVideoEntity{ 0 }; // Track last generated video
 
-		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
-			return Utils::ThreadPoolManager::getInstance().getStats();
-		}
+		// Add missing member variables
+		std::thread workerThread;
 
 		// Single task tracking
 		bool hasActiveTask{ false };
 		std::thread::id activeThreadId{};
 
+		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
+			return Utils::ThreadPoolManager::getInstance().getStats();
+		}
+
 		// Clone entity for processing to preserve original input images
 		EntityID CloneEntityForProcessing(const EntityID originalEntity) {
+			std::cout << "=== CLONE DEBUG START ===" << std::endl;
+			std::cout << "Original entity: " << originalEntity << std::endl;
+
 			try {
 				// Serialize the original entity
 				nlohmann::json entityData = mgr.SerializeEntity(originalEntity);
+				std::cout << "Serialized data keys: ";
+				for (auto&[key, value] : entityData.items()) {
+					std::cout << key << " ";
+				}
+				std::cout << std::endl;
 
 				// Create a new entity from the serialized data
 				EntityID clonedEntity = mgr.DeserializeEntity(entityData);
+				std::cout << "Cloned entity ID: " << clonedEntity << std::endl;
 
 				if (clonedEntity == 0) {
-					std::cerr << "Failed to deserialize cloned entity" << std::endl;
+					std::cerr << "DESERIALIZATION FAILED - returned entity ID 0" << std::endl;
 					return 0;
 				}
 
-				// Copy ALL image components from original to cloned entity
-
-				// Copy ImageComponent data
-				if (mgr.HasComponent<ImageComponent>(originalEntity) &&
-					mgr.HasComponent<ImageComponent>(clonedEntity)) {
-
-					auto& originalImg = mgr.GetComponent<ImageComponent>(originalEntity);
-					auto& clonedImg = mgr.GetComponent<ImageComponent>(clonedEntity);
-
-					// Copy ALL image data
-					clonedImg.filePath = originalImg.filePath;
-					clonedImg.fileName = originalImg.fileName;
-					clonedImg.width = originalImg.width;
-					clonedImg.height = originalImg.height;
-					clonedImg.channels = originalImg.channels;
-
-					std::cout << "Copied ImageComponent data to cloned entity " << clonedEntity
-						<< ": " << originalImg.filePath << " " << originalImg.width << "x" << originalImg.height << std::endl;
-				}
-
-				// Copy InputImageComponent data
-				if (mgr.HasComponent<InputImageComponent>(originalEntity) &&
-					mgr.HasComponent<InputImageComponent>(clonedEntity)) {
-
-					auto& originalInput = mgr.GetComponent<InputImageComponent>(originalEntity);
-					auto& clonedInput = mgr.GetComponent<InputImageComponent>(clonedEntity);
-
-					// Copy file path information for ImageSystem
-					clonedInput.filePath = originalInput.filePath;
-					clonedInput.fileName = originalInput.fileName;
-					clonedInput.width = originalInput.width;
-					clonedInput.height = originalInput.height;
-					clonedInput.channels = originalInput.channels;
-					clonedInput.inputFilePath = originalInput.inputFilePath;
-
-					std::cout << "Copied InputImageComponent data to cloned entity " << clonedEntity
-						<< ": " << originalInput.filePath << " " << originalInput.width << "x" << originalInput.height << std::endl;
-				}
-
-				std::cout << "Successfully cloned entity " << originalEntity << " to " << clonedEntity << std::endl;
+				std::cout << "=== CLONE DEBUG END ===" << std::endl;
 				return clonedEntity;
 			}
 			catch (const std::exception& e) {

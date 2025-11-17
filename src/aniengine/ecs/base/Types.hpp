@@ -32,15 +32,9 @@ namespace ECS {
 
 	using EntitySignature = std::unordered_set<ComponentTypeID>;
 
-	// Dummy functions - never called
+	// Simple dummy function - or remove CompType usage entirely
 	template <typename T>
 	inline static const ComponentTypeID CompType() noexcept {
-		return SIZE_MAX;
+		return 0;
 	}
-
-	template <typename T>
-	inline static const SystemTypeID SystemType() noexcept {
-		return SIZE_MAX;
-	}
-
 } // namespace ECS

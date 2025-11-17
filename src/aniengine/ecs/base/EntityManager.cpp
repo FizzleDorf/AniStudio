@@ -263,10 +263,15 @@ namespace ECS {
 		entityJson["components"] = nlohmann::json::array();
 
 		auto componentTypes = GetEntityComponents(entity);
+
 		for (const auto& componentId : componentTypes) {
-			if (auto* baseComponent = GetComponentByIdConst(entity, componentId)) {
+			// Use non-const version instead of GetComponentByIdConst
+			BaseComponent* baseComponent = const_cast<EntityManager*>(this)->GetComponentById(entity, componentId);
+
+			if (baseComponent) {
 				nlohmann::json componentJson;
 				std::string componentName = GetComponentNameById(componentId);
+
 				if (componentName != "Unknown") {
 					nlohmann::json serialized = baseComponent->Serialize();
 
@@ -299,13 +304,14 @@ namespace ECS {
 			for (const auto& componentId : componentTypes) {
 				auto creator = componentCreators.find(componentId);
 				if (creator != componentCreators.end()) {
+					// Create the component on the new entity
 					creator->second(newEntity);
 
-					if (auto* sourceComponent = GetComponentByIdConst(sourceEntity, componentId)) {
+					// Copy the data from source to destination
+					if (auto* sourceComponent = GetComponentById(sourceEntity, componentId)) {
 						if (auto* destComponent = GetComponentById(newEntity, componentId)) {
 							nlohmann::json componentData = sourceComponent->Serialize();
 							destComponent->Deserialize(componentData);
-
 							CopyComponentResources(sourceEntity, newEntity, componentId);
 						}
 					}
@@ -335,19 +341,37 @@ namespace ECS {
 				for (auto it = componentJson.begin(); it != componentJson.end(); ++it) {
 					std::string componentName = it.key();
 					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
+
+					std::cout << "[Deserialize] Looking up component: '" << componentName
+						<< "' -> ID: " << typeId << std::endl;
+
 					if (typeId != MAX_COMPONENT_COUNT) {
 						auto creator = componentCreators.find(typeId);
 						if (creator != componentCreators.end()) {
+							std::cout << "[Deserialize] Creating component: " << componentName << std::endl;
 							creator->second(entity);
 
-							if (auto* component = GetComponentById(entity, typeId)) {
+							// DEBUG: Check if component was actually created
+							BaseComponent* component = GetComponentById(entity, typeId);
+							std::cout << "[Deserialize] Component " << componentName << " created - pointer: " << component << std::endl;
+
+							if (component) {
 								component->Deserialize(componentJson[componentName]);
+								std::cout << "[Deserialize] Component data deserialized" << std::endl;
+							}
+							else {
+								std::cerr << "[Deserialize] ERROR: Component " << componentName << " was not created!" << std::endl;
 							}
 						}
+						else {
+							std::cerr << "[Deserialize] No creator for component: " << componentName << std::endl;
+						}
+					}
+					else {
+						std::cerr << "[Deserialize] Component not found: " << componentName << std::endl;
 					}
 				}
 			}
-
 			return entity;
 		}
 		catch (const std::exception& e) {
