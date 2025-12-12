@@ -23,19 +23,23 @@ namespace Utils
 		{
 			sd_ctx_t *sd_context = nullptr;
 			unsigned char *inputData = nullptr;
+			unsigned char *maskData = nullptr;
+			unsigned char *emptyMaskData = nullptr;
 			sd_image_t *result_image = nullptr;
-			sd_img_gen_params_t gen_params;
-			sd_img_gen_params_init(&gen_params);
 
 			try
 			{
 				std::string inputImagePath = "";
+				std::string maskImagePath = "";
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "img2img_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
 				int latentWidth = 0;
 				int latentHeight = 0;
+
+				sd_img_gen_params_t gen_params;
+				sd_img_gen_params_init(&gen_params);
 
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
@@ -44,10 +48,15 @@ namespace Utils
 						if (comp.contains("InputImage"))
 						{
 							nlohmann::json inputImageData = comp["InputImage"];
-							if (inputImageData.contains("inputFilePath") && !inputImageData["inputFilePath"].is_null())
-								inputImagePath = inputImageData["inputFilePath"].get<std::string>();
-							else if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null())
+							if (inputImageData.contains("filePath") && !inputImageData["filePath"].is_null())
 								inputImagePath = inputImageData["filePath"].get<std::string>();
+						}
+
+						if (comp.contains("MaskImage"))
+						{
+							nlohmann::json maskImageData = comp["MaskImage"];
+							if (maskImageData.contains("filePath") && !maskImageData["filePath"].is_null())
+								maskImagePath = maskImageData["filePath"].get<std::string>();
 						}
 
 						if (comp.contains("OutputImage"))
@@ -116,29 +125,110 @@ namespace Utils
 
 				gen_params.prompt = posPrompt.c_str();
 				gen_params.negative_prompt = negPrompt.c_str();
-
-				gen_params.mask_image = { 0, 0, 0, nullptr };
 				gen_params.control_image = { 0, 0, 0, nullptr };
 
 				if (inputImagePath.empty()) {
 					throw std::runtime_error("Input image path is empty!");
 				}
 
+				if (!std::filesystem::exists(inputImagePath)) {
+					throw std::runtime_error("Input image file not found: " + inputImagePath);
+				}
+
+				std::cout << "=== Img2Img Debug ===" << std::endl;
+				std::cout << "Input image path: " << inputImagePath << std::endl;
+
 				int inputWidth, inputHeight, inputChannels;
 				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
 				if (!inputData) {
 					throw std::runtime_error("Failed to load input image: " + inputImagePath);
 				}
+				inputChannels = 3;
+
+				std::cout << "Loaded image dimensions: " << inputWidth << "x" << inputHeight << std::endl;
+
+				if (latentWidth <= 0 || latentHeight <= 0) {
+					latentWidth = inputWidth;
+					latentHeight = inputHeight;
+				}
+
+				if (latentWidth != inputWidth || latentHeight != inputHeight) {
+					std::cout << "WARNING: Latent dimensions (" << latentWidth << "x" << latentHeight
+						<< ") don't match input image (" << inputWidth << "x" << inputHeight << ")" << std::endl;
+					std::cout << "Auto-adjusting latent to match input image..." << std::endl;
+					latentWidth = inputWidth;
+					latentHeight = inputHeight;
+				}
 
 				gen_params.width = static_cast<uint32_t>(latentWidth);
 				gen_params.height = static_cast<uint32_t>(latentHeight);
 
-				gen_params.init_image = {
+				sd_image_t input_image = {
 					static_cast<uint32_t>(inputWidth),
 					static_cast<uint32_t>(inputHeight),
 					3,
-					inputData
-				};
+					inputData };
+
+				gen_params.init_image = input_image;
+
+				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath))
+				{
+					size_t maskSize = inputWidth * inputHeight;
+					emptyMaskData = new unsigned char[maskSize];
+					std::memset(emptyMaskData, 255, maskSize);
+
+					gen_params.mask_image.width = static_cast<uint32_t>(inputWidth);
+					gen_params.mask_image.height = static_cast<uint32_t>(inputHeight);
+					gen_params.mask_image.channel = 1;
+					gen_params.mask_image.data = emptyMaskData;
+				}
+				else
+				{
+					int maskWidth, maskHeight, maskChannels;
+					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1);
+
+					if (!maskData)
+					{
+						size_t maskSize = inputWidth * inputHeight;
+						emptyMaskData = new unsigned char[maskSize];
+						std::memset(emptyMaskData, 255, maskSize);
+
+						gen_params.mask_image.width = static_cast<uint32_t>(inputWidth);
+						gen_params.mask_image.height = static_cast<uint32_t>(inputHeight);
+						gen_params.mask_image.channel = 1;
+						gen_params.mask_image.data = emptyMaskData;
+					}
+					else
+					{
+						if (maskWidth != inputWidth || maskHeight != inputHeight)
+						{
+							stbi_image_free(maskData);
+							maskData = nullptr;
+
+							size_t maskSize = inputWidth * inputHeight;
+							emptyMaskData = new unsigned char[maskSize];
+							std::memset(emptyMaskData, 255, maskSize);
+
+							gen_params.mask_image.width = static_cast<uint32_t>(inputWidth);
+							gen_params.mask_image.height = static_cast<uint32_t>(inputHeight);
+							gen_params.mask_image.channel = 1;
+							gen_params.mask_image.data = emptyMaskData;
+						}
+						else
+						{
+							gen_params.mask_image.width = static_cast<uint32_t>(maskWidth);
+							gen_params.mask_image.height = static_cast<uint32_t>(maskHeight);
+							gen_params.mask_image.channel = 1;
+							gen_params.mask_image.data = maskData;
+						}
+					}
+				}
+
+				std::cout << "Final settings:" << std::endl;
+				std::cout << "  - Input image: " << inputWidth << "x" << inputHeight << std::endl;
+				std::cout << "  - Target size: " << gen_params.width << "x" << gen_params.height << std::endl;
+				std::cout << "  - Strength: " << gen_params.strength << std::endl;
+				std::cout << "=====================" << std::endl;
 
 				std::filesystem::path outputDir(outputPath);
 				std::filesystem::path outputFile(outputFilename);
@@ -166,6 +256,14 @@ namespace Utils
 					stbi_image_free(inputData);
 					inputData = nullptr;
 				}
+				if (maskData) {
+					stbi_image_free(maskData);
+					maskData = nullptr;
+				}
+				if (emptyMaskData) {
+					delete[] emptyMaskData;
+					emptyMaskData = nullptr;
+				}
 				if (result_image) {
 					free(result_image);
 					result_image = nullptr;
@@ -184,6 +282,14 @@ namespace Utils
 				if (inputData) {
 					stbi_image_free(inputData);
 					inputData = nullptr;
+				}
+				if (maskData) {
+					stbi_image_free(maskData);
+					maskData = nullptr;
+				}
+				if (emptyMaskData) {
+					delete[] emptyMaskData;
+					emptyMaskData = nullptr;
 				}
 				if (result_image) {
 					free(result_image);

@@ -44,7 +44,6 @@ namespace GUI {
 		mgr.AddComponent<InputImageComponent>(upscaleEntity);
 		mgr.AddComponent<OutputImageComponent>(upscaleEntity);
 		mgr.AddComponent<EsrganComponent>(upscaleEntity);
-		mgr.AddComponent<SamplerComponent>(upscaleEntity);
 
 		// Initialize with default values
 		auto& outputComp = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
@@ -56,9 +55,6 @@ namespace GUI {
 		auto& esrganComp = mgr.GetComponent<EsrganComponent>(upscaleEntity);
 		esrganComp.upscaleFactor = 2;
 		esrganComp.preserveAspectRatio = true;
-
-		auto& samplerComp = mgr.GetComponent<SamplerComponent>(upscaleEntity);
-		samplerComp.n_threads = std::thread::hardware_concurrency();
 	}
 
 	bool UpscaleView::IsEntitySafeToUse(ECS::EntityID entity) const {

@@ -769,28 +769,44 @@ namespace Plugins {
 
 		PluginInfo& info = it->second;
 
+		// Force disable first with proper cleanup
 		if (info.enabled) {
-			std::cout << "[PluginManager] Disabling plugin before unload..." << std::endl;
-			disablePlugin(pluginName);
+			std::cout << "[PluginManager] Force-disabling plugin before unload..." << std::endl;
+			if (info.instance) {
+				info.instance->OnShutdown();
+				info.instance->SetInitialized(false);
+			}
+			info.enabled = false;
 		}
 
+		// Clean up views before destroying instance
+		cleanupPluginViews(pluginName);
+
+		// Destroy plugin instance
 		if (info.destroyFunc && info.instance) {
 			std::cout << "[PluginManager] Destroying plugin instance..." << std::endl;
 			info.destroyFunc(info.instance);
 			info.instance = nullptr;
 		}
 
+		// Unload DLL
 		if (info.handle) {
 			std::cout << "[PluginManager] Unloading plugin DLL..." << std::endl;
 			unloadLibrary(info.handle);
 			info.handle = nullptr;
+
+			// Give the system a moment to release the DLL
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
 
-		info.loaded = false;
-		std::cout << "[PluginManager] Plugin unloaded: " << pluginName << std::endl;
+		// Remove from plugin state
+		if (pluginState) {
+			pluginState->RemovePluginState(pluginName);
+		}
 
 		plugins.erase(pluginName);
 
+		std::cout << "[PluginManager] Plugin unloaded: " << pluginName << std::endl;
 		return true;
 	}
 

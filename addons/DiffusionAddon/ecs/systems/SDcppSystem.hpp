@@ -214,11 +214,6 @@ namespace ECS {
 				return;
 			}
 
-			if (!mgr.HasComponent<PromptComponent>(entityID)) {
-				std::cerr << "[QueueTask] ERROR: Entity " << entityID << " missing PromptComponent!" << std::endl;
-				return;
-			}
-
 			try {
 				std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -252,14 +247,12 @@ namespace ECS {
 
 				std::cout << "DEBUG: About to call SerializeEntity on entity " << entityID << std::endl;
 
-				// FIX: Create task data safely
 				TaskData taskData;
 				taskData.entityID = entityID;
 				taskData.processing = false;
 				taskData.taskType = taskType;
 				taskData.isClonedEntity = false;
 
-				// FIX: Validate and generate seed safely
 				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
 					taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
 
@@ -273,7 +266,6 @@ namespace ECS {
 					}
 				}
 
-				// FIX: Safe serialization
 				try {
 					taskData.metadata = mgr.SerializeEntity(entityID);
 					std::cout << "Serialization successful" << std::endl;
@@ -283,7 +275,6 @@ namespace ECS {
 					return;
 				}
 
-				// FIX: Add to queue safely
 				taskQueue.push_back(std::move(taskData));
 
 				std::cout << "Entity " << entityID << " queued for processing. Queue position: " << taskQueue.size() << std::endl;
@@ -329,7 +320,6 @@ namespace ECS {
 			if (taskQueue[fromIndex].processing)
 				return;
 
-			// Use move semantics for efficiency
 			TaskData task = std::move(taskQueue[fromIndex]);
 			taskQueue.erase(taskQueue.begin() + fromIndex);
 			taskQueue.insert(taskQueue.begin() + toIndex, std::move(task));
@@ -416,7 +406,7 @@ namespace ECS {
 		}
 
 	private:
-		// Private member variables
+		
 		std::vector<TaskData> taskQueue;
 		std::atomic<bool> pauseWorker;
 		std::atomic<bool> shuttingDown{ false };
@@ -426,7 +416,6 @@ namespace ECS {
 		mutable std::mutex queueMutex;
 		EntityID lastGeneratedVideoEntity{ 0 }; // Track last generated video
 
-		// Add missing member variables
 		std::thread workerThread;
 
 		// Single task tracking
@@ -516,12 +505,11 @@ namespace ECS {
 			}
 		}
 
-		// The actual clearing logic - called from Update when it's safe
 		void HandleClearRequest() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			std::cout << "Clearing queue with " << taskQueue.size() << " items" << std::endl;
 
-			// Just remove all non-processing tasks - NO CLEANUP
+			// Just remove all non-processing tasks
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
 				if (!it->processing) {
 					it = taskQueue.erase(it);

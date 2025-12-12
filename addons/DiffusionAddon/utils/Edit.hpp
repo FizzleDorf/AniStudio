@@ -30,8 +30,7 @@ namespace Utils
 
 			try
 			{
-
-				// Extract parameters from metadata - FIXED: Use local strings
+				// Extract parameters from metadata
 				std::vector<std::string> refImagePaths;
 				std::string outputPath = Utils::FilePaths::defaultProjectPath;
 				std::string outputFilename = "edit_output.png";
@@ -225,7 +224,7 @@ namespace Utils
 					throw std::runtime_error("No reference images provided for edit operation!");
 				}
 
-				// Load reference images - NEW API uses array in gen_params
+				// Load reference images
 				std::vector<sd_image_t> ref_images;
 				for (const std::string& imagePath : refImagePaths)
 				{
@@ -237,7 +236,7 @@ namespace Utils
 					int imgWidth, imgHeight, imgChannels;
 					std::cout << "Loading reference image from: " << imagePath << std::endl;
 
-					// Force 3 channels (RGB) for consistency
+					// Force 3 channels (RGB) for consistency - FIXED
 					unsigned char* imageData = stbi_load(imagePath.c_str(), &imgWidth, &imgHeight, &imgChannels, 3);
 					if (!imageData)
 					{
@@ -259,7 +258,7 @@ namespace Utils
 						throw std::runtime_error("Invalid reference image dimensions: " + std::to_string(imgWidth) + "x" + std::to_string(imgHeight));
 					}
 
-					// Store the image data and create sd_image_t struct
+					// Store the image data for cleanup
 					refImageData.push_back(imageData);
 
 					sd_image_t ref_img = {
@@ -272,28 +271,27 @@ namespace Utils
 					ref_images.push_back(ref_img);
 				}
 
-				// Set reference images in generation parameters (NEW API approach)
+				// Use the first reference image as init_image for edit operations
 				if (!ref_images.empty())
 				{
-					// Use the first reference image as init_image for edit operations
 					gen_params.init_image = ref_images[0];
-
-					// Set additional reference images if available
-					if (ref_images.size() > 1)
-					{
-						// For the new API, we need to allocate and set the ref_images array
-						static std::vector<sd_image_t> static_ref_images;
-						static_ref_images = std::vector<sd_image_t>(ref_images.begin() + 1, ref_images.end());
-						gen_params.ref_images = static_ref_images.data();
-						gen_params.ref_images_count = static_cast<int>(static_ref_images.size());
-					}
 				}
 
-				// Create output path
+				// Create output path - FIXED: Use the provided fullPath parameter
 				std::filesystem::path outputDir(outputPath);
 				std::filesystem::path outputFile(outputFilename);
-				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-					outputFile.string(), outputDir.string());
+				std::string uniqueFilePath;
+
+				// Use the provided fullPath if it's not empty, otherwise create a unique filename
+				if (!fullPath.empty())
+				{
+					uniqueFilePath = fullPath;
+				}
+				else
+				{
+					uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
+						outputFile.string(), outputDir.string());
+				}
 
 				// Initialize SD context
 				std::cout << "Initializing Stable Diffusion context..." << std::endl;
@@ -310,8 +308,15 @@ namespace Utils
 					std::cout << "Generated random seed: " << gen_params.seed << std::endl;
 				}
 
-				// Perform edit operation using NEW structured API
+				// Perform edit operation
 				std::cout << "Calling generate_image for edit with " << ref_images.size() << " reference images..." << std::endl;
+				std::cout << "Parameters: " << std::endl;
+				std::cout << "  - Width: " << gen_params.width << std::endl;
+				std::cout << "  - Height: " << gen_params.height << std::endl;
+				std::cout << "  - Strength: " << gen_params.strength << std::endl;
+				std::cout << "  - Seed: " << gen_params.seed << std::endl;
+				std::cout << "  - Init image: " << (gen_params.init_image.data ? "Set" : "Not set") << std::endl;
+
 				result_image = generate_image(sd_context, &gen_params);
 
 				if (!result_image)
@@ -325,12 +330,12 @@ namespace Utils
 					throw std::runtime_error("generate_image produced invalid image data");
 				}
 
-				std::cout << "edit successful: " << result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
+				std::cout << "Edit successful: " << result_image->width << "x" << result_image->height
+					<< "x" << result_image->channel << ", saving to: " << uniqueFilePath << std::endl;
 
 				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
-					result_image->channel, metadata, fullPath);
+					result_image->channel, metadata, uniqueFilePath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 				// Cleanup SLG layers array if it was allocated

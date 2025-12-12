@@ -4,7 +4,6 @@
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
-#include "AssetManager.hpp"
 #include <iostream>
 #include <filesystem>
 
@@ -84,10 +83,6 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			// Initialize asset management system FIRST
-			std::cout << "[EngineCore] Initializing AssetManager..." << std::endl;
-			AssetManager::Instance().Initialize();
-
 			// FIX: Initialize file paths BEFORE anything else that might need them
 			std::cout << "[EngineCore] Initializing file paths..." << std::endl;
 			Utils::FilePaths::Init();
@@ -142,10 +137,6 @@ namespace ANI {
 
 		entityManager.Reset();
 
-		// Shutdown asset manager last
-		std::cout << "[EngineCore] Shutting down AssetManager..." << std::endl;
-		AssetManager::Instance().Shutdown();
-
 		initialized = false;
 
 		std::cout << "[EngineCore] Shutdown complete" << std::endl;
@@ -153,9 +144,6 @@ namespace ANI {
 
 	void EngineCore::Update(float deltaTime) {
 		if (!initialized) return;
-
-		// Update asset manager first (handles main-thread texture creation)
-		AssetManager::Instance().Update();
 
 		entityManager.Update(deltaTime);
 

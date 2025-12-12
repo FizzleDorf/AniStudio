@@ -143,25 +143,25 @@ namespace Utils {
 					}
 
 					// Lora component
-					if (comp.contains("Lora"))
-					{
-						auto lora = comp["Lora"];
-						if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty())
-						{
-							loraPath = lora["modelPath"].get<std::string>();
-						}
-						else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
-						{
-							std::string modelName = lora["modelName"].get<std::string>();
-							loraPath = FilePaths::loraDir + "/" + modelName;
+					//if (comp.contains("Lora"))
+					//{
+					//	auto lora = comp["Lora"];
+					//	if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty())
+					//	{
+					//		loraPath = lora["modelPath"].get<std::string>();
+					//	}
+					//	else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
+					//	{
+					//		std::string modelName = lora["modelName"].get<std::string>();
+					//		loraPath = FilePaths::loraDir + "/" + modelName;
 
-							// Validation
-							if (!std::filesystem::exists(loraPath)) {
-								std::cout << "LoRA file not found: " << loraPath << ", skipping LoRA." << std::endl;
-								loraPath = "";
-							}
-						}
-					}
+					//		// Validation
+					//		if (!std::filesystem::exists(loraPath)) {
+					//			std::cout << "LoRA file not found: " << loraPath << ", skipping LoRA." << std::endl;
+					//			loraPath = "";
+					//		}
+					//	}
+					//}
 
 					// Embedding component
 					if (comp.contains("Embedding"))
@@ -173,7 +173,7 @@ namespace Utils {
 							embedPath = FilePaths::embedDir + "/" + embed["modelName"].get<std::string>();
 					}
 
-					// FIXED: Use PhotoMaker component to set photo_maker_path (this is what exists in your API)
+					// Use PhotoMaker component to set photo_maker_path (this is what exists in your API)
 					if (comp.contains("PhotoMaker") || comp.contains("StackedIdEmbed"))
 					{
 						auto pm = comp.contains("PhotoMaker") ? comp["PhotoMaker"] : comp["StackedIdEmbed"];
@@ -246,9 +246,11 @@ namespace Utils {
 			ctx_params.vae_path = vaePath.c_str();
 			ctx_params.taesd_path = taesdPath.c_str();
 			ctx_params.control_net_path = controlnetPath.c_str();
-			ctx_params.lora_model_dir = loraPath.c_str();
+			std::cout << "LoRA directory: " << FilePaths::loraDir << std::endl;
+			std::cout << "LoRA directory exists: " << std::filesystem::exists(FilePaths::loraDir) << std::endl;
+			ctx_params.lora_model_dir = FilePaths::loraDir.c_str();
 			ctx_params.embedding_dir = embedPath.c_str();
-			ctx_params.photo_maker_path = photoMakerPath.c_str();  // FIXED: Use photo_maker_path
+			ctx_params.photo_maker_path = photoMakerPath.c_str();
 
 			// Log all paths for debugging
 			std::cout << "Initializing SD context with the following parameters:" << std::endl;

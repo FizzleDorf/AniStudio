@@ -270,25 +270,40 @@ namespace GUI {
 					if (mgr.HasComponent<InputImageComponent>(entity)) {
 						auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
 
-						if (!inputComp.inputFilePath.empty()) {
-							ImGui::Text("Selected: %s", inputComp.inputFilePath.c_str());
+						if (!inputComp.filePath.empty()) {
+							ImGui::Text("Selected: %s", inputComp.filePath.c_str());
+
+							// Load dimensions on-demand for display
+							if (inputComp.width <= 0 || inputComp.height <= 0) {
+								// Try to get dimensions from file
+								int w, h, ch;
+								unsigned char* data = stbi_load(inputComp.filePath.c_str(), &w, &h, &ch, 0);
+								if (data) {
+									inputComp.width = w;
+									inputComp.height = h;
+									inputComp.channels = ch;
+									stbi_image_free(data);
+									std::cout << "Loaded image dimensions on-demand: "
+										<< w << "x" << h << std::endl;
+								}
+							}
+
+							// Display dimensions if available
+							if (inputComp.width > 0 && inputComp.height > 0) {
+								ImGui::Text("Dimensions: %dx%d", inputComp.width, inputComp.height);
+							}
 
 							// Button to set latent dimensions to image size
 							if (ImGui::Button("Set Latent to Image Size", ImVec2(-1.0f, 0))) {
 								if (mgr.HasComponent<LatentComponent>(entity)) {
 									auto& latentComp = mgr.GetComponent<LatentComponent>(entity);
 
-									// Try to get image dimensions from InputImageComponent
 									if (inputComp.width > 0 && inputComp.height > 0) {
-										// Round to nearest multiple of 64, minimum 64
-										int roundedWidth = std::max(64, ((inputComp.width + 32) / 64) * 64);
-										int roundedHeight = std::max(64, ((inputComp.height + 32) / 64) * 64);
+										latentComp.latentWidth = inputComp.width;
+										latentComp.latentHeight = inputComp.height;
 
-										latentComp.latentWidth = roundedWidth;
-										latentComp.latentHeight = roundedHeight;
-
-										std::cout << "Set latent dimensions to: " << roundedWidth
-											<< "x" << roundedHeight
+										std::cout << "Set latent dimensions to: " << latentComp.latentWidth
+											<< "x" << latentComp.latentHeight
 											<< " (from image: " << inputComp.width
 											<< "x" << inputComp.height << ")" << std::endl;
 									}

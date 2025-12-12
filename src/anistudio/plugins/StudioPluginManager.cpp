@@ -101,33 +101,37 @@ namespace Plugins {
 	}
 
 	void StudioPluginManager::cleanupPluginViews(const std::string& pluginName) {
-		auto nameIt = pluginViewNames.find(pluginName);
-		if (nameIt == pluginViewNames.end()) {
-			std::cout << "[StudioPluginManager] No views to cleanup for plugin: "
-				<< pluginName << std::endl;
-			return;
+		try {
+			auto nameIt = pluginViewNames.find(pluginName);
+			if (nameIt == pluginViewNames.end()) {
+				std::cout << "[StudioPluginManager] No views to cleanup for plugin: " << pluginName << std::endl;
+				return;
+			}
+
+			std::cout << "[StudioPluginManager] Cleaning up " << nameIt->second.size()
+				<< " views for plugin: " << pluginName << std::endl;
+
+			// Close views before unregistering
+			for (const std::string& viewName : nameIt->second) {
+				std::cout << "[StudioPluginManager] Closing view: " << viewName << std::endl;
+				viewManager.CloseAllViewsOfType(viewName);
+			}
+
+			// Small delay to ensure views are closed
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+			// Unregister view types
+			for (const std::string& viewName : nameIt->second) {
+				std::cout << "[StudioPluginManager] Unregistering view: " << viewName << std::endl;
+				viewManager.UnregisterViewType(viewName);
+			}
+
+			pluginViewNames.erase(nameIt);
+			std::cout << "[StudioPluginManager] View cleanup completed for plugin: " << pluginName << std::endl;
 		}
-
-		std::cout << "[StudioPluginManager] Cleaning up " << nameIt->second.size()
-			<< " views for plugin: " << pluginName << std::endl;
-
-		for (const std::string& viewName : nameIt->second) {
-			std::cout << "[StudioPluginManager] Unregistering view: " << viewName << std::endl;
-
-			// Close all instances of this view type
-			viewManager.CloseAllViewsOfType(viewName);
-
-			// Unregister from ViewManager - this handles everything
-			viewManager.UnregisterViewType(viewName);
+		catch (const std::exception& e) {
+			std::cerr << "[StudioPluginManager] Error during view cleanup: " << e.what() << std::endl;
 		}
-
-		// Unregister the plugin as a view source
-		viewManager.UnregisterViewSource("plugin");
-
-		pluginViewNames.erase(nameIt);
-
-		std::cout << "[StudioPluginManager] View cleanup completed for plugin: "
-			<< pluginName << std::endl;
 	}
 
 } // namespace Plugins

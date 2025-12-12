@@ -78,8 +78,9 @@ namespace GUI {
 
 		ImGui::SetNextWindowSize(ImVec2(1400, 800), ImGuiCond_FirstUseEver);
 
-		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			if (!windowOpen) {
+		bool windowShouldClose = false;
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowShouldClose)) {
+			if (windowShouldClose) {
 				if (m_hotReloadWasEnabled) {
 					m_pluginManager.enableHotReload(false);
 					m_hotReloadWasEnabled = false;
@@ -94,7 +95,10 @@ namespace GUI {
 
 			RenderMainContent();
 		}
-		ImGui::End();
+		ImGui::End(); // Ensure this is always called
+
+		// Update internal window state
+		windowOpen = !windowShouldClose;
 	}
 
 	void PluginView::RenderMainContent() {
@@ -113,11 +117,51 @@ namespace GUI {
 		RenderPluginLists();
 		ImGui::EndChild();
 
-		ImGui::EndChild();
+		ImGui::EndChild(); // Ensure proper EndChild for PluginSplit
 
 		// Status bar at the bottom
 		ImGui::Separator();
 		RenderStatusBar();
+	}
+
+	void PluginView::RenderPluginLists() {
+		// Get available height and split it
+		float availableHeight = ImGui::GetContentRegionAvail().y;
+		float listsHeight = availableHeight * 0.5f; // 50% for lists
+
+		// Use a table to show Available and Active plugins side by side
+		ImGui::BeginChild("PluginListsArea", ImVec2(0, listsHeight), true);
+		{
+			if (ImGui::BeginTable("PluginListsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
+				ImGui::TableSetupColumn("Available Plugins", ImGuiTableColumnFlags_WidthFixed, 400.0f);
+				ImGui::TableSetupColumn("Active Plugins", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				ImGui::TableNextRow();
+
+				// Available plugins column
+				ImGui::TableSetColumnIndex(0);
+				ImGui::BeginChild("AvailablePluginsColumn", ImVec2(0, 0), false);
+				RenderAvailablePluginsList();
+				ImGui::EndChild();
+
+				// Active plugins column
+				ImGui::TableSetColumnIndex(1);
+				ImGui::BeginChild("ActivePluginsColumn", ImVec2(0, 0), false);
+				RenderActivePluginsList();
+				ImGui::EndChild();
+
+				ImGui::EndTable();
+			}
+		}
+		ImGui::EndChild();
+
+		ImGui::Separator();
+
+		// Plugin details section below - takes remaining space
+		ImGui::BeginChild("PluginDetailsArea", ImVec2(0, 0), true);
+		RenderPluginDetails();
+		ImGui::EndChild();
 	}
 
 	void PluginView::RenderFilterList() {
@@ -208,41 +252,6 @@ namespace GUI {
 		ImGui::Text("Selected: %zu/%zu", m_selectedDirectories.size(), m_searchDirectories.size());
 		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ctrl+Click: Multi-select");
 		ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Right-Click: Options");
-	}
-
-	void PluginView::RenderPluginLists() {
-		// Get available height and split it
-		float availableHeight = ImGui::GetContentRegionAvail().y;
-		float listsHeight = availableHeight * 0.5f; // 50% for lists
-		float detailsHeight = availableHeight * 0.5f; // 50% for details
-
-		// Use a table to show Available and Active plugins side by side
-		ImGui::BeginChild("PluginListsArea", ImVec2(0, listsHeight), true);
-		if (ImGui::BeginTable("PluginListsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
-			ImGui::TableSetupColumn("Available Plugins", ImGuiTableColumnFlags_WidthFixed, 400.0f);
-			ImGui::TableSetupColumn("Active Plugins", ImGuiTableColumnFlags_WidthStretch);
-			ImGui::TableHeadersRow();
-
-			ImGui::TableNextRow();
-
-			// Available plugins column
-			ImGui::TableSetColumnIndex(0);
-			RenderAvailablePluginsList();
-
-			// Active plugins column
-			ImGui::TableSetColumnIndex(1);
-			RenderActivePluginsList();
-
-			ImGui::EndTable();
-		}
-		ImGui::EndChild();
-
-		ImGui::Separator();
-
-		// Plugin details section below - takes remaining space
-		ImGui::BeginChild("PluginDetailsArea", ImVec2(0, 0), true);
-		RenderPluginDetails();
-		ImGui::EndChild();
 	}
 
 	void PluginView::RenderAvailablePluginsList() {

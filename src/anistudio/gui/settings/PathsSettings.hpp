@@ -42,12 +42,12 @@ namespace Settings {
 				if (ImGui::Button("Reset Model Paths to Root")) {
 					if (!defaultModelRootPath.empty()) {
 						checkpointDir = defaultModelRootPath + "/checkpoints";
-						encoderDir = defaultModelRootPath + "/text_encoders";
+						encoderDir = defaultModelRootPath + "/clip";
 						vaeDir = defaultModelRootPath + "/vae";
 						unetDir = defaultModelRootPath + "/unet";
-						loraDir = defaultModelRootPath + "/lora";
+						loraDir = defaultModelRootPath + "/loras";
 						controlnetDir = defaultModelRootPath + "/controlnet";
-						upscaleDir = defaultModelRootPath + "/upscale";
+						upscaleDir = defaultModelRootPath + "/upscale_models";
 						hasChanges = true;
 					}
 				}

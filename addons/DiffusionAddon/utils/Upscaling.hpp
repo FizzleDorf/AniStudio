@@ -21,6 +21,7 @@ namespace Utils
 		{
 			upscaler_ctx_t *upscaler_context = nullptr;
 			unsigned char *inputData = nullptr;
+			sd_image_t upscaled_image = { 0, 0, 0, nullptr };
 
 			try
 			{
@@ -87,19 +88,6 @@ namespace Utils
 							if (esrganData.contains("upscaleFactor"))
 								upscaleFactor = esrganData["upscaleFactor"].get<uint32_t>();
 						}
-
-						// Sampler component
-						if (comp.contains("Sampler"))
-						{
-							nlohmann::json samplerData = comp["Sampler"];
-
-							if (samplerData.contains("n_threads"))
-								n_threads = samplerData["n_threads"].get<int>();
-							if (samplerData.contains("offload_params_to_cpu"))
-								offload_params_to_cpu = samplerData["offload_params_to_cpu"].get<bool>();
-							if (samplerData.contains("direct"))
-								direct = samplerData["direct"].get<bool>();
-						}
 					}
 				}
 
@@ -114,10 +102,10 @@ namespace Utils
 					throw std::runtime_error("ESRGAN model path is empty!");
 				}
 
-				// Load input image
+				// Load input image - force 3 channels for consistency
 				int inputWidth, inputHeight, inputChannels;
 				std::cout << "Loading input image from: " << inputImagePath << std::endl;
-				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 0);
+				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
 				if (!inputData)
 				{
 					std::string error = std::string("Failed to load input image: ") + inputImagePath + " - " +
@@ -125,16 +113,36 @@ namespace Utils
 					throw std::runtime_error(error);
 				}
 
+				// Force channels to 3 since we requested RGB
+				inputChannels = 3;
+
 				std::cout << "Input image loaded successfully: " << inputWidth << "x" << inputHeight
-					<< " with " << inputChannels << " channels" << std::endl;
+					<< " with " << inputChannels << " channels (forced RGB)" << std::endl;
 
-				// Create output path
-				std::filesystem::path outputDir(outputPath);
-				std::filesystem::path outputFile(outputFilename);
-				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-					outputFile.string(), outputDir.string());
+				// Determine output file path
+				std::string outputFilePath;
+				if (!fullPath.empty())
+				{
+					// Use the provided fullPath if available
+					outputFilePath = fullPath;
+				}
+				else
+				{
+					// Otherwise create a unique filename
+					std::filesystem::path outputDir(outputPath);
+					std::filesystem::path outputFile(outputFilename);
+					outputFilePath = Utils::PngMetadata::CreateUniqueFilename(
+						outputFile.string(), outputDir.string());
+				}
 
-				// Initialize upscaler context with NEW API signature
+				std::cout << "Output will be saved to: " << outputFilePath << std::endl;
+
+				// Initialize upscaler context
+				std::cout << "Initializing upscaler with model: " << modelPath << std::endl;
+				std::cout << "Parameters: threads=" << n_threads
+					<< ", offload_cpu=" << offload_params_to_cpu
+					<< ", direct=" << direct << std::endl;
+
 				upscaler_context = new_upscaler_ctx(modelPath.c_str(),
 					offload_params_to_cpu,
 					direct,
@@ -152,36 +160,42 @@ namespace Utils
 					inputData
 				};
 
-				// Perform upscaling using the NEW API
-				sd_image_t upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
+				// Perform upscaling
+				std::cout << "Upscaling image with factor: " << upscaleFactor << std::endl;
+				upscaled_image = upscale(upscaler_context, input_image, upscaleFactor);
 				if (!upscaled_image.data)
 				{
 					throw std::runtime_error("Upscaling failed - no output image produced");
 				}
 
-				std::cout << "Upscaling successful, saving output to: " << uniqueFilePath << std::endl;
+				std::cout << "Upscaling successful: " << upscaled_image.width << "x"
+					<< upscaled_image.height << "x" << upscaled_image.channel << std::endl;
 
 				// Save the upscaled image
 				SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
-					upscaled_image.channel, metadata, fullPath);
+					upscaled_image.channel, metadata, outputFilePath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
 				// Cleanup resources
 				if (inputData)
 				{
-					stbi_image_free(inputData);  // stb_image allocation
+					stbi_image_free(inputData);
 					inputData = nullptr;
 				}
 
-				// Free the upscaled image if needed
+				// Free the upscaled image
 				if (upscaled_image.data)
 				{
-					free(upscaled_image.data);  // stable-diffusion.cpp allocation
+					free(upscaled_image.data);
+					upscaled_image = { 0, 0, 0, nullptr };
 				}
 
 				// Cleanup upscaler context
-				free_upscaler_ctx(upscaler_context);
-				upscaler_context = nullptr;
+				if (upscaler_context)
+				{
+					free_upscaler_ctx(upscaler_context);
+					upscaler_context = nullptr;
+				}
 
 				return true;
 			}
@@ -192,8 +206,14 @@ namespace Utils
 				// Clean up resources
 				if (inputData)
 				{
-					stbi_image_free(inputData);  // stb_image allocation
+					stbi_image_free(inputData);
 					inputData = nullptr;
+				}
+
+				if (upscaled_image.data)
+				{
+					free(upscaled_image.data);
+					upscaled_image = { 0, 0, 0, nullptr };
 				}
 
 				if (upscaler_context)

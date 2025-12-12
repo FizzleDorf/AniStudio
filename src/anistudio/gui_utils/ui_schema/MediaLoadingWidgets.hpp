@@ -206,11 +206,25 @@ namespace UISchema {
 						fullPath = currentPath + pathSeparator + fileName;
 					}
 
+					std::cout << "=========================================" << std::endl;
+					std::cout << "MediaLoadingWidgets::ProcessDialog()" << std::endl;
+					std::cout << "File selected: " << fullPath << std::endl;
+					std::cout << "File exists: " << std::filesystem::exists(fullPath) << std::endl;
+
+					// Debug: Show what properties we're supposed to update
+					std::cout << "Properties to update:" << std::endl;
+					for (const auto&[key, variant] : currentProperties) {
+						std::cout << "  - " << key << std::endl;
+					}
+
 					// Load the image data using ImageUtils
 					int width, height, channels;
 					unsigned char* imageData = Utils::ImageUtils::LoadImageData(fullPath, width, height, channels);
 
 					if (imageData) {
+						std::cout << "Image loaded successfully:" << std::endl;
+						std::cout << "  Dimensions: " << width << "x" << height << "x" << channels << std::endl;
+
 						// Create texture using our local function
 						GLuint textureID = CreateTextureFromImageData(width, height, channels, imageData);
 
@@ -218,38 +232,73 @@ namespace UISchema {
 						std::filesystem::path fsPath(fullPath);
 
 						// Update the component properties directly through the PropertyMap
+
 						if (currentProperties.find("fileName") != currentProperties.end()) {
 							if (auto fileNamePtr = std::get_if<std::string*>(&currentProperties.at("fileName"))) {
+								std::cout << "Setting fileName to: " << fsPath.filename().string() << std::endl;
 								**fileNamePtr = fsPath.filename().string();
 							}
-						}
-						if (currentProperties.find("filePath") != currentProperties.end()) {
-							if (auto filePathPtr = std::get_if<std::string*>(&currentProperties.at("filePath"))) {
-								**filePathPtr = fullPath;  // Set full path instead of just directory
+							else {
+								std::cout << "ERROR: fileName property is not a string pointer!" << std::endl;
 							}
 						}
-						if (currentProperties.find("width") != currentProperties.end()) {
-							if (auto widthPtr = std::get_if<int*>(&currentProperties.at("width"))) {
-								**widthPtr = width;
-							}
-						}
-						if (currentProperties.find("height") != currentProperties.end()) {
-							if (auto heightPtr = std::get_if<int*>(&currentProperties.at("height"))) {
-								**heightPtr = height;
-							}
-						}
-						if (currentProperties.find("channels") != currentProperties.end()) {
-							if (auto channelsPtr = std::get_if<int*>(&currentProperties.at("channels"))) {
-								**channelsPtr = channels;
-							}
+						else {
+							std::cout << "WARNING: fileName not in properties map!" << std::endl;
 						}
 
-						std::cout << "Successfully loaded media:" << std::endl;
-						std::cout << "  Full Path: " << fullPath << std::endl;
-						std::cout << "  File Name: " << fsPath.filename().string() << std::endl;
-						std::cout << "  File Path: " << fsPath.parent_path().string() << std::endl;
-						std::cout << "  Dimensions: " << width << "x" << height << "x" << channels << std::endl;
-						std::cout << "  Texture ID: " << textureID << std::endl;
+						if (currentProperties.find("filePath") != currentProperties.end()) {
+							if (auto filePathPtr = std::get_if<std::string*>(&currentProperties.at("filePath"))) {
+								std::cout << "Setting filePath to: " << fullPath << std::endl;
+								**filePathPtr = fullPath;
+							}
+							else {
+								std::cout << "ERROR: filePath property is not a string pointer!" << std::endl;
+							}
+						}
+						else {
+							std::cout << "WARNING: filePath not in properties map!" << std::endl;
+						}
+
+						if (currentProperties.find("width") != currentProperties.end()) {
+							if (auto widthPtr = std::get_if<int*>(&currentProperties.at("width"))) {
+								std::cout << "Setting width to: " << width << std::endl;
+								**widthPtr = width;
+							}
+							else {
+								std::cout << "ERROR: width property is not an int pointer!" << std::endl;
+							}
+						}
+						else {
+							std::cout << "WARNING: width not in properties map!" << std::endl;
+						}
+
+						if (currentProperties.find("height") != currentProperties.end()) {
+							if (auto heightPtr = std::get_if<int*>(&currentProperties.at("height"))) {
+								std::cout << "Setting height to: " << height << std::endl;
+								**heightPtr = height;
+							}
+							else {
+								std::cout << "ERROR: height property is not an int pointer!" << std::endl;
+							}
+						}
+						else {
+							std::cout << "WARNING: height not in properties map!" << std::endl;
+						}
+
+						if (currentProperties.find("channels") != currentProperties.end()) {
+							if (auto channelsPtr = std::get_if<int*>(&currentProperties.at("channels"))) {
+								std::cout << "Setting channels to: " << channels << std::endl;
+								**channelsPtr = channels;
+							}
+							else {
+								std::cout << "ERROR: channels property is not an int pointer!" << std::endl;
+							}
+						}
+						else {
+							std::cout << "WARNING: channels not in properties map!" << std::endl;
+						}
+
+						std::cout << "=========================================" << std::endl;
 
 						// Free the image data since we've stored what we need
 						Utils::ImageUtils::FreeImageData(imageData);
@@ -258,7 +307,7 @@ namespace UISchema {
 						dialogResult = true;
 					}
 					else {
-						std::cerr << "Failed to load image data from: " << fullPath << std::endl;
+						std::cerr << "ERROR: Failed to load image data from: " << fullPath << std::endl;
 					}
 				}
 

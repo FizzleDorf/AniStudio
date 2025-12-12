@@ -136,13 +136,15 @@ namespace ECS {
 
 	struct InputImageComponent : public ImageComponent {
 		std::shared_ptr<unsigned char[]> ownedImageData; // Smart pointer for owned data
-		std::string inputFilePath = "";  // Full path to input image file
 
 		InputImageComponent() {
 			compName = "InputImage";
 			compCategory = "Image";
 			fileName = "";
 			filePath = "";
+			width = 0;
+			height = 0;
+			channels = 0;
 			setupInputSchema();
 		}
 
@@ -151,26 +153,34 @@ namespace ECS {
 			// Texture cleanup handled by base class
 		}
 
+		// Get property map for UI rendering - MUST INCLUDE ALL PROPERTIES
 		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["inputFilePath"] = &inputFilePath;
-			properties["width"] = &width; 
+			properties["fileName"] = &fileName;
+			properties["filePath"] = &filePath;
+			properties["width"] = &width;
 			properties["height"] = &height;
 			properties["channels"] = &channels;
 			return properties;
 		}
 
-		// Serialize the component to JSON
+		// Serialize the component to JSON - MUST INCLUDE ALL PROPERTIES
 		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j = ImageComponent::Serialize();
-			j[compName]["inputFilePath"] = inputFilePath;
-			// Note: We don't serialize imageData/ownedImageData as it's managed by ImageSystem
+			nlohmann::json j;
+			j["compName"] = compName;
+			j[compName] = {
+				{"fileName", fileName},
+				{"filePath", filePath},
+				{"width", width},
+				{"height", height},
+				{"channels", channels}
+			};
 			return j;
 		}
 
 		// Deserialize the component from JSON
 		virtual void Deserialize(const nlohmann::json& j) override {
-			ImageComponent::Deserialize(j);
+			BaseComponent::Deserialize(j);
 
 			nlohmann::json componentData;
 
@@ -191,10 +201,17 @@ namespace ECS {
 				}
 			}
 
-			if (componentData.contains("inputFilePath"))
-				inputFilePath = componentData["inputFilePath"];
-
-			// Note: imageData/ownedImageData will be loaded by ImageSystem when needed
+			// Load ALL properties from JSON
+			if (componentData.contains("fileName"))
+				fileName = componentData["fileName"];
+			if (componentData.contains("filePath"))
+				filePath = componentData["filePath"];
+			if (componentData.contains("width"))
+				width = componentData["width"];
+			if (componentData.contains("height"))
+				height = componentData["height"];
+			if (componentData.contains("channels"))
+				channels = componentData["channels"];
 		}
 
 		void SetImageData(unsigned char* data, int w, int h, int ch) {
@@ -234,9 +251,16 @@ namespace ECS {
 		// Copy constructor
 		InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
 			compName = "InputImage";
-			inputFilePath = other.inputFilePath;
 			setupInputSchema();
 
+			// Copy scalar values
+			fileName = other.fileName;
+			filePath = other.filePath;
+			width = other.width;
+			height = other.height;
+			channels = other.channels;
+
+			// Deep copy image data if it exists
 			if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
 				// Create a deep copy of the image data
 				size_t dataSize = other.width * other.height * other.channels;
@@ -253,7 +277,13 @@ namespace ECS {
 				// Call base assignment
 				ImageComponent::operator=(other);
 				compName = "InputImage";
-				inputFilePath = other.inputFilePath;
+
+				// Copy scalar values
+				fileName = other.fileName;
+				filePath = other.filePath;
+				width = other.width;
+				height = other.height;
+				channels = other.channels;
 
 				// Deep copy image data if it exists
 				if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
@@ -278,7 +308,7 @@ namespace ECS {
 				{"title", "Input Image"},
 				{"type", "object"},
 				{"properties", {
-					{"inputFilePath", {
+					{"filePath", {
 						{"type", "string"},
 						{"title", "Input Image File"},
 						{"ui:widget", "file_selector"},
@@ -292,7 +322,7 @@ namespace ECS {
 						}}
 					}}
 				}},
-				{"propertyOrder", {"inputFilePath", "width", "height", "channels"}}
+				{"propertyOrder", {"filePath", "fileName", "width", "height", "channels"}}
 			};
 		}
 	};

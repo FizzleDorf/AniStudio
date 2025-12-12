@@ -74,19 +74,16 @@ public:
 	bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr) override {
 		LogInfo("Registering Stable Diffusion views...");
 
-		// Use the stored ImGui context like ExamplePlugin does
 		std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
 		if (m_imguiContext) {
 			ImGui::SetCurrentContext(m_imguiContext);
 		}
 
-		// Store view manager reference
 		m_viewMgr = &viewMgr;
 
-		// Register views directly like ExamplePlugin does
 		viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "Diffusion");
-		viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Tools");
-		viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Tools");
+		viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");
+		viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
 		viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
 
 		LogInfo("Views registered via direct ViewManager");
@@ -105,7 +102,6 @@ public:
 	void DiffusionAddon::OnShutdown() {
 		LogInfo("SHUTTING DOWN DIFFUSION ADDON IMMEDIATELY");
 
-		// STEP 1: IMMEDIATE SYSTEM TERMINATION
 		if (m_entityMgr) {
 			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
 			if (system) {
@@ -114,153 +110,214 @@ public:
 			}
 		}
 
-		// STEP 2: Unregister event handlers
-		LogInfo("Unregistering diffusion event handlers");
-		auto& events = ANI::Events::Ref();
-		events.UnregisterEvent("QueueDiffusionTask");
-		events.UnregisterEvent("RemoveFromDiffusionQueue");
-		events.UnregisterEvent("MoveInDiffusionQueue");
-		events.UnregisterEvent("StopCurrentDiffusionTask");
-		events.UnregisterEvent("ClearDiffusionQueue");
-		events.UnregisterEvent("PauseDiffusionWorker");
-		events.UnregisterEvent("ResumeDiffusionWorker");
+		UnregisterEventHandlers();
 
-		// STEP 3: DESTROY ALL ENTITIES WITH DIFFUSION COMPONENTS
 		if (m_entityMgr) {
 			auto allEntities = m_entityMgr->GetAllEntities();
 			std::vector<EntityID> entitiesToDestroy;
 
 			for (EntityID entity : allEntities) {
-				// Check for ANY diffusion component directly
-				if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::SamplerComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::GuidanceComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ClipSkipComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::SLGComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::PhotoMakerComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ModelComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ClipLComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ClipGComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::T5XXLComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::VaeComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::TaesdComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ControlNetComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::LoraComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::EmbeddingComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::HighNoiseDiffusionModelComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ClipVisionComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::HighNoiseSamplerComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::VideoParamsComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::StackedIdEmbedComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::LatentComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::LatentTransformComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::LayerSkipComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::ChromaComponent>(entity) ||
-					m_entityMgr->HasComponent<ECS::EsrganComponent>(entity)) {
+				bool hasDiffusionComponent = false;
+
+				// Try multiple ways to detect diffusion components
+				try {
+					hasDiffusionComponent =
+						m_entityMgr->HasComponent<ECS::PromptComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::SamplerComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::GuidanceComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ClipSkipComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::SLGComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::PhotoMakerComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ModelComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ClipLComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ClipGComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::T5XXLComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::VaeComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::TaesdComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ControlNetComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::LoraComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::EmbeddingComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::HighNoiseDiffusionModelComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ClipVisionComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::HighNoiseSamplerComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::VideoParamsComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::StackedIdEmbedComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::LatentComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::LatentTransformComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::LayerSkipComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::ChromaComponent>(entity) ||
+						m_entityMgr->HasComponent<ECS::EsrganComponent>(entity);
+				}
+				catch (const std::exception& e) {
+					LogError("Error checking components for entity " + std::to_string(entity) + ": " + e.what());
+				}
+
+				if (hasDiffusionComponent) {
 					entitiesToDestroy.push_back(entity);
 				}
 			}
 
+			LogInfo("Found " + std::to_string(entitiesToDestroy.size()) + " entities to destroy");
+
 			for (EntityID entity : entitiesToDestroy) {
-				m_entityMgr->DestroyEntity(entity);
+				try {
+					m_entityMgr->DestroyEntity(entity);
+					LogInfo("Destroyed entity: " + std::to_string(entity));
+				}
+				catch (const std::exception& e) {
+					LogError("Error destroying entity " + std::to_string(entity) + ": " + e.what());
+				}
 			}
-			LogInfo("Destroyed " + std::to_string(entitiesToDestroy.size()) + " entities with diffusion components");
+		}
+
+		// STEP 4: Unregister components and system FIRST (before views to avoid deadlock)
+		if (m_entityMgr) {
+			try {
+				// Unregister all diffusion components by name
+				const char* componentNames[] = {
+					"Prompt", "Sampler", "Guidance", "ClipSkip", "SLG", "PhotoMaker",
+					"Model", "ClipL", "ClipG", "T5XXL", "DiffusionModel", "Vae",
+					"Taesd", "ControlNet", "Lora", "Embedding", "HighNoiseDiffusionModel",
+					"ClipVision", "HighNoiseSampler", "VideoParams", "StackedIdEmbed",
+					"Latent", "LatentTransform", "LayerSkip", "Chroma", "Esrgan"
+				};
+
+				for (const char* name : componentNames) {
+					try {
+						m_entityMgr->UnregisterComponentByName(name);
+						LogInfo("Unregistered component: " + std::string(name));
+					}
+					catch (const std::exception& e) {
+						LogError("Error unregistering component " + std::string(name) + ": " + e.what());
+					}
+					catch (...) {
+						// Component might not be registered, continue
+						LogInfo("Component not registered (skipping): " + std::string(name));
+					}
+				}
+
+				LogInfo("Unregistered all diffusion components");
+
+				// Unregister system
+				try {
+					m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
+					LogInfo("Unregistered SDCPPSystem");
+				}
+				catch (const std::exception& e) {
+					LogError("Error unregistering SDCPPSystem: " + std::string(e.what()));
+				}
+
+			}
+			catch (const std::exception& e) {
+				LogError("Error during component/system cleanup: " + std::string(e.what()));
+			}
 		}
 
 		if (m_viewMgr) {
-			m_viewMgr->UnregisterView("DiffusionView");
-			m_viewMgr->UnregisterView("ConvertView");
-			m_viewMgr->UnregisterView("UpscaleView");
-			m_viewMgr->UnregisterView("VideoDiffusionView");
-			LogInfo("Unregistered all diffusion views");
+			const char* viewNames[] = {
+				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
+			};
+
+			for (const char* viewName : viewNames) {
+				try {
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+					LogInfo("Attempting to unregister view: " + std::string(viewName));
+					m_viewMgr->UnregisterView(viewName);
+					LogInfo("Successfully unregistered view: " + std::string(viewName));
+				}
+				catch (const std::exception& e) {
+					LogError("Error unregistering view " + std::string(viewName) + ": " + e.what());
+					// Continue with other views even if one fails
+				}
+				catch (...) {
+					LogError("Unknown error unregistering view: " + std::string(viewName));
+				}
+			}
+
+			LogInfo("View unregistration complete");
 		}
 
-		if (m_entityMgr) {
-			m_entityMgr->UnregisterComponentByName("Prompt");
-			m_entityMgr->UnregisterComponentByName("Sampler");
-			m_entityMgr->UnregisterComponentByName("Guidance");
-			m_entityMgr->UnregisterComponentByName("ClipSkip");
-			m_entityMgr->UnregisterComponentByName("SLG");
-			m_entityMgr->UnregisterComponentByName("PhotoMaker");
-			m_entityMgr->UnregisterComponentByName("Model");
-			m_entityMgr->UnregisterComponentByName("ClipL");
-			m_entityMgr->UnregisterComponentByName("ClipG");
-			m_entityMgr->UnregisterComponentByName("T5XXL");
-			m_entityMgr->UnregisterComponentByName("DiffusionModel");
-			m_entityMgr->UnregisterComponentByName("Vae");
-			m_entityMgr->UnregisterComponentByName("Taesd");
-			m_entityMgr->UnregisterComponentByName("ControlNet");
-			m_entityMgr->UnregisterComponentByName("Lora");
-			m_entityMgr->UnregisterComponentByName("Embedding");
-			m_entityMgr->UnregisterComponentByName("HighNoiseDiffusionModel");
-			m_entityMgr->UnregisterComponentByName("ClipVision");
-			m_entityMgr->UnregisterComponentByName("HighNoiseSampler");
-			m_entityMgr->UnregisterComponentByName("VideoParams");
-			m_entityMgr->UnregisterComponentByName("StackedIdEmbed");
-			m_entityMgr->UnregisterComponentByName("Latent");
-			m_entityMgr->UnregisterComponentByName("LatentTransform");
-			m_entityMgr->UnregisterComponentByName("LayerSkip");
-			m_entityMgr->UnregisterComponentByName("Chroma");
-			m_entityMgr->UnregisterComponentByName("Esrgan");
-			LogInfo("Unregistered all diffusion components");
-
-			// Unregister the system
-			m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-			LogInfo("Unregistered SDCPPSystem");
-		
-		}
-
+		// STEP 6: Clear all references
 		m_entityMgr = nullptr;
 		m_viewMgr = nullptr;
 		m_imguiContext = nullptr;
 
-		LogInfo("DiffusionAddon immediate shutdown complete");
+		LogInfo("DiffusionAddon shutdown complete");
 	}
 
-	void OnUpdate(float deltaTime) override {
-		// System updates itself through ECS
-	}
+	void OnUpdate(float deltaTime) override {}
 
 private:
+	std::vector<std::string> m_registeredEvents;
+
 	void RegisterEventHandlers() {
-		// Register event handlers that call into the SDCPPSystem
-		ANI::Events::Ref().RegisterEventWithData("QueueDiffusionTask",
+		auto& events = ANI::Events::Ref();
+
+		// Store event names for cleanup
+		m_registeredEvents = {
+			"QueueDiffusionTask",
+			"RemoveFromDiffusionQueue",
+			"MoveInDiffusionQueue",
+			"StopCurrentDiffusionTask",
+			"ClearDiffusionQueue",
+			"PauseDiffusionWorker",
+			"ResumeDiffusionWorker"
+		};
+
+		// Register all events with their handlers
+		events.RegisterEventWithData("QueueDiffusionTask",
 			[this](const std::any& data) {
 			this->OnQueueDiffusionTask(data);
 		});
 
-		ANI::Events::Ref().RegisterEventWithData("RemoveFromDiffusionQueue",
+		events.RegisterEventWithData("RemoveFromDiffusionQueue",
 			[this](const std::any& data) {
 			this->OnRemoveFromDiffusionQueue(data);
 		});
 
-		ANI::Events::Ref().RegisterEventWithData("MoveInDiffusionQueue",
+		events.RegisterEventWithData("MoveInDiffusionQueue",
 			[this](const std::any& data) {
 			this->OnMoveInDiffusionQueue(data);
 		});
 
-		ANI::Events::Ref().RegisterEvent("StopCurrentDiffusionTask",
+		events.RegisterEvent("StopCurrentDiffusionTask",
 			[this]() {
 			this->OnStopCurrentDiffusionTask();
 		});
 
-		ANI::Events::Ref().RegisterEvent("ClearDiffusionQueue",
+		events.RegisterEvent("ClearDiffusionQueue",
 			[this]() {
 			this->OnClearDiffusionQueue();
 		});
 
-		ANI::Events::Ref().RegisterEvent("PauseDiffusionWorker",
+		events.RegisterEvent("PauseDiffusionWorker",
 			[this]() {
 			this->OnPauseDiffusionWorker();
 		});
 
-		ANI::Events::Ref().RegisterEvent("ResumeDiffusionWorker",
+		events.RegisterEvent("ResumeDiffusionWorker",
 			[this]() {
 			this->OnResumeDiffusionWorker();
 		});
 
 		LogInfo("Diffusion event handlers registered");
+	}
+
+	void UnregisterEventHandlers() {
+		LogInfo("Unregistering diffusion event handlers");
+		auto& events = ANI::Events::Ref();
+
+		for (const auto& eventName : m_registeredEvents) {
+			try {
+				events.UnregisterEvent(eventName);
+				LogInfo("Unregistered event: " + eventName);
+			}
+			catch (const std::exception& e) {
+				LogError("Failed to unregister event " + eventName + ": " + e.what());
+			}
+		}
+		m_registeredEvents.clear();
 	}
 
 	void OnQueueDiffusionTask(const std::any& data) {
@@ -370,20 +427,6 @@ private:
 	ECS::EntityManager* m_entityMgr = nullptr;
 	GUI::ViewManager* m_viewMgr = nullptr;
 	ImGuiContext* m_imguiContext = nullptr;
-
-	void UnregisterEventHandlers() {
-		LogInfo("Unregistering diffusion event handlers");
-
-		// Unregister all event handlers that this plugin registered
-		auto& events = ANI::Events::Ref();
-		events.UnregisterEvent("QueueDiffusionTask");
-		events.UnregisterEvent("RemoveFromDiffusionQueue");
-		events.UnregisterEvent("MoveInDiffusionQueue");
-		events.UnregisterEvent("StopCurrentDiffusionTask");
-		events.UnregisterEvent("ClearDiffusionQueue");
-		events.UnregisterEvent("PauseDiffusionWorker");
-		events.UnregisterEvent("ResumeDiffusionWorker");
-	}
 };
 
 extern "C" {

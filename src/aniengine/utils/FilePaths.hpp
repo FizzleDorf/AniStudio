@@ -190,20 +190,24 @@ namespace Utils
 				std::cout << "[FilePaths] Loading saved paths..." << std::endl;
 				LoadFilePathDefaults();
 
+				// CRITICAL FIX: Ensure defaultModelRootPath is ALWAYS set
+				if (defaultModelRootPath.empty())
+				{
+					std::filesystem::path newModelPath = basePath / "models";
+					defaultModelRootPath = std::filesystem::absolute(newModelPath).string();
+					std::cout << "[FilePaths] Set default model root: " << defaultModelRootPath << std::endl;
+				}
+
+				// CRITICAL FIX: ALWAYS call SetByModelRoot to ensure all subdirectories are initialized
+				std::cout << "[FilePaths] Setting up model directories..." << std::endl;
+				SetByModelRoot();
+
 				// Initialize default project directory if not set
 				if (defaultProjectPath.empty())
 				{
 					std::filesystem::path newProjectPath = basePath / "projects";
 					defaultProjectPath = std::filesystem::absolute(newProjectPath).string();
 					std::cout << "[FilePaths] Set default project path: " << defaultProjectPath << std::endl;
-				}
-
-				// Initialize model directory if not set
-				if (defaultModelRootPath.empty())
-				{
-					std::filesystem::path newModelPath = basePath / "models";
-					defaultModelRootPath = std::filesystem::absolute(newModelPath).string();
-					std::cout << "[FilePaths] Set default model root: " << defaultModelRootPath << std::endl;
 				}
 
 				// Create essential directories
@@ -213,10 +217,6 @@ namespace Utils
 				SafeCreateDirectories(defaultModelRootPath);
 				SafeCreateDirectories(defaultScriptsPath);
 				SafeCreateDirectories(pluginPath);
-
-				// Set up model subdirectories
-				std::cout << "[FilePaths] Setting up model directories..." << std::endl;
-				SetByModelRoot();
 
 				// Save initialized paths
 				std::cout << "[FilePaths] Saving initialized paths..." << std::endl;
