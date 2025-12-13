@@ -5,8 +5,11 @@
 #include "pch.h"
 #include <components.h>
 #include "SDCPPComponents.h" 
+#include "DiffusionCallbackUtils.hpp"
 #include <memory>
 #include <map>
+#include <iomanip>
+#include <sstream>
 
 // Forward declarations
 namespace Utils {
@@ -22,7 +25,7 @@ namespace GUI {
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
             "displayName": "Upscale View",
-            "category": "Tools",
+            "category": "Diffusion",
             "description": "Upscale images with ESRGAN models using schema-driven UI."
         })";
 		}
@@ -37,23 +40,19 @@ namespace GUI {
 		void Render() override;
 
 	private:
-		// Entity for upscaling template (like DiffusionView pattern)
 		EntityID upscaleEntity = 0;
 
-		// Component visibility tracking
 		std::map<std::string, bool> componentVisibility;
-
-		// Context menu utilities
 		std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
-		// Legacy state variables (to be removed if not needed)
+		// Legacy state variables (to be removed)
 		bool isFilenameChanged = false;
 
-		// Core methods following DiffusionView pattern
+		// Core methods
 		void ResetEntity();
 		bool IsEntitySafeToUse(ECS::EntityID entity) const;
 		std::vector<std::string> GetCategoryRenderOrder() const;
-		void RenderQueueControls();
+		void RenderQueueList();
 
 		// Component rendering
 		void RenderEntityComponents(const EntityID entity);

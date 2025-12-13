@@ -2,6 +2,7 @@
 #include "EntityManager.hpp"
 #include "ViewManager.hpp"
 #include "Events.hpp"
+#include "DiffusionCallbackUtils.hpp"
 
 // Components and Systems
 #include "SDCPPComponents.h"

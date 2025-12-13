@@ -16,7 +16,7 @@ namespace GUI {
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
             "displayName": "Convert Model",
-            "category": "Tools",
+            "category": "Diffusion",
             "description": "Convert diffusion models to GGUF/Quant format."
         })";
 		}
@@ -34,6 +34,7 @@ namespace GUI {
 
 		void Convert();
 		void RenderVaeLoader();
+		void RenderQueueList();
 	};
 
 } // namespace GUI

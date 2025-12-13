@@ -34,6 +34,7 @@ namespace GUI {
 	}
 
 	void DiffusionView::Init() {
+		GUI::DiffusionCallbackUtils::InitializeCallbacks();
 		ResetEntities();
 	}
 

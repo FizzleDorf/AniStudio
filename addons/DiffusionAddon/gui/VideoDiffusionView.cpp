@@ -30,41 +30,39 @@ namespace GUI {
 	}
 
 	void VideoDiffusionView::InitializeComponentVisibility() {
-		// Initialize all video-relevant components as visible by default
 		componentVisibility["ModelComponent"] = true;
 		componentVisibility["ClipLComponent"] = true;
 		componentVisibility["ClipGComponent"] = true;
-		componentVisibility["ClipVisionComponent"] = true;  // For I2V models
+		componentVisibility["ClipVisionComponent"] = true;
 		componentVisibility["T5XXLComponent"] = true;
 		componentVisibility["DiffusionModelComponent"] = true;
-		componentVisibility["HighNoiseDiffusionModelComponent"] = true;  // For Wan 2.2
+		componentVisibility["HighNoiseDiffusionModelComponent"] = true;
 		componentVisibility["VaeComponent"] = true;
 		componentVisibility["LoraComponent"] = true;
 		componentVisibility["TaesdComponent"] = true;
 		componentVisibility["LatentComponent"] = true;
 		componentVisibility["SamplerComponent"] = true;
-		componentVisibility["HighNoiseSamplerComponent"] = true;  // For Wan 2.2
-		componentVisibility["VideoParamsComponent"] = true;  // Video settings
+		componentVisibility["HighNoiseSamplerComponent"] = true;
+		componentVisibility["VideoParamsComponent"] = true;
 		componentVisibility["GuidanceComponent"] = true;
 		componentVisibility["ClipSkipComponent"] = true;
 		componentVisibility["PromptComponent"] = true;
 		componentVisibility["LayerSkipComponent"] = true;
 		componentVisibility["OutputImageComponent"] = true;
 		componentVisibility["InputImageComponent"] = true;
-		componentVisibility["EndImageComponent"] = true;  // For FLF2V
+		componentVisibility["EndImageComponent"] = true;
 		componentVisibility["ControlNetComponent"] = true;
 		componentVisibility["EmbeddingComponent"] = true;
 		componentVisibility["EsrganComponent"] = true;
 	}
 
 	void VideoDiffusionView::Init() {
-		DiffusionCallbackUtils::InitializeCallbacks();
+		GUI::DiffusionCallbackUtils::InitializeCallbacks();
 		ResetEntities();
 	}
 
 	void VideoDiffusionView::Update(float deltaT) {
-		// Video diffusion view doesn't need to track videos - that's VideoView's job
-		// This is just for generating videos, not viewing them
+
 	}
 
 	void VideoDiffusionView::ResetEntities() {
@@ -73,24 +71,22 @@ namespace GUI {
 			img2vidEntity = 0;
 		}
 
-		// Create entity for Img2Vid mode (requires input image)
 		img2vidEntity = mgr.AddNewEntity();
 
-		// Add components for Img2Vid - Include video components
 		mgr.AddComponent<ModelComponent>(img2vidEntity);
 		mgr.AddComponent<ClipLComponent>(img2vidEntity);
 		mgr.AddComponent<ClipGComponent>(img2vidEntity);
-		mgr.AddComponent<ClipVisionComponent>(img2vidEntity);  // For I2V models
+		mgr.AddComponent<ClipVisionComponent>(img2vidEntity);
 		mgr.AddComponent<T5XXLComponent>(img2vidEntity);
 		mgr.AddComponent<DiffusionModelComponent>(img2vidEntity);
-		mgr.AddComponent<HighNoiseDiffusionModelComponent>(img2vidEntity);  // For Wan 2.2
+		mgr.AddComponent<HighNoiseDiffusionModelComponent>(img2vidEntity);
 		mgr.AddComponent<VaeComponent>(img2vidEntity);
 		mgr.AddComponent<LoraComponent>(img2vidEntity);
 		mgr.AddComponent<TaesdComponent>(img2vidEntity);
 		mgr.AddComponent<LatentComponent>(img2vidEntity);
 		mgr.AddComponent<SamplerComponent>(img2vidEntity);
-		mgr.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);  // For Wan 2.2
-		mgr.AddComponent<VideoParamsComponent>(img2vidEntity);  // Video parameters
+		mgr.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);
+		mgr.AddComponent<VideoParamsComponent>(img2vidEntity);
 		mgr.AddComponent<GuidanceComponent>(img2vidEntity);
 		mgr.AddComponent<ClipSkipComponent>(img2vidEntity);
 		mgr.AddComponent<PromptComponent>(img2vidEntity);
@@ -98,7 +94,6 @@ namespace GUI {
 		mgr.AddComponent<OutputImageComponent>(img2vidEntity);
 		mgr.AddComponent<InputImageComponent>(img2vidEntity);
 
-		// Set default denoise values
 		mgr.GetComponent<SamplerComponent>(img2vidEntity).denoise = 0.6f;
 	}
 
@@ -108,7 +103,7 @@ namespace GUI {
 
 	void VideoDiffusionView::RenderComponentWithCheckbox(const EntityID entity, const std::string& componentName, const std::string& displayName, const std::function<void()>& renderFunc) {
 		if (!componentVisibility.count(componentName)) {
-			componentVisibility[componentName] = true; // Default to visible
+			componentVisibility[componentName] = true;
 		}
 
 		bool isVisible = componentVisibility[componentName];
@@ -586,7 +581,7 @@ namespace GUI {
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio_video.mp4";
 			}
-			// Force .mp4 extension for video
+
 			std::string filename = outputComp.fileName;
 			size_t lastDot = filename.find_last_of('.');
 			if (lastDot != std::string::npos) {
@@ -597,7 +592,6 @@ namespace GUI {
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		// NEW: Use proper event system with data
 		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Img2Vid);
 		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 	}
@@ -605,7 +599,26 @@ namespace GUI {
 	void VideoDiffusionView::RenderQueueList() {
 		ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Video Queue")) {
-			// ... progress bar code remains the same ...
+			// Get progress data from DiffusionCallbackUtils
+			const ProgressData& progressData = DiffusionCallbackUtils::GetProgressData();
+			int currentStep = progressData.currentStep;
+			int totalSteps = progressData.totalSteps;
+			float time = progressData.currentTime;
+			bool isProcessing = progressData.isProcessing;
+
+			if (isProcessing && totalSteps > 0) {
+				float progress = static_cast<float>(currentStep) / totalSteps;
+				std::ostringstream ss;
+				ss << "Processing: " << currentStep << "/" << totalSteps << " steps (" << std::fixed << std::setprecision(1)
+					<< time << "s)";
+				ImGui::Text("%s", ss.str().c_str());
+				ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0));
+			}
+			else {
+				ImGui::Text("Waiting...");
+				ImGui::ProgressBar(0.0f, ImVec2(-FLT_MIN, 0));
+			}
+			ImGui::Separator();
 
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
 				if (mgr.HasComponent<LoraComponent>(img2vidEntity)) {
@@ -620,7 +633,6 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			// NEW: Updated control buttons to use proper events
 			if (isPaused) {
 				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
 					ANI::Events::Ref().QueueEvent("ResumeDiffusionWorker");
