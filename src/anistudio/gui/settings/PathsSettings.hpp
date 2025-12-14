@@ -7,12 +7,16 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <map>
+#include <vector>
 
 namespace Settings {
 
 	class PathsSettingsTab : public BaseTabObject {
 	public:
 		PathsSettingsTab() : BaseTabObject("Paths", "Application") {
+			// Define path categories and their display names
+			InitializePathCategories();
 			LoadFromFilePaths();
 			LoadSettings();
 			CreateBackup();
@@ -20,60 +24,21 @@ namespace Settings {
 
 		void RenderUI() override {
 			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
-				// General Paths Section
-				ImGui::Text("General Paths");
-				ImGui::Spacing();
-
-				if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-					ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-					ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableHeadersRow();
-
-					RenderPathRow("Last Open Project", lastOpenProjectPath);
-					RenderPathRow("Default Project", defaultProjectPath);
-					RenderPathRow("Assets Folder", assetsFolderPath);
-
-					ImGui::EndTable();
+				// Render each category
+				for (const auto& category : pathCategories) {
+					RenderCategory(category.first, category.second);
 				}
 
 				ImGui::Separator();
 
-				if (ImGui::Button("Reset Model Paths to Root")) {
-					if (!defaultModelRootPath.empty()) {
-						checkpointDir = defaultModelRootPath + "/checkpoints";
-						encoderDir = defaultModelRootPath + "/clip";
-						vaeDir = defaultModelRootPath + "/vae";
-						unetDir = defaultModelRootPath + "/unet";
-						loraDir = defaultModelRootPath + "/loras";
-						controlnetDir = defaultModelRootPath + "/controlnet";
-						upscaleDir = defaultModelRootPath + "/upscale_models";
-						hasChanges = true;
+				// Special button for resetting model paths
+				auto modelRootIt = pathMap.find("ModelRoot");
+				if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
+					if (ImGui::Button("Reset Model Paths to Root")) {
+						ResetModelPathsToRoot(modelRootIt->second);
 					}
-				}
-
-				ImGui::Separator();
-
-				// Model Paths Section
-				ImGui::Text("Model Paths");
-				ImGui::Spacing();
-
-				if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-					ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-					ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-					ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableHeadersRow();
-
-					RenderPathRow("Model Root", defaultModelRootPath);
-					RenderPathRow("Checkpoints", checkpointDir);
-					RenderPathRow("Text Encoders", encoderDir);
-					RenderPathRow("VAE", vaeDir);
-					RenderPathRow("UNet", unetDir);
-					RenderPathRow("LORA", loraDir);
-					RenderPathRow("ControlNet", controlnetDir);
-					RenderPathRow("Upscale", upscaleDir);
-
-					ImGui::EndTable();
+					ImGui::SameLine();
+					ImGui::TextDisabled("(Will update all model subdirectories)");
 				}
 
 				ImGui::Separator();
@@ -84,64 +49,19 @@ namespace Settings {
 
 		void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
 			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
-				// General Paths Section
-				if (ShouldRenderCategory("General Paths", selectedCategories)) {
-					ImGui::Text("General Paths");
-					ImGui::Spacing();
-
-					if (ImGui::BeginTable("GeneralPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-						ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-						ImGui::TableHeadersRow();
-
-						RenderPathRow("Last Open Project", lastOpenProjectPath);
-						RenderPathRow("Default Project", defaultProjectPath);
-						RenderPathRow("Assets Folder", assetsFolderPath);
-
-						ImGui::EndTable();
-					}
-					ImGui::Separator();
-				}
-
-				if (ImGui::Button("Reset Model Paths to Root")) {
-					if (!defaultModelRootPath.empty()) {
-						checkpointDir = defaultModelRootPath + "/checkpoints";
-						encoderDir = defaultModelRootPath + "/text_encoders";
-						vaeDir = defaultModelRootPath + "/vae";
-						unetDir = defaultModelRootPath + "/unet";
-						loraDir = defaultModelRootPath + "/lora";
-						controlnetDir = defaultModelRootPath + "/controlnet";
-						upscaleDir = defaultModelRootPath + "/upscale";
-						hasChanges = true;
+				// Render only selected categories
+				for (const auto& category : pathCategories) {
+					if (ShouldRenderCategory(category.first, selectedCategories)) {
+						RenderCategory(category.first, category.second);
 					}
 				}
 
-				ImGui::Separator();
-
-				// Model Paths Section
-				if (ShouldRenderCategory("Model Paths", selectedCategories)) {
-					ImGui::Text("Model Paths");
-					ImGui::Spacing();
-
-					if (ImGui::BeginTable("ModelPathsTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-						ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-						ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-						ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-						ImGui::TableHeadersRow();
-
-						RenderPathRow("Model Root", defaultModelRootPath);
-						RenderPathRow("Checkpoints", checkpointDir);
-						RenderPathRow("Text Encoders", encoderDir);
-						RenderPathRow("VAE", vaeDir);
-						RenderPathRow("UNet", unetDir);
-						RenderPathRow("LORA", loraDir);
-						RenderPathRow("ControlNet", controlnetDir);
-						RenderPathRow("Upscale", upscaleDir);
-
-						ImGui::EndTable();
+				// Special button for resetting model paths
+				auto modelRootIt = pathMap.find("ModelRoot");
+				if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
+					if (ImGui::Button("Reset Model Paths to Root")) {
+						ResetModelPathsToRoot(modelRootIt->second);
 					}
-					ImGui::Separator();
 				}
 
 				RenderActionButtons();
@@ -152,17 +72,18 @@ namespace Settings {
 		bool SaveSettings() override {
 			try {
 				nlohmann::json j;
-				j["lastOpenProjectPath"] = lastOpenProjectPath;
-				j["defaultProjectPath"] = defaultProjectPath;
-				j["assetsFolderPath"] = assetsFolderPath;
-				j["defaultModelRootPath"] = defaultModelRootPath;
-				j["checkpointDir"] = checkpointDir;
-				j["encoderDir"] = encoderDir;
-				j["vaeDir"] = vaeDir;
-				j["unetDir"] = unetDir;
-				j["loraDir"] = loraDir;
-				j["controlnetDir"] = controlnetDir;
-				j["upscaleDir"] = upscaleDir;
+
+				// Save all paths dynamically
+				for (const auto&[key, value] : pathMap) {
+					j[key] = value;
+				}
+
+				// Also save category information
+				nlohmann::json categoriesJson;
+				for (const auto&[categoryName, pathKeys] : pathCategories) {
+					categoriesJson[categoryName] = pathKeys;
+				}
+				j["_categories"] = categoriesJson;
 
 				std::string filePath = GetSettingsDirectory() + "/paths_settings.json";
 				std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
@@ -207,17 +128,29 @@ namespace Settings {
 				file >> j;
 				file.close();
 
-				if (j.contains("lastOpenProjectPath")) lastOpenProjectPath = j["lastOpenProjectPath"];
-				if (j.contains("defaultProjectPath")) defaultProjectPath = j["defaultProjectPath"];
-				if (j.contains("assetsFolderPath")) assetsFolderPath = j["assetsFolderPath"];
-				if (j.contains("defaultModelRootPath")) defaultModelRootPath = j["defaultModelRootPath"];
-				if (j.contains("checkpointDir")) checkpointDir = j["checkpointDir"];
-				if (j.contains("encoderDir")) encoderDir = j["encoderDir"];
-				if (j.contains("vaeDir")) vaeDir = j["vaeDir"];
-				if (j.contains("unetDir")) unetDir = j["unetDir"];
-				if (j.contains("loraDir")) loraDir = j["loraDir"];
-				if (j.contains("controlnetDir")) controlnetDir = j["controlnetDir"];
-				if (j.contains("upscaleDir")) upscaleDir = j["upscaleDir"];
+				// Load all paths dynamically
+				for (auto it = j.begin(); it != j.end(); ++it) {
+					// Skip metadata keys starting with underscore
+					if (it.key().rfind("_", 0) == 0) continue;
+
+					if (it.value().is_string()) {
+						pathMap[it.key()] = it.value();
+					}
+				}
+
+				// Load categories if they exist
+				if (j.contains("_categories")) {
+					const auto& categoriesJson = j["_categories"];
+					for (auto it = categoriesJson.begin(); it != categoriesJson.end(); ++it) {
+						if (it.value().is_array()) {
+							std::vector<std::string> keys;
+							for (const auto& key : it.value()) {
+								keys.push_back(key);
+							}
+							pathCategories[it.key()] = keys;
+						}
+					}
+				}
 
 				hasChanges = false;
 				CreateBackup();
@@ -230,46 +163,19 @@ namespace Settings {
 		}
 
 		void ResetToDefaults() override {
-			lastOpenProjectPath.clear();
-			defaultProjectPath.clear();
-			assetsFolderPath.clear();
-			defaultModelRootPath.clear();
-			checkpointDir.clear();
-			encoderDir.clear();
-			vaeDir.clear();
-			unetDir.clear();
-			loraDir.clear();
-			controlnetDir.clear();
-			upscaleDir.clear();
+			// Clear all paths
+			for (auto&[key, value] : pathMap) {
+				value.clear();
+			}
 			hasChanges = true;
 		}
 
 		void CreateBackup() override {
-			backupLastOpenProjectPath = lastOpenProjectPath;
-			backupDefaultProjectPath = defaultProjectPath;
-			backupAssetsFolderPath = assetsFolderPath;
-			backupDefaultModelRootPath = defaultModelRootPath;
-			backupCheckpointDir = checkpointDir;
-			backupEncoderDir = encoderDir;
-			backupVaeDir = vaeDir;
-			backupUnetDir = unetDir;
-			backupLoraDir = loraDir;
-			backupControlnetDir = controlnetDir;
-			backupUpscaleDir = upscaleDir;
+			backupPathMap = pathMap;
 		}
 
 		void RestoreFromBackup() override {
-			lastOpenProjectPath = backupLastOpenProjectPath;
-			defaultProjectPath = backupDefaultProjectPath;
-			assetsFolderPath = backupAssetsFolderPath;
-			defaultModelRootPath = backupDefaultModelRootPath;
-			checkpointDir = backupCheckpointDir;
-			encoderDir = backupEncoderDir;
-			vaeDir = backupVaeDir;
-			unetDir = backupUnetDir;
-			loraDir = backupLoraDir;
-			controlnetDir = backupControlnetDir;
-			upscaleDir = backupUpscaleDir;
+			pathMap = backupPathMap;
 			hasChanges = false;
 		}
 
@@ -278,93 +184,171 @@ namespace Settings {
 		}
 
 	private:
-		// Path data
-		std::string lastOpenProjectPath;
-		std::string defaultProjectPath;
-		std::string assetsFolderPath;
-		std::string defaultModelRootPath;
-		std::string checkpointDir;
-		std::string encoderDir;
-		std::string vaeDir;
-		std::string unetDir;
-		std::string loraDir;
-		std::string controlnetDir;
-		std::string upscaleDir;
+		// Dynamic path storage
+		std::map<std::string, std::string> pathMap;
+		std::map<std::string, std::string> backupPathMap;
 
-		// Backup data
-		std::string backupLastOpenProjectPath;
-		std::string backupDefaultProjectPath;
-		std::string backupAssetsFolderPath;
-		std::string backupDefaultModelRootPath;
-		std::string backupCheckpointDir;
-		std::string backupEncoderDir;
-		std::string backupVaeDir;
-		std::string backupUnetDir;
-		std::string backupLoraDir;
-		std::string backupControlnetDir;
-		std::string backupUpscaleDir;
+		// Path categories for UI organization
+		std::map<std::string, std::vector<std::string>> pathCategories;
 
 		// State tracking
 		bool hasChanges = false;
 
+		void InitializePathCategories() {
+			// General paths
+			pathCategories["General Paths"] = {
+				"LastOpenProject",
+				"DefaultProject",
+				"AssetsFolder",
+				"OutputFolder",
+				"VirtualEnv",
+				"Scripts",
+				"Plugins",
+				"ImguiState"
+			};
+
+			// Model paths
+			pathCategories["Model Paths"] = {
+				"ModelRoot",
+				"Checkpoint",
+				"Encoder",
+				"Vae",
+				"Unet",
+				"Lora",
+				"ControlNet",
+				"Upscale",
+				"Embed"
+			};
+
+			// CLIP specific file paths (not directories)
+			pathCategories["CLIP Files"] = {
+				"ClipL",
+				"ClipG",
+				"T5XXL"
+			};
+		}
+
 		void LoadFromFilePaths() {
-			lastOpenProjectPath = Utils::FilePaths::lastOpenProjectPath;
-			defaultProjectPath = Utils::FilePaths::defaultProjectPath;
-			assetsFolderPath = Utils::FilePaths::assetsFolderPath;
-			defaultModelRootPath = Utils::FilePaths::defaultModelRootPath;
-			checkpointDir = Utils::FilePaths::checkpointDir;
-			encoderDir = Utils::FilePaths::encoderDir;
-			vaeDir = Utils::FilePaths::vaeDir;
-			unetDir = Utils::FilePaths::unetDir;
-			loraDir = Utils::FilePaths::loraDir;
-			controlnetDir = Utils::FilePaths::controlnetDir;
-			upscaleDir = Utils::FilePaths::upscaleDir;
+			auto& filePaths = Utils::FilePaths::GetInstance();
+
+			// Load all paths from FilePaths into our map
+			// We'll iterate through all categories to get all possible paths
+			for (const auto&[category, keys] : pathCategories) {
+				for (const auto& key : keys) {
+					pathMap[key] = filePaths.GetPath(key.c_str());
+				}
+			}
+
+			// Also load any additional paths that might exist in FilePaths
+			// (This would require FilePaths to expose its internal map, which it doesn't currently)
+			// For now, we'll just work with what we've defined in categories
 		}
 
 		void ApplyToFilePaths() {
-			Utils::FilePaths::lastOpenProjectPath = lastOpenProjectPath;
-			Utils::FilePaths::defaultProjectPath = defaultProjectPath;
-			Utils::FilePaths::assetsFolderPath = assetsFolderPath;
-			Utils::FilePaths::defaultModelRootPath = defaultModelRootPath;
-			Utils::FilePaths::checkpointDir = checkpointDir;
-			Utils::FilePaths::encoderDir = encoderDir;
-			Utils::FilePaths::vaeDir = vaeDir;
-			Utils::FilePaths::unetDir = unetDir;
-			Utils::FilePaths::loraDir = loraDir;
-			Utils::FilePaths::controlnetDir = controlnetDir;
-			Utils::FilePaths::upscaleDir = upscaleDir;
+			auto& filePaths = Utils::FilePaths::GetInstance();
 
-			Utils::FilePaths::SaveFilepathDefaults();
+			// Apply all paths from our map to FilePaths
+			for (const auto&[key, value] : pathMap) {
+				filePaths.SetPath(key.c_str(), value.c_str());
+			}
+
+			// If ModelRoot was changed, ensure model subdirectories are properly structured
+			auto modelRootIt = pathMap.find("ModelRoot");
+			if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
+				// Call SetByModelRoot to update all model subdirectories
+				filePaths.SetByModelRoot();
+			}
+
+			// Save to file
+			filePaths.SaveFilepathDefaults();
 		}
 
-		void RenderPathRow(const char* label, std::string& path) {
+		void RenderCategory(const std::string& categoryName, const std::vector<std::string>& pathKeys) {
+			ImGui::Text("%s", categoryName.c_str());
+			ImGui::Spacing();
+
+			if (ImGui::BeginTable((categoryName + "Table").c_str(), 3,
+				ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+
+				ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+				ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+				ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+				ImGui::TableHeadersRow();
+
+				for (const auto& key : pathKeys) {
+					auto it = pathMap.find(key);
+					if (it != pathMap.end()) {
+						RenderPathRow(key.c_str(), it->second, key);
+					}
+				}
+
+				ImGui::EndTable();
+			}
+			ImGui::Separator();
+		}
+
+		void RenderPathRow(const char* label, std::string& path, const std::string& pathKey) {
 			ImGui::TableNextRow();
 
+			// Display name (convert camelCase to Title Case)
 			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(label);
+			std::string displayName = FormatDisplayName(label);
+			ImGui::TextUnformatted(displayName.c_str());
 
+			// Browse button
 			ImGui::TableNextColumn();
 			std::string buttonID = std::string("...##") + label;
+
+			// Determine if this is a directory or file selector
+			bool isFileSelector = (pathKey == "ClipL" || pathKey == "ClipG" || pathKey == "T5XXL");
+
 			if (ImGui::Button(buttonID.c_str())) {
 				IGFD::FileDialogConfig config;
 				config.path = path.empty() ? "." : path;
 				config.flags = ImGuiFileDialogFlags_Modal;
 				std::string dialogID = std::string("ChoosePath##") + label;
-				ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(), "Select Directory", nullptr, config);
+
+				if (isFileSelector) {
+					// For CLIP files, use file selector
+					ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
+						"Select File",
+						"All Files{.*},.safetensors{.safetensors},.ckpt{.ckpt},.pth{.pth}",
+						config);
+				}
+				else {
+					// For directories, use directory selector
+					ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
+						"Select Directory",
+						nullptr,
+						config);
+				}
 			}
 
 			std::string dialogID = std::string("ChoosePath##") + label;
 			if (ImGuiFileDialog::Instance()->Display(dialogID.c_str(), 32, ImVec2(500, 400))) {
 				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+					std::string selectedPath;
+					if (isFileSelector) {
+						selectedPath = ImGuiFileDialog::Instance()->GetFilePathName();
+					}
+					else {
+						selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+					}
+
 					if (!selectedPath.empty() && selectedPath != path) {
 						path = selectedPath;
 						hasChanges = true;
+
+						// If this is ModelRoot, automatically update model subdirectories
+						if (pathKey == "ModelRoot" && !path.empty()) {
+							UpdateModelSubdirectories(path);
+						}
 					}
 				}
 				ImGuiFileDialog::Instance()->Close();
 			}
 
+			// Reset button
 			ImGui::SameLine();
 			std::string resetID = std::string("R##") + label;
 			if (ImGui::Button(resetID.c_str())) {
@@ -374,8 +358,80 @@ namespace Settings {
 				}
 			}
 
+			// Path display
 			ImGui::TableNextColumn();
-			ImGui::Text("%s", path.c_str());
+			if (path.empty()) {
+				ImGui::TextDisabled("(not set)");
+			}
+			else {
+				// Truncate path if too long
+				std::string displayPath = path;
+				if (displayPath.length() > 60) {
+					displayPath = "..." + displayPath.substr(displayPath.length() - 57);
+				}
+				ImGui::Text("%s", displayPath.c_str());
+				if (ImGui::IsItemHovered() && path.length() > 60) {
+					ImGui::SetTooltip("%s", path.c_str());
+				}
+			}
+		}
+
+		void ResetModelPathsToRoot(const std::string& modelRoot) {
+			if (modelRoot.empty()) return;
+
+			UpdateModelSubdirectories(modelRoot);
+			hasChanges = true;
+		}
+
+		void UpdateModelSubdirectories(const std::string& modelRoot) {
+			// Define model subdirectory mappings
+			std::map<std::string, std::string> modelSubdirs = {
+				{"Checkpoint", "/checkpoints"},
+				{"Encoder", "/clip"},
+				{"Vae", "/vae"},
+				{"Unet", "/unet"},
+				{"Lora", "/loras"},
+				{"ControlNet", "/controlnet"},
+				{"Upscale", "/upscale_models"},
+				{"Embed", "/embeddings"}
+			};
+
+			// Update all model subdirectories
+			for (const auto&[key, subdir] : modelSubdirs) {
+				pathMap[key] = modelRoot + subdir;
+			}
+
+			// Also update CLIP file paths
+			std::string encoderDir = modelRoot + "/clip";
+			pathMap["ClipL"] = encoderDir + "/clip_l.safetensors";
+			pathMap["ClipG"] = encoderDir + "/clip_g.safetensors";
+			pathMap["T5XXL"] = encoderDir + "/t5xxl.safetensors";
+		}
+
+		std::string FormatDisplayName(const std::string& key) {
+			std::string result;
+			bool lastWasLower = false;
+
+			for (char c : key) {
+				if (isupper(c) && lastWasLower) {
+					result += ' ';
+					result += c;
+				}
+				else if (c == '_' || c == '-') {
+					result += ' ';
+				}
+				else {
+					result += c;
+				}
+				lastWasLower = islower(c);
+			}
+
+			// Capitalize first letter
+			if (!result.empty()) {
+				result[0] = toupper(result[0]);
+			}
+
+			return result;
 		}
 
 		void RenderActionButtons() {

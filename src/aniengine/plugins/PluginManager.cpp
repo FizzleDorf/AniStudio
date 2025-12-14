@@ -389,6 +389,20 @@ namespace Plugins {
 			return false;
 		}
 
+		std::string currentVersionDll = info.path + "/" + getVersionedDllName(pluginName, info.currentVersion);
+		if (std::filesystem::exists(currentVersionDll)) {
+			// Compare file sizes and modification times
+			auto stagingSize = std::filesystem::file_size(stagingDllPath);
+			auto currentSize = std::filesystem::file_size(currentVersionDll);
+			auto stagingTime = std::filesystem::last_write_time(stagingDllPath);
+			auto currentTime = std::filesystem::last_write_time(currentVersionDll);
+
+			if (stagingSize == currentSize && stagingTime <= currentTime) {
+				std::cout << "[PluginManager] Staging DLL is identical to current version, skipping" << std::endl;
+				return false;
+			}
+		}
+
 		std::string pluginMainDir = info.path;
 		std::string versionedDllName = getVersionedDllName(pluginName, info.nextVersion);
 		std::string newDllPath = pluginMainDir + "/" + versionedDllName;
@@ -397,13 +411,44 @@ namespace Plugins {
 		std::cout << "  Source: " << stagingDllPath << std::endl;
 		std::cout << "  Destination: " << newDllPath << std::endl;
 
-		if (!copyFile(stagingDllPath, newDllPath)) {
-			std::cerr << "[PluginManager] Failed to copy staging DLL" << std::endl;
+		try {
+			// Remove destination if it exists
+			if (std::filesystem::exists(newDllPath)) {
+				std::filesystem::remove(newDllPath);
+			}
+
+			// Copy the file
+			std::filesystem::copy_file(stagingDllPath, newDllPath,
+				std::filesystem::copy_options::overwrite_existing);
+
+			// Verify the copy
+			if (!std::filesystem::exists(newDllPath)) {
+				std::cerr << "[PluginManager] Destination file not created: " << newDllPath << std::endl;
+				return false;
+			}
+
+			// Verify file size
+			auto srcSize = std::filesystem::file_size(stagingDllPath);
+			auto dstSize = std::filesystem::file_size(newDllPath);
+
+			if (srcSize != dstSize) {
+				std::cerr << "[PluginManager] File size mismatch after copy: src="
+					<< srcSize << ", dst=" << dstSize << std::endl;
+				return false;
+			}
+
+			std::cout << "[PluginManager] Successfully created versioned DLL v"
+				<< info.nextVersion << " (" << dstSize << " bytes)" << std::endl;
+
+			info.stagingWriteTime = std::filesystem::last_write_time(stagingDllPath);
+
+			return true;
+
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[PluginManager] Failed to copy staging DLL: " << e.what() << std::endl;
 			return false;
 		}
-
-		std::cout << "[PluginManager] Successfully created versioned DLL v" << info.nextVersion << std::endl;
-		return true;
 	}
 
 	bool PluginManager::safeReloadPlugin(const std::string& pluginName) {

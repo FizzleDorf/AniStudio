@@ -39,16 +39,16 @@ namespace ANI {
 		std::cout << "[ProjectManager] Initialized" << std::endl;
 
 		// Ensure FilePaths is initialized
-		if (!Utils::FilePaths::initialized) {
+		if (!Utils::FilePaths::GetInstance().IsInitialized()) {
 			std::cout << "[ProjectManager] FilePaths not initialized, initializing now..." << std::endl;
-			Utils::FilePaths::Init();
+			Utils::FilePaths::GetInstance().Init();
 		}
 
 		// Debug current FilePaths state
 		std::cout << "[ProjectManager] Current FilePaths state:" << std::endl;
-		std::cout << "  - Default project path: '" << Utils::FilePaths::defaultProjectPath << "'" << std::endl;
-		std::cout << "  - Last opened project: '" << Utils::FilePaths::lastOpenProjectPath << "'" << std::endl;
-		std::cout << "  - Data path: '" << Utils::FilePaths::dataPath << "'" << std::endl;
+		std::cout << "  - Default project path: '" << Utils::FilePaths::GetInstance().GetPath("DefaultProject") << "'" << std::endl;
+		std::cout << "  - Last opened project: '" << Utils::FilePaths::GetInstance().GetPath("LastOpenProject") << "'" << std::endl;
+		std::cout << "  - Data path: '" << Utils::FilePaths::GetInstance().GetDataPath() << "'" << std::endl;
 	}
 
 	ProjectManager::~ProjectManager() {}
@@ -60,13 +60,16 @@ namespace ANI {
 
 	bool ProjectManager::ShouldShowStartup() const {
 		// Check if we have a last opened project
-		bool hasLastProject = !Utils::FilePaths::lastOpenProjectPath.empty();
+		const char* lastProjectPath = Utils::FilePaths::GetInstance().GetPath("LastOpenProject");
+		bool hasLastProject = (lastProjectPath && lastProjectPath[0] != '\0');
 
 		// Debug output
 		std::cout << "[ProjectManager] ShouldShowStartup check:" << std::endl;
-		std::cout << "  - Last opened project: '" << Utils::FilePaths::lastOpenProjectPath << "'" << std::endl;
+		std::cout << "  - Last opened project: '" << (lastProjectPath ? lastProjectPath : "(empty)") << "'" << std::endl;
 		std::cout << "  - Has last project: " << (hasLastProject ? "YES" : "NO") << std::endl;
-		std::cout << "  - Default project path: '" << Utils::FilePaths::defaultProjectPath << "'" << std::endl;
+
+		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		std::cout << "  - Default project path: '" << (defaultProjectPath ? defaultProjectPath : "(empty)") << "'" << std::endl;
 
 		// Try to find any existing projects
 		auto recentProjects = GetRecentProjects();
@@ -366,27 +369,28 @@ namespace ANI {
 		std::set<std::string> addedPaths; // Track added paths to prevent duplicates
 
 		// First, check if we have a last opened project
-		if (!Utils::FilePaths::lastOpenProjectPath.empty() &&
-			std::filesystem::exists(Utils::FilePaths::lastOpenProjectPath)) {
+		const char* lastProjectPath = Utils::FilePaths::GetInstance().GetPath("LastOpenProject");
+		if (lastProjectPath && lastProjectPath[0] != '\0' &&
+			std::filesystem::exists(lastProjectPath)) {
 
 			try {
 				// Normalize the path to handle different representations of the same path
-				std::string normalizedPath = std::filesystem::canonical(Utils::FilePaths::lastOpenProjectPath).string();
+				std::string normalizedPath = std::filesystem::canonical(lastProjectPath).string();
 				recentProjects.push_back(normalizedPath);
 				addedPaths.insert(normalizedPath);
 			}
 			catch (const std::exception& e) {
 				// If canonical fails, use the original path
-				recentProjects.push_back(Utils::FilePaths::lastOpenProjectPath);
-				addedPaths.insert(Utils::FilePaths::lastOpenProjectPath);
+				recentProjects.push_back(lastProjectPath);
+				addedPaths.insert(lastProjectPath);
 			}
 		}
 
 		// Then scan the default project directory for any existing projects
-		std::string defaultProjectDir = Utils::FilePaths::defaultProjectPath;
-		if (!defaultProjectDir.empty() && std::filesystem::exists(defaultProjectDir)) {
+		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		if (defaultProjectPath && defaultProjectPath[0] != '\0' && std::filesystem::exists(defaultProjectPath)) {
 			try {
-				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectDir)) {
+				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectPath)) {
 					if (entry.is_directory()) {
 						std::string projectPath = entry.path().string();
 
@@ -437,39 +441,42 @@ namespace ANI {
 
 	void ProjectManager::AddToRecentProjects(const std::string& projectPath) {
 		// Update the last opened project path in FilePaths
-		Utils::FilePaths::lastOpenProjectPath = projectPath;
-		Utils::FilePaths::SaveFilepathDefaults();
+		Utils::FilePaths::GetInstance().SetPath("LastOpenProject", projectPath.c_str());
+		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
 	}
 
 	void ProjectManager::SetDefaultProjectPath(const std::string& path) {
-		Utils::FilePaths::defaultProjectPath = path;
-		Utils::FilePaths::SaveFilepathDefaults();
+		Utils::FilePaths::GetInstance().SetPath("DefaultProject", path.c_str());
+		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetDefaultProjectPath() const {
-		return Utils::FilePaths::defaultProjectPath;
+		const char* path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		return path ? std::string(path) : "";
 	}
 
 	void ProjectManager::SetAssetsFolder(const std::string& path) {
-		Utils::FilePaths::assetsFolderPath = path;
-		Utils::FilePaths::SaveFilepathDefaults();
+		Utils::FilePaths::GetInstance().SetPath("AssetsFolder", path.c_str());
+		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetAssetsFolder() const {
-		return Utils::FilePaths::assetsFolderPath;
+		const char* path = Utils::FilePaths::GetInstance().GetPath("AssetsFolder");
+		return path ? std::string(path) : "";
 	}
 
 	void ProjectManager::SetOutputFolder(const std::string& path) {
-		Utils::FilePaths::outputFolderPath = path;
-		Utils::FilePaths::SaveFilepathDefaults();
+		Utils::FilePaths::GetInstance().SetPath("OutputFolder", path.c_str());
+		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetOutputFolder() const {
-		return Utils::FilePaths::outputFolderPath;
+		const char* path = Utils::FilePaths::GetInstance().GetPath("OutputFolder");
+		return path ? std::string(path) : "";
 	}
 
 	void ProjectManager::InitializeApplicationPaths() {
-		Utils::FilePaths::Init();
+		Utils::FilePaths::GetInstance().Init();
 	}
 
 	bool ProjectManager::ApplyProjectTemplate(const GUI::ProjectTemplate& template_) {
@@ -681,23 +688,25 @@ namespace ANI {
 	}
 
 	void ProjectManager::UpdateProjectSpecificPaths() {
-		// For now, just set the paths directly in the FilePaths static variables
-		// In a future update, we could implement project-specific path management
-		if (!GetProjectAssetsPath().empty()) {
-			Utils::FilePaths::assetsFolderPath = GetProjectAssetsPath();
+		// Set project-specific paths in FilePaths
+		std::string assetsPath = GetProjectAssetsPath();
+		std::string outputPath = GetProjectOutputPath();
+
+		if (!assetsPath.empty()) {
+			Utils::FilePaths::GetInstance().SetPath("AssetsFolder", assetsPath.c_str());
 		}
-		if (!GetProjectOutputPath().empty()) {
-			Utils::FilePaths::outputFolderPath = GetProjectOutputPath();
+		if (!outputPath.empty()) {
+			Utils::FilePaths::GetInstance().SetPath("OutputFolder", outputPath.c_str());
 		}
-		Utils::FilePaths::SaveFilepathDefaults();
+
+		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
 	}
 
 	void ProjectManager::ClearProjectSpecificPaths() {
 		// Clear project-specific paths back to defaults
-		// This could be enhanced to restore previous global defaults
-		Utils::FilePaths::assetsFolderPath = "";
-		Utils::FilePaths::outputFolderPath = "";
-		Utils::FilePaths::SaveFilepathDefaults();
+		Utils::FilePaths::GetInstance().SetPath("AssetsFolder", "");
+		Utils::FilePaths::GetInstance().SetPath("OutputFolder", "");
+		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetProjectDataPath() const {

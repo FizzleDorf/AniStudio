@@ -62,8 +62,8 @@ namespace ANI {
 			std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		std::cout << "[EngineCore] Setting global data path: " << Utils::FilePaths::dataPath << std::endl;
-		pluginManager->SetGlobalDataPath(Utils::FilePaths::dataPath);
+		std::cout << "[EngineCore] Setting global data path: " << Utils::FilePaths::GetInstance().GetDataPath() << std::endl;
+		pluginManager->SetGlobalDataPath(Utils::FilePaths::GetInstance().GetDataPath());
 
 		// Scan plugins directory (but don't auto-load everything)
 		pluginManager->scanPluginDirectory(pluginDirectory);
@@ -83,15 +83,12 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			// FIX: Initialize file paths BEFORE anything else that might need them
 			std::cout << "[EngineCore] Initializing file paths..." << std::endl;
-			Utils::FilePaths::Init();
+			Utils::FilePaths::GetInstance().Init();
 
-			// DEBUG: Verify paths are set
 			std::cout << "[EngineCore] File paths initialized:" << std::endl;
-			std::cout << "[EngineCore]   defaultProjectPath: " << Utils::FilePaths::defaultProjectPath << std::endl;
-			std::cout << "[EngineCore]   dataPath: " << Utils::FilePaths::dataPath << std::endl;
-			std::cout << "[EngineCore]   loraDir: " << Utils::FilePaths::loraDir << std::endl;
+			const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+			std::cout << "[EngineCore]   defaultProjectPath: " << (defaultProjectPath ? defaultProjectPath : "(null)") << std::endl;
 
 			// Invalidate ID 0 for consistency
 			const ECS::EntityID temp = entityManager.AddNewEntity();

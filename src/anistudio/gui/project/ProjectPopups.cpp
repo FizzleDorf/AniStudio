@@ -60,7 +60,7 @@ namespace GUI {
 	void ProjectPopupState::LoadTemplates() {
 		templates.clear();
 
-		std::string templatesDir = Utils::FilePaths::dataPath + "/project_templates";
+		std::string templatesDir = std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/project_templates";
 
 		try {
 			if (!std::filesystem::exists(templatesDir)) {

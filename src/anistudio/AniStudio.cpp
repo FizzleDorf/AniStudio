@@ -102,8 +102,8 @@ namespace ANI {
 			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		std::cout << "[StudioCore] Setting global data path: " << Utils::FilePaths::dataPath << std::endl;
-		studioPluginManager->SetGlobalDataPath(Utils::FilePaths::dataPath);
+		std::cout << "[StudioCore] Setting global data path: " << Utils::FilePaths::GetInstance().GetDataPath() << std::endl;
+		studioPluginManager->SetGlobalDataPath(Utils::FilePaths::GetInstance().GetDataPath());
 
 		studioPluginManager->scanPluginDirectory(pluginDirectory);
 		studioPluginManager->enableHotReload(false);
@@ -136,7 +136,7 @@ namespace ANI {
 	}
 
 	void StudioCore::InitializeWindowState() {
-		m_windowState.SetGlobalDataPath(Utils::FilePaths::dataPath);
+		m_windowState.SetGlobalDataPath(Utils::FilePaths::GetInstance().GetDataPath());
 
 		std::string defaultPath = GetDefaultWindowStatePath();
 		if (std::filesystem::exists(defaultPath)) {
@@ -259,7 +259,7 @@ namespace ANI {
 		std::cout << "[StudioCore] Using main ImGui context: " << currentContext << std::endl;
 
 		std::cout << "[StudioCore] Loading ImGui style..." << std::endl;
-		std::string stylePath = Utils::FilePaths::dataPath + "/settings/imgui_style.json";
+		std::string stylePath = std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/settings/imgui_style.json";
 		if (std::filesystem::exists(stylePath)) {
 			LoadStyleFromFile(ImGui::GetStyle(), stylePath);
 			std::cout << "[StudioCore] Loaded custom style from: " << stylePath << std::endl;
@@ -284,7 +284,7 @@ namespace ANI {
 
 		std::cout << "[StudioCore] Loading ImGui IO settings..." << std::endl;
 		try {
-			std::string settingsPath = Utils::FilePaths::dataPath + "/settings/imgui_render_settings.json";
+			std::string settingsPath = std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/settings/imgui_render_settings.json";
 			if (std::filesystem::exists(settingsPath)) {
 				Utils::ImGuiSettingsUtil::LoadFromFile(settingsPath, io);
 				std::cout << "[StudioCore] ImGui IO settings loaded from file" << std::endl;
@@ -361,7 +361,7 @@ namespace ANI {
 	}
 
 	std::string StudioCore::GetDefaultWindowStatePath() const {
-		return Utils::FilePaths::dataPath + "/window_state.json";
+		return std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/window_state.json";
 	}
 
 	void StudioCore::Shutdown() {

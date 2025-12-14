@@ -1081,8 +1081,12 @@ namespace GUI {
 	}
 
 	void VideoSequencerView::LoadVideoFromDisk() {
+		// Get default project path from FilePaths singleton
+		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		std::string startPath = defaultProjectPath ? std::string(defaultProjectPath) : ".";
+
 		IGFD::FileDialogConfig config;
-		config.path = Utils::FilePaths::defaultProjectPath;
+		config.path = startPath;
 		config.countSelectionMax = 10;  // Allow multiple selection
 
 		ImGuiFileDialog::Instance()->OpenDialog(
@@ -1094,8 +1098,12 @@ namespace GUI {
 	}
 
 	void VideoSequencerView::LoadImageFromDisk() {
+		// Get default project path from FilePaths singleton
+		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		std::string startPath = defaultProjectPath ? std::string(defaultProjectPath) : ".";
+
 		IGFD::FileDialogConfig config;
-		config.path = Utils::FilePaths::defaultProjectPath;
+		config.path = startPath;
 		config.countSelectionMax = 10;  // Allow multiple selection
 
 		ImGuiFileDialog::Instance()->OpenDialog(

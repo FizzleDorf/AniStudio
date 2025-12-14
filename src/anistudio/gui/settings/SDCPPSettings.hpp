@@ -195,7 +195,7 @@ namespace Settings {
 
 		void LoadFromFilePaths() {
 			// Load SDCPP-specific paths if available
-			sdcppModelsRoot = Utils::FilePaths::defaultModelRootPath;
+			sdcppModelsRoot = Utils::FilePaths::GetInstance().GetPath("ModelRoot");
 			sdcppConfigPath = "data/sdcpp/config.json";
 		}
 

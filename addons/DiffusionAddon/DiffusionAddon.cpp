@@ -101,106 +101,22 @@ public:
 	}
 
 	void DiffusionAddon::OnShutdown() {
-		LogInfo("SHUTTING DOWN DIFFUSION ADDON IMMEDIATELY");
+		LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
+		// STEP 1: Unregister event handlers first
+		UnregisterEventHandlers();
+
+		// STEP 2: Stop and terminate the system
 		if (m_entityMgr) {
 			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
 			if (system) {
 				system->TerminateImmediately();
-				LogInfo("SDCPPSystem terminated immediately");
-			}
-		}
+				LogInfo("SDCPPSystem terminated");
 
-		UnregisterEventHandlers();
+				// Give the system time to clean up threads
+				std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-		if (m_entityMgr) {
-			auto allEntities = m_entityMgr->GetAllEntities();
-			std::vector<EntityID> entitiesToDestroy;
-
-			for (EntityID entity : allEntities) {
-				bool hasDiffusionComponent = false;
-
-				// Try multiple ways to detect diffusion components
-				try {
-					hasDiffusionComponent =
-						m_entityMgr->HasComponent<ECS::PromptComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::SamplerComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::GuidanceComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ClipSkipComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::SLGComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::PhotoMakerComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ModelComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ClipLComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ClipGComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::T5XXLComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::VaeComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::TaesdComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ControlNetComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::LoraComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::EmbeddingComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::HighNoiseDiffusionModelComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ClipVisionComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::HighNoiseSamplerComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::VideoParamsComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::StackedIdEmbedComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::LatentComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::LatentTransformComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::LayerSkipComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::ChromaComponent>(entity) ||
-						m_entityMgr->HasComponent<ECS::EsrganComponent>(entity);
-				}
-				catch (const std::exception& e) {
-					LogError("Error checking components for entity " + std::to_string(entity) + ": " + e.what());
-				}
-
-				if (hasDiffusionComponent) {
-					entitiesToDestroy.push_back(entity);
-				}
-			}
-
-			LogInfo("Found " + std::to_string(entitiesToDestroy.size()) + " entities to destroy");
-
-			for (EntityID entity : entitiesToDestroy) {
-				try {
-					m_entityMgr->DestroyEntity(entity);
-					LogInfo("Destroyed entity: " + std::to_string(entity));
-				}
-				catch (const std::exception& e) {
-					LogError("Error destroying entity " + std::to_string(entity) + ": " + e.what());
-				}
-			}
-		}
-
-		// STEP 4: Unregister components and system FIRST (before views to avoid deadlock)
-		if (m_entityMgr) {
-			try {
-				// Unregister all diffusion components by name
-				const char* componentNames[] = {
-					"Prompt", "Sampler", "Guidance", "ClipSkip", "SLG", "PhotoMaker",
-					"Model", "ClipL", "ClipG", "T5XXL", "DiffusionModel", "Vae",
-					"Taesd", "ControlNet", "Lora", "Embedding", "HighNoiseDiffusionModel",
-					"ClipVision", "HighNoiseSampler", "VideoParams", "StackedIdEmbed",
-					"Latent", "LatentTransform", "LayerSkip", "Chroma", "Esrgan"
-				};
-
-				for (const char* name : componentNames) {
-					try {
-						m_entityMgr->UnregisterComponentByName(name);
-						LogInfo("Unregistered component: " + std::string(name));
-					}
-					catch (const std::exception& e) {
-						LogError("Error unregistering component " + std::string(name) + ": " + e.what());
-					}
-					catch (...) {
-						// Component might not be registered, continue
-						LogInfo("Component not registered (skipping): " + std::string(name));
-					}
-				}
-
-				LogInfo("Unregistered all diffusion components");
-
-				// Unregister system
+				// Unregister the system (but NOT components)
 				try {
 					m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
 					LogInfo("Unregistered SDCPPSystem");
@@ -208,13 +124,10 @@ public:
 				catch (const std::exception& e) {
 					LogError("Error unregistering SDCPPSystem: " + std::string(e.what()));
 				}
-
-			}
-			catch (const std::exception& e) {
-				LogError("Error during component/system cleanup: " + std::string(e.what()));
 			}
 		}
 
+		// STEP 3: Close all views
 		if (m_viewMgr) {
 			const char* viewNames[] = {
 				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
@@ -222,21 +135,58 @@ public:
 
 			for (const char* viewName : viewNames) {
 				try {
+					m_viewMgr->CloseAllViewsOfType(viewName);
+					LogInfo("Closed all views of type: " + std::string(viewName));
 					std::this_thread::sleep_for(std::chrono::milliseconds(50));
-					LogInfo("Attempting to unregister view: " + std::string(viewName));
-					m_viewMgr->UnregisterView(viewName);
-					LogInfo("Successfully unregistered view: " + std::string(viewName));
-				}
-				catch (const std::exception& e) {
-					LogError("Error unregistering view " + std::string(viewName) + ": " + e.what());
-					// Continue with other views even if one fails
 				}
 				catch (...) {
-					LogError("Unknown error unregistering view: " + std::string(viewName));
+					// Continue even if closing fails
+				}
+			}
+		}
+
+		if (m_entityMgr) {
+			auto allEntities = m_entityMgr->GetAllEntities();
+			std::vector<EntityID> entitiesToDestroy;
+
+			// Collect entities to destroy
+			for (EntityID entity : allEntities) {
+				if (CheckEntityForDiffusionComponents(entity)) {
+					entitiesToDestroy.push_back(entity);
 				}
 			}
 
-			LogInfo("View unregistration complete");
+			LogInfo("Found " + std::to_string(entitiesToDestroy.size()) +
+				" entities to destroy out of " + std::to_string(allEntities.size()));
+
+			// Destroy in reverse order
+			for (auto it = entitiesToDestroy.rbegin(); it != entitiesToDestroy.rend(); ++it) {
+				try {
+					m_entityMgr->DestroyEntity(*it);
+					LogInfo("Destroyed entity: " + std::to_string(*it));
+				}
+				catch (const std::exception& e) {
+					LogError("Error destroying entity " + std::to_string(*it) + ": " + std::string(e.what()));
+				}
+			}
+		}
+
+		// STEP 5: Unregister views
+		if (m_viewMgr) {
+			const char* viewNames[] = {
+				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
+			};
+
+			for (const char* viewName : viewNames) {
+				try {
+					m_viewMgr->UnregisterView(viewName);
+					LogInfo("Unregistered view: " + std::string(viewName));
+					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+				}
+				catch (const std::exception& e) {
+					LogError("Error unregistering view " + std::string(viewName) + ": " + std::string(e.what()));
+				}
+			}
 		}
 
 		// STEP 6: Clear all references
@@ -245,6 +195,23 @@ public:
 		m_imguiContext = nullptr;
 
 		LogInfo("DiffusionAddon shutdown complete");
+	}
+
+	// Move this function OUTSIDE of OnShutdown
+	bool DiffusionAddon::CheckEntityForDiffusionComponents(EntityID entity) {
+		if (!m_entityMgr) return false;
+
+		// Check for a few key diffusion components
+		try {
+			if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity)) return true;
+			if (m_entityMgr->HasComponent<ECS::ModelComponent>(entity)) return true;
+			if (m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity)) return true;
+			if (m_entityMgr->HasComponent<ECS::LatentComponent>(entity)) return true;
+			return false;
+		}
+		catch (...) {
+			return false;
+		}
 	}
 
 	void OnUpdate(float deltaTime) override {}

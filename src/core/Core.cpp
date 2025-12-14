@@ -37,7 +37,8 @@ namespace ANI {
 
 	void Core::Init() {
 		std::cout << "[Core] Initializing FilePaths..." << std::endl;
-		Utils::FilePaths::Init();
+		// Use the singleton instance
+		Utils::FilePaths::GetInstance().Init();
 		std::cout << "[Core] FilePaths initialized" << std::endl;
 
 		// Initialize window and ImGui
@@ -321,7 +322,10 @@ namespace ANI {
 		std::cout << "[Core] Enabled docking by default" << std::endl;
 
 		std::cout << "[Core] Setting INI file path..." << std::endl;
-		std::string iniFilePath = std::filesystem::absolute(Utils::FilePaths::ImguiStatePath).string();
+		// Get ImGui state path from FilePaths singleton
+		const char* imguiStatePath = Utils::FilePaths::GetInstance().GetPath("ImguiState");
+		std::string iniFilePath = imguiStatePath ? std::string(imguiStatePath) : "imgui.ini";
+
 		std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
 		if (!std::filesystem::exists(iniDir)) {
 			std::filesystem::create_directories(iniDir);

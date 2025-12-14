@@ -196,111 +196,115 @@ namespace Utils
             }
         }
 
-        static std::string CreateUniqueFilename(const std::string &baseFilename, const std::string &directory)
-        {
-            try
-            {
-                // Validate inputs
-                std::string validBaseName = baseFilename.empty() ? "AniStudio_output.png" : baseFilename;
-                std::string validDirectory = directory.empty() ? Utils::FilePaths::defaultProjectPath : directory;
+		static std::string CreateUniqueFilename(const std::string &baseFilename, const std::string &directory)
+		{
+			try
+			{
+				// Get the FilePaths instance
+				auto& filePaths = Utils::FilePaths::GetInstance();
 
-                // Ensure directory exists
-                std::filesystem::path directoryPath(validDirectory);
-                if (!directoryPath.is_absolute())
-                {
-                    directoryPath = std::filesystem::path(Utils::FilePaths::defaultProjectPath) / directoryPath;
-                }
+				// Validate inputs
+				std::string validBaseName = baseFilename.empty() ? "AniStudio_output.png" : baseFilename;
+				std::string validDirectory = directory.empty() ? filePaths.GetPath("DefaultProject") : directory;
 
-                // Create directory if it doesn't exist
-                std::error_code ec;
-                std::filesystem::create_directories(directoryPath, ec);
-                if (ec)
-                {
-                    std::cerr << "Failed to create directory: " << directoryPath.string() << " - " << ec.message() << std::endl;
-                    // Fall back to default project path
-                    directoryPath = Utils::FilePaths::defaultProjectPath;
-                    std::filesystem::create_directories(directoryPath, ec);
-                    if (ec)
-                    {
-                        throw std::runtime_error("Failed to create fallback directory: " + directoryPath.string());
-                    }
-                }
+				// Ensure directory exists
+				std::filesystem::path directoryPath(validDirectory);
+				if (!directoryPath.is_absolute())
+				{
+					directoryPath = std::filesystem::path(filePaths.GetPath("DefaultProject")) / directoryPath;
+				}
 
-                // Parse the base filename
-                std::filesystem::path originalFilePath(validBaseName);
-                std::string baseName = originalFilePath.stem().string();
-                std::string extension = originalFilePath.extension().string();
+				// Create directory if it doesn't exist
+				std::error_code ec;
+				std::filesystem::create_directories(directoryPath, ec);
+				if (ec)
+				{
+					std::cerr << "Failed to create directory: " << directoryPath.string() << " - " << ec.message() << std::endl;
+					// Fall back to default project path
+					directoryPath = filePaths.GetPath("DefaultProject");
+					std::filesystem::create_directories(directoryPath, ec);
+					if (ec)
+					{
+						throw std::runtime_error("Failed to create fallback directory: " + directoryPath.string());
+					}
+				}
 
-                // Ensure extension starts with a dot
-                if (!extension.empty() && extension[0] != '.')
-                {
-                    extension = "." + extension;
-                }
+				// Parse the base filename
+				std::filesystem::path originalFilePath(validBaseName);
+				std::string baseName = originalFilePath.stem().string();
+				std::string extension = originalFilePath.extension().string();
 
-                // Default extension if none provided
-                if (extension.empty())
-                {
-                    extension = ".png";
-                }
+				// Ensure extension starts with a dot
+				if (!extension.empty() && extension[0] != '.')
+				{
+					extension = "." + extension;
+				}
 
-                // Check if directory exists after creation
-                if (!std::filesystem::exists(directoryPath))
-                {
-                    throw std::runtime_error("Directory does not exist after creation: " + directoryPath.string());
-                }
+				// Default extension if none provided
+				if (extension.empty())
+				{
+					extension = ".png";
+				}
 
-                // Find the highest existing index
-                int highestIndex = 0;
-                for (const auto &entry : std::filesystem::directory_iterator(directoryPath))
-                {
-                    if (entry.is_regular_file())
-                    {
-                        std::string entryName = entry.path().stem().string();
-                        std::string entryExt = entry.path().extension().string();
+				// Check if directory exists after creation
+				if (!std::filesystem::exists(directoryPath))
+				{
+					throw std::runtime_error("Directory does not exist after creation: " + directoryPath.string());
+				}
 
-                        // Check if this file matches our base name pattern
-                        if (entryExt == extension)
-                        {
-                            std::string prefix = baseName + "-";
-                            if (entryName.find(prefix) == 0)
-                            {
-                                // Extract the number part
-                                std::string numberPart = entryName.substr(prefix.length());
-                                try
-                                {
-                                    int index = std::stoi(numberPart);
-                                    if (index > highestIndex)
-                                    {
-                                        highestIndex = index;
-                                    }
-                                }
-                                catch (const std::exception &)
-                                {
-                                    // Invalid number, ignore
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
+				// Find the highest existing index
+				int highestIndex = 0;
+				for (const auto &entry : std::filesystem::directory_iterator(directoryPath))
+				{
+					if (entry.is_regular_file())
+					{
+						std::string entryName = entry.path().stem().string();
+						std::string entryExt = entry.path().extension().string();
 
-                // Create new filename with incremented index
-                highestIndex++;
-                std::ostringstream formattedIndex;
-                formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
+						// Check if this file matches our base name pattern
+						if (entryExt == extension)
+						{
+							std::string prefix = baseName + "-";
+							if (entryName.find(prefix) == 0)
+							{
+								// Extract the number part
+								std::string numberPart = entryName.substr(prefix.length());
+								try
+								{
+									int index = std::stoi(numberPart);
+									if (index > highestIndex)
+									{
+										highestIndex = index;
+									}
+								}
+								catch (const std::exception &)
+								{
+									// Invalid number, ignore
+									continue;
+								}
+							}
+						}
+					}
+				}
 
-                // Create the full path
-                std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
+				// Create new filename with incremented index
+				highestIndex++;
+				std::ostringstream formattedIndex;
+				formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
 
-                return newFilePath.string();
-            }
-            catch (const std::exception &e)
-            {
-                std::cerr << "Error in CreateUniqueFilename: " << e.what() << std::endl;
-                // Return a safe fallback
-                return Utils::FilePaths::defaultProjectPath + "/AniStudio_fallback.png";
-            }
-        }
+				// Create the full path
+				std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
+
+				return newFilePath.string();
+			}
+			catch (const std::exception &e)
+			{
+				std::cerr << "Error in CreateUniqueFilename: " << e.what() << std::endl;
+				// Return a safe fallback
+				auto& filePaths = Utils::FilePaths::GetInstance();
+				return std::string(filePaths.GetPath("DefaultProject")) + "/AniStudio_fallback.png";
+			}
+		}
 
         // Use MetadataUtils functions to avoid duplication
         static nlohmann::json ReadMetadataFromPNG(const std::string &imagePath)

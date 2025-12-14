@@ -111,22 +111,31 @@ namespace Plugins {
 			std::cout << "[StudioPluginManager] Cleaning up " << nameIt->second.size()
 				<< " views for plugin: " << pluginName << std::endl;
 
-			// Close views before unregistering
-			for (const std::string& viewName : nameIt->second) {
-				std::cout << "[StudioPluginManager] Closing view: " << viewName << std::endl;
-				viewManager.CloseAllViewsOfType(viewName);
-			}
-
-			// Small delay to ensure views are closed
-			std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-			// Unregister view types
-			for (const std::string& viewName : nameIt->second) {
-				std::cout << "[StudioPluginManager] Unregistering view: " << viewName << std::endl;
-				viewManager.UnregisterViewType(viewName);
-			}
-
+			// First, remove from tracking
+			std::vector<std::string> viewsToClean = std::move(nameIt->second);
 			pluginViewNames.erase(nameIt);
+
+			// Close and unregister views
+			for (const std::string& viewName : viewsToClean) {
+				std::cout << "[StudioPluginManager] Cleaning up view: " << viewName << std::endl;
+
+				// Close all instances first
+				viewManager.CloseAllViewsOfType(viewName);
+
+				// Give time for views to close
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+				// Unregister the view type
+				try {
+					viewManager.UnregisterView(viewName);
+					std::cout << "[StudioPluginManager] Unregistered view: " << viewName << std::endl;
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[StudioPluginManager] Failed to unregister view "
+						<< viewName << ": " << e.what() << std::endl;
+				}
+			}
+
 			std::cout << "[StudioPluginManager] View cleanup completed for plugin: " << pluginName << std::endl;
 		}
 		catch (const std::exception& e) {

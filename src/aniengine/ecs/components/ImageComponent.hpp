@@ -11,9 +11,9 @@ namespace ECS {
 	struct ImageComponent : public BaseComponent {
 		std::string fileName = "AniStudio";                  // Default file name
 		std::string filePath =
-			!Utils::FilePaths::outputFolderPath.empty()
-			? Utils::FilePaths::outputFolderPath			 // Output folder if one is found
-			: Utils::FilePaths::defaultProjectPath;			 // Directory containing the Image
+			std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
+			? Utils::FilePaths::GetInstance().GetPath("OutputFolder")			 // Output folder if one is found
+			: Utils::FilePaths::GetInstance().GetPath("DefaultProject");			 // Directory containing the Image
 		unsigned char *imageData = nullptr;                  // Pointer to image data - DO NOT FREE in destructor for base class
 		int width = 0;                                       // Image width
 		int height = 0;                                      // Image height
@@ -336,9 +336,9 @@ namespace ECS {
 			compName = "OutputImage";
 			compCategory = "Image";
 			// Set default output directory to filePath 
-			filePath = !Utils::FilePaths::outputFolderPath.empty()
-				? Utils::FilePaths::outputFolderPath
-				: Utils::FilePaths::defaultProjectPath;
+			filePath = std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
+				? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
+				: Utils::FilePaths::GetInstance().GetPath("DefaultProject");
 			fileName = "AniStudio";
 			setupOutputSchema();
 		}
@@ -366,9 +366,9 @@ namespace ECS {
 			// JUST USE FILEPATH - NO MORE outputDirectory BULLSHIT
 			std::string outputDir = filePath;
 			if (outputDir.empty()) {
-				outputDir = !Utils::FilePaths::outputFolderPath.empty()
-					? Utils::FilePaths::outputFolderPath
-					: Utils::FilePaths::defaultProjectPath;
+				outputDir = std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
+					? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
+					: Utils::FilePaths::GetInstance().GetPath("DefaultProject");
 			}
 
 			std::filesystem::path outputPath = std::filesystem::path(outputDir) / (baseName + extension);
@@ -431,9 +431,9 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"defaultPath", Utils::FilePaths::outputFolderPath.empty()
-								? Utils::FilePaths::defaultProjectPath
-								: Utils::FilePaths::outputFolderPath},
+							{"defaultPath", std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
+								? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
+								: Utils::FilePaths::GetInstance().GetPath("DefaultProject")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Reset"},
 							{"browseTooltip", "Browse to select output directory for saving images"}
