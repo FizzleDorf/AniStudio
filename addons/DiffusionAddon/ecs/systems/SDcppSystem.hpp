@@ -406,7 +406,7 @@ namespace ECS {
 		}
 
 	private:
-		
+
 		std::vector<TaskData> taskQueue;
 		std::atomic<bool> pauseWorker;
 		std::atomic<bool> shuttingDown{ false };
@@ -694,9 +694,24 @@ namespace ECS {
 
 						// Fallback to default if empty
 						if (outputDir.empty()) {
-							outputDir = Utils::FilePaths::outputFolderPath.empty()
-								? Utils::FilePaths::defaultProjectPath
-								: Utils::FilePaths::outputFolderPath;
+							// Get FilePaths instance
+							Utils::FilePaths& filePaths = Utils::FilePaths::GetInstance();
+
+							// Try OutputFolder first, then DefaultProject
+							std::string outputFolder = filePaths.GetPath("OutputFolder");
+							if (!outputFolder.empty() && outputFolder[0] != '\0') {
+								outputDir = outputFolder;
+							}
+							else {
+								std::string defaultProject = filePaths.GetPath("DefaultProject");
+								if (!defaultProject.empty() && defaultProject[0] != '\0') {
+									outputDir = defaultProject;
+								}
+								else {
+									// Ultimate fallback - executable directory
+									outputDir = filePaths.GetExecutableDir();
+								}
+							}
 						}
 
 						// Use proper API signature for CreateUniqueFilename

@@ -17,6 +17,17 @@ namespace ECS {
 		std::string modelName = "";
 		bool isModelLoaded = false;
 
+		virtual void RefreshSchema() override {
+			// Update paths in schema to reflect current FilePaths settings
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = GetDefaultDirectory().string();
+				}
+			}
+		}
+
 		virtual nlohmann::json Serialize() const override {
 			return { {compName, {
 				{"modelName", modelName},
@@ -94,7 +105,7 @@ namespace ECS {
 
 		// Get the appropriate default directory for this model type
 		virtual std::filesystem::path GetDefaultDirectory() const {
-			return Utils::FilePaths::checkpointDir; // Base class default
+			return Utils::FilePaths::GetInstance().GetPath("Checkpoint"); // Base class default
 		}
 	};
 
@@ -115,7 +126,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "Checkpoint Models"},
-							{"dialogDefaultPath", Utils::FilePaths::checkpointDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Checkpoint")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
@@ -125,8 +136,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Checkpoint path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Checkpoint");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::checkpointDir;
+			return Utils::FilePaths::GetInstance().GetPath("Checkpoint");
 		}
 
 		ModelComponent& operator=(const ModelComponent& other) {
@@ -156,7 +178,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "UNet Models"},
-							{"dialogDefaultPath", Utils::FilePaths::unetDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Unet")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for UNet/Diffusion model files for FLUX or transformer models"}
@@ -166,8 +188,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Unet path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Unet");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::unetDir;
+			return Utils::FilePaths::GetInstance().GetPath("Unet");
 		}
 
 		DiffusionModelComponent& operator=(const DiffusionModelComponent& other) {
@@ -197,7 +230,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Models"},
-							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP-G text encoder files"}
@@ -207,8 +240,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Encoder path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::encoderDir;
+			return Utils::FilePaths::GetInstance().GetPath("Encoder");
 		}
 
 		ClipGComponent& operator=(const ClipGComponent& other) {
@@ -239,7 +283,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Models"},
-							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP-L text encoder files"}
@@ -249,8 +293,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Encoder path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::encoderDir;
+			return Utils::FilePaths::GetInstance().GetPath("Encoder");
 		}
 
 		ClipLComponent& operator=(const ClipLComponent& other) {
@@ -281,7 +336,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "T5 Models"},
-							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for T5-XXL text encoder files for FLUX models"}
@@ -291,8 +346,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Encoder path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::encoderDir;
+			return Utils::FilePaths::GetInstance().GetPath("Encoder");
 		}
 
 		T5XXLComponent& operator=(const T5XXLComponent& other) {
@@ -323,7 +389,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "VAE Models"},
-							{"dialogDefaultPath", Utils::FilePaths::vaeDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Vae")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for VAE model files (.safetensors, .ckpt, .pt)"}
@@ -360,6 +426,17 @@ namespace ECS {
 		bool keep_vae_on_cpu = false;
 		bool vae_decode_only = false;
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Vae path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Vae");
+				}
+			}
+		}
+
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
@@ -371,7 +448,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::vaeDir;
+			return Utils::FilePaths::GetInstance().GetPath("Vae");
 		}
 
 		VaeComponent& operator=(const VaeComponent& other) {
@@ -442,7 +519,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "TAESD Models"},
-							{"dialogDefaultPath", Utils::FilePaths::vaeDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Vae")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for TAESD fast VAE files"}
@@ -452,8 +529,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Vae path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Vae");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::vaeDir;
+			return Utils::FilePaths::GetInstance().GetPath("Vae");
 		}
 
 		TaesdComponent& operator=(const TaesdComponent& other) {
@@ -470,7 +558,7 @@ namespace ECS {
 	struct LoraComponent : public ECS::BaseModelComponent {
 		LoraComponent() {
 			compName = "Lora";
-			modelPath = Utils::FilePaths::loraDir;
+			modelPath = Utils::FilePaths::GetInstance().GetPath("Lora");
 			schema = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},
@@ -484,7 +572,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "LoRA Models"},
-							{"dialogDefaultPath", Utils::FilePaths::loraDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Lora")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for LoRA adaptation files"}
@@ -523,6 +611,17 @@ namespace ECS {
 		float loraStrength = 1.0f;
 		float loraClipStrength = 1.0f;
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Lora path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Lora");
+				}
+			}
+		}
+
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
@@ -533,7 +632,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::loraDir;
+			return Utils::FilePaths::GetInstance().GetPath("Lora");
 		}
 
 		LoraComponent& operator=(const LoraComponent& other) {
@@ -600,7 +699,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "ControlNet Models"},
-							{"dialogDefaultPath", Utils::FilePaths::controlnetDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("ControlNet")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ControlNet model files"}
@@ -660,6 +759,17 @@ namespace ECS {
 		float applyEnd = 1.0f;
 		bool keep_control_net_cpu = false;
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current ControlNet path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("ControlNet");
+				}
+			}
+		}
+
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
@@ -672,7 +782,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::controlnetDir;
+			return Utils::FilePaths::GetInstance().GetPath("ControlNet");
 		}
 
 		ControlNetComponent& operator=(const ControlNetComponent& other) {
@@ -747,7 +857,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".pth,.safetensors,.pt"},
 							{"filterName", "Upscale Models"},
-							{"dialogDefaultPath", Utils::FilePaths::upscaleDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Upscale")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ESRGAN upscale model files (.pth, .safetensors, .pt)"}
@@ -778,6 +888,17 @@ namespace ECS {
 		uint32_t upscaleFactor = 2;
 		bool preserveAspectRatio = true;
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Upscale path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Upscale");
+				}
+			}
+		}
+
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
@@ -788,7 +909,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::upscaleDir;
+			return Utils::FilePaths::GetInstance().GetPath("Upscale");
 		}
 
 		EsrganComponent& operator=(const EsrganComponent& other) {
@@ -855,7 +976,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.bin"},
 							{"filterName", "Embedding Files"},
-							{"dialogDefaultPath", Utils::FilePaths::embedDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Embed")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for textual inversion embedding files"}
@@ -865,8 +986,19 @@ namespace ECS {
 			};
 		}
 
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Embed path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Embed");
+				}
+			}
+		}
+
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::embedDir;
+			return Utils::FilePaths::GetInstance().GetPath("Embed");
 		}
 
 		EmbeddingComponent& operator=(const EmbeddingComponent& other) {

@@ -149,43 +149,47 @@ namespace FileDialog {
 
 		// Get recommended default paths for each filter type
 		static std::string GetDefaultPath(FilterType type) {
+			auto& filePaths = Utils::FilePaths::GetInstance();
+			
 			switch (type) {
 			case FilterType::PATH_SELECTION:
-				return Utils::FilePaths::defaultProjectPath;
+				return filePaths.GetPath("DefaultProject");
 
 			case FilterType::DIFFUSION_MODEL:
-				return Utils::FilePaths::checkpointDir;
+				return filePaths.GetPath("Checkpoint");
 
 			case FilterType::IMAGE_FILE:
-				return Utils::FilePaths::defaultProjectPath;
+				return filePaths.GetPath("DefaultProject");
 
 			case FilterType::METADATA_FILE:
-				return Utils::FilePaths::defaultProjectPath;
+				return filePaths.GetPath("DefaultProject");
 
 			case FilterType::ALL_FILES:
-				return Utils::FilePaths::defaultProjectPath;
+				return filePaths.GetPath("DefaultProject");
 
 			default:
-				return Utils::FilePaths::defaultProjectPath;
+				return filePaths.GetPath("DefaultProject");
 			}
 		}
 
 		// Specialized getters for specific model types
 		static std::string GetModelPath(const std::string& modelType) {
+			auto& filePaths = Utils::FilePaths::GetInstance();
+			
 			static std::unordered_map<std::string, std::string> modelPaths = {
-				{"checkpoint", Utils::FilePaths::checkpointDir},
-				{"unet", Utils::FilePaths::unetDir},
-				{"vae", Utils::FilePaths::vaeDir},
-				{"clip", Utils::FilePaths::encoderDir},
-				{"t5", Utils::FilePaths::encoderDir},
-				{"lora", Utils::FilePaths::loraDir},
-				{"controlnet", Utils::FilePaths::controlnetDir},
-				{"embedding", Utils::FilePaths::embedDir},
-				{"upscale", Utils::FilePaths::upscaleDir}
+				{"checkpoint", filePaths.GetPath("Checkpoint")},
+				{"unet", filePaths.GetPath("Unet")},
+				{"vae", filePaths.GetPath("Vae")},
+				{"clip", filePaths.GetPath("Encoder")},
+				{"t5", filePaths.GetPath("Encoder")},
+				{"lora", filePaths.GetPath("Lora")},
+				{"controlnet", filePaths.GetPath("ControlNet")},
+				{"embedding", filePaths.GetPath("Embed")},
+				{"upscale", filePaths.GetPath("Upscale")}
 			};
 
 			auto it = modelPaths.find(modelType);
-			return (it != modelPaths.end()) ? it->second : Utils::FilePaths::checkpointDir;
+			return (it != modelPaths.end()) ? it->second : filePaths.GetPath("Checkpoint");
 		}
 
 		// Get filter for specific model type with separate categories
@@ -237,6 +241,8 @@ namespace FileDialog {
 		};
 
 		static ModelFilterInfo GetModelFilterInfo(const std::string& modelType) {
+			auto& filePaths = Utils::FilePaths::GetInstance();
+			
 			ModelFilterInfo info;
 			info.filter = GetModelFilter(modelType);
 			info.defaultPath = GetModelPath(modelType);

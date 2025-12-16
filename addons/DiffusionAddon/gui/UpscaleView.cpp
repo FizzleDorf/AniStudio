@@ -51,10 +51,26 @@ namespace GUI {
 
 		// Initialize with default values
 		auto& outputComp = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
+
+		// Use the new FilePaths API
+		FilePaths& filePaths = FilePaths::GetInstance();
+
+		std::string outputFolder = filePaths.GetPath("OutputFolder");
+		std::string defaultProject = filePaths.GetPath("DefaultProject");
+
 		outputComp.fileName = "upscaled_output";
-		outputComp.filePath = !Utils::FilePaths::outputFolderPath.empty()
-			? Utils::FilePaths::outputFolderPath
-			: Utils::FilePaths::defaultProjectPath;
+
+		// Use OutputFolder if set, otherwise use DefaultProject
+		if (!outputFolder.empty() && outputFolder[0] != '\0') {
+			outputComp.filePath = outputFolder;
+		}
+		else if (!defaultProject.empty() && defaultProject[0] != '\0') {
+			outputComp.filePath = defaultProject;
+		}
+		else {
+			// Fallback to executable directory if all else fails
+			outputComp.filePath = filePaths.GetExecutableDir();
+		}
 
 		auto& esrganComp = mgr.GetComponent<EsrganComponent>(upscaleEntity);
 		esrganComp.upscaleFactor = 2;
@@ -300,12 +316,26 @@ namespace GUI {
 		// Ensure output component is properly configured
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+			FilePaths& filePaths = FilePaths::GetInstance();
+
+			std::string defaultProject = filePaths.GetPath("DefaultProject");
+
 			if (outputComp.filePath.empty()) {
-				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
+				// Use DefaultProject path if available
+				if (!defaultProject.empty() && defaultProject[0] != '\0') {
+					outputComp.filePath = defaultProject;
+				}
+				else {
+					// Fallback to executable directory
+					outputComp.filePath = filePaths.GetExecutableDir();
+				}
 			}
+
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio_upscaled";
 			}
+
+			// Create output directory if it doesn't exist
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
@@ -535,15 +565,23 @@ namespace GUI {
 	}
 
 	void UpscaleView::RenderMetadataControls() {
+		FilePaths& filePaths = FilePaths::GetInstance();
+
+		// Get default path for file dialogs
+		std::string defaultPath = filePaths.GetPath("DefaultProject");
+		if (defaultPath.empty() || defaultPath[0] == '\0') {
+			defaultPath = filePaths.GetExecutableDir();
+		}
+
 		if (ImGui::Button("Save Settings", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::defaultProjectPath;
+			config.path = defaultPath;
 			ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Settings", ".json", config);
 		}
 
 		if (ImGui::Button("Load Settings", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::defaultProjectPath;
+			config.path = defaultPath;
 			ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Settings", ".json", config);
 		}
 

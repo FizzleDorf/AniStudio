@@ -332,7 +332,10 @@ namespace UISchema {
 			// Extract options
 			std::string filters = GetSchemaValue<std::string>(options, "filters", ".png,.jpg,.jpeg,.bmp,.tga");
 			std::string filterName = GetSchemaValue<std::string>(options, "filterName", "Image Files");
-			std::string defaultPath = GetSchemaValue<std::string>(options, "defaultPath", "");
+
+			// THE FIX: Changed from "defaultPath" to "dialogDefaultPath" to match the schema
+			std::string defaultPath = GetSchemaValue<std::string>(options, "dialogDefaultPath", "");
+
 			std::string buttonText = GetSchemaValue<std::string>(options, "buttonText", "Load Image...");
 			std::string browseTooltip = GetSchemaValue<std::string>(options, "browseTooltip", "");
 

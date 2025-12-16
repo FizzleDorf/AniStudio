@@ -3,6 +3,7 @@
 #include "BaseTabObject.hpp"
 #include "ImGuiFileDialog.h"
 #include "FilePaths.hpp"
+#include "Events.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -261,6 +262,15 @@ namespace Settings {
 
 			// Save to file
 			filePaths.SaveFilepathDefaults();
+
+			// Trigger schema refresh for all loaded model components
+			TriggerSchemaRefresh();
+		}
+
+		void TriggerSchemaRefresh() {
+			// This would need to be connected to the main application to refresh all views
+			// For now, queue an event
+			ANI::Events::Ref().QueueEvent("RefreshModelSchemas");
 		}
 
 		void RenderCategory(const std::string& categoryName, const std::vector<std::string>& pathKeys) {

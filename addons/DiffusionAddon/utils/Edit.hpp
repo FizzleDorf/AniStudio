@@ -5,6 +5,7 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
+#include "FilePaths.hpp"  // Added include for new FilePaths
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -30,9 +31,12 @@ namespace Utils
 
 			try
 			{
+				// Get FilePaths instance
+				FilePaths& filePaths = FilePaths::GetInstance();
+
 				// Extract parameters from metadata
 				std::vector<std::string> refImagePaths;
-				std::string outputPath = Utils::FilePaths::defaultProjectPath;
+				std::string outputPath = filePaths.GetPath("DefaultProject");  // Updated to use new API
 				std::string outputFilename = "edit_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
@@ -289,6 +293,19 @@ namespace Utils
 				}
 				else
 				{
+					// Check if output directory exists, if not use a fallback
+					if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
+						// Try to use OutputFolder from FilePaths
+						std::string outputFolder = filePaths.GetPath("OutputFolder");
+						if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
+							outputDir = outputFolder;
+						}
+						else {
+							// Fallback to executable directory
+							outputDir = filePaths.GetExecutableDir();
+						}
+					}
+
 					uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
 						outputFile.string(), outputDir.string());
 				}

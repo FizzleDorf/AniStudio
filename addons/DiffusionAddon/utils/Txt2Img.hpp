@@ -5,6 +5,7 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
+#include "FilePaths.hpp"  // Added include for new FilePaths
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -27,14 +28,17 @@ namespace Utils
 			sd_image_t *result_images = nullptr;
 			sd_img_gen_params_t gen_params;
 			sd_img_gen_params_init(&gen_params);
-			
+
 			std::cout << "=== METADATA STRUCTURE DEBUG ===" << std::endl;
 			std::cout << "Full metadata: " << metadata.dump(2) << std::endl;
 			std::cout << "=== END METADATA DEBUG ===" << std::endl;
 			try
 			{
+				// Get FilePaths instance
+				FilePaths& filePaths = FilePaths::GetInstance();
+
 				// Extract parameters from metadata - use local strings for proper lifetime
-				std::string outputPath = Utils::FilePaths::defaultProjectPath;
+				std::string outputPath = filePaths.GetPath("DefaultProject");  // Updated to use new API
 				std::string outputFilename = "txt2img_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
@@ -183,6 +187,20 @@ namespace Utils
 				// Create output path
 				std::filesystem::path outputDir(outputPath);
 				std::filesystem::path outputFile(outputFilename);
+
+				// Check if output directory exists, if not use a fallback
+				if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
+					// Try to use OutputFolder from FilePaths
+					std::string outputFolder = filePaths.GetPath("OutputFolder");
+					if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
+						outputDir = outputFolder;
+					}
+					else {
+						// Fallback to executable directory
+						outputDir = filePaths.GetExecutableDir();
+					}
+				}
+
 				std::string uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
 					outputFile.string(), outputDir.string());
 

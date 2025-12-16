@@ -576,7 +576,7 @@ namespace GUI {
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 			if (outputComp.filePath.empty()) {
-				outputComp.filePath = Utils::FilePaths::defaultProjectPath;
+				outputComp.filePath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
 			}
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio_video.mp4";
@@ -623,7 +623,7 @@ namespace GUI {
 			if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
 				if (mgr.HasComponent<LoraComponent>(img2vidEntity)) {
 					auto& loraComp = mgr.GetComponent<LoraComponent>(img2vidEntity);
-					loraComp.modelPath = Utils::FilePaths::loraDir;
+					loraComp.modelPath = Utils::FilePaths::GetInstance().GetPath("Lora");
 				}
 
 				for (int i = 0; i < numQueues; i++) {
@@ -835,13 +835,13 @@ namespace GUI {
 	void VideoDiffusionView::RenderMetadataControls() {
 		if (ImGui::Button("Save Video Metadata", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::defaultProjectPath;
+			config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
 			ImGuiFileDialog::Instance()->OpenDialog("SaveVideoMetadataDialog", "Save Video Metadata", ".json", config);
 		}
 
 		if (ImGui::Button("Load Video Metadata", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::defaultProjectPath;
+			config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
 			ImGuiFileDialog::Instance()->OpenDialog("LoadVideoMetadataDialog", "Load Video Metadata", ".json,.mp4,.avi,.mkv", config);
 		}
 

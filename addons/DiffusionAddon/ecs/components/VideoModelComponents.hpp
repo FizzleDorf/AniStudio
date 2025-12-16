@@ -28,7 +28,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "High Noise Models"},
-							{"dialogDefaultPath", Utils::FilePaths::unetDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Unet")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for Wan 2.2 high noise diffusion model files"}
@@ -72,7 +72,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Vision Models"},
-							{"dialogDefaultPath", Utils::FilePaths::encoderDir},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP Vision encoder files for I2V models"}

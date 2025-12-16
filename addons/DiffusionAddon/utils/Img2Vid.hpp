@@ -6,6 +6,7 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
+#include "FilePaths.hpp"  // Added include for new FilePaths
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -31,9 +32,12 @@ namespace Utils
 
 			try
 			{
+				// Get FilePaths instance
+				FilePaths& filePaths = FilePaths::GetInstance();
+
 				std::string inputImagePath = "";
 				std::string endImagePath = "";
-				std::string outputPath = Utils::FilePaths::defaultProjectPath;
+				std::string outputPath = filePaths.GetPath("DefaultProject");  // Updated to use new API
 				std::string outputFilename = "img2vid_output";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
@@ -281,8 +285,26 @@ namespace Utils
 
 				std::cout << "Generated " << num_frames_out << " frames" << std::endl;
 
+				// Ensure output directory exists with proper fallback
+				std::filesystem::path frameDir(outputPath);
+
+				// Check if output directory exists, if not use a fallback
+				if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(frameDir)) {
+					// Try to use OutputFolder from FilePaths
+					std::string outputFolder = filePaths.GetPath("OutputFolder");
+					if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
+						frameDir = outputFolder;
+					}
+					else {
+						// Fallback to executable directory
+						frameDir = filePaths.GetExecutableDir();
+					}
+				}
+
+				// Create the directory if it doesn't exist
+				std::filesystem::create_directories(frameDir);
+
 				for (int frame_idx = 0; frame_idx < num_frames_out; ++frame_idx) {
-					std::filesystem::path frameDir(outputPath);
 					std::string frameFilename = outputFilename + "_frame_" + std::to_string(frame_idx) + ".png";
 					std::string frameFullPath = (frameDir / frameFilename).string();
 

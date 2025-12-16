@@ -74,6 +74,11 @@ namespace ECS {
 			return uiSchema;
 		}
 
+		virtual void RefreshSchema() {
+			// Base implementation does nothing
+			// Derived components should override this
+		}
+
 		// Get property map for UI rendering - to be overridden by derived components
 		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() {
 			return {}; // Empty map by default

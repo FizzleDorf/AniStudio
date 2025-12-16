@@ -26,6 +26,9 @@ namespace Utils {
 			std::string embedPath = "";
 			std::string photoMakerPath = "";  // FIXED: Use photo_maker_path instead of stacked_id_embed_dir
 
+			// Get FilePaths instance for directory lookups
+			FilePaths& filePaths = FilePaths::GetInstance();
+
 			// Initialize context parameters with defaults
 			sd_ctx_params_t ctx_params;
 			sd_ctx_params_init(&ctx_params);
@@ -42,7 +45,7 @@ namespace Utils {
 						if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty())
 							modelPath = model["modelPath"].get<std::string>();
 						else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty())
-							modelPath = FilePaths::checkpointDir + "/" + model["modelName"].get<std::string>();
+							modelPath = std::string(filePaths.GetPath("Checkpoint")) + "/" + model["modelName"].get<std::string>();
 					}
 
 					// ClipL component
@@ -52,7 +55,7 @@ namespace Utils {
 						if (clipL.contains("modelPath") && !clipL["modelPath"].get<std::string>().empty())
 							clipLPath = clipL["modelPath"].get<std::string>();
 						else if (clipL.contains("modelName") && !clipL["modelName"].get<std::string>().empty())
-							clipLPath = FilePaths::encoderDir + "/" + clipL["modelName"].get<std::string>();
+							clipLPath = std::string(filePaths.GetPath("Encoder")) + "/" + clipL["modelName"].get<std::string>();
 					}
 
 					// ClipG component
@@ -62,7 +65,7 @@ namespace Utils {
 						if (clipG.contains("modelPath") && !clipG["modelPath"].get<std::string>().empty())
 							clipGPath = clipG["modelPath"].get<std::string>();
 						else if (clipG.contains("modelName") && !clipG["modelName"].get<std::string>().empty())
-							clipGPath = FilePaths::encoderDir + "/" + clipG["modelName"].get<std::string>();
+							clipGPath = std::string(filePaths.GetPath("Encoder")) + "/" + clipG["modelName"].get<std::string>();
 					}
 
 					// ClipVision component for I2V models
@@ -72,7 +75,7 @@ namespace Utils {
 						if (clipVision.contains("modelPath") && !clipVision["modelPath"].get<std::string>().empty())
 							clipVisionPath = clipVision["modelPath"].get<std::string>();
 						else if (clipVision.contains("modelName") && !clipVision["modelName"].get<std::string>().empty())
-							clipVisionPath = FilePaths::encoderDir + "/" + clipVision["modelName"].get<std::string>();
+							clipVisionPath = std::string(filePaths.GetPath("Encoder")) + "/" + clipVision["modelName"].get<std::string>();
 					}
 
 					// T5XXL component
@@ -82,7 +85,7 @@ namespace Utils {
 						if (t5xxl.contains("modelPath") && !t5xxl["modelPath"].get<std::string>().empty())
 							t5xxlPath = t5xxl["modelPath"].get<std::string>();
 						else if (t5xxl.contains("modelName") && !t5xxl["modelName"].get<std::string>().empty())
-							t5xxlPath = FilePaths::encoderDir + "/" + t5xxl["modelName"].get<std::string>();
+							t5xxlPath = std::string(filePaths.GetPath("Encoder")) + "/" + t5xxl["modelName"].get<std::string>();
 					}
 
 					// DiffusionModel component
@@ -92,7 +95,7 @@ namespace Utils {
 						if (diffusion.contains("modelPath") && !diffusion["modelPath"].get<std::string>().empty())
 							diffusionModelPath = diffusion["modelPath"].get<std::string>();
 						else if (diffusion.contains("modelName") && !diffusion["modelName"].get<std::string>().empty())
-							diffusionModelPath = FilePaths::unetDir + "/" + diffusion["modelName"].get<std::string>();
+							diffusionModelPath = std::string(filePaths.GetPath("Unet")) + "/" + diffusion["modelName"].get<std::string>();
 					}
 
 					// HighNoiseDiffusionModel component (for video generation)
@@ -102,7 +105,7 @@ namespace Utils {
 						if (highNoise.contains("modelPath") && !highNoise["modelPath"].get<std::string>().empty())
 							highNoiseModelPath = highNoise["modelPath"].get<std::string>();
 						else if (highNoise.contains("modelName") && !highNoise["modelName"].get<std::string>().empty())
-							highNoiseModelPath = FilePaths::unetDir + "/" + highNoise["modelName"].get<std::string>();
+							highNoiseModelPath = std::string(filePaths.GetPath("Unet")) + "/" + highNoise["modelName"].get<std::string>();
 					}
 
 					// Vae component - FIXED: Removed vae_tiling (not in your API)
@@ -112,7 +115,7 @@ namespace Utils {
 						if (vae.contains("modelPath") && !vae["modelPath"].get<std::string>().empty())
 							vaePath = vae["modelPath"].get<std::string>();
 						else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty())
-							vaePath = FilePaths::vaeDir + "/" + vae["modelName"].get<std::string>();
+							vaePath = std::string(filePaths.GetPath("Vae")) + "/" + vae["modelName"].get<std::string>();
 						if (vae.contains("vae_decode_only"))
 							ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
 						// REMOVED: vae_tiling - not in your sd_ctx_params_t
@@ -126,7 +129,7 @@ namespace Utils {
 						if (taesd.contains("modelPath") && !taesd["modelPath"].get<std::string>().empty())
 							taesdPath = taesd["modelPath"].get<std::string>();
 						else if (taesd.contains("modelName") && !taesd["modelName"].get<std::string>().empty())
-							taesdPath = FilePaths::vaeDir + "/" + taesd["modelName"].get<std::string>();
+							taesdPath = std::string(filePaths.GetPath("Vae")) + "/" + taesd["modelName"].get<std::string>();
 					}
 
 					// Controlnet component
@@ -136,7 +139,7 @@ namespace Utils {
 						if (controlnet.contains("modelPath") && !controlnet["modelPath"].get<std::string>().empty())
 							controlnetPath = controlnet["modelPath"].get<std::string>();
 						else if (controlnet.contains("modelName") && !controlnet["modelName"].get<std::string>().empty())
-							controlnetPath = FilePaths::controlnetDir + "/" + controlnet["modelName"].get<std::string>();
+							controlnetPath = std::string(filePaths.GetPath("ControlNet")) + "/" + controlnet["modelName"].get<std::string>();
 
 						if (controlnet.contains("keep_control_net_on_cpu"))
 							ctx_params.keep_control_net_on_cpu = controlnet["keep_control_net_on_cpu"].get<bool>();
@@ -153,7 +156,7 @@ namespace Utils {
 					//	else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
 					//	{
 					//		std::string modelName = lora["modelName"].get<std::string>();
-					//		loraPath = FilePaths::loraDir + "/" + modelName;
+					//		loraPath = std::string(filePaths.GetPath("Lora")) + "/" + modelName;
 
 					//		// Validation
 					//		if (!std::filesystem::exists(loraPath)) {
@@ -170,7 +173,7 @@ namespace Utils {
 						if (embed.contains("modelPath") && !embed["modelPath"].get<std::string>().empty())
 							embedPath = embed["modelPath"].get<std::string>();
 						else if (embed.contains("modelName") && !embed["modelName"].get<std::string>().empty())
-							embedPath = FilePaths::embedDir + "/" + embed["modelName"].get<std::string>();
+							embedPath = std::string(filePaths.GetPath("Embed")) + "/" + embed["modelName"].get<std::string>();
 					}
 
 					// Use PhotoMaker component to set photo_maker_path (this is what exists in your API)
@@ -180,7 +183,7 @@ namespace Utils {
 						if (pm.contains("modelPath") && !pm["modelPath"].get<std::string>().empty())
 							photoMakerPath = pm["modelPath"].get<std::string>();
 						else if (pm.contains("modelName") && !pm["modelName"].get<std::string>().empty())
-							photoMakerPath = FilePaths::embedDir + "/" + pm["modelName"].get<std::string>();
+							photoMakerPath = std::string(filePaths.GetPath("Embed")) + "/" + pm["modelName"].get<std::string>();
 					}
 
 					// Sampler component
@@ -235,7 +238,7 @@ namespace Utils {
 				}
 			}
 
-			// Set paths in context parameters - ALWAYS use c_str(), NEVER nullptr
+			// Set paths in context parameters
 			ctx_params.model_path = modelPath.c_str();
 			ctx_params.clip_l_path = clipLPath.c_str();
 			ctx_params.clip_g_path = clipGPath.c_str();
@@ -246,9 +249,13 @@ namespace Utils {
 			ctx_params.vae_path = vaePath.c_str();
 			ctx_params.taesd_path = taesdPath.c_str();
 			ctx_params.control_net_path = controlnetPath.c_str();
-			std::cout << "LoRA directory: " << FilePaths::loraDir << std::endl;
-			std::cout << "LoRA directory exists: " << std::filesystem::exists(FilePaths::loraDir) << std::endl;
-			ctx_params.lora_model_dir = FilePaths::loraDir.c_str();
+
+			// Get LoRA directory
+			std::string loraDir = filePaths.GetPath("Lora");
+			std::cout << "LoRA directory: " << loraDir << std::endl;
+			std::cout << "LoRA directory exists: " << std::filesystem::exists(loraDir) << std::endl;
+			ctx_params.lora_model_dir = loraDir.c_str();
+
 			ctx_params.embedding_dir = embedPath.c_str();
 			ctx_params.photo_maker_path = photoMakerPath.c_str();
 

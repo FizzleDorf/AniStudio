@@ -5,6 +5,7 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
+#include "FilePaths.hpp"  // Added include for new FilePaths
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -25,10 +26,13 @@ namespace Utils
 
 			try
 			{
+				// Get FilePaths instance
+				FilePaths& filePaths = FilePaths::GetInstance();
+
 				// Extract parameters from metadata
 				std::string inputImagePath = "";
-				std::string modelPath = Utils::FilePaths::upscaleDir;
-				std::string outputPath = Utils::FilePaths::defaultProjectPath;
+				std::string modelPath = filePaths.GetPath("Upscale");  // Updated to use new API
+				std::string outputPath = filePaths.GetPath("DefaultProject");  // Updated to use new API
 				std::string outputFilename = "upscale_AniStudio.png";
 				uint32_t upscaleFactor = 4;
 				bool offload_params_to_cpu = false;
@@ -82,7 +86,17 @@ namespace Utils
 							else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null() && !esrganData["modelName"].get<std::string>().empty())
 							{
 								std::string modelName = esrganData["modelName"].get<std::string>();
-								modelPath = (std::filesystem::path(Utils::FilePaths::upscaleDir) / modelName).string();
+
+								// Get the upscale models directory from FilePaths
+								std::string upscaleDir = filePaths.GetPath("Upscale");
+								if (!upscaleDir.empty() && upscaleDir[0] != '\0') {
+									modelPath = (std::filesystem::path(upscaleDir) / modelName).string();
+								}
+								else {
+									// Fallback: use executable directory
+									std::string exeDir = filePaths.GetExecutableDir();
+									modelPath = (std::filesystem::path(exeDir) / "models" / "upscale_models" / modelName).string();
+								}
 							}
 
 							if (esrganData.contains("upscaleFactor"))
@@ -131,6 +145,20 @@ namespace Utils
 					// Otherwise create a unique filename
 					std::filesystem::path outputDir(outputPath);
 					std::filesystem::path outputFile(outputFilename);
+
+					// Check if output directory exists, if not use a fallback
+					if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
+						// Try to use OutputFolder from FilePaths
+						std::string outputFolder = filePaths.GetPath("OutputFolder");
+						if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
+							outputDir = outputFolder;
+						}
+						else {
+							// Fallback to executable directory
+							outputDir = filePaths.GetExecutableDir();
+						}
+					}
+
 					outputFilePath = Utils::PngMetadata::CreateUniqueFilename(
 						outputFile.string(), outputDir.string());
 				}

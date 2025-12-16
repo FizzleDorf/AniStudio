@@ -39,7 +39,7 @@ namespace GUI {
 				ImGui::TableNextColumn();
 				if (ImGui::Button("...##j6")) {
 					IGFD::FileDialogConfig config;
-					config.path = Utils::FilePaths::checkpointDir;
+					config.path = Utils::FilePaths::GetInstance().GetPath("Checkpoint");
 					ImGuiFileDialog::Instance()->OpenDialog("ConvertModelDialog", "Choose Model",
 						".safetensors, .ckpt, .pt, .gguf", config);
 				}
@@ -113,7 +113,7 @@ namespace GUI {
 		ImGui::TableNextColumn();
 		if (ImGui::Button("...##4b")) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::vaeDir;
+			config.path = Utils::FilePaths::GetInstance().GetPath("Vae");
 			ImGuiFileDialog::Instance()->OpenDialog("ConvertVaeDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
 				config);
 		}
