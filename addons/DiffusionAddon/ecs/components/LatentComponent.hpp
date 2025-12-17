@@ -2,7 +2,7 @@
 
 #include "stable-diffusion.h"
 #include "BaseComponent.hpp"
-#include "Constants.hpp"
+#include "DiffusionOptions.hpp"
 #include <vector>
 #include <string>
 #include <algorithm>

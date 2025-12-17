@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Constants.hpp"
+#include "DiffusionOptions.hpp"
 #include "ECS.h"
 #include "ViewManager.hpp"
 #include "FilePaths.hpp"

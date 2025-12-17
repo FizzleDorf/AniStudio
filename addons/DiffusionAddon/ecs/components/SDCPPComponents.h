@@ -9,7 +9,6 @@
 // Models
 #include "ModelComponents.hpp"
 #include "VideoModelComponents.hpp"
-#include "PhotoMakerComponent.hpp"
 #include "SLGComponent.hpp"
 
 // Latents

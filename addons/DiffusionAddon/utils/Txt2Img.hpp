@@ -5,7 +5,7 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
-#include "FilePaths.hpp"  // Added include for new FilePaths
+#include "FilePaths.hpp"
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -38,10 +38,26 @@ namespace Utils
 				FilePaths& filePaths = FilePaths::GetInstance();
 
 				// Extract parameters from metadata - use local strings for proper lifetime
-				std::string outputPath = filePaths.GetPath("DefaultProject");  // Updated to use new API
+				std::string outputPath = filePaths.GetPath("DefaultProject");
 				std::string outputFilename = "txt2img_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
+
+				// Store LoRA model paths and strengths
+				std::vector<std::string> loraModelPaths;
+				std::vector<float> loraStrengths;
+				std::vector<float> loraClipStrengths;
+
+				// ControlNet parameters
+				std::string controlNetPath = "";
+				float controlStrength = 0.0f;
+
+				// PhotoMaker parameters
+				std::string photoMakerPath = "";
+				sd_pm_params_t pm_params = { nullptr, 0, nullptr, 0.0f };
+
+				// VAE tiling parameters
+				sd_tiling_params_t vae_tiling_params = { false, 64, 64, 0.0f, 64.0f, 64.0f };
 
 				// Debug logging for metadata
 				std::cout << "Txt2Img metadata:" << std::endl;
@@ -105,14 +121,17 @@ namespace Utils
 								gen_params.sample_params.sample_steps = samplerData["steps"].get<int>();
 							if (samplerData.contains("eta") && !samplerData["eta"].is_null())
 								gen_params.sample_params.eta = samplerData["eta"].get<float>();
-							if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
-								gen_params.strength = samplerData["denoise"].get<float>();
+
+							// For txt2img, strength should be 1.0 (full denoising)
+							gen_params.strength = 1.0f;
 
 							// Extract method selections
 							if (samplerData.contains("current_sample_method") && !samplerData["current_sample_method"].is_null())
 								gen_params.sample_params.sample_method = static_cast<sample_method_t>(samplerData["current_sample_method"].get<int>());
 							if (samplerData.contains("current_scheduler_method") && !samplerData["current_scheduler_method"].is_null())
 								gen_params.sample_params.scheduler = static_cast<scheduler_t>(samplerData["current_scheduler_method"].get<int>());
+							if (samplerData.contains("shifted_timestep") && !samplerData["shifted_timestep"].is_null())
+								gen_params.sample_params.shifted_timestep = samplerData["shifted_timestep"].get<int>();
 						}
 
 						// Guidance component - map to sample_params.guidance
@@ -120,6 +139,7 @@ namespace Utils
 						{
 							nlohmann::json guidanceData = comp["Guidance"];
 
+							// Note: The C++ API uses txt_cfg and img_cfg, not a single "cfg" parameter
 							if (guidanceData.contains("txt_cfg") && !guidanceData["txt_cfg"].is_null())
 								gen_params.sample_params.guidance.txt_cfg = guidanceData["txt_cfg"].get<float>();
 							if (guidanceData.contains("img_cfg") && !guidanceData["img_cfg"].is_null())
@@ -169,6 +189,115 @@ namespace Utils
 							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
 								gen_params.height = latentData["latentHeight"].get<int>();
 						}
+
+						// Lora component
+						if (comp.contains("Lora"))
+						{
+							nlohmann::json loraData = comp["Lora"];
+
+							std::string loraModelPath = "";
+							float loraStrength = 1.0f;
+							float loraClipStrength = 1.0f;
+
+							if (loraData.contains("modelPath") && !loraData["modelPath"].is_null() &&
+								!loraData["modelPath"].get<std::string>().empty())
+							{
+								loraModelPath = loraData["modelPath"].get<std::string>();
+								// Check if file exists
+								if (std::filesystem::exists(loraModelPath))
+								{
+									loraModelPaths.push_back(loraModelPath);
+									std::cout << "Found LoRA model: " << loraModelPath << std::endl;
+								}
+								else
+								{
+									std::cout << "Warning: LoRA model file not found: " << loraModelPath << std::endl;
+								}
+							}
+
+							if (loraData.contains("loraStrength") && !loraData["loraStrength"].is_null())
+							{
+								loraStrength = loraData["loraStrength"].get<float>();
+								loraStrengths.push_back(loraStrength);
+							}
+
+							if (loraData.contains("loraClipStrength") && !loraData["loraClipStrength"].is_null())
+							{
+								loraClipStrength = loraData["loraClipStrength"].get<float>();
+								loraClipStrengths.push_back(loraClipStrength);
+							}
+
+							// If strengths arrays don't match model paths, fill with defaults
+							if (loraModelPaths.size() > loraStrengths.size())
+							{
+								for (size_t i = loraStrengths.size(); i < loraModelPaths.size(); i++)
+								{
+									loraStrengths.push_back(1.0f);
+								}
+							}
+							if (loraModelPaths.size() > loraClipStrengths.size())
+							{
+								for (size_t i = loraClipStrengths.size(); i < loraModelPaths.size(); i++)
+								{
+									loraClipStrengths.push_back(1.0f);
+								}
+							}
+						}
+
+						// ControlNet component
+						if (comp.contains("Controlnet"))
+						{
+							nlohmann::json controlNetData = comp["Controlnet"];
+
+							if (controlNetData.contains("modelPath") && !controlNetData["modelPath"].is_null() &&
+								!controlNetData["modelPath"].get<std::string>().empty())
+							{
+								controlNetPath = controlNetData["modelPath"].get<std::string>();
+								std::cout << "Found ControlNet model: " << controlNetPath << std::endl;
+							}
+
+							if (controlNetData.contains("cnStrength") && !controlNetData["cnStrength"].is_null())
+							{
+								controlStrength = controlNetData["cnStrength"].get<float>();
+							}
+						}
+
+						// VAE component - for tiling parameters
+						if (comp.contains("Vae"))
+						{
+							nlohmann::json vaeData = comp["Vae"];
+
+							if (vaeData.contains("isTiled") && !vaeData["isTiled"].is_null())
+							{
+								vae_tiling_params.enabled = vaeData["isTiled"].get<bool>();
+							}
+							if (vaeData.contains("tile_size_x") && !vaeData["tile_size_x"].is_null())
+							{
+								vae_tiling_params.tile_size_x = vaeData["tile_size_x"].get<int>();
+							}
+							if (vaeData.contains("tile_size_y") && !vaeData["tile_size_y"].is_null())
+							{
+								vae_tiling_params.tile_size_y = vaeData["tile_size_y"].get<int>();
+							}
+						}
+
+						// PhotoMaker component
+						if (comp.contains("PhotoMaker"))
+						{
+							nlohmann::json pmData = comp["PhotoMaker"];
+
+							if (pmData.contains("modelPath") && !pmData["modelPath"].is_null() &&
+								!pmData["modelPath"].get<std::string>().empty())
+							{
+								photoMakerPath = pmData["modelPath"].get<std::string>();
+								std::cout << "Found PhotoMaker model: " << photoMakerPath << std::endl;
+								pm_params.id_embed_path = photoMakerPath.c_str();
+							}
+							if (pmData.contains("style_strength") && !pmData["style_strength"].is_null())
+							{
+								pm_params.style_strength = pmData["style_strength"].get<float>();
+							}
+						}
 					}
 				}
 
@@ -176,12 +305,22 @@ namespace Utils
 				gen_params.prompt = posPrompt.c_str();
 				gen_params.negative_prompt = negPrompt.c_str();
 
+				// Set VAE tiling parameters
+				gen_params.vae_tiling_params = vae_tiling_params;
+
+				// Set PhotoMaker parameters if available
+				if (!photoMakerPath.empty())
+				{
+					gen_params.pm_params = pm_params;
+				}
+
 				// Initialize empty image structs for txt2img (no input images needed)
 				gen_params.init_image = { 0, 0, 0, nullptr };
 				gen_params.mask_image = { 0, 0, 0, nullptr };
 				gen_params.control_image = { 0, 0, 0, nullptr };
 				gen_params.ref_images = nullptr;
 				gen_params.ref_images_count = 0;
+				gen_params.auto_resize_ref_image = false;
 				gen_params.increase_ref_index = false;
 
 				// Create output path

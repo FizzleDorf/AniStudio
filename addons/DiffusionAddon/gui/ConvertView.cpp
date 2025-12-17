@@ -1,6 +1,6 @@
 #include "ConvertView.hpp"
 #include "Events.hpp"
-#include "Constants.hpp"
+#include "DiffusionOptions.hpp"
 #include "DiffusionCallbackUtils.hpp"
 #include <iostream>
 #include <iomanip>

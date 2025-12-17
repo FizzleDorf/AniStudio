@@ -1,6 +1,6 @@
 #include "UpscaleView.hpp"
 #include "Events.hpp"
-#include "Constants.hpp"
+#include "DiffusionOptions.hpp"
 #include "UISchema.hpp"
 #include "ContextMenuUtils.hpp"
 #include "SDcppSystem.hpp"

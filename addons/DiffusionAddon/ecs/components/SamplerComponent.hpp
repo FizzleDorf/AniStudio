@@ -2,7 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include "stable-diffusion.h"
-#include "Constants.hpp"
+#include "DiffusionOptions.hpp"
 #include <string>
 
 namespace ECS {
@@ -17,8 +17,12 @@ namespace ECS {
 				{"type", "object"},
 				{"propertyOrder", {
 					"current_sample_method", "current_scheduler_method", "current_type_method",
+					"current_rng_type", "current_prediction_type",
 					"seed", "cfg", "steps", "eta", "denoise", "n_threads", "free_params_immediately",
-					"offload_params_to_cpu", "keep_clip_on_cpu", "diffusion_flash_attn", "diffusion_conv_direct", "vae_conv_direct"
+					"offload_params_to_cpu", "keep_clip_on_cpu", "keep_control_net_on_cpu", "keep_vae_on_cpu",
+					"diffusion_flash_attn", "diffusion_conv_direct", "vae_conv_direct",
+					"force_sdxl_vae_conv_scale", "chroma_use_dit_mask", "chroma_use_t5_mask",
+					"chroma_t5_mask_pad", "flow_shift", "shifted_timestep"
 				}},
 				{"properties", {
 					{"current_sample_method", {
@@ -44,6 +48,22 @@ namespace ECS {
 						{"ui:widget", "combo"},
 						{"items", type_method_items},
 						{"itemCount", type_method_item_count}
+					}},
+					{"current_rng_type", {
+						{"type", "integer"},
+						{"title", "RNG Type"},
+						{"description", "Random number generator type. STD_DEFAULT_RNG for CPU, CUDA_RNG for GPU-accelerated random number generation."},
+						{"ui:widget", "combo"},
+						{"items", type_rng_items},
+						{"itemCount", type_rng_item_count}
+					}},
+					{"current_prediction_type", {
+						{"type", "integer"},
+						{"title", "Prediction Type"},
+						{"description", "Noise prediction type. EPS_PRED for epsilon prediction (SD 1.5), V_PRED for v-prediction (SDXL), FLUX_FLOW_PRED for FLUX models."},
+						{"ui:widget", "combo"},
+						{"items", prediction_type_items},
+						{"itemCount", prediction_type_item_count}
 					}},
 					{"seed", {
 						{"type", "integer"},
@@ -130,6 +150,18 @@ namespace ECS {
 						{"description", "Keep text encoder on CPU instead of GPU. Saves VRAM but may slow down text processing."},
 						{"ui:widget", "checkbox"}
 					}},
+					{"keep_control_net_on_cpu", {
+						{"type", "boolean"},
+						{"title", "ControlNet on CPU"},
+						{"description", "Keep ControlNet models on CPU. Saves significant VRAM when using ControlNet but reduces performance."},
+						{"ui:widget", "checkbox"}
+					}},
+					{"keep_vae_on_cpu", {
+						{"type", "boolean"},
+						{"title", "VAE on CPU"},
+						{"description", "Keep VAE on CPU instead of GPU to save VRAM but significantly reduce performance."},
+						{"ui:widget", "checkbox"}
+					}},
 					{"diffusion_flash_attn", {
 						{"type", "boolean"},
 						{"title", "Flash Attention"},
@@ -147,6 +179,59 @@ namespace ECS {
 						{"title", "Direct VAE Conv"},
 						{"description", "Use direct CPU convolutions for VAE. Forces all VAE operations to CPU."},
 						{"ui:widget", "checkbox"}
+					}},
+					{"force_sdxl_vae_conv_scale", {
+						{"type", "boolean"},
+						{"title", "Force SDXL VAE Scale"},
+						{"description", "Force SDXL VAE to use scaling in convolutions. May improve quality for SDXL models."},
+						{"ui:widget", "checkbox"}
+					}},
+					{"chroma_use_dit_mask", {
+						{"type", "boolean"},
+						{"title", "Use DIT Mask"},
+						{"description", "Use DIT mask for chroma upsampling in video generation."},
+						{"ui:widget", "checkbox"}
+					}},
+					{"chroma_use_t5_mask", {
+						{"type", "boolean"},
+						{"title", "Use T5 Mask"},
+						{"description", "Use T5 mask for chroma upsampling in video generation."},
+						{"ui:widget", "checkbox"}
+					}},
+					{"chroma_t5_mask_pad", {
+						{"type", "integer"},
+						{"title", "T5 Mask Padding"},
+						{"description", "Padding size for T5 mask in chroma upsampling."},
+						{"ui:widget", "input_int"},
+						{"ui:options", {
+							{"step", 1},
+							{"step_fast", 4},
+							{"min", 0},
+							{"max", 64}
+						}}
+					}},
+					{"flow_shift", {
+						{"type", "number"},
+						{"title", "Flow Shift"},
+						{"description", "Flow shift parameter for FLUX model prediction type."},
+						{"ui:widget", "input_float"},
+						{"ui:options", {
+							{"step", 0.1f},
+							{"step_fast", 0.5f},
+							{"format", "%.2f"}
+						}}
+					}},
+					{"shifted_timestep", {
+						{"type", "integer"},
+						{"title", "Shifted Timestep"},
+						{"description", "Shifted timestep parameter for video generation or advanced sampling."},
+						{"ui:widget", "input_int"},
+						{"ui:options", {
+							{"step", 1},
+							{"step_fast", 10},
+							{"min", 0},
+							{"max", 1000}
+						}}
 					}}
 				}}
 			};
@@ -161,17 +246,27 @@ namespace ECS {
 		int n_threads = 4;
 		bool free_params_immediately = true;
 
-		// System-wide control flags
+		// System-wide control flags (from sd_ctx_params_t)
 		bool offload_params_to_cpu = false;
 		bool keep_clip_on_cpu = false;
+		bool keep_control_net_on_cpu = false;
+		bool keep_vae_on_cpu = false;
 		bool diffusion_flash_attn = false;
 		bool diffusion_conv_direct = false;
 		bool vae_conv_direct = false;
+		bool force_sdxl_vae_conv_scale = false;
+		bool chroma_use_dit_mask = false;
+		bool chroma_use_t5_mask = false;
+		int chroma_t5_mask_pad = 0;
+		float flow_shift = 0.0f;
+		int shifted_timestep = 0;
 
 		// Method selections
 		sample_method_t current_sample_method = EULER;
 		scheduler_t current_scheduler_method = DEFAULT;
 		sd_type_t current_type_method = SD_TYPE_F16;
+		rng_type_t current_rng_type = STD_DEFAULT_RNG;
+		prediction_t current_prediction_type = EPS_PRED;
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
@@ -184,13 +279,23 @@ namespace ECS {
 			properties["free_params_immediately"] = &free_params_immediately;
 			properties["offload_params_to_cpu"] = &offload_params_to_cpu;
 			properties["keep_clip_on_cpu"] = &keep_clip_on_cpu;
+			properties["keep_control_net_on_cpu"] = &keep_control_net_on_cpu;
+			properties["keep_vae_on_cpu"] = &keep_vae_on_cpu;
 			properties["diffusion_flash_attn"] = &diffusion_flash_attn;
 			properties["diffusion_conv_direct"] = &diffusion_conv_direct;
 			properties["vae_conv_direct"] = &vae_conv_direct;
+			properties["force_sdxl_vae_conv_scale"] = &force_sdxl_vae_conv_scale;
+			properties["chroma_use_dit_mask"] = &chroma_use_dit_mask;
+			properties["chroma_use_t5_mask"] = &chroma_use_t5_mask;
+			properties["chroma_t5_mask_pad"] = &chroma_t5_mask_pad;
+			properties["flow_shift"] = &flow_shift;
+			properties["shifted_timestep"] = &shifted_timestep;
 
 			properties["current_sample_method"] = reinterpret_cast<int*>(&current_sample_method);
 			properties["current_scheduler_method"] = reinterpret_cast<int*>(&current_scheduler_method);
 			properties["current_type_method"] = reinterpret_cast<int*>(&current_type_method);
+			properties["current_rng_type"] = reinterpret_cast<int*>(&current_rng_type);
+			properties["current_prediction_type"] = reinterpret_cast<int*>(&current_prediction_type);
 
 			return properties;
 		}
@@ -206,12 +311,22 @@ namespace ECS {
 				free_params_immediately = other.free_params_immediately;
 				offload_params_to_cpu = other.offload_params_to_cpu;
 				keep_clip_on_cpu = other.keep_clip_on_cpu;
+				keep_control_net_on_cpu = other.keep_control_net_on_cpu;
+				keep_vae_on_cpu = other.keep_vae_on_cpu;
 				diffusion_flash_attn = other.diffusion_flash_attn;
 				diffusion_conv_direct = other.diffusion_conv_direct;
 				vae_conv_direct = other.vae_conv_direct;
+				force_sdxl_vae_conv_scale = other.force_sdxl_vae_conv_scale;
+				chroma_use_dit_mask = other.chroma_use_dit_mask;
+				chroma_use_t5_mask = other.chroma_use_t5_mask;
+				chroma_t5_mask_pad = other.chroma_t5_mask_pad;
+				flow_shift = other.flow_shift;
+				shifted_timestep = other.shifted_timestep;
 				current_sample_method = other.current_sample_method;
 				current_scheduler_method = other.current_scheduler_method;
 				current_type_method = other.current_type_method;
+				current_rng_type = other.current_rng_type;
+				current_prediction_type = other.current_prediction_type;
 			}
 			return *this;
 		}
@@ -227,12 +342,22 @@ namespace ECS {
 				{"free_params_immediately", free_params_immediately},
 				{"offload_params_to_cpu", offload_params_to_cpu},
 				{"keep_clip_on_cpu", keep_clip_on_cpu},
+				{"keep_control_net_on_cpu", keep_control_net_on_cpu},
+				{"keep_vae_on_cpu", keep_vae_on_cpu},
 				{"diffusion_flash_attn", diffusion_flash_attn},
 				{"diffusion_conv_direct", diffusion_conv_direct},
 				{"vae_conv_direct", vae_conv_direct},
+				{"force_sdxl_vae_conv_scale", force_sdxl_vae_conv_scale},
+				{"chroma_use_dit_mask", chroma_use_dit_mask},
+				{"chroma_use_t5_mask", chroma_use_t5_mask},
+				{"chroma_t5_mask_pad", chroma_t5_mask_pad},
+				{"flow_shift", flow_shift},
+				{"shifted_timestep", shifted_timestep},
 				{"current_sample_method", static_cast<int>(current_sample_method)},
 				{"current_scheduler_method", static_cast<int>(current_scheduler_method)},
-				{"current_type_method", static_cast<int>(current_type_method)}
+				{"current_type_method", static_cast<int>(current_type_method)},
+				{"current_rng_type", static_cast<int>(current_rng_type)},
+				{"current_prediction_type", static_cast<int>(current_prediction_type)}
 			}} };
 		}
 
@@ -273,18 +398,38 @@ namespace ECS {
 				offload_params_to_cpu = componentData["offload_params_to_cpu"].get<bool>();
 			if (componentData.contains("keep_clip_on_cpu"))
 				keep_clip_on_cpu = componentData["keep_clip_on_cpu"].get<bool>();
+			if (componentData.contains("keep_control_net_on_cpu"))
+				keep_control_net_on_cpu = componentData["keep_control_net_on_cpu"].get<bool>();
+			if (componentData.contains("keep_vae_on_cpu"))
+				keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
 			if (componentData.contains("diffusion_flash_attn"))
 				diffusion_flash_attn = componentData["diffusion_flash_attn"].get<bool>();
 			if (componentData.contains("diffusion_conv_direct"))
 				diffusion_conv_direct = componentData["diffusion_conv_direct"].get<bool>();
 			if (componentData.contains("vae_conv_direct"))
 				vae_conv_direct = componentData["vae_conv_direct"].get<bool>();
+			if (componentData.contains("force_sdxl_vae_conv_scale"))
+				force_sdxl_vae_conv_scale = componentData["force_sdxl_vae_conv_scale"].get<bool>();
+			if (componentData.contains("chroma_use_dit_mask"))
+				chroma_use_dit_mask = componentData["chroma_use_dit_mask"].get<bool>();
+			if (componentData.contains("chroma_use_t5_mask"))
+				chroma_use_t5_mask = componentData["chroma_use_t5_mask"].get<bool>();
+			if (componentData.contains("chroma_t5_mask_pad"))
+				chroma_t5_mask_pad = componentData["chroma_t5_mask_pad"];
+			if (componentData.contains("flow_shift"))
+				flow_shift = componentData["flow_shift"];
+			if (componentData.contains("shifted_timestep"))
+				shifted_timestep = componentData["shifted_timestep"];
 			if (componentData.contains("current_sample_method"))
 				current_sample_method = static_cast<sample_method_t>(componentData["current_sample_method"]);
 			if (componentData.contains("current_scheduler_method"))
 				current_scheduler_method = static_cast<scheduler_t>(componentData["current_scheduler_method"]);
 			if (componentData.contains("current_type_method"))
 				current_type_method = static_cast<sd_type_t>(componentData["current_type_method"]);
+			if (componentData.contains("current_rng_type"))
+				current_rng_type = static_cast<rng_type_t>(componentData["current_rng_type"]);
+			if (componentData.contains("current_prediction_type"))
+				current_prediction_type = static_cast<prediction_t>(componentData["current_prediction_type"]);
 		}
 	};
 

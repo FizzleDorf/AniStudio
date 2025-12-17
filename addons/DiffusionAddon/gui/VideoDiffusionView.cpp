@@ -1,7 +1,7 @@
 #include "VideoDiffusionView.hpp"
 #include "DiffusionCallbackUtils.hpp"
 #include "Events.hpp"
-#include "Constants.hpp"
+#include "DiffusionOptions.hpp"
 #include "UISchema.hpp"
 #include "PngMetadataUtils.hpp"
 #include "utils.h"

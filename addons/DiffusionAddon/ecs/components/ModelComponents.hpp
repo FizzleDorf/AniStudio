@@ -371,6 +371,265 @@ namespace ECS {
 		}
 	};
 
+	// Clip Vision Component (for image encoding)
+	struct ClipVisionComponent : public BaseModelComponent {
+		ClipVisionComponent() {
+			compName = "ClipVision";
+
+			schema = {
+				{"title", "CLIP Vision Encoder"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "CLIP Vision"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "CLIP Vision Models"},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for CLIP Vision encoder files (for img2img, etc.)"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			// Update the default path in the schema to current Encoder path
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+		}
+
+		ClipVisionComponent& operator=(const ClipVisionComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	struct Qwen2VLComponent : public BaseModelComponent {
+		Qwen2VLComponent() {
+			compName = "Qwen2VL";
+
+			schema = {
+				{"title", "Qwen2VL Text Encoder"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Qwen2VL"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "Qwen2VL Models"},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for Qwen2VL text encoder files"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+		}
+
+		Qwen2VLComponent& operator=(const Qwen2VLComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	// Qwen2VL Vision Encoder Component
+	struct Qwen2VLVisionComponent : public BaseModelComponent {
+		Qwen2VLVisionComponent() {
+			compName = "Qwen2VLVision";
+
+			schema = {
+				{"title", "Qwen2VL Vision Encoder"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Qwen2VL Vision"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "Qwen2VL Vision Models"},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for Qwen2VL vision encoder files"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+		}
+
+		Qwen2VLVisionComponent& operator=(const Qwen2VLVisionComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	struct HighNoiseDiffusionModelComponent : public BaseModelComponent {
+		HighNoiseDiffusionModelComponent() {
+			compName = "HighNoiseDiffusionModel";
+
+			schema = {
+				{"title", "High Noise UNet/Diffusion Model"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "High Noise UNet"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "High Noise UNet Models"},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Unet")},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for high noise UNet/Diffusion model files (for video generation)"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Unet");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::GetInstance().GetPath("Unet");
+		}
+
+		HighNoiseDiffusionModelComponent& operator=(const HighNoiseDiffusionModelComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	// Photo Maker Component (for identity embedding/face swapping)
+	struct PhotoMakerComponent : public BaseModelComponent {
+		PhotoMakerComponent() {
+			compName = "PhotoMaker";
+
+			schema = {
+				{"title", "Photo Maker"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Photo Maker"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "Photo Maker Models"},
+							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("PhotoMaker")},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for Photo Maker identity embedding/face swapping models"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("PhotoMaker");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePaths::GetInstance().GetPath("PhotoMaker");
+		}
+
+		PhotoMakerComponent& operator=(const PhotoMakerComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
 	// VAE Component
 	struct VaeComponent : public BaseModelComponent {
 		VaeComponent() {

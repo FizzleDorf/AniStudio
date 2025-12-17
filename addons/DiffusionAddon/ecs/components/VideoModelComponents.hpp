@@ -1,102 +1,13 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "ModelComponents.hpp"  // For BaseModelComponent
-#include "stable-diffusion.h"   // For enum types
-#include "Constants.hpp"        // For constant arrays
+#include "ModelComponents.hpp"
+#include "stable-diffusion.h"
+#include "DiffusionOptions.hpp"
 #include "FilePaths.hpp"
 #include <string>
 
 namespace ECS {
-
-	// High Noise Diffusion Model Component for Wan 2.2
-	struct HighNoiseDiffusionModelComponent : public BaseModelComponent {
-		HighNoiseDiffusionModelComponent() {
-			compName = "HighNoiseDiffusionModel";
-			compCategory = "Sampling";
-
-			schema = {
-				{"title", "High Noise Diffusion Model"},
-				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
-				{"properties", {
-					{"modelName", {
-						{"type", "string"},
-						{"title", "High Noise Model"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "file"},
-							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
-							{"filterName", "High Noise Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Unet")},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for Wan 2.2 high noise diffusion model files"}
-						}}
-					}}
-				}}
-			};
-		}
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
-		}
-
-		HighNoiseDiffusionModelComponent& operator=(const HighNoiseDiffusionModelComponent& other) {
-			if (this != &other) {
-				modelPath = other.modelPath;
-				modelName = other.modelName;
-				isModelLoaded = other.isModelLoaded;
-			}
-			return *this;
-		}
-	};
-
-	// CLIP Vision Component for I2V models
-	struct ClipVisionComponent : public BaseModelComponent {
-		ClipVisionComponent() {
-			compName = "ClipVision";
-
-			schema = {
-				{"title", "CLIP Vision Encoder"},
-				{"type", "object"},
-				{"propertyOrder", {"modelName"}},
-				{"properties", {
-					{"modelName", {
-						{"type", "string"},
-						{"title", "CLIP Vision"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "file"},
-							{"filters", ".safetensors,.ckpt,.pt"},
-							{"filterName", "CLIP Vision Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for CLIP Vision encoder files for I2V models"}
-						}}
-					}}
-				}}
-			};
-		}
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelName", &modelName}
-			};
-		}
-
-		ClipVisionComponent& operator=(const ClipVisionComponent& other) {
-			if (this != &other) {
-				modelPath = other.modelPath;
-				modelName = other.modelName;
-				isModelLoaded = other.isModelLoaded;
-			}
-			return *this;
-		}
-	};
 
 	// Video Parameters Component for Wan models
 	struct VideoParamsComponent : public BaseComponent {
