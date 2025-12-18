@@ -199,7 +199,7 @@ namespace ECS {
 		}
 
 		void QueueTask(const EntityID entityID, const TaskType taskType) {
-			// FIX: Add comprehensive validation
+
 			std::cout << "[QueueTask] Starting for entity: " << entityID << std::endl;
 
 			// Validate entity exists and is valid
@@ -225,27 +225,6 @@ namespace ECS {
 
 				std::cout << "Processing entity: " << entityID << std::endl;
 				std::cout << "Task type: " << static_cast<int>(taskType) << std::endl;
-
-				// DEBUG: Check if entity is valid and get component info
-				std::cout << "DEBUG: Is entity " << entityID << " valid? " << mgr.IsEntityValid(entityID) << std::endl;
-
-				// DEBUG: Get actual component pointers for entity
-				auto componentTypes = mgr.GetEntityComponents(entityID);
-				std::cout << "DEBUG: Entity " << entityID << " has " << componentTypes.size() << " raw components:" << std::endl;
-				for (const auto& compId : componentTypes) {
-					std::string compName = mgr.GetComponentNameById(compId);
-					BaseComponent* comp = mgr.GetComponentById(entityID, compId);
-					std::cout << "  - " << compName << " (ID: " << compId << ") - ptr: " << comp;
-					if (comp) {
-						std::cout << " - VALID";
-					}
-					else {
-						std::cout << " - NULL";
-					}
-					std::cout << std::endl;
-				}
-
-				std::cout << "DEBUG: About to call SerializeEntity on entity " << entityID << std::endl;
 
 				TaskData taskData;
 				taskData.entityID = entityID;

@@ -464,11 +464,212 @@ namespace ECS {
 		}
 	};
 
-	// TODO: these are just placeholders until the node execution is implemented
+	struct ControlNetImageComponent : public InputImageComponent {
+		std::string controlType = "canny";  // Type of control: canny, depth, normal, etc.
+		float strength = 1.0f;
+		float startStep = 0.0f;
+		float endStep = 1.0f;
 
-	struct ControlNetImageComponent : public ImageComponent {
-		ControlNetImageComponent() {
-			compName = "ControlNetImageComponent";
+		ControlNetImageComponent() : InputImageComponent() {
+			compName = "ControlNetImage";
+			compCategory = "Image";
+			setupControlNetSchema();
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			auto properties = InputImageComponent::GetPropertyMap();
+			properties["controlType"] = &controlType;
+			properties["strength"] = &strength;
+			properties["startStep"] = &startStep;
+			properties["endStep"] = &endStep;
+			return properties;
+		}
+
+		// Serialize the component to JSON
+		virtual nlohmann::json Serialize() const override {
+			auto j = InputImageComponent::Serialize();
+			j[compName]["controlType"] = controlType;
+			j[compName]["strength"] = strength;
+			j[compName]["startStep"] = startStep;
+			j[compName]["endStep"] = endStep;
+			return j;
+		}
+
+		// Deserialize the component from JSON
+		virtual void Deserialize(const nlohmann::json& j) override {
+			InputImageComponent::Deserialize(j);
+
+			nlohmann::json componentData;
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+
+			if (componentData.contains("controlType"))
+				controlType = componentData["controlType"];
+			if (componentData.contains("strength"))
+				strength = componentData["strength"];
+			if (componentData.contains("startStep"))
+				startStep = componentData["startStep"];
+			if (componentData.contains("endStep"))
+				endStep = componentData["endStep"];
+		}
+
+	private:
+		void setupControlNetSchema() {
+			schema = {
+				{"title", "ControlNet Image"},
+				{"type", "object"},
+				{"properties", {
+					{"filePath", {
+						{"type", "string"},
+						{"title", "Control Image"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+							{"filterName", "ControlNet Images"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for control images (edge maps, depth maps, etc.)"}
+						}}
+					}},
+					{"controlType", {
+						{"type", "string"},
+						{"title", "Control Type"},
+						{"ui:widget", "combo"},
+						{"items", {
+							{{"label", "Canny Edge"}},
+							{{"label", "Depth Map"}},
+							{{"label", "Normal Map"}},
+							{{"label", "Scribble"}},
+							{{"label", "Segmentation"}},
+							{{"label", "OpenPose"}}
+						}}
+					}},
+					{"strength", {
+						{"type", "number"},
+						{"title", "Strength"},
+						{"description", "How strongly the ControlNet influences generation"},
+						{"ui:widget", "slider_float"},
+						{"minimum", 0.0},
+						{"maximum", 2.0},
+						{"ui:options", {
+							{"step", 0.05},
+							{"format", "%.2f"}
+						}}
+					}},
+					{"startStep", {
+						{"type", "number"},
+						{"title", "Start Step"},
+						{"description", "When to start applying ControlNet (0.0 = beginning)"},
+						{"ui:widget", "slider_float"},
+						{"minimum", 0.0},
+						{"maximum", 1.0},
+						{"ui:options", {
+							{"step", 0.05},
+							{"format", "%.2f"}
+						}}
+					}},
+					{"endStep", {
+						{"type", "number"},
+						{"title", "End Step"},
+						{"description", "When to stop applying ControlNet (1.0 = end)"},
+						{"ui:widget", "slider_float"},
+						{"minimum", 0.0},
+						{"maximum", 1.0},
+						{"ui:options", {
+							{"step", 0.05},
+							{"format", "%.2f"}
+						}}
+					}}
+				}},
+				{"propertyOrder", {"filePath", "controlType", "strength", "startStep", "endStep"}}
+			};
+		}
+	};
+
+	struct PhotoMakerImageComponent : public InputImageComponent {
+		float styleStrength = 1.0f;
+		bool isPrimaryID = true;  // Whether this is the primary ID image
+
+		PhotoMakerImageComponent() : InputImageComponent() {
+			compName = "PhotoMakerImage";
+			compCategory = "Image";
+			setupPhotoMakerSchema();
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			auto properties = InputImageComponent::GetPropertyMap();
+			properties["styleStrength"] = &styleStrength;
+			properties["isPrimaryID"] = &isPrimaryID;
+			return properties;
+		}
+
+		// Serialize the component to JSON
+		virtual nlohmann::json Serialize() const override {
+			auto j = InputImageComponent::Serialize();
+			j[compName]["styleStrength"] = styleStrength;
+			j[compName]["isPrimaryID"] = isPrimaryID;
+			return j;
+		}
+
+		// Deserialize the component from JSON
+		virtual void Deserialize(const nlohmann::json& j) override {
+			InputImageComponent::Deserialize(j);
+
+			nlohmann::json componentData;
+			if (j.contains(compName)) {
+				componentData = j.at(compName);
+			}
+
+			if (componentData.contains("styleStrength"))
+				styleStrength = componentData["styleStrength"];
+			if (componentData.contains("isPrimaryID"))
+				isPrimaryID = componentData["isPrimaryID"];
+		}
+
+	private:
+		void setupPhotoMakerSchema() {
+			schema = {
+				{"title", "PhotoMaker ID Image"},
+				{"type", "object"},
+				{"properties", {
+					{"filePath", {
+						{"type", "string"},
+						{"title", "ID Image"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+							{"filterName", "ID Images"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for identity reference images for PhotoMaker"}
+						}}
+					}},
+					{"styleStrength", {
+						{"type", "number"},
+						{"title", "Style Strength"},
+						{"description", "How strongly the style from this image influences generation"},
+						{"ui:widget", "slider_float"},
+						{"minimum", 0.0},
+						{"maximum", 2.0},
+						{"ui:options", {
+							{"step", 0.05},
+							{"format", "%.2f"}
+						}}
+					}},
+					{"isPrimaryID", {
+						{"type", "boolean"},
+						{"title", "Primary ID"},
+						{"description", "Whether this is the primary identity reference image"},
+						{"ui:widget", "checkbox"}
+					}}
+				}},
+				{"propertyOrder", {"filePath", "styleStrength", "isPrimaryID"}}
+			};
 		}
 	};
 

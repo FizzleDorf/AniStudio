@@ -49,14 +49,6 @@ namespace ECS {
 						{"items", type_method_items},
 						{"itemCount", type_method_item_count}
 					}},
-					{"current_rng_type", {
-						{"type", "integer"},
-						{"title", "RNG Type"},
-						{"description", "Random number generator type. STD_DEFAULT_RNG for CPU, CUDA_RNG for GPU-accelerated random number generation."},
-						{"ui:widget", "combo"},
-						{"items", type_rng_items},
-						{"itemCount", type_rng_item_count}
-					}},
 					{"current_prediction_type", {
 						{"type", "integer"},
 						{"title", "Prediction Type"},
@@ -265,7 +257,6 @@ namespace ECS {
 		sample_method_t current_sample_method = EULER;
 		scheduler_t current_scheduler_method = DEFAULT;
 		sd_type_t current_type_method = SD_TYPE_F16;
-		rng_type_t current_rng_type = STD_DEFAULT_RNG;
 		prediction_t current_prediction_type = EPS_PRED;
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -294,7 +285,6 @@ namespace ECS {
 			properties["current_sample_method"] = reinterpret_cast<int*>(&current_sample_method);
 			properties["current_scheduler_method"] = reinterpret_cast<int*>(&current_scheduler_method);
 			properties["current_type_method"] = reinterpret_cast<int*>(&current_type_method);
-			properties["current_rng_type"] = reinterpret_cast<int*>(&current_rng_type);
 			properties["current_prediction_type"] = reinterpret_cast<int*>(&current_prediction_type);
 
 			return properties;
@@ -325,7 +315,6 @@ namespace ECS {
 				current_sample_method = other.current_sample_method;
 				current_scheduler_method = other.current_scheduler_method;
 				current_type_method = other.current_type_method;
-				current_rng_type = other.current_rng_type;
 				current_prediction_type = other.current_prediction_type;
 			}
 			return *this;
@@ -356,7 +345,6 @@ namespace ECS {
 				{"current_sample_method", static_cast<int>(current_sample_method)},
 				{"current_scheduler_method", static_cast<int>(current_scheduler_method)},
 				{"current_type_method", static_cast<int>(current_type_method)},
-				{"current_rng_type", static_cast<int>(current_rng_type)},
 				{"current_prediction_type", static_cast<int>(current_prediction_type)}
 			}} };
 		}
@@ -426,8 +414,6 @@ namespace ECS {
 				current_scheduler_method = static_cast<scheduler_t>(componentData["current_scheduler_method"]);
 			if (componentData.contains("current_type_method"))
 				current_type_method = static_cast<sd_type_t>(componentData["current_type_method"]);
-			if (componentData.contains("current_rng_type"))
-				current_rng_type = static_cast<rng_type_t>(componentData["current_rng_type"]);
 			if (componentData.contains("current_prediction_type"))
 				current_prediction_type = static_cast<prediction_t>(componentData["current_prediction_type"]);
 		}

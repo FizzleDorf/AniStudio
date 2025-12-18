@@ -6,17 +6,19 @@
 
 namespace Utils {
 
-	// SD context initialization - FIXED to match your stable-diffusion.h API
+	// SD context initialization
 	inline sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata)
 	{
 		try
 		{
-			// Use local strings to ensure proper lifetime - these will be copied into the params
+			// Use local strings to ensure proper lifetime
 			std::string modelPath = "";
 			std::string clipLPath = "";
 			std::string clipGPath = "";
 			std::string clipVisionPath = "";
 			std::string t5xxlPath = "";
+			std::string qwen2vlPath = "";
+			std::string qwen2vlVisionPath = "";
 			std::string diffusionModelPath = "";
 			std::string highNoiseModelPath = "";
 			std::string vaePath = "";
@@ -24,7 +26,7 @@ namespace Utils {
 			std::string controlnetPath = "";
 			std::string loraPath = "";
 			std::string embedPath = "";
-			std::string photoMakerPath = "";  // FIXED: Use photo_maker_path instead of stacked_id_embed_dir
+			std::string photoMakerPath = "";
 
 			// Get FilePaths instance for directory lookups
 			FilePaths& filePaths = FilePaths::GetInstance();
@@ -88,6 +90,26 @@ namespace Utils {
 							t5xxlPath = std::string(filePaths.GetPath("Encoder")) + "/" + t5xxl["modelName"].get<std::string>();
 					}
 
+					// Qwen2VL text encoder component
+					if (comp.contains("Qwen2VL"))
+					{
+						auto qwen2vl = comp["Qwen2VL"];
+						if (qwen2vl.contains("modelPath") && !qwen2vl["modelPath"].get<std::string>().empty())
+							qwen2vlPath = qwen2vl["modelPath"].get<std::string>();
+						else if (qwen2vl.contains("modelName") && !qwen2vl["modelName"].get<std::string>().empty())
+							qwen2vlPath = std::string(filePaths.GetPath("Encoder")) + "/" + qwen2vl["modelName"].get<std::string>();
+					}
+
+					// Qwen2VL vision encoder component
+					if (comp.contains("Qwen2VLVision"))
+					{
+						auto qwen2vlVision = comp["Qwen2VLVision"];
+						if (qwen2vlVision.contains("modelPath") && !qwen2vlVision["modelPath"].get<std::string>().empty())
+							qwen2vlVisionPath = qwen2vlVision["modelPath"].get<std::string>();
+						else if (qwen2vlVision.contains("modelName") && !qwen2vlVision["modelName"].get<std::string>().empty())
+							qwen2vlVisionPath = std::string(filePaths.GetPath("Encoder")) + "/" + qwen2vlVision["modelName"].get<std::string>();
+					}
+
 					// DiffusionModel component
 					if (comp.contains("DiffusionModel"))
 					{
@@ -108,7 +130,7 @@ namespace Utils {
 							highNoiseModelPath = std::string(filePaths.GetPath("Unet")) + "/" + highNoise["modelName"].get<std::string>();
 					}
 
-					// Vae component - FIXED: Removed vae_tiling (not in your API)
+					// Vae component
 					if (comp.contains("Vae"))
 					{
 						auto vae = comp["Vae"];
@@ -118,8 +140,8 @@ namespace Utils {
 							vaePath = std::string(filePaths.GetPath("Vae")) + "/" + vae["modelName"].get<std::string>();
 						if (vae.contains("vae_decode_only"))
 							ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
-						// REMOVED: vae_tiling - not in your sd_ctx_params_t
-						// REMOVED: keep_vae_on_cpu - not in your sd_ctx_params_t
+						if (vae.contains("keep_vae_on_cpu"))
+							ctx_params.keep_vae_on_cpu = vae["keep_vae_on_cpu"].get<bool>();
 					}
 
 					// Taesd component
@@ -146,34 +168,31 @@ namespace Utils {
 					}
 
 					// Lora component
-					//if (comp.contains("Lora"))
-					//{
-					//	auto lora = comp["Lora"];
-					//	if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty())
-					//	{
-					//		loraPath = lora["modelPath"].get<std::string>();
-					//	}
-					//	else if (lora.contains("modelName") && !lora["modelName"].get<std::string>().empty())
-					//	{
-					//		std::string modelName = lora["modelName"].get<std::string>();
-					//		loraPath = std::string(filePaths.GetPath("Lora")) + "/" + modelName;
+					if (comp.contains("Lora"))
+					{
+						auto lora = comp["Lora"];
+						if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty())
+						{
+							loraPath = lora["modelPath"].get<std::string>();
 
-					//		// Validation
-					//		if (!std::filesystem::exists(loraPath)) {
-					//			std::cout << "LoRA file not found: " << loraPath << ", skipping LoRA." << std::endl;
-					//			loraPath = "";
-					//		}
-					//	}
-					//}
+							if (loraPath.empty()) {
+								loraPath = filePaths.GetPath("Lora");
+							}
+						}
+					}
 
 					// Embedding component
 					if (comp.contains("Embedding"))
 					{
 						auto embed = comp["Embedding"];
 						if (embed.contains("modelPath") && !embed["modelPath"].get<std::string>().empty())
+						{
 							embedPath = embed["modelPath"].get<std::string>();
-						else if (embed.contains("modelName") && !embed["modelName"].get<std::string>().empty())
-							embedPath = std::string(filePaths.GetPath("Embed")) + "/" + embed["modelName"].get<std::string>();
+
+							if (embedPath.empty()) {
+								embedPath = filePaths.GetPath("Embed");
+							}
+						}
 					}
 
 					// Use PhotoMaker component to set photo_maker_path (this is what exists in your API)
@@ -244,46 +263,21 @@ namespace Utils {
 			ctx_params.clip_g_path = clipGPath.c_str();
 			ctx_params.clip_vision_path = clipVisionPath.c_str();
 			ctx_params.t5xxl_path = t5xxlPath.c_str();
+			ctx_params.qwen2vl_path = qwen2vlPath.c_str();
+			ctx_params.qwen2vl_vision_path = qwen2vlVisionPath.c_str();
 			ctx_params.diffusion_model_path = diffusionModelPath.c_str();
 			ctx_params.high_noise_diffusion_model_path = highNoiseModelPath.c_str();
 			ctx_params.vae_path = vaePath.c_str();
 			ctx_params.taesd_path = taesdPath.c_str();
 			ctx_params.control_net_path = controlnetPath.c_str();
-
-			// Get LoRA directory
-			std::string loraDir = filePaths.GetPath("Lora");
-			std::cout << "LoRA directory: " << loraDir << std::endl;
-			std::cout << "LoRA directory exists: " << std::filesystem::exists(loraDir) << std::endl;
-			ctx_params.lora_model_dir = loraDir.c_str();
-
+			ctx_params.lora_model_dir = loraPath.c_str();
 			ctx_params.embedding_dir = embedPath.c_str();
 			ctx_params.photo_maker_path = photoMakerPath.c_str();
 
-			// Log all paths for debugging
-			std::cout << "Initializing SD context with the following parameters:" << std::endl;
-			std::cout << "Model: " << ctx_params.model_path << std::endl;
-			std::cout << "ClipL: " << ctx_params.clip_l_path << std::endl;
-			std::cout << "ClipG: " << ctx_params.clip_g_path << std::endl;
-			std::cout << "ClipVision: " << ctx_params.clip_vision_path << std::endl;
-			std::cout << "T5XXL: " << ctx_params.t5xxl_path << std::endl;
-			std::cout << "DiffusionModel: " << ctx_params.diffusion_model_path << std::endl;
-			std::cout << "HighNoiseDiffusionModel: " << ctx_params.high_noise_diffusion_model_path << std::endl;
-			std::cout << "Vae: " << ctx_params.vae_path << std::endl;
-			std::cout << "VAE Decode Only: " << (ctx_params.vae_decode_only ? "true" : "false") << std::endl;
-			std::cout << "Taesd: " << ctx_params.taesd_path << std::endl;
-			std::cout << "Controlnet: " << ctx_params.control_net_path << std::endl;
-			std::cout << "Lora: " << ctx_params.lora_model_dir << std::endl;
-			std::cout << "Embedding: " << ctx_params.embedding_dir << std::endl;
-			std::cout << "PhotoMaker: " << ctx_params.photo_maker_path << std::endl;
 
-			// Chroma debug output
-			std::cout << "Chroma DiT Mask: " << (ctx_params.chroma_use_dit_mask ? "true" : "false") << std::endl;
-			std::cout << "Chroma T5 Mask: " << (ctx_params.chroma_use_t5_mask ? "true" : "false") << std::endl;
-			std::cout << "Chroma T5 Mask Pad: " << ctx_params.chroma_t5_mask_pad << std::endl;
-			std::cout << "Flow Shift: " << ctx_params.flow_shift << std::endl;
+			sd_ctx_t* ctx = new_sd_ctx(&ctx_params);
 
-			// Initialize SD context using the NEW structured API
-			return new_sd_ctx(&ctx_params);
+			return ctx;
 		}
 		catch (const std::exception &e)
 		{

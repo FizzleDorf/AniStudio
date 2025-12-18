@@ -27,6 +27,7 @@ namespace ANI {
 		entityManager.RegisterComponent<ImageComponent>("Image");
 		entityManager.RegisterComponent<InputImageComponent>("InputImage");
 		entityManager.RegisterComponent<OutputImageComponent>("OutputImage");
+		entityManager.RegisterComponent<MaskImageComponent >("MaskImage");
 
 		entityManager.RegisterComponent<VideoComponent>("Video");
 		entityManager.RegisterComponent<InputVideoComponent>("InputVideo");

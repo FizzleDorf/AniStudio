@@ -85,10 +85,14 @@ namespace GUI {
 
 		// Add core diffusion components (NO ESRGAN)
 		mgr.AddComponent<ModelComponent>(entity);
+		mgr.AddComponent<DiffusionModelComponent>(entity);
 		mgr.AddComponent<ClipLComponent>(entity);
 		mgr.AddComponent<ClipGComponent>(entity);
 		mgr.AddComponent<T5XXLComponent>(entity);
-		mgr.AddComponent<DiffusionModelComponent>(entity);
+		mgr.AddComponent<TaesdComponent>(entity);
+		mgr.AddComponent<ClipVisionComponent>(entity);
+		mgr.AddComponent<Qwen2VLComponent>(entity);
+		mgr.AddComponent<Qwen2VLVisionComponent>(entity);
 		mgr.AddComponent<VaeComponent>(entity);
 		mgr.AddComponent<LoraComponent>(entity);
 		mgr.AddComponent<TaesdComponent>(entity);
@@ -151,12 +155,31 @@ namespace GUI {
 			if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
 				if (ImGui::BeginTabBar("ModelTabs")) {
 					if (ImGui::BeginTabItem("Full")) {
-						// Render checkpoint and VAE
+						
+						// Checkpoint
 						for (const auto&[compId, componentName] : modelsIt->second) {
-							if (componentName == "Model" || componentName == "Vae") {
+							if (componentName == "Model") {
 								RenderComponent(entity, compId, componentName);
 							}
 						}
+
+						// VAE and TAESD
+						if (ImGui::CollapsingHeader("Auto Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
+							for (const auto&[compId, componentName] : modelsIt->second) {
+								if (componentName == "Vae" || componentName == "Taesd") {
+									RenderComponent(entity, compId, componentName);
+								}
+							}
+						}
+
+						if (ImGui::CollapsingHeader("Other Models", ImGuiTreeNodeFlags_DefaultOpen)) {
+							for (const auto&[compId, componentName] : modelsIt->second) {
+								if (componentName == "Lora" || componentName == "Embedding") {
+									RenderComponent(entity, compId, componentName);
+								}
+							}
+						}
+
 						ImGui::EndTabItem();
 					}
 
@@ -171,16 +194,38 @@ namespace GUI {
 						// Text Encoders subcategory
 						if (ImGui::CollapsingHeader("Text Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
 							for (const auto&[compId, componentName] : modelsIt->second) {
-								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL") {
+								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "Qwen2VL" )
+								{
 									RenderComponent(entity, compId, componentName);
 								}
 							}
 						}
 
-						// VAE
-						for (const auto&[compId, componentName] : modelsIt->second) {
-							if (componentName == "Vae") {
-								RenderComponent(entity, compId, componentName);
+						// Vision Models
+						if (ImGui::CollapsingHeader("Vision Models", ImGuiTreeNodeFlags_DefaultOpen)) {
+							for (const auto&[compId, componentName] : modelsIt->second) {
+								if (componentName == "ClipVision" || componentName == "Qwen2VLVision")
+								{
+									RenderComponent(entity, compId, componentName);
+								}
+							}
+						}
+
+						// VAE and TAESD
+						if (ImGui::CollapsingHeader("Auto Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
+							for (const auto&[compId, componentName] : modelsIt->second) {
+								if (componentName == "Vae" || componentName == "Taesd") {
+									RenderComponent(entity, compId, componentName);
+								}
+							}
+						}
+
+						if (ImGui::CollapsingHeader("Other Models", ImGuiTreeNodeFlags_DefaultOpen)) {
+							// Lora and Embedding
+							for (const auto&[compId, componentName] : modelsIt->second) {
+								if (componentName == "Lora" || componentName == "Embedding") {
+									RenderComponent(entity, compId, componentName);
+								}
 							}
 						}
 						ImGui::EndTabItem();

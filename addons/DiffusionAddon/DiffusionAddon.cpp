@@ -36,6 +36,9 @@ public:
 		entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
 		entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
 		entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
+		entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
+		entityMgr.RegisterComponent<ECS::Qwen2VLComponent>("Qwen2VL");
+		entityMgr.RegisterComponent<ECS::Qwen2VLVisionComponent>("Qwen2VLVision");
 		entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
 		entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
 		entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
