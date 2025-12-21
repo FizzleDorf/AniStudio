@@ -254,8 +254,8 @@ namespace ECS {
 		int shifted_timestep = 0;
 
 		// Method selections
-		sample_method_t current_sample_method = EULER;
-		scheduler_t current_scheduler_method = DEFAULT;
+		sample_method_t current_sample_method = EULER_SAMPLE_METHOD;
+		scheduler_t current_scheduler_method = DISCRETE_SCHEDULER;
 		sd_type_t current_type_method = SD_TYPE_F16;
 		prediction_t current_prediction_type = EPS_PRED;
 

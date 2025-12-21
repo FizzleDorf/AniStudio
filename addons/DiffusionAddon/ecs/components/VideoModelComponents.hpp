@@ -283,8 +283,8 @@ namespace ECS {
 		}
 
 		// High noise sampling parameters
-		sample_method_t high_noise_sample_method = EULER;
-		scheduler_t high_noise_scheduler_method = DEFAULT;
+		sample_method_t high_noise_sample_method = EULER_SAMPLE_METHOD;
+		scheduler_t high_noise_scheduler_method = DISCRETE_SCHEDULER;
 		float high_noise_cfg = 3.5f;
 		int high_noise_steps = 8;
 		float high_noise_eta = 0.0f;

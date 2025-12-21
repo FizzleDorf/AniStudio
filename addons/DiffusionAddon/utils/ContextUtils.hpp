@@ -17,8 +17,8 @@ namespace Utils {
 			std::string clipGPath = "";
 			std::string clipVisionPath = "";
 			std::string t5xxlPath = "";
-			std::string qwen2vlPath = "";
-			std::string qwen2vlVisionPath = "";
+			std::string llmPath = "";
+			std::string llmVisionPath = "";
 			std::string diffusionModelPath = "";
 			std::string highNoiseModelPath = "";
 			std::string vaePath = "";
@@ -90,24 +90,24 @@ namespace Utils {
 							t5xxlPath = std::string(filePaths.GetPath("Encoder")) + "/" + t5xxl["modelName"].get<std::string>();
 					}
 
-					// Qwen2VL text encoder component
-					if (comp.contains("Qwen2VL"))
+					// llm text encoder component
+					if (comp.contains("LLM"))
 					{
-						auto qwen2vl = comp["Qwen2VL"];
-						if (qwen2vl.contains("modelPath") && !qwen2vl["modelPath"].get<std::string>().empty())
-							qwen2vlPath = qwen2vl["modelPath"].get<std::string>();
-						else if (qwen2vl.contains("modelName") && !qwen2vl["modelName"].get<std::string>().empty())
-							qwen2vlPath = std::string(filePaths.GetPath("Encoder")) + "/" + qwen2vl["modelName"].get<std::string>();
+						auto llm = comp["LLM"];
+						if (llm.contains("modelPath") && !llm["modelPath"].get<std::string>().empty())
+							llmPath = llm["modelPath"].get<std::string>();
+						else if (llm.contains("modelName") && !llm["modelName"].get<std::string>().empty())
+							llmPath = std::string(filePaths.GetPath("Encoder")) + "/" + llm["modelName"].get<std::string>();
 					}
 
-					// Qwen2VL vision encoder component
-					if (comp.contains("Qwen2VLVision"))
+					// llmVision vision encoder component
+					if (comp.contains("LLMVision"))
 					{
-						auto qwen2vlVision = comp["Qwen2VLVision"];
-						if (qwen2vlVision.contains("modelPath") && !qwen2vlVision["modelPath"].get<std::string>().empty())
-							qwen2vlVisionPath = qwen2vlVision["modelPath"].get<std::string>();
-						else if (qwen2vlVision.contains("modelName") && !qwen2vlVision["modelName"].get<std::string>().empty())
-							qwen2vlVisionPath = std::string(filePaths.GetPath("Encoder")) + "/" + qwen2vlVision["modelName"].get<std::string>();
+						auto llmVision = comp["LLMVision"];
+						if (llmVision.contains("modelPath") && !llmVision["modelPath"].get<std::string>().empty())
+							llmVisionPath = llmVision["modelPath"].get<std::string>();
+						else if (llmVision.contains("modelName") && !llmVision["modelName"].get<std::string>().empty())
+							llmVisionPath = std::string(filePaths.GetPath("Encoder")) + "/" + llmVision["modelName"].get<std::string>();
 					}
 
 					// DiffusionModel component
@@ -263,15 +263,15 @@ namespace Utils {
 			ctx_params.clip_g_path = clipGPath.c_str();
 			ctx_params.clip_vision_path = clipVisionPath.c_str();
 			ctx_params.t5xxl_path = t5xxlPath.c_str();
-			ctx_params.qwen2vl_path = qwen2vlPath.c_str();
-			ctx_params.qwen2vl_vision_path = qwen2vlVisionPath.c_str();
+			ctx_params.llm_path = llmPath.c_str();
+			ctx_params.llm_vision_path = llmVisionPath.c_str();
 			ctx_params.diffusion_model_path = diffusionModelPath.c_str();
 			ctx_params.high_noise_diffusion_model_path = highNoiseModelPath.c_str();
 			ctx_params.vae_path = vaePath.c_str();
 			ctx_params.taesd_path = taesdPath.c_str();
 			ctx_params.control_net_path = controlnetPath.c_str();
-			ctx_params.lora_model_dir = loraPath.c_str();
-			ctx_params.embedding_dir = embedPath.c_str();
+			// ctx_params.lora_model_dir = loraPath.c_str();
+			// ctx_params.embedding_dir = embedPath.c_str();
 			ctx_params.photo_maker_path = photoMakerPath.c_str();
 
 

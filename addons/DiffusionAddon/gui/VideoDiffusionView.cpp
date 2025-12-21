@@ -73,7 +73,6 @@ namespace GUI {
 
 		img2vidEntity = mgr.AddNewEntity();
 
-		mgr.AddComponent<ModelComponent>(img2vidEntity);
 		mgr.AddComponent<ClipLComponent>(img2vidEntity);
 		mgr.AddComponent<ClipGComponent>(img2vidEntity);
 		mgr.AddComponent<ClipVisionComponent>(img2vidEntity);
@@ -126,16 +125,16 @@ namespace GUI {
 			if (ImGui::BeginTabBar("ModelTabs")) {
 				if (ImGui::BeginTabItem("Full")) {
 					// Checkpoint Model
-					RenderComponentWithCheckbox(entity, "ModelComponent", "Checkpoint", [&]() {
-						if (mgr.HasComponent<ModelComponent>(entity)) {
-							auto& comp = mgr.GetComponent<ModelComponent>(entity);
+					RenderComponentWithCheckbox(entity, "CheckpointComponent", "Checkpoint", [&]() {
+						if (mgr.HasComponent<CheckpointComponent>(entity)) {
+							auto& comp = mgr.GetComponent<CheckpointComponent>(entity);
 							if (!comp.schema.empty()) {
 								try {
 									auto properties = comp.GetPropertyMap();
 									UISchema::RenderSchema(comp.schema, properties);
 								}
 								catch (const std::exception& e) {
-									ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering ModelComponent: %s", e.what());
+									ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering CheckpointComponent: %s", e.what());
 								}
 							}
 						}

@@ -8,6 +8,10 @@
 
 // Models
 #include "ModelComponents.hpp"
+#include "AutoEncoderComponent.hpp"
+#include "EncoderModelComponents.hpp"
+#include "OtherModelComponents.hpp"
+#include "VisionModelComponents.hpp"
 #include "VideoModelComponents.hpp"
 #include "SLGComponent.hpp"
 
@@ -18,3 +22,4 @@
 // Other
 #include "LayerSkipComponent.hpp"
 #include "ChromaComponent.hpp"
+#include "EasyCacheComponent.hpp"

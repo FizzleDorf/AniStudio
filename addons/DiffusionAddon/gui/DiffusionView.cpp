@@ -83,29 +83,39 @@ namespace GUI {
 	ECS::EntityID DiffusionView::CreateEntityWithComponents(bool includeInputImage) {
 		EntityID entity = mgr.AddNewEntity();
 
-		// Add core diffusion components (NO ESRGAN)
-		mgr.AddComponent<ModelComponent>(entity);
+		// Diffusion model
+		mgr.AddComponent<CheckpointComponent>(entity);
 		mgr.AddComponent<DiffusionModelComponent>(entity);
+
+		// Encoders
 		mgr.AddComponent<ClipLComponent>(entity);
 		mgr.AddComponent<ClipGComponent>(entity);
 		mgr.AddComponent<T5XXLComponent>(entity);
 		mgr.AddComponent<TaesdComponent>(entity);
 		mgr.AddComponent<ClipVisionComponent>(entity);
-		mgr.AddComponent<Qwen2VLComponent>(entity);
-		mgr.AddComponent<Qwen2VLVisionComponent>(entity);
+		mgr.AddComponent<LlmComponent>(entity);
+		mgr.AddComponent<LlmVisionComponent>(entity);
+
+		// Auto Encoders
 		mgr.AddComponent<VaeComponent>(entity);
-		mgr.AddComponent<LoraComponent>(entity);
 		mgr.AddComponent<TaesdComponent>(entity);
+
+		// Other Models
+		mgr.AddComponent<LoraComponent>(entity);
+		mgr.AddComponent<ControlNetComponent>(entity);
+		mgr.AddComponent<EmbeddingComponent>(entity);
+		
+		// Sampling
 		mgr.AddComponent<LatentComponent>(entity);
 		mgr.AddComponent<SamplerComponent>(entity);
 		mgr.AddComponent<GuidanceComponent>(entity);
 		mgr.AddComponent<ClipSkipComponent>(entity);
 		mgr.AddComponent<PromptComponent>(entity);
 		mgr.AddComponent<LayerSkipComponent>(entity);
-		mgr.AddComponent<OutputImageComponent>(entity);
-		mgr.AddComponent<ControlNetComponent>(entity);
-		mgr.AddComponent<EmbeddingComponent>(entity);
 		mgr.AddComponent<ChromaComponent>(entity);
+
+		// Image
+		mgr.AddComponent<OutputImageComponent>(entity);
 
 		if (includeInputImage) {
 			mgr.AddComponent<InputImageComponent>(entity);
@@ -158,7 +168,7 @@ namespace GUI {
 						
 						// Checkpoint
 						for (const auto&[compId, componentName] : modelsIt->second) {
-							if (componentName == "Model") {
+							if (componentName == "Checkpoint") {
 								RenderComponent(entity, compId, componentName);
 							}
 						}
@@ -194,7 +204,7 @@ namespace GUI {
 						// Text Encoders subcategory
 						if (ImGui::CollapsingHeader("Text Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
 							for (const auto&[compId, componentName] : modelsIt->second) {
-								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "Qwen2VL" )
+								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "LLM" )
 								{
 									RenderComponent(entity, compId, componentName);
 								}
@@ -204,7 +214,7 @@ namespace GUI {
 						// Vision Models
 						if (ImGui::CollapsingHeader("Vision Models", ImGuiTreeNodeFlags_DefaultOpen)) {
 							for (const auto&[compId, componentName] : modelsIt->second) {
-								if (componentName == "ClipVision" || componentName == "Qwen2VLVision")
+								if (componentName == "ClipVision" || componentName == "LLMVision")
 								{
 									RenderComponent(entity, compId, componentName);
 								}

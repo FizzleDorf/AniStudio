@@ -6,8 +6,6 @@ constexpr const char *type_method_items[] = {
 	"SD_TYPE_F16",
 	"SD_TYPE_Q4_0",
 	"SD_TYPE_Q4_1",
-	"SD_TYPE_Q4_2 (N/A)",
-	"SD_TYPE_Q4_3 (N/A)",
 	"SD_TYPE_Q5_0",
 	"SD_TYPE_Q5_1",
 	"SD_TYPE_Q8_0",
@@ -33,39 +31,76 @@ constexpr const char *type_method_items[] = {
 	"SD_TYPE_F64",
 	"SD_TYPE_IQ1_M",
 	"SD_TYPE_BF16",
-	"SD_TYPE_Q4_0_4_4 (N/A)",
-	"SD_TYPE_Q4_0_4_8 (N/A)",
-	"SD_TYPE_Q4_0_8_8 (N/A)",
 	"SD_TYPE_TQ1_0",
 	"SD_TYPE_TQ2_0",
-	"SD_TYPE_IQ4_NL_4_4 (N/A)",
-	"SD_TYPE_IQ4_NL_4_8 (N/A)",
-	"SD_TYPE_IQ4_NL_8_8 (N/A)",
 	"SD_TYPE_MXFP4"
 };
-
 constexpr const int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
 
-// sampler method constants - in exact enum order from C++ header
+// sample_method_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char *sample_method_items[] = {
-	"DEFAULT", "EULER", "HEUN", "DPM2", "DPMPP2S_A",
-	"DPMPP2M", "DPMPP2Mv2", "IPNDM", "IPNDM_V", "LCM",
-	"DDIM_TRAILING", "TCD", "EULER_A"
+	"EULER",
+	"EULER_A",
+	"HEUN",
+	"DPM2",
+	"DPMPP2S_A",
+	"DPMPP2M",
+	"DPMPP2Mv2",
+	"IPNDM",
+	"IPNDM_V",
+	"LCM",
+	"DDIM_TRAILING",
+	"TCD"
 };
 constexpr const int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
 
-// scheduler method constants - matching enum scheduler_t order
+// scheduler_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char *scheduler_method_items[] = {
-	"DEFAULT", "DISCRETE", "KARRAS", "EXPONENTIAL", "AYS", "GITS", "SGM_UNIFORM", "SIMPLE", "SMOOTHSTEP"
+	"DISCRETE",
+	"KARRAS",
+	"EXPONENTIAL",
+	"AYS",
+	"GITS",
+	"SGM_UNIFORM",
+	"SIMPLE",
+	"SMOOTHSTEP",
+	"KL_OPTIMAL",
+	"LCM"
 };
 constexpr const int scheduler_method_item_count = sizeof(scheduler_method_items) / sizeof(scheduler_method_items[0]);
 
-// rng type constants - matching enum rng_type_t order
-constexpr const char *type_rng_items[] = { "STD_DEFAULT_RNG", "CUDA_RNG" };
+// rng_type_t constants - matching exact enum order from stable-diffusion.h
+constexpr const char *type_rng_items[] = {
+	"STD_DEFAULT_RNG",
+	"CUDA_RNG",
+	"CPU_RNG"
+};
 constexpr const int type_rng_item_count = sizeof(type_rng_items) / sizeof(type_rng_items[0]);
 
-// prediction type constants - matching enum prediction_t order
+// prediction_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char *prediction_type_items[] = {
-	"EPS_PRED", "V_PRED", "EDM_V_PRED", "SD3_FLOW_PRED", "FLUX_FLOW_PRED"
+	"EPS_PRED",
+	"V_PRED",
+	"EDM_V_PRED",
+	"FLOW_PRED",
+	"FLUX_FLOW_PRED",
+	"FLUX2_FLOW_PRED"
 };
 constexpr const int prediction_type_item_count = sizeof(prediction_type_items) / sizeof(prediction_type_items[0]);
+
+// preview_t constants - matching exact enum order from stable-diffusion.h
+constexpr const char *preview_type_items[] = {
+	"PREVIEW_NONE",
+	"PREVIEW_PROJ",
+	"PREVIEW_TAE",
+	"PREVIEW_VAE"
+};
+constexpr const int preview_type_item_count = sizeof(preview_type_items) / sizeof(preview_type_items[0]);
+
+// lora_apply_mode_t constants - matching exact enum order from stable-diffusion.h
+constexpr const char *lora_apply_mode_items[] = {
+	"LORA_APPLY_AUTO",
+	"LORA_APPLY_IMMEDIATELY",
+	"LORA_APPLY_AT_RUNTIME"
+};
+constexpr const int lora_apply_mode_item_count = sizeof(lora_apply_mode_items) / sizeof(lora_apply_mode_items[0]);

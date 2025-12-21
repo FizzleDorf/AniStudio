@@ -29,7 +29,7 @@ namespace GUI {
 
 	private:
 		ECS::SamplerComponent samplerComp;
-		ECS::ModelComponent modelComp;
+		ECS::CheckpointComponent modelComp;
 		ECS::VaeComponent vaeComp;
 
 		void Convert();

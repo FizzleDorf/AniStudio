@@ -38,6 +38,7 @@ namespace Utils
 				bool offload_params_to_cpu = false;
 				bool direct = false;
 				int n_threads = 4;
+				int tile_size = 64;
 
 				// Parse metadata to extract parameters
 				if (metadata.contains("components") && metadata["components"].is_array())
@@ -174,7 +175,9 @@ namespace Utils
 				upscaler_context = new_upscaler_ctx(modelPath.c_str(),
 					offload_params_to_cpu,
 					direct,
-					n_threads);
+					n_threads,
+					tile_size);
+
 				if (!upscaler_context)
 				{
 					throw std::runtime_error("Failed to initialize upscaler context!");

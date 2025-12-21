@@ -95,11 +95,11 @@ namespace GUI {
 		}
 
 		ECS::EntityID entity = mgr.AddNewEntity();
-		mgr.AddComponent<ECS::ModelComponent>(entity);
+		mgr.AddComponent<ECS::CheckpointComponent>(entity);
 		mgr.AddComponent<ECS::SamplerComponent>(entity);
 		mgr.AddComponent<ECS::VaeComponent>(entity);
 
-		mgr.GetComponent<ECS::ModelComponent>(entity) = modelComp;
+		mgr.GetComponent<ECS::CheckpointComponent>(entity) = modelComp;
 		mgr.GetComponent<ECS::SamplerComponent>(entity) = samplerComp;
 		mgr.GetComponent<ECS::VaeComponent>(entity) = vaeComp;
 

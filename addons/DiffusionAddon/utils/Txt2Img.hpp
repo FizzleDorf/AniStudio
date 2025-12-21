@@ -354,9 +354,6 @@ namespace Utils
 								}
 							}
 						}
-
-						// Note: VideoParams, HighNoiseSampler, and Chroma components are handled in ContextUtils
-						// during context initialization. They don't affect individual image generation parameters.
 					}
 				}
 
@@ -388,8 +385,6 @@ namespace Utils
 				if (control_image.data != nullptr) {
 					gen_params.control_image = control_image;
 					gen_params.control_strength = control_strength;
-					// Note: apply_start and apply_end are not in sd_img_gen_params_t
-					// They would need to be set through a different mechanism
 				}
 
 				// Initialize SD context

@@ -32,13 +32,13 @@ public:
 		entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
 
 		// Models
-		entityMgr.RegisterComponent<ECS::ModelComponent>("Model");
+		entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
 		entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
 		entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
 		entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
 		entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
-		entityMgr.RegisterComponent<ECS::Qwen2VLComponent>("Qwen2VL");
-		entityMgr.RegisterComponent<ECS::Qwen2VLVisionComponent>("Qwen2VLVision");
+		entityMgr.RegisterComponent<ECS::LlmComponent>("LLM");
+		entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LLMVision");
 		entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
 		entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
 		entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
@@ -207,7 +207,7 @@ public:
 		// Check for a few key diffusion components
 		try {
 			if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity)) return true;
-			if (m_entityMgr->HasComponent<ECS::ModelComponent>(entity)) return true;
+			if (m_entityMgr->HasComponent<ECS::CheckpointComponent>(entity)) return true;
 			if (m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity)) return true;
 			if (m_entityMgr->HasComponent<ECS::LatentComponent>(entity)) return true;
 			return false;
