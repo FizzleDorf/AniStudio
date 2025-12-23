@@ -5,6 +5,7 @@
 #include "SamplerComponent.hpp"
 #include "GuidanceComponent.hpp"
 #include "ClipSkipComponent.hpp"
+#include "EasyCacheComponent.hpp"
 
 // Models
 #include "ModelComponents.hpp"
@@ -23,3 +24,4 @@
 #include "LayerSkipComponent.hpp"
 #include "ChromaComponent.hpp"
 #include "EasyCacheComponent.hpp"
+#include "ConversionComponent.hpp"

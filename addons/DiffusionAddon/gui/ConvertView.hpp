@@ -7,7 +7,10 @@
 #include "ImGuiFileDialog.h"
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"
+#include "ConversionComponent.hpp"
 #include "pch.h"
+#include <memory>
+#include <unordered_map>
 
 namespace GUI {
 
@@ -28,13 +31,23 @@ namespace GUI {
 		void Render() override;
 
 	private:
-		ECS::SamplerComponent samplerComp;
-		ECS::CheckpointComponent modelComp;
-		ECS::VaeComponent vaeComp;
+		// Entity for conversion
+		ECS::EntityID convertEntity = 0;
 
+		// UI state
+		bool windowOpen = true;
+		int numQueues = 1;
+		bool isPaused = false;
+
+		// Component visibility tracking
+		mutable std::unordered_map<std::string, bool> componentVisibility;
+
+		void InitializeEntity();
+		void RenderEntityComponents();
+		void RenderComponent(ECS::ComponentTypeID compId, const std::string& componentName);
 		void Convert();
-		void RenderVaeLoader();
 		void RenderQueueList();
+		std::vector<std::string> GetCategoryRenderOrder() const;
 	};
 
 } // namespace GUI

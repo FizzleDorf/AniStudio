@@ -2,10 +2,13 @@
 #include "Events.hpp"
 #include "DiffusionOptions.hpp"
 #include "DiffusionCallbackUtils.hpp"
+#include "UISchema.hpp"
+#include "SDcppSystem.hpp"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <map>
 
 using namespace ECS;
 using namespace ANI;
@@ -19,62 +22,176 @@ namespace GUI {
 
 	void ConvertView::Init() {
 		GUI::DiffusionCallbackUtils::InitializeCallbacks();
+		InitializeEntity();
+	}
+
+	void ConvertView::InitializeEntity() {
+		if (convertEntity != 0 && mgr.IsEntityValid(convertEntity)) {
+			mgr.DestroyEntity(convertEntity);
+		}
+
+		// Create entity with conversion components
+		convertEntity = mgr.AddNewEntity();
+
+		// Add model components
+		mgr.AddComponent<CheckpointComponent>(convertEntity);
+		mgr.AddComponent<VaeComponent>(convertEntity);
+		mgr.AddComponent<SamplerComponent>(convertEntity);
+		mgr.AddComponent<ConversionComponent>(convertEntity); // Add ConversionComponent
+
+		// Configure defaults
+		if (mgr.HasComponent<CheckpointComponent>(convertEntity)) {
+			auto& checkpoint = mgr.GetComponent<CheckpointComponent>(convertEntity);
+			checkpoint.modelPath = "";
+			checkpoint.modelName = "";
+		}
+
+		if (mgr.HasComponent<VaeComponent>(convertEntity)) {
+			auto& vae = mgr.GetComponent<VaeComponent>(convertEntity);
+			vae.modelPath = "";
+			vae.modelName = "";
+		}
+
+		if (mgr.HasComponent<SamplerComponent>(convertEntity)) {
+			auto& sampler = mgr.GetComponent<SamplerComponent>(convertEntity);
+			sampler.current_type_method = sd_type_t::SD_TYPE_COUNT; // Default type
+		}
+
+		if (mgr.HasComponent<ConversionComponent>(convertEntity)) {
+			auto& conversion = mgr.GetComponent<ConversionComponent>(convertEntity);
+			conversion.tensorTypeRules = "";
+			conversion.convertName = true;
+		}
+
+		// Refresh schemas
+		auto componentIds = mgr.GetEntityComponents(convertEntity);
+		for (ComponentTypeID compId : componentIds) {
+			auto* component = mgr.GetComponentById(convertEntity, compId);
+			if (component) {
+				component->RefreshSchema();
+			}
+		}
+	}
+
+	std::vector<std::string> ConvertView::GetCategoryRenderOrder() const {
+		return {
+			"Models",
+			"Sampling",
+			"Tools" // ConversionComponent has category "Tools"
+		};
+	}
+
+	void ConvertView::RenderEntityComponents() {
+		if (convertEntity == 0 || !mgr.IsEntityValid(convertEntity)) {
+			InitializeEntity();
+			return;
+		}
+
+		// Get all components and organize by category
+		auto componentIds = mgr.GetEntityComponents(convertEntity);
+		std::map<std::string, std::vector<std::pair<ComponentTypeID, std::string>>> categorizedComponents;
+
+		for (ComponentTypeID compId : componentIds) {
+			std::string componentName = mgr.GetComponentNameById(compId);
+			auto* component = mgr.GetComponentByIdConst(convertEntity, compId);
+			if (!component) continue;
+
+			std::string category = component->compCategory.empty() ? "Uncategorized" : component->compCategory;
+			categorizedComponents[category].emplace_back(compId, componentName);
+		}
+
+		// Get the desired render order
+		std::vector<std::string> renderOrder = GetCategoryRenderOrder();
+
+		// Render categories in the specified order
+		for (const auto& category : renderOrder) {
+			auto it = categorizedComponents.find(category);
+			if (it != categorizedComponents.end()) {
+				if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+					for (const auto&[compId, componentName] : it->second) {
+						RenderComponent(compId, componentName);
+					}
+				}
+				// Remove from map so it doesn't render again
+				categorizedComponents.erase(it);
+			}
+		}
+
+		// Render remaining categories that weren't in the ordered list
+		for (const auto&[category, components] : categorizedComponents) {
+			if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+				for (const auto&[compId, componentName] : components) {
+					RenderComponent(compId, componentName);
+				}
+			}
+		}
+	}
+
+	void ConvertView::RenderComponent(ComponentTypeID compId, const std::string& componentName) {
+		// Component visibility checkbox
+		if (componentVisibility.find(componentName) == componentVisibility.end()) {
+			componentVisibility[componentName] = true;
+		}
+
+		bool isVisible = componentVisibility[componentName];
+		if (ImGui::Checkbox(componentName.c_str(), &isVisible)) {
+			componentVisibility[componentName] = isVisible;
+		}
+
+		if (!isVisible) return;
+
+		ImGui::Indent();
+
+		// Get component and render its UI
+		auto* component = mgr.GetComponentById(convertEntity, compId);
+		if (component && !component->schema.empty()) {
+			try {
+				auto properties = component->GetPropertyMap();
+				UISchema::RenderSchema(component->schema, properties);
+
+				// Special handling for specific components
+				if (componentName == "Sampler") {
+					// Display current quantization type
+					if (mgr.HasComponent<SamplerComponent>(convertEntity)) {
+						auto& sampler = mgr.GetComponent<SamplerComponent>(convertEntity);
+						// FIX: Cast the int to sd_type_t
+						const char* typeName = sd_type_name(static_cast<sd_type_t>(sampler.current_type_method));
+						ImGui::Text("Quantization: %s", typeName);
+					}
+				}
+				else if (componentName == "Conversion") {
+					// Additional info for ConversionComponent
+					if (mgr.HasComponent<ConversionComponent>(convertEntity)) {
+						auto& conversion = mgr.GetComponent<ConversionComponent>(convertEntity);
+						ImGui::TextDisabled("Tensor rules: %s",
+							conversion.tensorTypeRules.empty() ? "None" : conversion.tensorTypeRules.c_str());
+						ImGui::TextDisabled("Convert names: %s",
+							conversion.convertName ? "Yes" : "No");
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering %s: %s",
+					componentName.c_str(), e.what());
+			}
+		}
+
+		ImGui::Unindent();
 	}
 
 	void ConvertView::Render() {
 		RenderQueueList();
 
-		ImGui::SetNextWindowSize(ImVec2(300, 200), ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
 
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			if (ImGui::BeginTable("ModelLoaderTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
-				ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-				ImGui::TableSetupColumn("Load", ImGuiTableColumnFlags_WidthFixed, 52.0f);
-				ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
+			// Render all entity components dynamically
+			RenderEntityComponents();
 
-				// Row for "Input Model"
-				ImGui::TableNextColumn();
-				ImGui::Text("Input Model");
-				ImGui::TableNextColumn();
-				if (ImGui::Button("...##j6")) {
-					IGFD::FileDialogConfig config;
-					config.path = Utils::FilePaths::GetInstance().GetPath("Checkpoint");
-					ImGuiFileDialog::Instance()->OpenDialog("ConvertModelDialog", "Choose Model",
-						".safetensors, .ckpt, .pt, .gguf", config);
-				}
-				ImGui::SameLine();
-				if (ImGui::Button("R##j6")) {
-					modelComp.modelName = "";
-					modelComp.modelPath = "";
-				}
-				ImGui::TableNextColumn();
-				ImGui::Text("%s", modelComp.modelName.c_str());
+			ImGui::Separator();
 
-				RenderVaeLoader();
-
-				ImGui::EndTable();
-			}
-
-			if (ImGuiFileDialog::Instance()->Display("ConvertModelDialog", 32, ImVec2(700, 400))) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
-					std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-
-					modelComp.modelName = selectedFile;
-					modelComp.modelPath = fullPath;
-					std::cout << "Selected file: " << modelComp.modelName << std::endl;
-					std::cout << "Full path: " << modelComp.modelPath << std::endl;
-					std::cout << "New model path set: " << modelComp.modelPath << std::endl;
-				}
-
-				ImGuiFileDialog::Instance()->Close();
-			}
-
-			ImGui::Combo("Quant Type", reinterpret_cast<int *>(&samplerComp.current_type_method), type_method_items,
-				type_method_item_count);
-
-			if (ImGui::Button("Convert")) {
+			// Only show the main Convert button - queue controls are in the Queue window
+			if (ImGui::Button("Convert to GGUF", ImVec2(-FLT_MIN, 40))) {
 				Convert();
 			}
 		}
@@ -89,56 +206,33 @@ namespace GUI {
 	}
 
 	void ConvertView::Convert() {
+		// Get SDCPPSystem through event or direct system access
 		auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
 		if (!sdSystem) {
+			// Try to get it via event
 			mgr.RegisterSystem<ECS::SDCPPSystem>();
+			sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
 		}
 
-		ECS::EntityID entity = mgr.AddNewEntity();
-		mgr.AddComponent<ECS::CheckpointComponent>(entity);
-		mgr.AddComponent<ECS::SamplerComponent>(entity);
-		mgr.AddComponent<ECS::VaeComponent>(entity);
+		if (!sdSystem) {
+			std::cerr << "Failed to create SDCPPSystem!" << std::endl;
+			return;
+		}
 
-		mgr.GetComponent<ECS::CheckpointComponent>(entity) = modelComp;
-		mgr.GetComponent<ECS::SamplerComponent>(entity) = samplerComp;
-		mgr.GetComponent<ECS::VaeComponent>(entity) = vaeComp;
+		// Clone the entity (same pattern as DiffusionView)
+		nlohmann::json entityData = mgr.SerializeEntity(convertEntity);
+		EntityID newEntity = mgr.DeserializeEntity(entityData);
 
-		auto taskData = std::make_pair(entity, ECS::SDCPPSystem::TaskType::Conversion);
+		if (newEntity == 0) {
+			std::cerr << "Failed to create conversion entity!" << std::endl;
+			return;
+		}
+
+		std::cout << "Successfully cloned entity " << convertEntity << " to " << newEntity << " via serialization" << std::endl;
+
+		// Send the cloned entity to the system via event (same as DiffusionView)
+		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Conversion);
 		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
-	}
-
-	void ConvertView::RenderVaeLoader() {
-		ImGui::TableNextColumn();
-		ImGui::Text("Vae: ");
-		ImGui::TableNextColumn();
-		if (ImGui::Button("...##4b")) {
-			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::GetInstance().GetPath("Vae");
-			ImGuiFileDialog::Instance()->OpenDialog("ConvertVaeDialog", "Choose Model", ".safetensors, .ckpt, .pt, .gguf",
-				config);
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("R##f7")) {
-			vaeComp.modelName = "";
-			vaeComp.modelPath = "";
-		}
-		ImGui::TableNextColumn();
-		ImGui::Text("%s", vaeComp.modelName.c_str());
-
-		if (ImGuiFileDialog::Instance()->Display("ConvertVaeDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string selectedFile = ImGuiFileDialog::Instance()->GetCurrentFileName();
-				std::string fullPath = ImGuiFileDialog::Instance()->GetFilePathName();
-
-				vaeComp.modelName = selectedFile;
-				vaeComp.modelPath = fullPath;
-				std::cout << "Selected file: " << vaeComp.modelName << std::endl;
-				std::cout << "Full path: " << vaeComp.modelPath << std::endl;
-				std::cout << "New model path set: " << vaeComp.modelPath << std::endl;
-			}
-
-			ImGuiFileDialog::Instance()->Close();
-		}
 	}
 
 	void ConvertView::RenderQueueList() {
@@ -166,7 +260,7 @@ namespace GUI {
 			ImGui::Separator();
 
 			// Queue count input
-			static int numQueues = 1;
+			ImGui::SetNextItemWidth(100);
 			if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
 				if (numQueues < 1) {
 					numQueues = 1;
@@ -182,7 +276,6 @@ namespace GUI {
 			ImGui::Separator();
 
 			// Control buttons
-			static bool isPaused = false;
 			if (isPaused) {
 				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
 					ANI::Events::Ref().QueueEvent("ResumeDiffusionWorker");

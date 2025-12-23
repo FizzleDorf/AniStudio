@@ -19,6 +19,7 @@ namespace Utils
 				std::string inputPath, vaePath;
 				std::string tensorTypeRules = ""; // Optional parameter for tensor type conversion rules
 				sd_type_t type = SD_TYPE_F16;
+				bool convertName = true;
 
 				// Extract model paths from metadata
 				if (metadata.contains("components") && metadata["components"].is_array())
@@ -51,6 +52,10 @@ namespace Utils
 							auto conversion = comp["Conversion"];
 							if (conversion.contains("tensorTypeRules") && !conversion["tensorTypeRules"].get<std::string>().empty())
 								tensorTypeRules = conversion["tensorTypeRules"].get<std::string>();
+
+							// Add support for convert_name parameter
+							if (conversion.contains("convertName"))
+								convertName = conversion["convertName"].get<bool>();
 						}
 					}
 				}
@@ -73,18 +78,18 @@ namespace Utils
 					std::string(sd_type_name(type)) + ".gguf";
 
 				// Perform conversion using UPDATED API from stable-diffusion.h
+				// All 6 parameters are required according to the header
 				bool result = convert(inputPath.c_str(),
 					vaePath.empty() ? nullptr : vaePath.c_str(),
 					outPath.c_str(),
 					type,
-					tensorTypeRules.empty() ? nullptr : tensorTypeRules.c_str());
+					tensorTypeRules.empty() ? nullptr : tensorTypeRules.c_str(),
+					convertName);
 
 				if (!result)
 				{
 					throw std::runtime_error("Failed to convert Model: " + inputPath);
 				}
-
-				std::cout << "Successfully converted model to: " << outPath << std::endl;
 
 				// Log conversion details
 				std::cout << "Conversion details:" << std::endl;
@@ -93,6 +98,7 @@ namespace Utils
 				std::cout << "  Output: " << outPath << std::endl;
 				std::cout << "  Type: " << sd_type_name(type) << std::endl;
 				std::cout << "  Tensor Rules: " << (tensorTypeRules.empty() ? "none" : tensorTypeRules) << std::endl;
+				std::cout << "  Convert Name: " << (convertName ? "true" : "false") << std::endl;
 
 				return true;
 			}
