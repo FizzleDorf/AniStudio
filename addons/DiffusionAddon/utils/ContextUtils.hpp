@@ -3,6 +3,7 @@
 #include "stable-diffusion.h"
 #include "pch.h"
 #include <iostream>
+#include <thread>
 
 namespace Utils {
 
@@ -24,30 +25,74 @@ namespace Utils {
 			std::string vaePath = "";
 			std::string taesdPath = "";
 			std::string controlnetPath = "";
-			std::string loraPath = "";
-			std::string embedPath = "";
 			std::string photoMakerPath = "";
+			std::string tensorTypeRules = "";  // Added for tensor_type_rules
+
+			// Note: loraPath and embedPath commented out in ctx_params below
 
 			// Get FilePaths instance for directory lookups
 			FilePaths& filePaths = FilePaths::GetInstance();
 
 			// Initialize context parameters with defaults
 			sd_ctx_params_t ctx_params;
-			sd_ctx_params_init(&ctx_params);
+
+			// MANUALLY initialize all fields since sd_ctx_params_init might not set all
+			ctx_params.model_path = nullptr;
+			ctx_params.clip_l_path = nullptr;
+			ctx_params.clip_g_path = nullptr;
+			ctx_params.clip_vision_path = nullptr;
+			ctx_params.t5xxl_path = nullptr;
+			ctx_params.llm_path = nullptr;
+			ctx_params.llm_vision_path = nullptr;
+			ctx_params.diffusion_model_path = nullptr;
+			ctx_params.high_noise_diffusion_model_path = nullptr;
+			ctx_params.vae_path = nullptr;
+			ctx_params.taesd_path = nullptr;
+			ctx_params.control_net_path = nullptr;
+			ctx_params.embeddings = nullptr;
+			ctx_params.embedding_count = 0;
+			ctx_params.photo_maker_path = nullptr;
+			ctx_params.tensor_type_rules = nullptr;
+			ctx_params.vae_decode_only = false;
+			ctx_params.free_params_immediately = false;
+			ctx_params.n_threads = std::thread::hardware_concurrency();
+			ctx_params.wtype = SD_TYPE_F32;  // Default to F32
+			ctx_params.rng_type = STD_DEFAULT_RNG;
+			ctx_params.sampler_rng_type = STD_DEFAULT_RNG;
+			ctx_params.prediction = EPS_PRED;  // Default prediction type
+			ctx_params.lora_apply_mode = LORA_APPLY_AUTO;
+			ctx_params.offload_params_to_cpu = false;
+			ctx_params.keep_clip_on_cpu = false;
+			ctx_params.keep_control_net_on_cpu = false;
+			ctx_params.keep_vae_on_cpu = false;
+			ctx_params.diffusion_flash_attn = false;
+			ctx_params.tae_preview_only = false;
+			ctx_params.diffusion_conv_direct = false;
+			ctx_params.vae_conv_direct = false;
+			ctx_params.circular_x = false;
+			ctx_params.circular_y = false;
+			ctx_params.force_sdxl_vae_conv_scale = false;
+			ctx_params.chroma_use_dit_mask = false;
+			ctx_params.chroma_use_t5_mask = false;
+			ctx_params.chroma_t5_mask_pad = 0;
+			ctx_params.flow_shift = 0.0f;
 
 			// Extract parameters from components array in metadata
 			if (metadata.contains("components") && metadata["components"].is_array())
 			{
 				for (const auto &comp : metadata["components"])
 				{
-					// Model component
-					if (comp.contains("Model"))
+					// Model component (Checkpoint)
+					if (comp.contains("Checkpoint"))
 					{
-						auto model = comp["Model"];
+						auto model = comp["Checkpoint"];
 						if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty())
 							modelPath = model["modelPath"].get<std::string>();
 						else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty())
 							modelPath = std::string(filePaths.GetPath("Checkpoint")) + "/" + model["modelName"].get<std::string>();
+
+						// Debug output
+						std::cout << "DEBUG: Model path set to: " << modelPath << std::endl;
 					}
 
 					// ClipL component
@@ -167,34 +212,6 @@ namespace Utils {
 							ctx_params.keep_control_net_on_cpu = controlnet["keep_control_net_on_cpu"].get<bool>();
 					}
 
-					// Lora component
-					if (comp.contains("Lora"))
-					{
-						auto lora = comp["Lora"];
-						if (lora.contains("modelPath") && !lora["modelPath"].get<std::string>().empty())
-						{
-							loraPath = lora["modelPath"].get<std::string>();
-
-							if (loraPath.empty()) {
-								loraPath = filePaths.GetPath("Lora");
-							}
-						}
-					}
-
-					// Embedding component
-					if (comp.contains("Embedding"))
-					{
-						auto embed = comp["Embedding"];
-						if (embed.contains("modelPath") && !embed["modelPath"].get<std::string>().empty())
-						{
-							embedPath = embed["modelPath"].get<std::string>();
-
-							if (embedPath.empty()) {
-								embedPath = filePaths.GetPath("Embed");
-							}
-						}
-					}
-
 					// Use PhotoMaker component to set photo_maker_path (this is what exists in your API)
 					if (comp.contains("PhotoMaker") || comp.contains("StackedIdEmbed"))
 					{
@@ -225,6 +242,12 @@ namespace Utils {
 							ctx_params.vae_conv_direct = sampler["vae_conv_direct"].get<bool>();
 						if (sampler.contains("current_type_method"))
 							ctx_params.wtype = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
+						if (sampler.contains("current_prediction_type"))
+							ctx_params.prediction = static_cast<prediction_t>(sampler["current_prediction_type"].get<int>());
+
+						// Check for tensor type rules
+						if (sampler.contains("tensor_type_rules") && !sampler["tensor_type_rules"].get<std::string>().empty())
+							tensorTypeRules = sampler["tensor_type_rules"].get<std::string>();
 					}
 
 					// Latent Component
@@ -233,6 +256,8 @@ namespace Utils {
 						auto latent = comp["Latent"];
 						if (latent.contains("current_rng_type"))
 							ctx_params.rng_type = static_cast<rng_type_t>(latent["current_rng_type"].get<int>());
+						if (latent.contains("sampler_rng_type"))
+							ctx_params.sampler_rng_type = static_cast<rng_type_t>(latent["sampler_rng_type"].get<int>());
 					}
 
 					// VideoParams component for flow_shift
@@ -257,26 +282,42 @@ namespace Utils {
 				}
 			}
 
-			// Set paths in context parameters
-			ctx_params.model_path = modelPath.c_str();
-			ctx_params.clip_l_path = clipLPath.c_str();
-			ctx_params.clip_g_path = clipGPath.c_str();
-			ctx_params.clip_vision_path = clipVisionPath.c_str();
-			ctx_params.t5xxl_path = t5xxlPath.c_str();
-			ctx_params.llm_path = llmPath.c_str();
-			ctx_params.llm_vision_path = llmVisionPath.c_str();
-			ctx_params.diffusion_model_path = diffusionModelPath.c_str();
-			ctx_params.high_noise_diffusion_model_path = highNoiseModelPath.c_str();
-			ctx_params.vae_path = vaePath.c_str();
-			ctx_params.taesd_path = taesdPath.c_str();
-			ctx_params.control_net_path = controlnetPath.c_str();
+			// Debug: Print all paths before creating context
+			std::cout << "DEBUG: Creating SD context with paths:" << std::endl;
+			std::cout << "  model_path: " << (modelPath.empty() ? "(empty)" : modelPath) << std::endl;
+			std::cout << "  vae_path: " << (vaePath.empty() ? "(empty)" : vaePath) << std::endl;
+			std::cout << "  clip_l_path: " << (clipLPath.empty() ? "(empty)" : clipLPath) << std::endl;
+			std::cout << "  clip_g_path: " << (clipGPath.empty() ? "(empty)" : clipGPath) << std::endl;
+
+			// Set paths in context parameters (only if not empty)
+			ctx_params.model_path = modelPath.empty() ? nullptr : modelPath.c_str();
+			ctx_params.clip_l_path = clipLPath.empty() ? nullptr : clipLPath.c_str();
+			ctx_params.clip_g_path = clipGPath.empty() ? nullptr : clipGPath.c_str();
+			ctx_params.clip_vision_path = clipVisionPath.empty() ? nullptr : clipVisionPath.c_str();
+			ctx_params.t5xxl_path = t5xxlPath.empty() ? nullptr : t5xxlPath.c_str();
+			ctx_params.llm_path = llmPath.empty() ? nullptr : llmPath.c_str();
+			ctx_params.llm_vision_path = llmVisionPath.empty() ? nullptr : llmVisionPath.c_str();
+			ctx_params.diffusion_model_path = diffusionModelPath.empty() ? nullptr : diffusionModelPath.c_str();
+			ctx_params.high_noise_diffusion_model_path = highNoiseModelPath.empty() ? nullptr : highNoiseModelPath.c_str();
+			ctx_params.vae_path = vaePath.empty() ? nullptr : vaePath.c_str();
+			ctx_params.taesd_path = taesdPath.empty() ? nullptr : taesdPath.c_str();
+			ctx_params.control_net_path = controlnetPath.empty() ? nullptr : controlnetPath.c_str();
+			ctx_params.photo_maker_path = photoMakerPath.empty() ? nullptr : photoMakerPath.c_str();
+			ctx_params.tensor_type_rules = tensorTypeRules.empty() ? nullptr : tensorTypeRules.c_str();
+
+			// Note: The following are commented out in the original code
 			// ctx_params.lora_model_dir = loraPath.c_str();
 			// ctx_params.embedding_dir = embedPath.c_str();
-			ctx_params.photo_maker_path = photoMakerPath.c_str();
 
-
+			// Create context
 			sd_ctx_t* ctx = new_sd_ctx(&ctx_params);
 
+			if (!ctx) {
+				std::cerr << "ERROR: Failed to create SD context!" << std::endl;
+				return nullptr;
+			}
+
+			std::cout << "DEBUG: SD context created successfully!" << std::endl;
 			return ctx;
 		}
 		catch (const std::exception &e)

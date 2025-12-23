@@ -37,7 +37,7 @@ namespace GUI {
 		mgr.AddComponent<CheckpointComponent>(convertEntity);
 		mgr.AddComponent<VaeComponent>(convertEntity);
 		mgr.AddComponent<SamplerComponent>(convertEntity);
-		mgr.AddComponent<ConversionComponent>(convertEntity); // Add ConversionComponent
+		mgr.AddComponent<ConversionComponent>(convertEntity);
 
 		// Configure defaults
 		if (mgr.HasComponent<CheckpointComponent>(convertEntity)) {
@@ -77,7 +77,7 @@ namespace GUI {
 		return {
 			"Models",
 			"Sampling",
-			"Tools" // ConversionComponent has category "Tools"
+			"Tools"
 		};
 	}
 
