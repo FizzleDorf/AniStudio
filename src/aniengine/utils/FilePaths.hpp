@@ -151,35 +151,30 @@ namespace Utils
 		}
 
 	public:
+		// REMOVED: Singleton pattern - this is now a regular class
+		// static FilePaths& GetInstance();
+		// static const char* GetStaticPath(const char* key);
+		// static const char* GetStaticDataPath();
+		// static const char* GetStaticExecutableDir();
+		// static bool IsStaticInitialized();
+
 		FilePaths() = default;
 		~FilePaths() = default;
 
-		// Disable copy (for DLL boundaries)
+		// Regular constructor that can take initialization parameters
+		FilePaths(const std::string& customDataPath = "") {
+			if (!customDataPath.empty()) {
+				m_dataPath = customDataPath;
+			}
+		}
+
+		// Disable copy (for DLL boundaries) - keep as is
 		FilePaths(const FilePaths&) = delete;
 		FilePaths& operator=(const FilePaths&) = delete;
 
-		// Singleton access
-		static FilePaths& GetInstance() {
-			static FilePaths instance;
-			return instance;
-		}
-
-		// Static convenience methods for backward compatibility
-		static const char* GetStaticPath(const char* key) {
-			return GetInstance().GetPath(key);
-		}
-
-		static const char* GetStaticDataPath() {
-			return GetInstance().GetDataPath();
-		}
-
-		static const char* GetStaticExecutableDir() {
-			return GetInstance().GetExecutableDir();
-		}
-
-		static bool IsStaticInitialized() {
-			return GetInstance().IsInitialized();
-		}
+		// Enable move semantics
+		FilePaths(FilePaths&&) = default;
+		FilePaths& operator=(FilePaths&&) = default;
 
 		// Application initialization - should be called at startup
 		void Init()
@@ -204,8 +199,10 @@ namespace Utils
 				std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
 				std::cout << "[FilePaths] Base directory: " << basePath.string() << std::endl;
 
-				// Set data path
-				m_dataPath = (basePath / "data" / "defaults").string();
+				// Set data path if not already set
+				if (m_dataPath.empty()) {
+					m_dataPath = (basePath / "data" / "defaults").string();
+				}
 				std::cout << "[FilePaths] Set data path: " << m_dataPath << std::endl;
 
 				// Try to load saved paths (this might override some defaults)

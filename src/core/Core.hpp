@@ -54,5 +54,4 @@ namespace ANI {
 
 		StudioCore studioCore;
 	};
-
-} // namespace ANI
+}

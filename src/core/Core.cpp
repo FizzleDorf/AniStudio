@@ -36,18 +36,16 @@ namespace ANI {
 	}
 
 	void Core::Init() {
-		std::cout << "[Core] Initializing FilePaths..." << std::endl;
-		// Use the singleton instance
-		Utils::FilePaths::GetInstance().Init();
-		std::cout << "[Core] FilePaths initialized" << std::endl;
+		std::cout << "[Core] Initializing..." << std::endl;
 
-		// Initialize window and ImGui
+		// Initialize window and ImGui (FilePaths will be initialized inside EngineContext)
 		if (!InitializeWindow()) {
 			throw std::runtime_error("Failed to initialize window");
 		}
 		std::cout << "[Core] Window and ImGui fully initialized" << std::endl;
 
 		// Initialize the studio core (basic initialization)
+		// This will create EngineContext which initializes FilePaths
 		if (!studioCore.Initialize()) {
 			throw std::runtime_error("Failed to initialize StudioCore");
 		}
@@ -322,10 +320,10 @@ namespace ANI {
 		std::cout << "[Core] Enabled docking by default" << std::endl;
 
 		std::cout << "[Core] Setting INI file path..." << std::endl;
-		// Get ImGui state path from FilePaths singleton
-		const char* imguiStatePath = Utils::FilePaths::GetInstance().GetPath("ImguiState");
-		std::string iniFilePath = imguiStatePath ? std::string(imguiStatePath) : "imgui.ini";
 
+		// We can't use FilePaths singleton anymore - we'll set a default path
+		// The actual path will be set when StudioCore initializes and we have access to context
+		std::string iniFilePath = "imgui.ini";
 		std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
 		if (!std::filesystem::exists(iniDir)) {
 			std::filesystem::create_directories(iniDir);

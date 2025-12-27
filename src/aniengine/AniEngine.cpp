@@ -1,6 +1,7 @@
 #define ANI_ENGINE_EXPORTS
 
 #include "AniEngine.hpp"
+#include "EngineContext.hpp"
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
@@ -12,7 +13,7 @@ using namespace ECS;
 namespace ANI {
 
 	EngineCore::EngineCore()
-		: initialized(false), running(false), pluginDirectory("../plugins") {
+		: initialized(false), running(false) {
 		std::cout << "[EngineCore] Constructor called" << std::endl;
 	}
 
@@ -23,11 +24,17 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreComponents() {
+		if (!context || !context->entityManager) {
+			std::cerr << "[EngineCore] Context or EntityManager not initialized!" << std::endl;
+			return;
+		}
+
+		auto& entityManager = *context->entityManager;
 
 		entityManager.RegisterComponent<ImageComponent>("Image");
 		entityManager.RegisterComponent<InputImageComponent>("InputImage");
 		entityManager.RegisterComponent<OutputImageComponent>("OutputImage");
-		entityManager.RegisterComponent<MaskImageComponent >("MaskImage");
+		entityManager.RegisterComponent<MaskImageComponent>("MaskImage");
 
 		entityManager.RegisterComponent<VideoComponent>("Video");
 		entityManager.RegisterComponent<InputVideoComponent>("InputVideo");
@@ -42,6 +49,13 @@ namespace ANI {
 	}
 
 	void EngineCore::RegisterCoreSystems() {
+		if (!context || !context->entityManager) {
+			std::cerr << "[EngineCore] Context or EntityManager not initialized!" << std::endl;
+			return;
+		}
+
+		auto& entityManager = *context->entityManager;
+
 		entityManager.RegisterSystem<ImageSystem>();
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
@@ -50,27 +64,33 @@ namespace ANI {
 	}
 
 	void EngineCore::InitializePlugins() {
-		if (!pluginManager) {
-			std::cerr << "[EngineCore] PluginManager not created!" << std::endl;
+		if (!context || !context->pluginManager) {
+			std::cerr << "[EngineCore] PluginManager not created in context!" << std::endl;
 			return;
 		}
 
-		std::cout << "[EngineCore] Initializing plugins from: " << pluginDirectory << std::endl;
+		std::cout << "[EngineCore] Initializing plugins from: " << context->pluginDirectory << std::endl;
 
 		// Create plugin directory if it doesn't exist
-		if (!std::filesystem::exists(pluginDirectory)) {
-			std::filesystem::create_directories(pluginDirectory);
-			std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
+		if (!std::filesystem::exists(context->pluginDirectory)) {
+			std::filesystem::create_directories(context->pluginDirectory);
+			std::cout << "[EngineCore] Created plugin directory: " << context->pluginDirectory << std::endl;
 		}
 
-		std::cout << "[EngineCore] Setting global data path: " << Utils::FilePaths::GetInstance().GetDataPath() << std::endl;
-		pluginManager->SetGlobalDataPath(Utils::FilePaths::GetInstance().GetDataPath());
+		// Use FilePaths from context
+		if (context->filePaths) {
+			std::cout << "[EngineCore] Setting global data path: " << context->filePaths->GetDataPath() << std::endl;
+			context->pluginManager->SetGlobalDataPath(context->filePaths->GetDataPath());
+		}
+		else {
+			std::cerr << "[EngineCore] FilePaths not available in context!" << std::endl;
+		}
 
 		// Scan plugins directory (but don't auto-load everything)
-		pluginManager->scanPluginDirectory(pluginDirectory);
+		context->pluginManager->scanPluginDirectory(context->pluginDirectory);
 
 		std::cout << "[EngineCore] Loading global plugin state..." << std::endl;
-		pluginManager->LoadGlobalPluginState();
+		context->pluginManager->LoadGlobalPluginState();
 
 		std::cout << "[EngineCore] Plugin system initialized with selective loading" << std::endl;
 	}
@@ -84,14 +104,20 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			std::cout << "[EngineCore] Initializing file paths..." << std::endl;
-			Utils::FilePaths::GetInstance().Init();
+			// Create EngineContext (which initializes FilePaths)
+			context = EngineContext::Create();
+
+			if (!context->isValid()) {
+				std::cerr << "[EngineCore] Failed to create valid EngineContext!" << std::endl;
+				return false;
+			}
 
 			std::cout << "[EngineCore] File paths initialized:" << std::endl;
-			const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+			const char* defaultProjectPath = context->filePaths->GetPath("DefaultProject");
 			std::cout << "[EngineCore]   defaultProjectPath: " << (defaultProjectPath ? defaultProjectPath : "(null)") << std::endl;
 
 			// Invalidate ID 0 for consistency
+			auto& entityManager = *context->entityManager;
 			const ECS::EntityID temp = entityManager.AddNewEntity();
 			entityManager.DestroyEntity(temp);
 
@@ -99,9 +125,7 @@ namespace ANI {
 			RegisterCoreComponents();
 			RegisterCoreSystems();
 
-			// Create plugin manager (ENGINE ONLY VERSION)
-			pluginManager = std::make_unique<Plugins::PluginManager>(entityManager);
-			std::cout << "[EngineCore] Plugin manager created" << std::endl;
+			std::cout << "[EngineCore] Engine context created successfully" << std::endl;
 
 			// Initialize plugins
 			InitializePlugins();
@@ -110,7 +134,7 @@ namespace ANI {
 			running = true;
 
 			std::cout << "[EngineCore] Initialized successfully" << std::endl;
-			std::cout << "[EngineCore] EntityManager address: " << &entityManager << std::endl;
+			std::cout << "[EngineCore] EntityManager address: " << context->entityManager.get() << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -119,21 +143,49 @@ namespace ANI {
 		}
 	}
 
+	std::unique_ptr<EngineCore> EngineCore::CreateWithContext(std::shared_ptr<EngineContext> existingContext) {
+		if (!existingContext || !existingContext->isValid()) {
+			std::cerr << "[EngineCore] Invalid context provided to CreateWithContext!" << std::endl;
+			return nullptr;
+		}
+
+		auto engineCore = std::make_unique<EngineCore>();
+		engineCore->context = existingContext;
+
+		// Register components and systems
+		engineCore->RegisterCoreComponents();
+		engineCore->RegisterCoreSystems();
+
+		// Initialize plugins
+		engineCore->InitializePlugins();
+
+		engineCore->initialized = true;
+		engineCore->running = true;
+
+		std::cout << "[EngineCore] Created with existing context successfully" << std::endl;
+		return engineCore;
+	}
+
 	void EngineCore::Shutdown() {
-		if (!initialized) return;
+		if (!initialized || !context) return;
 
 		std::cout << "[EngineCore] Shutting down..." << std::endl;
 
 		running = false;
 
 		// Save global plugin state before shutdown
-		if (pluginManager) {
+		if (context->pluginManager) {
 			std::cout << "[EngineCore] Saving global plugin state..." << std::endl;
-			pluginManager->SaveGlobalPluginState();
-			pluginManager.reset();
+			context->pluginManager->SaveGlobalPluginState();
 		}
 
-		entityManager.Reset();
+		// Reset entity manager
+		if (context->entityManager) {
+			context->entityManager->Reset();
+		}
+
+		// Clear the context
+		context.reset();
 
 		initialized = false;
 
@@ -141,14 +193,14 @@ namespace ANI {
 	}
 
 	void EngineCore::Update(float deltaTime) {
-		if (!initialized) return;
+		if (!initialized || !context) return;
 
-		entityManager.Update(deltaTime);
+		context->entityManager->Update(deltaTime);
 
 		// Update plugins
-		if (pluginManager) {
-			pluginManager->checkForChanges(); // Hot reload check
-			pluginManager->updatePlugins(deltaTime);
+		if (context->pluginManager) {
+			context->pluginManager->checkForChanges(); // Hot reload check
+			context->pluginManager->updatePlugins(deltaTime);
 		}
 	}
 

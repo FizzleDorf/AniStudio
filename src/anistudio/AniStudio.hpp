@@ -23,6 +23,7 @@
 #define ANI_STUDIO_API
 
 #include "AniEngine.hpp"
+#include "StudioContext.hpp"
 #include "GUI.h"
 #include "ProjectManager.hpp"
 #include "ViewState.hpp"
@@ -67,10 +68,33 @@ namespace ANI {
 		void Update(float deltaTime);
 		void Render();
 
-		// Manager access
-		ECS::EntityManager& GetEntityManager() { return engineCore.GetEntityManager(); }
-		GUI::ViewManager& GetViewManager() { return viewManager; }
-		ANI::ProjectManager& GetProjectManager() { return m_projectManager; }
+		// Manager access via context
+		ECS::EntityManager& GetEntityManager() {
+			if (!studioContext || !studioContext->entityManager) {
+				throw std::runtime_error("StudioContext or EntityManager not initialized");
+			}
+			return *studioContext->entityManager;
+		}
+
+		GUI::ViewManager& GetViewManager() {
+			if (!studioContext || !studioContext->viewManager) {
+				throw std::runtime_error("StudioContext or ViewManager not initialized");
+			}
+			return *studioContext->viewManager;
+		}
+
+		ANI::ProjectManager& GetProjectManager() {
+			if (!studioContext || !studioContext->projectManager) {
+				throw std::runtime_error("StudioContext or ProjectManager not initialized");
+			}
+			return *studioContext->projectManager;
+		}
+
+		// Context access
+		std::shared_ptr<StudioContext> GetStudioContext() const { return studioContext; }
+
+		// Create StudioCore with existing context
+		static std::unique_ptr<StudioCore> CreateWithContext(std::shared_ptr<StudioContext> existingContext);
 
 		// Studio state
 		bool IsRunning() const { return running && engineCore.IsRunning(); }
@@ -79,13 +103,15 @@ namespace ANI {
 			engineCore.SetRunning(isRunning);
 		}
 
+		bool IsInitialized() const { return initialized; }
+
 		// Window management
 		void SetWindowHandle(void* window);
 		void SetImGuiContext(void* context);
 		void SetCoreCallbacks();
 		void SetCoreEvents();
 
-		//Workspace management
+		// Workspace management
 		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
 		GUI::WorkspaceID GetActiveWorkspace() const;
 
@@ -99,16 +125,16 @@ namespace ANI {
 		bool running;
 		bool m_isShuttingDown; // Prevent callbacks during shutdown
 
+		std::shared_ptr<StudioContext> studioContext;
+
 		// Pointers to the imgui and glfw instances
 		void* windowHandle;
 		void* imguiContext;
 
 		// Core systems
 		EngineCore engineCore;
-		GUI::ViewManager viewManager;
-		ANI::ProjectManager m_projectManager;
 
-		// Plugin system
+		// Plugin system (still managed separately as it needs ImGui context)
 		std::unique_ptr<Plugins::StudioPluginManager> studioPluginManager;
 
 		// Standalone views
@@ -130,5 +156,4 @@ namespace ANI {
 		void ApplyWindowStateToGLFW();
 		std::string GetDefaultWindowStatePath() const;
 	};
-
 }

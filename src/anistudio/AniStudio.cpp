@@ -1,4 +1,5 @@
 #include "AniStudio.hpp"
+#include "StudioContext.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
 #include "ImGuiSettingsUtil.hpp"
@@ -15,11 +16,8 @@ namespace ANI {
 
 	StudioCore::StudioCore()
 		: initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
-		m_projectManager(viewManager, engineCore.GetEntityManager()), m_isShuttingDown(false) {
+		m_isShuttingDown(false) {
 		std::cout << "[StudioCore] Constructor called" << std::endl;
-
-		m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(m_projectManager);
-		engineCore.GetEntityManager().RegisterSystem<TextureSystem>();
 	}
 
 	StudioCore::~StudioCore() {
@@ -31,10 +29,22 @@ namespace ANI {
 	void StudioCore::SetImGuiContext(void* context) {
 		imguiContext = context;
 		std::cout << "[StudioCore] ImGui context set to: " << imguiContext << std::endl;
+
+		// Also update the context if it exists
+		if (studioContext) {
+			studioContext->imguiContext = context;
+		}
 	}
 
 	void StudioCore::RegisterCoreViews() {
+		if (!studioContext || !studioContext->viewManager) {
+			std::cerr << "[StudioCore] Context or ViewManager not initialized!" << std::endl;
+			return;
+		}
+
 		std::cout << "[StudioCore] Registering core view types..." << std::endl;
+
+		auto& viewManager = *studioContext->viewManager;
 
 		viewManager.RegisterView<GUI::DebugView>("DebugView");
 		viewManager.RegisterView<GUI::SettingsView>("SettingsView");
@@ -56,7 +66,7 @@ namespace ANI {
 
 		viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
 			[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-			return std::make_unique<GUI::WorkspaceView>(mgr, viewManager);
+			return std::make_unique<GUI::WorkspaceView>(mgr, *studioContext->viewManager);
 		},
 			[]() -> GUI::ViewMetadata { return GUI::WorkspaceView::GetMetadata(); }
 		);
@@ -65,6 +75,11 @@ namespace ANI {
 	}
 
 	void StudioCore::InitializeStudioPlugins() {
+		if (!studioContext) {
+			std::cerr << "[StudioCore] StudioContext not initialized!" << std::endl;
+			return;
+		}
+
 		std::cout << "[StudioCore] Initializing studio plugin system..." << std::endl;
 
 		if (!imguiContext) {
@@ -89,11 +104,14 @@ namespace ANI {
 
 		std::cout << "[StudioCore] ImGui context verified - fonts loaded: " << io.Fonts->Fonts.Size << std::endl;
 
-		studioPluginManager = std::make_unique<Plugins::StudioPluginManager>(
-			engineCore.GetEntityManager(),
-			viewManager,
+		// Create StudioPluginManager and store in context
+		studioContext->studioPluginManager = std::make_shared<StudioPluginManager>(
+			*studioContext->entityManager,
+			*studioContext->viewManager,
 			static_cast<ImGuiContext*>(imguiContext)
 			);
+
+		studioPluginManager = studioContext->studioPluginManager; // Keep a local reference for backward compatibility
 
 		std::string pluginDirectory = "../plugins";
 
@@ -102,8 +120,14 @@ namespace ANI {
 			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		std::cout << "[StudioCore] Setting global data path: " << Utils::FilePaths::GetInstance().GetDataPath() << std::endl;
-		studioPluginManager->SetGlobalDataPath(Utils::FilePaths::GetInstance().GetDataPath());
+		// Use FilePaths from context
+		if (studioContext->filePaths) {
+			std::cout << "[StudioCore] Setting global data path: " << studioContext->filePaths->GetDataPath() << std::endl;
+			studioPluginManager->SetGlobalDataPath(studioContext->filePaths->GetDataPath());
+		}
+		else {
+			std::cerr << "[StudioCore] FilePaths not available in context!" << std::endl;
+		}
 
 		studioPluginManager->scanPluginDirectory(pluginDirectory);
 		studioPluginManager->enableHotReload(false);
@@ -115,28 +139,40 @@ namespace ANI {
 	}
 
 	void StudioCore::SetupProjectCallbacks() {
-		m_projectManager.SetProjectLoadedCallback([this](const std::string& projectPath) {
+		if (!studioContext || !studioContext->projectManager) {
+			std::cerr << "[StudioCore] Context or ProjectManager not initialized!" << std::endl;
+			return;
+		}
+
+		auto& projectManager = *studioContext->projectManager;
+
+		projectManager.SetProjectLoadedCallback([this](const std::string& projectPath) {
 			OnProjectLoaded(projectPath);
 		});
 
-		m_projectManager.SetProjectCreatedCallback([this](const std::string& projectPath) {
+		projectManager.SetProjectCreatedCallback([this](const std::string& projectPath) {
 			OnProjectCreated(projectPath);
 		});
 
-		m_projectManager.SetProjectClosedCallback([this]() {
+		projectManager.SetProjectClosedCallback([this]() {
 			if (!m_isShuttingDown) {
 				OnProjectClosed();
 			}
 		});
 
-		m_projectManager.SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
+		projectManager.SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
 			std::cout << "[StudioCore] Syncing ViewManager with loaded active workspace: " << activeWorkspaceID << std::endl;
-			viewManager.SetActiveWorkspace(activeWorkspaceID);
+			studioContext->viewManager->SetActiveWorkspace(activeWorkspaceID);
 		});
 	}
 
 	void StudioCore::InitializeWindowState() {
-		m_windowState.SetGlobalDataPath(Utils::FilePaths::GetInstance().GetDataPath());
+		if (!studioContext || !studioContext->filePaths) {
+			std::cerr << "[StudioCore] Context or FilePaths not initialized!" << std::endl;
+			return;
+		}
+
+		m_windowState.SetGlobalDataPath(studioContext->filePaths->GetDataPath());
 
 		std::string defaultPath = GetDefaultWindowStatePath();
 		if (std::filesystem::exists(defaultPath)) {
@@ -157,7 +193,15 @@ namespace ANI {
 
 		if (window) {
 			std::cout << "[StudioCore] Window handle set for WindowState utility" << std::endl;
-			m_projectManager.SetWindowHandle(window);
+
+			if (studioContext && studioContext->projectManager) {
+				studioContext->projectManager->SetWindowHandle(window);
+			}
+
+			// Update window handle in context
+			if (studioContext) {
+				studioContext->windowHandle = window;
+			}
 
 			if (initialized) {
 				InitializeWindowState();
@@ -219,14 +263,36 @@ namespace ANI {
 		try {
 			std::cout << "[StudioCore] Initializing..." << std::endl;
 
+			// Create EngineCore
 			if (!engineCore.Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
 			}
 
-			viewManager.SetEntityManager(engineCore.GetEntityManager());
-			SetupProjectCallbacks();
+			// Get the EngineContext and convert it to StudioContext
+			auto engineContext = engineCore.GetEngineContext();
+			if (!engineContext) {
+				std::cerr << "[StudioCore] Failed to get EngineContext from EngineCore!" << std::endl;
+				return false;
+			}
 
+			// Create StudioContext from EngineContext
+			studioContext = StudioContext::FromEngine(engineContext);
+			if (!studioContext || !studioContext->isValid()) {
+				std::cerr << "[StudioCore] Failed to create valid StudioContext!" << std::endl;
+				return false;
+			}
+
+			// Set ViewManager's EntityManager
+			studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
+
+			// Initialize ProjectManagerView with the context's ProjectManager
+			m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager);
+
+			// Register TextureSystem
+			studioContext->entityManager->RegisterSystem<TextureSystem>();
+
+			SetupProjectCallbacks();
 			SetCoreCallbacks();
 			SetCoreEvents();
 
@@ -241,6 +307,39 @@ namespace ANI {
 			Shutdown();
 			return false;
 		}
+	}
+
+	std::unique_ptr<StudioCore> StudioCore::CreateWithContext(std::shared_ptr<StudioContext> existingContext) {
+		if (!existingContext || !existingContext->isValid()) {
+			std::cerr << "[StudioCore] Invalid context provided to CreateWithContext!" << std::endl;
+			return nullptr;
+		}
+
+		auto studioCore = std::make_unique<StudioCore>();
+		studioCore->studioContext = existingContext;
+
+		// Create EngineCore with the shared EngineContext
+		studioCore->engineCore = EngineCore::CreateWithContext(existingContext);
+		if (!studioCore->engineCore) {
+			std::cerr << "[StudioCore] Failed to create EngineCore with context!" << std::endl;
+			return nullptr;
+		}
+
+		// Initialize ProjectManagerView
+		studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager);
+
+		// Register TextureSystem
+		studioCore->studioContext->entityManager->RegisterSystem<TextureSystem>();
+
+		studioCore->SetupProjectCallbacks();
+		studioCore->SetCoreCallbacks();
+		studioCore->SetCoreEvents();
+
+		studioCore->initialized = true;
+		studioCore->running = true;
+
+		std::cout << "[StudioCore] Created with existing context successfully" << std::endl;
+		return studioCore;
 	}
 
 	void StudioCore::CompleteInitialization() {
@@ -258,8 +357,14 @@ namespace ANI {
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 		std::cout << "[StudioCore] Using main ImGui context: " << currentContext << std::endl;
 
+		// Use FilePaths from context
+		if (!studioContext || !studioContext->filePaths) {
+			std::cerr << "[StudioCore] ERROR: Context or FilePaths not initialized!" << std::endl;
+			return;
+		}
+
 		std::cout << "[StudioCore] Loading ImGui style..." << std::endl;
-		std::string stylePath = std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/settings/imgui_style.json";
+		std::string stylePath = std::string(studioContext->filePaths->GetDataPath()) + "/settings/imgui_style.json";
 		if (std::filesystem::exists(stylePath)) {
 			LoadStyleFromFile(ImGui::GetStyle(), stylePath);
 			std::cout << "[StudioCore] Loaded custom style from: " << stylePath << std::endl;
@@ -284,7 +389,7 @@ namespace ANI {
 
 		std::cout << "[StudioCore] Loading ImGui IO settings..." << std::endl;
 		try {
-			std::string settingsPath = std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/settings/imgui_render_settings.json";
+			std::string settingsPath = std::string(studioContext->filePaths->GetDataPath()) + "/settings/imgui_render_settings.json";
 			if (std::filesystem::exists(settingsPath)) {
 				Utils::ImGuiSettingsUtil::LoadFromFile(settingsPath, io);
 				std::cout << "[StudioCore] ImGui IO settings loaded from file" << std::endl;
@@ -306,7 +411,8 @@ namespace ANI {
 		m_projectManagerView->Init();
 		std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;
 
-		m_menuBar = std::make_unique<GUI::MenuBar>(m_projectManager, viewManager);
+		// Create MenuBar with context managers
+		m_menuBar = std::make_unique<GUI::MenuBar>(*studioContext->projectManager, *studioContext->viewManager);
 		std::cout << "[StudioCore] MenuBar created" << std::endl;
 
 		m_showProjectManagerView = true;
@@ -361,7 +467,11 @@ namespace ANI {
 	}
 
 	std::string StudioCore::GetDefaultWindowStatePath() const {
-		return std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/window_state.json";
+		if (!studioContext || !studioContext->filePaths) {
+			std::cerr << "[StudioCore] Context or FilePaths not available!" << std::endl;
+			return "";
+		}
+		return std::string(studioContext->filePaths->GetDataPath()) + "/window_state.json";
 	}
 
 	void StudioCore::Shutdown() {
@@ -372,21 +482,24 @@ namespace ANI {
 		m_isShuttingDown = true;
 
 		try {
-			if (m_projectManager.IsProjectOpen()) {
-				std::cout << "[StudioCore] Saving open project BEFORE shutdown: " << m_projectManager.GetCurrentProjectName() << std::endl;
+			if (studioContext && studioContext->projectManager && studioContext->projectManager->IsProjectOpen()) {
+				std::cout << "[StudioCore] Saving open project BEFORE shutdown: "
+					<< studioContext->projectManager->GetCurrentProjectName() << std::endl;
 
 				if (studioPluginManager) {
 					studioPluginManager->SaveProjectPluginState();
 				}
 
-				m_projectManager.SaveProject();
+				studioContext->projectManager->SaveProject();
 			}
 			else {
 				SyncWindowStateFromGLFW();
 				std::string defaultPath = GetDefaultWindowStatePath();
-				std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
-				m_windowState.SaveToFile(defaultPath);
-				std::cout << "[StudioCore] Saved default window state during shutdown" << std::endl;
+				if (!defaultPath.empty()) {
+					std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+					m_windowState.SaveToFile(defaultPath);
+					std::cout << "[StudioCore] Saved default window state during shutdown" << std::endl;
+				}
 			}
 
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -402,10 +515,15 @@ namespace ANI {
 			}
 
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
-			viewManager.FullReset();
+			if (studioContext && studioContext->viewManager) {
+				studioContext->viewManager->FullReset();
+			}
 
 			std::cout << "[StudioCore] Shutting down engine core..." << std::endl;
 			engineCore.Shutdown();
+
+			// Clear the context
+			studioContext.reset();
 
 			std::cout << "[StudioCore] All components shut down successfully" << std::endl;
 		}
@@ -418,7 +536,8 @@ namespace ANI {
 	}
 
 	void StudioCore::Update(float deltaTime) {
-		if (!running || !initialized) return;
+		if (!running || !initialized || !studioContext) return;
+
 		ANI::Events::Ref().Poll();
 		try {
 			engineCore.Update(deltaTime);
@@ -433,7 +552,7 @@ namespace ANI {
 				m_projectManagerView->Update(deltaTime);
 			}
 
-			viewManager.Update(deltaTime);
+			studioContext->viewManager->Update(deltaTime);
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[StudioCore] Update error: " << e.what() << std::endl;
@@ -441,12 +560,12 @@ namespace ANI {
 	}
 
 	void StudioCore::Render() {
-		if (!running || !initialized) return;
+		if (!running || !initialized || !studioContext) return;
 
 		try {
 			CompleteInitialization();
 
-			bool IsProjectOpen = m_projectManager.IsProjectOpen();
+			bool IsProjectOpen = studioContext->projectManager->IsProjectOpen();
 
 			if (!IsProjectOpen && m_showProjectManagerView && m_projectManagerView) {
 				m_projectManagerView->Render();
@@ -479,7 +598,7 @@ namespace ANI {
 					ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
 					ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
 
-					viewManager.Render();
+					studioContext->viewManager->Render();
 					ImGui::End();
 				}
 				else {
@@ -496,14 +615,14 @@ namespace ANI {
 	void StudioCore::SetCoreCallbacks() {
 		std::cout << "[StudioCore] Setting up core system callbacks..." << std::endl;
 
-		auto& entityMgr = engineCore.GetEntityManager();
+		auto& entityMgr = GetEntityManager();
 		auto textureSystem = entityMgr.GetSystem<TextureSystem>();
 		auto imageSystem = entityMgr.GetSystem<ImageSystem>();
 
 		if (textureSystem && imageSystem) {
 			// System callback: When ImageSystem finishes loading, queue texture creation
 			imageSystem->RegisterImageAddedCallback([this, textureSystem](EntityID entityID) {
-				auto& entityMgr = engineCore.GetEntityManager();
+				auto& entityMgr = GetEntityManager();
 				if (entityMgr.HasComponent<ImageComponent>(entityID)) {
 					auto& imageComp = entityMgr.GetComponent<ImageComponent>(entityID);
 
@@ -545,7 +664,7 @@ namespace ANI {
 	void StudioCore::SetCoreEvents() {
 		std::cout << "[StudioCore] Registering core system events..." << std::endl;
 
-		auto& entityMgr = engineCore.GetEntityManager();
+		auto& entityMgr = GetEntityManager();
 		auto imageSystem = entityMgr.GetSystem<ImageSystem>();
 
 		if (!imageSystem) {
@@ -554,7 +673,6 @@ namespace ANI {
 		}
 
 		// Event handler: LoadImageRequest from ImageView
-		// Capture 'this' so we can access engineCore member
 		Events::Ref().RegisterEventWithData("LoadImageRequest", [this, imageSystem](const std::any& data) {
 			try {
 				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
@@ -562,7 +680,7 @@ namespace ANI {
 
 				std::cout << "[StudioCore] LoadImageRequest: " << filePath << std::endl;
 
-				auto& entityMgr = engineCore.GetEntityManager();
+				auto& entityMgr = GetEntityManager();
 				ECS::EntityID entity = entityMgr.AddNewEntity();
 				entityMgr.AddComponent<ImageComponent>(entity);
 				imageSystem->SetImage(entity, filePath);
@@ -590,14 +708,20 @@ namespace ANI {
 	}
 
 	void StudioCore::SetActiveWorkspace(GUI::WorkspaceID workspaceID) {
-		viewManager.SetActiveWorkspace(workspaceID);
-		if (m_projectManager.IsProjectOpen()) {
-			m_projectManager.SetLastActiveWorkspace(workspaceID);
+		if (studioContext && studioContext->viewManager) {
+			studioContext->viewManager->SetActiveWorkspace(workspaceID);
+
+			if (studioContext->projectManager && studioContext->projectManager->IsProjectOpen()) {
+				studioContext->projectManager->SetLastActiveWorkspace(workspaceID);
+			}
 		}
 	}
 
 	GUI::WorkspaceID StudioCore::GetActiveWorkspace() const {
-		return viewManager.GetActiveWorkspace();
+		if (studioContext && studioContext->viewManager) {
+			return studioContext->viewManager->GetActiveWorkspace();
+		}
+		return 0;
 	}
 
 } // namespace ANI
