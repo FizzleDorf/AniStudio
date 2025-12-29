@@ -280,12 +280,12 @@ namespace GUI {
 					ImGui::SameLine();
 					if (ImGui::Button("Browse##Venv")) {
 						IGFD::FileDialogConfig config;
-						config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+						config.path = Utils::FilePathService::GetPath("DefaultProject");
 						ImGuiFileDialog::Instance()->OpenDialog("ChooseVenvDialog", "Choose Virtual Environment Directory", nullptr, config);
 					}
 
 					if (ImGui::Button("Reset to Default")) {
-						pythonComp.virtualEnvPath = Utils::FilePaths::GetInstance().GetPath("VirtualEnv");
+						pythonComp.virtualEnvPath = Utils::FilePathService::GetPath("VirtualEnv");
 						pythonComp.UpdateVirtualEnvPaths();
 						strncpy(venvPathBuffer, pythonComp.virtualEnvPath.c_str(), sizeof(venvPathBuffer) - 1);
 					}
@@ -317,11 +317,11 @@ namespace GUI {
 
 	void ZepView::LoadDefaultPythonScript() {
 		// Construct path to default Python script using FilePaths
-		std::string defaultScriptPath = std::string(Utils::FilePaths::GetInstance().GetPath("DefaultProject")) + "/scripts/default_script.py";
+		std::string defaultScriptPath = std::string(Utils::FilePathService::GetPath("DefaultProject")) + "/scripts/default_script.py";
 
 		try {
 			// Create scripts directory if it doesn't exist
-			std::string scriptsDir = std::string(Utils::FilePaths::GetInstance().GetPath("DefaultProject")) + "/scripts";
+			std::string scriptsDir = std::string(Utils::FilePathService::GetPath("DefaultProject")) + "/scripts";
 			std::filesystem::create_directories(scriptsDir);
 
 			if (std::filesystem::exists(defaultScriptPath)) {
@@ -475,13 +475,13 @@ if __name__ == "__main__":
 
 	void ZepView::OpenFileDialog() {
 		IGFD::FileDialogConfig config;
-		config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		config.path = Utils::FilePathService::GetPath("DefaultProject");
 		ImGuiFileDialog::Instance()->OpenDialog("OpenCodeFile", "Choose Code File", ".py,.cpp,.hpp,.h,.c,.txt,.md", config);
 	}
 
 	void ZepView::SaveFileDialog() {
 		IGFD::FileDialogConfig config;
-		config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		config.path = Utils::FilePathService::GetPath("DefaultProject");
 
 		// Set default extension based on current file
 		std::string filter = ".txt";
@@ -501,7 +501,7 @@ if __name__ == "__main__":
 
 	void ZepView::SaveAsFileDialog() {
 		IGFD::FileDialogConfig config;
-		config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		config.path = Utils::FilePathService::GetPath("DefaultProject");
 		ImGuiFileDialog::Instance()->OpenDialog("SaveAsCodeFile", "Save Code File As", ".py,.cpp,.hpp,.h,.c,.txt,.md", config);
 	}
 

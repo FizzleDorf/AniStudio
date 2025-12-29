@@ -1,7 +1,7 @@
 #include "ProjectPopups.hpp"
 #include "ProjectManager.hpp"
 #include "Events.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -60,7 +60,7 @@ namespace GUI {
 	void ProjectPopupState::LoadTemplates() {
 		templates.clear();
 
-		std::string templatesDir = std::string(Utils::FilePaths::GetInstance().GetDataPath()) + "/project_templates";
+		std::string templatesDir = std::string(Utils::FilePathService::GetPath("Data") + "/project_templates");
 
 		try {
 			if (!std::filesystem::exists(templatesDir)) {

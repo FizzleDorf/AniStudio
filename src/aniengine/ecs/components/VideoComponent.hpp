@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "FilePaths.hpp"
-#include <OpenGLWrapper.hpp>
+#include "OpenGLWrapper.hpp"
+#include "FilePathService.hpp"
 #include <opencv2/opencv.hpp>
 #include <string>
 
@@ -26,7 +26,7 @@ namespace ECS {
 
 		// Video properties
 		std::string fileName = "Untitled";
-		std::string filePath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		std::string filePath = "";
 		int width = 0;
 		int height = 0;
 		double fps = 30.0;
@@ -47,6 +47,7 @@ namespace ECS {
 
 		VideoComponent() {
 			compName = "Video";
+			InitializeFilePathFromService();
 		}
 
 		~VideoComponent() {
@@ -58,6 +59,22 @@ namespace ECS {
 				glDeleteTextures(1, &currentTexture);
 				currentTexture = 0;
 			}
+		}
+
+		// Get property map for UI rendering
+		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+			properties["fileName"] = &fileName;
+			properties["filePath"] = &filePath;
+			properties["width"] = &width;
+			properties["height"] = &height;
+			properties["fps"] = &fps;
+			properties["frameCount"] = &frameCount;
+			properties["currentFrame"] = &currentFrame;
+			properties["isPlaying"] = &isPlaying;
+			properties["playbackSpeed"] = &playbackSpeed;
+			properties["looping"] = &looping;
+			return properties;
 		}
 
 		virtual nlohmann::json Serialize() const override {
@@ -110,19 +127,31 @@ namespace ECS {
 			}
 			return *this;
 		}
+
+	protected:
+		// Initialize file path from the service
+		void InitializeFilePathFromService() {
+			if (Utils::FilePathService::IsInitialized()) {
+				std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
+				if (!defaultPath.empty()) {
+					filePath = defaultPath;
+				}
+			}
+		}
 	};
 
 	struct InputVideoComponent : public VideoComponent {
 		InputVideoComponent() {
 			compName = "InputVideo";
 			fileName = "";
-			filePath = "";
+			filePath = "";  // Input videos start with empty path
 		}
 	};
 
 	struct OutputVideoComponent : public VideoComponent {
 		OutputVideoComponent() {
 			compName = "OutputVideo";
+			InitializeFilePathFromService();
 		}
 	};
 

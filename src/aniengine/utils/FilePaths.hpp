@@ -7,6 +7,7 @@
 #include <string>
 #include <iostream>
 #include <unordered_map>
+#include <memory>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -151,30 +152,21 @@ namespace Utils
 		}
 
 	public:
-		// REMOVED: Singleton pattern - this is now a regular class
-		// static FilePaths& GetInstance();
-		// static const char* GetStaticPath(const char* key);
-		// static const char* GetStaticDataPath();
-		// static const char* GetStaticExecutableDir();
-		// static bool IsStaticInitialized();
-
 		FilePaths() = default;
-		~FilePaths() = default;
 
-		// Regular constructor that can take initialization parameters
-		FilePaths(const std::string& customDataPath = "") {
-			if (!customDataPath.empty()) {
-				m_dataPath = customDataPath;
-			}
+		FilePaths(const std::string& customDataPath) : m_dataPath(customDataPath) {
+			// Store custom data path if provided
 		}
+
+		~FilePaths() = default;
 
 		// Disable copy (for DLL boundaries) - keep as is
 		FilePaths(const FilePaths&) = delete;
 		FilePaths& operator=(const FilePaths&) = delete;
 
 		// Enable move semantics
-		FilePaths(FilePaths&&) = default;
-		FilePaths& operator=(FilePaths&&) = default;
+		FilePaths(FilePaths&& other) = default;
+		FilePaths& operator=(FilePaths&& other) = default;
 
 		// Application initialization - should be called at startup
 		void Init()

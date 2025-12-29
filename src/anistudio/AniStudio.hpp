@@ -134,9 +134,6 @@ namespace ANI {
 		// Core systems
 		EngineCore engineCore;
 
-		// Plugin system (still managed separately as it needs ImGui context)
-		std::unique_ptr<Plugins::StudioPluginManager> studioPluginManager;
-
 		// Standalone views
 		std::unique_ptr<GUI::MenuBar> m_menuBar;
 		std::unique_ptr<GUI::ProjectManagerView> m_projectManagerView;

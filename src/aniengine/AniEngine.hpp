@@ -90,5 +90,8 @@ namespace ANI {
 
 		// Plugin management
 		void InitializePlugins();
+
+		// File path service initialization
+		void InitializeFilePathService();
 	};
 }

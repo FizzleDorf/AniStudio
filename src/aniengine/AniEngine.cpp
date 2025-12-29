@@ -5,6 +5,7 @@
 #include "utils.h"
 #include "components.h"
 #include "systems.h"
+#include "FilePathService.hpp"  // Add this include
 #include <iostream>
 #include <filesystem>
 
@@ -63,6 +64,33 @@ namespace ANI {
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}
 
+	void EngineCore::InitializeFilePathService() {
+		if (!context || !context->filePaths) {
+			std::cerr << "[EngineCore] Cannot initialize FilePathService: FilePaths not available!" << std::endl;
+			return;
+		}
+
+		std::cout << "[EngineCore] Initializing FilePathService..." << std::endl;
+
+		// Initialize the service with our FilePaths instance
+		Utils::FilePathService::Initialize(context->filePaths);
+
+		if (Utils::FilePathService::IsInitialized()) {
+			std::cout << "[EngineCore] FilePathService initialized successfully" << std::endl;
+
+			// Debug: Print some key paths to verify
+			std::cout << "[EngineCore] DefaultProject path: "
+				<< Utils::FilePathService::GetPath("DefaultProject") << std::endl;
+			std::cout << "[EngineCore] OutputFolder path: "
+				<< Utils::FilePathService::GetPath("OutputFolder") << std::endl;
+			std::cout << "[EngineCore] ModelRoot path: "
+				<< Utils::FilePathService::GetPath("ModelRoot") << std::endl;
+		}
+		else {
+			std::cerr << "[EngineCore] Failed to initialize FilePathService!" << std::endl;
+		}
+	}
+
 	void EngineCore::InitializePlugins() {
 		if (!context || !context->pluginManager) {
 			std::cerr << "[EngineCore] PluginManager not created in context!" << std::endl;
@@ -71,13 +99,11 @@ namespace ANI {
 
 		std::cout << "[EngineCore] Initializing plugins from: " << context->pluginDirectory << std::endl;
 
-		// Create plugin directory if it doesn't exist
 		if (!std::filesystem::exists(context->pluginDirectory)) {
 			std::filesystem::create_directories(context->pluginDirectory);
 			std::cout << "[EngineCore] Created plugin directory: " << context->pluginDirectory << std::endl;
 		}
 
-		// Use FilePaths from context
 		if (context->filePaths) {
 			std::cout << "[EngineCore] Setting global data path: " << context->filePaths->GetDataPath() << std::endl;
 			context->pluginManager->SetGlobalDataPath(context->filePaths->GetDataPath());
@@ -86,7 +112,6 @@ namespace ANI {
 			std::cerr << "[EngineCore] FilePaths not available in context!" << std::endl;
 		}
 
-		// Scan plugins directory (but don't auto-load everything)
 		context->pluginManager->scanPluginDirectory(context->pluginDirectory);
 
 		std::cout << "[EngineCore] Loading global plugin state..." << std::endl;
@@ -104,7 +129,6 @@ namespace ANI {
 		try {
 			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-			// Create EngineContext (which initializes FilePaths)
 			context = EngineContext::Create();
 
 			if (!context->isValid()) {
@@ -116,18 +140,19 @@ namespace ANI {
 			const char* defaultProjectPath = context->filePaths->GetPath("DefaultProject");
 			std::cout << "[EngineCore]   defaultProjectPath: " << (defaultProjectPath ? defaultProjectPath : "(null)") << std::endl;
 
-			// Invalidate ID 0 for consistency
 			auto& entityManager = *context->entityManager;
 			const ECS::EntityID temp = entityManager.AddNewEntity();
 			entityManager.DestroyEntity(temp);
 
-			// Register components and systems
+			// Initialize FilePathService BEFORE registering components
+			InitializeFilePathService();
+
+			// Now register components (they will use FilePathService)
 			RegisterCoreComponents();
 			RegisterCoreSystems();
 
 			std::cout << "[EngineCore] Engine context created successfully" << std::endl;
 
-			// Initialize plugins
 			InitializePlugins();
 
 			initialized = true;
@@ -152,11 +177,12 @@ namespace ANI {
 		auto engineCore = std::make_unique<EngineCore>();
 		engineCore->context = existingContext;
 
-		// Register components and systems
+		// Initialize FilePathService BEFORE registering components
+		engineCore->InitializeFilePathService();
+
 		engineCore->RegisterCoreComponents();
 		engineCore->RegisterCoreSystems();
 
-		// Initialize plugins
 		engineCore->InitializePlugins();
 
 		engineCore->initialized = true;
@@ -173,18 +199,19 @@ namespace ANI {
 
 		running = false;
 
-		// Save global plugin state before shutdown
 		if (context->pluginManager) {
 			std::cout << "[EngineCore] Saving global plugin state..." << std::endl;
 			context->pluginManager->SaveGlobalPluginState();
 		}
 
-		// Reset entity manager
+		// Shutdown FilePathService
+		std::cout << "[EngineCore] Shutting down FilePathService..." << std::endl;
+		Utils::FilePathService::Shutdown();
+
 		if (context->entityManager) {
 			context->entityManager->Reset();
 		}
 
-		// Clear the context
 		context.reset();
 
 		initialized = false;
@@ -197,9 +224,8 @@ namespace ANI {
 
 		context->entityManager->Update(deltaTime);
 
-		// Update plugins
 		if (context->pluginManager) {
-			context->pluginManager->checkForChanges(); // Hot reload check
+			context->pluginManager->checkForChanges();
 			context->pluginManager->updatePlugins(deltaTime);
 		}
 	}

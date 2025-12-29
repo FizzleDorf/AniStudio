@@ -53,10 +53,10 @@ namespace ANI {
 		viewManager.RegisterView<GUI::HelpView>("HelpView");
 		viewManager.RegisterView<GUI::ZepView>("ZepView");
 
-		if (studioPluginManager) {
+		if (studioContext->studioPluginManager) {
 			viewManager.RegisterViewWithFactory("PluginView", "Tools",
 				[this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-				return std::make_unique<GUI::PluginView>(mgr, *studioPluginManager);
+				return std::make_unique<GUI::PluginView>(mgr, *studioContext->studioPluginManager);
 			},
 				[]() -> GUI::ViewMetadata {
 				return GUI::BaseView::GetMetadataFor<GUI::PluginView>();
@@ -105,13 +105,11 @@ namespace ANI {
 		std::cout << "[StudioCore] ImGui context verified - fonts loaded: " << io.Fonts->Fonts.Size << std::endl;
 
 		// Create StudioPluginManager and store in context
-		studioContext->studioPluginManager = std::make_shared<StudioPluginManager>(
+		studioContext->studioPluginManager = std::make_shared<Plugins::StudioPluginManager>(
 			*studioContext->entityManager,
 			*studioContext->viewManager,
 			static_cast<ImGuiContext*>(imguiContext)
 			);
-
-		studioPluginManager = studioContext->studioPluginManager; // Keep a local reference for backward compatibility
 
 		std::string pluginDirectory = "../plugins";
 
@@ -123,17 +121,17 @@ namespace ANI {
 		// Use FilePaths from context
 		if (studioContext->filePaths) {
 			std::cout << "[StudioCore] Setting global data path: " << studioContext->filePaths->GetDataPath() << std::endl;
-			studioPluginManager->SetGlobalDataPath(studioContext->filePaths->GetDataPath());
+			studioContext->studioPluginManager->SetGlobalDataPath(studioContext->filePaths->GetDataPath());
 		}
 		else {
 			std::cerr << "[StudioCore] FilePaths not available in context!" << std::endl;
 		}
 
-		studioPluginManager->scanPluginDirectory(pluginDirectory);
-		studioPluginManager->enableHotReload(false);
+		studioContext->studioPluginManager->scanPluginDirectory(pluginDirectory);
+		studioContext->studioPluginManager->enableHotReload(false);
 
 		std::cout << "[StudioCore] Loading global plugin state..." << std::endl;
-		studioPluginManager->LoadGlobalPluginState();
+		studioContext->studioPluginManager->LoadGlobalPluginState();
 
 		std::cout << "[StudioCore] Studio plugin system initialized with selective loading" << std::endl;
 	}
@@ -318,12 +316,14 @@ namespace ANI {
 		auto studioCore = std::make_unique<StudioCore>();
 		studioCore->studioContext = existingContext;
 
-		// Create EngineCore with the shared EngineContext
-		studioCore->engineCore = EngineCore::CreateWithContext(existingContext);
-		if (!studioCore->engineCore) {
-			std::cerr << "[StudioCore] Failed to create EngineCore with context!" << std::endl;
+		// Initialize EngineCore using the context
+		if (!studioCore->engineCore.Initialize()) {
+			std::cerr << "[StudioCore] Failed to initialize EngineCore with existing context!" << std::endl;
 			return nullptr;
 		}
+
+		// Set ViewManager's EntityManager
+		studioCore->studioContext->viewManager->SetEntityManager(*studioCore->studioContext->entityManager);
 
 		// Initialize ProjectManagerView
 		studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager);
@@ -425,9 +425,9 @@ namespace ANI {
 	void StudioCore::OnProjectLoaded(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
 
-		if (studioPluginManager) {
+		if (studioContext && studioContext->studioPluginManager) {
 			std::cout << "[StudioCore] Setting plugin manager project context: " << projectPath << std::endl;
-			studioPluginManager->SetProjectContext(projectPath);
+			studioContext->studioPluginManager->SetProjectContext(projectPath);
 		}
 
 		m_showProjectManagerView = false;
@@ -437,9 +437,9 @@ namespace ANI {
 	void StudioCore::OnProjectCreated(const std::string& projectPath) {
 		std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
 
-		if (studioPluginManager) {
+		if (studioContext && studioContext->studioPluginManager) {
 			std::cout << "[StudioCore] Setting plugin manager project context for new project: " << projectPath << std::endl;
-			studioPluginManager->SetProjectContext(projectPath);
+			studioContext->studioPluginManager->SetProjectContext(projectPath);
 		}
 
 		m_showProjectManagerView = false;
@@ -449,10 +449,10 @@ namespace ANI {
 	void StudioCore::OnProjectClosed() {
 		std::cout << "[StudioCore] OnProjectClosed() called" << std::endl;
 
-		if (studioPluginManager) {
+		if (studioContext && studioContext->studioPluginManager) {
 			std::cout << "[StudioCore] Saving project plugin state and reverting to global..." << std::endl;
-			studioPluginManager->SaveProjectPluginState();
-			studioPluginManager->UseGlobalPluginState();
+			studioContext->studioPluginManager->SaveProjectPluginState();
+			studioContext->studioPluginManager->UseGlobalPluginState();
 		}
 
 		m_showProjectManagerView = true;
@@ -486,8 +486,8 @@ namespace ANI {
 				std::cout << "[StudioCore] Saving open project BEFORE shutdown: "
 					<< studioContext->projectManager->GetCurrentProjectName() << std::endl;
 
-				if (studioPluginManager) {
-					studioPluginManager->SaveProjectPluginState();
+				if (studioContext->studioPluginManager) {
+					studioContext->studioPluginManager->SaveProjectPluginState();
 				}
 
 				studioContext->projectManager->SaveProject();
@@ -509,9 +509,9 @@ namespace ANI {
 			m_menuBar.reset();
 			m_projectManagerView.reset();
 
-			if (studioPluginManager) {
+			if (studioContext && studioContext->studioPluginManager) {
 				std::cout << "[StudioCore] Shutting down studio plugin manager..." << std::endl;
-				studioPluginManager.reset();
+				studioContext->studioPluginManager.reset();
 			}
 
 			std::cout << "[StudioCore] Shutting down view manager..." << std::endl;
@@ -542,8 +542,8 @@ namespace ANI {
 		try {
 			engineCore.Update(deltaTime);
 
-			if (studioPluginManager) {
-				studioPluginManager->updatePlugins(deltaTime);
+			if (studioContext->studioPluginManager) {
+				studioContext->studioPluginManager->updatePlugins(deltaTime);
 			}
 
 			if (m_menuBar) m_menuBar->Update(deltaTime);

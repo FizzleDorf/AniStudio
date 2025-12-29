@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "FilePaths.hpp"
 #include "OpenGLWrapper.hpp"
+#include "FilePathService.hpp"  // Use the service instead of FilePaths directly
 #include <string>
 #include <stb_image.h>
 #include <memory>
@@ -10,10 +10,7 @@
 namespace ECS {
 	struct ImageComponent : public BaseComponent {
 		std::string fileName = "AniStudio";                  // Default file name
-		std::string filePath =
-			std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-			? Utils::FilePaths::GetInstance().GetPath("OutputFolder")			 // Output folder if one is found
-			: Utils::FilePaths::GetInstance().GetPath("DefaultProject");			 // Directory containing the Image
+		std::string filePath = "";                           // File path - initialized via service
 		unsigned char *imageData = nullptr;                  // Pointer to image data - DO NOT FREE in destructor for base class
 		int width = 0;                                       // Image width
 		int height = 0;                                      // Image height
@@ -23,6 +20,7 @@ namespace ECS {
 		ImageComponent() {
 			compName = "Image";
 			compCategory = "Image";
+			InitializeFilePathFromService();
 			setupBaseSchema();
 		}
 
@@ -112,6 +110,7 @@ namespace ECS {
 			channels = other.channels;
 			imageData = nullptr; // Don't copy raw pointer
 			textureID = 0; // Don't copy texture ID
+			InitializeFilePathFromService();
 			setupBaseSchema();
 		}
 
@@ -132,6 +131,23 @@ namespace ECS {
 				}}
 			};
 		}
+
+		// Initialize file path from the service
+		void InitializeFilePathFromService() {
+			if (Utils::FilePathService::IsInitialized()) {
+				// Try OutputFolder first, then DefaultProject
+				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
+				if (!outputPath.empty()) {
+					filePath = outputPath;
+				}
+				else {
+					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
+					if (!defaultPath.empty()) {
+						filePath = defaultPath;
+					}
+				}
+			}
+		}
 	};
 
 	struct InputImageComponent : public ImageComponent {
@@ -141,7 +157,7 @@ namespace ECS {
 			compName = "InputImage";
 			compCategory = "Image";
 			fileName = "";
-			filePath = "";
+			filePath = "";  // Input images start with empty path
 			width = 0;
 			height = 0;
 			channels = 0;
@@ -335,10 +351,8 @@ namespace ECS {
 		OutputImageComponent() {
 			compName = "OutputImage";
 			compCategory = "Image";
-			// Set default output directory to filePath 
-			filePath = std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-				? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
-				: Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+			// Set default output directory using the service
+			InitializeFilePathFromService();
 			fileName = "AniStudio";
 			setupOutputSchema();
 		}
@@ -363,12 +377,27 @@ namespace ECS {
 			std::string baseName = fileName;
 			if (baseName.empty()) baseName = "AniStudio";
 
-			// JUST USE FILEPATH - NO MORE outputDirectory BULLSHIT
+			// Use filePath (already initialized from service or set by user)
 			std::string outputDir = filePath;
 			if (outputDir.empty()) {
-				outputDir = std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-					? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
-					: Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+				// Fallback to service if filePath is empty
+				if (Utils::FilePathService::IsInitialized()) {
+					std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
+					if (!outputPath.empty()) {
+						outputDir = outputPath;
+					}
+					else {
+						std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
+						if (!defaultPath.empty()) {
+							outputDir = defaultPath;
+						}
+					}
+				}
+			}
+
+			if (outputDir.empty()) {
+				// Last resort: just return filename with extension
+				return baseName + extension;
 			}
 
 			std::filesystem::path outputPath = std::filesystem::path(outputDir) / (baseName + extension);
@@ -421,6 +450,21 @@ namespace ECS {
 
 	private:
 		void setupOutputSchema() {
+			// Get default path from service for the UI schema
+			std::string defaultOutputPath = "";
+			if (Utils::FilePathService::IsInitialized()) {
+				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
+				if (!outputPath.empty()) {
+					defaultOutputPath = outputPath;
+				}
+				else {
+					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
+					if (!defaultPath.empty()) {
+						defaultOutputPath = defaultPath;
+					}
+				}
+			}
+
 			schema = {
 				{"title", "Output Image"},
 				{"type", "object"},
@@ -431,9 +475,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"defaultPath", std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-								? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
-								: Utils::FilePaths::GetInstance().GetPath("DefaultProject")},
+							{"defaultPath", defaultOutputPath},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Reset"},
 							{"browseTooltip", "Browse to select output directory for saving images"}
@@ -680,7 +722,7 @@ namespace ECS {
 		MaskImageComponent() {
 			compName = "MaskImageComponent";
 			fileName = "";
-			filePath = "";
+			filePath = "";  // Mask images don't need default path
 			setupMaskSchema();
 		}
 
