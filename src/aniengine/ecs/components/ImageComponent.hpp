@@ -2,7 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include "OpenGLWrapper.hpp"
-#include "FilePathService.hpp"  // Use the service instead of FilePaths directly
+#include "FilePathService.hpp"
 #include <string>
 #include <stb_image.h>
 #include <memory>
@@ -352,7 +352,7 @@ namespace ECS {
 			compName = "OutputImage";
 			compCategory = "Image";
 			// Set default output directory using the service
-			InitializeFilePathFromService();
+			ResetToProjectOutputDirectory();
 			fileName = "AniStudio";
 			setupOutputSchema();
 		}
@@ -381,18 +381,7 @@ namespace ECS {
 			std::string outputDir = filePath;
 			if (outputDir.empty()) {
 				// Fallback to service if filePath is empty
-				if (Utils::FilePathService::IsInitialized()) {
-					std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
-					if (!outputPath.empty()) {
-						outputDir = outputPath;
-					}
-					else {
-						std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
-						if (!defaultPath.empty()) {
-							outputDir = defaultPath;
-						}
-					}
-				}
+				outputDir = GetProjectOutputDirectory();
 			}
 
 			if (outputDir.empty()) {
@@ -404,9 +393,33 @@ namespace ECS {
 			return outputPath.string();
 		}
 
+		// Reset to project's output directory
+		void ResetToProjectOutputDirectory() {
+			filePath = GetProjectOutputDirectory();
+		}
+
+		// Get project output directory from service
+		std::string GetProjectOutputDirectory() const {
+			if (Utils::FilePathService::IsInitialized()) {
+				// Try OutputFolder first (project-specific)
+				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
+				if (!outputPath.empty()) {
+					return outputPath;
+				}
+				else {
+					// Fallback to DefaultProject
+					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
+					if (!defaultPath.empty()) {
+						return defaultPath;
+					}
+				}
+			}
+			return ""; // Service not initialized
+		}
+
 		// Serialize the component to JSON
 		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j = ImageComponent::Serialize();
+			auto j = ImageComponent::Serialize();
 			j[compName]["fileExtension"] = fileExtension;
 			j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
 			return j;
@@ -425,6 +438,11 @@ namespace ECS {
 				fileExtension = componentData["fileExtension"];
 			if (componentData.contains("selectedExtensionIndex"))
 				selectedExtensionIndex = componentData["selectedExtensionIndex"];
+
+			// If filePath is empty after deserialization, reset to project output directory
+			if (filePath.empty()) {
+				ResetToProjectOutputDirectory();
+			}
 		}
 
 		OutputImageComponent &operator=(const OutputImageComponent &other) {
@@ -445,31 +463,23 @@ namespace ECS {
 			fileExtension = other.fileExtension;
 			selectedExtensionIndex = other.selectedExtensionIndex;
 			supportedExtensions = other.supportedExtensions;
+			// If filePath is empty in the copy, reset to project output directory
+			if (filePath.empty()) {
+				ResetToProjectOutputDirectory();
+			}
 			setupOutputSchema();
 		}
 
 	private:
 		void setupOutputSchema() {
 			// Get default path from service for the UI schema
-			std::string defaultOutputPath = "";
-			if (Utils::FilePathService::IsInitialized()) {
-				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
-				if (!outputPath.empty()) {
-					defaultOutputPath = outputPath;
-				}
-				else {
-					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
-					if (!defaultPath.empty()) {
-						defaultOutputPath = defaultPath;
-					}
-				}
-			}
+			std::string defaultOutputPath = GetProjectOutputDirectory();
 
 			schema = {
 				{"title", "Output Image"},
 				{"type", "object"},
 				{"properties", {
-					{"filePath", {  // CHANGE FROM outputDirectory TO filePath!
+					{"filePath", {
 						{"type", "string"},
 						{"title", "Output Directory"},
 						{"ui:widget", "file_selector"},
@@ -484,7 +494,10 @@ namespace ECS {
 					{"fileName", {
 						{"type", "string"},
 						{"title", "File Name"},
-						{"ui:widget", "input_text"}
+						{"ui:widget", "input_text"},
+						{"ui:options", {
+							{"resetButtonText", "Reset to Default"}
+						}}
 					}},
 					{"selectedExtensionIndex", {
 						{"type", "integer"},
@@ -498,10 +511,13 @@ namespace ECS {
 							{{"label", "JPEG (.jpeg)"}},
 							{{"label", "Bitmap (.bmp)"}},
 							{{"label", "Targa (.tga)"}}
+						}},
+						{"ui:options", {
+							{"resetButtonText", "Reset to PNG"}
 						}}
 					}}
 				}},
-				{"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}  // CHANGED HERE TOO
+				{"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}
 			};
 		}
 	};

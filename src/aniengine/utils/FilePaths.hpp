@@ -25,7 +25,7 @@ namespace Utils
 	class FilePaths
 	{
 	private:
-		std::unordered_map<const char*, std::string> m_pathMap;
+		std::unordered_map<std::string, std::string> m_pathMap;  // CHANGED: Use std::string as key
 		std::string m_executableDir;
 		std::string m_dataPath;
 		bool m_initialized = false;
@@ -46,10 +46,9 @@ namespace Utils
 				DWORD length = GetModuleFileNameA(NULL, buffer, MAX_PATH);
 				if (length > 0 && length < MAX_PATH) {
 					exePath = std::filesystem::path(buffer);
-					std::cout << "[FilePaths] Windows exe path: " << buffer << std::endl;
 				}
 				else {
-					std::cerr << "[FilePaths] GetModuleFileName failed or path too long" << std::endl;
+					std::cerr << "[FilePaths] GetModuleFileName failed" << std::endl;
 				}
 #elif defined(__linux__)
 				char buffer[PATH_MAX];
@@ -57,7 +56,6 @@ namespace Utils
 				if (length > 0) {
 					buffer[length] = '\0';
 					exePath = std::filesystem::path(buffer);
-					std::cout << "[FilePaths] Linux exe path: " << buffer << std::endl;
 				}
 				else {
 					std::cerr << "[FilePaths] readlink failed" << std::endl;
@@ -69,7 +67,6 @@ namespace Utils
 					char* resolved = realpath(buffer, nullptr);
 					if (resolved) {
 						exePath = std::filesystem::path(resolved);
-						std::cout << "[FilePaths] macOS exe path: " << resolved << std::endl;
 						free(resolved);
 					}
 					else {
@@ -86,15 +83,13 @@ namespace Utils
 					std::cout << "[FilePaths] Executable directory: " << m_executableDir << std::endl;
 				}
 				else {
-					// Fallback to current working directory
 					m_executableDir = std::filesystem::current_path().string();
-					std::cout << "[FilePaths] WARNING: Could not determine executable directory, using CWD: " << m_executableDir << std::endl;
+					std::cout << "[FilePaths] Using CWD: " << m_executableDir << std::endl;
 				}
 			}
 			catch (const std::exception& e) {
 				std::cerr << "[FilePaths] Exception in GetExecutableDirectory: " << e.what() << std::endl;
 				m_executableDir = std::filesystem::current_path().string();
-				std::cout << "[FilePaths] Using fallback CWD: " << m_executableDir << std::endl;
 			}
 
 			return m_executableDir;
@@ -104,7 +99,6 @@ namespace Utils
 		bool SafeCreateDirectories(const std::string& path) {
 			try {
 				if (path.empty()) {
-					std::cerr << "[FilePaths] Cannot create directory: path is empty" << std::endl;
 					return false;
 				}
 
@@ -116,23 +110,16 @@ namespace Utils
 					return false;
 				}
 
-				if (created) {
-					std::cout << "[FilePaths] Created directory: " << path << std::endl;
-				}
-				else {
-					std::cout << "[FilePaths] Directory already exists: " << path << std::endl;
-				}
-
 				return true;
 			}
 			catch (const std::exception& e) {
-				std::cerr << "[FilePaths] Exception creating directory '" << path << "': " << e.what() << std::endl;
+				std::cerr << "[FilePaths] Exception creating directory: " << e.what() << std::endl;
 				return false;
 			}
 		}
 
 		// Get path from map with fallback
-		std::string GetMapPath(const char* key) const {
+		std::string GetMapPath(const std::string& key) const {
 			auto it = m_pathMap.find(key);
 			if (it != m_pathMap.end() && !it->second.empty()) {
 				return it->second;
@@ -141,12 +128,12 @@ namespace Utils
 		}
 
 		// Set path in map
-		void SetMapPath(const char* key, const std::string& path) {
+		void SetMapPath(const std::string& key, const std::string& path) {
 			m_pathMap[key] = path;
 		}
 
 		// Check if path exists in map
-		bool HasMapPath(const char* key) const {
+		bool HasMapPath(const std::string& key) const {
 			auto it = m_pathMap.find(key);
 			return it != m_pathMap.end() && !it->second.empty();
 		}
@@ -155,16 +142,13 @@ namespace Utils
 		FilePaths() = default;
 
 		FilePaths(const std::string& customDataPath) : m_dataPath(customDataPath) {
-			// Store custom data path if provided
 		}
 
 		~FilePaths() = default;
 
-		// Disable copy (for DLL boundaries) - keep as is
 		FilePaths(const FilePaths&) = delete;
 		FilePaths& operator=(const FilePaths&) = delete;
 
-		// Enable move semantics
 		FilePaths(FilePaths&& other) = default;
 		FilePaths& operator=(FilePaths&& other) = default;
 
@@ -195,73 +179,57 @@ namespace Utils
 				if (m_dataPath.empty()) {
 					m_dataPath = (basePath / "data" / "defaults").string();
 				}
-				std::cout << "[FilePaths] Set data path: " << m_dataPath << std::endl;
+				std::cout << "[FilePaths] Data path: " << m_dataPath << std::endl;
 
-				// Try to load saved paths (this might override some defaults)
+				// Try to load saved paths FIRST
 				std::cout << "[FilePaths] Loading saved paths..." << std::endl;
 				LoadFilePathDefaults();
 
-				// Register default paths if they weren't loaded from file
-				std::cout << "[FilePaths] Registering default paths..." << std::endl;
+				// **CRITICAL: ALWAYS SET THESE PATHS, NO MATTER WHAT**
+				std::cout << "[FilePaths] Setting essential paths..." << std::endl;
 
 				// Application-level paths
-				if (!HasMapPath("ImguiState")) {
-					SetMapPath("ImguiState", (basePath / "data" / "defaults" / "imgui.ini").string());
-				}
-				if (!HasMapPath("VirtualEnv")) {
-					SetMapPath("VirtualEnv", (basePath / "venv").string());
-				}
-				if (!HasMapPath("Scripts")) {
-					SetMapPath("Scripts", (basePath / "scripts").string());
-				}
-				if (!HasMapPath("Plugins")) {
-					SetMapPath("Plugins", (basePath / "plugins").string());
-				}
+				SetMapPath("ImguiState", (basePath / "data" / "defaults" / "imgui.ini").string());
+				SetMapPath("VirtualEnv", (basePath / "venv").string());
+				SetMapPath("Scripts", (basePath / "scripts").string());
+				SetMapPath("Plugins", (basePath / "plugins").string());
 
-				// Project-level paths
-				if (!HasMapPath("LastOpenProject")) {
-					SetMapPath("LastOpenProject", "");
-				}
-				if (!HasMapPath("DefaultProject")) {
-					SetMapPath("DefaultProject", (basePath / "projects").string());
-				}
-				if (!HasMapPath("AssetsFolder")) {
-					SetMapPath("AssetsFolder", "");
-				}
-				if (!HasMapPath("OutputFolder")) {
-					SetMapPath("OutputFolder", "");
-				}
+				// Project-level paths - THESE ARE THE ONES THAT MATTER
+				std::string defaultProjectPath = (basePath / "projects").string();
+				SetMapPath("DefaultProject", defaultProjectPath);
+				std::cout << "[FilePaths] SET DefaultProject path to: " << defaultProjectPath << std::endl;
 
-				// Model paths - CRITICAL: Ensure ModelRoot is ALWAYS set
-				if (!HasMapPath("ModelRoot")) {
-					std::filesystem::path newModelPath = basePath / "models";
-					SetMapPath("ModelRoot", std::filesystem::absolute(newModelPath).string());
-					std::cout << "[FilePaths] Set default model root: " << GetMapPath("ModelRoot") << std::endl;
-				}
+				SetMapPath("LastOpenProject", "");
+				SetMapPath("AssetsFolder", "");
+				SetMapPath("OutputFolder", "");
 
-				// CRITICAL: ALWAYS call SetByModelRoot to ensure all subdirectories are initialized
+				// Model paths
+				std::string modelRoot = (basePath / "models").string();
+				SetMapPath("ModelRoot", modelRoot);
+
+				// Set up model subdirectories
 				std::cout << "[FilePaths] Setting up model directories..." << std::endl;
 				SetByModelRoot();
 
 				// Create essential directories
 				std::cout << "[FilePaths] Creating essential directories..." << std::endl;
 				SafeCreateDirectories(m_dataPath);
-				SafeCreateDirectories(GetMapPath("DefaultProject"));
-				SafeCreateDirectories(GetMapPath("ModelRoot"));
+				SafeCreateDirectories(defaultProjectPath);
+				SafeCreateDirectories(modelRoot);
 				SafeCreateDirectories(GetMapPath("Scripts"));
 				SafeCreateDirectories(GetMapPath("Plugins"));
 
 				// Save initialized paths
-				std::cout << "[FilePaths] Saving initialized paths..." << std::endl;
+				std::cout << "[FilePaths] Saving paths to file..." << std::endl;
 				SaveFilepathDefaults();
 
 				m_initialized = true;
-				std::cout << "[FilePaths] Initialization complete successfully!" << std::endl;
+				std::cout << "[FilePaths] Initialization complete!" << std::endl;
+				std::cout << "[FilePaths] DefaultProject: " << GetMapPath("DefaultProject") << std::endl;
 				std::cout << "[FilePaths] ==========================" << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "[FilePaths] FATAL EXCEPTION during initialization: " << e.what() << std::endl;
-				std::cerr << "[FilePaths] ==========================" << std::endl;
 			}
 		}
 
@@ -271,13 +239,11 @@ namespace Utils
 			try {
 				std::cout << "[FilePaths] Saving paths..." << std::endl;
 
-				// Create the data directory if it does not exist
 				if (!SafeCreateDirectories(m_dataPath)) {
-					std::cerr << "[FilePaths] Failed to create data directory, cannot save paths" << std::endl;
+					std::cerr << "[FilePaths] Failed to create data directory" << std::endl;
 					return;
 				}
 
-				// Create a JSON object to store paths
 				nlohmann::json json;
 
 				// Save all paths from the map
@@ -285,20 +251,18 @@ namespace Utils
 					json[key] = path;
 				}
 
-				// Also save executable directory
 				json["ExecutableDir"] = m_executableDir;
 
-				// Write JSON to file
 				std::string pathsFile = m_dataPath + "/paths.json";
 				std::ofstream file(pathsFile);
 				if (file.is_open())
 				{
-					file << json.dump(4); // Pretty print with 4 spaces
+					file << json.dump(4);
 					file.close();
 					std::cout << "[FilePaths] Saved paths to: " << pathsFile << std::endl;
 				}
 				else {
-					std::cerr << "[FilePaths] Failed to open paths file for writing: " << pathsFile << std::endl;
+					std::cerr << "[FilePaths] Failed to open paths file: " << pathsFile << std::endl;
 				}
 			}
 			catch (const std::exception& e) {
@@ -310,42 +274,38 @@ namespace Utils
 		void LoadFilePathDefaults()
 		{
 			try {
-				// Open JSON file
 				std::string pathsFile = m_dataPath + "/paths.json";
 
 				if (!std::filesystem::exists(pathsFile)) {
-					std::cout << "[FilePaths] No existing paths file found: " << pathsFile << std::endl;
+					std::cout << "[FilePaths] No existing paths file" << std::endl;
 					return;
 				}
 
 				std::ifstream file(pathsFile);
 				if (!file.is_open())
 				{
-					std::cout << "[FilePaths] Could not open paths file: " << pathsFile << std::endl;
+					std::cout << "[FilePaths] Could not open paths file" << std::endl;
 					return;
 				}
 
-				// Parse the JSON file
 				nlohmann::json json;
 				file >> json;
 				file.close();
 
 				std::cout << "[FilePaths] Loading saved paths from: " << pathsFile << std::endl;
 
-				// Load all paths from JSON into the map
 				for (auto&[key, value] : json.items()) {
 					if (value.is_string()) {
-						if (std::string(key) == "ExecutableDir") {
+						if (key == "ExecutableDir") {
 							m_executableDir = value;
 						}
 						else {
-							// Convert key to const char* for map
-							m_pathMap[key.c_str()] = value;
+							m_pathMap[key] = value;
 						}
 					}
 				}
 
-				std::cout << "[FilePaths] Successfully loaded " << m_pathMap.size() << " saved paths" << std::endl;
+				std::cout << "[FilePaths] Loaded " << m_pathMap.size() << " saved paths" << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "[FilePaths] Exception loading paths: " << e.what() << std::endl;
@@ -357,14 +317,13 @@ namespace Utils
 		{
 			std::string modelRoot = GetMapPath("ModelRoot");
 			if (modelRoot.empty()) {
-				std::cerr << "[FilePaths] Cannot set model paths: root path is empty" << std::endl;
+				std::cerr << "[FilePaths] ModelRoot path is empty" << std::endl;
 				return;
 			}
 
 			try {
 				std::cout << "[FilePaths] Setting up model subdirectories..." << std::endl;
 
-				// Create all model subdirectories
 				std::string checkpointDir = (std::filesystem::path(modelRoot) / "checkpoints").string();
 				SafeCreateDirectories(checkpointDir);
 				SetMapPath("Checkpoint", checkpointDir);
@@ -397,21 +356,23 @@ namespace Utils
 				SafeCreateDirectories(embedDir);
 				SetMapPath("Embed", embedDir);
 
-				// Set up CLIP specific paths (these are file paths, not directories)
 				SetMapPath("ClipL", (std::filesystem::path(encoderDir) / "clip_l.safetensors").string());
 				SetMapPath("ClipG", (std::filesystem::path(encoderDir) / "clip_g.safetensors").string());
 				SetMapPath("T5XXL", (std::filesystem::path(encoderDir) / "t5xxl.safetensors").string());
 
-				std::cout << "[FilePaths] Model directories set up successfully" << std::endl;
+				std::cout << "[FilePaths] Model directories set up" << std::endl;
 			}
 			catch (const std::exception& e) {
 				std::cerr << "[FilePaths] Exception setting up model directories: " << e.what() << std::endl;
 			}
 		}
 
-		// Get path by name (returns const char* for DLL compatibility)
+		// Get path by name
 		const char* GetPath(const char* key) const {
-			auto it = m_pathMap.find(key);
+			if (!key) return "";
+
+			std::string keyStr(key);
+			auto it = m_pathMap.find(keyStr);
 			if (it != m_pathMap.end()) {
 				return it->second.c_str();
 			}
@@ -420,7 +381,11 @@ namespace Utils
 
 		// Set path by name
 		void SetPath(const char* key, const char* path) {
-			m_pathMap[key] = path;
+			if (!key || !path) return;
+
+			std::string keyStr(key);
+			std::string pathStr(path);
+			m_pathMap[keyStr] = pathStr;
 		}
 
 		// Utility functions
@@ -448,7 +413,6 @@ namespace Utils
 
 				if (projectData.contains("settings") &&
 					projectData["settings"].contains("projectName")) {
-					// Store in a static buffer for return (simplified - in real code use thread-local or better approach)
 					static std::string result;
 					result = projectData["settings"]["projectName"];
 					return result.c_str();
@@ -467,7 +431,6 @@ namespace Utils
 			std::cout << "[FilePaths] Executable Dir: " << m_executableDir << std::endl;
 			std::cout << "[FilePaths] Data Path: " << m_dataPath << std::endl;
 
-			// Print all paths in the map
 			for (const auto&[key, path] : m_pathMap) {
 				std::cout << "[FilePaths] " << key << ": " << path << std::endl;
 			}

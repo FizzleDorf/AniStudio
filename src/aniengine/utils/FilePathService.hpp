@@ -8,8 +8,8 @@ namespace Utils {
 
 	class FilePathService {
 	private:
-		static std::unique_ptr<FilePaths> filePathsInstance;
-		static std::mutex instanceMutex;
+		static inline std::unique_ptr<FilePaths> filePathsInstance = nullptr;
+		static inline std::mutex instanceMutex;
 
 		// Private constructor to prevent instantiation
 		FilePathService() = delete;
@@ -75,6 +75,85 @@ namespace Utils {
 		static void Shutdown() {
 			std::lock_guard<std::mutex> lock(instanceMutex);
 			filePathsInstance.reset();
+		}
+
+		// ===== NEW METHODS - Exposing FilePaths public methods =====
+
+		// Application initialization - should be called at startup
+		static void Init() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				filePathsInstance->Init();
+			}
+		}
+
+		// Save all current paths to JSON
+		static void SaveFilepathDefaults() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				filePathsInstance->SaveFilepathDefaults();
+			}
+		}
+
+		// Load paths from JSON
+		static void LoadFilePathDefaults() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				filePathsInstance->LoadFilePathDefaults();
+			}
+		}
+
+		// Set up model subdirectories based on root path
+		static void SetByModelRoot() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				filePathsInstance->SetByModelRoot();
+			}
+		}
+
+		// Utility functions
+		static bool IsProjectPath(const std::string& path) {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				return filePathsInstance->IsProjectPath(path.c_str());
+			}
+			return false;
+		}
+
+		static std::string GetProjectName(const std::string& projectPath) {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				const char* name = filePathsInstance->GetProjectName(projectPath.c_str());
+				return name ? std::string(name) : "";
+			}
+			return "";
+		}
+
+		// Debug output
+		static void PrintCurrentPaths() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				filePathsInstance->PrintCurrentPaths();
+			}
+		}
+
+		// Getters for internal state
+		static std::string GetExecutableDir() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				const char* dir = filePathsInstance->GetExecutableDir();
+				return dir ? std::string(dir) : "";
+			}
+			return "";
+		}
+
+		static std::string GetDataPath() {
+			std::lock_guard<std::mutex> lock(instanceMutex);
+			if (filePathsInstance) {
+				const char* path = filePathsInstance->GetDataPath();
+				return path ? std::string(path) : "";
+			}
+			return "";
 		}
 	};
 

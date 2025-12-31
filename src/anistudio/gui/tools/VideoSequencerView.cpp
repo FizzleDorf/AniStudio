@@ -4,7 +4,7 @@
 #include "ImGuiFileDialog.h"
 #include <opencv2/opencv.hpp>
 #include <iostream>
-#include "../events/Events.hpp"
+#include "Events.hpp"
 
 namespace GUI {
 
@@ -1082,7 +1082,7 @@ namespace GUI {
 
 	void VideoSequencerView::LoadVideoFromDisk() {
 		// Get default project path from FilePaths singleton
-		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		const char* defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject").c_str();
 		std::string startPath = defaultProjectPath ? std::string(defaultProjectPath) : ".";
 
 		IGFD::FileDialogConfig config;
@@ -1099,7 +1099,7 @@ namespace GUI {
 
 	void VideoSequencerView::LoadImageFromDisk() {
 		// Get default project path from FilePaths singleton
-		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+		const char* defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject").c_str();
 		std::string startPath = defaultProjectPath ? std::string(defaultProjectPath) : ".";
 
 		IGFD::FileDialogConfig config;

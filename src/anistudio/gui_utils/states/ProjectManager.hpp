@@ -1,6 +1,6 @@
 #pragma once
 #include "ViewState.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "ProjectTemplate.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
@@ -52,6 +52,9 @@ namespace ANI {
 		const std::string& GetCurrentProjectPath() const { return m_currentProjectPath; }
 		const std::string& GetCurrentProjectName() const { return m_projectSettings.projectName; }
 
+		// Project data path access (for internal use)
+		std::string GetProjectDataPath() const;
+
 		// CRITICAL: ViewState access for workspace management
 		GUI::ViewState& GetViewState() { return m_viewState; }
 		const GUI::ViewState& GetViewState() const { return m_viewState; }
@@ -98,7 +101,7 @@ namespace ANI {
 			m_onProjectClosedCallback = callback;
 		}
 
-		// CRITICAL: Callback for when ViewState is loaded with active workspace
+		// Callback for when ViewState is loaded with active workspace
 		void SetViewStateLoadedCallback(std::function<void(GUI::WorkspaceID)> callback) {
 			m_onViewStateLoadedCallback = callback;
 		}
@@ -110,7 +113,7 @@ namespace ANI {
 		bool m_isProjectOpen = false;
 		std::string m_currentProjectPath;
 		ProjectSettings m_projectSettings;
-		GUI::ViewState m_viewState;  // CRITICAL: Contains workspace state
+		GUI::ViewState m_viewState;
 		std::string m_lastError;
 
 		// Window handle for window state management
@@ -120,7 +123,7 @@ namespace ANI {
 		std::function<void(const std::string&)> m_onProjectLoadedCallback;
 		std::function<void(const std::string&)> m_onProjectCreatedCallback;
 		std::function<void()> m_onProjectClosedCallback;
-		std::function<void(GUI::WorkspaceID)> m_onViewStateLoadedCallback;  // CRITICAL: For workspace restoration
+		std::function<void(GUI::WorkspaceID)> m_onViewStateLoadedCallback;
 
 		// File operations
 		bool SaveViewState();
@@ -137,7 +140,6 @@ namespace ANI {
 		void ClearProjectSpecificPaths();
 
 		// Path utilities
-		std::string GetProjectDataPath() const;
 		std::string GetProjectAssetsPath() const;
 		std::string GetProjectOutputPath() const;
 		std::string GetProjectWindowStatePath() const;

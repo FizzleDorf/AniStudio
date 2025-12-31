@@ -2,7 +2,7 @@
 
 #include "BaseTabObject.hpp"
 #include "ImGuiFileDialog.h"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "Events.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -74,8 +74,10 @@ namespace Settings {
 			try {
 				nlohmann::json j;
 
-				// Save all paths dynamically
+				// Save all paths dynamically, but exclude runtime-only paths
 				for (const auto&[key, value] : pathMap) {
+					// Skip runtime-only paths that shouldn't be saved in settings
+					if (key == "LastOpenProject") continue;
 					j[key] = value;
 				}
 
@@ -129,7 +131,7 @@ namespace Settings {
 				file >> j;
 				file.close();
 
-				// Load all paths dynamically
+				// Load all paths dynamically, but preserve runtime-only paths
 				for (auto it = j.begin(); it != j.end(); ++it) {
 					// Skip metadata keys starting with underscore
 					if (it.key().rfind("_", 0) == 0) continue;
@@ -164,9 +166,11 @@ namespace Settings {
 		}
 
 		void ResetToDefaults() override {
-			// Clear all paths
+			// Clear all paths except runtime-only paths
 			for (auto&[key, value] : pathMap) {
-				value.clear();
+				if (key != "LastOpenProject") {
+					value.clear();
+				}
 			}
 			hasChanges = true;
 		}
@@ -196,12 +200,11 @@ namespace Settings {
 		bool hasChanges = false;
 
 		void InitializePathCategories() {
-			// General paths
+			// General paths - REMOVE LastOpenProject from user-editable settings
 			pathCategories["General Paths"] = {
-				"LastOpenProject",
-				"DefaultProject",
-				"AssetsFolder",
-				"OutputFolder",
+				"DefaultProject",      // User can configure default location for new projects
+				"AssetsFolder",        // Default assets folder (can be overridden by project)
+				"OutputFolder",        // Default output folder (can be overridden by project)
 				"VirtualEnv",
 				"Scripts",
 				"Plugins",
@@ -230,38 +233,34 @@ namespace Settings {
 		}
 
 		void LoadFromFilePaths() {
-			auto& filePaths = Utils::FilePaths::GetInstance();
-
 			// Load all paths from FilePaths into our map
 			// We'll iterate through all categories to get all possible paths
 			for (const auto&[category, keys] : pathCategories) {
 				for (const auto& key : keys) {
-					pathMap[key] = filePaths.GetPath(key.c_str());
+					pathMap[key] = Utils::FilePathService::GetPath(key.c_str());
 				}
 			}
 
-			// Also load any additional paths that might exist in FilePaths
-			// (This would require FilePaths to expose its internal map, which it doesn't currently)
-			// For now, we'll just work with what we've defined in categories
+			// Also load LastOpenProject for internal use only (not shown in UI)
+			pathMap["LastOpenProject"] = Utils::FilePathService::GetPath("LastOpenProject");
 		}
 
 		void ApplyToFilePaths() {
-			auto& filePaths = Utils::FilePaths::GetInstance();
-
 			// Apply all paths from our map to FilePaths
 			for (const auto&[key, value] : pathMap) {
-				filePaths.SetPath(key.c_str(), value.c_str());
+				// Always apply all paths to keep them synchronized
+				Utils::FilePathService::SetPath(key.c_str(), value.c_str());
 			}
 
 			// If ModelRoot was changed, ensure model subdirectories are properly structured
 			auto modelRootIt = pathMap.find("ModelRoot");
 			if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
 				// Call SetByModelRoot to update all model subdirectories
-				filePaths.SetByModelRoot();
+				Utils::FilePathService::SetByModelRoot();
 			}
 
 			// Save to file
-			filePaths.SaveFilepathDefaults();
+			Utils::FilePathService::SaveFilepathDefaults();
 
 			// Trigger schema refresh for all loaded model components
 			TriggerSchemaRefresh();
@@ -298,6 +297,11 @@ namespace Settings {
 		}
 
 		void RenderPathRow(const char* label, std::string& path, const std::string& pathKey) {
+			// Skip LastOpenProject - it's runtime-only and shouldn't be shown in UI
+			if (pathKey == "LastOpenProject") {
+				return;
+			}
+
 			ImGui::TableNextRow();
 
 			// Display name (convert camelCase to Title Case)

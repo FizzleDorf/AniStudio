@@ -2,6 +2,7 @@
 #include "StudioContext.hpp"
 #include "AllViews.h"
 #include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "ImGuiSettingsUtil.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "Events.hpp"
@@ -111,20 +112,26 @@ namespace ANI {
 			static_cast<ImGuiContext*>(imguiContext)
 			);
 
-		std::string pluginDirectory = "../plugins";
+		// Get plugin directory from FilePathService
+		std::string pluginDirectory = Utils::FilePathService::GetPath("Plugins");
+		if (pluginDirectory.empty()) {
+			pluginDirectory = "../plugins";
+			std::cerr << "[StudioCore] WARNING: Plugin directory not found in FilePathService, using default: " << pluginDirectory << std::endl;
+		}
 
 		if (!std::filesystem::exists(pluginDirectory)) {
 			std::filesystem::create_directories(pluginDirectory);
 			std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
 		}
 
-		// Use FilePaths from context
-		if (studioContext->filePaths) {
-			std::cout << "[StudioCore] Setting global data path: " << studioContext->filePaths->GetDataPath() << std::endl;
-			studioContext->studioPluginManager->SetGlobalDataPath(studioContext->filePaths->GetDataPath());
+		// Use data path from FilePathService
+		std::string dataPath = Utils::FilePathService::GetDataPath();
+		if (!dataPath.empty()) {
+			std::cout << "[StudioCore] Setting global data path: " << dataPath << std::endl;
+			studioContext->studioPluginManager->SetGlobalDataPath(dataPath);
 		}
 		else {
-			std::cerr << "[StudioCore] FilePaths not available in context!" << std::endl;
+			std::cerr << "[StudioCore] ERROR: Data path not available from FilePathService!" << std::endl;
 		}
 
 		studioContext->studioPluginManager->scanPluginDirectory(pluginDirectory);
@@ -259,9 +266,32 @@ namespace ANI {
 		}
 
 		try {
-			std::cout << "[StudioCore] Initializing..." << std::endl;
+			std::cout << "[StudioCore] =========================================" << std::endl;
+			std::cout << "[StudioCore] Initializing StudioCore..." << std::endl;
 
-			// Create EngineCore
+			// **CRITICAL FIX: FIRST initialize FilePathService directly BEFORE anything else**
+			std::cout << "[StudioCore] Ensuring FilePathService is initialized..." << std::endl;
+			if (!Utils::FilePathService::IsInitialized()) {
+				std::cout << "[StudioCore] Initializing FilePathService standalone..." << std::endl;
+				Utils::FilePathService::Initialize();
+
+				// Wait a moment for initialization to complete
+				std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+				if (!Utils::FilePathService::IsInitialized()) {
+					std::cerr << "[StudioCore] FATAL: Failed to initialize FilePathService!" << std::endl;
+					return false;
+				}
+			}
+
+			std::cout << "[StudioCore] FilePathService initialized successfully" << std::endl;
+
+			// Verify we can get paths
+			std::string testPath = Utils::FilePathService::GetPath("DefaultProject");
+			std::cout << "[StudioCore] Test path retrieval - DefaultProject: " << testPath << std::endl;
+
+			// **NOW initialize EngineCore**
+			std::cout << "[StudioCore] Initializing EngineCore..." << std::endl;
 			if (!engineCore.Initialize()) {
 				std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
 				return false;
@@ -290,6 +320,77 @@ namespace ANI {
 			// Register TextureSystem
 			studioContext->entityManager->RegisterSystem<TextureSystem>();
 
+			// **CRITICAL: VERIFY FilePathService is initialized and paths are loaded**
+			std::cout << "[StudioCore] =========================================" << std::endl;
+			std::cout << "[StudioCore] VERIFYING FILEPATHSERVICE INITIALIZATION" << std::endl;
+			std::cout << "[StudioCore] =========================================" << std::endl;
+
+			if (!Utils::FilePathService::IsInitialized()) {
+				std::cerr << "[StudioCore] CRITICAL ERROR: FilePathService not initialized after EngineCore init!" << std::endl;
+				return false;
+			}
+
+			// Print ALL paths from FilePathService to verify
+			std::cout << "[StudioCore] === FILEPATHSERVICE DUMP ===" << std::endl;
+			Utils::FilePathService::PrintCurrentPaths();
+			std::cout << "[StudioCore] =============================" << std::endl;
+
+			// Check if DefaultProject path exists
+			std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
+			if (defaultProjectPath.empty()) {
+				std::cerr << "[StudioCore] CRITICAL: DefaultProject path is EMPTY!" << std::endl;
+
+				// Emergency fallback: use executable directory
+				std::string exeDir = Utils::FilePathService::GetExecutableDir();
+				if (!exeDir.empty()) {
+					std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
+					defaultProjectPath = (basePath / "projects").string();
+					Utils::FilePathService::SetPath("DefaultProject", defaultProjectPath);
+					Utils::FilePathService::SaveFilepathDefaults(); // Save immediately
+					std::cout << "[StudioCore] EMERGENCY: Set DefaultProject to: " << defaultProjectPath << std::endl;
+				}
+				else {
+					std::cerr << "[StudioCore] FATAL: Cannot determine executable directory!" << std::endl;
+					return false;
+				}
+			}
+
+			std::cout << "[StudioCore] Default project path: " << defaultProjectPath << std::endl;
+
+			// Check if path exists
+			if (!std::filesystem::exists(defaultProjectPath)) {
+				std::cout << "[StudioCore] Creating default project directory..." << std::endl;
+				if (!std::filesystem::create_directories(defaultProjectPath)) {
+					std::cerr << "[StudioCore] Failed to create default project directory!" << std::endl;
+				}
+				else {
+					std::cout << "[StudioCore] Created directory: " << defaultProjectPath << std::endl;
+				}
+			}
+
+			// Check for existing projects
+			std::cout << "[StudioCore] Scanning for existing projects..." << std::endl;
+			int projectCount = 0;
+			try {
+				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectPath)) {
+					if (entry.is_directory()) {
+						std::string projectFile = entry.path().string() + "/project.ani";
+						if (std::filesystem::exists(projectFile)) {
+							projectCount++;
+							std::cout << "[StudioCore] Found project: " << entry.path().filename().string() << std::endl;
+						}
+					}
+				}
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] Error scanning directory: " << e.what() << std::endl;
+			}
+
+			std::cout << "[StudioCore] Found " << projectCount << " existing projects" << std::endl;
+
+			// Set default project path in ProjectManager
+			studioContext->projectManager->SetDefaultProjectPath(defaultProjectPath);
+
 			SetupProjectCallbacks();
 			SetCoreCallbacks();
 			SetCoreEvents();
@@ -297,7 +398,8 @@ namespace ANI {
 			initialized = true;
 			running = true;
 
-			std::cout << "[StudioCore] Core initialized successfully!" << std::endl;
+			std::cout << "[StudioCore] StudioCore initialized successfully!" << std::endl;
+			std::cout << "[StudioCore] =========================================" << std::endl;
 			return true;
 		}
 		catch (const std::exception& e) {
@@ -316,6 +418,12 @@ namespace ANI {
 		auto studioCore = std::make_unique<StudioCore>();
 		studioCore->studioContext = existingContext;
 
+		// FIRST ensure FilePathService is initialized
+		if (!Utils::FilePathService::IsInitialized()) {
+			std::cout << "[StudioCore] Initializing FilePathService in CreateWithContext..." << std::endl;
+			Utils::FilePathService::Initialize();
+		}
+
 		// Initialize EngineCore using the context
 		if (!studioCore->engineCore.Initialize()) {
 			std::cerr << "[StudioCore] Failed to initialize EngineCore with existing context!" << std::endl;
@@ -327,6 +435,12 @@ namespace ANI {
 
 		// Initialize ProjectManagerView
 		studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager);
+
+		// Check and create default project directory
+		std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
+		if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
+			std::filesystem::create_directories(defaultProjectPath);
+		}
 
 		// Register TextureSystem
 		studioCore->studioContext->entityManager->RegisterSystem<TextureSystem>();
@@ -357,14 +471,97 @@ namespace ANI {
 		ImGuiContext* currentContext = ImGui::GetCurrentContext();
 		std::cout << "[StudioCore] Using main ImGui context: " << currentContext << std::endl;
 
-		// Use FilePaths from context
-		if (!studioContext || !studioContext->filePaths) {
-			std::cerr << "[StudioCore] ERROR: Context or FilePaths not initialized!" << std::endl;
+		// Check FilePathService is initialized
+		if (!Utils::FilePathService::IsInitialized()) {
+			std::cerr << "[StudioCore] ERROR: FilePathService not initialized!" << std::endl;
 			return;
 		}
 
+		// Double-check DefaultProject path
+		std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
+		if (defaultProjectPath.empty()) {
+			std::cerr << "[StudioCore] CRITICAL: DefaultProject path is still empty!" << std::endl;
+
+			// Emergency recovery
+			std::string exeDir = Utils::FilePathService::GetExecutableDir();
+			if (!exeDir.empty()) {
+				std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
+				defaultProjectPath = (basePath / "projects").string();
+				Utils::FilePathService::SetPath("DefaultProject", defaultProjectPath);
+				Utils::FilePathService::SaveFilepathDefaults();
+				std::cout << "[StudioCore] EMERGENCY RECOVERY: Set DefaultProject to: " << defaultProjectPath << std::endl;
+			}
+		}
+
+		// Ensure the directory exists
+		if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
+			std::filesystem::create_directories(defaultProjectPath);
+			std::cout << "[StudioCore] Created default project directory: " << defaultProjectPath << std::endl;
+		}
+
+		// Debug output for troubleshooting
+		std::cout << "[StudioCore] === DEBUG: PROJECT DIRECTORY ANALYSIS ===" << std::endl;
+		std::cout << "[StudioCore] DefaultProject path: " << defaultProjectPath << std::endl;
+		std::cout << "[StudioCore] Path exists: " << std::filesystem::exists(defaultProjectPath) << std::endl;
+
+		if (std::filesystem::exists(defaultProjectPath)) {
+			int itemCount = 0;
+			int projectCount = 0;
+			try {
+				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectPath)) {
+					itemCount++;
+					if (entry.is_directory()) {
+						std::string projectFile = entry.path().string() + "/project.ani";
+						bool hasProjectFile = std::filesystem::exists(projectFile);
+						if (hasProjectFile) {
+							projectCount++;
+							std::cout << "[StudioCore] PROJECT FOUND: " << entry.path().filename().string() << std::endl;
+						}
+					}
+				}
+				std::cout << "[StudioCore] Total directories: " << itemCount << std::endl;
+				std::cout << "[StudioCore] Valid projects: " << projectCount << std::endl;
+			}
+			catch (const std::exception& e) {
+				std::cerr << "[StudioCore] Error listing directory: " << e.what() << std::endl;
+			}
+		}
+		std::cout << "[StudioCore] === END DEBUG ===" << std::endl;
+
+		// Verify with ProjectManager
+		if (studioContext && studioContext->projectManager) {
+			auto recentProjects = studioContext->projectManager->GetRecentProjects();
+			std::cout << "[StudioCore] ProjectManager reports " << recentProjects.size() << " recent projects" << std::endl;
+			for (const auto& proj : recentProjects) {
+				std::cout << "[StudioCore]   - " << proj << std::endl;
+			}
+		}
+
+		std::cout << "[StudioCore] Setting proper INI file path from FilePathService..." << std::endl;
+		ImGuiIO& io = ImGui::GetIO();
+
+		// Get the proper INI path from FilePathService
+		std::string imguiIniPath = Utils::FilePathService::GetPath("ImguiState");
+		if (!imguiIniPath.empty()) {
+			// Create directory if it doesn't exist
+			std::filesystem::path iniDir = std::filesystem::path(imguiIniPath).parent_path();
+			if (!iniDir.empty() && !std::filesystem::exists(iniDir)) {
+				std::filesystem::create_directories(iniDir);
+				std::cout << "[StudioCore] Created directory for ImGui INI file: " << iniDir.string() << std::endl;
+			}
+
+			// Update the INI filename
+			static std::string persistentIniPath = imguiIniPath;
+			io.IniFilename = persistentIniPath.c_str();
+			std::cout << "[StudioCore] ImGui INI file path updated to: " << io.IniFilename << std::endl;
+		}
+		else {
+			std::cerr << "[StudioCore] WARNING: Could not get ImguiState path from FilePathService!" << std::endl;
+		}
+
 		std::cout << "[StudioCore] Loading ImGui style..." << std::endl;
-		std::string stylePath = std::string(studioContext->filePaths->GetDataPath()) + "/settings/imgui_style.json";
+		std::string dataPath = Utils::FilePathService::GetDataPath();
+		std::string stylePath = dataPath + "/settings/imgui_style.json";
 		if (std::filesystem::exists(stylePath)) {
 			LoadStyleFromFile(ImGui::GetStyle(), stylePath);
 			std::cout << "[StudioCore] Loaded custom style from: " << stylePath << std::endl;
@@ -374,7 +571,6 @@ namespace ANI {
 			std::cout << "[StudioCore] Using custom dark theme as default" << std::endl;
 		}
 
-		ImGuiIO& io = ImGui::GetIO();
 		std::cout << "[StudioCore] ImGui fonts pointer: " << io.Fonts << std::endl;
 		if (io.Fonts) {
 			std::cout << "[StudioCore] ImGui fonts count: " << io.Fonts->Fonts.Size << std::endl;
@@ -389,7 +585,7 @@ namespace ANI {
 
 		std::cout << "[StudioCore] Loading ImGui IO settings..." << std::endl;
 		try {
-			std::string settingsPath = std::string(studioContext->filePaths->GetDataPath()) + "/settings/imgui_render_settings.json";
+			std::string settingsPath = dataPath + "/settings/imgui_render_settings.json";
 			if (std::filesystem::exists(settingsPath)) {
 				Utils::ImGuiSettingsUtil::LoadFromFile(settingsPath, io);
 				std::cout << "[StudioCore] ImGui IO settings loaded from file" << std::endl;
@@ -415,8 +611,15 @@ namespace ANI {
 		m_menuBar = std::make_unique<GUI::MenuBar>(*studioContext->projectManager, *studioContext->viewManager);
 		std::cout << "[StudioCore] MenuBar created" << std::endl;
 
-		m_showProjectManagerView = true;
-		std::cout << "[StudioCore] Will show startup view on launch" << std::endl;
+		// Check if we should show project manager
+		if (studioContext && studioContext->projectManager) {
+			m_showProjectManagerView = studioContext->projectManager->ShouldShowStartup();
+			std::cout << "[StudioCore] Should show startup view: " << (m_showProjectManagerView ? "YES" : "NO") << std::endl;
+		}
+		else {
+			m_showProjectManagerView = true;
+			std::cout << "[StudioCore] No ProjectManager, showing startup view" << std::endl;
+		}
 
 		completedInitialization = true;
 		std::cout << "[StudioCore] Complete initialization finished!" << std::endl;
@@ -467,11 +670,12 @@ namespace ANI {
 	}
 
 	std::string StudioCore::GetDefaultWindowStatePath() const {
-		if (!studioContext || !studioContext->filePaths) {
-			std::cerr << "[StudioCore] Context or FilePaths not available!" << std::endl;
+		std::string dataPath = Utils::FilePathService::GetDataPath();
+		if (dataPath.empty()) {
+			std::cerr << "[StudioCore] Data path not available from FilePathService!" << std::endl;
 			return "";
 		}
-		return std::string(studioContext->filePaths->GetDataPath()) + "/window_state.json";
+		return dataPath + "/window_state.json";
 	}
 
 	void StudioCore::Shutdown() {
@@ -521,6 +725,10 @@ namespace ANI {
 
 			std::cout << "[StudioCore] Shutting down engine core..." << std::endl;
 			engineCore.Shutdown();
+
+			// Shutdown FilePathService
+			std::cout << "[StudioCore] Shutting down FilePathService..." << std::endl;
+			Utils::FilePathService::Shutdown();
 
 			// Clear the context
 			studioContext.reset();
