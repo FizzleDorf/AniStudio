@@ -18,6 +18,11 @@ namespace GUI {
 	class ViewManager;
 }
 
+namespace ANI {
+	class EngineContext;
+	class StudioContext;
+}
+
 namespace Plugins {
 
 	struct PluginInfo {
@@ -74,6 +79,12 @@ namespace Plugins {
 		void cleanupPluginComponents(const std::string& pluginName);
 		void SetViewManager(GUI::ViewManager* viewMgr) { viewManager = viewMgr; }
 
+		// Set the engine context for plugins
+		void SetEngineContext(std::shared_ptr<ANI::EngineContext> context) {
+			engineContext = context;
+			std::cout << "[PluginManager] Engine context set for plugin manager" << std::endl;
+		}
+
 	protected:
 		virtual void cleanupPluginViews(const std::string& pluginName);
 
@@ -90,6 +101,9 @@ namespace Plugins {
 		std::string stagingDirectory = "../plugins";
 
 		std::unique_ptr<PluginState> pluginState;
+
+		// Store weak reference to engine context
+		std::weak_ptr<ANI::EngineContext> engineContext;
 
 	private:
 		void setupPluginDirectories(const std::string& pluginName);

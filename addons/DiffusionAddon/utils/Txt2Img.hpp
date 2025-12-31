@@ -4,7 +4,7 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -66,11 +66,9 @@ namespace Utils
 
 			try
 			{
-				// Get FilePaths instance
-				FilePaths& filePaths = FilePaths::GetInstance();
 
 				// Extract parameters from metadata
-				std::string outputPath = filePaths.GetPath("DefaultProject");
+				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
 				std::string outputFilename = "txt2img_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";

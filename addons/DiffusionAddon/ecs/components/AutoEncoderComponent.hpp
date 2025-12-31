@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePaths.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -24,7 +23,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "VAE Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Vae")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("Vae")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for VAE model files (.safetensors, .ckpt, .pt)"}
@@ -126,7 +125,7 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Vae");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Vae");
 				}
 			}
 		}
@@ -147,7 +146,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Vae");
+			return Utils::FilePathService::GetPath("Vae");
 		}
 
 		VaeComponent& operator=(const VaeComponent& other) {
@@ -238,7 +237,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "TAESD Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Vae")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("Vae")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for TAESD fast VAE files"}
@@ -253,13 +252,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Vae");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Vae");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Vae");
+			return Utils::FilePathService::GetPath("Vae");
 		}
 
 		TaesdComponent& operator=(const TaesdComponent& other) {

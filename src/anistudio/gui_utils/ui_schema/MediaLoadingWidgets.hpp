@@ -10,7 +10,6 @@
 #include "FileDialogFilters.hpp"
 #include "UISchemaUtils.hpp"
 #include "ImageUtils.hpp"
-#include "AssetManager.hpp"
 #include "PropertyTypes.hpp"
 #include <stb_image.h>
 

@@ -3,6 +3,11 @@
 #include "ViewManager.hpp"
 #include "Events.hpp"
 #include "DiffusionCallbackUtils.hpp"
+#include "FilePathService.hpp"
+#include "EngineContext.hpp"
+#include "StudioContext.hpp"
+#include "ProjectManager.hpp"
+#include "WindowState.hpp"
 
 // Components and Systems
 #include "SDCPPComponents.h"
@@ -22,6 +27,25 @@ public:
 
 	bool OnEngineInit(ECS::EntityManager& entityMgr) override {
 		LogInfo("Initializing Stable Diffusion Addon...");
+
+		// Initialize FilePathService - don't rely on engine context
+		if (!Utils::FilePathService::IsInitialized()) {
+			Utils::FilePathService::Initialize(engineContext->filePaths);
+			LogInfo("FilePathService initialized");
+		}
+		else {
+			LogInfo("FilePathService already initialized");
+		}
+
+		// Log some key paths for debugging
+		std::string modelRoot = Utils::FilePathService::GetPath("ModelRoot");
+		if (!modelRoot.empty()) {
+			LogInfo("Model root path: " + modelRoot);
+		}
+		else {
+			LogError("Model root path is empty!");
+			return false;
+		}
 
 		// Register components directly with EntityManager using templates
 		entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
@@ -48,7 +72,6 @@ public:
 
 		// Video models
 		entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
-		entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
 		entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
 		entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
 		entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
@@ -70,7 +93,7 @@ public:
 		// Register event handlers for diffusion tasks
 		RegisterEventHandlers();
 
-		LogInfo("SDCPPSystem registered with ID: " + std::to_string(m_systemId));
+		LogInfo("SDCPPSystem registered");
 		LogInfo("Stable Diffusion Addon initialized");
 		return true;
 	}
@@ -78,10 +101,16 @@ public:
 	bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr) override {
 		LogInfo("Registering Stable Diffusion views...");
 
-		std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
-		if (m_imguiContext) {
-			ImGui::SetCurrentContext(m_imguiContext);
+		// Rely on m_imguiContext being set via SetImGuiContext()
+		if (!m_imguiContext) {
+			LogError("ImGui context not set! Make sure SetImGuiContext was called.");
+			return false;
 		}
+
+		ImGui::SetCurrentContext(m_imguiContext);
+		LogInfo("ImGui context set for DiffusionAddon");
+
+		std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
 
 		m_viewMgr = &viewMgr;
 
@@ -103,7 +132,7 @@ public:
 		return m_imguiContext != nullptr;
 	}
 
-	void DiffusionAddon::OnShutdown() {
+	void OnShutdown() {
 		LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
 		// STEP 1: Unregister event handlers first
@@ -197,11 +226,14 @@ public:
 		m_viewMgr = nullptr;
 		m_imguiContext = nullptr;
 
+		// Shutdown FilePathService
+		Utils::FilePathService::Shutdown();
+
 		LogInfo("DiffusionAddon shutdown complete");
 	}
 
 	// Move this function OUTSIDE of OnShutdown
-	bool DiffusionAddon::CheckEntityForDiffusionComponents(EntityID entity) {
+	bool CheckEntityForDiffusionComponents(EntityID entity) {
 		if (!m_entityMgr) return false;
 
 		// Check for a few key diffusion components

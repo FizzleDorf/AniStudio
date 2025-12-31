@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <iostream>
+#include <memory>
 
 // Forward declarations only
 namespace ECS {
@@ -9,6 +10,11 @@ namespace ECS {
 
 namespace GUI {
 	class ViewManager;
+}
+
+namespace ANI {
+	class EngineContext;
+	class StudioContext;
 }
 
 // Forward declaration for ImGui
@@ -30,9 +36,6 @@ namespace Plugins {
 		// Internal state management - called by PluginManager
 		void SetInitialized(bool init) { this->initialized = init; }
 
-		// ============================================
-		// IMGUI CONTEXT MANAGEMENT - ADD THESE METHODS
-		// ============================================
 		virtual void SetImGuiContext(ImGuiContext* context) {
 			// Default implementation does nothing
 			// Plugins that need ImGui should override this
@@ -42,9 +45,15 @@ namespace Plugins {
 			return false;
 		}
 
-		// ============================================
-		// SIMPLIFIED: Direct manager access, no registry!
-		// ============================================
+		virtual void SetEngineContext(std::shared_ptr<ANI::EngineContext> context) {
+			// Default implementation stores the context
+			engineContext = context;
+		}
+
+		virtual void SetStudioContext(std::shared_ptr<ANI::StudioContext> context) {
+			// Default implementation stores the context
+			studioContext = context;
+		}
 
 		// Engine-only plugins (ECS without GUI)
 		virtual bool OnEngineInit(ECS::EntityManager& entityMgr) {
@@ -70,10 +79,18 @@ namespace Plugins {
 			std::cerr << "[" << name << "] ERROR: " << msg << std::endl;
 		}
 
+		// Protected accessors for derived plugins
+		std::shared_ptr<ANI::EngineContext> GetEngineContext() const { return engineContext; }
+		std::shared_ptr<ANI::StudioContext> GetStudioContext() const { return studioContext; }
+
 	private:
 		std::string name;
 		std::string version;
 		bool initialized = false;
+
+		// Store contexts for plugin use
+		std::shared_ptr<ANI::EngineContext> engineContext;
+		std::shared_ptr<ANI::StudioContext> studioContext;
 	};
 
 } // namespace Plugins

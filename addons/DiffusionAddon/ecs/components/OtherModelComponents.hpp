@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -25,7 +25,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "Photo Maker Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("PhotoMaker")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("PhotoMaker")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for Photo Maker identity embedding/face swapping models"}
@@ -40,13 +40,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("PhotoMaker");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("PhotoMaker");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("PhotoMaker");
+			return Utils::FilePathService::GetPath("PhotoMaker");
 		}
 
 		PhotoMakerComponent& operator=(const PhotoMakerComponent& other) {
@@ -77,7 +77,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "ControlNet Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("ControlNet")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("ControlNet")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ControlNet model files"}
@@ -143,7 +143,7 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("ControlNet");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("ControlNet");
 				}
 			}
 		}
@@ -160,7 +160,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("ControlNet");
+			return Utils::FilePathService::GetPath("ControlNet");
 		}
 
 		ControlNetComponent& operator=(const ControlNetComponent& other) {
@@ -235,7 +235,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".pth,.safetensors,.pt"},
 							{"filterName", "Upscale Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Upscale")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("Upscale")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ESRGAN upscale model files (.pth, .safetensors, .pt)"}
@@ -279,7 +279,7 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Upscale");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Upscale");
 				}
 			}
 		}
@@ -294,7 +294,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Upscale");
+			return Utils::FilePathService::GetPath("Upscale");
 		}
 
 		EsrganComponent& operator=(const EsrganComponent& other) {
@@ -347,7 +347,7 @@ namespace ECS {
 	struct LoraComponent : public ECS::BaseModelComponent {
 		LoraComponent() {
 			compName = "Lora";
-			modelPath = Utils::FilePaths::GetInstance().GetPath("Lora");
+			modelPath = Utils::FilePathService::GetPath("Lora");
 			schema = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},
@@ -359,7 +359,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Lora")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("Lora")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for root LoRA directory"}
@@ -374,7 +374,7 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Lora");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Lora");
 				}
 			}
 		}
@@ -387,7 +387,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Lora");
+			return Utils::FilePathService::GetPath("Lora");
 		}
 
 		LoraComponent& operator=(const LoraComponent& other) {
@@ -415,7 +415,7 @@ namespace ECS {
 	struct EmbeddingComponent : public BaseModelComponent {
 		EmbeddingComponent() {
 			compName = "Embedding";
-			modelPath = Utils::FilePaths::GetInstance().GetPath("Embed");
+			modelPath = Utils::FilePathService::GetPath("Embed");
 
 			schema = {
 				{"title", "Text Embedding"},
@@ -428,7 +428,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Embed")},
+							{"dialogDefaultPath", Utils::FilePathService::GetPath("Embed")},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for textual inversion embedding files"}
@@ -443,7 +443,7 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Embed");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Embed");
 				}
 			}
 		}
@@ -456,7 +456,7 @@ namespace ECS {
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Embed");
+			return Utils::FilePathService::GetPath("Embed");
 		}
 
 		EmbeddingComponent& operator=(const EmbeddingComponent& other) {

@@ -1,6 +1,6 @@
 #pragma once
 #include "BaseComponent.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -103,7 +103,7 @@ namespace ECS {
 
 		// Get the appropriate default directory for this model type
 		virtual std::filesystem::path GetDefaultDirectory() const {
-			return Utils::FilePaths::GetInstance().GetPath("Checkpoint"); // Base class default
+			return Utils::FilePathService::GetPath("Checkpoint"); // Base class default
 		}
 	};
 }
