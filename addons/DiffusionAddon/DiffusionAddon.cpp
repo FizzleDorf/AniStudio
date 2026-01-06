@@ -47,7 +47,7 @@ public:
 			return false;
 		}
 
-		// Register components directly with EntityManager using templates
+		// Register components
 		entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
 		entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
 		entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
