@@ -1,6 +1,7 @@
 #include "PluginManager.hpp"
 #include "EntityManager.hpp"
 #include "PluginState.hpp"
+#include "EngineContext.hpp"
 #include <iostream>
 #include <filesystem>
 #include <vector>
@@ -723,6 +724,14 @@ namespace Plugins {
 			return false;
 		}
 
+		// Pass engine context to plugin if available
+		if (!engineContext.expired()) {
+			auto ctx = engineContext.lock();
+			if (ctx) {
+				info.instance->SetEngineContext(ctx);
+			}
+		}
+
 		info.version = info.instance->GetVersion();
 		info.activeDllPath = newestVersionedDll;
 		info.currentVersion = loadedVersion;
@@ -758,6 +767,14 @@ namespace Plugins {
 		if (!info.instance) {
 			std::cerr << "[PluginManager] No plugin instance to enable" << std::endl;
 			return false;
+		}
+
+		// Pass engine context again (in case it was set after load)
+		if (!engineContext.expired()) {
+			auto ctx = engineContext.lock();
+			if (ctx) {
+				info.instance->SetEngineContext(ctx);
+			}
 		}
 
 		if (!info.instance->OnEngineInit(entityManager)) {

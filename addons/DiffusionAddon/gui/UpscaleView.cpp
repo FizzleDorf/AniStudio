@@ -52,11 +52,8 @@ namespace GUI {
 		// Initialize with default values
 		auto& outputComp = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
 
-		// Use the new FilePaths API
-		FilePaths& filePaths = FilePaths::GetInstance();
-
-		std::string outputFolder = filePaths.GetPath("OutputFolder");
-		std::string defaultProject = filePaths.GetPath("DefaultProject");
+		std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
+		std::string defaultProject = Utils::FilePathService::GetPath("DefaultProject");
 
 		outputComp.fileName = "upscaled_output";
 
@@ -69,7 +66,7 @@ namespace GUI {
 		}
 		else {
 			// Fallback to executable directory if all else fails
-			outputComp.filePath = filePaths.GetExecutableDir();
+			outputComp.filePath = Utils::FilePathService::GetExecutableDir();
 		}
 
 		auto& esrganComp = mgr.GetComponent<EsrganComponent>(upscaleEntity);
@@ -316,9 +313,8 @@ namespace GUI {
 		// Ensure output component is properly configured
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
-			FilePaths& filePaths = FilePaths::GetInstance();
 
-			std::string defaultProject = filePaths.GetPath("DefaultProject");
+			std::string defaultProject = Utils::FilePathService::GetPath("DefaultProject");
 
 			if (outputComp.filePath.empty()) {
 				// Use DefaultProject path if available
@@ -327,7 +323,7 @@ namespace GUI {
 				}
 				else {
 					// Fallback to executable directory
-					outputComp.filePath = filePaths.GetExecutableDir();
+					outputComp.filePath = Utils::FilePathService::GetExecutableDir();
 				}
 			}
 
@@ -565,12 +561,11 @@ namespace GUI {
 	}
 
 	void UpscaleView::RenderMetadataControls() {
-		FilePaths& filePaths = FilePaths::GetInstance();
 
 		// Get default path for file dialogs
-		std::string defaultPath = filePaths.GetPath("DefaultProject");
+		std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
 		if (defaultPath.empty() || defaultPath[0] == '\0') {
-			defaultPath = filePaths.GetExecutableDir();
+			defaultPath = Utils::FilePathService::GetExecutableDir();
 		}
 
 		if (ImGui::Button("Save Settings", ImVec2(-FLT_MIN, 0))) {

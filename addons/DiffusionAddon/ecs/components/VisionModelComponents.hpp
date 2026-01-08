@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -25,7 +25,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Vision Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP Vision encoder files (for img2img, etc.)"}
@@ -41,13 +41,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		ClipVisionComponent& operator=(const ClipVisionComponent& other) {
@@ -78,7 +78,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "LLM Vision Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for LLM vision encoder files"}
@@ -93,13 +93,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		LlmVisionComponent& operator=(const LlmVisionComponent& other) {

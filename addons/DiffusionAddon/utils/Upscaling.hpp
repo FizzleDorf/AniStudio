@@ -26,13 +26,11 @@ namespace Utils
 
 			try
 			{
-				// Get FilePaths instance
-				FilePaths& filePaths = FilePaths::GetInstance();
 
 				// Extract parameters from metadata
 				std::string inputImagePath = "";
-				std::string modelPath = filePaths.GetPath("Upscale");  // Updated to use new API
-				std::string outputPath = filePaths.GetPath("DefaultProject");  // Updated to use new API
+				std::string modelPath = Utils::FilePathService::GetPath("Upscale");  // Updated to use new API
+				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");  // Updated to use new API
 				std::string outputFilename = "upscale_AniStudio.png";
 				uint32_t upscaleFactor = 4;
 				bool offload_params_to_cpu = false;
@@ -89,13 +87,13 @@ namespace Utils
 								std::string modelName = esrganData["modelName"].get<std::string>();
 
 								// Get the upscale models directory from FilePaths
-								std::string upscaleDir = filePaths.GetPath("Upscale");
+								std::string upscaleDir = Utils::FilePathService::GetPath("Upscale");
 								if (!upscaleDir.empty() && upscaleDir[0] != '\0') {
 									modelPath = (std::filesystem::path(upscaleDir) / modelName).string();
 								}
 								else {
 									// Fallback: use executable directory
-									std::string exeDir = filePaths.GetExecutableDir();
+									std::string exeDir = Utils::FilePathService::GetExecutableDir();
 									modelPath = (std::filesystem::path(exeDir) / "models" / "upscale_models" / modelName).string();
 								}
 							}
@@ -150,13 +148,13 @@ namespace Utils
 					// Check if output directory exists, if not use a fallback
 					if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
 						// Try to use OutputFolder from FilePaths
-						std::string outputFolder = filePaths.GetPath("OutputFolder");
+						std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
 						if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
 							outputDir = outputFolder;
 						}
 						else {
 							// Fallback to executable directory
-							outputDir = filePaths.GetExecutableDir();
+							outputDir = Utils::FilePathService::GetExecutableDir();
 						}
 					}
 

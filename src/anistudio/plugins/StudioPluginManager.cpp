@@ -1,5 +1,6 @@
 #include "StudioPluginManager.hpp"
 #include "ViewManager.hpp"
+#include "StudioContext.hpp"
 #include <imgui.h>
 #include <iostream>
 
@@ -33,34 +34,45 @@ namespace Plugins {
 		}
 
 		try {
-			std::cout << "[StudioPluginManager] Creating plugin instance..." << std::endl;
-			plugin.instance = plugin.createFunc();
-
-			if (!plugin.instance) {
-				std::cerr << "[StudioPluginManager] Failed to create plugin instance: "
-					<< pluginName << std::endl;
-				return false;
+			// ===== FIX STARTS HERE =====
+			// Pass engine context if available
+			std::shared_ptr<ANI::EngineContext> engineContextPtr;
+			if (!engineContext.expired()) {
+				engineContextPtr = engineContext.lock();
 			}
 
-			// ============================================
-			// ADDED: PASS IMGUI CONTEXT TO PLUGIN
-			// ============================================
+			// If engine context is still null, try to use studioContext
+			if (!engineContextPtr && studioContext) {
+				// StudioContext inherits from EngineContext, so we can cast it
+				engineContextPtr = std::static_pointer_cast<ANI::EngineContext>(studioContext);
+				std::cout << "[StudioPluginManager] Using StudioContext as EngineContext for plugin" << std::endl;
+			}
+
+			if (engineContextPtr) {
+				plugin.instance->SetEngineContext(engineContextPtr);
+				std::cout << "[StudioPluginManager] EngineContext set for plugin: " << pluginName << std::endl;
+			}
+			else {
+				std::cerr << "[StudioPluginManager] WARNING: No EngineContext available for plugin!" << std::endl;
+			}
+			// ===== FIX ENDS HERE =====
+
+			// Pass studio context if available
+			if (studioContext) {
+				plugin.instance->SetStudioContext(studioContext);
+			}
+
+			// Pass ImGui context if available
 			if (mainImGuiContext) {
 				std::cout << "[StudioPluginManager] Setting ImGui context for plugin: "
 					<< mainImGuiContext << std::endl;
 				plugin.instance->SetImGuiContext(mainImGuiContext);
 			}
 
-			plugin.version = plugin.instance->GetVersion();
-			std::cout << "[StudioPluginManager] Plugin instance created, version: "
-				<< plugin.version << std::endl;
-
 			std::cout << "[StudioPluginManager] Calling OnEngineInit..." << std::endl;
 			if (!plugin.instance->OnEngineInit(entityManager)) {
 				std::cerr << "[StudioPluginManager] Plugin engine initialization failed: "
 					<< pluginName << std::endl;
-				plugin.destroyFunc(plugin.instance);
-				plugin.instance = nullptr;
 				return false;
 			}
 
@@ -68,8 +80,6 @@ namespace Plugins {
 			if (!plugin.instance->OnStudioInit(entityManager, viewManager)) {
 				std::cerr << "[StudioPluginManager] Plugin studio initialization failed: "
 					<< pluginName << std::endl;
-				plugin.destroyFunc(plugin.instance);
-				plugin.instance = nullptr;
 				return false;
 			}
 
@@ -90,10 +100,6 @@ namespace Plugins {
 		catch (const std::exception& e) {
 			std::cerr << "[StudioPluginManager] Exception during plugin enable: "
 				<< e.what() << std::endl;
-			if (plugin.instance) {
-				plugin.destroyFunc(plugin.instance);
-				plugin.instance = nullptr;
-			}
 			return false;
 		}
 

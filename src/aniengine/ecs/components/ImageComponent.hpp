@@ -1,8 +1,8 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "FilePaths.hpp"
 #include "OpenGLWrapper.hpp"
+#include "FilePathService.hpp"
 #include <string>
 #include <stb_image.h>
 #include <memory>
@@ -10,10 +10,7 @@
 namespace ECS {
 	struct ImageComponent : public BaseComponent {
 		std::string fileName = "AniStudio";                  // Default file name
-		std::string filePath =
-			std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-			? Utils::FilePaths::GetInstance().GetPath("OutputFolder")			 // Output folder if one is found
-			: Utils::FilePaths::GetInstance().GetPath("DefaultProject");			 // Directory containing the Image
+		std::string filePath = "";                           // File path - initialized via service
 		unsigned char *imageData = nullptr;                  // Pointer to image data - DO NOT FREE in destructor for base class
 		int width = 0;                                       // Image width
 		int height = 0;                                      // Image height
@@ -23,6 +20,7 @@ namespace ECS {
 		ImageComponent() {
 			compName = "Image";
 			compCategory = "Image";
+			InitializeFilePathFromService();
 			setupBaseSchema();
 		}
 
@@ -112,6 +110,7 @@ namespace ECS {
 			channels = other.channels;
 			imageData = nullptr; // Don't copy raw pointer
 			textureID = 0; // Don't copy texture ID
+			InitializeFilePathFromService();
 			setupBaseSchema();
 		}
 
@@ -132,6 +131,23 @@ namespace ECS {
 				}}
 			};
 		}
+
+		// Initialize file path from the service
+		void InitializeFilePathFromService() {
+			if (Utils::FilePathService::IsInitialized()) {
+				// Try OutputFolder first, then DefaultProject
+				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
+				if (!outputPath.empty()) {
+					filePath = outputPath;
+				}
+				else {
+					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
+					if (!defaultPath.empty()) {
+						filePath = defaultPath;
+					}
+				}
+			}
+		}
 	};
 
 	struct InputImageComponent : public ImageComponent {
@@ -141,7 +157,7 @@ namespace ECS {
 			compName = "InputImage";
 			compCategory = "Image";
 			fileName = "";
-			filePath = "";
+			filePath = "";  // Input images start with empty path
 			width = 0;
 			height = 0;
 			channels = 0;
@@ -335,10 +351,7 @@ namespace ECS {
 		OutputImageComponent() {
 			compName = "OutputImage";
 			compCategory = "Image";
-			// Set default output directory to filePath 
-			filePath = std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-				? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
-				: Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+			// Set default output directory using the service
 			fileName = "AniStudio";
 			setupOutputSchema();
 		}
@@ -353,31 +366,9 @@ namespace ECS {
 			return properties;
 		}
 
-		// Get the full output path - SIMPLIFIED
-		std::string GetFullOutputPath() const {
-			std::string extension = fileExtension;
-			if (selectedExtensionIndex >= 0 && selectedExtensionIndex < supportedExtensions.size()) {
-				extension = supportedExtensions[selectedExtensionIndex];
-			}
-
-			std::string baseName = fileName;
-			if (baseName.empty()) baseName = "AniStudio";
-
-			// JUST USE FILEPATH - NO MORE outputDirectory BULLSHIT
-			std::string outputDir = filePath;
-			if (outputDir.empty()) {
-				outputDir = std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-					? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
-					: Utils::FilePaths::GetInstance().GetPath("DefaultProject");
-			}
-
-			std::filesystem::path outputPath = std::filesystem::path(outputDir) / (baseName + extension);
-			return outputPath.string();
-		}
-
 		// Serialize the component to JSON
 		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j = ImageComponent::Serialize();
+			auto j = ImageComponent::Serialize();
 			j[compName]["fileExtension"] = fileExtension;
 			j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
 			return j;
@@ -416,24 +407,24 @@ namespace ECS {
 			fileExtension = other.fileExtension;
 			selectedExtensionIndex = other.selectedExtensionIndex;
 			supportedExtensions = other.supportedExtensions;
+			// If filePath is empty in the copy, reset to project output directory
 			setupOutputSchema();
 		}
 
 	private:
 		void setupOutputSchema() {
+
 			schema = {
 				{"title", "Output Image"},
 				{"type", "object"},
 				{"properties", {
-					{"filePath", {  // CHANGE FROM outputDirectory TO filePath!
+					{"filePath", {
 						{"type", "string"},
 						{"title", "Output Directory"},
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"defaultPath", std::string(Utils::FilePaths::GetInstance().GetPath("OutputFolder")) != ""
-								? Utils::FilePaths::GetInstance().GetPath("OutputFolder")
-								: Utils::FilePaths::GetInstance().GetPath("DefaultProject")},
+							{"defaultPath", "OutputFolder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Reset"},
 							{"browseTooltip", "Browse to select output directory for saving images"}
@@ -442,7 +433,12 @@ namespace ECS {
 					{"fileName", {
 						{"type", "string"},
 						{"title", "File Name"},
-						{"ui:widget", "input_text"}
+						{"ui:widget", "input_text"},
+						{"ui:options", {
+							{"dialogDefaultPath", "OutputFolder"},
+							{"defaultPath", "OutputFolder"},
+							{"resetButtonText", "Reset to Default"}
+						}}
 					}},
 					{"selectedExtensionIndex", {
 						{"type", "integer"},
@@ -456,10 +452,13 @@ namespace ECS {
 							{{"label", "JPEG (.jpeg)"}},
 							{{"label", "Bitmap (.bmp)"}},
 							{{"label", "Targa (.tga)"}}
+						}},
+						{"ui:options", {
+							{"resetButtonText", "Reset to PNG"}
 						}}
 					}}
 				}},
-				{"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}  // CHANGED HERE TOO
+				{"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}
 			};
 		}
 	};
@@ -680,7 +679,7 @@ namespace ECS {
 		MaskImageComponent() {
 			compName = "MaskImageComponent";
 			fileName = "";
-			filePath = "";
+			filePath = "";  // Mask images don't need default path
 			setupMaskSchema();
 		}
 

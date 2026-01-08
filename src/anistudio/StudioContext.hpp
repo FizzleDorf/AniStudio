@@ -3,19 +3,17 @@
 #include <memory>
 
 namespace GUI { class ViewManager; }
-namespace ANI {
-	class ProjectManager;
-	class WindowState;
-	class StudioPluginManager;
-}
+namespace Plugins { class StudioPluginManager; }
+namespace ANI { class ProjectManager; }
+namespace Utils { class WindowState; }
 
 namespace ANI {
 
 	struct StudioContext : public EngineContext {
 		std::shared_ptr<GUI::ViewManager> viewManager;
 		std::shared_ptr<ProjectManager> projectManager;
-		std::shared_ptr<WindowState> windowState;
-		std::shared_ptr<StudioPluginManager> studioPluginManager;
+		std::shared_ptr<Utils::WindowState> windowState;
+		std::shared_ptr<Plugins::StudioPluginManager> studioPluginManager;
 
 		// Window/UI settings
 		void* windowHandle = nullptr;
@@ -38,7 +36,7 @@ namespace ANI {
 			auto context = std::make_shared<StudioContext>();
 			context->entityManager = std::make_shared<ECS::EntityManager>();
 			context->viewManager = std::make_shared<GUI::ViewManager>();
-			context->windowState = std::make_shared<WindowState>();
+			context->windowState = std::make_shared<Utils::WindowState>();
 			context->projectManager = std::make_shared<ProjectManager>(
 				*context->viewManager,
 				*context->entityManager
@@ -56,12 +54,13 @@ namespace ANI {
 			// Copy base context members
 			studioContext->entityManager = engineContext->entityManager;
 			studioContext->pluginManager = engineContext->pluginManager;
+			studioContext->filePaths = engineContext->filePaths;
 			studioContext->pluginDirectory = engineContext->pluginDirectory;
 			studioContext->hotReloadEnabled = engineContext->hotReloadEnabled;
 
 			// Initialize studio-specific members
 			studioContext->viewManager = std::make_shared<GUI::ViewManager>();
-			studioContext->windowState = std::make_shared<WindowState>();
+			studioContext->windowState = std::make_shared<Utils::WindowState>();
 			studioContext->projectManager = std::make_shared<ProjectManager>(
 				*studioContext->viewManager,
 				*studioContext->entityManager

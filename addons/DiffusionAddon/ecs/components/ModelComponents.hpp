@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -24,7 +24,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "Checkpoint Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Checkpoint")},
+							{"dialogDefaultPath", "Checkpoint"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
@@ -40,13 +40,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Checkpoint");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Checkpoint");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Checkpoint");
+			return Utils::FilePathService::GetPath("Checkpoint");
 		}
 
 		CheckpointComponent& operator=(const CheckpointComponent& other) {
@@ -76,7 +76,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "UNet Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Unet")},
+							{"dialogDefaultPath", "Unet"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for UNet/Diffusion model files for FLUX or transformer models"}
@@ -92,13 +92,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Unet");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Unet");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Unet");
+			return Utils::FilePathService::GetPath("Unet");
 		}
 
 		DiffusionModelComponent& operator=(const DiffusionModelComponent& other) {
@@ -129,7 +129,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "High Noise UNet Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Unet")},
+							{"dialogDefaultPath", "Unet"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for high noise UNet/Diffusion model files (for video generation)"}
@@ -144,13 +144,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Unet");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Unet");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Unet");
+			return Utils::FilePathService::GetPath("Unet");
 		}
 
 		HighNoiseDiffusionModelComponent& operator=(const HighNoiseDiffusionModelComponent& other) {

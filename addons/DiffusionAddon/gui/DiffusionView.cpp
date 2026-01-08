@@ -48,28 +48,28 @@ namespace GUI {
 		img2imgEntity = CreateEntityWithComponents(true);
 		editEntity = CreateEntityWithComponents(true);
 
-		// Refresh schemas for all model components to update paths
-		for (EntityID entity : {txt2imgEntity, img2imgEntity, editEntity}) {
-			// Get all components and refresh their schemas
-			auto componentIds = mgr.GetEntityComponents(entity);
-			for (ComponentTypeID compId : componentIds) {
-				auto* component = mgr.GetComponentById(entity, compId);
-				if (component) {
-					component->RefreshSchema();
-				}
-			}
+		//// Refresh schemas for all model components to update paths
+		//for (EntityID entity : {txt2imgEntity, img2imgEntity, editEntity}) {
+		//	// Get all components and refresh their schemas
+		//	auto componentIds = mgr.GetEntityComponents(entity);
+		//	for (ComponentTypeID compId : componentIds) {
+		//		auto* component = mgr.GetComponentById(entity, compId);
+		//		if (component) {
+		//			component->RefreshSchema();
+		//		}
+		//	}
 
-			if (mgr.HasComponent<OutputImageComponent>(entity)) {
-				auto& output = mgr.GetComponent<OutputImageComponent>(entity);
-				output.filePath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
-				output.fileName = "AniStudio.png";
-			}
+		//	if (mgr.HasComponent<OutputImageComponent>(entity)) {
+		//		auto& output = mgr.GetComponent<OutputImageComponent>(entity);
+		//		output.filePath = Utils::FilePathService::GetPath("DefaultProject");
+		//		output.fileName = "AniStudio.png";
+		//	}
 
-			if (mgr.HasComponent<LoraComponent>(entity)) {
-				auto& lora = mgr.GetComponent<LoraComponent>(entity);
-				lora.modelPath = Utils::FilePaths::GetInstance().GetPath("Lora");
-			}
-		}
+		//	if (mgr.HasComponent<LoraComponent>(entity)) {
+		//		auto& lora = mgr.GetComponent<LoraComponent>(entity);
+		//		lora.modelPath = Utils::FilePathService::GetPath("Lora");
+		//	}
+		//}
 
 		// Set default denoise for img2img and edit
 		if (mgr.HasComponent<SamplerComponent>(img2imgEntity)) {
@@ -536,7 +536,7 @@ namespace GUI {
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 			if (outputComp.filePath.empty()) {
-				outputComp.filePath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+				outputComp.filePath = Utils::FilePathService::GetPath("DefaultProject");
 			}
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio.png";
@@ -567,7 +567,7 @@ namespace GUI {
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 			if (outputComp.filePath.empty()) {
-				outputComp.filePath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+				outputComp.filePath = Utils::FilePathService::GetPath("DefaultProject");
 			}
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio_edit.png";
@@ -626,7 +626,7 @@ namespace GUI {
 				if (mgr.HasComponent<LoraComponent>(targetEntity)) {
 					auto& loraComp = mgr.GetComponent<LoraComponent>(targetEntity);
 					if (loraComp.modelPath.empty())
-						loraComp.modelPath = Utils::FilePaths::GetInstance().GetPath("Lora");
+						loraComp.modelPath = Utils::FilePathService::GetPath("Lora");
 				}
 
 				for (int i = 0; i < numQueues; i++) {
@@ -907,13 +907,13 @@ namespace GUI {
 	void DiffusionView::RenderMetadataControls() {
 		if (ImGui::Button("Save Metadata", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+			config.path = Utils::FilePathService::GetPath("DefaultProject");
 			ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Metadata", ".json", config);
 		}
 
 		if (ImGui::Button("Load Metadata", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
+			config.path = Utils::FilePathService::GetPath("DefaultProject");
 			ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Metadata", ".json,.png", config);
 		}
 

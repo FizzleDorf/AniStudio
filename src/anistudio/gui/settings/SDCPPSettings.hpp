@@ -2,7 +2,7 @@
 
 #include "BaseTabObject.hpp"
 #include "ImGuiFileDialog.h"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
@@ -195,7 +195,7 @@ namespace Settings {
 
 		void LoadFromFilePaths() {
 			// Load SDCPP-specific paths if available
-			sdcppModelsRoot = Utils::FilePaths::GetInstance().GetPath("ModelRoot");
+			sdcppModelsRoot = Utils::FilePathService::GetPath("ModelRoot");
 			sdcppConfigPath = "data/sdcpp/config.json";
 		}
 

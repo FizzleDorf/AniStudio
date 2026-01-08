@@ -673,22 +673,20 @@ namespace ECS {
 
 						// Fallback to default if empty
 						if (outputDir.empty()) {
-							// Get FilePaths instance
-							Utils::FilePaths& filePaths = Utils::FilePaths::GetInstance();
 
 							// Try OutputFolder first, then DefaultProject
-							std::string outputFolder = filePaths.GetPath("OutputFolder");
+							std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
 							if (!outputFolder.empty() && outputFolder[0] != '\0') {
 								outputDir = outputFolder;
 							}
 							else {
-								std::string defaultProject = filePaths.GetPath("DefaultProject");
+								std::string defaultProject = Utils::FilePathService::GetPath("DefaultProject");
 								if (!defaultProject.empty() && defaultProject[0] != '\0') {
 									outputDir = defaultProject;
 								}
 								else {
 									// Ultimate fallback - executable directory
-									outputDir = filePaths.GetExecutableDir();
+									outputDir = Utils::FilePathService::GetExecutableDir();
 								}
 							}
 						}

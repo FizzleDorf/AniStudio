@@ -1,4 +1,50 @@
 {
+    "AssetsFolder": "",
+    "Checkpoint": "D:\\Stable Diffusion\\models/checkpoints",
+    "ClipG": "D:\\Stable Diffusion\\models/clip/clip_g.safetensors",
+    "ClipL": "D:\\Stable Diffusion\\models/clip/clip_l.safetensors",
+    "ControlNet": "D:\\Stable Diffusion\\models/controlnet",
+    "DefaultProject": "",
+    "Embed": "D:\\Stable Diffusion\\models/embeddings",
+    "Encoder": "D:\\Stable Diffusion\\models/clip",
+    "ImguiState": "",
+    "Lora": "D:\\Stable Diffusion\\models/loras",
+    "ModelRoot": "D:\\Stable Diffusion\\models",
+    "OutputFolder": "",
+    "Plugins": "",
+    "Scripts": "",
+    "T5XXL": "D:\\Stable Diffusion\\models/clip/t5xxl.safetensors",
+    "Unet": "D:\\Stable Diffusion\\models/unet",
+    "Upscale": "D:\\Stable Diffusion\\models/upscale_models",
+    "Vae": "D:\\Stable Diffusion\\models/vae",
+    "VirtualEnv": "",
+    "_categories": {
+        "CLIP Files": [
+            "ClipL",
+            "ClipG",
+            "T5XXL"
+        ],
+        "General Paths": [
+            "DefaultProject",
+            "AssetsFolder",
+            "OutputFolder",
+            "VirtualEnv",
+            "Scripts",
+            "Plugins",
+            "ImguiState"
+        ],
+        "Model Paths": [
+            "ModelRoot",
+            "Checkpoint",
+            "Encoder",
+            "Vae",
+            "Unet",
+            "Lora",
+            "ControlNet",
+            "Upscale",
+            "Embed"
+        ]
+    },
     "assetsFolderPath": "",
     "checkpointDir": "",
     "controlnetDir": "",

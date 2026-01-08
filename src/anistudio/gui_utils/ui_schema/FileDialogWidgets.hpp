@@ -11,6 +11,8 @@
 #include "UISchemaUtils.hpp"
 #include "UISchemaContext.hpp"
 #include <stb_image.h>
+#include "FilePathService.hpp"
+#include <iostream>
 
 namespace UISchema {
 
@@ -33,6 +35,26 @@ namespace UISchema {
 		// Cache for image previews
 		static inline std::unordered_map<std::string, GLuint> imagePreviewCache;
 		static inline std::unordered_map<std::string, std::pair<int, int>> imageDimensionsCache;
+
+		// Helper to resolve path from key or direct path
+		static std::string ResolveDialogPath(const std::string& pathOrKey, const std::string& fallbackPath = "") {
+			// Check if it's a key by looking for FilePathService
+			if (!pathOrKey.empty() && Utils::FilePathService::HasPath(pathOrKey)) {
+				std::string resolvedPath = Utils::FilePathService::GetPath(pathOrKey);
+				if (!resolvedPath.empty() && std::filesystem::exists(resolvedPath)) {
+					return resolvedPath;
+				}
+			}
+
+			// If not a key or key resolution failed, check if it's a valid direct path
+			if (!pathOrKey.empty() && std::filesystem::exists(pathOrKey)) {
+				return pathOrKey;
+			}
+
+			// Return fallback or current directory
+			std::string result = fallbackPath.empty() ? "." : fallbackPath;
+			return result;
+		}
 
 	public:
 		// Clean up preview textures
@@ -136,7 +158,7 @@ namespace UISchema {
 			const std::string& dialogKey,
 			const std::string& title,
 			const std::string& filters,
-			const std::string& path,
+			const std::string& pathOrKey,  // Can be either a path or a FilePathService key
 			bool isDirectoryMode = false,
 			FileDialogCallback callback = nullptr
 		) {
@@ -150,7 +172,10 @@ namespace UISchema {
 
 			// Setup dialog configuration
 			IGFD::FileDialogConfig config;
-			config.path = path;
+
+			// Resolve the path (could be a key or direct path)
+			std::string actualPath = ResolveDialogPath(pathOrKey);
+			config.path = actualPath;
 			config.flags = ImGuiFileDialogFlags_Modal;
 
 			// Special handling for directory selection
@@ -268,12 +293,6 @@ namespace UISchema {
 			std::string resetButtonText = GetSchemaValue<std::string>(options, "resetButtonText", "Clear");
 			std::string browseTooltip = GetSchemaValue<std::string>(options, "browseTooltip", "");
 
-			// Initialize value to default path if empty and default exists
-			if (value->empty() && !defaultPath.empty()) {
-				*value = defaultPath;
-				modified = true;
-			}
-
 			// Extract property name from label for ID generation
 			std::string propertyName = label;
 			size_t hashPos = label.find("##");
@@ -347,6 +366,8 @@ namespace UISchema {
 
 			// Determine the actual dialog path to use
 			std::string actualDialogPath;
+
+			// First priority: Use the parent directory of the currently selected file
 			if (!value->empty()) {
 				std::filesystem::path currentPath(*value);
 				if (std::filesystem::exists(currentPath.parent_path())) {
@@ -354,10 +375,27 @@ namespace UISchema {
 				}
 			}
 
-			if (actualDialogPath.empty()) {
-				actualDialogPath = dialogDefaultPath;
+			// Second priority: Resolve the dialogDefaultPath (could be a key or path)
+			if (actualDialogPath.empty() && !dialogDefaultPath.empty()) {
+				actualDialogPath = ResolveDialogPath(dialogDefaultPath);
 			}
-			if (actualDialogPath.empty()) {
+
+			// Third priority: For directory mode, try FilePathService based on property name
+			if (actualDialogPath.empty() && mode == "directory") {
+				// For directory selection, try to get from FilePathService
+				if (propertyName == "modelPath") {
+					// Map property to FilePathService key
+					if (label.find("LoRA") != std::string::npos) {
+						actualDialogPath = Utils::FilePathService::GetPath("Lora");
+					}
+					else if (label.find("Embedding") != std::string::npos) {
+						actualDialogPath = Utils::FilePathService::GetPath("Embed");
+					}
+				}
+			}
+
+			// Final fallback: If still empty or invalid, use current directory
+			if (actualDialogPath.empty() || !std::filesystem::exists(actualDialogPath)) {
 				actualDialogPath = ".";
 			}
 
@@ -391,7 +429,6 @@ namespace UISchema {
 						else {
 							// ALWAYS store the full path for ALL file types
 							*value = result.fullPath;
-							std::cout << "File selected: " << result.fullPath << std::endl;
 						}
 					}
 				}
@@ -416,33 +453,42 @@ namespace UISchema {
 			}
 
 			// Show reset/clear button
-			if (!defaultPath.empty()) {
-				ImGui::SameLine();
-				std::string resetButtonId = context.GenerateWidgetId(propertyName, "reset");
-				std::string resetButtonLabel = resetButtonText + "##" + resetButtonId;
+			ImGui::SameLine();
 
-				if (ImGui::Button(resetButtonLabel.c_str())) {
-					*value = defaultPath;
-					modified = true;
-				}
+			// Always show clear button for model components (SDCPP expects empty string if not used)
+			std::string clearButtonId = context.GenerateWidgetId(propertyName, "clear");
+			std::string clearButtonLabel = "Clear##" + clearButtonId;
 
-				if (ImGui::IsItemHovered()) {
-					ImGui::BeginTooltip();
-					ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-					ImGui::Text("Reset to default: %s", defaultPath.c_str());
-					ImGui::PopTextWrapPos();
-					ImGui::EndTooltip();
+			if (ImGui::Button(clearButtonLabel.c_str())) {
+				// If defaultPath is specified in the ui's ui_options, set value to that resolved path
+				// Otherwise clear to empty string
+				if (!defaultPath.empty()) {
+					// Resolve the default path (could be a key like "OutputFolder")
+					std::string resolvedDefault = ResolveDialogPath(defaultPath);
+					if (!resolvedDefault.empty() && std::filesystem::exists(resolvedDefault)) {
+						*value = resolvedDefault;
+					}
+					else {
+						*value = ""; // Default path doesn't exist, clear to empty
+					}
 				}
+				else {
+					*value = ""; // No default path specified, clear to empty
+				}
+				modified = true;
 			}
-			else {
-				ImGui::SameLine();
-				std::string clearButtonId = context.GenerateWidgetId(propertyName, "clear");
-				std::string clearButtonLabel = "Clear##" + clearButtonId;
 
-				if (ImGui::Button(clearButtonLabel.c_str())) {
-					*value = "";
-					modified = true;
+			if (ImGui::IsItemHovered()) {
+				ImGui::BeginTooltip();
+				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+				if (!defaultPath.empty()) {
+					ImGui::Text("Reset to default path: %s", defaultPath.c_str());
 				}
+				else {
+					ImGui::Text("Clear the selected file/directory");
+				}
+				ImGui::PopTextWrapPos();
+				ImGui::EndTooltip();
 			}
 
 			return modified;

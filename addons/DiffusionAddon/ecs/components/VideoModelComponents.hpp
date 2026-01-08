@@ -4,7 +4,7 @@
 #include "ModelComponents.hpp"
 #include "stable-diffusion.h"
 #include "DiffusionOptions.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include <string>
 
 namespace ECS {

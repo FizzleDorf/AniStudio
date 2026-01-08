@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 
 namespace FileDialog {
 
@@ -148,48 +148,45 @@ namespace FileDialog {
 		}
 
 		// Get recommended default paths for each filter type
-		static std::string GetDefaultPath(FilterType type) {
-			auto& filePaths = Utils::FilePaths::GetInstance();
-			
+		static std::string GetDefaultPath(FilterType type) {			
 			switch (type) {
 			case FilterType::PATH_SELECTION:
-				return filePaths.GetPath("DefaultProject");
+				return Utils::FilePathService::GetPath("DefaultProject");
 
 			case FilterType::DIFFUSION_MODEL:
-				return filePaths.GetPath("Checkpoint");
+				return Utils::FilePathService::GetPath("Checkpoint");
 
 			case FilterType::IMAGE_FILE:
-				return filePaths.GetPath("DefaultProject");
+				return Utils::FilePathService::GetPath("DefaultProject");
 
 			case FilterType::METADATA_FILE:
-				return filePaths.GetPath("DefaultProject");
+				return Utils::FilePathService::GetPath("DefaultProject");
 
 			case FilterType::ALL_FILES:
-				return filePaths.GetPath("DefaultProject");
+				return Utils::FilePathService::GetPath("DefaultProject");
 
 			default:
-				return filePaths.GetPath("DefaultProject");
+				return Utils::FilePathService::GetPath("DefaultProject");
 			}
 		}
 
 		// Specialized getters for specific model types
 		static std::string GetModelPath(const std::string& modelType) {
-			auto& filePaths = Utils::FilePaths::GetInstance();
 			
 			static std::unordered_map<std::string, std::string> modelPaths = {
-				{"checkpoint", filePaths.GetPath("Checkpoint")},
-				{"unet", filePaths.GetPath("Unet")},
-				{"vae", filePaths.GetPath("Vae")},
-				{"clip", filePaths.GetPath("Encoder")},
-				{"t5", filePaths.GetPath("Encoder")},
-				{"lora", filePaths.GetPath("Lora")},
-				{"controlnet", filePaths.GetPath("ControlNet")},
-				{"embedding", filePaths.GetPath("Embed")},
-				{"upscale", filePaths.GetPath("Upscale")}
+				{"checkpoint", Utils::FilePathService::GetPath("Checkpoint")},
+				{"unet", Utils::FilePathService::GetPath("Unet")},
+				{"vae", Utils::FilePathService::GetPath("Vae")},
+				{"clip", Utils::FilePathService::GetPath("Encoder")},
+				{"t5", Utils::FilePathService::GetPath("Encoder")},
+				{"lora", Utils::FilePathService::GetPath("Lora")},
+				{"controlnet", Utils::FilePathService::GetPath("ControlNet")},
+				{"embedding", Utils::FilePathService::GetPath("Embed")},
+				{"upscale", Utils::FilePathService::GetPath("Upscale")}
 			};
 
 			auto it = modelPaths.find(modelType);
-			return (it != modelPaths.end()) ? it->second : filePaths.GetPath("Checkpoint");
+			return (it != modelPaths.end()) ? it->second : Utils::FilePathService::GetPath("Checkpoint");
 		}
 
 		// Get filter for specific model type with separate categories
@@ -240,9 +237,7 @@ namespace FileDialog {
 			std::string description;
 		};
 
-		static ModelFilterInfo GetModelFilterInfo(const std::string& modelType) {
-			auto& filePaths = Utils::FilePaths::GetInstance();
-			
+		static ModelFilterInfo GetModelFilterInfo(const std::string& modelType) {			
 			ModelFilterInfo info;
 			info.filter = GetModelFilter(modelType);
 			info.defaultPath = GetModelPath(modelType);

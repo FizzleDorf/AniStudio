@@ -2,7 +2,7 @@
 
 #include "PngMetadataUtils.hpp"
 #include "ImageUtils.hpp"
-#include "FilePaths.hpp"  // Added include for new FilePaths
+#include "FilePathService.hpp"
 #include "pch.h"
 #include <filesystem>
 #include <iostream>
@@ -26,18 +26,15 @@ namespace Utils {
 				throw std::runtime_error("Invalid image dimensions: " + std::to_string(width) + "x" + std::to_string(height));
 			}
 
-			// Get FilePaths instance
-			FilePaths& filePaths = FilePaths::GetInstance();
-
 			std::string outputPath = fullPath;
 			if (outputPath.empty())
 			{
 				// Get default project path from FilePaths
-				std::string defaultProjectPath = filePaths.GetPath("DefaultProject");
+				std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
 
 				if (defaultProjectPath.empty() || defaultProjectPath[0] == '\0') {
 					// Fallback to executable directory
-					defaultProjectPath = filePaths.GetExecutableDir();
+					defaultProjectPath = Utils::FilePathService::GetExecutableDir();
 				}
 
 				outputPath = defaultProjectPath + "/AniStudio_output.png";
@@ -51,11 +48,11 @@ namespace Utils {
 			if (outputFilePath.is_relative())
 			{
 				// Get default project path from FilePaths
-				std::string defaultProjectPath = filePaths.GetPath("DefaultProject");
+				std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
 
 				if (defaultProjectPath.empty() || defaultProjectPath[0] == '\0') {
 					// Fallback to executable directory
-					defaultProjectPath = filePaths.GetExecutableDir();
+					defaultProjectPath = Utils::FilePathService::GetExecutableDir();
 				}
 
 				outputFilePath = std::filesystem::path(defaultProjectPath) / outputFilePath;

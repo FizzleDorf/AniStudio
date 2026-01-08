@@ -17,15 +17,19 @@ namespace GUI {
 		popupState.InitializeBuffers(m_projectManager);
 		popupState.LoadTemplates();
 		popupState.RefreshRecentProjects(m_projectManager);
+
+		// Initialize auto-load state
+		autoLoadState.showPopup = false;
+		autoLoadState.userChoiceMade = false;
+		autoLoadState.shouldAutoLoad = false;
 	}
 
 	void ProjectManagerView::Update(const float deltaT) {
-		// Close this view if a project is now open
+		// Close this view if a project is open
 		if (m_projectManager.IsProjectOpen()) {
-			// View will be hidden automatically when project opens
-			// Reset popup flags when closing
 			popupState.showNewProjectPopup = false;
 			popupState.showLoadProjectPopup = false;
+			autoLoadState.showPopup = false;
 		}
 	}
 
@@ -35,7 +39,17 @@ namespace GUI {
 			return;
 		}
 
-		// Render project popups first - same as MenuBar!
+		// Render auto-load popup first (if active)
+		if (autoLoadState.showPopup) {
+			RenderAutoLoadPopup();
+
+			// If auto-load popup is still showing, don't render the main window
+			if (autoLoadState.showPopup) {
+				return;
+			}
+		}
+
+		// Render project popups first
 		ProjectPopups::RenderNewProjectPopup(popupState, m_projectManager);
 		ProjectPopups::RenderLoadProjectPopup(popupState, m_projectManager);
 
@@ -116,10 +130,41 @@ namespace GUI {
 
 		}
 		ImGui::End();
+	}
 
-		// Handle close or ESC
-		if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-			// View will be hidden automatically when project opens
+	void ProjectManagerView::RenderAutoLoadPopup() {
+		if (AutoLoadPopup::Show(autoLoadState)) {
+			// User made a choice
+			if (autoLoadState.shouldAutoLoad) {
+				std::cout << "[ProjectManagerView] User chose to auto-load project: "
+					<< autoLoadState.lastProjectPath << std::endl;
+
+				// Try to load the project
+				if (m_projectManager.LoadProject(autoLoadState.lastProjectPath)) {
+					std::cout << "[ProjectManagerView] Auto-load successful" << std::endl;
+				}
+				else {
+					std::cerr << "[ProjectManagerView] Auto-load failed: "
+						<< m_projectManager.GetLastError() << std::endl;
+				}
+			}
+			else {
+				std::cout << "[ProjectManagerView] User chose to show project manager" << std::endl;
+				// Just show the normal startup window
+			}
+		}
+	}
+
+	void ProjectManagerView::ShowAutoLoadPopup(const std::string& lastProjectPath) {
+		if (AutoLoadPopup::ShouldShow(lastProjectPath)) {
+			autoLoadState.showPopup = true;
+			autoLoadState.lastProjectPath = lastProjectPath;
+			autoLoadState.lastProjectName = AutoLoadPopup::GetProjectNameFromPath(lastProjectPath);
+			autoLoadState.userChoiceMade = false;
+			autoLoadState.shouldAutoLoad = false;
+
+			std::cout << "[ProjectManagerView] Showing auto-load popup for project: "
+				<< autoLoadState.lastProjectName << std::endl;
 		}
 	}
 

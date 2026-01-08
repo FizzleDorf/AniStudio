@@ -3,12 +3,15 @@
 #include "ViewManager.hpp"
 #include "Events.hpp"
 #include "DiffusionCallbackUtils.hpp"
+#include "FilePathService.hpp"
+#include "EngineContext.hpp"
+#include "StudioContext.hpp"
+#include "ProjectManager.hpp"
+#include "WindowState.hpp"
 
-// Components and Systems
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"
 
-// Views
 #include "DiffusionView.hpp"
 #include "ConvertView.hpp"
 #include "UpscaleView.hpp"
@@ -23,7 +26,46 @@ public:
 	bool OnEngineInit(ECS::EntityManager& entityMgr) override {
 		LogInfo("Initializing Stable Diffusion Addon...");
 
-		// Register components directly with EntityManager using templates
+		auto context = GetEngineContext();
+
+		if (!context) {
+			auto studioCtx = GetStudioContext();
+			if (studioCtx) {
+				context = std::static_pointer_cast<ANI::EngineContext>(studioCtx);
+				LogInfo("Got EngineContext from StudioContext fallback");
+			}
+		}
+
+		if (!context) {
+			LogError("Engine context is null! Plugin cannot initialize.");
+			return false;
+		}
+
+		LogInfo("Engine context obtained successfully");
+
+		if (Utils::FilePathService::IsInitialized()) {
+			LogInfo("FilePathService already initialized");
+		}
+		else {
+			if (context->filePaths) {
+				Utils::FilePathService::SetInstance(context->filePaths);
+				LogInfo("FilePathService set with context FilePaths");
+			}
+			else {
+				LogError("No FilePaths in context to set in FilePathService!");
+				return false;
+			}
+		}
+
+		std::string modelRoot = Utils::FilePathService::GetPath("ModelRoot");
+		if (!modelRoot.empty()) {
+			LogInfo("Model root path: " + modelRoot);
+		}
+		else {
+			LogError("Model root path is empty!");
+			return false;
+		}
+
 		entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
 		entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
 		entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
@@ -31,7 +73,6 @@ public:
 		entityMgr.RegisterComponent<ECS::SLGComponent>("SLG");
 		entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
 
-		// Models
 		entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
 		entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
 		entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
@@ -46,31 +87,25 @@ public:
 		entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
 		entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
 
-		// Video models
 		entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
-		entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
 		entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
 		entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
 		entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
 
-		// Latents
 		entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
 		entityMgr.RegisterComponent<ECS::LatentTransformComponent>("LatentTransform");
 
-		// Other
 		entityMgr.RegisterComponent<ECS::LayerSkipComponent>("LayerSkip");
 		entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
 		entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
 
 		entityMgr.RegisterSystem<ECS::SDCPPSystem>();
 
-		// Store the entity manager reference for event handling
 		m_entityMgr = &entityMgr;
 
-		// Register event handlers for diffusion tasks
 		RegisterEventHandlers();
 
-		LogInfo("SDCPPSystem registered with ID: " + std::to_string(m_systemId));
+		LogInfo("SDCPPSystem registered");
 		LogInfo("Stable Diffusion Addon initialized");
 		return true;
 	}
@@ -78,10 +113,15 @@ public:
 	bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr) override {
 		LogInfo("Registering Stable Diffusion views...");
 
-		std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
-		if (m_imguiContext) {
-			ImGui::SetCurrentContext(m_imguiContext);
+		if (!m_imguiContext) {
+			LogError("ImGui context not set! Make sure SetImGuiContext was called.");
+			return false;
 		}
+
+		ImGui::SetCurrentContext(m_imguiContext);
+		LogInfo("ImGui context set for DiffusionAddon");
+
+		std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
 
 		m_viewMgr = &viewMgr;
 
@@ -103,23 +143,19 @@ public:
 		return m_imguiContext != nullptr;
 	}
 
-	void DiffusionAddon::OnShutdown() {
+	void OnShutdown() {
 		LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
-		// STEP 1: Unregister event handlers first
 		UnregisterEventHandlers();
 
-		// STEP 2: Stop and terminate the system
 		if (m_entityMgr) {
 			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
 			if (system) {
 				system->TerminateImmediately();
 				LogInfo("SDCPPSystem terminated");
 
-				// Give the system time to clean up threads
 				std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-				// Unregister the system (but NOT components)
 				try {
 					m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
 					LogInfo("Unregistered SDCPPSystem");
@@ -130,7 +166,6 @@ public:
 			}
 		}
 
-		// STEP 3: Close all views
 		if (m_viewMgr) {
 			const char* viewNames[] = {
 				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
@@ -143,7 +178,6 @@ public:
 					std::this_thread::sleep_for(std::chrono::milliseconds(50));
 				}
 				catch (...) {
-					// Continue even if closing fails
 				}
 			}
 		}
@@ -152,7 +186,6 @@ public:
 			auto allEntities = m_entityMgr->GetAllEntities();
 			std::vector<EntityID> entitiesToDestroy;
 
-			// Collect entities to destroy
 			for (EntityID entity : allEntities) {
 				if (CheckEntityForDiffusionComponents(entity)) {
 					entitiesToDestroy.push_back(entity);
@@ -162,7 +195,6 @@ public:
 			LogInfo("Found " + std::to_string(entitiesToDestroy.size()) +
 				" entities to destroy out of " + std::to_string(allEntities.size()));
 
-			// Destroy in reverse order
 			for (auto it = entitiesToDestroy.rbegin(); it != entitiesToDestroy.rend(); ++it) {
 				try {
 					m_entityMgr->DestroyEntity(*it);
@@ -174,7 +206,6 @@ public:
 			}
 		}
 
-		// STEP 5: Unregister views
 		if (m_viewMgr) {
 			const char* viewNames[] = {
 				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
@@ -192,7 +223,6 @@ public:
 			}
 		}
 
-		// STEP 6: Clear all references
 		m_entityMgr = nullptr;
 		m_viewMgr = nullptr;
 		m_imguiContext = nullptr;
@@ -200,11 +230,9 @@ public:
 		LogInfo("DiffusionAddon shutdown complete");
 	}
 
-	// Move this function OUTSIDE of OnShutdown
-	bool DiffusionAddon::CheckEntityForDiffusionComponents(EntityID entity) {
+	bool CheckEntityForDiffusionComponents(EntityID entity) {
 		if (!m_entityMgr) return false;
 
-		// Check for a few key diffusion components
 		try {
 			if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity)) return true;
 			if (m_entityMgr->HasComponent<ECS::CheckpointComponent>(entity)) return true;
@@ -225,7 +253,6 @@ private:
 	void RegisterEventHandlers() {
 		auto& events = ANI::Events::Ref();
 
-		// Store event names for cleanup
 		m_registeredEvents = {
 			"QueueDiffusionTask",
 			"RemoveFromDiffusionQueue",
@@ -236,7 +263,6 @@ private:
 			"ResumeDiffusionWorker"
 		};
 
-		// Register all events with their handlers
 		events.RegisterEventWithData("QueueDiffusionTask",
 			[this](const std::any& data) {
 			this->OnQueueDiffusionTask(data);
@@ -401,7 +427,6 @@ private:
 };
 
 extern "C" {
-	// Remove the PLUGIN_EXPORT macro definition since it's already defined in BasePlugin.hpp
 	__declspec(dllexport) Plugins::BasePlugin* CreatePlugin() {
 		return new DiffusionAddon();
 	}

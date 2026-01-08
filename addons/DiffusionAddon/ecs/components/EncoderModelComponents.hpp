@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -24,7 +24,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP-G text encoder files"}
@@ -40,13 +40,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		ClipGComponent& operator=(const ClipGComponent& other) {
@@ -77,7 +77,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP-L text encoder files"}
@@ -93,13 +93,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		ClipLComponent& operator=(const ClipLComponent& other) {
@@ -130,7 +130,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "T5 Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for T5-XXL text encoder files for FLUX models"}
@@ -146,13 +146,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		T5XXLComponent& operator=(const T5XXLComponent& other) {
@@ -183,7 +183,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "LLM Models"},
-							{"dialogDefaultPath", Utils::FilePaths::GetInstance().GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for LLM text encoder files"}
@@ -198,13 +198,13 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePaths::GetInstance().GetPath("Encoder");
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
 				}
 			}
 		}
 
 		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePaths::GetInstance().GetPath("Encoder");
+			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		LlmComponent& operator=(const LlmComponent& other) {

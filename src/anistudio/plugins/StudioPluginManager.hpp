@@ -1,5 +1,7 @@
 #pragma once
 #include "PluginManager.hpp"
+#include "ProjectManager.hpp"
+#include "WindowState.hpp"
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -9,6 +11,10 @@ struct ImGuiContext;
 
 namespace GUI {
 	class ViewManager;
+}
+
+namespace ANI {
+	class StudioContext;
 }
 
 namespace Plugins {
@@ -24,6 +30,14 @@ namespace Plugins {
 
 		// Override to provide studio-specific initialization
 		bool enablePlugin(const std::string& pluginName) override;
+
+		// Set studio context
+		void SetStudioContext(std::shared_ptr<ANI::StudioContext> context) {
+			studioContext = context;
+			std::cout << "[StudioPluginManager] Studio context set" << std::endl;
+		}
+
+		std::shared_ptr<ANI::StudioContext> GetStudioContext() const { return studioContext; }
 
 		// Public accessors for plugins (if needed, but plugins get direct access in init)
 		GUI::ViewManager& GetViewManager() { return viewManager; }
@@ -42,6 +56,9 @@ namespace Plugins {
 		// Track plugin views for cleanup
 		// We track view names because plugins register them directly with ViewManager
 		std::unordered_map<std::string, std::vector<std::string>> pluginViewNames;
+
+		// Store studio context
+		std::shared_ptr<ANI::StudioContext> studioContext;
 	};
 
 } // namespace Plugins

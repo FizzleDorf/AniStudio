@@ -36,18 +36,16 @@ namespace ANI {
 	}
 
 	void Core::Init() {
-		std::cout << "[Core] Initializing FilePaths..." << std::endl;
-		// Use the singleton instance
-		Utils::FilePaths::GetInstance().Init();
-		std::cout << "[Core] FilePaths initialized" << std::endl;
+		std::cout << "[Core] Initializing..." << std::endl;
 
-		// Initialize window and ImGui
+		// Initialize window and ImGui (FilePaths will be initialized inside EngineContext)
 		if (!InitializeWindow()) {
 			throw std::runtime_error("Failed to initialize window");
 		}
 		std::cout << "[Core] Window and ImGui fully initialized" << std::endl;
 
 		// Initialize the studio core (basic initialization)
+		// This will create EngineContext which initializes FilePaths
 		if (!studioCore.Initialize()) {
 			throw std::runtime_error("Failed to initialize StudioCore");
 		}
@@ -321,19 +319,28 @@ namespace ANI {
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		std::cout << "[Core] Enabled docking by default" << std::endl;
 
-		std::cout << "[Core] Setting INI file path..." << std::endl;
-		// Get ImGui state path from FilePaths singleton
-		const char* imguiStatePath = Utils::FilePaths::GetInstance().GetPath("ImguiState");
-		std::string iniFilePath = imguiStatePath ? std::string(imguiStatePath) : "imgui.ini";
+		// CRITICAL FIX: Don't try to use FilePaths here. Use a temporary INI path
+		// The proper path will be set in AniStudio.cpp after FilePaths is initialized
+		std::cout << "[Core] Setting temporary INI file path..." << std::endl;
+		std::string iniFilePath = "imgui.ini";
 
-		std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
-		if (!std::filesystem::exists(iniDir)) {
-			std::filesystem::create_directories(iniDir);
+		// Create directory if it doesn't exist
+		try {
+			std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
+			if (!iniDir.empty() && !std::filesystem::exists(iniDir)) {
+				std::filesystem::create_directories(iniDir);
+				std::cout << "[Core] Created directory for temporary INI file" << std::endl;
+			}
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[Core] Warning: Could not create INI directory: " << e.what() << std::endl;
+			// Continue anyway - ImGui will just not save settings
 		}
 
-		static std::string persistentIniPath = iniFilePath;
-		io.IniFilename = persistentIniPath.c_str();
-		std::cout << "[Core] INI file path set to: " << io.IniFilename << std::endl;
+		// Use a static string to ensure the pointer stays valid
+		static std::string tempIniPath = iniFilePath;
+		io.IniFilename = tempIniPath.c_str();
+		std::cout << "[Core] Temporary INI file path set to: " << io.IniFilename << std::endl;
 
 		std::cout << "[Core] Initializing GLFW backend..." << std::endl;
 		bool glfwOk = ImGui_ImplGlfw_InitForOpenGL(window, true);

@@ -23,7 +23,7 @@
 #define ANI_ENGINE_API
 
 #include "ECS.h"
-#include "PluginManager.hpp"  // Add plugin support
+#include "EngineContext.hpp"
 #include <memory>
 #include <string>
 
@@ -49,13 +49,40 @@ namespace ANI {
 		void Shutdown();
 		void Update(float deltaTime);
 
-		// Manager access
-		ECS::EntityManager& GetEntityManager() { return entityManager; }
-		Plugins::PluginManager& GetPluginManager() { return *pluginManager; }
+		// Manager access via context
+		ECS::EntityManager& GetEntityManager() {
+			if (!context || !context->entityManager) {
+				throw std::runtime_error("EngineContext or EntityManager not initialized");
+			}
+			return *context->entityManager;
+		}
+
+		Plugins::PluginManager* GetPluginManager() {
+			return context ? context->pluginManager.get() : nullptr;
+		}
+
+		// Context access
+		std::shared_ptr<EngineContext> GetEngineContext() const { return context; }
+
+		// Create EngineCore with existing context
+		static std::unique_ptr<EngineCore> CreateWithContext(std::shared_ptr<EngineContext> existingContext);
 
 		// Engine state
 		bool IsRunning() const { return running; }
 		void SetRunning(bool isRunning) { running = isRunning; }
+		bool IsInitialized() const { return initialized; }
+
+		// Plugin management
+		void SetPluginDirectory(const std::string& directory) {
+			if (context) {
+				context->pluginDirectory = directory;
+			}
+		}
+
+	private:
+		bool initialized;
+		bool running;
+		std::shared_ptr<EngineContext> context;
 
 		// Component/System registration
 		void RegisterCoreComponents();
@@ -63,15 +90,8 @@ namespace ANI {
 
 		// Plugin management
 		void InitializePlugins();
-		void SetPluginDirectory(const std::string& directory) { pluginDirectory = directory; }
 
-	private:
-		bool initialized;
-		bool running;
-		std::string pluginDirectory;
-
-		ECS::EntityManager entityManager;
-		std::unique_ptr<Plugins::PluginManager> pluginManager;
+		// File path service initialization
+		void InitializeFilePathService();
 	};
-
 }

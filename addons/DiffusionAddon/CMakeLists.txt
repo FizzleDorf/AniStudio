@@ -220,6 +220,7 @@ file(GLOB_RECURSE DIFFUSION_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
+    "${ANISTUDIO_ROOT}/src/anistudio/gui_utils/states/*.cpp"
 )
 list(APPEND DIFFUSION_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/DiffusionAddon.cpp")
 
@@ -227,6 +228,7 @@ add_library(DiffusionAddon SHARED ${DIFFUSION_SOURCES})
 
 # Include directories
 target_include_directories(DiffusionAddon PRIVATE
+    ${ANISTUDIO_ROOT}/src/aniengine
     ${ANISTUDIO_ROOT}/src/aniengine/ecs
     ${ANISTUDIO_ROOT}/src/aniengine/ecs/base
     ${ANISTUDIO_ROOT}/src/aniengine/ecs/components
@@ -236,12 +238,13 @@ target_include_directories(DiffusionAddon PRIVATE
     ${ANISTUDIO_ROOT}/src/aniengine/utils/media
     ${ANISTUDIO_ROOT}/src/anistudio/gui/base
     ${ANISTUDIO_ROOT}/src/anistudio/gui_utils
+    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/states
     ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/widgets
     ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/ui_schema
+    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/rendering
     ${ANISTUDIO_ROOT}/src/anistudio/plugins
     ${ANISTUDIO_ROOT}/src/anistudio
     ${ANISTUDIO_ROOT}/src/anistudio/events
-    ${ANISTUDIO_ROOT}/src/aniengine/asset_mgr
     ${ANISTUDIO_ROOT}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
     ecs

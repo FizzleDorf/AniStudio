@@ -37,18 +37,6 @@ namespace ANI {
 	ProjectManager::ProjectManager(GUI::ViewManager& viewMgr, ECS::EntityManager& entityMgr)
 		: m_viewManager(viewMgr), m_entityManager(entityMgr) {
 		std::cout << "[ProjectManager] Initialized" << std::endl;
-
-		// Ensure FilePaths is initialized
-		if (!Utils::FilePaths::GetInstance().IsInitialized()) {
-			std::cout << "[ProjectManager] FilePaths not initialized, initializing now..." << std::endl;
-			Utils::FilePaths::GetInstance().Init();
-		}
-
-		// Debug current FilePaths state
-		std::cout << "[ProjectManager] Current FilePaths state:" << std::endl;
-		std::cout << "  - Default project path: '" << Utils::FilePaths::GetInstance().GetPath("DefaultProject") << "'" << std::endl;
-		std::cout << "  - Last opened project: '" << Utils::FilePaths::GetInstance().GetPath("LastOpenProject") << "'" << std::endl;
-		std::cout << "  - Data path: '" << Utils::FilePaths::GetInstance().GetDataPath() << "'" << std::endl;
 	}
 
 	ProjectManager::~ProjectManager() {}
@@ -59,30 +47,28 @@ namespace ANI {
 	}
 
 	bool ProjectManager::ShouldShowStartup() const {
-		// Check if we have a last opened project
-		const char* lastProjectPath = Utils::FilePaths::GetInstance().GetPath("LastOpenProject");
-		bool hasLastProject = (lastProjectPath && lastProjectPath[0] != '\0');
-
-		// Debug output
 		std::cout << "[ProjectManager] ShouldShowStartup check:" << std::endl;
-		std::cout << "  - Last opened project: '" << (lastProjectPath ? lastProjectPath : "(empty)") << "'" << std::endl;
-		std::cout << "  - Has last project: " << (hasLastProject ? "YES" : "NO") << std::endl;
+		std::cout << "  - Project open: " << (m_isProjectOpen ? "YES" : "NO") << std::endl;
 
-		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
-		std::cout << "  - Default project path: '" << (defaultProjectPath ? defaultProjectPath : "(empty)") << "'" << std::endl;
-
-		// Try to find any existing projects
-		auto recentProjects = GetRecentProjects();
-		std::cout << "  - Found " << recentProjects.size() << " recent projects" << std::endl;
-		for (const auto& proj : recentProjects) {
-			std::cout << "    * " << proj << std::endl;
+		if (m_isProjectOpen) {
+			std::cout << "  - Project already open" << std::endl;
+			return false;
 		}
 
-		// Show startup if no recent projects found
-		bool shouldShow = recentProjects.empty();
-		std::cout << "  - Should show startup: " << (shouldShow ? "YES" : "NO") << std::endl;
+		std::string lastProjectPath = Utils::FilePathService::GetPath("LastOpenProject");
+		if (!lastProjectPath.empty() && std::filesystem::exists(lastProjectPath)) {
+			std::cout << "  - Has last opened project: " << lastProjectPath << std::endl;
 
-		return shouldShow;
+			// DIRECT AUTO-LOAD (no popup)
+			std::cout << "  - Auto-loading project..." << std::endl;
+			const_cast<ProjectManager*>(this)->LoadProject(lastProjectPath);
+
+			return false; // Don't show startup since we auto-loaded
+		}
+
+		std::cout << "  - No last opened project" << std::endl;
+		std::cout << "  - Should show startup: YES" << std::endl;
+		return true;
 	}
 
 	bool ProjectManager::CreateNewProject(const std::string& projectPath, const std::string& projectName) {
@@ -122,6 +108,12 @@ namespace ANI {
 			m_currentProjectPath = projectPath;
 			m_isProjectOpen = true;
 
+			// CRITICAL: Update project-specific paths IMMEDIATELY
+			UpdateProjectSpecificPaths();
+
+			// CRITICAL: Set LastOpenProject to the new project path
+			Utils::FilePathService::SetPath("LastOpenProject", projectPath);
+
 			// Reset ViewState and create default workspace
 			m_viewState.Reset();
 
@@ -139,13 +131,14 @@ namespace ANI {
 				return false;
 			}
 
-			// Update project-specific paths
-			UpdateProjectSpecificPaths();
-
 			// Add to recent projects
 			AddToRecentProjects(projectPath);
 
+			// Save all paths to file
+			Utils::FilePathService::SaveFilepathDefaults();
+
 			std::cout << "[ProjectManager] Created new project: " << projectName << " at " << projectPath << std::endl;
+			std::cout << "[ProjectManager] Set LastOpenProject to: " << projectPath << std::endl;
 
 			// Trigger callback
 			if (m_onProjectCreatedCallback) {
@@ -208,13 +201,23 @@ namespace ANI {
 			m_currentProjectPath = projectPath;
 			m_isProjectOpen = true;
 
-			// Update project-specific paths FIRST
+			// CRITICAL: Update project-specific paths FIRST
 			UpdateProjectSpecificPaths();
+
+			// CRITICAL: Set LastOpenProject to the loaded project path
+			Utils::FilePathService::SetPath("LastOpenProject", projectPath);
+
+			// Save all paths to file immediately
+			Utils::FilePathService::SaveFilepathDefaults();
 
 			// Add to recent projects
 			AddToRecentProjects(projectPath);
 
 			std::cout << "[ProjectManager] Loaded project: " << m_projectSettings.projectName << " from " << projectPath << std::endl;
+			std::cout << "[ProjectManager] Set LastOpenProject to: " << projectPath << std::endl;
+			std::cout << "[ProjectManager] Project paths set:" << std::endl;
+			std::cout << "  - AssetsFolder: " << Utils::FilePathService::GetPath("AssetsFolder") << std::endl;
+			std::cout << "  - OutputFolder: " << Utils::FilePathService::GetPath("OutputFolder") << std::endl;
 
 			// CRITICAL: Trigger callback FIRST - this loads plugins so view types get registered
 			if (m_onProjectLoadedCallback) {
@@ -299,6 +302,9 @@ namespace ANI {
 				std::cout << "[ProjectManager] Warning: Failed to save window state" << std::endl;
 			}
 
+			// Ensure project paths are still set correctly
+			UpdateProjectSpecificPaths();
+
 			std::cout << "[ProjectManager] Project saved: " << m_projectSettings.projectName << std::endl;
 			return true;
 		}
@@ -329,6 +335,10 @@ namespace ANI {
 		// Clear project-specific paths
 		ClearProjectSpecificPaths();
 
+		// Clear LastOpenProject when closing project
+		Utils::FilePathService::SetPath("LastOpenProject", "");
+		Utils::FilePathService::SaveFilepathDefaults();
+
 		// Reset state
 		std::cout << "[ProjectManager] Clearing project state..." << std::endl;
 		m_isProjectOpen = false;
@@ -337,6 +347,7 @@ namespace ANI {
 		m_viewState.Reset();
 
 		std::cout << "[ProjectManager] Project closed and ALL workspaces cleared" << std::endl;
+		std::cout << "[ProjectManager] Cleared LastOpenProject path" << std::endl;
 
 		// CRITICAL: Trigger callback
 		std::cout << "[ProjectManager] Triggering OnProjectClosed callback..." << std::endl;
@@ -366,117 +377,67 @@ namespace ANI {
 
 	std::vector<std::string> ProjectManager::GetRecentProjects() const {
 		std::vector<std::string> recentProjects;
-		std::set<std::string> addedPaths; // Track added paths to prevent duplicates
 
-		// First, check if we have a last opened project
-		const char* lastProjectPath = Utils::FilePaths::GetInstance().GetPath("LastOpenProject");
-		if (lastProjectPath && lastProjectPath[0] != '\0' &&
-			std::filesystem::exists(lastProjectPath)) {
-
-			try {
-				// Normalize the path to handle different representations of the same path
-				std::string normalizedPath = std::filesystem::canonical(lastProjectPath).string();
-				recentProjects.push_back(normalizedPath);
-				addedPaths.insert(normalizedPath);
-			}
-			catch (const std::exception& e) {
-				// If canonical fails, use the original path
-				recentProjects.push_back(lastProjectPath);
-				addedPaths.insert(lastProjectPath);
-			}
+		// Get default project path
+		std::string defaultPath = GetDefaultProjectPath();
+		if (defaultPath.empty()) {
+			std::cerr << "[ProjectManager] ERROR: DefaultProject path is empty!" << std::endl;
+			return recentProjects;
 		}
 
-		// Then scan the default project directory for any existing projects
-		const char* defaultProjectPath = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
-		if (defaultProjectPath && defaultProjectPath[0] != '\0' && std::filesystem::exists(defaultProjectPath)) {
-			try {
-				for (const auto& entry : std::filesystem::directory_iterator(defaultProjectPath)) {
-					if (entry.is_directory()) {
-						std::string projectPath = entry.path().string();
-
-						// Check if this directory contains a project.ani file (indicating it's a project)
-						std::string projectFile = projectPath + "/project.ani";
-						if (std::filesystem::exists(projectFile)) {
-							try {
-								// Normalize the path to handle different representations
-								std::string normalizedPath = std::filesystem::canonical(projectPath).string();
-
-								// Don't add duplicates
-								if (addedPaths.find(normalizedPath) == addedPaths.end()) {
-									recentProjects.push_back(normalizedPath);
-									addedPaths.insert(normalizedPath);
-								}
-							}
-							catch (const std::exception& e) {
-								// If canonical fails, check with original path
-								if (addedPaths.find(projectPath) == addedPaths.end()) {
-									recentProjects.push_back(projectPath);
-									addedPaths.insert(projectPath);
-								}
-							}
-						}
+		// Scan for projects
+		try {
+			for (const auto& entry : std::filesystem::directory_iterator(defaultPath)) {
+				if (entry.is_directory()) {
+					std::string projectFile = entry.path().string() + "/project.ani";
+					if (std::filesystem::exists(projectFile)) {
+						recentProjects.push_back(entry.path().string());
 					}
 				}
 			}
-			catch (const std::exception& e) {
-				std::cerr << "[ProjectManager] Error scanning for projects: " << e.what() << std::endl;
-			}
 		}
-
-		// Sort by most recently modified
-		std::sort(recentProjects.begin(), recentProjects.end(),
-			[](const std::string& a, const std::string& b) {
-			try {
-				auto timeA = std::filesystem::last_write_time(a + "/project.ani");
-				auto timeB = std::filesystem::last_write_time(b + "/project.ani");
-				return timeA > timeB; // Most recent first
-			}
-			catch (...) {
-				return false;
-			}
-		});
+		catch (const std::exception& e) {
+			std::cerr << "[ProjectManager] Error scanning for projects: " << e.what() << std::endl;
+		}
 
 		return recentProjects;
 	}
 
 	void ProjectManager::AddToRecentProjects(const std::string& projectPath) {
 		// Update the last opened project path in FilePaths
-		Utils::FilePaths::GetInstance().SetPath("LastOpenProject", projectPath.c_str());
-		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
+		Utils::FilePathService::SetPath("LastOpenProject", projectPath);
+		Utils::FilePathService::SaveFilepathDefaults();
 	}
 
 	void ProjectManager::SetDefaultProjectPath(const std::string& path) {
-		Utils::FilePaths::GetInstance().SetPath("DefaultProject", path.c_str());
-		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
+		Utils::FilePathService::SetPath("DefaultProject", path);
+		Utils::FilePathService::SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetDefaultProjectPath() const {
-		const char* path = Utils::FilePaths::GetInstance().GetPath("DefaultProject");
-		return path ? std::string(path) : "";
+		return Utils::FilePathService::GetPath("DefaultProject");
 	}
 
 	void ProjectManager::SetAssetsFolder(const std::string& path) {
-		Utils::FilePaths::GetInstance().SetPath("AssetsFolder", path.c_str());
-		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
+		Utils::FilePathService::SetPath("AssetsFolder", path);
+		Utils::FilePathService::SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetAssetsFolder() const {
-		const char* path = Utils::FilePaths::GetInstance().GetPath("AssetsFolder");
-		return path ? std::string(path) : "";
+		return Utils::FilePathService::GetPath("AssetsFolder");
 	}
 
 	void ProjectManager::SetOutputFolder(const std::string& path) {
-		Utils::FilePaths::GetInstance().SetPath("OutputFolder", path.c_str());
-		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
+		Utils::FilePathService::SetPath("OutputFolder", path);
+		Utils::FilePathService::SaveFilepathDefaults();
 	}
 
 	std::string ProjectManager::GetOutputFolder() const {
-		const char* path = Utils::FilePaths::GetInstance().GetPath("OutputFolder");
-		return path ? std::string(path) : "";
+		return Utils::FilePathService::GetPath("OutputFolder");
 	}
 
 	void ProjectManager::InitializeApplicationPaths() {
-		Utils::FilePaths::GetInstance().Init();
+		Utils::FilePathService::Init();
 	}
 
 	bool ProjectManager::ApplyProjectTemplate(const GUI::ProjectTemplate& template_) {
@@ -688,25 +649,41 @@ namespace ANI {
 	}
 
 	void ProjectManager::UpdateProjectSpecificPaths() {
+		if (!m_isProjectOpen) return;
+
 		// Set project-specific paths in FilePaths
 		std::string assetsPath = GetProjectAssetsPath();
 		std::string outputPath = GetProjectOutputPath();
+		std::string dataPath = GetProjectDataPath();
 
+		// Always set these paths when a project is open
 		if (!assetsPath.empty()) {
-			Utils::FilePaths::GetInstance().SetPath("AssetsFolder", assetsPath.c_str());
+			Utils::FilePathService::SetPath("AssetsFolder", assetsPath);
 		}
 		if (!outputPath.empty()) {
-			Utils::FilePaths::GetInstance().SetPath("OutputFolder", outputPath.c_str());
+			Utils::FilePathService::SetPath("OutputFolder", outputPath);
 		}
 
-		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
+		// Store project data path for internal use (not in settings UI)
+		Utils::FilePathService::SetPath("ProjectDataPath", dataPath);
+
+		// Save immediately to ensure synchronization
+		Utils::FilePathService::SaveFilepathDefaults();
+
+		std::cout << "[ProjectManager] Updated project-specific paths:" << std::endl;
+		std::cout << "  - AssetsFolder: " << assetsPath << std::endl;
+		std::cout << "  - OutputFolder: " << outputPath << std::endl;
+		std::cout << "  - ProjectDataPath: " << dataPath << std::endl;
 	}
 
 	void ProjectManager::ClearProjectSpecificPaths() {
 		// Clear project-specific paths back to defaults
-		Utils::FilePaths::GetInstance().SetPath("AssetsFolder", "");
-		Utils::FilePaths::GetInstance().SetPath("OutputFolder", "");
-		Utils::FilePaths::GetInstance().SaveFilepathDefaults();
+		Utils::FilePathService::SetPath("AssetsFolder", "");
+		Utils::FilePathService::SetPath("OutputFolder", "");
+		Utils::FilePathService::SetPath("ProjectDataPath", "");
+		Utils::FilePathService::SaveFilepathDefaults();
+
+		std::cout << "[ProjectManager] Cleared project-specific paths" << std::endl;
 	}
 
 	std::string ProjectManager::GetProjectDataPath() const {

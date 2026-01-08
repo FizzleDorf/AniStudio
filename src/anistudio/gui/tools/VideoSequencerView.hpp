@@ -7,7 +7,7 @@
 #include "ImageSystem.hpp"
 #include "ImGuizmo.h"
 #include "ImSequencer.h"
-#include "FilePaths.hpp"
+#include "FilePathService.hpp"
 #include <pch.h>
 #include <filesystem>
 
