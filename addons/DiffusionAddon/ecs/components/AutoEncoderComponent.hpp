@@ -23,7 +23,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "VAE Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Vae")},
+							{"dialogDefaultPath", "Vae"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for VAE model files (.safetensors, .ckpt, .pt)"}
@@ -237,7 +237,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "TAESD Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Vae")},
+							{"dialogDefaultPath", "Vae"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for TAESD fast VAE files"}

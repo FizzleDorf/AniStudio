@@ -25,7 +25,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "Photo Maker Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("PhotoMaker")},
+							{"dialogDefaultPath", "PhotoMaker"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for Photo Maker identity embedding/face swapping models"}
@@ -77,7 +77,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "ControlNet Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("ControlNet")},
+							{"dialogDefaultPath", "ControlNet"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ControlNet model files"}
@@ -235,7 +235,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".pth,.safetensors,.pt"},
 							{"filterName", "Upscale Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Upscale")},
+							{"dialogDefaultPath", "Upscale"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ESRGAN upscale model files (.pth, .safetensors, .pt)"}
@@ -359,7 +359,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Lora")},
+							{"dialogDefaultPath", "Lora"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for root LoRA directory"}
@@ -428,7 +428,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Embed")},
+							{"dialogDefaultPath", "Embed"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for textual inversion embedding files"}

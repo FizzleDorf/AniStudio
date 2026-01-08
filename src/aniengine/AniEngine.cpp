@@ -67,26 +67,16 @@ namespace ANI {
 	void EngineCore::InitializeFilePathService() {
 		std::cout << "[EngineCore] Initializing FilePathService..." << std::endl;
 
-		// Check if FilePathService is already initialized
 		if (Utils::FilePathService::IsInitialized()) {
 			std::cout << "[EngineCore] FilePathService already initialized" << std::endl;
-
-			// Debug: Print current paths to verify
-			std::cout << "[EngineCore] Current paths in FilePathService:" << std::endl;
-			std::cout << "[EngineCore] DefaultProject: "
-				<< Utils::FilePathService::GetPath("DefaultProject") << std::endl;
 			return;
 		}
 
-		// Initialize FilePathService with our FilePaths instance
 		if (context && context->filePaths) {
-			// Make sure FilePaths is initialized
 			if (!context->filePaths->IsInitialized()) {
 				std::cout << "[EngineCore] FilePaths not initialized, initializing..." << std::endl;
 				context->filePaths->Init();
 
-				// Verify paths were loaded
-				std::cout << "[EngineCore] FilePaths initialized. Checking DefaultProject path..." << std::endl;
 				const char* defaultProjPath = context->filePaths->GetPath("DefaultProject");
 				if (defaultProjPath && defaultProjPath[0] != '\0') {
 					std::cout << "[EngineCore] DefaultProject path from FilePaths: " << defaultProjPath << std::endl;
@@ -96,36 +86,16 @@ namespace ANI {
 				}
 			}
 
-			// Initialize the service with our FilePaths instance
-			Utils::FilePathService::Initialize(context->filePaths);
-			std::cout << "[EngineCore] FilePathService initialized with context FilePaths" << std::endl;
+			Utils::FilePathService::SetInstance(context->filePaths);
+			std::cout << "[EngineCore] FilePathService set with context FilePaths" << std::endl;
 		}
 		else {
-			// Initialize FilePathService standalone
-			std::cout << "[EngineCore] No context FilePaths, initializing standalone..." << std::endl;
-			Utils::FilePathService::Initialize();
-			std::cout << "[EngineCore] FilePathService initialized standalone" << std::endl;
+			std::cerr << "[EngineCore] ERROR: No context FilePaths to set in FilePathService!" << std::endl;
+			return;
 		}
 
-		// Verify initialization
 		if (Utils::FilePathService::IsInitialized()) {
 			std::cout << "[EngineCore] FilePathService initialized successfully" << std::endl;
-
-			// Debug: Print all key paths to verify
-			std::cout << "[EngineCore] === FilePathService Paths ===" << std::endl;
-			std::cout << "[EngineCore] DefaultProject: "
-				<< Utils::FilePathService::GetPath("DefaultProject") << std::endl;
-			std::cout << "[EngineCore] LastOpenProject: "
-				<< Utils::FilePathService::GetPath("LastOpenProject") << std::endl;
-			std::cout << "[EngineCore] OutputFolder: "
-				<< Utils::FilePathService::GetPath("OutputFolder") << std::endl;
-			std::cout << "[EngineCore] ModelRoot: "
-				<< Utils::FilePathService::GetPath("ModelRoot") << std::endl;
-			std::cout << "[EngineCore] Executable Dir: "
-				<< Utils::FilePathService::GetExecutableDir() << std::endl;
-			std::cout << "[EngineCore] Data Path: "
-				<< Utils::FilePathService::GetDataPath() << std::endl;
-			std::cout << "[EngineCore] =============================" << std::endl;
 		}
 		else {
 			std::cerr << "[EngineCore] Failed to initialize FilePathService!" << std::endl;

@@ -25,7 +25,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Vision Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP Vision encoder files (for img2img, etc.)"}
@@ -78,7 +78,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "LLM Vision Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Encoder")},
+							{"dialogDefaultPath", "Encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for LLM vision encoder files"}

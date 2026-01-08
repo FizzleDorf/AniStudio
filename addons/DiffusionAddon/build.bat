@@ -127,7 +127,7 @@ if not exist "CMakeCache.txt" (
 
 REM Build the addon
 echo Building addon...
-cmake --build . --config Release --target %ADDON_NAME%
+cmake --build . --config Release --target %ADDON_NAME% 
 if %errorlevel% neq 0 (
     echo ERROR: Build failed!
     pause

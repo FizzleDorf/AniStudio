@@ -34,13 +34,28 @@ namespace Plugins {
 		}
 
 		try {
+			// ===== FIX STARTS HERE =====
 			// Pass engine context if available
+			std::shared_ptr<ANI::EngineContext> engineContextPtr;
 			if (!engineContext.expired()) {
-				auto ctx = engineContext.lock();
-				if (ctx) {
-					plugin.instance->SetEngineContext(ctx);
-				}
+				engineContextPtr = engineContext.lock();
 			}
+
+			// If engine context is still null, try to use studioContext
+			if (!engineContextPtr && studioContext) {
+				// StudioContext inherits from EngineContext, so we can cast it
+				engineContextPtr = std::static_pointer_cast<ANI::EngineContext>(studioContext);
+				std::cout << "[StudioPluginManager] Using StudioContext as EngineContext for plugin" << std::endl;
+			}
+
+			if (engineContextPtr) {
+				plugin.instance->SetEngineContext(engineContextPtr);
+				std::cout << "[StudioPluginManager] EngineContext set for plugin: " << pluginName << std::endl;
+			}
+			else {
+				std::cerr << "[StudioPluginManager] WARNING: No EngineContext available for plugin!" << std::endl;
+			}
+			// ===== FIX ENDS HERE =====
 
 			// Pass studio context if available
 			if (studioContext) {

@@ -1,14 +1,17 @@
 #pragma once
 
+#include "ProjectManager.hpp"
 #include "ProjectPopups.hpp"
-#include <vector>
-#include <string>
-
-namespace ANI { class ProjectManager; }
+#include "AutoLoadPopup.hpp"
 
 namespace GUI {
 
 	class ProjectManagerView {
+	private:
+		ANI::ProjectManager& m_projectManager;
+		ProjectPopupState popupState;
+		AutoLoadPopupState autoLoadState;
+
 	public:
 		ProjectManagerView(ANI::ProjectManager& projectMgr);
 
@@ -16,15 +19,16 @@ namespace GUI {
 		void Update(const float deltaT);
 		void Render();
 
-		// Public methods for MenuBar to trigger popups
 		void ShowNewProjectDialog();
 		void ShowLoadProjectDialog();
+		void ShowAutoLoadPopup(const std::string& lastProjectPath);
+
+
+		bool IsAutoLoadPopupActive() const { return autoLoadState.showPopup; }
+		bool ShouldAutoLoad() const { return autoLoadState.shouldAutoLoad; }
 
 	private:
-		ANI::ProjectManager& m_projectManager;
-
-		// Use the same popup system as MenuBar!
-		ProjectPopupState popupState;
+		void RenderAutoLoadPopup();
 	};
 
 } // namespace GUI

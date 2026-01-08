@@ -352,7 +352,6 @@ namespace ECS {
 			compName = "OutputImage";
 			compCategory = "Image";
 			// Set default output directory using the service
-			ResetToProjectOutputDirectory();
 			fileName = "AniStudio";
 			setupOutputSchema();
 		}
@@ -365,56 +364,6 @@ namespace ECS {
 			properties["selectedExtensionIndex"] = &selectedExtensionIndex;
 			properties["supportedExtensions"] = &supportedExtensions;
 			return properties;
-		}
-
-		// Get the full output path - SIMPLIFIED
-		std::string GetFullOutputPath() const {
-			std::string extension = fileExtension;
-			if (selectedExtensionIndex >= 0 && selectedExtensionIndex < supportedExtensions.size()) {
-				extension = supportedExtensions[selectedExtensionIndex];
-			}
-
-			std::string baseName = fileName;
-			if (baseName.empty()) baseName = "AniStudio";
-
-			// Use filePath (already initialized from service or set by user)
-			std::string outputDir = filePath;
-			if (outputDir.empty()) {
-				// Fallback to service if filePath is empty
-				outputDir = GetProjectOutputDirectory();
-			}
-
-			if (outputDir.empty()) {
-				// Last resort: just return filename with extension
-				return baseName + extension;
-			}
-
-			std::filesystem::path outputPath = std::filesystem::path(outputDir) / (baseName + extension);
-			return outputPath.string();
-		}
-
-		// Reset to project's output directory
-		void ResetToProjectOutputDirectory() {
-			filePath = GetProjectOutputDirectory();
-		}
-
-		// Get project output directory from service
-		std::string GetProjectOutputDirectory() const {
-			if (Utils::FilePathService::IsInitialized()) {
-				// Try OutputFolder first (project-specific)
-				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
-				if (!outputPath.empty()) {
-					return outputPath;
-				}
-				else {
-					// Fallback to DefaultProject
-					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
-					if (!defaultPath.empty()) {
-						return defaultPath;
-					}
-				}
-			}
-			return ""; // Service not initialized
 		}
 
 		// Serialize the component to JSON
@@ -438,11 +387,6 @@ namespace ECS {
 				fileExtension = componentData["fileExtension"];
 			if (componentData.contains("selectedExtensionIndex"))
 				selectedExtensionIndex = componentData["selectedExtensionIndex"];
-
-			// If filePath is empty after deserialization, reset to project output directory
-			if (filePath.empty()) {
-				ResetToProjectOutputDirectory();
-			}
 		}
 
 		OutputImageComponent &operator=(const OutputImageComponent &other) {
@@ -464,16 +408,11 @@ namespace ECS {
 			selectedExtensionIndex = other.selectedExtensionIndex;
 			supportedExtensions = other.supportedExtensions;
 			// If filePath is empty in the copy, reset to project output directory
-			if (filePath.empty()) {
-				ResetToProjectOutputDirectory();
-			}
 			setupOutputSchema();
 		}
 
 	private:
 		void setupOutputSchema() {
-			// Get default path from service for the UI schema
-			std::string defaultOutputPath = GetProjectOutputDirectory();
 
 			schema = {
 				{"title", "Output Image"},
@@ -485,7 +424,7 @@ namespace ECS {
 						{"ui:widget", "file_selector"},
 						{"ui:options", {
 							{"mode", "directory"},
-							{"defaultPath", defaultOutputPath},
+							{"defaultPath", "OutputFolder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Reset"},
 							{"browseTooltip", "Browse to select output directory for saving images"}
@@ -496,6 +435,8 @@ namespace ECS {
 						{"title", "File Name"},
 						{"ui:widget", "input_text"},
 						{"ui:options", {
+							{"dialogDefaultPath", "OutputFolder"},
+							{"defaultPath", "OutputFolder"},
 							{"resetButtonText", "Reset to Default"}
 						}}
 					}},

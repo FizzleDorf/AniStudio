@@ -24,7 +24,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "Checkpoint Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Checkpoint")},
+							{"dialogDefaultPath", "Checkpoint"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
@@ -76,7 +76,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "UNet Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Unet")},
+							{"dialogDefaultPath", "Unet"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for UNet/Diffusion model files for FLUX or transformer models"}
@@ -129,7 +129,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "High Noise UNet Models"},
-							{"dialogDefaultPath", Utils::FilePathService::GetPath("Unet")},
+							{"dialogDefaultPath", "Unet"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for high noise UNet/Diffusion model files (for video generation)"}

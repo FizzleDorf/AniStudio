@@ -50,21 +50,22 @@ namespace ANI {
 		std::cout << "[ProjectManager] ShouldShowStartup check:" << std::endl;
 		std::cout << "  - Project open: " << (m_isProjectOpen ? "YES" : "NO") << std::endl;
 
-		// If project already open, don't show startup
 		if (m_isProjectOpen) {
 			std::cout << "  - Project already open" << std::endl;
 			return false;
 		}
 
-		// Check if we have a last opened project to auto-load
 		std::string lastProjectPath = Utils::FilePathService::GetPath("LastOpenProject");
 		if (!lastProjectPath.empty() && std::filesystem::exists(lastProjectPath)) {
 			std::cout << "  - Has last opened project: " << lastProjectPath << std::endl;
-			std::cout << "  - Should show startup: NO (will auto-load)" << std::endl;
-			return false;  // Don't show startup, will auto-load
+
+			// DIRECT AUTO-LOAD (no popup)
+			std::cout << "  - Auto-loading project..." << std::endl;
+			const_cast<ProjectManager*>(this)->LoadProject(lastProjectPath);
+
+			return false; // Don't show startup since we auto-loaded
 		}
 
-		// No last project, show startup
 		std::cout << "  - No last opened project" << std::endl;
 		std::cout << "  - Should show startup: YES" << std::endl;
 		return true;
