@@ -25,7 +25,6 @@ namespace ECS {
 			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == component.GetID(); });
 			if (comp == data.end()) {
 				data.push_back(component);
-				std::cout << "Component added to entity: " << component.GetID() << std::endl;
 			}
 			else {
 				std::cout << "Component already exists for entity: " << component.GetID() << std::endl;
@@ -42,7 +41,6 @@ namespace ECS {
 			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
 			if (comp != data.end()) {
 				data.erase(comp);
-				std::cout << "Component erased from entity: " << entity << std::endl;
 			}
 			else {
 				std::cout << "No component found for entity: " << entity << std::endl;

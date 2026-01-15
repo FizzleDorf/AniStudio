@@ -184,31 +184,24 @@ namespace ECS {
 			RegisterComponentType(
 				typeId,
 				[this, typeId, name](EntityID entity) {
-				std::cout << "[ComponentCreator] DEBUG: Creating component " << name << " for entity " << entity << std::endl;
 				GetEntitySignature(entity)->insert(typeId);
 
 				// Debug the component list
 				auto compList = GetCompList<T>();
-				std::cout << "[ComponentCreator] DEBUG: Component list pointer: " << compList.get() << std::endl;
-				std::cout << "[ComponentCreator] DEBUG: Before insert - size: " << compList->Size() << std::endl;
 
 				T componentInstance{};
 				componentInstance.entityID = entity;
 				compList->Insert(componentInstance);
 
-				std::cout << "[ComponentCreator] DEBUG: After insert - size: " << compList->Size() << std::endl;
-
 				// Check if component was actually created
 				try {
 					BaseComponent* comp = &compList->Get(entity);
-					std::cout << "[ComponentCreator] DEBUG: Component created - pointer: " << comp << std::endl;
 				}
 				catch (const std::exception& e) {
 					std::cerr << "[ComponentCreator] ERROR: Failed to get component after creation: " << e.what() << std::endl;
 				}
 
 				UpdateEntityTargetSystem(entity);
-				std::cout << "[ComponentCreator] DEBUG: Component creation completed for " << name << std::endl;
 			},
 				[this, typeId, name](EntityID entity) -> BaseComponent* {
 				if (!HasComponentById(entity, typeId)) {

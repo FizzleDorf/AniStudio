@@ -48,29 +48,6 @@ namespace GUI {
 		img2imgEntity = CreateEntityWithComponents(true);
 		editEntity = CreateEntityWithComponents(true);
 
-		//// Refresh schemas for all model components to update paths
-		//for (EntityID entity : {txt2imgEntity, img2imgEntity, editEntity}) {
-		//	// Get all components and refresh their schemas
-		//	auto componentIds = mgr.GetEntityComponents(entity);
-		//	for (ComponentTypeID compId : componentIds) {
-		//		auto* component = mgr.GetComponentById(entity, compId);
-		//		if (component) {
-		//			component->RefreshSchema();
-		//		}
-		//	}
-
-		//	if (mgr.HasComponent<OutputImageComponent>(entity)) {
-		//		auto& output = mgr.GetComponent<OutputImageComponent>(entity);
-		//		output.filePath = Utils::FilePathService::GetPath("DefaultProject");
-		//		output.fileName = "AniStudio.png";
-		//	}
-
-		//	if (mgr.HasComponent<LoraComponent>(entity)) {
-		//		auto& lora = mgr.GetComponent<LoraComponent>(entity);
-		//		lora.modelPath = Utils::FilePathService::GetPath("Lora");
-		//	}
-		//}
-
 		// Set default denoise for img2img and edit
 		if (mgr.HasComponent<SamplerComponent>(img2imgEntity)) {
 			mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;

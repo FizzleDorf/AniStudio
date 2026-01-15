@@ -342,22 +342,16 @@ namespace ECS {
 					std::string componentName = it.key();
 					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
 
-					std::cout << "[Deserialize] Looking up component: '" << componentName
-						<< "' -> ID: " << typeId << std::endl;
-
 					if (typeId != MAX_COMPONENT_COUNT) {
 						auto creator = componentCreators.find(typeId);
 						if (creator != componentCreators.end()) {
-							std::cout << "[Deserialize] Creating component: " << componentName << std::endl;
 							creator->second(entity);
 
 							// DEBUG: Check if component was actually created
 							BaseComponent* component = GetComponentById(entity, typeId);
-							std::cout << "[Deserialize] Component " << componentName << " created - pointer: " << component << std::endl;
 
 							if (component) {
 								component->Deserialize(componentJson[componentName]);
-								std::cout << "[Deserialize] Component data deserialized" << std::endl;
 							}
 							else {
 								std::cerr << "[Deserialize] ERROR: Component " << componentName << " was not created!" << std::endl;
