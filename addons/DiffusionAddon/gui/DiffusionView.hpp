@@ -60,11 +60,11 @@ namespace GUI {
 		// Context menus
 		void RenderMainContextMenu();
 
+		// Menu bar
+		void RenderMenuBar();
+
 		// Queue rendering
 		void RenderQueueList();
-
-		// Metadata controls
-		void RenderMetadataControls();
 
 		// Event handlers
 		void HandleT2IEvent();
@@ -79,6 +79,8 @@ namespace GUI {
 		void SaveMetadataToJson(const std::string& filepath);
 		void LoadMetadataFromJson(const std::string& filepath);
 		void LoadMetadataFromPNG(const std::string& imagePath);
+		void QuickSave();
+		void QuickLoad();
 	};
 
 } // namespace GUI

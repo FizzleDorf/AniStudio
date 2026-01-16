@@ -28,6 +28,7 @@ namespace GUI {
 	}
 
 	DiffusionView::~DiffusionView() {
+		QuickSave();
 		if (txt2imgEntity != 0) mgr.DestroyEntity(txt2imgEntity);
 		if (img2imgEntity != 0) mgr.DestroyEntity(img2imgEntity);
 		if (editEntity != 0) mgr.DestroyEntity(editEntity);
@@ -36,6 +37,7 @@ namespace GUI {
 	void DiffusionView::Init() {
 		GUI::DiffusionCallbackUtils::InitializeCallbacks();
 		ResetEntities();
+		QuickLoad();
 	}
 
 	void DiffusionView::ResetEntities() {
@@ -81,7 +83,7 @@ namespace GUI {
 		mgr.AddComponent<LoraComponent>(entity);
 		mgr.AddComponent<ControlNetComponent>(entity);
 		mgr.AddComponent<EmbeddingComponent>(entity);
-		
+
 		// Sampling
 		mgr.AddComponent<LatentComponent>(entity);
 		mgr.AddComponent<SamplerComponent>(entity);
@@ -142,7 +144,7 @@ namespace GUI {
 			if (ImGui::CollapsingHeader("Model Selection", ImGuiTreeNodeFlags_DefaultOpen)) {
 				if (ImGui::BeginTabBar("ModelTabs")) {
 					if (ImGui::BeginTabItem("Full")) {
-						
+
 						// Checkpoint
 						for (const auto&[compId, componentName] : modelsIt->second) {
 							if (componentName == "Checkpoint") {
@@ -181,7 +183,7 @@ namespace GUI {
 						// Text Encoders subcategory
 						if (ImGui::CollapsingHeader("Text Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
 							for (const auto&[compId, componentName] : modelsIt->second) {
-								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "LLM" )
+								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "LLM")
 								{
 									RenderComponent(entity, compId, componentName);
 								}
@@ -469,6 +471,69 @@ namespace GUI {
 		}
 	}
 
+	void DiffusionView::RenderMenuBar() {
+		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("File")) {
+				if (ImGui::MenuItem("Save Metadata...")) {
+					IGFD::FileDialogConfig config;
+					config.path = Utils::FilePathService::GetPath("DefaultProject");
+					std::string defaultFilename = viewName + "_" + std::to_string(GetID()) + ".json";
+					config.fileName = defaultFilename;
+					ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Metadata", ".json", config);
+				}
+
+				if (ImGui::MenuItem("Load Metadata...")) {
+					IGFD::FileDialogConfig config;
+					config.path = Utils::FilePathService::GetPath("DefaultProject");
+					ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Metadata", ".json,.png", config);
+				}
+
+				if (ImGui::MenuItem("Quick Save")) {
+					QuickSave();
+				}
+
+				if (ImGui::MenuItem("Quick Load")) {
+					QuickLoad();
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Reset View")) {
+					ResetEntities();
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMenuBar();
+		}
+
+		// Handle Save Dialog
+		if (ImGuiFileDialog::Instance()->Display("SaveMetadataDialog", 32, ImVec2(700, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+				SaveMetadataToJson(filepath);
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
+
+		// Handle Load Dialog
+		if (ImGuiFileDialog::Instance()->Display("LoadMetadataDialog", 32, ImVec2(700, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::string filepath = ImGuiFileDialog::Instance()->GetFilePathName();
+				std::string extension = std::filesystem::path(filepath).extension().string();
+
+				if (extension == ".json") {
+					LoadMetadataFromJson(filepath);
+				}
+				else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg") {
+					LoadMetadataFromPNG(filepath);
+				}
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
+	}
+
 	void DiffusionView::HandleT2IEvent() {
 		std::cout << "Adding new T2I entity..." << std::endl;
 
@@ -720,10 +785,9 @@ namespace GUI {
 		RenderQueueList();
 
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
-		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			if (ImGui::CollapsingHeader("Metadata Controls")) {
-				RenderMetadataControls();
-			}
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
+			
+			RenderMenuBar();
 
 			if (contextMenuUtils->HasValidClipboardData()) {
 				ImGui::Separator();
@@ -881,45 +945,6 @@ namespace GUI {
 		fclose(fp);
 	}
 
-	void DiffusionView::RenderMetadataControls() {
-		if (ImGui::Button("Save Metadata", ImVec2(-FLT_MIN, 0))) {
-			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePathService::GetPath("DefaultProject");
-			ImGuiFileDialog::Instance()->OpenDialog("SaveMetadataDialog", "Save Metadata", ".json", config);
-		}
-
-		if (ImGui::Button("Load Metadata", ImVec2(-FLT_MIN, 0))) {
-			IGFD::FileDialogConfig config;
-			config.path = Utils::FilePathService::GetPath("DefaultProject");
-			ImGuiFileDialog::Instance()->OpenDialog("LoadMetadataDialog", "Load Metadata", ".json,.png", config);
-		}
-
-		// Handle Save Dialog
-		if (ImGuiFileDialog::Instance()->Display("SaveMetadataDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-				SaveMetadataToJson(filepath);
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-
-		// Handle Load Dialog
-		if (ImGuiFileDialog::Instance()->Display("LoadMetadataDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::string filepath = ImGuiFileDialog::Instance()->GetFilePathName();
-				std::string extension = std::filesystem::path(filepath).extension().string();
-
-				if (extension == ".json") {
-					LoadMetadataFromJson(filepath);
-				}
-				else if (extension == ".png" || extension == ".jpg" || extension == ".jpeg") {
-					LoadMetadataFromPNG(filepath);
-				}
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-	}
-
 	void DiffusionView::LoadMetadataFromJson(const std::string& filepath) {
 		try {
 			std::ifstream file(filepath);
@@ -946,6 +971,67 @@ namespace GUI {
 		}
 		catch (const std::exception& e) {
 			std::cerr << "Error saving metadata: " << e.what() << std::endl;
+		}
+	}
+
+	void DiffusionView::QuickSave() {
+		try {
+			// Get the project's data directory from the FilePathService
+			std::string dataPath = Utils::FilePathService::GetPath("ProjectDataPath");
+			if (dataPath.empty()) {
+				dataPath = Utils::FilePathService::GetPath("DefaultProject");
+			}
+
+			if (dataPath.empty()) {
+				std::cerr << "Error: Could not determine save location. Project paths not initialized." << std::endl;
+				return;
+			}
+
+			// Create the data directory if it doesn't exist
+			std::filesystem::create_directories(dataPath);
+
+			// Generate filename: viewname_(current workspace).json
+			std::string filename = viewName + "_" + std::to_string(GetID()) + ".json";
+			std::string filepath = (std::filesystem::path(dataPath) / filename).string();
+
+			// Save the metadata
+			SaveMetadataToJson(filepath);
+			std::cout << "Quick saved to: " << filepath << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error during quick save: " << e.what() << std::endl;
+		}
+	}
+
+	void DiffusionView::QuickLoad() {
+		try {
+			// Get the project's data directory from the FilePathService
+			std::string dataPath = Utils::FilePathService::GetPath("ProjectDataPath");
+			if (dataPath.empty()) {
+				dataPath = Utils::FilePathService::GetPath("DefaultProject");
+			}
+
+			if (dataPath.empty()) {
+				std::cerr << "Error: Could not determine load location. Project paths not initialized." << std::endl;
+				return;
+			}
+
+			// Generate filename: viewname_(current workspace).json
+			std::string filename = viewName + "_" + std::to_string(GetID()) + ".json";
+			std::string filepath = (std::filesystem::path(dataPath) / filename).string();
+
+			// Check if the file exists
+			if (!std::filesystem::exists(filepath)) {
+				std::cerr << "Error: Quick save file not found: " << filepath << std::endl;
+				return;
+			}
+
+			// Load the metadata
+			LoadMetadataFromJson(filepath);
+			std::cout << "Quick loaded from: " << filepath << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error during quick load: " << e.what() << std::endl;
 		}
 	}
 
