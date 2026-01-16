@@ -830,31 +830,56 @@ namespace GUI {
 	}
 
 	nlohmann::json DiffusionView::Serialize() const {
-		EntityID targetEntity = GetCurrentEntity();
-		nlohmann::json j = mgr.SerializeEntity(targetEntity);
+		nlohmann::json j;
+
+		// Save all three entities
+		j["txt2imgEntity"] = mgr.SerializeEntity(txt2imgEntity);
+		j["img2imgEntity"] = mgr.SerializeEntity(img2imgEntity);
+		j["editEntity"] = mgr.SerializeEntity(editEntity);
+
+		// Save UI state
 		j["componentVisibility"] = componentVisibility;
 		j["currentMode"] = currentMode;
+		j["numQueues"] = numQueues;
+		j["isPaused"] = isPaused;
+
 		return j;
 	}
 
 	void DiffusionView::Deserialize(const nlohmann::json& j) {
-		EntityID targetEntity = GetCurrentEntity();
-		if (targetEntity == 0) {
-			std::cerr << "Error: Invalid target entity for deserialization" << std::endl;
-			return;
-		}
-
 		try {
-			mgr.DeserializeEntity(j, targetEntity);
+			// Load all three entities if they exist in the JSON
+			if (j.contains("txt2imgEntity")) {
+				mgr.DeserializeEntity(j["txt2imgEntity"], txt2imgEntity);
+			}
+
+			if (j.contains("img2imgEntity")) {
+				mgr.DeserializeEntity(j["img2imgEntity"], img2imgEntity);
+			}
+
+			if (j.contains("editEntity")) {
+				mgr.DeserializeEntity(j["editEntity"], editEntity);
+			}
+
+			// Load UI state
 			if (j.contains("componentVisibility")) {
 				componentVisibility = j["componentVisibility"];
 			}
+
 			if (j.contains("currentMode")) {
 				currentMode = j["currentMode"];
 			}
+
+			if (j.contains("numQueues")) {
+				numQueues = j["numQueues"];
+			}
+
+			if (j.contains("isPaused")) {
+				isPaused = j["isPaused"];
+			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Error saving metadata: " << e.what() << std::endl;
+			std::cerr << "Error loading metadata: " << e.what() << std::endl;
 		}
 	}
 
@@ -931,7 +956,7 @@ namespace GUI {
 							convertedJson["components"] = metadata["components"];
 						}
 
-						Deserialize(convertedJson);
+						DeserializeAllEntities(convertedJson);
 					}
 					catch (const std::exception& e) {
 						std::cerr << "Error loading metadata: " << e.what() << std::endl;
@@ -951,7 +976,7 @@ namespace GUI {
 			if (file.is_open()) {
 				nlohmann::json metadata;
 				file >> metadata;
-				Deserialize(metadata);
+				DeserializeAllEntities(metadata);
 				file.close();
 			}
 		}
@@ -1032,6 +1057,65 @@ namespace GUI {
 		}
 		catch (const std::exception& e) {
 			std::cerr << "Error during quick load: " << e.what() << std::endl;
+		}
+	}
+
+	void DiffusionView::DeserializeAllEntities(const nlohmann::json& j) {
+		
+		// First try the new format with all entities
+		if (j.contains("txt2imgEntity") && j.contains("img2imgEntity") && j.contains("editEntity")) {
+			Deserialize(j);
+			return;
+		}
+
+		// If we're here, it's an old format with only current entity
+		// We'll apply the same settings to all three entities for consistency
+		try {
+			EntityID targetEntity = GetCurrentEntity();
+			if (targetEntity != 0) {
+				// Apply to all three entities
+				mgr.DeserializeEntity(j, txt2imgEntity);
+
+				// For img2img and edit, we need to preserve some settings
+				if (j.contains("components")) {
+					// Clone the configuration to img2img and edit entities
+					nlohmann::json entityData = mgr.SerializeEntity(txt2imgEntity);
+
+					// Apply to img2img, but preserve denoise setting
+					float img2imgDenoise = 0.6f;
+					if (mgr.HasComponent<SamplerComponent>(img2imgEntity)) {
+						img2imgDenoise = mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise;
+					}
+					mgr.DeserializeEntity(entityData, img2imgEntity);
+					if (mgr.HasComponent<SamplerComponent>(img2imgEntity)) {
+						mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = img2imgDenoise;
+					}
+
+					// Apply to edit, but preserve denoise setting
+					float editDenoise = 0.6f;
+					if (mgr.HasComponent<SamplerComponent>(editEntity)) {
+						editDenoise = mgr.GetComponent<SamplerComponent>(editEntity).denoise;
+					}
+					mgr.DeserializeEntity(entityData, editEntity);
+					if (mgr.HasComponent<SamplerComponent>(editEntity)) {
+						mgr.GetComponent<SamplerComponent>(editEntity).denoise = editDenoise;
+					}
+				}
+			}
+
+			// Load UI state
+			if (j.contains("componentVisibility")) {
+				componentVisibility = j["componentVisibility"];
+			}
+
+			if (j.contains("currentMode")) {
+				currentMode = j["currentMode"];
+			}
+
+			std::cout << "Loaded legacy format (applied to all entities)" << std::endl;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "Error loading legacy metadata: " << e.what() << std::endl;
 		}
 	}
 

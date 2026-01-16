@@ -81,6 +81,8 @@ namespace GUI {
 		void LoadMetadataFromPNG(const std::string& imagePath);
 		void QuickSave();
 		void QuickLoad();
+		nlohmann::json SerializeAllEntities() const;
+		void DeserializeAllEntities(const nlohmann::json& j);
 	};
 
 } // namespace GUI
