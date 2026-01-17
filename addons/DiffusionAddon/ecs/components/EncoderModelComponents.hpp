@@ -166,9 +166,9 @@ namespace ECS {
 	};
 
 	// LLM Encoder
-	struct LlmComponent : public BaseModelComponent {
-		LlmComponent() {
-			compName = "LLM";
+	struct LlmEncoderComponent : public BaseModelComponent {
+		LlmEncoderComponent() {
+			compName = "LlmEncoder";
 
 			schema = {
 				{"title", "LLM Text Encoder"},
@@ -207,7 +207,7 @@ namespace ECS {
 			return Utils::FilePathService::GetPath("Encoder");
 		}
 
-		LlmComponent& operator=(const LlmComponent& other) {
+		LlmEncoderComponent& operator=(const LlmEncoderComponent& other) {
 			if (this != &other) {
 				modelPath = other.modelPath;
 				modelName = other.modelName;

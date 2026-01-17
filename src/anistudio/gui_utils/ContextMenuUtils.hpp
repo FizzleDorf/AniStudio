@@ -1,23 +1,3 @@
-/*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
-   d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
-  d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
- d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
-
- * This file is part of AniStudio.
- * Copyright (C) 2025 FizzleDorf (AnimAnon)
- *
- * This software is dual-licensed under the GNU Lesser General Public License v3.0 (LGPL-3.0)
- * and a commercial license. You may choose to use it under either license.
- *
- * For the LGPL-3.0, see the LICENSE-LGPL-3.0.txt file in the repository.
- * For commercial license information, please contact legal@kframe.ai.
- */
-
 #pragma once
 
 #include "EntityManager.hpp"
@@ -26,6 +6,7 @@
 #include <imgui.h>
 #include <string>
 #include <vector>
+#include <map>
 
 namespace Utils {
 
@@ -34,32 +15,34 @@ namespace Utils {
 		ContextMenuUtils(ECS::EntityManager& entityMgr);
 		~ContextMenuUtils() = default;
 
-		// Main context menu rendering for images with metadata
+		// Main context menu rendering
 		void RenderImageContextMenu(ECS::EntityID entityId);
 		void RenderImageContextMenuWithPath(const std::string& imagePath);
-
-		// Legacy method for DiffusionView compatibility
 		void RenderComponentContextMenu(ECS::EntityID entityId, ECS::ComponentTypeID componentId);
 		void RenderComponentContextMenu(ECS::EntityID entityId, const std::string& componentName);
 
-		// Component operations from clipboard
+		// Copy operations
+		void CopyEntity(ECS::EntityID entityId);
 		void CopyComponent(ECS::EntityID entityId, ECS::ComponentTypeID componentId);
 		void CopyComponent(ECS::EntityID entityId, const std::string& componentName);
-		bool PasteComponent(ECS::EntityID targetEntityId);
-		bool PasteEntityToExisting(ECS::EntityID targetEntityId);
-		bool CanPasteComponent() const;
 
-		// Entity operations
-		void CopyEntity(ECS::EntityID entityId);
-		ECS::EntityID PasteEntity();
-		bool CanPasteEntity() const;
+		// Paste operations
+		bool PasteEntity(ECS::EntityID targetEntityId);
+		bool PasteComponent(ECS::EntityID targetEntityId, const std::string& componentName);
+		bool PasteValue(ECS::EntityID targetEntityId, const std::string& componentName, const std::string& propertyName);
 
 		// Clipboard utilities
-		bool HasValidClipboardData() const;
+		bool HasClipboardEntity() const;
 		std::string GetClipboardPreview() const;
-		void SetClipboardData(const nlohmann::json& data);
-		nlohmann::json GetClipboardData() const;
 		void ClearClipboard();
+
+		// Helper functions
+		std::vector<std::string> GetClipboardComponents() const;
+		std::vector<std::string> GetCommonProperties(ECS::EntityID targetEntityId, const std::string& componentName) const;
+
+		// Public method to get clipboard data
+		nlohmann::json GetClipboardData() const;
+		void RenderPasteMenu(ECS::EntityID entityId); 
 
 	private:
 		ECS::EntityManager& entityManager;
@@ -71,14 +54,20 @@ namespace Utils {
 		// Context menu rendering helpers
 		void RenderMetadataComponentMenu(const nlohmann::json& metadata);
 		void RenderEntityComponentMenu(ECS::EntityID entityId);
-		void RenderPasteMenu(ECS::EntityID entityId);
+		// REMOVED: void RenderPasteMenu(ECS::EntityID entityId);  <-- REMOVE THIS FROM PRIVATE
+		void RenderValueCopyMenu(ECS::EntityID entityId, ECS::ComponentTypeID componentId, const std::string& componentName);
+		void RenderMetadataValueMenu(const nlohmann::json& metadata);
 
 		// Component operations from metadata
 		void CopyComponentFromMetadata(const nlohmann::json& metadata, const std::string& componentName);
 		void CopyEntityFromMetadata(const nlohmann::json& metadata);
 
-		// Utility functions
-		bool IsComponentRegistered(const std::string& componentName) const;
+		// Clipboard operations
+		void SetClipboardData(const nlohmann::json& data);
+
+		// Value extraction
+		std::string GetClipboardValue(const std::string& componentName, const std::string& propertyName) const;
+		nlohmann::json GetClipboardComponent(const std::string& componentName) const;
 	};
 
-} // namespace Utils
+}

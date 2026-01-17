@@ -230,18 +230,25 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			if (contextMenuUtils->HasValidClipboardData()) {
-				if (contextMenuUtils->CanPasteComponent()) {
-					if (ImGui::MenuItem("Paste Component")) {
-						contextMenuUtils->PasteComponent(entity);
+			bool hasClipboardEntity = contextMenuUtils->HasClipboardEntity();
+			if (hasClipboardEntity) {
+				std::vector<std::string> clipboardComponents = contextMenuUtils->GetClipboardComponents();
+				if (!clipboardComponents.empty()) {
+					if (ImGui::BeginMenu("Paste Component")) {
+						for (const auto& compName : clipboardComponents) {
+							if (ImGui::MenuItem(compName.c_str())) {
+								contextMenuUtils->PasteComponent(entity, compName);
+							}
+						}
+						ImGui::EndMenu();
 					}
 				}
-				if (contextMenuUtils->CanPasteEntity()) {
-					if (ImGui::MenuItem("Paste Entity")) {
-						nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
-						if (clipboardData.contains("data")) {
-							mgr.DeserializeEntity(clipboardData["data"], entity);
-						}
+
+				// Paste Entity option
+				if (ImGui::MenuItem("Paste Entity")) {
+					nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
+					if (clipboardData.contains("data")) {
+						mgr.DeserializeEntity(clipboardData["data"], entity);
 					}
 				}
 			}
@@ -272,18 +279,24 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			if (contextMenuUtils->HasValidClipboardData()) {
-				if (contextMenuUtils->CanPasteComponent()) {
-					if (ImGui::MenuItem("Paste Component")) {
-						contextMenuUtils->PasteComponent(upscaleEntity);
+			bool hasClipboardEntity = contextMenuUtils->HasClipboardEntity();
+			if (hasClipboardEntity) {
+				std::vector<std::string> clipboardComponents = contextMenuUtils->GetClipboardComponents();
+				if (!clipboardComponents.empty()) {
+					if (ImGui::BeginMenu("Paste Component")) {
+						for (const auto& compName : clipboardComponents) {
+							if (ImGui::MenuItem(compName.c_str())) {
+								contextMenuUtils->PasteComponent(upscaleEntity, compName);
+							}
+						}
+						ImGui::EndMenu();
 					}
 				}
-				if (contextMenuUtils->CanPasteEntity()) {
-					if (ImGui::MenuItem("Paste Entity")) {
-						nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
-						if (clipboardData.contains("data")) {
-							mgr.DeserializeEntity(clipboardData["data"], upscaleEntity);
-						}
+
+				if (ImGui::MenuItem("Paste Entity")) {
+					nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
+					if (clipboardData.contains("data")) {
+						mgr.DeserializeEntity(clipboardData["data"], upscaleEntity);
 					}
 				}
 
@@ -496,7 +509,7 @@ namespace GUI {
 				RenderMetadataControls();
 			}
 
-			if (contextMenuUtils->HasValidClipboardData()) {
+			if (contextMenuUtils->HasClipboardEntity()) {
 				ImGui::Separator();
 				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s",
 					contextMenuUtils->GetClipboardPreview().c_str());

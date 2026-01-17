@@ -72,7 +72,7 @@ namespace GUI {
 		mgr.AddComponent<T5XXLComponent>(entity);
 		mgr.AddComponent<TaesdComponent>(entity);
 		mgr.AddComponent<ClipVisionComponent>(entity);
-		mgr.AddComponent<LlmComponent>(entity);
+		mgr.AddComponent<LlmEncoderComponent>(entity);
 		mgr.AddComponent<LlmVisionComponent>(entity);
 
 		// Auto Encoders
@@ -183,7 +183,7 @@ namespace GUI {
 						// Text Encoders subcategory
 						if (ImGui::CollapsingHeader("Text Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
 							for (const auto&[compId, componentName] : modelsIt->second) {
-								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "LLM")
+								if (componentName == "ClipL" || componentName == "ClipG" || componentName == "T5XXL" || componentName == "LlmEncoder")
 								{
 									RenderComponent(entity, compId, componentName);
 								}
@@ -373,54 +373,15 @@ namespace GUI {
 			}
 		}
 
-		// Add context menu for component
+		// Add context menu for component - USE THE UTILITY CLASS
 		ImVec2 contentEnd = ImGui::GetCursorScreenPos();
 		ImVec2 contentSize = ImVec2(ImGui::GetContentRegionAvail().x, contentEnd.y - contentStart.y);
 
 		ImGui::SetCursorScreenPos(contentStart);
 		ImGui::InvisibleButton(("##component_context_" + componentName).c_str(), contentSize);
 
-		std::string popupId = "ComponentContextMenu##" + componentName + "_" + std::to_string(entity);
-		if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-			ImGui::OpenPopup(popupId.c_str());
-		}
-
-		if (ImGui::BeginPopup(popupId.c_str())) {
-			ImGui::Text("Component: %s", componentName.c_str());
-			ImGui::Text("Entity: %zu", entity);
-			ImGui::Separator();
-
-			if (ImGui::MenuItem("Copy Component")) {
-				contextMenuUtils->CopyComponent(entity, compId);
-			}
-
-			if (ImGui::MenuItem("Copy Entity")) {
-				contextMenuUtils->CopyEntity(entity);
-			}
-
-			ImGui::Separator();
-
-			if (contextMenuUtils->HasValidClipboardData()) {
-				if (contextMenuUtils->CanPasteComponent()) {
-					if (ImGui::MenuItem("Paste Component")) {
-						contextMenuUtils->PasteComponent(entity);
-					}
-				}
-				if (contextMenuUtils->CanPasteEntity()) {
-					if (ImGui::MenuItem("Paste Entity")) {
-						nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
-						if (clipboardData.contains("data")) {
-							mgr.DeserializeEntity(clipboardData["data"], entity);
-						}
-					}
-				}
-			}
-			else {
-				ImGui::TextDisabled("Nothing to paste");
-			}
-
-			ImGui::EndPopup();
-		}
+		// Use the ContextMenuUtils to render the component context menu
+		contextMenuUtils->RenderComponentContextMenu(entity, compId);
 
 		ImGui::SetCursorScreenPos(contentEnd);
 		ImGui::Unindent();
@@ -438,30 +399,20 @@ namespace GUI {
 
 			EntityID currentEntity = GetCurrentEntity();
 
+			// COPY OPTIONS
 			if (ImGui::MenuItem("Copy Current Entity")) {
 				contextMenuUtils->CopyEntity(currentEntity);
 			}
 
 			ImGui::Separator();
 
-			if (contextMenuUtils->HasValidClipboardData()) {
-				if (contextMenuUtils->CanPasteComponent()) {
-					if (ImGui::MenuItem("Paste Component")) {
-						contextMenuUtils->PasteComponent(currentEntity);
-					}
-				}
-				if (contextMenuUtils->CanPasteEntity()) {
-					if (ImGui::MenuItem("Paste Entity")) {
-						nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
-						if (clipboardData.contains("data")) {
-							mgr.DeserializeEntity(clipboardData["data"], currentEntity);
-						}
-					}
-				}
-
+			// PASTE OPTIONS
+			if (contextMenuUtils->HasClipboardEntity()) {
+				// Show clipboard preview
+				ImGui::TextDisabled("Clipboard: %s", contextMenuUtils->GetClipboardPreview().c_str());
 				ImGui::Separator();
-				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s",
-					contextMenuUtils->GetClipboardPreview().c_str());
+
+				contextMenuUtils->RenderPasteMenu(currentEntity);
 			}
 			else {
 				ImGui::TextDisabled("Nothing to paste");
@@ -786,10 +737,10 @@ namespace GUI {
 
 		ImGui::SetNextWindowSize(ImVec2(300, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
-			
+
 			RenderMenuBar();
 
-			if (contextMenuUtils->HasValidClipboardData()) {
+			if (contextMenuUtils->HasClipboardEntity()) {
 				ImGui::Separator();
 				ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s",
 					contextMenuUtils->GetClipboardPreview().c_str());
@@ -1061,7 +1012,7 @@ namespace GUI {
 	}
 
 	void DiffusionView::DeserializeAllEntities(const nlohmann::json& j) {
-		
+
 		// First try the new format with all entities
 		if (j.contains("txt2imgEntity") && j.contains("img2imgEntity") && j.contains("editEntity")) {
 			Deserialize(j);

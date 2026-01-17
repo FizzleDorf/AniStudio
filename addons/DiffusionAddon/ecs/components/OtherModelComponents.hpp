@@ -62,7 +62,7 @@ namespace ECS {
 	// ControlNet Component
 	struct ControlNetComponent : public ECS::BaseModelComponent {
 		ControlNetComponent() {
-			compName = "Controlnet";
+			compName = "ControlNet";
 
 			schema = {
 				{"title", "ControlNet Settings"},

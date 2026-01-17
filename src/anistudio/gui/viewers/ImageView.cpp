@@ -258,7 +258,7 @@ namespace GUI {
 			RefreshImageEntities();
 		}
 
-		if (contextMenuUtils->HasValidClipboardData()) {
+		if (contextMenuUtils->HasClipboardEntity()) {
 			ImGui::SameLine();
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s", contextMenuUtils->GetClipboardPreview().c_str());
 		}
