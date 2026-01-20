@@ -9,6 +9,9 @@
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <iostream>
+#include <filesystem>
+#include <thread>
 
 namespace Utils
 {
@@ -16,28 +19,41 @@ namespace Utils
 	uint64_t generateRandomSeed();
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
-	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
 
 	class Edit
 	{
 	public:
-		static bool RunEdit(const nlohmann::json &metadata, std::string fullPath)
+		static bool RunEdit(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
 		{
-			sd_ctx_t *sd_context = nullptr;
+			bool contextProvided = (sd_context != nullptr);
 			std::vector<unsigned char*> refImageData;
 			sd_image_t *result_image = nullptr;
 			sd_img_gen_params_t gen_params;
 			sd_img_gen_params_init(&gen_params);
 
+			// Additional structures for advanced features
+			std::vector<sd_image_t> imagesToCleanup;
+			std::vector<sd_image_t> idImagesStorage;
+			int* slg_layers = nullptr;
+
 			try
 			{
-
 				// Extract parameters from metadata
 				std::vector<std::string> refImagePaths;
 				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
 				std::string outputFilename = "edit_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
+
+				// VAE tiling parameters
+				sd_tiling_params_t vae_tiling_params = { false, 64, 64, 0.0f, 64.0f, 64.0f };
+
+				// PhotoMaker parameters
+				sd_pm_params_t pm_params = { nullptr, 0, nullptr, 0.0f };
+
+				// ControlNet image
+				sd_image_t control_image = { 0, 0, 0, nullptr };
+				float control_strength = 0.0f;
 
 				// Debug logging for metadata
 				std::cout << "Edit metadata:" << std::endl;
@@ -168,7 +184,8 @@ namespace Utils
 								if (layer_count > 0 && slgData["layers"].size() >= layer_count)
 								{
 									// Allocate and copy layers array
-									gen_params.sample_params.guidance.slg.layers = new int[layer_count];
+									slg_layers = new int[layer_count];
+									gen_params.sample_params.guidance.slg.layers = slg_layers;
 									gen_params.sample_params.guidance.slg.layer_count = layer_count;
 
 									for (size_t i = 0; i < layer_count; i++)
@@ -190,13 +207,54 @@ namespace Utils
 								gen_params.height = latentData["latentHeight"].get<int>();
 						}
 
+						// VAE component - read all tiling parameters
+						if (comp.contains("Vae"))
+						{
+							nlohmann::json vaeData = comp["Vae"];
+							if (vaeData.contains("isTiled") && !vaeData["isTiled"].is_null())
+								vae_tiling_params.enabled = vaeData["isTiled"].get<bool>();
+							if (vaeData.contains("tile_size_x") && !vaeData["tile_size_x"].is_null())
+								vae_tiling_params.tile_size_x = vaeData["tile_size_x"].get<int>();
+							if (vaeData.contains("tile_size_y") && !vaeData["tile_size_y"].is_null())
+								vae_tiling_params.tile_size_y = vaeData["tile_size_y"].get<int>();
+							if (vaeData.contains("target_overlap") && !vaeData["target_overlap"].is_null())
+								vae_tiling_params.target_overlap = vaeData["target_overlap"].get<float>();
+							if (vaeData.contains("rel_size_x") && !vaeData["rel_size_x"].is_null())
+								vae_tiling_params.rel_size_x = vaeData["rel_size_x"].get<float>();
+							if (vaeData.contains("rel_size_y") && !vaeData["rel_size_y"].is_null())
+								vae_tiling_params.rel_size_y = vaeData["rel_size_y"].get<float>();
+						}
+
 						// ControlNet component for edit operations
 						if (comp.contains("Controlnet"))
 						{
 							nlohmann::json controlData = comp["Controlnet"];
 
-							if (controlData.contains("control_strength") && !controlData["control_strength"].is_null())
-								gen_params.control_strength = controlData["control_strength"].get<float>();
+							if (controlData.contains("cnStrength") && !controlData["cnStrength"].is_null())
+								control_strength = controlData["cnStrength"].get<float>();
+						}
+
+						// ControlNet Image component
+						if (comp.contains("ControlNetImage"))
+						{
+							nlohmann::json controlImageData = comp["ControlNetImage"];
+
+							// Load control image
+							if (controlImageData.contains("filePath") && !controlImageData["filePath"].is_null() &&
+								!controlImageData["filePath"].get<std::string>().empty())
+							{
+								std::string controlImagePath = controlImageData["filePath"].get<std::string>();
+								control_image = LoadImageToSDImage(controlImagePath);
+								if (control_image.data) {
+									imagesToCleanup.push_back(control_image);
+								}
+							}
+
+							// Get control strength from image component if not set from ControlNet component
+							if (controlImageData.contains("strength") && !controlImageData["strength"].is_null() && control_strength == 0.0f)
+							{
+								control_strength = controlImageData["strength"].get<float>();
+							}
 						}
 
 						// PhotoMaker component
@@ -205,9 +263,29 @@ namespace Utils
 							nlohmann::json pmData = comp["PhotoMaker"];
 
 							if (pmData.contains("style_strength") && !pmData["style_strength"].is_null())
-								gen_params.pm_params.style_strength = pmData["style_strength"].get<float>();
-							if (pmData.contains("id_embed_path") && !pmData["id_embed_path"].is_null())
-								gen_params.pm_params.id_embed_path = pmData["id_embed_path"].get<std::string>().c_str();
+								pm_params.style_strength = pmData["style_strength"].get<float>();
+							if (pmData.contains("modelPath") && !pmData["modelPath"].is_null())
+							{
+								std::string pm_path = pmData["modelPath"].get<std::string>();
+								pm_params.id_embed_path = pm_path.c_str();
+							}
+						}
+
+						// PhotoMaker ID Images - can have multiple
+						if (comp.contains("PhotoMakerImage"))
+						{
+							nlohmann::json pmImageData = comp["PhotoMakerImage"];
+
+							if (pmImageData.contains("filePath") && !pmImageData["filePath"].is_null() &&
+								!pmImageData["filePath"].get<std::string>().empty())
+							{
+								std::string idImagePath = pmImageData["filePath"].get<std::string>();
+								sd_image_t id_image = LoadImageToSDImage(idImagePath);
+								if (id_image.data) {
+									idImagesStorage.push_back(id_image);
+									imagesToCleanup.push_back(id_image);
+								}
+							}
 						}
 					}
 				}
@@ -218,7 +296,23 @@ namespace Utils
 
 				// Initialize empty mask and control image for edit operations
 				gen_params.mask_image = { 0, 0, 0, nullptr };
-				gen_params.control_image = { 0, 0, 0, nullptr };
+				gen_params.control_image = control_image;
+				gen_params.control_strength = control_strength;
+
+				// Set VAE tiling parameters
+				gen_params.vae_tiling_params = vae_tiling_params;
+
+				// Set up PhotoMaker parameters if available
+				if (pm_params.id_embed_path != nullptr) {
+					gen_params.pm_params = pm_params;
+				}
+
+				// Set up PhotoMaker ID images array
+				if (!idImagesStorage.empty()) {
+					pm_params.id_images_count = idImagesStorage.size();
+					pm_params.id_images = idImagesStorage.data();
+					gen_params.pm_params = pm_params;
+				}
 
 				// Validate parameters
 				if (refImagePaths.empty())
@@ -238,7 +332,7 @@ namespace Utils
 					int imgWidth, imgHeight, imgChannels;
 					std::cout << "Loading reference image from: " << imagePath << std::endl;
 
-					// Force 3 channels (RGB) for consistency - FIXED
+					// Force 3 channels (RGB) for consistency
 					unsigned char* imageData = stbi_load(imagePath.c_str(), &imgWidth, &imgHeight, &imgChannels, 3);
 					if (!imageData)
 					{
@@ -279,38 +373,11 @@ namespace Utils
 					gen_params.init_image = ref_images[0];
 				}
 
-				// Create output path - FIXED: Use the provided fullPath parameter
-				std::filesystem::path outputDir(outputPath);
-				std::filesystem::path outputFile(outputFilename);
-				std::string uniqueFilePath;
-
-				// Use the provided fullPath if it's not empty, otherwise create a unique filename
-				if (!fullPath.empty())
-				{
-					uniqueFilePath = fullPath;
-				}
-				else
-				{
-					// Check if output directory exists, if not use a fallback
-					if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
-						// Try to use OutputFolder from FilePaths
-						std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
-						if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
-							outputDir = outputFolder;
-						}
-						else {
-							// Fallback to executable directory
-							outputDir = Utils::FilePathService::GetExecutableDir();
-						}
-					}
-
-					uniqueFilePath = Utils::PngMetadata::CreateUniqueFilename(
-						outputFile.string(), outputDir.string());
+				// Get SD context if not provided
+				if (!contextProvided) {
+					sd_context = SDContextManager::GetOrCreateContext(metadata);
 				}
 
-				// Initialize SD context
-				std::cout << "Initializing Stable Diffusion context..." << std::endl;
-				sd_context = InitializeStableDiffusionContext(metadata);
 				if (!sd_context)
 				{
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
@@ -346,40 +413,19 @@ namespace Utils
 				}
 
 				std::cout << "Edit successful: " << result_image->width << "x" << result_image->height
-					<< "x" << result_image->channel << ", saving to: " << uniqueFilePath << std::endl;
+					<< "x" << result_image->channel << ", saving to: " << fullPath << std::endl;
 
 				// Save the result image
 				SaveImage(result_image->data, result_image->width, result_image->height,
-					result_image->channel, metadata, uniqueFilePath);
+					result_image->channel, metadata, fullPath);
 				std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-				// Cleanup SLG layers array if it was allocated
-				if (gen_params.sample_params.guidance.slg.layers != nullptr)
-				{
-					delete[] gen_params.sample_params.guidance.slg.layers;
-					gen_params.sample_params.guidance.slg.layers = nullptr;
-				}
+				// Cleanup
+				CleanupResources(refImageData, result_image, slg_layers, imagesToCleanup);
 
-				// Cleanup resources
-				for (unsigned char* imageData : refImageData)
-				{
-					if (imageData)
-					{
-						stbi_image_free(imageData);
-					}
-				}
-				refImageData.clear();
-
-				if (result_image)
-				{
-					free(result_image);
-					result_image = nullptr;
-				}
-
-				if (sd_context)
-				{
-					free_sd_ctx(sd_context);
-					sd_context = nullptr;
+				// Release context back to cache if we acquired it
+				if (!contextProvided) {
+					SDContextManager::ReleaseContext(sd_context);
 				}
 
 				return true;
@@ -388,36 +434,78 @@ namespace Utils
 			{
 				std::cerr << "Exception during edit: " << e.what() << std::endl;
 
-				// Clean up SLG layers array if it was allocated
-				if (gen_params.sample_params.guidance.slg.layers != nullptr)
-				{
-					delete[] gen_params.sample_params.guidance.slg.layers;
-					gen_params.sample_params.guidance.slg.layers = nullptr;
-				}
+				// Cleanup on error
+				CleanupResources(refImageData, result_image, slg_layers, imagesToCleanup);
 
-				// Clean up resources
-				for (unsigned char* imageData : refImageData)
-				{
-					if (imageData)
-					{
-						stbi_image_free(imageData);
-					}
-				}
-				refImageData.clear();
-
-				if (result_image)
-				{
-					free(result_image);
-					result_image = nullptr;
-				}
-
-				if (sd_context)
-				{
-					free_sd_ctx(sd_context);
-					sd_context = nullptr;
+				// Release context back to cache if we acquired it
+				if (!contextProvided && sd_context) {
+					SDContextManager::ReleaseContext(sd_context);
 				}
 
 				return false;
+			}
+		}
+
+	private:
+		static void CleanupResources(std::vector<unsigned char*>& refImageData,
+			sd_image_t* result_image,
+			int* slg_layers,
+			std::vector<sd_image_t>& imagesToCleanup) {
+
+			// Cleanup reference images
+			for (unsigned char* imageData : refImageData)
+			{
+				if (imageData)
+				{
+					stbi_image_free(imageData);
+				}
+			}
+			refImageData.clear();
+
+			// Cleanup SLG layers array if it was allocated
+			if (slg_layers != nullptr)
+			{
+				delete[] slg_layers;
+			}
+
+			// Cleanup additional loaded images
+			for (auto& img : imagesToCleanup) {
+				FreeSDImage(img);
+			}
+
+			// Cleanup result image
+			if (result_image)
+			{
+				free(result_image);
+				result_image = nullptr;
+			}
+		}
+
+		// Helper function to load image from file to sd_image_t
+		static sd_image_t LoadImageToSDImage(const std::string& filePath) {
+			sd_image_t result = { 0, 0, 0, nullptr };
+
+			if (filePath.empty() || !std::filesystem::exists(filePath)) {
+				return result;
+			}
+
+			int width, height, channels;
+			unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
+			if (data) {
+				result.width = width;
+				result.height = height;
+				result.channel = channels;
+				result.data = data;
+			}
+
+			return result;
+		}
+
+		// Helper to free sd_image_t data
+		static void FreeSDImage(sd_image_t& img) {
+			if (img.data) {
+				stbi_image_free(img.data);
+				img.data = nullptr;
 			}
 		}
 	};

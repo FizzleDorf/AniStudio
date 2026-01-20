@@ -1,13 +1,14 @@
 #pragma once
+
 #include "stable-diffusion.h"
-#include "PngMetadataUtils.hpp"
-#include "RngUtils.hpp"
-#include "ContextUtils.hpp" 
-#include "SaveUtils.hpp"
-#include "FilePathService.hpp"
 #include "pch.h"
+#include "ContextUtils.hpp"
+#include "PngMetadataUtils.hpp"
+#include "FilePathService.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <iostream>
+#include <filesystem>
 
 namespace Utils
 {
@@ -15,7 +16,6 @@ namespace Utils
 	uint64_t generateRandomSeed();
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
-	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
 
 	// Helper function to load image from file to sd_image_t
 	inline sd_image_t LoadImageToSDImage(const std::string& filePath) {
@@ -48,10 +48,10 @@ namespace Utils
 	class Txt2Img
 	{
 	public:
-		// Main inference function using NEW structured API
-		static bool RunInference(const nlohmann::json &metadata, std::string fullPath)
+		// Main inference function using cached SD context
+		static bool RunInference(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
 		{
-			sd_ctx_t *sd_context = nullptr;
+			bool contextProvided = (sd_context != nullptr);
 			sd_image_t *result_images = nullptr;
 			sd_img_gen_params_t gen_params;
 			sd_img_gen_params_init(&gen_params);
@@ -66,10 +66,7 @@ namespace Utils
 
 			try
 			{
-
 				// Extract parameters from metadata
-				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
-				std::string outputFilename = "txt2img_output.png";
 				std::string posPrompt = "";
 				std::string negPrompt = "";
 
@@ -82,27 +79,12 @@ namespace Utils
 				// ControlNet image
 				sd_image_t control_image = { 0, 0, 0, nullptr };
 				float control_strength = 0.0f;
-				float apply_start = 0.0f;
-				float apply_end = 1.0f;
-
-				// Reference images
-				std::vector<sd_image_t> refImages;
 
 				// Parse metadata to extract parameters
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
 					for (const auto &comp : metadata["components"])
 					{
-						// Output settings
-						if (comp.contains("OutputImage"))
-						{
-							nlohmann::json outputImageData = comp["OutputImage"];
-							if (outputImageData.contains("filePath") && !outputImageData["filePath"].is_null())
-								outputPath = outputImageData["filePath"].get<std::string>();
-							if (outputImageData.contains("fileName") && !outputImageData["fileName"].is_null())
-								outputFilename = outputImageData["fileName"].get<std::string>();
-						}
-
 						// Prompt component
 						if (comp.contains("Prompt"))
 						{
@@ -144,11 +126,6 @@ namespace Utils
 								gen_params.sample_params.scheduler = static_cast<scheduler_t>(samplerData["current_scheduler_method"].get<int>());
 							if (samplerData.contains("shifted_timestep") && !samplerData["shifted_timestep"].is_null())
 								gen_params.sample_params.shifted_timestep = samplerData["shifted_timestep"].get<int>();
-							if (samplerData.contains("current_prediction_type") && !samplerData["current_prediction_type"].is_null())
-							{
-								// Note: prediction type should be set in context params, not generation params
-								// This would need to be handled during context initialization
-							}
 						}
 
 						// Guidance component
@@ -208,14 +185,6 @@ namespace Utils
 							if (controlNetData.contains("cnStrength") && !controlNetData["cnStrength"].is_null())
 							{
 								control_strength = controlNetData["cnStrength"].get<float>();
-							}
-							if (controlNetData.contains("applyStart") && !controlNetData["applyStart"].is_null())
-							{
-								apply_start = controlNetData["applyStart"].get<float>();
-							}
-							if (controlNetData.contains("applyEnd") && !controlNetData["applyEnd"].is_null())
-							{
-								apply_end = controlNetData["applyEnd"].get<float>();
 							}
 						}
 
@@ -385,8 +354,11 @@ namespace Utils
 					gen_params.control_strength = control_strength;
 				}
 
-				// Initialize SD context
-				sd_context = InitializeStableDiffusionContext(metadata);
+				// Get SD context if not provided
+				if (!contextProvided) {
+					sd_context = SDContextManager::GetOrCreateContext(metadata);
+				}
+
 				if (!sd_context)
 				{
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
@@ -415,7 +387,12 @@ namespace Utils
 					result_images->channel, metadata, fullPath);
 
 				// Cleanup
-				CleanupResources(slg_layers, imagesToCleanup, result_images, sd_context);
+				CleanupResources(slg_layers, imagesToCleanup, result_images);
+
+				// Release context back to cache if we acquired it
+				if (!contextProvided) {
+					SDContextManager::ReleaseContext(sd_context);
+				}
 
 				return true;
 			}
@@ -424,7 +401,12 @@ namespace Utils
 				std::cerr << "Exception during txt2img: " << e.what() << std::endl;
 
 				// Cleanup on error
-				CleanupResources(slg_layers, imagesToCleanup, result_images, sd_context);
+				CleanupResources(slg_layers, imagesToCleanup, result_images);
+
+				// Release context back to cache if we acquired it
+				if (!contextProvided && sd_context) {
+					SDContextManager::ReleaseContext(sd_context);
+				}
 
 				return false;
 			}
@@ -433,8 +415,7 @@ namespace Utils
 	private:
 		static void CleanupResources(int* slg_layers,
 			std::vector<sd_image_t>& imagesToCleanup,
-			sd_image_t* result_images,
-			sd_ctx_t* sd_context) {
+			sd_image_t* result_images) {
 			// Cleanup SLG layers array if it was allocated
 			if (slg_layers != nullptr)
 			{
@@ -450,12 +431,6 @@ namespace Utils
 			if (result_images)
 			{
 				free(result_images);
-			}
-
-			// Cleanup SD context
-			if (sd_context)
-			{
-				free_sd_ctx(sd_context);
 			}
 		}
 	};

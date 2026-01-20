@@ -6,14 +6,19 @@
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
 #include <filesystem>
+#include <iostream>
 
 namespace Utils
 {
 	class Conversion
 	{
 	public:
-		static bool ConvertToGGUF(const nlohmann::json &metadata)
+		// Note: Conversion doesn't use sd_ctx_t, but we keep the parameter for API consistency
+		static bool ConvertToGGUF(const nlohmann::json &metadata, sd_ctx_t *sd_context = nullptr)
 		{
+			// Note: sd_context parameter is not used for conversion, but kept for API consistency
+			(void)sd_context; // Mark as unused to avoid compiler warnings
+
 			try
 			{
 				std::string inputPath, vaePath;

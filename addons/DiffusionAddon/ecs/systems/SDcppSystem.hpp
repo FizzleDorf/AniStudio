@@ -4,11 +4,9 @@
 #include "ECS.h"
 #include "rng.hpp"
 
-// Include component headers
 #include "SDCPPComponents.h"
 #include "Components.h"
 
-// Include your processing utilities
 #include "Txt2Img.hpp"
 #include "Img2Img.hpp"
 #include "Img2Vid.hpp"
@@ -17,9 +15,10 @@
 #include "Conversion.hpp"
 #include "PngMetadataUtils.hpp"
 
-// Include ImageSystem and VideoSystem for direct loading
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
+
+#include "ContextUtils.hpp"
 
 // Standard includes
 #include "pch.h"
@@ -74,6 +73,7 @@ namespace ECS {
 			std::string fullPath;
 			std::future<bool> result;
 			bool isClonedEntity = false;
+			sd_ctx_t* sdContext = nullptr;
 
 			// Default constructor
 			TaskData() = default;
@@ -86,7 +86,10 @@ namespace ECS {
 				, metadata(std::move(other.metadata))
 				, fullPath(std::move(other.fullPath))
 				, result(std::move(other.result))
-				, isClonedEntity(other.isClonedEntity) {}
+				, isClonedEntity(other.isClonedEntity)
+				, sdContext(other.sdContext) {
+				other.sdContext = nullptr;
+			}
 
 			// Move assignment operator
 			TaskData& operator=(TaskData&& other) noexcept {
@@ -98,6 +101,8 @@ namespace ECS {
 					fullPath = std::move(other.fullPath);
 					result = std::move(other.result);
 					isClonedEntity = other.isClonedEntity;
+					sdContext = other.sdContext;
+					other.sdContext = nullptr;
 				}
 				return *this;
 			}
@@ -105,6 +110,11 @@ namespace ECS {
 			// Delete copy operations since std::future is not copyable
 			TaskData(const TaskData&) = delete;
 			TaskData& operator=(const TaskData&) = delete;
+
+			// Destructor
+			~TaskData() {
+				// Context will be managed by SDContextManager
+			}
 		};
 
 		// Constructor - Use single thread for diffusion tasks
@@ -114,6 +124,9 @@ namespace ECS {
 			, hasActiveTask(false)
 			, clearRequested(false) {
 			sysName = "SDCPPSystem";
+
+			// Initialize context manager
+			std::cout << "[SDCPPSystem] Initialized with SD context caching" << std::endl;
 		}
 
 		// Destructor
@@ -143,6 +156,9 @@ namespace ECS {
 			if (diffusionPool.getActiveCount() > 0 || diffusionPool.getQueueSize() > 0) {
 				std::cerr << "Warning: Diffusion pool did not shut down cleanly within timeout" << std::endl;
 			}
+
+			// Clear all SD contexts
+			Utils::SDContextManager::ClearAllContexts();
 
 			// Clean up any remaining entities
 			{
@@ -174,6 +190,9 @@ namespace ECS {
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 
+			// Clear all SD contexts
+			Utils::SDContextManager::ClearAllContexts();
+
 			std::cout << "[SDCPPSystem] Shutdown complete" << std::endl;
 		}
 
@@ -191,6 +210,9 @@ namespace ECS {
 
 			// Clear the task queue
 			ClearQueue();
+
+			// Clear all SD contexts
+			Utils::SDContextManager::ClearAllContexts();
 
 			// Terminate the thread pool immediately
 			Utils::ThreadPoolManager::getInstance().getDiffusionPool().terminate();
@@ -285,6 +307,12 @@ namespace ECS {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			if (index < taskQueue.size() && !taskQueue[index].processing) {
 				EntityID entityID = taskQueue[index].entityID;
+
+				// Release context if it was acquired
+				if (taskQueue[index].sdContext) {
+					Utils::SDContextManager::ReleaseContext(taskQueue[index].sdContext);
+				}
+
 				taskQueue.erase(taskQueue.begin() + index);
 
 				// Add to deferred cleanup list instead of destroying immediately
@@ -384,6 +412,28 @@ namespace ECS {
 			return lastGeneratedVideoEntity;
 		}
 
+		// SD Context Management Methods
+		void ClearAllSDContexts() {
+			std::cout << "[SDCPPSystem] Clearing all SD contexts..." << std::endl;
+			Utils::SDContextManager::ClearAllContexts();
+		}
+
+		void ListSDContexts() {
+			std::cout << "[SDCPPSystem] Listing all cached SD contexts:" << std::endl;
+			Utils::SDContextManager::ListCachedContexts();
+		}
+
+		std::tuple<size_t, size_t, size_t> GetSDContextStats() {
+			return Utils::SDContextManager::GetCacheStats();
+		}
+
+		// Force reload model for next task
+		void ForceModelReload() {
+			std::lock_guard<std::mutex> lock(queueMutex);
+			forceModelReload = true;
+			std::cout << "[SDCPPSystem] Model reload forced for next task" << std::endl;
+		}
+
 	private:
 
 		std::vector<TaskData> taskQueue;
@@ -391,6 +441,7 @@ namespace ECS {
 		std::atomic<bool> shuttingDown{ false };
 		std::atomic<bool> terminateFlag{ false };
 		std::atomic<bool> clearRequested{ false };
+		std::atomic<bool> forceModelReload{ false };
 		std::vector<EntityID> entitiesNeedingCleanup;
 		mutable std::mutex queueMutex;
 		EntityID lastGeneratedVideoEntity{ 0 }; // Track last generated video
@@ -488,6 +539,14 @@ namespace ECS {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			std::cout << "Clearing queue with " << taskQueue.size() << " items" << std::endl;
 
+			// Release contexts for all non-processing tasks
+			for (auto& task : taskQueue) {
+				if (!task.processing && task.sdContext) {
+					Utils::SDContextManager::ReleaseContext(task.sdContext);
+					task.sdContext = nullptr;
+				}
+			}
+
 			// Just remove all non-processing tasks
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
 				if (!it->processing) {
@@ -510,8 +569,46 @@ namespace ECS {
 		}
 
 		// Task wrapper that captures thread ID and sets active task status
+		// Version for tasks that need SD context
 		template<typename Func, typename... Args>
-		auto CreateTaskWrapper(EntityID entityID, Func&& func, Args&&... args) {
+		auto CreateTaskWrapperWithContext(EntityID entityID, sd_ctx_t* context, Func&& func, Args&&... args) {
+			return[this, entityID, context, func = std::forward<Func>(func), args...]() -> bool {
+				// Set thread tracking info
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					hasActiveTask = true;
+					activeThreadId = std::this_thread::get_id();
+					terminateFlag = false;
+				}
+
+				std::cout << "Task started for entity " << entityID << " on thread " << std::this_thread::get_id() << std::endl;
+
+				bool result = false;
+				try {
+					// Call the actual function with context
+					result = func(args..., context);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Exception in task wrapper: " << e.what() << std::endl;
+				}
+
+				// Clear thread tracking info
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					hasActiveTask = false;
+					activeThreadId = std::thread::id{};
+					terminateFlag = false;
+				}
+
+				std::cout << "Task completed for entity " << entityID << " with result: " << (result ? "success" : "failure") << std::endl;
+
+				return result;
+			};
+		}
+
+		// Version for tasks that don't need SD context
+		template<typename Func, typename... Args>
+		auto CreateTaskWrapperWithoutContext(EntityID entityID, Func&& func, Args&&... args) {
 			return[this, entityID, func = std::forward<Func>(func), args...]() -> bool {
 				// Set thread tracking info
 				{
@@ -525,7 +622,7 @@ namespace ECS {
 
 				bool result = false;
 				try {
-					// Call the actual function
+					// Call the actual function without context
 					result = func(args...);
 				}
 				catch (const std::exception& e) {
@@ -546,10 +643,10 @@ namespace ECS {
 			};
 		}
 
-		// Static task functions - FIXED Img2Img to handle missing InputImage data
-		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath) {
+		// Static task functions - UPDATED to accept SD context parameter
+		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
-				return Utils::Txt2Img::RunInference(metadata, fullPath);
+				return Utils::Txt2Img::RunInference(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during inference: " << e.what() << std::endl;
@@ -567,9 +664,9 @@ namespace ECS {
 			}
 		}
 
-		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath) {
+		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
-				return Utils::Img2Img::RunImg2Img(metadata, fullPath);
+				return Utils::Img2Img::RunImg2Img(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
@@ -577,9 +674,9 @@ namespace ECS {
 			}
 		}
 
-		static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath) {
+		static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
-				return Utils::Img2Vid::RunImg2Vid(metadata, fullPath);
+				return Utils::Img2Vid::RunImg2Vid(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2vid: " << e.what() << std::endl;
@@ -587,9 +684,9 @@ namespace ECS {
 			}
 		}
 
-		static bool RunEdit(const nlohmann::json& metadata, const std::string& fullPath) {
+		static bool RunEdit(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
-				return Utils::Edit::RunEdit(metadata, fullPath);
+				return Utils::Edit::RunEdit(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during edit: " << e.what() << std::endl;
@@ -597,9 +694,9 @@ namespace ECS {
 			}
 		}
 
-		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath) {
+		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
-				return Utils::Upscaling::RunUpscaling(metadata, fullPath);
+				return Utils::Upscaling::RunUpscaling(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during upscaling: " << e.what() << std::endl;
@@ -621,6 +718,26 @@ namespace ECS {
 			default:
 				return ".png";
 			}
+		}
+
+		// Get or create SD context for a task
+		sd_ctx_t* GetSDContextForTask(TaskData& task) {
+			// Check if force reload is requested
+			if (forceModelReload) {
+				// Clear cache for this task's metadata key
+				std::string cacheKey = Utils::SDContextManager::GenerateCacheKey(task.metadata);
+				{
+					std::lock_guard<std::mutex> lock(queueMutex);
+					// Force creation of new context
+					task.sdContext = Utils::SDContextManager::CreateNewContext(task.metadata);
+					forceModelReload = false;
+				}
+				return task.sdContext;
+			}
+
+			// Use cached context
+			task.sdContext = Utils::SDContextManager::GetOrCreateContext(task.metadata);
+			return task.sdContext;
 		}
 
 		// Queue processing methods
@@ -673,7 +790,6 @@ namespace ECS {
 
 						// Fallback to default if empty
 						if (outputDir.empty()) {
-
 							// Try OutputFolder first, then DefaultProject
 							std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
 							if (!outputFolder.empty() && outputFolder[0] != '\0') {
@@ -702,43 +818,129 @@ namespace ECS {
 					try {
 						switch (task.taskType) {
 						case TaskType::Inference:
+						{
+							// Get SD context for this task
+							sd_ctx_t* context = GetSDContextForTask(task);
+							if (!context) {
+								std::cerr << "Failed to get SD context for inference task" << std::endl;
+								// Add to cleanup list for failed task
+								entitiesNeedingCleanup.push_back(task.entityID);
+								// Remove the failed task
+								auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
+									[&task](const TaskData& t) { return t.entityID == task.entityID; });
+								if (it != taskQueue.end()) {
+									taskQueue.erase(it);
+								}
+								break;
+							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapper(task.entityID, RunInference, task.metadata, task.fullPath)
+								CreateTaskWrapperWithContext(task.entityID, context, RunInference, task.metadata, task.fullPath)
 							);
-							break;
+						}
+						break;
 
 						case TaskType::Conversion:
+							// Conversion doesn't need SD context
 							task.result = diffusionPool.submit(
-								CreateTaskWrapper(task.entityID, RunConversion, task.metadata)
+								CreateTaskWrapperWithoutContext(task.entityID, RunConversion, task.metadata)
 							);
 							break;
 
 						case TaskType::Img2Img:
+						{
+							// Get SD context for this task
+							sd_ctx_t* context = GetSDContextForTask(task);
+							if (!context) {
+								std::cerr << "Failed to get SD context for img2img task" << std::endl;
+								// Add to cleanup list for failed task
+								entitiesNeedingCleanup.push_back(task.entityID);
+								// Remove the failed task
+								auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
+									[&task](const TaskData& t) { return t.entityID == task.entityID; });
+								if (it != taskQueue.end()) {
+									taskQueue.erase(it);
+								}
+								break;
+							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapper(task.entityID, RunImg2Img, task.metadata, task.fullPath)
+								CreateTaskWrapperWithContext(task.entityID, context, RunImg2Img, task.metadata, task.fullPath)
 							);
-							break;
+						}
+						break;
 
 						case TaskType::Img2Vid:
+						{
+							// Get SD context for this task
+							sd_ctx_t* context = GetSDContextForTask(task);
+							if (!context) {
+								std::cerr << "Failed to get SD context for img2vid task" << std::endl;
+								// Add to cleanup list for failed task
+								entitiesNeedingCleanup.push_back(task.entityID);
+								// Remove the failed task
+								auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
+									[&task](const TaskData& t) { return t.entityID == task.entityID; });
+								if (it != taskQueue.end()) {
+									taskQueue.erase(it);
+								}
+								break;
+							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapper(task.entityID, RunImg2Vid, task.metadata, task.fullPath)
+								CreateTaskWrapperWithContext(task.entityID, context, RunImg2Vid, task.metadata, task.fullPath)
 							);
-							break;
+						}
+						break;
 
 						case TaskType::Edit:
+						{
+							// Get SD context for this task
+							sd_ctx_t* context = GetSDContextForTask(task);
+							if (!context) {
+								std::cerr << "Failed to get SD context for edit task" << std::endl;
+								// Add to cleanup list for failed task
+								entitiesNeedingCleanup.push_back(task.entityID);
+								// Remove the failed task
+								auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
+									[&task](const TaskData& t) { return t.entityID == task.entityID; });
+								if (it != taskQueue.end()) {
+									taskQueue.erase(it);
+								}
+								break;
+							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapper(task.entityID, RunEdit, task.metadata, task.fullPath)
+								CreateTaskWrapperWithContext(task.entityID, context, RunEdit, task.metadata, task.fullPath)
 							);
-							break;
+						}
+						break;
 
 						case TaskType::Upscaling:
+						{
+							// Get SD context for this task
+							sd_ctx_t* context = GetSDContextForTask(task);
+							if (!context) {
+								std::cerr << "Failed to get SD context for upscaling task" << std::endl;
+								// Add to cleanup list for failed task
+								entitiesNeedingCleanup.push_back(task.entityID);
+								// Remove the failed task
+								auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
+									[&task](const TaskData& t) { return t.entityID == task.entityID; });
+								if (it != taskQueue.end()) {
+									taskQueue.erase(it);
+								}
+								break;
+							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapper(task.entityID, RunUpscaling, task.metadata, task.fullPath)
+								CreateTaskWrapperWithContext(task.entityID, context, RunUpscaling, task.metadata, task.fullPath)
 							);
-							break;
+						}
+						break;
 
 						default:
 							std::cerr << "Unknown task type: " << static_cast<int>(task.taskType) << std::endl;
+							// Release context if we acquired it
+							if (task.sdContext) {
+								Utils::SDContextManager::ReleaseContext(task.sdContext);
+								task.sdContext = nullptr;
+							}
 							continue;
 						}
 
@@ -749,6 +951,11 @@ namespace ECS {
 					}
 					catch (const std::exception& e) {
 						std::cerr << "Failed to submit task: " << e.what() << std::endl;
+						// Release context if we acquired it
+						if (task.sdContext) {
+							Utils::SDContextManager::ReleaseContext(task.sdContext);
+							task.sdContext = nullptr;
+						}
 						// Add to cleanup list for failed task
 						entitiesNeedingCleanup.push_back(task.entityID);
 						// Remove the failed task
@@ -768,7 +975,7 @@ namespace ECS {
 				return;
 			}
 
-			std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;
+			std::vector<std::tuple<std::string, TaskType, EntityID, sd_ctx_t*>> completedTasks;
 
 			{
 				std::unique_lock<std::mutex> lock(queueMutex);
@@ -783,6 +990,7 @@ namespace ECS {
 							EntityID entityID = it->entityID;
 							std::string fullPath = it->fullPath;
 							TaskType taskType = it->taskType;
+							sd_ctx_t* context = it->sdContext;
 							bool success = false;
 
 							try {
@@ -792,9 +1000,14 @@ namespace ECS {
 								std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
 							}
 
+							// Release the SD context back to cache (if it was used)
+							if (context && taskType != TaskType::Conversion) {
+								Utils::SDContextManager::ReleaseContext(context);
+							}
+
 							// Process the completed task ONLY if not shutting down
 							if (!shuttingDown && success) {
-								completedTasks.emplace_back(fullPath, taskType, entityID);
+								completedTasks.emplace_back(fullPath, taskType, entityID, context);
 							}
 							else {
 								std::cerr << "Task failed for entity " << entityID << std::endl;
@@ -834,7 +1047,7 @@ namespace ECS {
 
 			// Process completed tasks WITHOUT holding the lock
 			if (!shuttingDown) {
-				for (const auto&[fullPath, taskType, originalEntity] : completedTasks) {
+				for (const auto&[fullPath, taskType, originalEntity, context] : completedTasks) {
 					ProcessCompletedTask(fullPath, taskType, originalEntity);
 				}
 			}

@@ -5,10 +5,13 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp" 
 #include "SaveUtils.hpp"
-#include "FilePaths.hpp"  // Added include for new FilePaths
+#include "FilePathService.hpp"  // Updated to use FilePathService
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <iostream>
+#include <filesystem>
+#include <thread>
 
 namespace Utils
 {
@@ -18,19 +21,23 @@ namespace Utils
 	class Upscaling
 	{
 	public:
-		static bool RunUpscaling(const nlohmann::json &metadata, std::string fullPath)
+		// Note: upscaling doesn't use sd_ctx_t, but we keep the parameter for consistency
+		// The sd_context parameter is ignored for upscaling operations
+		static bool RunUpscaling(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
 		{
+			// Note: sd_context parameter is not used for upscaling, but kept for API consistency
+			(void)sd_context; // Mark as unused to avoid compiler warnings
+
 			upscaler_ctx_t *upscaler_context = nullptr;
 			unsigned char *inputData = nullptr;
 			sd_image_t upscaled_image = { 0, 0, 0, nullptr };
 
 			try
 			{
-
 				// Extract parameters from metadata
 				std::string inputImagePath = "";
-				std::string modelPath = Utils::FilePathService::GetPath("Upscale");  // Updated to use new API
-				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");  // Updated to use new API
+				std::string modelPath = Utils::FilePathService::GetPath("Upscale");
+				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
 				std::string outputFilename = "upscale_AniStudio.png";
 				uint32_t upscaleFactor = 4;
 				bool offload_params_to_cpu = false;
@@ -86,7 +93,7 @@ namespace Utils
 							{
 								std::string modelName = esrganData["modelName"].get<std::string>();
 
-								// Get the upscale models directory from FilePaths
+								// Get the upscale models directory from FilePathService
 								std::string upscaleDir = Utils::FilePathService::GetPath("Upscale");
 								if (!upscaleDir.empty() && upscaleDir[0] != '\0') {
 									modelPath = (std::filesystem::path(upscaleDir) / modelName).string();
@@ -100,6 +107,25 @@ namespace Utils
 
 							if (esrganData.contains("upscaleFactor"))
 								upscaleFactor = esrganData["upscaleFactor"].get<uint32_t>();
+
+							// Additional ESRGAN parameters
+							if (esrganData.contains("offload_params_to_cpu"))
+								offload_params_to_cpu = esrganData["offload_params_to_cpu"].get<bool>();
+							if (esrganData.contains("direct"))
+								direct = esrganData["direct"].get<bool>();
+							if (esrganData.contains("n_threads"))
+								n_threads = esrganData["n_threads"].get<int>();
+							if (esrganData.contains("tile_size"))
+								tile_size = esrganData["tile_size"].get<int>();
+						}
+
+						// Sampler component (some upscalers might use SD context)
+						if (comp.contains("Sampler"))
+						{
+							nlohmann::json samplerData = comp["Sampler"];
+							// Could extract parameters that affect upscaler initialization
+							if (samplerData.contains("n_threads"))
+								n_threads = samplerData["n_threads"].get<int>();
 						}
 					}
 				}
@@ -113,6 +139,21 @@ namespace Utils
 				if (modelPath.empty())
 				{
 					throw std::runtime_error("ESRGAN model path is empty!");
+				}
+
+				// Check if model file exists
+				if (!std::filesystem::exists(modelPath)) {
+					std::cerr << "Warning: ESRGAN model file not found: " << modelPath << std::endl;
+
+					// Try to find the model in the upscale directory
+					std::string upscaleDir = Utils::FilePathService::GetPath("Upscale");
+					if (!upscaleDir.empty()) {
+						std::string altPath = (std::filesystem::path(upscaleDir) / std::filesystem::path(modelPath).filename()).string();
+						if (std::filesystem::exists(altPath)) {
+							std::cout << "Found model at alternative path: " << altPath << std::endl;
+							modelPath = altPath;
+						}
+					}
 				}
 
 				// Load input image - force 3 channels for consistency
@@ -147,7 +188,7 @@ namespace Utils
 
 					// Check if output directory exists, if not use a fallback
 					if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
-						// Try to use OutputFolder from FilePaths
+						// Try to use OutputFolder from FilePathService
 						std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
 						if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
 							outputDir = outputFolder;
@@ -168,7 +209,8 @@ namespace Utils
 				std::cout << "Initializing upscaler with model: " << modelPath << std::endl;
 				std::cout << "Parameters: threads=" << n_threads
 					<< ", offload_cpu=" << offload_params_to_cpu
-					<< ", direct=" << direct << std::endl;
+					<< ", direct=" << direct
+					<< ", tile_size=" << tile_size << std::endl;
 
 				upscaler_context = new_upscaler_ctx(modelPath.c_str(),
 					offload_params_to_cpu,
@@ -179,6 +221,14 @@ namespace Utils
 				if (!upscaler_context)
 				{
 					throw std::runtime_error("Failed to initialize upscaler context!");
+				}
+
+				// Check actual upscale factor from context
+				int actual_upscale_factor = get_upscale_factor(upscaler_context);
+				if (actual_upscale_factor > 0 && actual_upscale_factor != upscaleFactor) {
+					std::cout << "Note: Model supports upscale factor " << actual_upscale_factor
+						<< ", overriding requested factor " << upscaleFactor << std::endl;
+					upscaleFactor = actual_upscale_factor;
 				}
 
 				// Create input image struct

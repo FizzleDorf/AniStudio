@@ -9,20 +9,21 @@
 #include "FilePathService.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include <iostream>
+#include <filesystem>
 
 namespace Utils
 {
 	uint64_t generateRandomSeed();
 	void SaveImage(const unsigned char *data, int width, int height, int channels,
 		const nlohmann::json &metadata, const std::string &fullPath);
-	sd_ctx_t *InitializeStableDiffusionContext(const nlohmann::json &metadata);
 
 	class Img2Vid
 	{
 	public:
-		static bool RunImg2Vid(const nlohmann::json &metadata, std::string fullPath)
+		static bool RunImg2Vid(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
 		{
-			sd_ctx_t *sd_context = nullptr;
+			bool contextProvided = (sd_context != nullptr);
 			unsigned char *inputData = nullptr;
 			unsigned char *endInputData = nullptr;
 			sd_image_t *result_images = nullptr;
@@ -30,9 +31,13 @@ namespace Utils
 			sd_vid_gen_params_t vid_params;
 			sd_vid_gen_params_init(&vid_params);
 
+			// Additional structures for advanced features
+			std::vector<sd_image_t> imagesToCleanup;
+			std::vector<sd_image_t> idImagesStorage;
+			int* slg_layers = nullptr;
+
 			try
 			{
-
 				std::string inputImagePath = "";
 				std::string endImagePath = "";
 				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
@@ -41,6 +46,15 @@ namespace Utils
 				std::string negPrompt = "";
 				int latentWidth = 0;
 				int latentHeight = 0;
+
+				// VAE tiling parameters
+				sd_tiling_params_t vae_tiling_params = { false, 64, 64, 0.0f, 64.0f, 64.0f };
+
+				// PhotoMaker parameters
+				sd_pm_params_t pm_params = { nullptr, 0, nullptr, 0.0f };
+
+				// Control frames (for video control)
+				std::vector<sd_image_t> controlFramesStorage;
 
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
@@ -181,11 +195,100 @@ namespace Utils
 							if (latentData.contains("latentHeight") && !latentData["latentHeight"].is_null())
 								latentHeight = latentData["latentHeight"].get<int>();
 						}
+
+						// VAE component - read all tiling parameters
+						if (comp.contains("Vae"))
+						{
+							nlohmann::json vaeData = comp["Vae"];
+							if (vaeData.contains("isTiled") && !vaeData["isTiled"].is_null())
+								vae_tiling_params.enabled = vaeData["isTiled"].get<bool>();
+							if (vaeData.contains("tile_size_x") && !vaeData["tile_size_x"].is_null())
+								vae_tiling_params.tile_size_x = vaeData["tile_size_x"].get<int>();
+							if (vaeData.contains("tile_size_y") && !vaeData["tile_size_y"].is_null())
+								vae_tiling_params.tile_size_y = vaeData["tile_size_y"].get<int>();
+							if (vaeData.contains("target_overlap") && !vaeData["target_overlap"].is_null())
+								vae_tiling_params.target_overlap = vaeData["target_overlap"].get<float>();
+							if (vaeData.contains("rel_size_x") && !vaeData["rel_size_x"].is_null())
+								vae_tiling_params.rel_size_x = vaeData["rel_size_x"].get<float>();
+							if (vaeData.contains("rel_size_y") && !vaeData["rel_size_y"].is_null())
+								vae_tiling_params.rel_size_y = vaeData["rel_size_y"].get<float>();
+						}
+
+						// PhotoMaker component
+						if (comp.contains("PhotoMaker"))
+						{
+							nlohmann::json pmData = comp["PhotoMaker"];
+							if (pmData.contains("modelPath") && !pmData["modelPath"].is_null())
+							{
+								std::string pm_path = pmData["modelPath"].get<std::string>();
+								pm_params.id_embed_path = pm_path.c_str();
+							}
+							if (pmData.contains("style_strength") && !pmData["style_strength"].is_null())
+							{
+								pm_params.style_strength = pmData["style_strength"].get<float>();
+							}
+						}
+
+						// PhotoMaker ID Images - can have multiple
+						if (comp.contains("PhotoMakerImage"))
+						{
+							nlohmann::json pmImageData = comp["PhotoMakerImage"];
+
+							if (pmImageData.contains("filePath") && !pmImageData["filePath"].is_null() &&
+								!pmImageData["filePath"].get<std::string>().empty())
+							{
+								std::string idImagePath = pmImageData["filePath"].get<std::string>();
+								sd_image_t id_image = LoadImageToSDImage(idImagePath);
+								if (id_image.data) {
+									idImagesStorage.push_back(id_image);
+									imagesToCleanup.push_back(id_image);
+								}
+							}
+						}
+
+						// Control frames for video
+						if (comp.contains("ControlFrames"))
+						{
+							nlohmann::json controlFramesData = comp["ControlFrames"];
+							if (controlFramesData.is_array())
+							{
+								for (const auto& frameData : controlFramesData)
+								{
+									if (frameData.contains("filePath") && !frameData["filePath"].is_null())
+									{
+										std::string framePath = frameData["filePath"].get<std::string>();
+										sd_image_t control_frame = LoadImageToSDImage(framePath);
+										if (control_frame.data) {
+											controlFramesStorage.push_back(control_frame);
+											imagesToCleanup.push_back(control_frame);
+										}
+									}
+								}
+							}
+						}
 					}
 				}
 
 				vid_params.prompt = posPrompt.c_str();
 				vid_params.negative_prompt = negPrompt.c_str();
+
+				// Set up PhotoMaker ID images array
+				if (!idImagesStorage.empty()) {
+					pm_params.id_images_count = idImagesStorage.size();
+					pm_params.id_images = idImagesStorage.data();
+					// Note: Need to check if vid_params has pm_params field
+					// vid_params.pm_params = pm_params;
+				}
+
+				// Set up control frames
+				if (!controlFramesStorage.empty()) {
+					vid_params.control_frames = controlFramesStorage.data();
+					vid_params.control_frames_size = controlFramesStorage.size();
+				}
+				else {
+					vid_params.control_frames = nullptr;
+					vid_params.control_frames_size = 0;
+				}
 
 				if (inputImagePath.empty()) {
 					throw std::runtime_error("Input image path is empty!");
@@ -257,17 +360,19 @@ namespace Utils
 					vid_params.end_image = { 0, 0, 0, nullptr };
 				}
 
-				vid_params.control_frames = nullptr;
-				vid_params.control_frames_size = 0;
-
 				std::cout << "Final settings:" << std::endl;
 				std::cout << "  - Input image: " << inputWidth << "x" << inputHeight << std::endl;
 				std::cout << "  - Target size: " << vid_params.width << "x" << vid_params.height << std::endl;
 				std::cout << "  - Strength: " << vid_params.strength << std::endl;
 				std::cout << "  - Video frames: " << vid_params.video_frames << std::endl;
+				std::cout << "  - Control frames: " << controlFramesStorage.size() << std::endl;
 				std::cout << "=====================" << std::endl;
 
-				sd_context = InitializeStableDiffusionContext(metadata);
+				// Get SD context if not provided
+				if (!contextProvided) {
+					sd_context = SDContextManager::GetOrCreateContext(metadata);
+				}
+
 				if (!sd_context) {
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
@@ -302,6 +407,7 @@ namespace Utils
 				// Create the directory if it doesn't exist
 				std::filesystem::create_directories(frameDir);
 
+				// Save individual frames
 				for (int frame_idx = 0; frame_idx < num_frames_out; ++frame_idx) {
 					std::string frameFilename = outputFilename + "_frame_" + std::to_string(frame_idx) + ".png";
 					std::string frameFullPath = (frameDir / frameFilename).string();
@@ -314,26 +420,13 @@ namespace Utils
 						frameFullPath);
 				}
 
-				if (inputData) {
-					stbi_image_free(inputData);
-					inputData = nullptr;
-				}
-				if (endInputData) {
-					stbi_image_free(endInputData);
-					endInputData = nullptr;
-				}
-				if (result_images) {
-					for (int i = 0; i < num_frames_out; ++i) {
-						if (result_images[i].data) {
-							free(result_images[i].data);
-						}
-					}
-					free(result_images);
-					result_images = nullptr;
-				}
-				if (sd_context) {
-					free_sd_ctx(sd_context);
-					sd_context = nullptr;
+				// Cleanup
+				CleanupResources(inputData, endInputData, result_images, num_frames_out,
+					slg_layers, imagesToCleanup);
+
+				// Release context back to cache if we acquired it
+				if (!contextProvided) {
+					SDContextManager::ReleaseContext(sd_context);
 				}
 
 				return true;
@@ -342,29 +435,85 @@ namespace Utils
 			{
 				std::cerr << "Exception during img2vid: " << e.what() << std::endl;
 
-				if (inputData) {
-					stbi_image_free(inputData);
-					inputData = nullptr;
-				}
-				if (endInputData) {
-					stbi_image_free(endInputData);
-					endInputData = nullptr;
-				}
-				if (result_images) {
-					for (int i = 0; i < num_frames_out; ++i) {
-						if (result_images[i].data) {
-							free(result_images[i].data);
-						}
-					}
-					free(result_images);
-					result_images = nullptr;
-				}
-				if (sd_context) {
-					free_sd_ctx(sd_context);
-					sd_context = nullptr;
+				// Cleanup on error
+				CleanupResources(inputData, endInputData, result_images, num_frames_out,
+					slg_layers, imagesToCleanup);
+
+				// Release context back to cache if we acquired it
+				if (!contextProvided && sd_context) {
+					SDContextManager::ReleaseContext(sd_context);
 				}
 
 				return false;
+			}
+		}
+
+	private:
+		static void CleanupResources(unsigned char* inputData,
+			unsigned char* endInputData,
+			sd_image_t* result_images,
+			int num_frames_out,
+			int* slg_layers,
+			std::vector<sd_image_t>& imagesToCleanup) {
+
+			// Cleanup main image data
+			if (inputData) {
+				stbi_image_free(inputData);
+				inputData = nullptr;
+			}
+			if (endInputData) {
+				stbi_image_free(endInputData);
+				endInputData = nullptr;
+			}
+
+			// Cleanup result frames
+			if (result_images) {
+				for (int i = 0; i < num_frames_out; ++i) {
+					if (result_images[i].data) {
+						free(result_images[i].data);
+					}
+				}
+				free(result_images);
+				result_images = nullptr;
+			}
+
+			// Cleanup SLG layers array if it was allocated
+			if (slg_layers != nullptr)
+			{
+				delete[] slg_layers;
+			}
+
+			// Cleanup additional loaded images
+			for (auto& img : imagesToCleanup) {
+				FreeSDImage(img);
+			}
+		}
+
+		// Helper function to load image from file to sd_image_t
+		static sd_image_t LoadImageToSDImage(const std::string& filePath) {
+			sd_image_t result = { 0, 0, 0, nullptr };
+
+			if (filePath.empty() || !std::filesystem::exists(filePath)) {
+				return result;
+			}
+
+			int width, height, channels;
+			unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
+			if (data) {
+				result.width = width;
+				result.height = height;
+				result.channel = channels;
+				result.data = data;
+			}
+
+			return result;
+		}
+
+		// Helper to free sd_image_t data
+		static void FreeSDImage(sd_image_t& img) {
+			if (img.data) {
+				stbi_image_free(img.data);
+				img.data = nullptr;
 			}
 		}
 	};
