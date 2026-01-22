@@ -9,6 +9,8 @@
 #include <mutex>
 #include <atomic>
 #include <memory>
+#include <future>
+#include <queue>
 
 namespace Utils {
 
@@ -20,8 +22,10 @@ namespace Utils {
 		std::chrono::steady_clock::time_point lastUsed;
 		size_t useCount;
 		bool isInUse;
+		bool isLoading; // NEW: Track if context is currently loading
+		std::future<sd_ctx_t*> loadingFuture; // NEW: Future for async loading
 
-		SDContextCacheEntry() : context(nullptr), useCount(0), isInUse(false) {}
+		SDContextCacheEntry() : context(nullptr), useCount(0), isInUse(false), isLoading(false) {}
 		~SDContextCacheEntry() {
 			if (context) {
 				free_sd_ctx(context);
@@ -37,6 +41,7 @@ namespace Utils {
 		static inline std::mutex cacheMutex;
 		static inline const size_t MAX_CACHE_SIZE = 3; // Maximum number of cached contexts
 		static inline std::atomic<size_t> totalContextsCreated{ 0 };
+		static inline std::atomic<size_t> totalContextsFailed{ 0 };
 
 	public:
 		// Generate a cache key from metadata
@@ -204,82 +209,8 @@ namespace Utils {
 			}
 		}
 
-		// Get or create context
-		static sd_ctx_t* GetOrCreateContext(const nlohmann::json& metadata) {
-			std::string cacheKey = GenerateCacheKey(metadata);
-
-			{
-				std::lock_guard<std::mutex> lock(cacheMutex);
-
-				// Check if we have a cached context
-				auto it = contextCache.find(cacheKey);
-				if (it != contextCache.end()) {
-					// Check if metadata is similar enough to reuse
-					if (CanReuseContext(it->second->metadata, metadata)) {
-						it->second->lastUsed = std::chrono::steady_clock::now();
-						it->second->useCount++;
-						it->second->isInUse = true;
-						std::cout << "DEBUG: Reusing cached SD context: " << cacheKey
-							<< " (use count: " << it->second->useCount << ")" << std::endl;
-						return it->second->context;
-					}
-					else {
-						// Metadata differs, remove old entry
-						std::cout << "DEBUG: Metadata differs, removing old cache entry: " << cacheKey << std::endl;
-						contextCache.erase(it);
-					}
-				}
-			}
-
-			// Create new context
-			sd_ctx_t* newContext = CreateNewContext(metadata);
-			if (!newContext) {
-				return nullptr;
-			}
-
-			// Cache the new context
-			{
-				std::lock_guard<std::mutex> lock(cacheMutex);
-
-				// Clean up least recently used if cache is full
-				if (contextCache.size() >= MAX_CACHE_SIZE) {
-					auto oldest = contextCache.begin();
-					auto oldestTime = oldest->second->lastUsed;
-
-					for (auto it = contextCache.begin(); it != contextCache.end(); ++it) {
-						if (it->second->lastUsed < oldestTime && !it->second->isInUse) {
-							oldest = it;
-							oldestTime = it->second->lastUsed;
-						}
-					}
-
-					if (oldest != contextCache.end() && !oldest->second->isInUse) {
-						std::cout << "DEBUG: Removing LRU cache entry: " << oldest->first << std::endl;
-						contextCache.erase(oldest);
-					}
-				}
-
-				// Add new entry to cache
-				auto newEntry = std::make_shared<SDContextCacheEntry>();
-				newEntry->cacheKey = cacheKey;
-				newEntry->context = newContext;
-				newEntry->metadata = metadata;
-				newEntry->lastUsed = std::chrono::steady_clock::now();
-				newEntry->useCount = 1;
-				newEntry->isInUse = true;
-
-				contextCache[cacheKey] = newEntry;
-				totalContextsCreated++;
-
-				std::cout << "DEBUG: Created new SD context: " << cacheKey
-					<< " (total created: " << totalContextsCreated << ")" << std::endl;
-			}
-
-			return newContext;
-		}
-
-		// Create new context from metadata
-		static sd_ctx_t* CreateNewContext(const nlohmann::json& metadata) {
+		// Create new context from metadata (private helper, now async)
+		static sd_ctx_t* CreateNewContextInternal(const nlohmann::json& metadata) {
 			try {
 				std::string modelPath = "";
 				std::string clipLPath = "";
@@ -502,6 +433,185 @@ namespace Utils {
 			}
 		}
 
+		// Async function to create context
+		static std::future<sd_ctx_t*> CreateNewContextAsync(const nlohmann::json& metadata) {
+			return std::async(std::launch::async, [metadata]() -> sd_ctx_t* {
+				return CreateNewContextInternal(metadata);
+			});
+		}
+
+	public:
+		// Create new context from metadata (public interface)
+		static sd_ctx_t* CreateNewContext(const nlohmann::json& metadata) {
+			return CreateNewContextInternal(metadata);
+		}
+
+		// Get or create context - UPDATED for async loading
+		static sd_ctx_t* GetOrCreateContext(const nlohmann::json& metadata) {
+			std::string cacheKey = GenerateCacheKey(metadata);
+
+			{
+				std::lock_guard<std::mutex> lock(cacheMutex);
+
+				// Check if we have a cached context
+				auto it = contextCache.find(cacheKey);
+				if (it != contextCache.end()) {
+					auto& entry = it->second;
+
+					// Check if context is currently loading
+					if (entry->isLoading) {
+						// Check if loading is complete
+						if (entry->loadingFuture.valid()) {
+							auto status = entry->loadingFuture.wait_for(std::chrono::milliseconds(0));
+							if (status == std::future_status::ready) {
+								try {
+									// Get the loaded context
+									entry->context = entry->loadingFuture.get();
+									entry->isLoading = false;
+
+									if (!entry->context) {
+										// Loading failed, remove the entry
+										std::cout << "DEBUG: Async context loading failed for: " << cacheKey << std::endl;
+										contextCache.erase(it);
+										totalContextsFailed++;
+										return nullptr;
+									}
+
+									std::cout << "DEBUG: Async context loading completed for: " << cacheKey << std::endl;
+								}
+								catch (const std::exception& e) {
+									std::cerr << "Error getting async context result: " << e.what() << std::endl;
+									contextCache.erase(it);
+									totalContextsFailed++;
+									return nullptr;
+								}
+							}
+							else {
+								// Still loading
+								std::cout << "DEBUG: Context is still loading: " << cacheKey << std::endl;
+								entry->isInUse = true;
+								return nullptr; // Return null to indicate loading in progress
+							}
+						}
+					}
+
+					// Check if we have a valid context now
+					if (entry->context) {
+						// Check if metadata is similar enough to reuse
+						if (CanReuseContext(entry->metadata, metadata)) {
+							entry->lastUsed = std::chrono::steady_clock::now();
+							entry->useCount++;
+							entry->isInUse = true;
+							std::cout << "DEBUG: Reusing cached SD context: " << cacheKey
+								<< " (use count: " << entry->useCount << ")" << std::endl;
+							return entry->context;
+						}
+						else {
+							// Metadata differs, remove old entry
+							std::cout << "DEBUG: Metadata differs, removing old cache entry: " << cacheKey << std::endl;
+							contextCache.erase(it);
+						}
+					}
+				}
+			}
+
+			// Create new context entry and start async loading
+			std::shared_ptr<SDContextCacheEntry> newEntry;
+			{
+				std::lock_guard<std::mutex> lock(cacheMutex);
+
+				// Clean up least recently used if cache is full
+				if (contextCache.size() >= MAX_CACHE_SIZE) {
+					auto oldest = contextCache.begin();
+					auto oldestTime = oldest->second->lastUsed;
+
+					for (auto it = contextCache.begin(); it != contextCache.end(); ++it) {
+						if (it->second->lastUsed < oldestTime && !it->second->isInUse && !it->second->isLoading) {
+							oldest = it;
+							oldestTime = it->second->lastUsed;
+						}
+					}
+
+					if (oldest != contextCache.end() && !oldest->second->isInUse && !oldest->second->isLoading) {
+						std::cout << "DEBUG: Removing LRU cache entry: " << oldest->first << std::endl;
+						contextCache.erase(oldest);
+					}
+				}
+
+				// Create new entry
+				newEntry = std::make_shared<SDContextCacheEntry>();
+				newEntry->cacheKey = cacheKey;
+				newEntry->metadata = metadata;
+				newEntry->lastUsed = std::chrono::steady_clock::now();
+				newEntry->useCount = 1;
+				newEntry->isInUse = true;
+				newEntry->isLoading = true;
+
+				// Start async loading
+				newEntry->loadingFuture = CreateNewContextAsync(metadata);
+
+				contextCache[cacheKey] = newEntry;
+				totalContextsCreated++;
+
+				std::cout << "DEBUG: Started async loading for SD context: " << cacheKey
+					<< " (total created: " << totalContextsCreated << ")" << std::endl;
+			}
+
+			// Return nullptr to indicate loading in progress
+			return nullptr;
+		}
+
+		// Check if a context is currently loading for given metadata
+		static bool IsContextLoading(const nlohmann::json& metadata) {
+			std::string cacheKey = GenerateCacheKey(metadata);
+			std::lock_guard<std::mutex> lock(cacheMutex);
+
+			auto it = contextCache.find(cacheKey);
+			if (it != contextCache.end()) {
+				return it->second->isLoading;
+			}
+			return false;
+		}
+
+		// Check if loading is complete and get context if ready
+		static sd_ctx_t* TryGetLoadedContext(const nlohmann::json& metadata) {
+			std::string cacheKey = GenerateCacheKey(metadata);
+			std::lock_guard<std::mutex> lock(cacheMutex);
+
+			auto it = contextCache.find(cacheKey);
+			if (it != contextCache.end() && it->second->isLoading) {
+				auto& entry = it->second;
+				if (entry->loadingFuture.valid()) {
+					auto status = entry->loadingFuture.wait_for(std::chrono::milliseconds(0));
+					if (status == std::future_status::ready) {
+						try {
+							entry->context = entry->loadingFuture.get();
+							entry->isLoading = false;
+
+							if (!entry->context) {
+								// Loading failed
+								std::cout << "DEBUG: Async context loading failed for: " << cacheKey << std::endl;
+								contextCache.erase(it);
+								totalContextsFailed++;
+								return nullptr;
+							}
+
+							entry->isInUse = true;
+							std::cout << "DEBUG: Async context loading completed for: " << cacheKey << std::endl;
+							return entry->context;
+						}
+						catch (const std::exception& e) {
+							std::cerr << "Error getting async context result: " << e.what() << std::endl;
+							contextCache.erase(it);
+							totalContextsFailed++;
+							return nullptr;
+						}
+					}
+				}
+			}
+			return nullptr;
+		}
+
 		// Release context back to cache
 		static void ReleaseContext(sd_ctx_t* context) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
@@ -558,12 +668,26 @@ namespace Utils {
 				if (entry.second->isInUse) {
 					inUse++;
 				}
-				else {
+				else if (!entry.second->isLoading) {
 					available++;
 				}
 			}
 
 			return { totalCached, inUse, available };
+		}
+
+		// Get loading statistics
+		static std::tuple<size_t, size_t> GetLoadingStats() {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+
+			size_t loadingCount = 0;
+			for (const auto& entry : contextCache) {
+				if (entry.second->isLoading) {
+					loadingCount++;
+				}
+			}
+
+			return { loadingCount, totalContextsFailed };
 		}
 
 		// List all cached contexts
@@ -573,6 +697,7 @@ namespace Utils {
 			std::cout << "=== Cached SD Contexts ===" << std::endl;
 			std::cout << "Total contexts: " << contextCache.size() << std::endl;
 			std::cout << "Total created: " << totalContextsCreated << std::endl;
+			std::cout << "Total failed: " << totalContextsFailed << std::endl;
 
 			for (const auto& entry : contextCache) {
 				auto& cacheEntry = entry.second;
@@ -582,6 +707,7 @@ namespace Utils {
 				std::cout << "  Key: " << entry.first << std::endl;
 				std::cout << "    Use count: " << cacheEntry->useCount << std::endl;
 				std::cout << "    In use: " << (cacheEntry->isInUse ? "yes" : "no") << std::endl;
+				std::cout << "    Loading: " << (cacheEntry->isLoading ? "yes" : "no") << std::endl;
 				std::cout << "    Age: " << age.count() << " seconds" << std::endl;
 
 				// Show model paths
