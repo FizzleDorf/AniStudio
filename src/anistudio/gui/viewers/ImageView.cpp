@@ -13,6 +13,7 @@ namespace GUI {
 		selectedEntityID(0),
 		imgIndex(0),
 		showHistory(true),
+		autoSwitchOnLoad(true),
 		zoom(1.0f),
 		offsetX(0.0f),
 		offsetY(0.0f),
@@ -91,15 +92,19 @@ namespace GUI {
 	}
 
 	void ImageView::Render() {
-		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+		// Render history window first if enabled
+		if (showHistory) {
+			RenderHistory();
+		}
 
+		// Main window with menu bar
+		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
+			// Render the menu bar
+			RenderMenuBar();
 
 			RenderImageInfo();
 			RenderControls();
 			RenderSelector();
-
-			ImGui::SameLine();
-			ImGui::Checkbox("Show History", &showHistory);
 
 			ImGui::Separator();
 
@@ -116,18 +121,104 @@ namespace GUI {
 			eventData["viewTypeName"] = viewName;
 			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
 		}
+	}
 
-		if (showHistory) {
-			RenderHistory();
+	void ImageView::RenderMenuBar() {
+		if (ImGui::BeginMenuBar()) {
+			if (ImGui::BeginMenu("File")) {
+				if (ImGui::MenuItem("Load Image(s)")) {
+					IGFD::FileDialogConfig config;
+					config.path = ".";
+					config.countSelectionMax = 0;
+					ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)",
+						filters, config);
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Save Image", nullptr, false, selectedEntityID != 0)) {
+					SaveSelectedImage();
+				}
+
+				if (ImGui::MenuItem("Save Image As...", nullptr, false, selectedEntityID != 0)) {
+					IGFD::FileDialogConfig config;
+					config.path = ".";
+					ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As",
+						filters, config);
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Remove Image", nullptr, false, selectedEntityID != 0)) {
+					RemoveSelectedImage();
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Refresh")) {
+					RefreshImageEntities();
+				}
+
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("View")) {
+				if (ImGui::MenuItem("Show History", nullptr, &showHistory)) {
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("First Image", nullptr, false, !imageEntities.empty())) {
+					if (!imageEntities.empty()) {
+						imgIndex = 0;
+						selectedEntityID = imageEntities[imgIndex];
+					}
+				}
+
+				if (ImGui::MenuItem("Last Image", nullptr, false, !imageEntities.empty())) {
+					if (!imageEntities.empty()) {
+						imgIndex = static_cast<int>(imageEntities.size() - 1);
+						selectedEntityID = imageEntities[imgIndex];
+					}
+				}
+
+				ImGui::Separator();
+
+				if (ImGui::MenuItem("Auto-switch on Load", nullptr, &autoSwitchOnLoad)) {
+				}
+
+				ImGui::EndMenu();
+			}
+
+			ImGui::EndMenuBar();
 		}
 
+		// Handle file dialogs
+		if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
+			if (ImGuiFileDialog::Instance()->IsOk()) {
+				std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
+				std::vector<std::string> filePaths;
+				for (const auto&[fileName, filePath] : selection) {
+					filePaths.push_back(filePath);
+				}
+				LoadImages(filePaths);
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
 
+		if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog")) {
+			if (ImGuiFileDialog::Instance()->IsOk() && selectedEntityID != 0) {
+				std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
+				SaveSelectedImageAs(savePath);
+			}
+			ImGuiFileDialog::Instance()->Close();
+		}
 	}
 
 	void ImageView::OnImageLoaded(ECS::EntityID entityID) {
 		RefreshImageEntities();
 
-		if (!imageEntities.empty()) {
+		if (!imageEntities.empty() && autoSwitchOnLoad) {
 			auto it = std::find(imageEntities.begin(), imageEntities.end(), entityID);
 			if (it != imageEntities.end()) {
 				imgIndex = static_cast<int>(std::distance(imageEntities.begin(), it));
@@ -203,73 +294,20 @@ namespace GUI {
 	}
 
 	void ImageView::RenderControls() {
-		if (ImGui::Button("Load Image(s)")) {
-			IGFD::FileDialogConfig config;
-			config.path = ".";
-			config.countSelectionMax = 0;
-			ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)",
-				filters, config);
+		// Display zoom control and image count
+		ImGui::PushItemWidth(100.0f);
+		if (ImGui::InputFloat("Zoom", &zoom, 0.1f, 0.5f, "%.1f")) {
+			SetZoom(zoom);
 		}
-
-		if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
-			if (ImGuiFileDialog::Instance()->IsOk()) {
-				std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
-				std::vector<std::string> filePaths;
-				for (const auto&[fileName, filePath] : selection) {
-					filePaths.push_back(filePath);
-				}
-				LoadImages(filePaths);
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
+		ImGui::PopItemWidth();
 
 		ImGui::SameLine();
 
-		if (selectedEntityID != 0 && ImGui::Button("Save Image")) {
-			SaveSelectedImage();
-		}
-
-		ImGui::SameLine();
-
-		if (selectedEntityID != 0 && ImGui::Button("Save Image As")) {
-			IGFD::FileDialogConfig config;
-			config.path = ".";
-			ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As",
-				filters, config);
-		}
-
-		if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog")) {
-			if (ImGuiFileDialog::Instance()->IsOk() && selectedEntityID != 0) {
-				std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
-				SaveSelectedImageAs(savePath);
-			}
-			ImGuiFileDialog::Instance()->Close();
-		}
-
-		ImGui::SameLine();
-
-		if (selectedEntityID != 0 && ImGui::Button("Remove Image")) {
-			RemoveSelectedImage();
-		}
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Refresh")) {
-			RefreshImageEntities();
-		}
-
+		// Display clipboard info if available
 		if (contextMenuUtils->HasClipboardEntity()) {
 			ImGui::SameLine();
 			ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s", contextMenuUtils->GetClipboardPreview().c_str());
 		}
-
-		ImGui::SameLine();
-
-		ImGui::Text("Zoom: %.1f", zoom);
-
-		ImGui::SameLine();
-
-		ImGui::Text("Image count: %zu", imageEntities.size());
 	}
 
 	void ImageView::RenderSelector() {
@@ -278,24 +316,8 @@ namespace GUI {
 			return;
 		}
 
-		if (ImGui::Button("First")) {
-			if (!imageEntities.empty()) {
-				imgIndex = 0;
-				selectedEntityID = imageEntities[imgIndex];
-			}
-		}
-
-		ImGui::SameLine();
-
-		if (ImGui::Button("Last")) {
-			if (!imageEntities.empty()) {
-				imgIndex = static_cast<int>(imageEntities.size() - 1);
-				selectedEntityID = imageEntities[imgIndex];
-			}
-		}
-
-		ImGui::SameLine();
-
+		// Image navigation input
+		ImGui::PushItemWidth(100.0f);
 		if (ImGui::InputInt("Current Image", &imgIndex)) {
 			if (!imageEntities.empty()) {
 				const int size = static_cast<int>(imageEntities.size());
@@ -308,13 +330,14 @@ namespace GUI {
 				selectedEntityID = imageEntities[imgIndex];
 			}
 		}
+		ImGui::PopItemWidth();
 
+		ImGui::SameLine();
 		ImGui::Text("Image %d of %zu", imgIndex + 1, imageEntities.size());
 	}
 
 	void ImageView::RenderHistory() {
-
-		ImGui::Begin("Image History");
+		ImGui::Begin("Image History", &showHistory);
 
 		float currentRowWidth = 0.0f;
 

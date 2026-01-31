@@ -31,6 +31,7 @@ namespace GUI {
 		ECS::EntityID selectedEntityID;
 		int imgIndex;
 		bool showHistory;
+		bool autoSwitchOnLoad;
 		size_t lastEntityCount;
 
 		float zoom;
@@ -48,13 +49,16 @@ namespace GUI {
 		void OnImageLoaded(ECS::EntityID entityID);
 		void OnImageRemoved(ECS::EntityID entityID);
 		void RefreshImageEntities();
-
+		
+		void RenderMenuBar();
 		void RenderImageInfo();
 		void RenderControls();
 		void RenderSelector();
 		void RenderHistory();
 		void RenderSelectedImage();
 		void DrawGrid(int imageWidth, int imageHeight);
+
+		
 
 		void SetZoom(float newZoom);
 		void LoadImages(const std::vector<std::string>& filePaths);
