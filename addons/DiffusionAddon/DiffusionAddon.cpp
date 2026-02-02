@@ -98,6 +98,9 @@ public:
 		entityMgr.RegisterComponent<ECS::LayerSkipComponent>("LayerSkip");
 		entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
 		entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
+		
+		// Conversion
+		entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
 
 		entityMgr.RegisterSystem<ECS::SDCPPSystem>();
 

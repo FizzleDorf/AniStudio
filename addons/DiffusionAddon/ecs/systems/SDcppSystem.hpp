@@ -64,7 +64,7 @@ namespace ECS {
 			QueueItem& operator=(const QueueItem& other) = default;
 		};
 
-		// Internal tracking structure with futures and metadata
+		// Internal tracking structure with proper context management
 		struct TaskData {
 			EntityID entityID = 0;
 			bool processing = false;
@@ -72,12 +72,25 @@ namespace ECS {
 			nlohmann::json metadata;
 			std::string fullPath;
 			std::future<bool> result;
-			bool isClonedEntity = false;
-			sd_ctx_t* sdContext = nullptr;
-			bool modelLoading = false; // NEW: Track if model is loading
+
+			// Contexts - only one will be used depending on task type
+			union {
+				sd_ctx_t* sdContext;
+				upscaler_ctx_t* upscalerContext;
+			};
+
+			bool contextAcquired = false;
+			bool modelLoading = false;
+
+			// Store context type for proper cleanup
+			enum ContextType {
+				NoContext,      // Conversion tasks
+				SDContext,      // Inference/Img2Img/Img2Vid/Edit tasks
+				UpscalerContext // Upscaling tasks
+			} contextType = NoContext;
 
 			// Default constructor
-			TaskData() = default;
+			TaskData() : sdContext(nullptr), contextType(NoContext) {}
 
 			// Move constructor
 			TaskData(TaskData&& other) noexcept
@@ -87,94 +100,125 @@ namespace ECS {
 				, metadata(std::move(other.metadata))
 				, fullPath(std::move(other.fullPath))
 				, result(std::move(other.result))
-				, isClonedEntity(other.isClonedEntity)
-				, sdContext(other.sdContext)
-				, modelLoading(other.modelLoading) {
-				other.sdContext = nullptr;
+				, contextAcquired(other.contextAcquired)
+				, modelLoading(other.modelLoading)
+				, contextType(other.contextType) {
+
+				// Move the appropriate context pointer
+				switch (contextType) {
+				case SDContext:
+					sdContext = other.sdContext;
+					other.sdContext = nullptr;
+					break;
+				case UpscalerContext:
+					upscalerContext = other.upscalerContext;
+					other.upscalerContext = nullptr;
+					break;
+				case NoContext:
+				default:
+					sdContext = nullptr;
+					break;
+				}
 			}
 
 			// Move assignment operator
 			TaskData& operator=(TaskData&& other) noexcept {
 				if (this != &other) {
+					// Clean up existing context first
+					CleanupContext();
+
 					entityID = other.entityID;
 					processing = other.processing;
 					taskType = other.taskType;
 					metadata = std::move(other.metadata);
 					fullPath = std::move(other.fullPath);
 					result = std::move(other.result);
-					isClonedEntity = other.isClonedEntity;
-					sdContext = other.sdContext;
+					contextAcquired = other.contextAcquired;
 					modelLoading = other.modelLoading;
-					other.sdContext = nullptr;
+					contextType = other.contextType;
+
+					// Move the appropriate context pointer
+					switch (contextType) {
+					case SDContext:
+						sdContext = other.sdContext;
+						other.sdContext = nullptr;
+						break;
+					case UpscalerContext:
+						upscalerContext = other.upscalerContext;
+						other.upscalerContext = nullptr;
+						break;
+					case NoContext:
+					default:
+						sdContext = nullptr;
+						break;
+					}
 				}
 				return *this;
 			}
 
-			// Delete copy operations since std::future is not copyable
+			// Delete copy operations
 			TaskData(const TaskData&) = delete;
 			TaskData& operator=(const TaskData&) = delete;
 
 			// Destructor
 			~TaskData() {
-				// Context will be managed by SDContextManager
+				CleanupContext();
+			}
+
+			// Helper to clean up context
+			void CleanupContext() {
+				switch (contextType) {
+				case SDContext:
+					if (sdContext && !modelLoading) {
+						Utils::SDContextManager::ReleaseContext(sdContext);
+					}
+					sdContext = nullptr;
+					break;
+				case UpscalerContext:
+					if (upscalerContext) {
+						free_upscaler_ctx(upscalerContext);
+					}
+					upscalerContext = nullptr;
+					break;
+				case NoContext:
+				default:
+					// Nothing to clean up
+					break;
+				}
+				contextType = NoContext;
+				contextAcquired = false;
 			}
 		};
 
-		// Constructor - Use single thread for diffusion tasks
+		// Constructor
 		SDCPPSystem(EntityManager& entityMgr)
 			: BaseSystem(entityMgr)
 			, pauseWorker(false)
 			, hasActiveTask(false)
 			, clearRequested(false) {
 			sysName = "SDCPPSystem";
-
-			// Initialize context manager
-			std::cout << "[SDCPPSystem] Initialized with SD context caching" << std::endl;
+			std::cout << "[SDCPPSystem] Initialized with proper context management" << std::endl;
 		}
 
 		// Destructor
 		~SDCPPSystem() {
-			// Signal shutdown and wait for all tasks to complete
+			Shutdown();
+		}
+
+		void Shutdown() {
+			std::cout << "[SDCPPSystem] Shutting down system..." << std::endl;
+
+			// Signal shutdown
 			{
 				std::lock_guard<std::mutex> lock(queueMutex);
 				shuttingDown = true;
 				pauseWorker = true;
 			}
 
-			// Try to terminate the active task if it exists
-			TerminateActiveTask();
-
-			// Get the diffusion pool and wait for tasks to complete by polling
-			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
-
-			// Wait for diffusion tasks to complete (with timeout) by polling
-			auto startTime = std::chrono::steady_clock::now();
-			while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(5)) {
-				if (diffusionPool.getActiveCount() == 0 && diffusionPool.getQueueSize() == 0) {
-					break;
-				}
-				std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			}
-
-			if (diffusionPool.getActiveCount() > 0 || diffusionPool.getQueueSize() > 0) {
-				std::cerr << "Warning: Diffusion pool did not shut down cleanly within timeout" << std::endl;
-			}
-
-			// Clear all SD contexts
-			Utils::SDContextManager::ClearAllContexts();
-
-			// Clean up any remaining entities
-			{
-				std::lock_guard<std::mutex> lock(queueMutex);
-				HandleClearRequest();
-			}
-		}
-
-		void Shutdown() {
-			std::cout << "[SDCPPSystem] Shutting down system..." << std::endl;
-
-			// Stop current task and clear queue
+			// Stop current task
 			StopCurrentTask();
+
+			// Clear queue and clean up contexts
 			ClearQueue();
 
 			// Wait for all threads to complete
@@ -182,8 +226,7 @@ namespace ECS {
 				workerThread.join();
 			}
 
-			// Shutdown any thread pools used by this system
-			// This is crucial - wait for all diffusion tasks to complete by polling
+			// Shutdown thread pools
 			auto& diffusionPool = Utils::ThreadPoolManager::getInstance().getDiffusionPool();
 			auto startTime = std::chrono::steady_clock::now();
 			while (std::chrono::steady_clock::now() - startTime < std::chrono::seconds(5)) {
@@ -193,13 +236,12 @@ namespace ECS {
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			}
 
-			// Clear all SD contexts
+			// Clear all contexts
 			Utils::SDContextManager::ClearAllContexts();
 
 			std::cout << "[SDCPPSystem] Shutdown complete" << std::endl;
 		}
 
-		// Add missing method called from plugin
 		void TerminateImmediately() {
 			std::cout << "[SDCPPSystem] Immediate termination requested" << std::endl;
 
@@ -214,7 +256,7 @@ namespace ECS {
 			// Clear the task queue
 			ClearQueue();
 
-			// Clear all SD contexts
+			// Clear all contexts
 			Utils::SDContextManager::ClearAllContexts();
 
 			// Terminate the thread pool immediately
@@ -224,18 +266,11 @@ namespace ECS {
 		}
 
 		void QueueTask(const EntityID entityID, const TaskType taskType) {
-
 			std::cout << "[QueueTask] Starting for entity: " << entityID << std::endl;
 
-			// Validate entity exists and is valid
+			// Validate entity exists
 			if (!mgr.IsEntityValid(entityID)) {
 				std::cerr << "[QueueTask] ERROR: Entity " << entityID << " is not valid!" << std::endl;
-				return;
-			}
-
-			// Validate entity has required components
-			if (!mgr.HasComponent<OutputImageComponent>(entityID)) {
-				std::cerr << "[QueueTask] ERROR: Entity " << entityID << " missing OutputImageComponent!" << std::endl;
 				return;
 			}
 
@@ -255,9 +290,10 @@ namespace ECS {
 				taskData.entityID = entityID;
 				taskData.processing = false;
 				taskData.taskType = taskType;
-				taskData.isClonedEntity = false;
 				taskData.modelLoading = false;
+				taskData.contextType = TaskData::NoContext;
 
+				// Set seed for tasks that need it
 				if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
 					taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
 
@@ -294,7 +330,7 @@ namespace ECS {
 				return;
 			}
 
-			// Handle clear request at the beginning of update cycle
+			// Handle clear request
 			if (clearRequested) {
 				HandleClearRequest();
 				clearRequested = false;
@@ -306,7 +342,7 @@ namespace ECS {
 			// Update status of running task
 			CheckTaskCompletion();
 
-			// NEW: Check for model loading failures
+			// Check for model loading failures
 			CheckModelLoadingFailures();
 		}
 
@@ -315,14 +351,12 @@ namespace ECS {
 			if (index < taskQueue.size() && !taskQueue[index].processing) {
 				EntityID entityID = taskQueue[index].entityID;
 
-				// Release context if it was acquired
-				if (taskQueue[index].sdContext) {
-					Utils::SDContextManager::ReleaseContext(taskQueue[index].sdContext);
-				}
+				// Clean up context
+				taskQueue[index].CleanupContext();
 
 				taskQueue.erase(taskQueue.begin() + index);
 
-				// Add to deferred cleanup list instead of destroying immediately
+				// Add to deferred cleanup list
 				entitiesNeedingCleanup.push_back(entityID);
 			}
 		}
@@ -361,7 +395,8 @@ namespace ECS {
 
 			if (hasActiveTask && activeThreadId != std::thread::id{}) {
 				std::cout << "Attempting to terminate active task on thread: " << activeThreadId << std::endl;
-				// TODO: needs logic in new sdcpp implementation
+				// Set termination flag
+				terminateFlag = true;
 			}
 			else {
 				std::cout << "No active task to terminate" << std::endl;
@@ -421,7 +456,7 @@ namespace ECS {
 			return lastGeneratedVideoEntity;
 		}
 
-		// SD Context Management Methods
+		// Context Management Methods
 		void ClearAllSDContexts() {
 			std::cout << "[SDCPPSystem] Clearing all SD contexts..." << std::endl;
 			Utils::SDContextManager::ClearAllContexts();
@@ -436,7 +471,7 @@ namespace ECS {
 			return Utils::SDContextManager::GetCacheStats();
 		}
 
-		// NEW: Get model loading stats
+		// Get model loading stats
 		std::tuple<size_t, size_t> GetModelLoadingStats() {
 			return Utils::SDContextManager::GetLoadingStats();
 		}
@@ -449,7 +484,6 @@ namespace ECS {
 		}
 
 	private:
-
 		std::vector<TaskData> taskQueue;
 		std::atomic<bool> pauseWorker;
 		std::atomic<bool> shuttingDown{ false };
@@ -458,7 +492,7 @@ namespace ECS {
 		std::atomic<bool> forceModelReload{ false };
 		std::vector<EntityID> entitiesNeedingCleanup;
 		mutable std::mutex queueMutex;
-		EntityID lastGeneratedVideoEntity{ 0 }; // Track last generated video
+		EntityID lastGeneratedVideoEntity{ 0 };
 
 		std::thread workerThread;
 
@@ -466,39 +500,123 @@ namespace ECS {
 		bool hasActiveTask{ false };
 		std::thread::id activeThreadId{};
 
-		Utils::ThreadPoolManager::PoolStats GetThreadPoolStats() const {
-			return Utils::ThreadPoolManager::getInstance().getStats();
+		// Helper to determine which context type a task needs
+		TaskData::ContextType GetRequiredContextType(TaskType taskType) {
+			switch (taskType) {
+			case TaskType::Inference:
+			case TaskType::Img2Img:
+			case TaskType::Img2Vid:
+			case TaskType::Edit:
+				return TaskData::SDContext;
+			case TaskType::Upscaling:
+				return TaskData::UpscalerContext;
+			case TaskType::Conversion:
+			default:
+				return TaskData::NoContext;
+			}
 		}
 
-		// Clone entity for processing to preserve original input images
-		EntityID CloneEntityForProcessing(const EntityID originalEntity) {
-			std::cout << "=== CLONE DEBUG START ===" << std::endl;
-			std::cout << "Original entity: " << originalEntity << std::endl;
+		// Get or create context for a task
+		bool AcquireContextForTask(TaskData& task) {
+			switch (task.contextType) {
+			case TaskData::SDContext: {
+				// Check if force reload is requested
+				if (forceModelReload) {
+					// Force creation of new context
+					task.sdContext = Utils::SDContextManager::CreateNewContext(task.metadata);
+					task.modelLoading = false;
+					forceModelReload = false;
+					task.contextAcquired = (task.sdContext != nullptr);
+					return task.contextAcquired;
+				}
 
+				// Try to get or create context (async)
+				task.sdContext = Utils::SDContextManager::GetOrCreateContext(task.metadata);
+
+				// If context is nullptr, it means it's loading asynchronously
+				if (!task.sdContext) {
+					task.modelLoading = true;
+					std::cout << "Model is loading asynchronously for entity " << task.entityID << std::endl;
+					return false; // Not ready yet
+				}
+
+				task.modelLoading = false;
+				task.contextAcquired = true;
+				return true;
+			}
+
+			case TaskData::UpscalerContext: {
+				// Upscaler context is created synchronously
+				task.upscalerContext = CreateUpscalerContext(task.metadata);
+				task.contextAcquired = (task.upscalerContext != nullptr);
+				return task.contextAcquired;
+			}
+
+			case TaskData::NoContext:
+			default:
+				// No context needed (Conversion tasks)
+				task.contextAcquired = true;
+				return true;
+			}
+		}
+
+		// Create upscaler context from metadata
+		upscaler_ctx_t* CreateUpscalerContext(const nlohmann::json& metadata) {
 			try {
-				// Serialize the original entity
-				nlohmann::json entityData = mgr.SerializeEntity(originalEntity);
-				std::cout << "Serialized data keys: ";
-				for (auto&[key, value] : entityData.items()) {
-					std::cout << key << " ";
+				std::string esrganPath = "";
+				bool offload_params_to_cpu = false;
+				bool direct = false;
+				int n_threads = 4;
+				int tile_size = 64;
+
+				// Parse metadata to extract upscaler parameters
+				if (metadata.contains("components") && metadata["components"].is_array()) {
+					for (const auto& comp : metadata["components"]) {
+						if (comp.contains("Esrgan")) {
+							nlohmann::json esrganData = comp["Esrgan"];
+
+							if (esrganData.contains("modelPath") && !esrganData["modelPath"].is_null()) {
+								esrganPath = esrganData["modelPath"].get<std::string>();
+							}
+
+							if (esrganData.contains("offload_params_to_cpu")) {
+								offload_params_to_cpu = esrganData["offload_params_to_cpu"].get<bool>();
+							}
+							if (esrganData.contains("direct")) {
+								direct = esrganData["direct"].get<bool>();
+							}
+							if (esrganData.contains("n_threads")) {
+								n_threads = esrganData["n_threads"].get<int>();
+							}
+							if (esrganData.contains("tile_size")) {
+								tile_size = esrganData["tile_size"].get<int>();
+							}
+						}
+
+						if (comp.contains("Sampler")) {
+							nlohmann::json samplerData = comp["Sampler"];
+							if (samplerData.contains("n_threads")) {
+								n_threads = samplerData["n_threads"].get<int>();
+							}
+						}
+					}
 				}
-				std::cout << std::endl;
 
-				// Create a new entity from the serialized data
-				EntityID clonedEntity = mgr.DeserializeEntity(entityData);
-				std::cout << "Cloned entity ID: " << clonedEntity << std::endl;
-
-				if (clonedEntity == 0) {
-					std::cerr << "DESERIALIZATION FAILED - returned entity ID 0" << std::endl;
-					return 0;
+				if (esrganPath.empty()) {
+					std::cerr << "No ESRGAN model path specified for upscaling" << std::endl;
+					return nullptr;
 				}
 
-				std::cout << "=== CLONE DEBUG END ===" << std::endl;
-				return clonedEntity;
+				std::cout << "Creating upscaler context with path: " << esrganPath << std::endl;
+				return new_upscaler_ctx(esrganPath.c_str(),
+					offload_params_to_cpu,
+					direct,
+					n_threads,
+					tile_size);
 			}
 			catch (const std::exception& e) {
-				std::cerr << "Exception cloning entity " << originalEntity << ": " << e.what() << std::endl;
-				return 0;
+				std::cerr << "Error creating upscaler context: " << e.what() << std::endl;
+				return nullptr;
 			}
 		}
 
@@ -520,7 +638,6 @@ namespace ECS {
 			}
 		}
 
-		// Helper to load video via VideoSystem - creates NEW entity for output
 		void LoadVideoViaVideoSystem(const std::string& filePath) {
 			if (auto videoSystem = mgr.GetSystem<VideoSystem>()) {
 				// Create a NEW entity for the generated video
@@ -535,7 +652,7 @@ namespace ECS {
 				// Use VideoSystem to load the video
 				videoSystem->SetVideo(videoEntity, filePath);
 
-				// Store the last generated video entity for VideoDiffusionView
+				// Store the last generated video entity
 				{
 					std::lock_guard<std::mutex> lock(queueMutex);
 					lastGeneratedVideoEntity = videoEntity;
@@ -553,15 +670,14 @@ namespace ECS {
 			std::lock_guard<std::mutex> lock(queueMutex);
 			std::cout << "Clearing queue with " << taskQueue.size() << " items" << std::endl;
 
-			// Release contexts for all non-processing tasks
+			// Clean up contexts for all non-processing tasks
 			for (auto& task : taskQueue) {
-				if (!task.processing && task.sdContext) {
-					Utils::SDContextManager::ReleaseContext(task.sdContext);
-					task.sdContext = nullptr;
+				if (!task.processing) {
+					task.CleanupContext();
 				}
 			}
 
-			// Just remove all non-processing tasks
+			// Remove all non-processing tasks
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
 				if (!it->processing) {
 					it = taskQueue.erase(it);
@@ -574,20 +690,11 @@ namespace ECS {
 			std::cout << "Queue cleared. " << taskQueue.size() << " items remaining (active)" << std::endl;
 		}
 
-		void TerminateActiveTask() {
-			std::lock_guard<std::mutex> lock(queueMutex);
-			if (hasActiveTask) {
-				terminateFlag = true;
-				std::cout << "Termination flag set for active task" << std::endl;
-			}
-		}
-
-		// NEW: Check for model loading failures
 		void CheckModelLoadingFailures() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 
 			for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-				if (it->modelLoading) {
+				if (it->modelLoading && it->contextType == TaskData::SDContext) {
 					// Check if loading is complete
 					sd_ctx_t* loadedContext = Utils::SDContextManager::TryGetLoadedContext(it->metadata);
 
@@ -595,11 +702,12 @@ namespace ECS {
 						// Loading successful
 						it->sdContext = loadedContext;
 						it->modelLoading = false;
+						it->contextAcquired = true;
 						std::cout << "Model loading completed for entity " << it->entityID << std::endl;
 						++it;
 					}
 					else if (loadedContext == nullptr && !Utils::SDContextManager::IsContextLoading(it->metadata)) {
-						// Loading failed - context is null and not loading anymore
+						// Loading failed
 						std::cerr << "Model loading failed for entity " << it->entityID << std::endl;
 
 						// Add to cleanup list
@@ -621,47 +729,9 @@ namespace ECS {
 			}
 		}
 
-		// Task wrapper that captures thread ID and sets active task status
-		// Version for tasks that need SD context
+		// Task wrappers for different context types
 		template<typename Func, typename... Args>
-		auto CreateTaskWrapperWithContext(EntityID entityID, sd_ctx_t* context, Func&& func, Args&&... args) {
-			return[this, entityID, context, func = std::forward<Func>(func), args...]() -> bool {
-				// Set thread tracking info
-				{
-					std::lock_guard<std::mutex> lock(queueMutex);
-					hasActiveTask = true;
-					activeThreadId = std::this_thread::get_id();
-					terminateFlag = false;
-				}
-
-				std::cout << "Task started for entity " << entityID << " on thread " << std::this_thread::get_id() << std::endl;
-
-				bool result = false;
-				try {
-					// Call the actual function with context
-					result = func(args..., context);
-				}
-				catch (const std::exception& e) {
-					std::cerr << "Exception in task wrapper: " << e.what() << std::endl;
-				}
-
-				// Clear thread tracking info
-				{
-					std::lock_guard<std::mutex> lock(queueMutex);
-					hasActiveTask = false;
-					activeThreadId = std::thread::id{};
-					terminateFlag = false;
-				}
-
-				std::cout << "Task completed for entity " << entityID << " with result: " << (result ? "success" : "failure") << std::endl;
-
-				return result;
-			};
-		}
-
-		// Version for tasks that don't need SD context
-		template<typename Func, typename... Args>
-		auto CreateTaskWrapperWithoutContext(EntityID entityID, Func&& func, Args&&... args) {
+		auto CreateTaskWrapper(EntityID entityID, Func&& func, Args&&... args) {
 			return[this, entityID, func = std::forward<Func>(func), args...]() -> bool {
 				// Set thread tracking info
 				{
@@ -675,7 +745,7 @@ namespace ECS {
 
 				bool result = false;
 				try {
-					// Call the actual function without context
+					// Call the actual function
 					result = func(args...);
 				}
 				catch (const std::exception& e) {
@@ -696,7 +766,7 @@ namespace ECS {
 			};
 		}
 
-		// Static task functions - UPDATED to accept SD context parameter
+		// Static task functions - these match the actual function signatures
 		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
 				return Utils::Txt2Img::RunInference(metadata, fullPath, context);
@@ -747,9 +817,10 @@ namespace ECS {
 			}
 		}
 
-		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
+		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath) {
 			try {
-				return Utils::Upscaling::RunUpscaling(metadata, fullPath, context);
+				// Upscaling doesn't need sd_ctx_t parameter
+				return Utils::Upscaling::RunUpscaling(metadata, fullPath);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during upscaling: " << e.what() << std::endl;
@@ -773,37 +844,7 @@ namespace ECS {
 			}
 		}
 
-		// Get or create SD context for a task - UPDATED for async loading
-		sd_ctx_t* GetSDContextForTask(TaskData& task) {
-			// Check if force reload is requested
-			if (forceModelReload) {
-				// Clear cache for this task's metadata key
-				std::string cacheKey = Utils::SDContextManager::GenerateCacheKey(task.metadata);
-				{
-					std::lock_guard<std::mutex> lock(queueMutex);
-					// Force creation of new context (sync for forced reload)
-					task.sdContext = Utils::SDContextManager::CreateNewContext(task.metadata);
-					task.modelLoading = false;
-					forceModelReload = false;
-				}
-				return task.sdContext;
-			}
-
-			// Try to get or create context (now async)
-			task.sdContext = Utils::SDContextManager::GetOrCreateContext(task.metadata);
-
-			// If context is nullptr, it means it's loading asynchronously
-			if (!task.sdContext) {
-				task.modelLoading = true;
-				std::cout << "Model is loading asynchronously for entity " << task.entityID << std::endl;
-				return nullptr;
-			}
-
-			task.modelLoading = false;
-			return task.sdContext;
-		}
-
-		// Queue processing methods - UPDATED to handle async loading
+		// Queue processing methods - simplified
 		void ProcessQueues() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -824,7 +865,16 @@ namespace ECS {
 			// Find the first non-processing item
 			for (auto& task : taskQueue) {
 				if (!task.processing && !task.modelLoading) {
-					// Prepare the output path based on task type
+					// Determine what context type this task needs
+					task.contextType = GetRequiredContextType(task.taskType);
+
+					// Acquire context for this task
+					if (!AcquireContextForTask(task)) {
+						// Context not ready yet (e.g., still loading)
+						continue; // Skip to next task
+					}
+
+					// Prepare the output path
 					if (mgr.HasComponent<OutputImageComponent>(task.entityID)) {
 						auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
 
@@ -840,20 +890,14 @@ namespace ECS {
 
 						std::string fullFileName = baseName + extension;
 
-						// Use filePath as directory - extract directory if it's a file path
+						// Extract directory
 						std::string outputDir = output.filePath;
-
-						// If filePath contains a filename, extract just the directory
-						if (!outputDir.empty()) {
-							std::filesystem::path p(outputDir);
-							if (p.has_extension()) {
-								outputDir = p.parent_path().string();
-							}
+						if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension()) {
+							outputDir = std::filesystem::path(outputDir).parent_path().string();
 						}
 
-						// Fallback to default if empty
+						// Fallback directories
 						if (outputDir.empty()) {
-							// Try OutputFolder first, then DefaultProject
 							std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
 							if (!outputFolder.empty() && outputFolder[0] != '\0') {
 								outputDir = outputFolder;
@@ -864,116 +908,60 @@ namespace ECS {
 									outputDir = defaultProject;
 								}
 								else {
-									// Ultimate fallback - executable directory
 									outputDir = Utils::FilePathService::GetExecutableDir();
 								}
 							}
 						}
 
-						// Use proper API signature for CreateUniqueFilename
+						// Create unique filename
 						task.fullPath = Utils::PngMetadata::CreateUniqueFilename(
 							fullFileName,  // filename with extension
 							outputDir      // directory
 						);
 					}
 
-					// Submit appropriate function based on task type using wrapper
+					// Submit appropriate function based on task type
 					try {
 						switch (task.taskType) {
 						case TaskType::Inference:
-						{
-							// Get SD context for this task
-							sd_ctx_t* context = GetSDContextForTask(task);
-							if (!context) {
-								// Context is loading asynchronously, skip for now
-								std::cout << "Model loading in progress for inference task, entity "
-									<< task.entityID << " will be processed later" << std::endl;
-								continue; // Skip to next task
-							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapperWithContext(task.entityID, context, RunInference, task.metadata, task.fullPath)
+								CreateTaskWrapper(task.entityID, RunInference, task.metadata, task.fullPath, task.sdContext)
 							);
-						}
-						break;
+							break;
 
 						case TaskType::Conversion:
-							// Conversion doesn't need SD context
 							task.result = diffusionPool.submit(
-								CreateTaskWrapperWithoutContext(task.entityID, RunConversion, task.metadata)
+								CreateTaskWrapper(task.entityID, RunConversion, task.metadata)
 							);
 							break;
 
 						case TaskType::Img2Img:
-						{
-							// Get SD context for this task
-							sd_ctx_t* context = GetSDContextForTask(task);
-							if (!context) {
-								// Context is loading asynchronously, skip for now
-								std::cout << "Model loading in progress for img2img task, entity "
-									<< task.entityID << " will be processed later" << std::endl;
-								continue; // Skip to next task
-							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapperWithContext(task.entityID, context, RunImg2Img, task.metadata, task.fullPath)
+								CreateTaskWrapper(task.entityID, RunImg2Img, task.metadata, task.fullPath, task.sdContext)
 							);
-						}
-						break;
+							break;
 
 						case TaskType::Img2Vid:
-						{
-							// Get SD context for this task
-							sd_ctx_t* context = GetSDContextForTask(task);
-							if (!context) {
-								// Context is loading asynchronously, skip for now
-								std::cout << "Model loading in progress for img2vid task, entity "
-									<< task.entityID << " will be processed later" << std::endl;
-								continue; // Skip to next task
-							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapperWithContext(task.entityID, context, RunImg2Vid, task.metadata, task.fullPath)
+								CreateTaskWrapper(task.entityID, RunImg2Vid, task.metadata, task.fullPath, task.sdContext)
 							);
-						}
-						break;
+							break;
 
 						case TaskType::Edit:
-						{
-							// Get SD context for this task
-							sd_ctx_t* context = GetSDContextForTask(task);
-							if (!context) {
-								// Context is loading asynchronously, skip for now
-								std::cout << "Model loading in progress for edit task, entity "
-									<< task.entityID << " will be processed later" << std::endl;
-								continue; // Skip to next task
-							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapperWithContext(task.entityID, context, RunEdit, task.metadata, task.fullPath)
+								CreateTaskWrapper(task.entityID, RunEdit, task.metadata, task.fullPath, task.sdContext)
 							);
-						}
-						break;
+							break;
 
 						case TaskType::Upscaling:
-						{
-							// Get SD context for this task
-							sd_ctx_t* context = GetSDContextForTask(task);
-							if (!context) {
-								// Context is loading asynchronously, skip for now
-								std::cout << "Model loading in progress for upscaling task, entity "
-									<< task.entityID << " will be processed later" << std::endl;
-								continue; // Skip to next task
-							}
 							task.result = diffusionPool.submit(
-								CreateTaskWrapperWithContext(task.entityID, context, RunUpscaling, task.metadata, task.fullPath)
+								CreateTaskWrapper(task.entityID, RunUpscaling, task.metadata, task.fullPath)
 							);
-						}
-						break;
+							break;
 
 						default:
 							std::cerr << "Unknown task type: " << static_cast<int>(task.taskType) << std::endl;
-							// Release context if we acquired it
-							if (task.sdContext) {
-								Utils::SDContextManager::ReleaseContext(task.sdContext);
-								task.sdContext = nullptr;
-							}
+							task.CleanupContext();
 							continue;
 						}
 
@@ -984,11 +972,7 @@ namespace ECS {
 					}
 					catch (const std::exception& e) {
 						std::cerr << "Failed to submit task: " << e.what() << std::endl;
-						// Release context if we acquired it
-						if (task.sdContext) {
-							Utils::SDContextManager::ReleaseContext(task.sdContext);
-							task.sdContext = nullptr;
-						}
+						task.CleanupContext();
 						// Add to cleanup list for failed task
 						entitiesNeedingCleanup.push_back(task.entityID);
 						// Remove the failed task
@@ -1008,13 +992,12 @@ namespace ECS {
 				return;
 			}
 
-			std::vector<std::tuple<std::string, TaskType, EntityID, sd_ctx_t*>> completedTasks;
+			std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;
 
 			{
 				std::unique_lock<std::mutex> lock(queueMutex);
 
 				for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-					// Check if this task is processing and has a valid future
 					if (it->processing && it->result.valid()) {
 						// Check if the future is ready without blocking
 						auto status = it->result.wait_for(std::chrono::milliseconds(0));
@@ -1023,7 +1006,6 @@ namespace ECS {
 							EntityID entityID = it->entityID;
 							std::string fullPath = it->fullPath;
 							TaskType taskType = it->taskType;
-							sd_ctx_t* context = it->sdContext;
 							bool success = false;
 
 							try {
@@ -1033,14 +1015,12 @@ namespace ECS {
 								std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
 							}
 
-							// Release the SD context back to cache (if it was used)
-							if (context && taskType != TaskType::Conversion) {
-								Utils::SDContextManager::ReleaseContext(context);
-							}
+							// Clean up context
+							it->CleanupContext();
 
 							// Process the completed task ONLY if not shutting down
 							if (!shuttingDown && success) {
-								completedTasks.emplace_back(fullPath, taskType, entityID, context);
+								completedTasks.emplace_back(fullPath, taskType, entityID);
 							}
 							else {
 								std::cerr << "Task failed for entity " << entityID << std::endl;
@@ -1054,11 +1034,6 @@ namespace ECS {
 										std::cerr << "Failed to remove partial file: " << e.what() << std::endl;
 									}
 								}
-							}
-
-							// Only clean up cloned entities
-							if (it->isClonedEntity) {
-								entitiesNeedingCleanup.push_back(entityID);
 							}
 
 							// Remove the completed task
@@ -1076,17 +1051,17 @@ namespace ECS {
 						++it;
 					}
 				}
-			} // Lock released here
+			}
 
-			// Process completed tasks WITHOUT holding the lock
+			// Process completed tasks
 			if (!shuttingDown) {
-				for (const auto&[fullPath, taskType, originalEntity, context] : completedTasks) {
-					ProcessCompletedTask(fullPath, taskType, originalEntity);
+				for (const auto&[fullPath, taskType, entityID] : completedTasks) {
+					ProcessCompletedTask(fullPath, taskType, entityID);
 				}
 			}
 		}
 
-		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID clonedEntity) {
+		void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID entityID) {
 			try {
 				if (shuttingDown) {
 					return;
