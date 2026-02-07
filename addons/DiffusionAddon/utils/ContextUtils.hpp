@@ -39,7 +39,7 @@ namespace Utils {
 		// INLINE static members (C++17+) - no separate .cpp file needed
 		static inline std::unordered_map<std::string, std::shared_ptr<SDContextCacheEntry>> contextCache;
 		static inline std::mutex cacheMutex;
-		static inline const size_t MAX_CACHE_SIZE = 3; // Maximum number of cached contexts
+		static inline size_t MAX_CACHE_SIZE = 3; // Maximum number of cached contexts (made non-const)
 		static inline std::atomic<size_t> totalContextsCreated{ 0 };
 		static inline std::atomic<size_t> totalContextsFailed{ 0 };
 
@@ -724,6 +724,193 @@ namespace Utils {
 				std::cout << std::endl;
 			}
 			std::cout << "==========================" << std::endl;
+		}
+
+		// ================================================
+		// NEW: Model Management API
+		// ================================================
+
+		// Unload specific model by path
+		static void UnloadSpecificModel(const std::string& modelPath) {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+
+			std::cout << "DEBUG: Looking for contexts using model: " << modelPath << std::endl;
+
+			// Find all cache entries using this model
+			std::vector<std::string> toRemove;
+			for (const auto& entry : contextCache) {
+				try {
+					bool usesModel = false;
+
+					if (entry.second->metadata.contains("components") &&
+						entry.second->metadata["components"].is_array()) {
+						for (const auto& comp : entry.second->metadata["components"]) {
+							if (comp.contains("Checkpoint")) {
+								auto model = comp["Checkpoint"];
+								if (model.contains("modelPath") &&
+									model["modelPath"].get<std::string>().find(modelPath) != std::string::npos) {
+									usesModel = true;
+									break;
+								}
+								if (model.contains("modelName") &&
+									model["modelName"].get<std::string>().find(modelPath) != std::string::npos) {
+									usesModel = true;
+									break;
+								}
+							}
+						}
+					}
+
+					if (usesModel) {
+						std::cout << "DEBUG: Found context using model: " << entry.first << std::endl;
+						toRemove.push_back(entry.first);
+					}
+				}
+				catch (const std::exception& e) {
+					std::cerr << "Error checking model usage: " << e.what() << std::endl;
+				}
+			}
+
+			// Remove the contexts
+			for (const auto& key : toRemove) {
+				contextCache.erase(key);
+				std::cout << "DEBUG: Removed context: " << key << std::endl;
+			}
+		}
+
+		// Unload all models
+		static void UnloadAllModels() {
+			ClearAllContexts();
+		}
+
+		// Set maximum number of models to cache
+		static void SetMaxCacheSize(size_t size) {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+			MAX_CACHE_SIZE = size;
+			std::cout << "DEBUG: Max cache size set to: " << MAX_CACHE_SIZE << std::endl;
+		}
+
+		// Get maximum cache size
+		static size_t GetMaxCacheSize() {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+			return MAX_CACHE_SIZE;
+		}
+
+		// Force unload when new model is requested (default behavior)
+		static void ForceUnloadForNewModel(const nlohmann::json& newMetadata) {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+
+			if (contextCache.size() >= 1) { // If we have at least one model loaded
+				// Extract model path from new metadata
+				std::string newModelPath = "";
+				if (newMetadata.contains("components") && newMetadata["components"].is_array()) {
+					for (const auto& comp : newMetadata["components"]) {
+						if (comp.contains("Checkpoint")) {
+							auto model = comp["Checkpoint"];
+							if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty()) {
+								newModelPath = model["modelPath"].get<std::string>();
+							}
+							break;
+						}
+					}
+				}
+
+				if (!newModelPath.empty()) {
+					// Find and remove all contexts that don't use the new model
+					for (auto it = contextCache.begin(); it != contextCache.end();) {
+						bool usesNewModel = false;
+
+						if (it->second->metadata.contains("components") &&
+							it->second->metadata["components"].is_array()) {
+							for (const auto& comp : it->second->metadata["components"]) {
+								if (comp.contains("Checkpoint")) {
+									auto model = comp["Checkpoint"];
+									if (model.contains("modelPath") &&
+										model["modelPath"].get<std::string>() == newModelPath) {
+										usesNewModel = true;
+										break;
+									}
+								}
+							}
+						}
+
+						if (!usesNewModel) {
+							std::cout << "DEBUG: Force unloading model for new request: " << it->first << std::endl;
+							it = contextCache.erase(it);
+						}
+						else {
+							++it;
+						}
+					}
+				}
+			}
+		}
+
+		// Check if a specific model is currently loaded
+		static bool IsModelLoaded(const std::string& modelPath) {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+
+			for (const auto& entry : contextCache) {
+				try {
+					if (entry.second->metadata.contains("components") &&
+						entry.second->metadata["components"].is_array()) {
+						for (const auto& comp : entry.second->metadata["components"]) {
+							if (comp.contains("Checkpoint")) {
+								auto model = comp["Checkpoint"];
+								if (model.contains("modelPath") &&
+									model["modelPath"].get<std::string>().find(modelPath) != std::string::npos) {
+									return true;
+								}
+								if (model.contains("modelName") &&
+									model["modelName"].get<std::string>().find(modelPath) != std::string::npos) {
+									return true;
+								}
+							}
+						}
+					}
+				}
+				catch (const std::exception& e) {
+					// Skip errors
+				}
+			}
+
+			return false;
+		}
+
+		// Get list of all loaded models
+		static std::vector<std::string> GetLoadedModels() {
+			std::lock_guard<std::mutex> lock(cacheMutex);
+			std::vector<std::string> models;
+
+			for (const auto& entry : contextCache) {
+				try {
+					if (entry.second->metadata.contains("components") &&
+						entry.second->metadata["components"].is_array()) {
+						for (const auto& comp : entry.second->metadata["components"]) {
+							if (comp.contains("Checkpoint")) {
+								auto model = comp["Checkpoint"];
+								std::string modelInfo;
+								if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty()) {
+									modelInfo = model["modelPath"].get<std::string>();
+								}
+								else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty()) {
+									modelInfo = model["modelName"].get<std::string>();
+								}
+
+								if (!modelInfo.empty()) {
+									modelInfo += " [Cache: " + entry.first + "]";
+									models.push_back(modelInfo);
+								}
+							}
+						}
+					}
+				}
+				catch (const std::exception& e) {
+					// Skip errors
+				}
+			}
+
+			return models;
 		}
 	};
 

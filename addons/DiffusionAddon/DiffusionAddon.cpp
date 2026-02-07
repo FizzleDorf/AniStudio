@@ -16,6 +16,7 @@
 #include "ConvertView.hpp"
 #include "UpscaleView.hpp"
 #include "VideoDiffusionView.hpp"
+#include "SDCPPDebugView.hpp"
 
 #include <iostream>
 
@@ -66,13 +67,11 @@ public:
 			return false;
 		}
 
+		// Base SDCPP Components
 		entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
 		entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
 		entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
-		entityMgr.RegisterComponent<ECS::ClipSkipComponent>("ClipSkip");
-		entityMgr.RegisterComponent<ECS::SLGComponent>("SLG");
-		entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
-
+		entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
 		entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
 		entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
 		entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
@@ -83,23 +82,24 @@ public:
 		entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
 		entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
 		entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
-		entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
-		entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
-		entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
 
+		// Other settings
+		entityMgr.RegisterComponent<ECS::ClipSkipComponent>("ClipSkip");
+		entityMgr.RegisterComponent<ECS::SLGComponent>("SLG");
+		entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
 		entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
 		entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
 		entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
+
+		// Advanced
+		entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
+		entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
+		entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
 		entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
-
-		entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
 		entityMgr.RegisterComponent<ECS::LatentTransformComponent>("LatentTransform");
-
 		entityMgr.RegisterComponent<ECS::LayerSkipComponent>("LayerSkip");
 		entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
 		entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
-		
-		// Conversion
 		entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
 
 		entityMgr.RegisterSystem<ECS::SDCPPSystem>();
@@ -132,6 +132,7 @@ public:
 		viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");
 		viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
 		viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
+		viewMgr.RegisterView<GUI::SDCPPDebugView>("SDCPPDebugView", "Diffusion");
 
 		LogInfo("Views registered via direct ViewManager");
 		return true;
