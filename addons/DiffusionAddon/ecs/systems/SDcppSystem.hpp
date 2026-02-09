@@ -209,13 +209,9 @@ namespace ECS {
 			, pauseWorker(false)
 			, hasActiveTask(false)
 			, clearRequested(false)
-			, allowMultipleModels(false)    // Default: don't allow multiple models
-			, autoUnloadOldModels(true)     // CRITICAL: Set to TRUE to enable auto-unload by default
 		{
 			sysName = "SDCPPSystem";
-			std::cout << "[SDCPPSystem] Initialized with aggressive context management" << std::endl;
-			std::cout << "[SDCPPSystem] Default: Auto-unload ENABLED to prevent memory leaks" << std::endl;
-			std::cout << "[SDCPPSystem] Default: Multiple models DISABLED to force context cleanup" << std::endl;
+			std::cout << "[SDCPPSystem] Initialized with smart context management" << std::endl;
 		}
 
 		// Destructor
@@ -360,7 +356,7 @@ namespace ECS {
 			// Update status of running task
 			CheckTaskCompletion();
 
-			// Check for model loading failures (only for tasks about to be processed)
+			// Check for model loading failures
 			CheckModelLoadingFailures();
 		}
 
@@ -485,13 +481,18 @@ namespace ECS {
 			Utils::SDContextManager::ListCachedContexts();
 		}
 
+		// Get SD context stats
 		std::tuple<size_t, size_t, size_t> GetSDContextStats() {
-			return Utils::SDContextManager::GetCacheStats();
+			size_t totalCached = 0, inUse = 0, available = 0;
+			Utils::SDContextManager::GetCacheStats(totalCached, inUse, available);
+			return std::make_tuple(totalCached, inUse, available);
 		}
 
 		// Get model loading stats
 		std::tuple<size_t, size_t> GetModelLoadingStats() {
-			return Utils::SDContextManager::GetLoadingStats();
+			size_t loadingCount = 0, failedCount = 0;
+			Utils::SDContextManager::GetLoadingStats(loadingCount, failedCount);
+			return std::make_tuple(loadingCount, failedCount);
 		}
 
 		// Force reload model for next task
@@ -502,47 +503,17 @@ namespace ECS {
 		}
 
 		// ================================================
-		// NEW: Model Management Controls
+		// Model Management Controls
 		// ================================================
 
-		// Model Management Controls
-		void SetAllowMultipleModels(bool allow) {
-			allowMultipleModels = allow;
-			// If NOT allowing multiple models, force cleanup of existing contexts
-			if (!allow) {
-				std::cout << "[SDCPPSystem] Multiple models disabled - cleaning up existing contexts..." << std::endl;
-				CleanupUnusedContexts();
-			}
-			// Always enable auto-unload when multiple models are not allowed
-			if (!allow) {
-				autoUnloadOldModels = true;
-				std::cout << "[SDCPPSystem] Auto-unload enabled for single-model mode" << std::endl;
-			}
-			std::cout << "[SDCPPSystem] Multiple models " << (allow ? "allowed" : "not allowed") << std::endl;
+		// Set maximum number of models to cache
+		void SetMaxModelCache(size_t maxModels) {
+			Utils::SDContextManager::SetMaxCacheSize(maxModels);
+			std::cout << "[SDCPPSystem] Max model cache set to: " << maxModels << std::endl;
 		}
 
-		bool GetAllowMultipleModels() const {
-			return allowMultipleModels;
-		}
-
-		void SetAutoUnloadOldModels(bool autoUnload) {
-			// Always allow auto-unload to be set to true
-			// Only prevent it if trying to disable while in single-model mode
-			if (!autoUnload && !allowMultipleModels) {
-				std::cout << "[SDCPPSystem] WARNING: Cannot disable auto-unload in single-model mode!" << std::endl;
-				return;
-			}
-			autoUnloadOldModels = autoUnload;
-			std::cout << "[SDCPPSystem] Auto-unload old models: " << (autoUnload ? "enabled" : "disabled") << std::endl;
-
-			// If enabling auto-unload, clean up any existing contexts
-			if (autoUnload) {
-				CleanupUnusedContexts();
-			}
-		}
-
-		bool GetAutoUnloadOldModels() const {
-			return autoUnloadOldModels;
+		size_t GetMaxModelCache() const {
+			return Utils::SDContextManager::GetMaxCacheSize();
 		}
 
 		// Unload specific model (safely - only if not in use)
@@ -585,7 +556,7 @@ namespace ECS {
 			}
 		}
 
-		// AGGRESSIVE CONTEXT CLEANUP - NEW METHOD
+		// Force unload idle models
 		void ForceUnloadIdleModels() {
 			std::cout << "[SDCPPSystem] Force unloading idle models..." << std::endl;
 
@@ -607,16 +578,6 @@ namespace ECS {
 			std::cout << "[SDCPPSystem] All models unloaded" << std::endl;
 		}
 
-		// Set maximum number of models to cache
-		void SetMaxModelCache(size_t maxModels) {
-			Utils::SDContextManager::SetMaxCacheSize(maxModels);
-			std::cout << "[SDCPPSystem] Max model cache set to: " << maxModels << std::endl;
-		}
-
-		size_t GetMaxModelCache() const {
-			return Utils::SDContextManager::GetMaxCacheSize();
-		}
-
 		// Check if a model is loaded
 		bool IsModelLoaded(const std::string& modelPath) const {
 			return Utils::SDContextManager::IsModelLoaded(modelPath);
@@ -629,7 +590,9 @@ namespace ECS {
 
 		// Get current model cache stats
 		std::tuple<size_t, size_t, size_t> GetModelCacheStats() const {
-			return Utils::SDContextManager::GetCacheStats();
+			size_t totalCached = 0, inUse = 0, available = 0;
+			Utils::SDContextManager::GetCacheStats(totalCached, inUse, available);
+			return std::make_tuple(totalCached, inUse, available);
 		}
 
 	private:
@@ -639,8 +602,6 @@ namespace ECS {
 		std::atomic<bool> terminateFlag{ false };
 		std::atomic<bool> clearRequested{ false };
 		std::atomic<bool> forceModelReload{ false };
-		std::atomic<bool> allowMultipleModels{ false };     // User setting
-		std::atomic<bool> autoUnloadOldModels{ true };     // CRITICAL: Default to TRUE
 		std::vector<EntityID> entitiesNeedingCleanup;
 		mutable std::mutex queueMutex;
 		EntityID lastGeneratedVideoEntity{ 0 };
@@ -671,8 +632,8 @@ namespace ECS {
 		bool IsTaskReadyForProcessing(TaskData& task) {
 			switch (task.contextType) {
 			case TaskData::SDContext:
-				// For SD tasks, check if context is loaded
-				if (task.sdContext != nullptr) {
+				// For SD tasks, check if context is loaded AND not loading
+				if (task.sdContext != nullptr && !task.modelLoading) {
 					return true; // Context already loaded
 				}
 
@@ -704,35 +665,10 @@ namespace ECS {
 			}
 		}
 
-		// Get or create context for a task - FIXED VERSION
+		// Get or create context for a task
 		bool AcquireContextForTask(TaskData& task) {
 			switch (task.contextType) {
 			case TaskData::SDContext: {
-				// ONLY cleanup if we're not already loading AND not allowing multiple models
-				if (!allowMultipleModels && !task.modelLoading) {
-					std::cout << "[SDCPPSystem] Cleaning up old contexts before loading new model..." << std::endl;
-
-					// Get current cache stats
-					auto[totalCached, inUse, available] = Utils::SDContextManager::GetCacheStats();
-
-					if (totalCached > 0) {
-						std::cout << "[SDCPPSystem] Found " << totalCached << " cached contexts, clearing them..." << std::endl;
-
-						// List what we're about to clear
-						auto loadedModels = Utils::SDContextManager::GetLoadedModels();
-						if (!loadedModels.empty()) {
-							std::cout << "[SDCPPSystem] Currently loaded models:" << std::endl;
-							for (const auto& model : loadedModels) {
-								std::cout << "  - " << model << std::endl;
-							}
-						}
-
-						// CLEAR ALL CONTEXTS - BE AGGRESSIVE
-						Utils::SDContextManager::ClearAllContexts();
-						std::cout << "[SDCPPSystem] All contexts cleared" << std::endl;
-					}
-				}
-
 				// Check if force reload is requested
 				if (forceModelReload) {
 					// Force creation of new context
@@ -777,24 +713,6 @@ namespace ECS {
 				task.contextAcquired = true;
 				return true;
 			}
-		}
-
-		// AGGRESSIVE CONTEXT CLEANUP METHOD
-		void CleanupUnusedContexts() {
-			std::cout << "[SDCPPSystem] Cleaning up unused contexts..." << std::endl;
-
-			// Get current cache stats
-			auto[totalCached, inUse, available] = Utils::SDContextManager::GetCacheStats();
-			std::cout << "[SDCPPSystem] Before cleanup: Total=" << totalCached
-				<< ", InUse=" << inUse << ", Available=" << available << std::endl;
-
-			// Clean up ALL unused contexts - be aggressive
-			Utils::SDContextManager::ClearAllContexts();
-
-			// Verify cleanup
-			auto[newTotal, newInUse, newAvailable] = Utils::SDContextManager::GetCacheStats();
-			std::cout << "[SDCPPSystem] After cleanup: Total=" << newTotal
-				<< ", InUse=" << newInUse << ", Available=" << newAvailable << std::endl;
 		}
 
 		// Create upscaler context from metadata
@@ -857,25 +775,23 @@ namespace ECS {
 			}
 		}
 
-		// FIXED: Check model loading failures - only checks tasks that are about to be processed
+		// Check model loading failures
 		void CheckModelLoadingFailures() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 
-			// Only check the FIRST non-processing task that's marked as loading
-			// This prevents checking all tasks in the queue prematurely
+			// Check all non-processing tasks that are marked as loading
 			for (auto& task : taskQueue) {
 				if (!task.processing && task.modelLoading && task.contextType == TaskData::SDContext) {
-					// This is the next task waiting for SD context
 					// Check if loading has completed (successfully or failed)
 					if (!Utils::SDContextManager::IsContextLoading(task.metadata)) {
 						// Loading is no longer in progress, check result
 						sd_ctx_t* loadedContext = Utils::SDContextManager::TryGetLoadedContext(task.metadata);
 
 						if (loadedContext == nullptr) {
-							// Loading failed for this specific task
+							// Loading failed for this task
 							std::cerr << "Model loading failed for entity " << task.entityID << std::endl;
 
-							// Mark for cleanup - this task will fail when ProcessQueues() tries to start it
+							// Mark for cleanup
 							task.modelLoading = false;
 							task.contextAcquired = false;
 						}
@@ -887,8 +803,6 @@ namespace ECS {
 							std::cout << "Model loading completed for entity " << task.entityID << std::endl;
 						}
 					}
-					// Only check the first loading task, not all tasks in queue
-					break;
 				}
 			}
 		}
@@ -1003,6 +917,11 @@ namespace ECS {
 		// Static task functions - these match the actual function signatures
 		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
+				// Ensure model is not still loading
+				if (Utils::SDContextManager::IsContextLoading(metadata)) {
+					std::cerr << "ERROR: Model is still loading, cannot start inference" << std::endl;
+					return false;
+				}
 				return Utils::Txt2Img::RunInference(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
@@ -1023,6 +942,11 @@ namespace ECS {
 
 		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
+				// Ensure model is not still loading
+				if (Utils::SDContextManager::IsContextLoading(metadata)) {
+					std::cerr << "ERROR: Model is still loading, cannot start img2img" << std::endl;
+					return false;
+				}
 				return Utils::Img2Img::RunImg2Img(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
@@ -1033,6 +957,11 @@ namespace ECS {
 
 		static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
+				// Ensure model is not still loading
+				if (Utils::SDContextManager::IsContextLoading(metadata)) {
+					std::cerr << "ERROR: Model is still loading, cannot start img2vid" << std::endl;
+					return false;
+				}
 				return Utils::Img2Vid::RunImg2Vid(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
@@ -1043,6 +972,11 @@ namespace ECS {
 
 		static bool RunEdit(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
 			try {
+				// Ensure model is not still loading
+				if (Utils::SDContextManager::IsContextLoading(metadata)) {
+					std::cerr << "ERROR: Model is still loading, cannot start edit" << std::endl;
+					return false;
+				}
 				return Utils::Edit::RunEdit(metadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
@@ -1078,7 +1012,7 @@ namespace ECS {
 			}
 		}
 
-		// FIXED: Queue processing methods - better handling of task readiness
+		// Queue processing methods
 		void ProcessQueues() {
 			std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -1104,11 +1038,11 @@ namespace ECS {
 						task.contextType = GetRequiredContextType(task.taskType);
 					}
 
-					// Check if task is ready (has context if needed)
+					// Check if task is ready (has context if needed and not loading)
 					if (!IsTaskReadyForProcessing(task)) {
 						// Task not ready yet, try to acquire context if we haven't already
 						if (!task.contextAcquired && !task.modelLoading) {
-							// First attempt to get context - ONLY FOR THIS TASK
+							// First attempt to get context
 							bool acquired = AcquireContextForTask(task);
 							if (!acquired) {
 								// Task is loading, wait for it
@@ -1277,7 +1211,7 @@ namespace ECS {
 								std::cerr << "Exception retrieving task result: " << e.what() << std::endl;
 							}
 
-							// CRITICAL FIX: Clean up context BEFORE removing task
+							// Clean up context BEFORE removing task
 							it->CleanupContext();
 
 							// Process the completed task ONLY if not shutting down

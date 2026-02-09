@@ -16,7 +16,7 @@
 #include "ConvertView.hpp"
 #include "UpscaleView.hpp"
 #include "VideoDiffusionView.hpp"
-#include "SDCPPDebugView.hpp"
+#include "ModelCacheView.hpp"
 
 #include <iostream>
 
@@ -132,7 +132,7 @@ public:
 		viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");
 		viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
 		viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
-		viewMgr.RegisterView<GUI::SDCPPDebugView>("SDCPPDebugView", "Diffusion");
+		viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "Diffusion");
 
 		LogInfo("Views registered via direct ViewManager");
 		return true;

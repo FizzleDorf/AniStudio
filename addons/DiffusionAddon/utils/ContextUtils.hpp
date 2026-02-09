@@ -39,9 +39,9 @@ namespace Utils {
 		// INLINE static members (C++17+) - no separate .cpp file needed
 		static inline std::unordered_map<std::string, std::shared_ptr<SDContextCacheEntry>> contextCache;
 		static inline std::mutex cacheMutex;
-		static inline size_t MAX_CACHE_SIZE = 3; // Maximum number of cached contexts (made non-const)
-		static inline std::atomic<size_t> totalContextsCreated{ 0 };
-		static inline std::atomic<size_t> totalContextsFailed{ 0 };
+		static inline size_t MAX_CACHE_SIZE = 3; // Maximum number of cached contexts
+		static inline size_t totalContextsCreated = 0;
+		static inline size_t totalContextsFailed = 0;
 
 	public:
 		// Generate a cache key from metadata
@@ -55,10 +55,10 @@ namespace Utils {
 						// Model paths are the most important for context uniqueness
 						if (comp.contains("Checkpoint")) {
 							auto model = comp["Checkpoint"];
-							if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty()) {
+							if (model.contains("modelPath") && !model["modelPath"].is_null() && !model["modelPath"].get<std::string>().empty()) {
 								key += model["modelPath"].get<std::string>();
 							}
-							else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty()) {
+							else if (model.contains("modelName") && !model["modelName"].is_null() && !model["modelName"].get<std::string>().empty()) {
 								key += model["modelName"].get<std::string>();
 							}
 						}
@@ -66,10 +66,10 @@ namespace Utils {
 						// Include VAE if present
 						if (comp.contains("Vae")) {
 							auto vae = comp["Vae"];
-							if (vae.contains("modelPath") && !vae["modelPath"].get<std::string>().empty()) {
+							if (vae.contains("modelPath") && !vae["modelPath"].is_null() && !vae["modelPath"].get<std::string>().empty()) {
 								key += "|vae:" + vae["modelPath"].get<std::string>();
 							}
-							else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty()) {
+							else if (vae.contains("modelName") && !vae["modelName"].is_null() && !vae["modelName"].get<std::string>().empty()) {
 								key += "|vae:" + vae["modelName"].get<std::string>();
 							}
 						}
@@ -77,20 +77,20 @@ namespace Utils {
 						// Include CLIP if present
 						if (comp.contains("ClipL")) {
 							auto clipL = comp["ClipL"];
-							if (clipL.contains("modelPath") && !clipL["modelPath"].get<std::string>().empty()) {
+							if (clipL.contains("modelPath") && !clipL["modelPath"].is_null() && !clipL["modelPath"].get<std::string>().empty()) {
 								key += "|clipL:" + clipL["modelPath"].get<std::string>();
 							}
-							else if (clipL.contains("modelName") && !clipL["modelName"].get<std::string>().empty()) {
+							else if (clipL.contains("modelName") && !clipL["modelName"].is_null() && !clipL["modelName"].get<std::string>().empty()) {
 								key += "|clipL:" + clipL["modelName"].get<std::string>();
 							}
 						}
 
 						if (comp.contains("ClipG")) {
 							auto clipG = comp["ClipG"];
-							if (clipG.contains("modelPath") && !clipG["modelPath"].get<std::string>().empty()) {
+							if (clipG.contains("modelPath") && !clipG["modelPath"].is_null() && !clipG["modelPath"].get<std::string>().empty()) {
 								key += "|clipG:" + clipG["modelPath"].get<std::string>();
 							}
-							else if (clipG.contains("modelName") && !clipG["modelName"].get<std::string>().empty()) {
+							else if (clipG.contains("modelName") && !clipG["modelName"].is_null() && !clipG["modelName"].get<std::string>().empty()) {
 								key += "|clipG:" + clipG["modelName"].get<std::string>();
 							}
 						}
@@ -136,25 +136,25 @@ namespace Utils {
 						for (const auto& comp : metadata["components"]) {
 							if (comp.contains("Checkpoint")) {
 								auto model = comp["Checkpoint"];
-								if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty()) {
+								if (model.contains("modelPath") && !model["modelPath"].is_null() && !model["modelPath"].get<std::string>().empty()) {
 									paths.push_back(model["modelPath"].get<std::string>());
 								}
 							}
 							if (comp.contains("Vae")) {
 								auto vae = comp["Vae"];
-								if (vae.contains("modelPath") && !vae["modelPath"].get<std::string>().empty()) {
+								if (vae.contains("modelPath") && !vae["modelPath"].is_null() && !vae["modelPath"].get<std::string>().empty()) {
 									paths.push_back(vae["modelPath"].get<std::string>());
 								}
 							}
 							if (comp.contains("ClipL")) {
 								auto clipL = comp["ClipL"];
-								if (clipL.contains("modelPath") && !clipL["modelPath"].get<std::string>().empty()) {
+								if (clipL.contains("modelPath") && !clipL["modelPath"].is_null() && !clipL["modelPath"].get<std::string>().empty()) {
 									paths.push_back(clipL["modelPath"].get<std::string>());
 								}
 							}
 							if (comp.contains("ClipG")) {
 								auto clipG = comp["ClipG"];
-								if (clipG.contains("modelPath") && !clipG["modelPath"].get<std::string>().empty()) {
+								if (clipG.contains("modelPath") && !clipG["modelPath"].is_null() && !clipG["modelPath"].get<std::string>().empty()) {
 									paths.push_back(clipG["modelPath"].get<std::string>());
 								}
 							}
@@ -234,9 +234,9 @@ namespace Utils {
 					for (const auto &comp : metadata["components"]) {
 						if (comp.contains("Checkpoint")) {
 							auto model = comp["Checkpoint"];
-							if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty())
+							if (model.contains("modelPath") && !model["modelPath"].is_null() && !model["modelPath"].get<std::string>().empty())
 								modelPath = model["modelPath"].get<std::string>();
-							else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty())
+							else if (model.contains("modelName") && !model["modelName"].is_null() && !model["modelName"].get<std::string>().empty())
 								modelPath = FilePathService::GetPath("Checkpoint") + "/" + model["modelName"].get<std::string>();
 
 							std::cout << "DEBUG: Model path set to: " << modelPath << std::endl;
@@ -244,73 +244,73 @@ namespace Utils {
 
 						if (comp.contains("ClipL")) {
 							auto clipL = comp["ClipL"];
-							if (clipL.contains("modelPath") && !clipL["modelPath"].get<std::string>().empty())
+							if (clipL.contains("modelPath") && !clipL["modelPath"].is_null() && !clipL["modelPath"].get<std::string>().empty())
 								clipLPath = clipL["modelPath"].get<std::string>();
-							else if (clipL.contains("modelName") && !clipL["modelName"].get<std::string>().empty())
+							else if (clipL.contains("modelName") && !clipL["modelName"].is_null() && !clipL["modelName"].get<std::string>().empty())
 								clipLPath = FilePathService::GetPath("Encoder") + "/" + clipL["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("ClipG")) {
 							auto clipG = comp["ClipG"];
-							if (clipG.contains("modelPath") && !clipG["modelPath"].get<std::string>().empty())
+							if (clipG.contains("modelPath") && !clipG["modelPath"].is_null() && !clipG["modelPath"].get<std::string>().empty())
 								clipGPath = clipG["modelPath"].get<std::string>();
-							else if (clipG.contains("modelName") && !clipG["modelName"].get<std::string>().empty())
+							else if (clipG.contains("modelName") && !clipG["modelName"].is_null() && !clipG["modelName"].get<std::string>().empty())
 								clipGPath = FilePathService::GetPath("Encoder") + "/" + clipG["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("ClipVision")) {
 							auto clipVision = comp["ClipVision"];
-							if (clipVision.contains("modelPath") && !clipVision["modelPath"].get<std::string>().empty())
+							if (clipVision.contains("modelPath") && !clipVision["modelPath"].is_null() && !clipVision["modelPath"].get<std::string>().empty())
 								clipVisionPath = clipVision["modelPath"].get<std::string>();
-							else if (clipVision.contains("modelName") && !clipVision["modelName"].get<std::string>().empty())
+							else if (clipVision.contains("modelName") && !clipVision["modelName"].is_null() && !clipVision["modelName"].get<std::string>().empty())
 								clipVisionPath = FilePathService::GetPath("Encoder") + "/" + clipVision["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("T5XXL")) {
 							auto t5xxl = comp["T5XXL"];
-							if (t5xxl.contains("modelPath") && !t5xxl["modelPath"].get<std::string>().empty())
+							if (t5xxl.contains("modelPath") && !t5xxl["modelPath"].is_null() && !t5xxl["modelPath"].get<std::string>().empty())
 								t5xxlPath = t5xxl["modelPath"].get<std::string>();
-							else if (t5xxl.contains("modelName") && !t5xxl["modelName"].get<std::string>().empty())
+							else if (t5xxl.contains("modelName") && !t5xxl["modelName"].is_null() && !t5xxl["modelName"].get<std::string>().empty())
 								t5xxlPath = FilePathService::GetPath("Encoder") + "/" + t5xxl["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("LLM")) {
 							auto llm = comp["LLM"];
-							if (llm.contains("modelPath") && !llm["modelPath"].get<std::string>().empty())
+							if (llm.contains("modelPath") && !llm["modelPath"].is_null() && !llm["modelPath"].get<std::string>().empty())
 								llmPath = llm["modelPath"].get<std::string>();
-							else if (llm.contains("modelName") && !llm["modelName"].get<std::string>().empty())
+							else if (llm.contains("modelName") && !llm["modelName"].is_null() && !llm["modelName"].get<std::string>().empty())
 								llmPath = FilePathService::GetPath("Encoder") + "/" + llm["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("LLMVision")) {
 							auto llmVision = comp["LLMVision"];
-							if (llmVision.contains("modelPath") && !llmVision["modelPath"].get<std::string>().empty())
+							if (llmVision.contains("modelPath") && !llmVision["modelPath"].is_null() && !llmVision["modelPath"].get<std::string>().empty())
 								llmVisionPath = llmVision["modelPath"].get<std::string>();
-							else if (llmVision.contains("modelName") && !llmVision["modelName"].get<std::string>().empty())
+							else if (llmVision.contains("modelName") && !llmVision["modelName"].is_null() && !llmVision["modelName"].get<std::string>().empty())
 								llmVisionPath = FilePathService::GetPath("Encoder") + "/" + llmVision["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("DiffusionModel")) {
 							auto diffusion = comp["DiffusionModel"];
-							if (diffusion.contains("modelPath") && !diffusion["modelPath"].get<std::string>().empty())
+							if (diffusion.contains("modelPath") && !diffusion["modelPath"].is_null() && !diffusion["modelPath"].get<std::string>().empty())
 								diffusionModelPath = diffusion["modelPath"].get<std::string>();
-							else if (diffusion.contains("modelName") && !diffusion["modelName"].get<std::string>().empty())
+							else if (diffusion.contains("modelName") && !diffusion["modelName"].is_null() && !diffusion["modelName"].get<std::string>().empty())
 								diffusionModelPath = FilePathService::GetPath("Unet") + "/" + diffusion["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("HighNoiseDiffusionModel")) {
 							auto highNoise = comp["HighNoiseDiffusionModel"];
-							if (highNoise.contains("modelPath") && !highNoise["modelPath"].get<std::string>().empty())
+							if (highNoise.contains("modelPath") && !highNoise["modelPath"].is_null() && !highNoise["modelPath"].get<std::string>().empty())
 								highNoiseModelPath = highNoise["modelPath"].get<std::string>();
-							else if (highNoise.contains("modelName") && !highNoise["modelName"].get<std::string>().empty())
+							else if (highNoise.contains("modelName") && !highNoise["modelName"].is_null() && !highNoise["modelName"].get<std::string>().empty())
 								highNoiseModelPath = FilePathService::GetPath("Unet") + "/" + highNoise["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("Vae")) {
 							auto vae = comp["Vae"];
-							if (vae.contains("modelPath") && !vae["modelPath"].get<std::string>().empty())
+							if (vae.contains("modelPath") && !vae["modelPath"].is_null() && !vae["modelPath"].get<std::string>().empty())
 								vaePath = vae["modelPath"].get<std::string>();
-							else if (vae.contains("modelName") && !vae["modelName"].get<std::string>().empty())
+							else if (vae.contains("modelName") && !vae["modelName"].is_null() && !vae["modelName"].get<std::string>().empty())
 								vaePath = FilePathService::GetPath("Vae") + "/" + vae["modelName"].get<std::string>();
 							if (vae.contains("vae_decode_only"))
 								ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
@@ -320,17 +320,17 @@ namespace Utils {
 
 						if (comp.contains("Taesd")) {
 							auto taesd = comp["Taesd"];
-							if (taesd.contains("modelPath") && !taesd["modelPath"].get<std::string>().empty())
+							if (taesd.contains("modelPath") && !taesd["modelPath"].is_null() && !taesd["modelPath"].get<std::string>().empty())
 								taesdPath = taesd["modelPath"].get<std::string>();
-							else if (taesd.contains("modelName") && !taesd["modelName"].get<std::string>().empty())
+							else if (taesd.contains("modelName") && !taesd["modelName"].is_null() && !taesd["modelName"].get<std::string>().empty())
 								taesdPath = FilePathService::GetPath("Vae") + "/" + taesd["modelName"].get<std::string>();
 						}
 
 						if (comp.contains("Controlnet")) {
 							auto controlnet = comp["Controlnet"];
-							if (controlnet.contains("modelPath") && !controlnet["modelPath"].get<std::string>().empty())
+							if (controlnet.contains("modelPath") && !controlnet["modelPath"].is_null() && !controlnet["modelPath"].get<std::string>().empty())
 								controlnetPath = controlnet["modelPath"].get<std::string>();
-							else if (controlnet.contains("modelName") && !controlnet["modelName"].get<std::string>().empty())
+							else if (controlnet.contains("modelName") && !controlnet["modelName"].is_null() && !controlnet["modelName"].get<std::string>().empty())
 								controlnetPath = FilePathService::GetPath("ControlNet") + "/" + controlnet["modelName"].get<std::string>();
 
 							if (controlnet.contains("keep_control_net_on_cpu"))
@@ -339,9 +339,9 @@ namespace Utils {
 
 						if (comp.contains("PhotoMaker") || comp.contains("StackedIdEmbed")) {
 							auto pm = comp.contains("PhotoMaker") ? comp["PhotoMaker"] : comp["StackedIdEmbed"];
-							if (pm.contains("modelPath") && !pm["modelPath"].get<std::string>().empty())
+							if (pm.contains("modelPath") && !pm["modelPath"].is_null() && !pm["modelPath"].get<std::string>().empty())
 								photoMakerPath = pm["modelPath"].get<std::string>();
-							else if (pm.contains("modelName") && !pm["modelName"].get<std::string>().empty())
+							else if (pm.contains("modelName") && !pm["modelName"].is_null() && !pm["modelName"].get<std::string>().empty())
 								photoMakerPath = FilePathService::GetPath("Embed") + "/" + pm["modelName"].get<std::string>();
 						}
 
@@ -366,7 +366,7 @@ namespace Utils {
 							if (sampler.contains("current_prediction_type"))
 								ctx_params.prediction = static_cast<prediction_t>(sampler["current_prediction_type"].get<int>());
 
-							if (sampler.contains("tensor_type_rules") && !sampler["tensor_type_rules"].get<std::string>().empty())
+							if (sampler.contains("tensor_type_rules") && !sampler["tensor_type_rules"].is_null() && !sampler["tensor_type_rules"].get<std::string>().empty())
 								tensorTypeRules = sampler["tensor_type_rules"].get<std::string>();
 						}
 
@@ -657,12 +657,12 @@ namespace Utils {
 		}
 
 		// Get cache statistics
-		static std::tuple<size_t, size_t, size_t> GetCacheStats() {
+		static void GetCacheStats(size_t& totalCached, size_t& inUse, size_t& available) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
-			size_t totalCached = contextCache.size();
-			size_t inUse = 0;
-			size_t available = 0;
+			totalCached = contextCache.size();
+			inUse = 0;
+			available = 0;
 
 			for (const auto& entry : contextCache) {
 				if (entry.second->isInUse) {
@@ -672,22 +672,20 @@ namespace Utils {
 					available++;
 				}
 			}
-
-			return { totalCached, inUse, available };
 		}
 
 		// Get loading statistics
-		static std::tuple<size_t, size_t> GetLoadingStats() {
+		static void GetLoadingStats(size_t& loadingCount, size_t& failedCount) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
-			size_t loadingCount = 0;
+			loadingCount = 0;
 			for (const auto& entry : contextCache) {
 				if (entry.second->isLoading) {
 					loadingCount++;
 				}
 			}
 
-			return { loadingCount, totalContextsFailed };
+			failedCount = totalContextsFailed;
 		}
 
 		// List all cached contexts
@@ -695,7 +693,7 @@ namespace Utils {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
 			std::cout << "=== Cached SD Contexts ===" << std::endl;
-			std::cout << "Total contexts: " << contextCache.size() << std::endl;
+			std::cout << "Total contexts: " << contextCache.size() << " (max: " << MAX_CACHE_SIZE << ")" << std::endl;
 			std::cout << "Total created: " << totalContextsCreated << std::endl;
 			std::cout << "Total failed: " << totalContextsFailed << std::endl;
 
@@ -727,7 +725,7 @@ namespace Utils {
 		}
 
 		// ================================================
-		// NEW: Model Management API
+		// Model Management API
 		// ================================================
 
 		// Unload specific model by path
@@ -748,11 +746,13 @@ namespace Utils {
 							if (comp.contains("Checkpoint")) {
 								auto model = comp["Checkpoint"];
 								if (model.contains("modelPath") &&
+									!model["modelPath"].is_null() &&
 									model["modelPath"].get<std::string>().find(modelPath) != std::string::npos) {
 									usesModel = true;
 									break;
 								}
 								if (model.contains("modelName") &&
+									!model["modelName"].is_null() &&
 									model["modelName"].get<std::string>().find(modelPath) != std::string::npos) {
 									usesModel = true;
 									break;
@@ -796,56 +796,6 @@ namespace Utils {
 			return MAX_CACHE_SIZE;
 		}
 
-		// Force unload when new model is requested (default behavior)
-		static void ForceUnloadForNewModel(const nlohmann::json& newMetadata) {
-			std::lock_guard<std::mutex> lock(cacheMutex);
-
-			if (contextCache.size() >= 1) { // If we have at least one model loaded
-				// Extract model path from new metadata
-				std::string newModelPath = "";
-				if (newMetadata.contains("components") && newMetadata["components"].is_array()) {
-					for (const auto& comp : newMetadata["components"]) {
-						if (comp.contains("Checkpoint")) {
-							auto model = comp["Checkpoint"];
-							if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty()) {
-								newModelPath = model["modelPath"].get<std::string>();
-							}
-							break;
-						}
-					}
-				}
-
-				if (!newModelPath.empty()) {
-					// Find and remove all contexts that don't use the new model
-					for (auto it = contextCache.begin(); it != contextCache.end();) {
-						bool usesNewModel = false;
-
-						if (it->second->metadata.contains("components") &&
-							it->second->metadata["components"].is_array()) {
-							for (const auto& comp : it->second->metadata["components"]) {
-								if (comp.contains("Checkpoint")) {
-									auto model = comp["Checkpoint"];
-									if (model.contains("modelPath") &&
-										model["modelPath"].get<std::string>() == newModelPath) {
-										usesNewModel = true;
-										break;
-									}
-								}
-							}
-						}
-
-						if (!usesNewModel) {
-							std::cout << "DEBUG: Force unloading model for new request: " << it->first << std::endl;
-							it = contextCache.erase(it);
-						}
-						else {
-							++it;
-						}
-					}
-				}
-			}
-		}
-
 		// Check if a specific model is currently loaded
 		static bool IsModelLoaded(const std::string& modelPath) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
@@ -858,10 +808,12 @@ namespace Utils {
 							if (comp.contains("Checkpoint")) {
 								auto model = comp["Checkpoint"];
 								if (model.contains("modelPath") &&
+									!model["modelPath"].is_null() &&
 									model["modelPath"].get<std::string>().find(modelPath) != std::string::npos) {
 									return true;
 								}
 								if (model.contains("modelName") &&
+									!model["modelName"].is_null() &&
 									model["modelName"].get<std::string>().find(modelPath) != std::string::npos) {
 									return true;
 								}
@@ -890,10 +842,10 @@ namespace Utils {
 							if (comp.contains("Checkpoint")) {
 								auto model = comp["Checkpoint"];
 								std::string modelInfo;
-								if (model.contains("modelPath") && !model["modelPath"].get<std::string>().empty()) {
+								if (model.contains("modelPath") && !model["modelPath"].is_null() && !model["modelPath"].get<std::string>().empty()) {
 									modelInfo = model["modelPath"].get<std::string>();
 								}
-								else if (model.contains("modelName") && !model["modelName"].get<std::string>().empty()) {
+								else if (model.contains("modelName") && !model["modelName"].is_null() && !model["modelName"].get<std::string>().empty()) {
 									modelInfo = model["modelName"].get<std::string>();
 								}
 
