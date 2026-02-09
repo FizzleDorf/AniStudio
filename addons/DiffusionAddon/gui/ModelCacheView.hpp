@@ -114,9 +114,6 @@ namespace GUI {
 				return;
 			}
 
-			// Cache Statistics Section
-			RenderCacheStats(sdcppSystem);
-
 			ImGui::Separator();
 
 			// Cache Configuration Section
@@ -131,44 +128,6 @@ namespace GUI {
 
 			// Cache Actions Section
 			RenderCacheActions(sdcppSystem);
-		}
-
-		void RenderCacheStats(std::shared_ptr<ECS::SDCPPSystem> sdcppSystem) {
-			ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Cache Statistics");
-
-			auto stats = sdcppSystem->GetSDContextStats();
-			size_t totalCached = std::get<0>(stats);
-			size_t inUse = std::get<1>(stats);
-			size_t available = std::get<2>(stats);
-
-			auto loadingStats = sdcppSystem->GetModelLoadingStats();
-			size_t loadingCount = std::get<0>(loadingStats);
-			size_t failedCount = std::get<1>(loadingStats);
-
-			ImGui::Text("Total Cached: %zu", totalCached);
-			ImGui::SameLine(); HelpMarker("Number of models currently in cache");
-
-			ImGui::Text("In Use: %zu", inUse);
-			ImGui::SameLine(); HelpMarker("Models currently being used for inference");
-
-			ImGui::Text("Available: %zu", available);
-			ImGui::SameLine(); HelpMarker("Models cached but not currently in use");
-
-			ImGui::Text("Loading: %zu", loadingCount);
-			ImGui::SameLine(); HelpMarker("Models currently loading asynchronously");
-
-			if (failedCount > 0) {
-				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Failed Loads: %zu", failedCount);
-				ImGui::SameLine(); HelpMarker("Number of model loading failures");
-			}
-
-			// Cache usage visualization
-			if (maxCacheSize > 0) {
-				float cacheUsage = static_cast<float>(totalCached) / static_cast<float>(maxCacheSize);
-				char progressText[64];
-				snprintf(progressText, sizeof(progressText), "Cache Usage: %zu/%zu", totalCached, maxCacheSize);
-				ImGui::ProgressBar(cacheUsage, ImVec2(-FLT_MIN, 20), progressText);
-			}
 		}
 
 		void RenderCacheConfig(std::shared_ptr<ECS::SDCPPSystem> sdcppSystem) {
