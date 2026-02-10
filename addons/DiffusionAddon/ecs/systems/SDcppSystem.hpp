@@ -947,7 +947,22 @@ namespace ECS {
 					std::cerr << "ERROR: Model is still loading, cannot start img2img" << std::endl;
 					return false;
 				}
-				return Utils::Img2Img::RunImg2Img(metadata, fullPath, context);
+
+				// Clone metadata and modify VAE settings for img2vid tasks
+				nlohmann::json modifiedMetadata = metadata;
+
+				// Ensure vae_decode_only is false for img2vid (needs full VAE)
+				if (modifiedMetadata.contains("components") && modifiedMetadata["components"].is_array()) {
+					for (size_t i = 0; i < modifiedMetadata["components"].size(); ++i) {
+						auto& comp = modifiedMetadata["components"][i];
+						if (comp.contains("Vae")) {
+							auto& vae = comp["Vae"];
+							vae["vae_decode_only"] = false;
+						}
+					}
+				}
+
+				return Utils::Img2Img::RunImg2Img(modifiedMetadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
@@ -962,7 +977,22 @@ namespace ECS {
 					std::cerr << "ERROR: Model is still loading, cannot start img2vid" << std::endl;
 					return false;
 				}
-				return Utils::Img2Vid::RunImg2Vid(metadata, fullPath, context);
+
+				// Clone metadata and modify VAE settings for img2vid tasks
+				nlohmann::json modifiedMetadata = metadata;
+
+				// Ensure vae_decode_only is false for img2vid (needs full VAE)
+				if (modifiedMetadata.contains("components") && modifiedMetadata["components"].is_array()) {
+					for (size_t i = 0; i < modifiedMetadata["components"].size(); ++i) {
+						auto& comp = modifiedMetadata["components"][i];
+						if (comp.contains("Vae")) {
+							auto& vae = comp["Vae"];
+							vae["vae_decode_only"] = false;
+						}
+					}
+				}
+
+				return Utils::Img2Vid::RunImg2Vid(modifiedMetadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during img2vid: " << e.what() << std::endl;
@@ -977,7 +1007,22 @@ namespace ECS {
 					std::cerr << "ERROR: Model is still loading, cannot start edit" << std::endl;
 					return false;
 				}
-				return Utils::Edit::RunEdit(metadata, fullPath, context);
+
+				// Clone metadata and modify VAE settings for edit tasks
+				nlohmann::json modifiedMetadata = metadata;
+
+				// Ensure vae_decode_only is false for edit (needs full VAE)
+				if (modifiedMetadata.contains("components") && modifiedMetadata["components"].is_array()) {
+					for (size_t i = 0; i < modifiedMetadata["components"].size(); ++i) {
+						auto& comp = modifiedMetadata["components"][i]; // This is now a non-const reference
+						if (comp.contains("Vae")) {
+							auto& vae = comp["Vae"];
+							vae["vae_decode_only"] = false;
+						}
+					}
+				}
+
+				return Utils::Edit::RunEdit(modifiedMetadata, fullPath, context);
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Exception during edit: " << e.what() << std::endl;

@@ -3,6 +3,19 @@ cmake_policy(SET CMP0091 NEW)
 
 project(DiffusionAddon)
 
+# ===== ADD THIS FOR VULKAN SHADER GENERATOR FIX =====
+# Workaround for MSBuild/ExternalProject timing issues
+if(WIN32)
+    # Disable parallel build for ExternalProject steps to prevent race conditions
+    set(CMAKE_JOB_POOLS compile=1 link=1)
+    set(CMAKE_JOB_POOL_COMPILE compile)
+    set(CMAKE_JOB_POOL_LINK link)
+    
+    # Fix ExternalProject timing
+    set(CMAKE_POLICY_DEFAULT_CMP0114 NEW)
+endif()
+# ====================================================
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -196,6 +209,15 @@ endif()
 # Force stable-diffusion to build as static library
 set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "Build stable-diffusion as static library" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
+
+# ===== FIX FOR VULKAN SHADER GENERATOR =====
+# Disable problematic ExternalProject steps for vulkan-shaders-gen
+if(SD_VULKAN)
+    # This prevents the build order issue where install tries to run before build
+    set(GGML_VULKAN_FORCE_SYNC_SHADERS ON CACHE BOOL "Force sync shader generation" FORCE)
+    set(CMAKE_POLICY_DEFAULT_CMP0114 NEW)  # Fix for ExternalProject timing issues
+endif()
+# ===========================================
 
 # Add the subdirectory - stable-diffusion will be built as static lib
 add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")

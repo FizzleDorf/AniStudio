@@ -131,7 +131,7 @@ namespace GUI {
 		}
 
 		void RenderCacheConfig(std::shared_ptr<ECS::SDCPPSystem> sdcppSystem) {
-			ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Cache Configuration");
+			ImGui::Text("Cache Configuration");
 
 			// Max cache size input
 			ImGui::SetNextItemWidth(100);
