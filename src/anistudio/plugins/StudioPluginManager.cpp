@@ -3,6 +3,7 @@
 #include "StudioContext.hpp"
 #include <imgui.h>
 #include <iostream>
+#include <thread>
 
 namespace Plugins {
 

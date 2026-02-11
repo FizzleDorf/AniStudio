@@ -157,6 +157,7 @@ endif()
 # Add Zep text editor
 if(NOT TARGET Zep::Zep AND EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt")
     set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
+    set(BUILD_DEMOS  OFF CACHE BOOL "Build Other Demo" FORCE)
     set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE)
     set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
     set(ZEP_FEATURE_CPP_FILE_SYSTEM ON CACHE BOOL "Enable cpp file system" FORCE)

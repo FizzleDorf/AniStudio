@@ -36,14 +36,28 @@ if(NOT TARGET ImGuizmo)
 endif()
 
 set(ZEP_AVAILABLE FALSE)
-if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
-    set(BUILD_IMGUI OFF CACHE BOOL "" FORCE)
-    set(BUILD_QT OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/_external/zep")
-    set(ZEP_AVAILABLE TRUE)
-elseif(TARGET Zep)
-    set(ZEP_AVAILABLE TRUE)
+
+# Only check for Zep if you explicitly want it
+if(DEFINED ANISTUDIO_ENABLE_ZEP AND ANISTUDIO_ENABLE_ZEP)
+    if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
+        set(BUILD_IMGUI OFF CACHE BOOL "" FORCE)
+        set(BUILD_QT OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(BUILD_DEMOS OFF CACHE BOOL "" FORCE)
+        
+        # Disable vcpkg if you don't have it
+        if(NOT EXISTS "${EXTERNAL_DIR}/zep/vcpkg/scripts/buildsystems/vcpkg.cmake")
+            message(STATUS "Zep vcpkg not found, using system packages")
+            # You might need to set variables to disable vcpkg usage in Zep
+        endif()
+        
+        add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/_external/zep")
+        set(ZEP_AVAILABLE TRUE)
+    elseif(TARGET Zep)
+        set(ZEP_AVAILABLE TRUE)
+    endif()
+else()
+    message(STATUS "Zep not enabled (ANISTUDIO_ENABLE_ZEP=${ANISTUDIO_ENABLE_ZEP})")
 endif()
 
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVE})
