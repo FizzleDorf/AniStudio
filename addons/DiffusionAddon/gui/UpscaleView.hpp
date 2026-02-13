@@ -3,7 +3,7 @@
 #include "ViewManager.hpp"
 #include "FilePaths.hpp"
 #include "pch.h"
-#include <components.h>
+#include "Components.h"
 #include "SDCPPComponents.h" 
 #include "DiffusionCallbackUtils.hpp"
 #include <memory>

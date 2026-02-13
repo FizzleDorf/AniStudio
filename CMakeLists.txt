@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0091 NEW)
+cmake_policy(SET CMP0079 NEW)
 
 project(AniStudio VERSION 0.2.0)
 
@@ -60,21 +61,6 @@ foreach(CONFIG ${CMAKE_CONFIGURATION_TYPES})
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CONFIG_UPPER} ${CMAKE_BINARY_DIR}/lib)
 endforeach()
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/bin)
-
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib)
-
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_BINARY_DIR}/lib)
-
 set(PLUGINS_DIR "${CMAKE_BINARY_DIR}/plugins")
 set(DATA_DIR "${CMAKE_BINARY_DIR}/data")
 set(DEFAULTS_DIR "${DATA_DIR}/defaults")
@@ -134,12 +120,24 @@ find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
-find_package(FFmpeg REQUIRED)
+find_package(FFmpeg REQUIRED COMPONENTS avformat avutil swscale)
 find_package(PkgConfig REQUIRED)
 find_package(pybind11 REQUIRED)
 
+# Find X11 on Linux
+if(UNIX AND NOT APPLE)
+    find_package(X11 REQUIRED)
+    if(NOT X11_FOUND)
+        message(FATAL_ERROR "X11 development libraries not found!")
+    endif()
+endif()
+
 if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
     set(ZEP_AVAILABLE TRUE)
+    set(BUILD_DEMOS OFF CACHE BOOL "Build Zep demos" FORCE)
+    set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
+    set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE)
+    set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
     message(STATUS "Zep text editor source found")
 else()
     message(WARNING "Zep not found at external/zep - text editor features will be limited")
@@ -150,14 +148,88 @@ set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniEngine shared" FO
 set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniStudio shared" FORCE)
 set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE} CACHE BOOL "AniStudio Zep" FORCE)
 
+# Set up external dependencies as interface libraries to propagate usage requirements
+add_library(AniEngineDeps INTERFACE)
+target_link_libraries(AniEngineDeps INTERFACE
+    ${OpenCV_LIBS}
+    ZLIB::ZLIB
+    PNG::PNG
+    GLEW::GLEW
+    glfw
+    ffmpeg::avformat
+    ffmpeg::avutil
+    ffmpeg::swscale
+    pybind11::embed
+)
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(AniEngineDeps INTERFACE
+        pthread
+        dl
+        rt
+        ${X11_LIBRARIES}
+    )
+    target_include_directories(AniEngineDeps INTERFACE ${X11_INCLUDE_DIR})
+endif()
+
+target_compile_definitions(AniEngineDeps INTERFACE
+    GLEW_STATIC
+)
+
+add_library(AniStudioDeps INTERFACE)
+target_link_libraries(AniStudioDeps INTERFACE
+    AniEngineDeps
+    exiv2::exiv2
+    ImGui
+    ImGuiFileDialog
+    ImNodeFlow
+    ImGuizmo
+)
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(AniStudioDeps INTERFACE
+        pthread
+        dl
+        rt
+        ${X11_LIBRARIES}
+    )
+endif()
+
+target_compile_definitions(AniStudioDeps INTERFACE
+    GLEW_STATIC
+    IMGUI_DEFINE_MATH_OPERATORS
+    IMGUI_FILEDIALOG_AVAILABLE
+    IMGUI_NODES_AVAILABLE
+    IMNODEFLOW_AVAILABLE
+    IMGUIZMO_AVAILABLE
+    NODE_EDITOR_AVAILABLE
+    IMSEQUENCER_AVAILABLE
+)
+
+if(ZEP_AVAILABLE)
+    target_link_libraries(AniStudioDeps INTERFACE Zep)
+    target_compile_definitions(AniStudioDeps INTERFACE ZEP_AVAILABLE)
+endif()
+
+# Build AniEngine first
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
+    
+    # Ensure AniEngineCore uses the dependencies interface
+    target_link_libraries(AniEngineCore PUBLIC AniEngineDeps)
 endif()
 
+# Build AniStudio second (depends on AniEngine)
 if(BUILD_ANISTUDIO)
     add_subdirectory(src/anistudio)
+    
+    # Ensure AniStudioCore uses the dependencies interface
+    if(TARGET AniStudioCore)
+        target_link_libraries(AniStudioCore PUBLIC AniEngineCore AniStudioDeps)
+    endif()
 endif()
 
+# Build main application last
 if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
@@ -171,6 +243,7 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
+        PREFIX ""
     )
 
     target_compile_definitions(${PROJECT_NAME} PRIVATE
@@ -185,20 +258,32 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/include
     )
 
+    # Link only what's directly needed - AniStudioCore brings everything else
     target_link_libraries(${PROJECT_NAME} PRIVATE
         AniStudioCore
-        AniEngineCore
-        ImGui
         glfw
         GLEW::GLEW
     )
 
+    # Ensure proper symbol resolution on Linux
+    if(UNIX AND NOT APPLE)
+        target_link_options(${PROJECT_NAME} PRIVATE
+            -Wl,--no-as-needed
+            -Wl,--copy-dt-needed-entries
+            -Wl,-rpath-link,${CMAKE_BINARY_DIR}/lib
+        )
+        
+        # Also link X11 directly for the executable
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${X11_LIBRARIES})
+    endif()
+
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
     message(STATUS "Main application will be built")
-    message(STATUS "  Links against: AniStudioCore, AniEngineCore, ImGui, glfw, GLEW")
+    message(STATUS "  Links against: AniStudioCore (brings all engine and studio dependencies)")
 endif()
 
+# Function to add external plugins
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
 
@@ -217,8 +302,16 @@ function(add_external_plugin TARGET_NAME)
         ${PLUGIN_LIBRARIES}
     )
 
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(${TARGET_NAME} PRIVATE
+            pthread
+            dl
+        )
+    endif()
+
     target_compile_definitions(${TARGET_NAME} PRIVATE
         PLUGIN_API=__declspec\(dllexport\)
+        GLEW_STATIC
     )
 
     set_target_properties(${TARGET_NAME} PROPERTIES
@@ -240,11 +333,28 @@ function(add_external_plugin TARGET_NAME)
     message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
+# Installation rules
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
 
     if(BUILD_MAIN_APP AND TARGET ${PROJECT_NAME})
         install(TARGETS ${PROJECT_NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
+
+    if(TARGET AniEngineCore)
+        install(TARGETS AniEngineCore
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
+
+    if(TARGET AniStudioCore)
+        install(TARGETS AniStudioCore
+            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()

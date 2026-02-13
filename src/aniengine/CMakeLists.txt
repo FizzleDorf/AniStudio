@@ -19,11 +19,7 @@ else()
 endif()
 
 file(GLOB_RECURSE ANIENGINE_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/utils/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/ecs/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/asset_mgr/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/AniEngine.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
 )
 
 add_library(AniEngineCore ${ANIENGINE_SOURCES})
@@ -37,9 +33,16 @@ if(BUILD_SHARED_LIBS)
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
         )
+    else()
+        set_target_properties(AniEngineCore PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+            PREFIX ""
+        )
     endif()
 else()
-    target_compile_definitions(AniEngineCore PRIVATE BUILDING_ANISTUDIO)
+    target_compile_definitions(AniEngineCore PRIVATE BUILDING_ANIENGINE)
 endif()
 
 target_include_directories(AniEngineCore PUBLIC
@@ -74,6 +77,15 @@ target_link_libraries(AniEngineCore PUBLIC
     pybind11::embed
 )
 
+# ADD THESE MISSING DEPENDENCIES FOR LINUX
+if(UNIX AND NOT APPLE)
+    target_link_libraries(AniEngineCore PUBLIC
+        pthread
+        dl
+        rt
+    )
+endif()
+
 target_compile_definitions(AniEngineCore PUBLIC
     GLEW_STATIC
     $<$<CONFIG:Debug>:DEBUG>
@@ -84,9 +96,9 @@ add_library(AniEngine::AniEngineCore ALIAS AniEngineCore)
 
 message(STATUS "AniEngine: BUILD_SHARED_LIBS = ${BUILD_SHARED_LIBS}")
 if(BUILD_SHARED_LIBS)
-    message(STATUS "AniEngine: Building as SHARED library (.dll)")
+    message(STATUS "AniEngine: Building as SHARED library (.dll/.so)")
     message(STATUS "AniEngine: Output -> ${CMAKE_BINARY_DIR}/lib")
 else()
-    message(STATUS "AniEngine: Building as STATIC library (.lib)")
+    message(STATUS "AniEngine: Building as STATIC library (.lib/.a)")
     message(STATUS "AniEngine: Output -> ${CMAKE_BINARY_DIR}/lib")
 endif()

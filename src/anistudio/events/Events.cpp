@@ -1,136 +1,123 @@
 #include "Events.hpp"
+#include <algorithm>
 
 namespace ANI {
+    Events& Events::Ref() {
+        static Events instance;
+        return instance;
+    }
 
-	Events::Events() {}
+    Events::Events() {
+        std::cout << "[Events] Created instance: " << this << std::endl;
+    }
 
-	Events::~Events() {
-		ClearAllEvents();
-	}
+    Events::~Events() {
+        ClearAllEvents();
+    }
 
-	void Events::RegisterEvent(const std::string& eventName, EventCallback callback) {
-		eventHandlers[eventName].simpleCallbacks.push_back(callback);
-		std::cout << "[Events] Registered simple callback for event: " << eventName << std::endl;
-	}
+    void Events::RegisterEvent(const std::string& eventName, EventCallback callback) {
+        eventHandlers[eventName].simpleCallbacks.push_back(callback);
+        std::cout << "[Events] Registered callback for: " << eventName << std::endl;
+    }
 
-	void Events::RegisterEventWithData(const std::string& eventName, EventCallbackWithData callback) {
-		eventHandlers[eventName].dataCallbacks.push_back(callback);
-		std::cout << "[Events] Registered data callback for event: " << eventName << std::endl;
-	}
+    void Events::RegisterEventWithData(const std::string& eventName, EventCallbackWithData callback) {
+        eventHandlers[eventName].dataCallbacks.push_back(callback);
+        std::cout << "[Events] Registered data callback for: " << eventName << std::endl;
+    }
 
-	void Events::QueueEvent(const std::string& eventName) {
-		QueuedEvent event;
-		event.eventName = eventName;
-		event.hasData = false;
-		eventQueue.push_back(event);
+    void Events::QueueEvent(const std::string& eventName) {
+        QueuedEvent event;
+        event.eventName = eventName;
+        event.hasData = false;
+        eventQueue.push_back(event);
+        std::cout << "[Events] Queued event: " << eventName << std::endl;
+    }
 
-		std::cout << "[Events] Queued event: " << eventName << std::endl;
-	}
+    void Events::Poll() {
+        if (eventQueue.empty()) return;
 
-	void Events::Poll() {
-		if (eventQueue.empty()) return;
+        for (const auto& queuedEvent : eventQueue) {
+            auto it = eventHandlers.find(queuedEvent.eventName);
+            if (it != eventHandlers.end()) {
+                const EventData& eventData = it->second;
+                
+                for (const auto& callback : eventData.simpleCallbacks) {
+                    if (callback) callback();
+                }
 
-		// Process all events in the queue
-		for (const auto& queuedEvent : eventQueue) {
-			auto it = eventHandlers.find(queuedEvent.eventName);
-			if (it != eventHandlers.end()) {
-				const EventData& eventData = it->second;
+                if (queuedEvent.hasData) {
+                    for (const auto& callback : eventData.dataCallbacks) {
+                        if (callback) callback(queuedEvent.data);
+                    }
+                }
 
-				try {
-					// Process simple callbacks
-					for (const auto& callback : eventData.simpleCallbacks) {
-						callback();
-					}
+                std::cout << "[Events] Processed: " << queuedEvent.eventName << std::endl;
+            }
+        }
 
-					// Process data callbacks if we have data
-					if (queuedEvent.hasData) {
-						for (const auto& callback : eventData.dataCallbacks) {
-							callback(queuedEvent.data);
-						}
-					}
+        eventQueue.clear();
+    }
 
-					std::cout << "[Events] Processed event: " << queuedEvent.eventName
-						<< " (callbacks: " << eventData.simpleCallbacks.size() + eventData.dataCallbacks.size()
-						<< ")" << std::endl;
-				}
-				catch (const std::exception& e) {
-					std::cerr << "[Events] Exception processing event "
-						<< queuedEvent.eventName << ": " << e.what() << std::endl;
-				}
-			}
-			else {
-				std::cout << "[Events] No handlers registered for event: "
-					<< queuedEvent.eventName << std::endl;
-			}
-		}
+    void Events::UnregisterEvent(const std::string& eventName) {
+        auto it = eventHandlers.find(eventName);
+        if (it != eventHandlers.end()) {
+            eventHandlers.erase(it);
+            std::cout << "[Events] Unregistered: " << eventName << std::endl;
+        }
+    }
 
-		// Clear the processed events
-		eventQueue.clear();
-	}
+    void Events::UnregisterEvent(const std::string& eventName, EventCallback callback) {
+        auto it = eventHandlers.find(eventName);
+        if (it != eventHandlers.end()) {
+            auto& callbacks = it->second.simpleCallbacks;
+            callbacks.erase(
+                std::remove_if(callbacks.begin(), callbacks.end(),
+                    [&callback](const EventCallback& cb) {
+                        return cb.target_type() == callback.target_type();
+                    }),
+                callbacks.end()
+            );
 
-	void Events::UnregisterEvent(const std::string& eventName) {
-		auto it = eventHandlers.find(eventName);
-		if (it != eventHandlers.end()) {
-			eventHandlers.erase(it);
-			std::cout << "[Events] Unregistered all handlers for event: " << eventName << std::endl;
-		}
-		else {
-			std::cout << "[Events] No handlers found for event: " << eventName << std::endl;
-		}
-	}
+            if (callbacks.empty() && it->second.dataCallbacks.empty()) {
+                eventHandlers.erase(it);
+            }
+        }
+    }
 
-	void Events::UnregisterEvent(const std::string& eventName, EventCallback callback) {
-		auto it = eventHandlers.find(eventName);
-		if (it != eventHandlers.end()) {
-			auto& simpleCallbacks = it->second.simpleCallbacks;
+    void Events::UnregisterEventWithData(const std::string& eventName, EventCallbackWithData callback) {
+        auto it = eventHandlers.find(eventName);
+        if (it != eventHandlers.end()) {
+            auto& callbacks = it->second.dataCallbacks;
+            callbacks.erase(
+                std::remove_if(callbacks.begin(), callbacks.end(),
+                    [&callback](const EventCallbackWithData& cb) {
+                        return cb.target_type() == callback.target_type();
+                    }),
+                callbacks.end()
+            );
 
-			// Remove the specific callback
-			for (auto cbIt = simpleCallbacks.begin(); cbIt != simpleCallbacks.end(); ) {
-				// Compare function objects - this works for lambdas with the same capture
-				if (cbIt->target_type() == callback.target_type()) {
-					cbIt = simpleCallbacks.erase(cbIt);
-					std::cout << "[Events] Unregistered specific callback for event: " << eventName << std::endl;
-				}
-				else {
-					++cbIt;
-				}
-			}
+            if (it->second.simpleCallbacks.empty() && callbacks.empty()) {
+                eventHandlers.erase(it);
+            }
+        }
+    }
 
-			// Remove the event entirely if no callbacks left
-			if (simpleCallbacks.empty() && it->second.dataCallbacks.empty()) {
-				eventHandlers.erase(it);
-			}
-		}
-	}
+    void Events::UnregisterAllEventsForPlugin(const std::string& pluginName) {
+        std::string prefix = "Plugin_" + pluginName + "_";
+        auto it = eventHandlers.begin();
+        while (it != eventHandlers.end()) {
+            if (it->first.find(prefix) == 0) {
+                it = eventHandlers.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        std::cout << "[Events] Unregistered plugin: " << pluginName << std::endl;
+    }
 
-	void Events::UnregisterEventWithData(const std::string& eventName, EventCallbackWithData callback) {
-		auto it = eventHandlers.find(eventName);
-		if (it != eventHandlers.end()) {
-			auto& dataCallbacks = it->second.dataCallbacks;
-
-			// Remove the specific callback
-			for (auto cbIt = dataCallbacks.begin(); cbIt != dataCallbacks.end(); ) {
-				// Compare function objects
-				if (cbIt->target_type() == callback.target_type()) {
-					cbIt = dataCallbacks.erase(cbIt);
-					std::cout << "[Events] Unregistered specific data callback for event: " << eventName << std::endl;
-				}
-				else {
-					++cbIt;
-				}
-			}
-
-			// Remove the event entirely if no callbacks left
-			if (it->second.simpleCallbacks.empty() && dataCallbacks.empty()) {
-				eventHandlers.erase(it);
-			}
-		}
-	}
-
-	void Events::ClearAllEvents() {
-		eventHandlers.clear();
-		eventQueue.clear();
-		std::cout << "[Events] Cleared all event handlers" << std::endl;
-	}
-
-} // namespace ANI
+    void Events::ClearAllEvents() {
+        eventHandlers.clear();
+        eventQueue.clear();
+        std::cout << "[Events] Cleared all events" << std::endl;
+    }
+}

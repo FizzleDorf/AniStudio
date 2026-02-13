@@ -2,7 +2,7 @@
 
 #include "GUI.h"
 #include "FilePaths.hpp"
-#include <components.h>
+#include "Components.h"
 #include <systems.h>
 
 using namespace ECS;

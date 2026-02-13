@@ -3,7 +3,7 @@
 #include "AniEngine.hpp"
 #include "EngineContext.hpp"
 #include "utils.h"
-#include "components.h"
+#include "Components.h"
 #include "systems.h"
 #include "FilePathService.hpp"
 #include <iostream>

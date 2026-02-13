@@ -4,7 +4,7 @@
 BUILD_TYPE="Release"
 PARALLEL_JOBS=$(nproc)
 CLEAN_BUILD=false
-BUILD_SHARED="OFF"
+BUILD_SHARED="ON"
 
 # Function to show help
 show_help() {
@@ -38,7 +38,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --shared)
-            BUILD_SHARED="ON"
+            BUILD_SHARED="OFF"
             shift
             ;;
         --jobs)

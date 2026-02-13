@@ -36,38 +36,20 @@ if(NOT TARGET ImGuizmo)
 endif()
 
 set(ZEP_AVAILABLE FALSE)
-
-# Only check for Zep if you explicitly want it
-if(DEFINED ANISTUDIO_ENABLE_ZEP AND ANISTUDIO_ENABLE_ZEP)
-    if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
-        set(BUILD_IMGUI OFF CACHE BOOL "" FORCE)
-        set(BUILD_QT OFF CACHE BOOL "" FORCE)
-        set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(BUILD_DEMOS OFF CACHE BOOL "" FORCE)
-        
-        # Disable vcpkg if you don't have it
-        if(NOT EXISTS "${EXTERNAL_DIR}/zep/vcpkg/scripts/buildsystems/vcpkg.cmake")
-            message(STATUS "Zep vcpkg not found, using system packages")
-            # You might need to set variables to disable vcpkg usage in Zep
-        endif()
-        
-        add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/_external/zep")
-        set(ZEP_AVAILABLE TRUE)
-    elseif(TARGET Zep)
-        set(ZEP_AVAILABLE TRUE)
-    endif()
-else()
-    message(STATUS "Zep not enabled (ANISTUDIO_ENABLE_ZEP=${ANISTUDIO_ENABLE_ZEP})")
+if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
+    set(BUILD_IMGUI OFF CACHE BOOL "" FORCE)
+    set(BUILD_QT OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/_external/zep")
+    set(ZEP_AVAILABLE TRUE)
+elseif(TARGET Zep)
+    set(ZEP_AVAILABLE TRUE)
 endif()
 
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVE})
 
 file(GLOB_RECURSE ANISTUDIO_SOURCES
-    "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/gui_utils/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/events/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/plugins/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/AniStudio.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
 )
 
 add_library(AniStudioCore ${ANISTUDIO_SOURCES})
@@ -80,6 +62,13 @@ if(BUILD_SHARED_LIBS)
             ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+        )
+    else()
+        set_target_properties(AniStudioCore PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+            PREFIX ""
         )
     endif()
 else()
@@ -128,10 +117,16 @@ target_link_libraries(AniStudioCore PRIVATE
     ImGuiFileDialog
     ImNodeFlow
     ImGuizmo
+    ${OpenCV_LIBS}
+    ZLIB::ZLIB
+    PNG::PNG
 )
 
-if(ZEP_AVAILABLE AND TARGET Zep::Zep)
-    target_link_libraries(AniStudioCore PRIVATE Zep::Zep)
+# ADD THIS - stb_image.cpp
+target_sources(AniStudioCore PRIVATE "${EXTERNAL_DIR}/stb_image/stb_image.cpp")
+
+if(ZEP_AVAILABLE AND TARGET Zep)
+    target_link_libraries(AniStudioCore PRIVATE Zep)
     target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
 endif()
 
@@ -150,9 +145,9 @@ add_library(AniStudio::AniStudioCore ALIAS AniStudioCore)
 
 message(STATUS "AniStudio: BUILD_SHARED_LIBS = ${BUILD_SHARED_LIBS}")
 if(BUILD_SHARED_LIBS)
-    message(STATUS "AniStudio: Building as SHARED library (.dll)")
+    message(STATUS "AniStudio: Building as SHARED library (.dll/.so)")
     message(STATUS "AniStudio: Output -> ${CMAKE_BINARY_DIR}/lib")
 else()
-    message(STATUS "AniStudio: Building as STATIC library (.lib)")
+    message(STATUS "AniStudio: Building as STATIC library (.lib/.a)")
     message(STATUS "AniStudio: Output -> ${CMAKE_BINARY_DIR}/lib")
 endif()

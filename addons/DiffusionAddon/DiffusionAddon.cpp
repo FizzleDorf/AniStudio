@@ -20,6 +20,13 @@
 
 #include <iostream>
 
+// Platform-specific export macro for plugins
+#if defined(_WIN32) || defined(_WIN64)
+    #define PLUGIN_EXPORT __declspec(dllexport)
+#else
+    #define PLUGIN_EXPORT __attribute__((visibility("default")))
+#endif
+
 class DiffusionAddon : public Plugins::BasePlugin {
 public:
 	DiffusionAddon() : BasePlugin("DiffusionAddon", "1.0.0"), m_imguiContext(nullptr) {}
@@ -431,11 +438,11 @@ private:
 };
 
 extern "C" {
-	__declspec(dllexport) Plugins::BasePlugin* CreatePlugin() {
+	PLUGIN_EXPORT Plugins::BasePlugin* CreatePlugin() {
 		return new DiffusionAddon();
 	}
 
-	__declspec(dllexport) void DestroyPlugin(Plugins::BasePlugin* plugin) {
+	PLUGIN_EXPORT void DestroyPlugin(Plugins::BasePlugin* plugin) {
 		delete plugin;
 	}
 }
