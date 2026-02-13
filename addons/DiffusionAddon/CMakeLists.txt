@@ -204,6 +204,11 @@ target_include_directories(DiffusionAddon PUBLIC
     "${EXTERNAL_DIR}/stable-diffusion.cpp"
     "${EXTERNAL_DIR}/stb_image"
     "${EXTERNAL_DIR}/imgui_filedialog"
+    "${EXTERNAL_DIR}/imgui_filedialog/stb"
+    "${EXTERNAL_DIR}/imgui_nodes"
+    "${EXTERNAL_DIR}/ImNodeFlow/include"
+    "${EXTERNAL_DIR}/ImGuizmo"
+    "${EXTERNAL_DIR}/imgui_markdown"
     "${EXTERNAL_DIR}/zep/include"
 )
 
@@ -254,7 +259,7 @@ else()
         POSITION_INDEPENDENT_CODE ON
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON
-        PREFIX "lib"
+        PREFIX ""
     )
     target_link_options(DiffusionAddon PRIVATE "-Wl,--unresolved-symbols=ignore-all")
 endif()
