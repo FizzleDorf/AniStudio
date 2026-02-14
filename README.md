@@ -63,11 +63,13 @@ An executable engine and editor for image, video and edit diffusion models writt
 
 ## How To Build
 Main application and Libraries: 
-[How to build with Linux GCC](docs/Building with GCC.md)
-[How to build with Windows MSVC](docs/Building with MSVC.md)
+
+[How to build with Linux GCC](docs/Building_with_GCC.md)
+
+[How to build with Windows MSVC](docs/Building_with_MSVC.md)
 
 Official Addons:
-[How to build DiffusionAddon](docs/Building DiffusionAddon.md)
+[How to build DiffusionAddon](docs/Building_DiffusionAddon.md)
 
 ---
 
