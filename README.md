@@ -71,16 +71,6 @@ Official Addons:
 
 ---
 
-## TODO:
-- [x] hot reload plugin manager
-- [x] python interop
-- [x] project management
-- [ ] asset and heap managers
-- [ ] separate sdcpp into shared libs
-- [ ] reduce bad allocations
-- [ ] nodegraph execution
-- [ ] basic usage guide
-
 ## License
 
 This project is dual-licensed under the **GNU Lesser General Public License v3.0 (LGPL-3.0)** and a **commercial license**.
