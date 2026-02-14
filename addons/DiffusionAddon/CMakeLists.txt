@@ -131,16 +131,67 @@ else()
 endif()
 
 set(MAIN_LIB_DIR "${ANISTUDIO_ROOT}/build/lib")
+set(MAIN_BIN_DIR "${ANISTUDIO_ROOT}/build/bin")
 
-if(EXISTS "${MAIN_LIB_DIR}/AniEngineCore.so")
-    add_library(AniEngineCore SHARED IMPORTED)
-    set_target_properties(AniEngineCore PROPERTIES IMPORTED_LOCATION "${MAIN_LIB_DIR}/AniEngineCore.so")
+# ===== FIXED: Platform-agnostic library imports =====
+if(WIN32)
+    # On Windows, look for .lib import libraries in lib/ and .dlls in bin/
+    if(EXISTS "${MAIN_LIB_DIR}/AniEngineCore.lib")
+        add_library(AniEngineCore SHARED IMPORTED)
+        set_target_properties(AniEngineCore PROPERTIES
+            IMPORTED_IMPLIB "${MAIN_LIB_DIR}/AniEngineCore.lib"
+            IMPORTED_LOCATION "${MAIN_BIN_DIR}/AniEngineCore.dll"
+        )
+        message(STATUS "Found AniEngineCore: ${MAIN_LIB_DIR}/AniEngineCore.lib -> ${MAIN_BIN_DIR}/AniEngineCore.dll")
+    else()
+        message(FATAL_ERROR "AniEngineCore.lib not found in ${MAIN_LIB_DIR}")
+    endif()
+    
+    if(EXISTS "${MAIN_LIB_DIR}/AniStudioCore.lib")
+        add_library(AniStudioCore SHARED IMPORTED)
+        set_target_properties(AniStudioCore PROPERTIES
+            IMPORTED_IMPLIB "${MAIN_LIB_DIR}/AniStudioCore.lib"
+            IMPORTED_LOCATION "${MAIN_BIN_DIR}/AniStudioCore.dll"
+        )
+        message(STATUS "Found AniStudioCore: ${MAIN_LIB_DIR}/AniStudioCore.lib -> ${MAIN_BIN_DIR}/AniStudioCore.dll")
+    else()
+        message(FATAL_ERROR "AniStudioCore.lib not found in ${MAIN_LIB_DIR}")
+    endif()
+else()
+    # On Linux, look for .so files
+    if(EXISTS "${MAIN_LIB_DIR}/AniEngineCore.so")
+        add_library(AniEngineCore SHARED IMPORTED)
+        set_target_properties(AniEngineCore PROPERTIES 
+            IMPORTED_LOCATION "${MAIN_LIB_DIR}/AniEngineCore.so"
+        )
+        message(STATUS "Found AniEngineCore: ${MAIN_LIB_DIR}/AniEngineCore.so")
+    elseif(EXISTS "${MAIN_LIB_DIR}/libAniEngineCore.so")
+        add_library(AniEngineCore SHARED IMPORTED)
+        set_target_properties(AniEngineCore PROPERTIES 
+            IMPORTED_LOCATION "${MAIN_LIB_DIR}/libAniEngineCore.so"
+        )
+        message(STATUS "Found AniEngineCore: ${MAIN_LIB_DIR}/libAniEngineCore.so")
+    else()
+        message(FATAL_ERROR "AniEngineCore.so not found in ${MAIN_LIB_DIR}")
+    endif()
+    
+    if(EXISTS "${MAIN_LIB_DIR}/AniStudioCore.so")
+        add_library(AniStudioCore SHARED IMPORTED)
+        set_target_properties(AniStudioCore PROPERTIES 
+            IMPORTED_LOCATION "${MAIN_LIB_DIR}/AniStudioCore.so"
+        )
+        message(STATUS "Found AniStudioCore: ${MAIN_LIB_DIR}/AniStudioCore.so")
+    elseif(EXISTS "${MAIN_LIB_DIR}/libAniStudioCore.so")
+        add_library(AniStudioCore SHARED IMPORTED)
+        set_target_properties(AniStudioCore PROPERTIES 
+            IMPORTED_LOCATION "${MAIN_LIB_DIR}/libAniStudioCore.so"
+        )
+        message(STATUS "Found AniStudioCore: ${MAIN_LIB_DIR}/libAniStudioCore.so")
+    else()
+        message(FATAL_ERROR "AniStudioCore.so not found in ${MAIN_LIB_DIR}")
+    endif()
 endif()
-
-if(EXISTS "${MAIN_LIB_DIR}/AniStudioCore.so")
-    add_library(AniStudioCore SHARED IMPORTED)
-    set_target_properties(AniStudioCore PROPERTIES IMPORTED_LOCATION "${MAIN_LIB_DIR}/AniStudioCore.so")
-endif()
+# ===== END FIX =====
 
 set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
@@ -226,10 +277,34 @@ target_link_libraries(DiffusionAddon PRIVATE
     ImGuiFileDialog
     stable-diffusion
     pybind11::embed
-    dl
-    pthread
-    stdc++fs
 )
+
+# Platform-specific libraries
+if(WIN32)
+    # Windows specific libraries
+    target_link_libraries(DiffusionAddon PRIVATE
+        ws2_32
+        winmm
+        shlwapi
+    )
+    
+    # Ensure we're linking against the import libraries correctly
+    target_link_options(DiffusionAddon PRIVATE
+        "/FORCE:UNRESOLVED"
+    )
+elseif(UNIX AND NOT APPLE)
+    # Linux specific libraries
+    target_link_libraries(DiffusionAddon PRIVATE
+        dl
+        pthread
+        stdc++fs
+        rt
+    )
+    
+    target_link_options(DiffusionAddon PRIVATE
+        "-Wl,--unresolved-symbols=ignore-all"
+    )
+endif()
 
 if(SD_CUDA)
     target_link_libraries(DiffusionAddon PRIVATE CUDA::cudart CUDA::cublas CUDA::curand)
@@ -250,10 +325,17 @@ if(CURL_FOUND)
     target_compile_definitions(DiffusionAddon PRIVATE HAS_CURL)
 endif()
 
+# Export definition for Windows DLL
 if(WIN32)
+    set_target_properties(DiffusionAddon PROPERTIES
+        WINDOWS_EXPORT_ALL_SYMBOLS ON
+        PREFIX ""
+    )
+    
+    # Create a .def file for explicit exports if needed
     set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/DiffusionAddon.def")
     file(WRITE ${DEF_FILE} "EXPORTS\nCreatePlugin\nDestroyPlugin\n")
-    set_target_properties(DiffusionAddon PROPERTIES LINK_FLAGS "/DEF:${DEF_FILE} /FORCE:UNRESOLVED")
+    target_sources(DiffusionAddon PRIVATE ${DEF_FILE})
 else()
     set_target_properties(DiffusionAddon PROPERTIES
         POSITION_INDEPENDENT_CODE ON
@@ -261,7 +343,6 @@ else()
         VISIBILITY_INLINES_HIDDEN ON
         PREFIX ""
     )
-    target_link_options(DiffusionAddon PRIVATE "-Wl,--unresolved-symbols=ignore-all")
 endif()
 
 target_compile_definitions(DiffusionAddon PRIVATE 
@@ -280,6 +361,12 @@ set_target_properties(DiffusionAddon PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${ADDON_STAGING_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${ADDON_STAGING_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
 )
 
 message(STATUS "Configured DiffusionAddon for Staging: ${ADDON_STAGING_DIR}")
+message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
+if(WIN32)
+    message(STATUS "Windows build: Looking for DLLs in ${MAIN_BIN_DIR}")
+endif()
