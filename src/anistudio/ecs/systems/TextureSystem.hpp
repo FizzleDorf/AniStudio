@@ -3,6 +3,7 @@
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
 #include "ImageComponent.hpp"
+#include "ImageUtils.hpp"
 #include "OpenGLUtils.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -32,7 +33,7 @@ namespace ECS {
 		~TextureSystem() override {
 			std::cout << "[TextureSystem] Destructor - cleaning up textures" << std::endl;
 
-			// Clean up all textures - trust that context is current during shutdown
+			// Clean up all textures
 			for (auto entity : entities) {
 				if (mgr.HasComponent<ImageComponent>(entity)) {
 					auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
@@ -46,11 +47,8 @@ namespace ECS {
 		}
 
 		void Update(const float deltaT) override {
-			// Don't process textures here - moved to ProcessGLOperations()
-		}
-
-		// NEW: Call this from main thread during render phase when OpenGL context is current
-		void ProcessGLOperations() {
+			// Process texture creation requests in the main thread during Update
+			// This ensures we're on the correct thread with OpenGL context
 			ProcessPendingTextureCreations();
 		}
 
@@ -109,20 +107,26 @@ namespace ECS {
 			// VERIFY we have a valid OpenGL context
 			GLFWwindow* currentContext = glfwGetCurrentContext();
 			if (!currentContext) {
-				std::cerr << "[TextureSystem] ERROR: No OpenGL context current! Deferring texture creation." << std::endl;
+				// Don't process if no context - we'll try again next frame
+				std::cout << "[TextureSystem] No OpenGL context current, deferring " 
+						 << textureQueue.size() << " texture creations" << std::endl;
 				return;
 			}
 
 			// Test OpenGL context validity
+			glGetError(); // Clear any previous errors
 			GLint textureUnits;
 			glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &textureUnits);
 			GLenum error = glGetError();
+			
 			if (error != GL_NO_ERROR) {
-				std::cerr << "[TextureSystem] ERROR: OpenGL context not valid! Error: " << error << std::endl;
+				std::cerr << "[TextureSystem] OpenGL context error " << error 
+						 << ", deferring texture creations" << std::endl;
 				return;
 			}
 
-			std::cout << "[TextureSystem] Processing " << textureQueue.size() << " texture creation requests with valid OpenGL context" << std::endl;
+			std::cout << "[TextureSystem] Processing " << textureQueue.size() 
+					 << " texture creation requests with valid OpenGL context" << std::endl;
 
 			while (!textureQueue.empty()) {
 				TextureCreationRequest request = textureQueue.front();
@@ -137,6 +141,11 @@ namespace ECS {
 					!mgr.HasComponent<ImageComponent>(request.entityID)) {
 					std::cout << "[TextureSystem] Entity " << request.entityID
 						<< " no longer valid, skipping texture creation" << std::endl;
+					
+					// Free the image data if entity is gone
+					if (request.imageData) {
+						Utils::ImageUtils::FreeImageData(request.imageData);
+					}
 					continue;
 				}
 
@@ -147,7 +156,7 @@ namespace ECS {
 					DeleteTexture(imageComp);
 				}
 
-				// Create the texture - NOW WITH GUARANTEED OPENGL CONTEXT
+				// Create the texture
 				imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
 					request.width,
 					request.height,
@@ -173,9 +182,16 @@ namespace ECS {
 
 		void DeleteTexture(ImageComponent& imageComp) {
 			if (imageComp.textureID != 0) {
-				// Trust that context is current during cleanup
-				Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
-				std::cout << "[TextureSystem] Deleted texture ID: " << imageComp.textureID << std::endl;
+				// Check if we have a valid OpenGL context before deleting
+				GLFWwindow* currentContext = glfwGetCurrentContext();
+				if (currentContext) {
+					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
+					std::cout << "[TextureSystem] Deleted texture ID: " << imageComp.textureID << std::endl;
+				} else {
+					// If no context, just mark as 0 - texture will be cleaned up by system shutdown
+					std::cout << "[TextureSystem] No OpenGL context, marking texture ID " 
+							 << imageComp.textureID << " for deletion" << std::endl;
+				}
 				imageComp.textureID = 0;
 				imageComp.width = 0;
 				imageComp.height = 0;

@@ -407,10 +407,6 @@ namespace ANI {
 
 		// Update studio core - ALL OpenGL operations happen in this call chain
 		try {
-			auto textureSystem = studioCore.GetEntityManager().GetSystem<ECS::TextureSystem>();
-			if (textureSystem) {
-				textureSystem->ProcessGLOperations();
-			}
 			studioCore.Update(deltaT);
 		}
 		catch (const std::exception& e) {
