@@ -31,6 +31,9 @@
 *.out
 *.app
 
+#AppImage
+AniStudio-x86_64.AppImage
+
 # Visual Studio files
 .vs/
 *.sln
@@ -43,6 +46,7 @@
 build/
 out/
 .out/
+build-appimage/
 
 # CMake generated files
 CMakeCache.txt
