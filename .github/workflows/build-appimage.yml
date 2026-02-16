@@ -1,0 +1,66 @@
+name: Build AppImage
+
+on:
+  push:
+    tags:
+      - 'AniStudio_AppImage'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
+        
+    - name: Get short SHA
+      id: vars
+      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake ninja-build \
+          python3-pip \
+          libx11-dev \
+          libgl1-mesa-dev \
+          libxrandr-dev \
+          libxinerama-dev \
+          libxcursor-dev \
+          libxi-dev
+        
+    - name: Install Conan
+      run: |
+        pip3 install conan
+        conan profile detect
+        
+    - name: Make scripts executable
+      run: |
+        chmod +x build.sh
+        chmod +x build-appimage.sh
+        
+    - name: Normal build (for conan deps)
+      run: |
+        ./build.sh
+        
+    - name: Build AppImage
+      run: |
+        ./build-appimage.sh
+        
+    - name: Upload AppImage
+      uses: actions/upload-artifact@v4
+      with:
+        name: AniStudio-${{ steps.vars.outputs.sha_short }}
+        path: build-appimage/AniStudio_*.AppImage
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build-appimage/AniStudio_*.AppImage
+        name: "AniStudio AppImage Build"
+        body: "Automated AppImage build from commit ${{ steps.vars.outputs.sha_short }}"
