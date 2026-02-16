@@ -193,15 +193,17 @@ else()
 endif()
 # ===== END FIX =====
 
-set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+# ===== FIX: Build stable-diffusion as shared libraries =====
+set(SD_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+# ===== END FIX =====
 
 if(EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp/CMakeLists.txt")
     add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
 endif()
 
 if(NOT TARGET stable-diffusion)
-    find_library(STABLE_DIFFUSION_LIB NAMES libstable-diffusion.a stable-diffusion.a libstable-diffusion.so 
+    find_library(STABLE_DIFFUSION_LIB NAMES libstable-diffusion.so stable-diffusion.so libstable-diffusion.a 
                  PATHS "${MAIN_LIB_DIR}" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
     if(STABLE_DIFFUSION_LIB)
         add_library(stable-diffusion UNKNOWN IMPORTED)
