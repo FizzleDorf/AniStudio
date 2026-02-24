@@ -428,6 +428,18 @@ namespace ANI {
 				return;
 			}
 
+#ifdef _WIN32
+			// Create textures before ImGui frame to avoid context issues
+			{
+				auto& entityMgr = studioCore.GetEntityManager();
+				auto textureSystem = entityMgr.GetSystem<ECS::TextureSystem>();
+				if (textureSystem && textureSystem->HasPendingTextures()) {
+					std::cout << "[Core] Windows: Creating pending textures before ImGui frame" << std::endl;
+					textureSystem->CreatePendingTextures();
+				}
+			}
+#endif
+
 			// Clear and render
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
@@ -437,7 +449,7 @@ namespace ANI {
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			// Render studio content - uses the main ImGui context
+			// Render studio content
 			studioCore.Render();
 
 			// End ImGui frame and render - ONLY ONCE per frame

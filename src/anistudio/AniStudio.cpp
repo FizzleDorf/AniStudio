@@ -684,6 +684,12 @@ namespace ANI {
 
 		ANI::Events::Ref().Poll();
 		try {
+
+			auto textureSystem = GetEntityManager().GetSystem<ECS::TextureSystem>();
+			if (textureSystem) {
+				textureSystem->CreatePendingTextures();
+			}
+
 			engineCore.Update(deltaTime);
 
 			if (studioContext->studioPluginManager) {
