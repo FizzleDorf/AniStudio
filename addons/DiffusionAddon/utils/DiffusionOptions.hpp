@@ -50,7 +50,9 @@ constexpr const char *sample_method_items[] = {
 	"IPNDM_V",
 	"LCM",
 	"DDIM_TRAILING",
-	"TCD"
+	"TCD",
+	"RES_MULTISTEP",
+	"RES_2S"
 };
 constexpr const int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
 
@@ -65,7 +67,8 @@ constexpr const char *scheduler_method_items[] = {
 	"SIMPLE",
 	"SMOOTHSTEP",
 	"KL_OPTIMAL",
-	"LCM"
+	"LCM",
+	"BONG_TANGENT"
 };
 constexpr const int scheduler_method_item_count = sizeof(scheduler_method_items) / sizeof(scheduler_method_items[0]);
 

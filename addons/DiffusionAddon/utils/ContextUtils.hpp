@@ -378,12 +378,6 @@ namespace Utils {
 								ctx_params.sampler_rng_type = static_cast<rng_type_t>(latent["sampler_rng_type"].get<int>());
 						}
 
-						if (comp.contains("VideoParams")) {
-							auto videoParams = comp["VideoParams"];
-							if (videoParams.contains("flow_shift"))
-								ctx_params.flow_shift = videoParams["flow_shift"].get<float>();
-						}
-
 						if (comp.contains("Chroma")) {
 							auto chroma = comp["Chroma"];
 							if (chroma.contains("use_dit_mask"))

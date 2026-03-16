@@ -61,8 +61,9 @@ namespace Utils
 			std::vector<sd_image_t> idImagesStorage; // Store ID images for PhotoMaker
 			std::vector<sd_image_t> refImagesStorage; // Store reference images
 
-			// Track allocated SLG layers
+			// Track allocated SLG layers and custom sigmas
 			int* slg_layers = nullptr;
+			float* custom_sigmas_ptr = nullptr;
 
 			try
 			{
@@ -126,6 +127,25 @@ namespace Utils
 								gen_params.sample_params.scheduler = static_cast<scheduler_t>(samplerData["current_scheduler_method"].get<int>());
 							if (samplerData.contains("shifted_timestep") && !samplerData["shifted_timestep"].is_null())
 								gen_params.sample_params.shifted_timestep = samplerData["shifted_timestep"].get<int>();
+
+							if (samplerData.contains("flow_shift") && !samplerData["flow_shift"].is_null())
+								gen_params.sample_params.flow_shift = samplerData["flow_shift"].get<float>();
+
+							if (samplerData.contains("custom_sigmas") && samplerData["custom_sigmas"].is_array())
+							{
+								auto sigmasArray = samplerData["custom_sigmas"];
+								size_t count = sigmasArray.size();
+								if (count > 0)
+								{
+									custom_sigmas_ptr = new float[count];
+									for (size_t i = 0; i < count; ++i)
+									{
+										custom_sigmas_ptr[i] = sigmasArray[i].get<float>();
+									}
+									gen_params.sample_params.custom_sigmas = custom_sigmas_ptr;
+									gen_params.sample_params.custom_sigmas_count = static_cast<int>(count);
+								}
+							}
 						}
 
 						// Guidance component
@@ -387,7 +407,7 @@ namespace Utils
 					result_images->channel, metadata, fullPath);
 
 				// Cleanup
-				CleanupResources(slg_layers, imagesToCleanup, result_images);
+				CleanupResources(slg_layers, custom_sigmas_ptr, imagesToCleanup, result_images);
 
 				// Release context back to cache if we acquired it
 				if (!contextProvided) {
@@ -401,7 +421,7 @@ namespace Utils
 				std::cerr << "Exception during txt2img: " << e.what() << std::endl;
 
 				// Cleanup on error
-				CleanupResources(slg_layers, imagesToCleanup, result_images);
+				CleanupResources(slg_layers, custom_sigmas_ptr, imagesToCleanup, result_images);
 
 				// Release context back to cache if we acquired it
 				if (!contextProvided && sd_context) {
@@ -413,7 +433,7 @@ namespace Utils
 		}
 
 	private:
-		static void CleanupResources(int* slg_layers,
+		static void CleanupResources(int* slg_layers, float* custom_sigmas,
 			std::vector<sd_image_t>& imagesToCleanup,
 			sd_image_t* result_images) {
 			// Cleanup SLG layers array if it was allocated
@@ -421,12 +441,15 @@ namespace Utils
 			{
 				delete[] slg_layers;
 			}
-
+			// Cleanup custom sigmas array
+			if (custom_sigmas != nullptr)
+			{
+				delete[] custom_sigmas;
+			}
 			// Cleanup loaded images
 			for (auto& img : imagesToCleanup) {
 				FreeSDImage(img);
 			}
-
 			// Cleanup result images
 			if (result_images)
 			{
