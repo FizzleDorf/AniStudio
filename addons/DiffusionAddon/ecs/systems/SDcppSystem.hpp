@@ -1091,13 +1091,11 @@ namespace ECS {
 							bool acquired = AcquireContextForTask(task);
 							if (!acquired) {
 								// Task is loading, wait for it
-								std::cout << "Task " << task.entityID << " is loading model, waiting..." << std::endl;
 								break; // Don't check other tasks, wait for this one
 							}
 						}
 						else if (task.modelLoading) {
 							// Already loading, wait for it
-							std::cout << "Task " << task.entityID << " still loading model..." << std::endl;
 							break; // Don't check other tasks, wait for this one
 						}
 						else {

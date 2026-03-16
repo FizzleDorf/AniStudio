@@ -110,12 +110,12 @@ constexpr const int lora_apply_mode_item_count = sizeof(lora_apply_mode_items) /
 
 // cache_mode_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char *cache_mode_items[] = {
-	"SD_CACHE_DISABLED",
-	"SD_CACHE_EASYCACHE",
-	"SD_CACHE_UCACHE",
-	"SD_CACHE_DBCACHE",
-	"SD_CACHE_TAYLORSEER",
-	"SD_CACHE_CACHE_DIT",
-	"SD_CACHE_SPECTRUM"
+	"DISABLED",
+	"EASYCACHE",
+	"UCACHE",
+	"DBCACHE",
+	"TAYLORSEER",
+	"CACHE_DIT",
+	"SPECTRUM"
 };
 constexpr const int cache_mode_item_count = sizeof(cache_mode_items) / sizeof(cache_mode_items[0]);

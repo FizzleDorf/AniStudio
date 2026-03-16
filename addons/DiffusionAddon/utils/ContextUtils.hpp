@@ -3,6 +3,7 @@
 #include "stable-diffusion.h"
 #include "pch.h"
 #include "FilePathService.hpp"
+#include "sdcpp_utils\SDContextUtil.hpp"
 #include <iostream>
 #include <thread>
 #include <unordered_map>
@@ -22,8 +23,24 @@ namespace Utils {
 		std::chrono::steady_clock::time_point lastUsed;
 		size_t useCount;
 		bool isInUse;
-		bool isLoading; // NEW: Track if context is currently loading
-		std::future<sd_ctx_t*> loadingFuture; // NEW: Future for async loading
+		bool isLoading;
+		std::future<sd_ctx_t*> loadingFuture;
+
+		// String storage for context parameters (must outlive ctx_params)
+		std::string modelPath;
+		std::string vaePath;
+		std::string clipLPath;
+		std::string clipGPath;
+		std::string clipVisionPath;
+		std::string t5xxlPath;
+		std::string llmPath;
+		std::string llmVisionPath;
+		std::string diffusionModelPath;
+		std::string highNoiseModelPath;
+		std::string taesdPath;
+		std::string controlnetPath;
+		std::string photoMakerPath;
+		std::string tensorTypeRules;
 
 		SDContextCacheEntry() : context(nullptr), useCount(0), isInUse(false), isLoading(false) {}
 		~SDContextCacheEntry() {
@@ -36,10 +53,9 @@ namespace Utils {
 
 	class SDContextManager {
 	private:
-		// INLINE static members (C++17+) - no separate .cpp file needed
 		static inline std::unordered_map<std::string, std::shared_ptr<SDContextCacheEntry>> contextCache;
 		static inline std::mutex cacheMutex;
-		static inline size_t MAX_CACHE_SIZE = 3; // Maximum number of cached contexts
+		static inline size_t MAX_CACHE_SIZE = 3;
 		static inline size_t totalContextsCreated = 0;
 		static inline size_t totalContextsFailed = 0;
 
@@ -49,10 +65,8 @@ namespace Utils {
 			try {
 				std::string key;
 
-				// Extract key components from metadata
 				if (metadata.contains("components") && metadata["components"].is_array()) {
 					for (const auto& comp : metadata["components"]) {
-						// Model paths are the most important for context uniqueness
 						if (comp.contains("Checkpoint")) {
 							auto model = comp["Checkpoint"];
 							if (model.contains("modelPath") && !model["modelPath"].is_null() && !model["modelPath"].get<std::string>().empty()) {
@@ -63,7 +77,6 @@ namespace Utils {
 							}
 						}
 
-						// Include VAE if present
 						if (comp.contains("Vae")) {
 							auto vae = comp["Vae"];
 							if (vae.contains("modelPath") && !vae["modelPath"].is_null() && !vae["modelPath"].get<std::string>().empty()) {
@@ -74,7 +87,6 @@ namespace Utils {
 							}
 						}
 
-						// Include CLIP if present
 						if (comp.contains("ClipL")) {
 							auto clipL = comp["ClipL"];
 							if (clipL.contains("modelPath") && !clipL["modelPath"].is_null() && !clipL["modelPath"].get<std::string>().empty()) {
@@ -97,7 +109,6 @@ namespace Utils {
 					}
 				}
 
-				// Add sampler settings that affect context
 				if (metadata.contains("components")) {
 					for (const auto& comp : metadata["components"]) {
 						if (comp.contains("Sampler")) {
@@ -112,7 +123,6 @@ namespace Utils {
 					}
 				}
 
-				// If key is empty, generate a hash of the entire metadata
 				if (key.empty()) {
 					key = std::to_string(std::hash<std::string>{}(metadata.dump()));
 				}
@@ -129,7 +139,6 @@ namespace Utils {
 		static bool CanReuseContext(const nlohmann::json& cachedMetadata,
 			const nlohmann::json& newMetadata) {
 			try {
-				// Check if the core model paths are the same
 				auto getModelPaths = [](const nlohmann::json& metadata) -> std::vector<std::string> {
 					std::vector<std::string> paths;
 					if (metadata.contains("components") && metadata["components"].is_array()) {
@@ -176,10 +185,9 @@ namespace Utils {
 					}
 				}
 
-				// Check key sampler settings
 				auto getSamplerSettings = [](const nlohmann::json& metadata) -> std::pair<int, int> {
 					int n_threads = std::thread::hardware_concurrency();
-					int wtype = 0; // SD_TYPE_F32
+					int wtype = 0;
 
 					if (metadata.contains("components")) {
 						for (const auto& comp : metadata["components"]) {
@@ -201,7 +209,6 @@ namespace Utils {
 				auto newSettings = getSamplerSettings(newMetadata);
 
 				return (cachedSettings == newSettings);
-
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error checking context reuse: " << e.what() << std::endl;
@@ -209,207 +216,27 @@ namespace Utils {
 			}
 		}
 
-		// Create new context from metadata (private helper, now async)
-		static sd_ctx_t* CreateNewContextInternal(const nlohmann::json& metadata) {
+		// Create new context from metadata using the parser utility
+		static sd_ctx_t* CreateNewContextInternal(const nlohmann::json& metadata,
+			std::shared_ptr<SDContextCacheEntry> entry) {
 			try {
-				std::string modelPath = "";
-				std::string clipLPath = "";
-				std::string clipGPath = "";
-				std::string clipVisionPath = "";
-				std::string t5xxlPath = "";
-				std::string llmPath = "";
-				std::string llmVisionPath = "";
-				std::string diffusionModelPath = "";
-				std::string highNoiseModelPath = "";
-				std::string vaePath = "";
-				std::string taesdPath = "";
-				std::string controlnetPath = "";
-				std::string photoMakerPath = "";
-				std::string tensorTypeRules = "";
-
 				sd_ctx_params_t ctx_params;
-				sd_ctx_params_init(&ctx_params); // Initialize with defaults
 
-				if (metadata.contains("components") && metadata["components"].is_array()) {
-					for (const auto &comp : metadata["components"]) {
-						if (comp.contains("Checkpoint")) {
-							auto model = comp["Checkpoint"];
-							if (model.contains("modelPath") && !model["modelPath"].is_null() && !model["modelPath"].get<std::string>().empty())
-								modelPath = model["modelPath"].get<std::string>();
-							else if (model.contains("modelName") && !model["modelName"].is_null() && !model["modelName"].get<std::string>().empty())
-								modelPath = FilePathService::GetPath("Checkpoint") + "/" + model["modelName"].get<std::string>();
-
-							std::cout << "DEBUG: Model path set to: " << modelPath << std::endl;
-						}
-
-						if (comp.contains("ClipL")) {
-							auto clipL = comp["ClipL"];
-							if (clipL.contains("modelPath") && !clipL["modelPath"].is_null() && !clipL["modelPath"].get<std::string>().empty())
-								clipLPath = clipL["modelPath"].get<std::string>();
-							else if (clipL.contains("modelName") && !clipL["modelName"].is_null() && !clipL["modelName"].get<std::string>().empty())
-								clipLPath = FilePathService::GetPath("Encoder") + "/" + clipL["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("ClipG")) {
-							auto clipG = comp["ClipG"];
-							if (clipG.contains("modelPath") && !clipG["modelPath"].is_null() && !clipG["modelPath"].get<std::string>().empty())
-								clipGPath = clipG["modelPath"].get<std::string>();
-							else if (clipG.contains("modelName") && !clipG["modelName"].is_null() && !clipG["modelName"].get<std::string>().empty())
-								clipGPath = FilePathService::GetPath("Encoder") + "/" + clipG["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("ClipVision")) {
-							auto clipVision = comp["ClipVision"];
-							if (clipVision.contains("modelPath") && !clipVision["modelPath"].is_null() && !clipVision["modelPath"].get<std::string>().empty())
-								clipVisionPath = clipVision["modelPath"].get<std::string>();
-							else if (clipVision.contains("modelName") && !clipVision["modelName"].is_null() && !clipVision["modelName"].get<std::string>().empty())
-								clipVisionPath = FilePathService::GetPath("Encoder") + "/" + clipVision["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("T5XXL")) {
-							auto t5xxl = comp["T5XXL"];
-							if (t5xxl.contains("modelPath") && !t5xxl["modelPath"].is_null() && !t5xxl["modelPath"].get<std::string>().empty())
-								t5xxlPath = t5xxl["modelPath"].get<std::string>();
-							else if (t5xxl.contains("modelName") && !t5xxl["modelName"].is_null() && !t5xxl["modelName"].get<std::string>().empty())
-								t5xxlPath = FilePathService::GetPath("Encoder") + "/" + t5xxl["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("LLM")) {
-							auto llm = comp["LLM"];
-							if (llm.contains("modelPath") && !llm["modelPath"].is_null() && !llm["modelPath"].get<std::string>().empty())
-								llmPath = llm["modelPath"].get<std::string>();
-							else if (llm.contains("modelName") && !llm["modelName"].is_null() && !llm["modelName"].get<std::string>().empty())
-								llmPath = FilePathService::GetPath("Encoder") + "/" + llm["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("LLMVision")) {
-							auto llmVision = comp["LLMVision"];
-							if (llmVision.contains("modelPath") && !llmVision["modelPath"].is_null() && !llmVision["modelPath"].get<std::string>().empty())
-								llmVisionPath = llmVision["modelPath"].get<std::string>();
-							else if (llmVision.contains("modelName") && !llmVision["modelName"].is_null() && !llmVision["modelName"].get<std::string>().empty())
-								llmVisionPath = FilePathService::GetPath("Encoder") + "/" + llmVision["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("DiffusionModel")) {
-							auto diffusion = comp["DiffusionModel"];
-							if (diffusion.contains("modelPath") && !diffusion["modelPath"].is_null() && !diffusion["modelPath"].get<std::string>().empty())
-								diffusionModelPath = diffusion["modelPath"].get<std::string>();
-							else if (diffusion.contains("modelName") && !diffusion["modelName"].is_null() && !diffusion["modelName"].get<std::string>().empty())
-								diffusionModelPath = FilePathService::GetPath("Unet") + "/" + diffusion["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("HighNoiseDiffusionModel")) {
-							auto highNoise = comp["HighNoiseDiffusionModel"];
-							if (highNoise.contains("modelPath") && !highNoise["modelPath"].is_null() && !highNoise["modelPath"].get<std::string>().empty())
-								highNoiseModelPath = highNoise["modelPath"].get<std::string>();
-							else if (highNoise.contains("modelName") && !highNoise["modelName"].is_null() && !highNoise["modelName"].get<std::string>().empty())
-								highNoiseModelPath = FilePathService::GetPath("Unet") + "/" + highNoise["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("Vae")) {
-							auto vae = comp["Vae"];
-							if (vae.contains("modelPath") && !vae["modelPath"].is_null() && !vae["modelPath"].get<std::string>().empty())
-								vaePath = vae["modelPath"].get<std::string>();
-							else if (vae.contains("modelName") && !vae["modelName"].is_null() && !vae["modelName"].get<std::string>().empty())
-								vaePath = FilePathService::GetPath("Vae") + "/" + vae["modelName"].get<std::string>();
-							if (vae.contains("vae_decode_only"))
-								ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
-							if (vae.contains("keep_vae_on_cpu"))
-								ctx_params.keep_vae_on_cpu = vae["keep_vae_on_cpu"].get<bool>();
-						}
-
-						if (comp.contains("Taesd")) {
-							auto taesd = comp["Taesd"];
-							if (taesd.contains("modelPath") && !taesd["modelPath"].is_null() && !taesd["modelPath"].get<std::string>().empty())
-								taesdPath = taesd["modelPath"].get<std::string>();
-							else if (taesd.contains("modelName") && !taesd["modelName"].is_null() && !taesd["modelName"].get<std::string>().empty())
-								taesdPath = FilePathService::GetPath("Vae") + "/" + taesd["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("Controlnet")) {
-							auto controlnet = comp["Controlnet"];
-							if (controlnet.contains("modelPath") && !controlnet["modelPath"].is_null() && !controlnet["modelPath"].get<std::string>().empty())
-								controlnetPath = controlnet["modelPath"].get<std::string>();
-							else if (controlnet.contains("modelName") && !controlnet["modelName"].is_null() && !controlnet["modelName"].get<std::string>().empty())
-								controlnetPath = FilePathService::GetPath("ControlNet") + "/" + controlnet["modelName"].get<std::string>();
-
-							if (controlnet.contains("keep_control_net_on_cpu"))
-								ctx_params.keep_control_net_on_cpu = controlnet["keep_control_net_on_cpu"].get<bool>();
-						}
-
-						if (comp.contains("PhotoMaker") || comp.contains("StackedIdEmbed")) {
-							auto pm = comp.contains("PhotoMaker") ? comp["PhotoMaker"] : comp["StackedIdEmbed"];
-							if (pm.contains("modelPath") && !pm["modelPath"].is_null() && !pm["modelPath"].get<std::string>().empty())
-								photoMakerPath = pm["modelPath"].get<std::string>();
-							else if (pm.contains("modelName") && !pm["modelName"].is_null() && !pm["modelName"].get<std::string>().empty())
-								photoMakerPath = FilePathService::GetPath("Embed") + "/" + pm["modelName"].get<std::string>();
-						}
-
-						if (comp.contains("Sampler")) {
-							auto sampler = comp["Sampler"];
-							if (sampler.contains("n_threads"))
-								ctx_params.n_threads = sampler["n_threads"].get<int>();
-							if (sampler.contains("free_params_immediately"))
-								ctx_params.free_params_immediately = sampler["free_params_immediately"].get<bool>();
-							if (sampler.contains("offload_params_to_cpu"))
-								ctx_params.offload_params_to_cpu = sampler["offload_params_to_cpu"].get<bool>();
-							if (sampler.contains("keep_clip_on_cpu"))
-								ctx_params.keep_clip_on_cpu = sampler["keep_clip_on_cpu"].get<bool>();
-							if (sampler.contains("diffusion_flash_attn"))
-								ctx_params.diffusion_flash_attn = sampler["diffusion_flash_attn"].get<bool>();
-							if (sampler.contains("diffusion_conv_direct"))
-								ctx_params.diffusion_conv_direct = sampler["diffusion_conv_direct"].get<bool>();
-							if (sampler.contains("vae_conv_direct"))
-								ctx_params.vae_conv_direct = sampler["vae_conv_direct"].get<bool>();
-							if (sampler.contains("current_type_method"))
-								ctx_params.wtype = static_cast<sd_type_t>(sampler["current_type_method"].get<int>());
-							if (sampler.contains("current_prediction_type"))
-								ctx_params.prediction = static_cast<prediction_t>(sampler["current_prediction_type"].get<int>());
-
-							if (sampler.contains("tensor_type_rules") && !sampler["tensor_type_rules"].is_null() && !sampler["tensor_type_rules"].get<std::string>().empty())
-								tensorTypeRules = sampler["tensor_type_rules"].get<std::string>();
-						}
-
-						if (comp.contains("Latent")) {
-							auto latent = comp["Latent"];
-							if (latent.contains("current_rng_type"))
-								ctx_params.rng_type = static_cast<rng_type_t>(latent["current_rng_type"].get<int>());
-							if (latent.contains("sampler_rng_type"))
-								ctx_params.sampler_rng_type = static_cast<rng_type_t>(latent["sampler_rng_type"].get<int>());
-						}
-
-						if (comp.contains("Chroma")) {
-							auto chroma = comp["Chroma"];
-							if (chroma.contains("use_dit_mask"))
-								ctx_params.chroma_use_dit_mask = chroma["use_dit_mask"].get<bool>();
-							if (chroma.contains("use_t5_mask"))
-								ctx_params.chroma_use_t5_mask = chroma["use_t5_mask"].get<bool>();
-							if (chroma.contains("t5_mask_pad"))
-								ctx_params.chroma_t5_mask_pad = chroma["t5_mask_pad"].get<int>();
-						}
-					}
+				// Parse parameters into the entry's string storage
+				if (!ParseContextParams(metadata, ctx_params,
+					entry->modelPath, entry->vaePath, entry->clipLPath, entry->clipGPath,
+					entry->clipVisionPath, entry->t5xxlPath, entry->llmPath, entry->llmVisionPath,
+					entry->diffusionModelPath, entry->highNoiseModelPath, entry->taesdPath,
+					entry->controlnetPath, entry->photoMakerPath, entry->tensorTypeRules)) {
+					std::cerr << "ERROR: Failed to parse context parameters!" << std::endl;
+					return nullptr;
 				}
 
 				std::cout << "DEBUG: Creating SD context with paths:" << std::endl;
-				std::cout << "  model_path: " << (modelPath.empty() ? "(empty)" : modelPath) << std::endl;
-				std::cout << "  vae_path: " << (vaePath.empty() ? "(empty)" : vaePath) << std::endl;
-				std::cout << "  clip_l_path: " << (clipLPath.empty() ? "(empty)" : clipLPath) << std::endl;
-				std::cout << "  clip_g_path: " << (clipGPath.empty() ? "(empty)" : clipGPath) << std::endl;
-
-				ctx_params.model_path = modelPath.empty() ? nullptr : modelPath.c_str();
-				ctx_params.clip_l_path = clipLPath.empty() ? nullptr : clipLPath.c_str();
-				ctx_params.clip_g_path = clipGPath.empty() ? nullptr : clipGPath.c_str();
-				ctx_params.clip_vision_path = clipVisionPath.empty() ? nullptr : clipVisionPath.c_str();
-				ctx_params.t5xxl_path = t5xxlPath.empty() ? nullptr : t5xxlPath.c_str();
-				ctx_params.llm_path = llmPath.empty() ? nullptr : llmPath.c_str();
-				ctx_params.llm_vision_path = llmVisionPath.empty() ? nullptr : llmVisionPath.c_str();
-				ctx_params.diffusion_model_path = diffusionModelPath.empty() ? nullptr : diffusionModelPath.c_str();
-				ctx_params.high_noise_diffusion_model_path = highNoiseModelPath.empty() ? nullptr : highNoiseModelPath.c_str();
-				ctx_params.vae_path = vaePath.empty() ? nullptr : vaePath.c_str();
-				ctx_params.taesd_path = taesdPath.empty() ? nullptr : taesdPath.c_str();
-				ctx_params.control_net_path = controlnetPath.empty() ? nullptr : controlnetPath.c_str();
-				ctx_params.photo_maker_path = photoMakerPath.empty() ? nullptr : photoMakerPath.c_str();
-				ctx_params.tensor_type_rules = tensorTypeRules.empty() ? nullptr : tensorTypeRules.c_str();
+				std::cout << "  model_path: " << (ctx_params.model_path ? ctx_params.model_path : "(empty)") << std::endl;
+				std::cout << "  vae_path: " << (ctx_params.vae_path ? ctx_params.vae_path : "(empty)") << std::endl;
+				std::cout << "  clip_l_path: " << (ctx_params.clip_l_path ? ctx_params.clip_l_path : "(empty)") << std::endl;
+				std::cout << "  clip_g_path: " << (ctx_params.clip_g_path ? ctx_params.clip_g_path : "(empty)") << std::endl;
 
 				sd_ctx_t* ctx = new_sd_ctx(&ctx_params);
 
@@ -428,43 +255,40 @@ namespace Utils {
 		}
 
 		// Async function to create context
-		static std::future<sd_ctx_t*> CreateNewContextAsync(const nlohmann::json& metadata) {
-			return std::async(std::launch::async, [metadata]() -> sd_ctx_t* {
-				return CreateNewContextInternal(metadata);
+		static std::future<sd_ctx_t*> CreateNewContextAsync(std::shared_ptr<SDContextCacheEntry> entry) {
+			return std::async(std::launch::async, [entry]() -> sd_ctx_t* {
+				return CreateNewContextInternal(entry->metadata, entry);
 			});
 		}
 
 	public:
 		// Create new context from metadata (public interface)
 		static sd_ctx_t* CreateNewContext(const nlohmann::json& metadata) {
-			return CreateNewContextInternal(metadata);
+			auto entry = std::make_shared<SDContextCacheEntry>();
+			entry->metadata = metadata;
+			return CreateNewContextInternal(metadata, entry);
 		}
 
-		// Get or create context - UPDATED for async loading
+		// Get or create context with async loading
 		static sd_ctx_t* GetOrCreateContext(const nlohmann::json& metadata) {
 			std::string cacheKey = GenerateCacheKey(metadata);
 
 			{
 				std::lock_guard<std::mutex> lock(cacheMutex);
 
-				// Check if we have a cached context
 				auto it = contextCache.find(cacheKey);
 				if (it != contextCache.end()) {
 					auto& entry = it->second;
 
-					// Check if context is currently loading
 					if (entry->isLoading) {
-						// Check if loading is complete
 						if (entry->loadingFuture.valid()) {
 							auto status = entry->loadingFuture.wait_for(std::chrono::milliseconds(0));
 							if (status == std::future_status::ready) {
 								try {
-									// Get the loaded context
 									entry->context = entry->loadingFuture.get();
 									entry->isLoading = false;
 
 									if (!entry->context) {
-										// Loading failed, remove the entry
 										std::cout << "DEBUG: Async context loading failed for: " << cacheKey << std::endl;
 										contextCache.erase(it);
 										totalContextsFailed++;
@@ -481,17 +305,14 @@ namespace Utils {
 								}
 							}
 							else {
-								// Still loading
 								std::cout << "DEBUG: Context is still loading: " << cacheKey << std::endl;
 								entry->isInUse = true;
-								return nullptr; // Return null to indicate loading in progress
+								return nullptr;
 							}
 						}
 					}
 
-					// Check if we have a valid context now
 					if (entry->context) {
-						// Check if metadata is similar enough to reuse
 						if (CanReuseContext(entry->metadata, metadata)) {
 							entry->lastUsed = std::chrono::steady_clock::now();
 							entry->useCount++;
@@ -501,7 +322,6 @@ namespace Utils {
 							return entry->context;
 						}
 						else {
-							// Metadata differs, remove old entry
 							std::cout << "DEBUG: Metadata differs, removing old cache entry: " << cacheKey << std::endl;
 							contextCache.erase(it);
 						}
@@ -509,12 +329,10 @@ namespace Utils {
 				}
 			}
 
-			// Create new context entry and start async loading
 			std::shared_ptr<SDContextCacheEntry> newEntry;
 			{
 				std::lock_guard<std::mutex> lock(cacheMutex);
 
-				// Clean up least recently used if cache is full
 				if (contextCache.size() >= MAX_CACHE_SIZE) {
 					auto oldest = contextCache.begin();
 					auto oldestTime = oldest->second->lastUsed;
@@ -532,7 +350,6 @@ namespace Utils {
 					}
 				}
 
-				// Create new entry
 				newEntry = std::make_shared<SDContextCacheEntry>();
 				newEntry->cacheKey = cacheKey;
 				newEntry->metadata = metadata;
@@ -541,8 +358,7 @@ namespace Utils {
 				newEntry->isInUse = true;
 				newEntry->isLoading = true;
 
-				// Start async loading
-				newEntry->loadingFuture = CreateNewContextAsync(metadata);
+				newEntry->loadingFuture = CreateNewContextAsync(newEntry);
 
 				contextCache[cacheKey] = newEntry;
 				totalContextsCreated++;
@@ -551,9 +367,11 @@ namespace Utils {
 					<< " (total created: " << totalContextsCreated << ")" << std::endl;
 			}
 
-			// Return nullptr to indicate loading in progress
 			return nullptr;
 		}
+
+		// Rest of the class remains the same...
+		// (ReleaseContext, ClearAllContexts, GetCacheStats, etc.)
 
 		// Check if a context is currently loading for given metadata
 		static bool IsContextLoading(const nlohmann::json& metadata) {
@@ -583,7 +401,6 @@ namespace Utils {
 							entry->isLoading = false;
 
 							if (!entry->context) {
-								// Loading failed
 								std::cout << "DEBUG: Async context loading failed for: " << cacheKey << std::endl;
 								contextCache.erase(it);
 								totalContextsFailed++;
@@ -620,7 +437,6 @@ namespace Utils {
 				}
 			}
 
-			// Context not found in cache, free it directly
 			std::cerr << "WARNING: Context not found in cache, freeing directly" << std::endl;
 			free_sd_ctx(context);
 		}
@@ -637,7 +453,6 @@ namespace Utils {
 				}
 			}
 
-			// Context not in cache, free directly
 			free_sd_ctx(context);
 		}
 
@@ -702,7 +517,6 @@ namespace Utils {
 				std::cout << "    Loading: " << (cacheEntry->isLoading ? "yes" : "no") << std::endl;
 				std::cout << "    Age: " << age.count() << " seconds" << std::endl;
 
-				// Show model paths
 				if (cacheEntry->metadata.contains("components")) {
 					for (const auto& comp : cacheEntry->metadata["components"]) {
 						if (comp.contains("Checkpoint")) {
@@ -728,7 +542,6 @@ namespace Utils {
 
 			std::cout << "DEBUG: Looking for contexts using model: " << modelPath << std::endl;
 
-			// Find all cache entries using this model
 			std::vector<std::string> toRemove;
 			for (const auto& entry : contextCache) {
 				try {
@@ -765,7 +578,6 @@ namespace Utils {
 				}
 			}
 
-			// Remove the contexts
 			for (const auto& key : toRemove) {
 				contextCache.erase(key);
 				std::cout << "DEBUG: Removed context: " << key << std::endl;
