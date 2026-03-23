@@ -1,9 +1,9 @@
 /*
-		d8888          d8b  .d8888b.  888                  888 d8b
-	   d88888          Y8P d88P  Y88b 888                  888 Y8P
-	  d88P888              Y88b.      888                  888
-	 d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
-	d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
+        d8888          d8b  .d8888b.  888                  888 d8b
+       d88888          Y8P d88P  Y88b 888                  888 Y8P
+      d88P888              Y88b.      888                  888
+     d88P 888 88888b.  888  "Y888b.   888888 888  888  .d88888 888  .d88b.
+    d88P  888 888 "88b 888     "Y88b. 888    888  888 d88" 888 888 d88""88b
    d88P   888 888  888 888       "888 888    888  888 888  888 888 888  888
   d8888888888 888  888 888 Y88b  d88P Y88b.  Y88b 888 Y88b 888 888 Y88..88P
  d88P     888 888  888 888  "Y8888P"   "Y888  "Y88888  "Y88888 888  "Y88P"
@@ -39,118 +39,114 @@
 #include <set>
 #include <unordered_map>
 
- /*
- The AniStudio Library is responsible for the AniEngine instance if you choose to use this
- library. You can access any of the managers from the get functions here. Other than holding
- the AniEngine Instance, the library contains all gui logic and utilities. If you want to use
- another gui solution instead of imgui, you can still access the gui utilities via the
- AniStudio shared library. Otherwise, I would suggest you use the AniEngine shared library
- instead. Commercial licence holders can use the static libs or use code directly.
- */
-
 namespace GUI {
-	class MenuBar;
-	class ProjectManagerView;
+    class MenuBar;
+    class ProjectManagerView;
+    class SettingsView;
 }
 
 namespace ANI {
 
-	class ANI_STUDIO_API StudioCore {
-	public:
-		// Constructor/Destructor
-		StudioCore();
-		~StudioCore();
+    class ANI_STUDIO_API StudioCore {
+    public:
+        // Constructor/Destructor
+        StudioCore();
+        ~StudioCore();
 
-		// Core lifecycle
-		bool Initialize();
-		void CompleteInitialization();
-		void Shutdown();
-		void Update(float deltaTime);
-		void Render();
+        // Core lifecycle
+        bool Initialize();
+        void CompleteInitialization();
+        void Shutdown();
+        void Update(float deltaTime);
+        void Render();
 
-		// Manager access via context
-		ECS::EntityManager& GetEntityManager() {
-			if (!studioContext || !studioContext->entityManager) {
-				throw std::runtime_error("StudioContext or EntityManager not initialized");
-			}
-			return *studioContext->entityManager;
-		}
+        // Manager access via context
+        ECS::EntityManager& GetEntityManager() {
+            if (!studioContext || !studioContext->entityManager) {
+                throw std::runtime_error("StudioContext or EntityManager not initialized");
+            }
+            return *studioContext->entityManager;
+        }
 
-		GUI::ViewManager& GetViewManager() {
-			if (!studioContext || !studioContext->viewManager) {
-				throw std::runtime_error("StudioContext or ViewManager not initialized");
-			}
-			return *studioContext->viewManager;
-		}
+        GUI::ViewManager& GetViewManager() {
+            if (!studioContext || !studioContext->viewManager) {
+                throw std::runtime_error("StudioContext or ViewManager not initialized");
+            }
+            return *studioContext->viewManager;
+        }
 
-		ANI::ProjectManager& GetProjectManager() {
-			if (!studioContext || !studioContext->projectManager) {
-				throw std::runtime_error("StudioContext or ProjectManager not initialized");
-			}
-			return *studioContext->projectManager;
-		}
+        ANI::ProjectManager& GetProjectManager() {
+            if (!studioContext || !studioContext->projectManager) {
+                throw std::runtime_error("StudioContext or ProjectManager not initialized");
+            }
+            return *studioContext->projectManager;
+        }
 
-		// Context access
-		std::shared_ptr<StudioContext> GetStudioContext() const { return studioContext; }
+        // Settings access
+        GUI::SettingsView& GetSettingsView();
 
-		// Create StudioCore with existing context
-		static std::unique_ptr<StudioCore> CreateWithContext(std::shared_ptr<StudioContext> existingContext);
+        // Context access
+        std::shared_ptr<StudioContext> GetStudioContext() const { return studioContext; }
 
-		// Studio state
-		bool IsRunning() const { return running && engineCore.IsRunning(); }
-		void SetRunning(bool isRunning) {
-			running = isRunning;
-			engineCore.SetRunning(isRunning);
-		}
+        // Create StudioCore with existing context
+        static std::unique_ptr<StudioCore> CreateWithContext(std::shared_ptr<StudioContext> existingContext);
 
-		bool IsInitialized() const { return initialized; }
+        // Studio state
+        bool IsRunning() const { return running && engineCore.IsRunning(); }
+        void SetRunning(bool isRunning) {
+            running = isRunning;
+            engineCore.SetRunning(isRunning);
+        }
 
-		// Window management
-		void SetWindowHandle(void* window);
-		void SetImGuiContext(void* context);
-		void SetCoreCallbacks();
-		void SetCoreEvents();
+        bool IsInitialized() const { return initialized; }
 
-		// Workspace management
-		void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
-		GUI::WorkspaceID GetActiveWorkspace() const;
+        // Window management
+        void SetWindowHandle(void* window);
+        void SetImGuiContext(void* context);
+        void SetCoreCallbacks();
+        void SetCoreEvents();
 
-		// Project event handlers
-		void OnProjectLoaded(const std::string& projectPath);
-		void OnProjectCreated(const std::string& projectPath);
-		void OnProjectClosed();
+        // Workspace management
+        void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
+        GUI::WorkspaceID GetActiveWorkspace() const;
 
-	private:
-		bool initialized;
-		bool running;
-		bool m_isShuttingDown; // Prevent callbacks during shutdown
+        // Project event handlers
+        void OnProjectLoaded(const std::string& projectPath);
+        void OnProjectCreated(const std::string& projectPath);
+        void OnProjectClosed();
 
-		std::shared_ptr<StudioContext> studioContext;
+    private:
+        bool initialized;
+        bool running;
+        bool m_isShuttingDown;
 
-		// Pointers to the imgui and glfw instances
-		void* windowHandle;
-		void* imguiContext;
+        std::shared_ptr<StudioContext> studioContext;
 
-		// Core systems
-		EngineCore engineCore;
+        // Pointers to the imgui and glfw instances
+        void* windowHandle;
+        void* imguiContext;
 
-		// Standalone views
-		std::unique_ptr<GUI::MenuBar> m_menuBar;
-		std::unique_ptr<GUI::ProjectManagerView> m_projectManagerView;
-		bool m_showProjectManagerView = false;
+        // Core systems
+        EngineCore engineCore;
 
-		// Use existing WindowState utility
-		Utils::WindowState m_windowState;
+        // Standalone views (lazy initialized)
+        std::unique_ptr<GUI::MenuBar> m_menuBar;
+        std::unique_ptr<GUI::ProjectManagerView> m_projectManagerView;
+        std::unique_ptr<GUI::SettingsView> m_settingsView;
+        bool m_showProjectManagerView = false;
 
-		// Internal setup
-		void RegisterCoreViews();
-		void SetupProjectCallbacks();
-		void InitializeStudioPlugins();
+        // Use existing WindowState utility
+        Utils::WindowState m_windowState;
 
-		// Window state management
-		void InitializeWindowState();
-		void SyncWindowStateFromGLFW();
-		void ApplyWindowStateToGLFW();
-		std::string GetDefaultWindowStatePath() const;
-	};
+        // Internal setup
+        void RegisterCoreViews();
+        void SetupProjectCallbacks();
+        void InitializeStudioPlugins();
+
+        // Window state management
+        void InitializeWindowState();
+        void SyncWindowStateFromGLFW();
+        void ApplyWindowStateToGLFW();
+        std::string GetDefaultWindowStatePath() const;
+    };
 }

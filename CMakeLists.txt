@@ -121,7 +121,7 @@ find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(FFmpeg REQUIRED COMPONENTS avformat avutil swscale)
-find_package(PkgConfig REQUIRED)
+# find_package(PkgConfig REQUIRED)
 find_package(pybind11 REQUIRED)
 
 # Find X11 on Linux

@@ -22,12 +22,18 @@
 
 #define ANI_ENGINE_API
 
+#ifdef _WIN32
 #ifdef BUILDING_ANIENGINE
-#define ANI_ENGINE_API __declspec(dllexport)  // Windows
-#define ANI_ENGINE_API __attribute__((visibility("default"))) // Linux
+#define ANI_ENGINE_API __declspec(dllexport)
 #else
-#define ANI_ENGINE_API __declspec(dllimport)  // Windows
-#define ANI_ENGINE_API // Linux
+#define ANI_ENGINE_API __declspec(dllimport)
+#endif
+#else
+#ifdef BUILDING_ANIENGINE
+#define ANI_ENGINE_API __attribute__((visibility("default")))
+#else
+#define ANI_ENGINE_API
+#endif
 #endif
 
 #include "ECS.h"
