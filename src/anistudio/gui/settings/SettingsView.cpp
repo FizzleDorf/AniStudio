@@ -4,6 +4,7 @@
 #include "GeneralSettings.hpp"
 #include "ImGuiStyleSettings.hpp"
 #include "ImGuiRenderSettings.hpp"
+#include "SettingsManager.hpp"
 #include <iostream>
 #include <algorithm>
 #include <imgui_internal.h>
@@ -16,11 +17,13 @@ namespace GUI {
         filterListWidth(250.0f), currentActiveTab(""),
         imguiContext(nullptr), settingsLoaded(false) {
 
-        std::cout << "[SettingsView] Constructor - Registering core tabs..." << std::endl;
+        std::cout << "[SettingsView] Constructor - Creating SettingsManager..." << std::endl;
+        settingsManager = std::make_unique<Settings::SettingsManager>();
 
+        std::cout << "[SettingsView] Registering core tabs..." << std::endl;
         RegisterCoreTabs();
 
-        const auto& tabs = settingsManager.GetTabs();
+        const auto& tabs = settingsManager->GetTabs();
         if (!tabs.empty()) {
             std::cout << "[SettingsView] First tab: " << tabs[0]->GetTabName() << std::endl;
             UpdateCategoriesForActiveTab(tabs[0]->GetTabName());
@@ -33,7 +36,13 @@ namespace GUI {
         imguiContext = context;
         std::cout << "[SettingsView] ImGui context set to: " << imguiContext << std::endl;
 
-        for (const auto& tab : settingsManager.GetTabs()) {
+        if (!imguiContext) {
+            std::cerr << "[SettingsView] Warning: ImGui context is null!" << std::endl;
+            return;
+        }
+
+        // Set context for all ImGui-related tabs
+        for (const auto& tab : settingsManager->GetTabs()) {
             std::string tabName = tab->GetTabName();
             if (tabName == "ImGui Style") {
                 auto* styleTab = dynamic_cast<Settings::ImGuiStyleSettingsTab*>(tab.get());
@@ -51,6 +60,7 @@ namespace GUI {
             }
         }
 
+        // Now load settings with the context set
         LoadAllSettingsWithContext();
     }
 
@@ -59,14 +69,17 @@ namespace GUI {
             return;
         }
 
-        std::cout << "[SettingsView] Loading all settings with ImGui context..." << std::endl;
-
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
+        if (!imguiContext) {
+            std::cerr << "[SettingsView] Cannot load settings: ImGui context is null!" << std::endl;
+            return;
         }
 
+        std::cout << "[SettingsView] Loading all settings with ImGui context..." << std::endl;
+
+        ImGui::SetCurrentContext(imguiContext);
+
         try {
-            settingsManager.LoadAllSettings();
+            settingsManager->LoadAllSettings();
             std::cout << "[SettingsView] Settings loaded successfully" << std::endl;
             settingsLoaded = true;
         }
@@ -80,19 +93,19 @@ namespace GUI {
 
         try {
             auto generalTab = std::make_unique<Settings::GeneralSettingsTab>();
-            settingsManager.RegisterTab(std::move(generalTab));
+            settingsManager->RegisterTab(std::move(generalTab));
             std::cout << "[SettingsView] Registered General tab" << std::endl;
 
             auto pathsTab = std::make_unique<Settings::PathsSettingsTab>();
-            settingsManager.RegisterTab(std::move(pathsTab));
+            settingsManager->RegisterTab(std::move(pathsTab));
             std::cout << "[SettingsView] Registered Paths tab" << std::endl;
 
             auto styleTab = std::make_unique<Settings::ImGuiStyleSettingsTab>();
-            settingsManager.RegisterTab(std::move(styleTab));
+            settingsManager->RegisterTab(std::move(styleTab));
             std::cout << "[SettingsView] Registered ImGui Style tab" << std::endl;
 
             auto renderTab = std::make_unique<Settings::ImGuiRenderSettingsTab>();
-            settingsManager.RegisterTab(std::move(renderTab));
+            settingsManager->RegisterTab(std::move(renderTab));
             std::cout << "[SettingsView] Registered ImGui Render tab" << std::endl;
 
             std::cout << "[SettingsView] All core tabs registered successfully" << std::endl;
@@ -105,7 +118,7 @@ namespace GUI {
     void SettingsView::UpdateCategoriesForActiveTab(const std::string& activeTabName) {
         availableCategories.clear();
 
-        for (const auto& tab : settingsManager.GetTabs()) {
+        for (const auto& tab : settingsManager->GetTabs()) {
             if (tab->GetTabName() == activeTabName) {
                 auto tabCategories = GetCategoriesFromTab(tab.get());
                 for (const auto& category : tabCategories) {
@@ -156,10 +169,12 @@ namespace GUI {
     void SettingsView::Render() {
         if (!showPopup) return;
 
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
+        if (!imguiContext) {
+            std::cerr << "[SettingsView] Cannot render: ImGui context is null!" << std::endl;
+            return;
         }
 
+        ImGui::SetCurrentContext(imguiContext);
         ImGui::OpenPopup("Settings##SettingsPopup");
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -185,7 +200,7 @@ namespace GUI {
     }
 
     void SettingsView::HandlePopupClose() {
-        if (settingsManager.HasAnyUnsavedChanges()) {
+        if (settingsManager->HasAnyUnsavedChanges()) {
             showUnsavedChangesDialog = true;
             pendingClose = true;
         }
@@ -195,7 +210,7 @@ namespace GUI {
     }
 
     void SettingsView::RenderMainContent() {
-        const auto& tabs = settingsManager.GetTabs();
+        const auto& tabs = settingsManager->GetTabs();
         if (tabs.empty()) {
             ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "No settings tabs available!");
             return;
@@ -267,7 +282,7 @@ namespace GUI {
     }
 
     void SettingsView::RenderSelectedCategoriesContent() {
-        const auto& tabs = settingsManager.GetTabs();
+        const auto& tabs = settingsManager->GetTabs();
 
         if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
             for (const auto& tab : tabs) {
@@ -336,13 +351,13 @@ namespace GUI {
     }
 
     void SettingsView::RenderActionButtons() {
-        if (settingsManager.HasAnyUnsavedChanges()) {
+        if (settingsManager->HasAnyUnsavedChanges()) {
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "* Unsaved changes");
             ImGui::SameLine();
         }
 
         if (ImGui::Button("Apply")) {
-            if (settingsManager.SaveAllSettings()) {
+            if (settingsManager->SaveAllSettings()) {
                 showSavePopup = true;
             }
         }
@@ -350,21 +365,21 @@ namespace GUI {
         ImGui::SameLine();
 
         if (ImGui::Button("Save and Close")) {
-            if (settingsManager.SaveAllSettings()) {
+            if (settingsManager->SaveAllSettings()) {
                 showPopup = false;
                 ImGui::CloseCurrentPopup();
             }
         }
 
-        if (settingsManager.HasAnyUnsavedChanges()) {
+        if (settingsManager->HasAnyUnsavedChanges()) {
             ImGui::SameLine();
             if (ImGui::Button("Cancel Changes")) {
-                settingsManager.RestoreAllFromBackups();
+                settingsManager->RestoreAllFromBackups();
             }
 
             ImGui::SameLine();
             if (ImGui::Button("Reset to Defaults")) {
-                settingsManager.ResetAllToDefaults();
+                settingsManager->ResetAllToDefaults();
             }
         }
 
@@ -400,7 +415,7 @@ namespace GUI {
             ImGui::Separator();
 
             if (ImGui::Button("Apply and Close", ImVec2(120, 0))) {
-                if (settingsManager.SaveAllSettings()) {
+                if (settingsManager->SaveAllSettings()) {
                     showUnsavedChangesDialog = false;
                     showPopup = false;
                     pendingClose = false;
@@ -410,7 +425,7 @@ namespace GUI {
 
             ImGui::SameLine();
             if (ImGui::Button("Discard Changes", ImVec2(120, 0))) {
-                settingsManager.RestoreAllFromBackups();
+                settingsManager->RestoreAllFromBackups();
                 showUnsavedChangesDialog = false;
                 showPopup = false;
                 pendingClose = false;

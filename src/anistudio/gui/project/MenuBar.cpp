@@ -2,9 +2,11 @@
 #include "ProjectManager.hpp"
 #include "ViewManager.hpp"
 #include "Events.hpp"
+#include "SettingsView.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <sstream>
+#include <iostream>
 
 namespace GUI {
 
@@ -14,18 +16,18 @@ namespace GUI {
         popupState.InitializeBuffers(projectMgr);
         popupState.LoadTemplates();
         popupState.RefreshRecentProjects(projectMgr);
+
+        std::cout << "[MenuBar] Constructor - Settings will be accessed via StudioCore" << std::endl;
     }
 
     void MenuBar::Update(float deltaTime) {
-        // Nothing to update now that we don't have separate view classes
+        // Nothing to update
     }
 
     void MenuBar::Render() {
         // Render project popups
         ProjectPopups::RenderNewProjectPopup(popupState, projectManager);
         ProjectPopups::RenderLoadProjectPopup(popupState, projectManager);
-
-        // Settings view is rendered by StudioCore, not here
 
         if (ImGui::BeginMenuBar()) {
             ShowFileMenu();
@@ -64,7 +66,9 @@ namespace GUI {
             ImGui::Separator();
 
             if (ImGui::MenuItem("Settings...", "Ctrl+,")) {
+                // Access SettingsView through StudioCore
                 studioCore.GetSettingsView().Show();
+                std::cout << "[MenuBar] Opening Settings dialog" << std::endl;
             }
 
             if (projectOpen) {

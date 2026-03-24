@@ -313,7 +313,8 @@ namespace ANI {
 
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
 
-            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager);
+            // Create ProjectManagerView with StudioCore reference
+            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager, this);
 
             studioContext->entityManager->RegisterSystem<TextureSystem>();
 
@@ -378,7 +379,8 @@ namespace ANI {
 
         studioCore->studioContext->viewManager->SetEntityManager(*studioCore->studioContext->entityManager);
 
-        studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager);
+        // Create ProjectManagerView with StudioCore reference
+        studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager, studioCore.get());
 
         std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
         if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {

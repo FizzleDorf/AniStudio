@@ -2,11 +2,15 @@
 #pragma once
 
 #include "GUI.h"
-#include "SettingsManager.hpp"
 #include "BaseTabObject.hpp"
 #include <string>
 #include <vector>
 #include <set>
+#include <memory>
+
+namespace Settings {
+    class SettingsManager;
+}
 
 namespace GUI {
 
@@ -21,10 +25,8 @@ namespace GUI {
         void Hide() { showPopup = false; }
         bool IsVisible() const { return showPopup; }
 
-        Settings::SettingsManager& GetSettingsManager() { return settingsManager; }
-
     private:
-        Settings::SettingsManager settingsManager;
+        std::unique_ptr<Settings::SettingsManager> settingsManager;
 
         bool showPopup;
         bool showSavePopup;

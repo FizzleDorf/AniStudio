@@ -1,6 +1,5 @@
 #pragma once
 #include "ProjectPopups.hpp"
-#include "SettingsView.hpp"
 #include "AniStudio.hpp"
 #include <string>
 #include <vector>

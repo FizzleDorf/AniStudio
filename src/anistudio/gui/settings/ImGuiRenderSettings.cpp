@@ -3,39 +3,32 @@
 namespace Settings {
 
     void ImGuiRenderSettingsTab::EnsureInitialized() {
-        if (!isInitialized) {
-            if (imguiContext) {
-                ImGui::SetCurrentContext(imguiContext);
-            }
+        if (!isInitialized && imguiContext) {
+            ImGui::SetCurrentContext(imguiContext);
             LoadCurrentImGuiSettings();
-            LoadSettings();
-            CreateBackup();
             isInitialized = true;
         }
     }
 
     void ImGuiRenderSettingsTab::RenderFilteredUI(const std::set<std::string>& selectedCategories) {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
 
         if (ImGui::BeginChild("ImGuiRenderSettings", ImVec2(0, 0), false)) {
             ImGuiIO& io = ImGui::GetIO();
 
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Warning: Changes require application restart");
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Warning: Some changes require application restart");
             ImGui::Separator();
 
             if (ShouldRenderCategory("Display Settings", selectedCategories)) {
                 ImGui::Text("Display Settings");
                 ImGui::Spacing();
 
-                if (ImGui::SliderFloat("Global Font Scale", &io.FontGlobalScale, 0.5f, 2.0f, "%.2f")) {
-                    hasChanges = true;
-                }
-
-                if (ImGui::SliderFloat2("Display Framebuffer Scale",
-                    (float*)&io.DisplayFramebufferScale, 0.5f, 3.0f, "%.1f")) {
+                float fontScale = io.FontGlobalScale;
+                if (ImGui::SliderFloat("Global Font Scale", &fontScale, 0.5f, 2.0f, "%.2f")) {
+                    io.FontGlobalScale = fontScale;
                     hasChanges = true;
                 }
 
@@ -46,19 +39,15 @@ namespace Settings {
                 ImGui::Text("Input Settings");
                 ImGui::Spacing();
 
-                if (ImGui::SliderFloat("Mouse Double Click Time", &io.MouseDoubleClickTime, 0.1f, 1.0f, "%.2f")) {
+                float doubleClickTime = io.MouseDoubleClickTime;
+                if (ImGui::SliderFloat("Mouse Double Click Time", &doubleClickTime, 0.1f, 1.0f, "%.2f")) {
+                    io.MouseDoubleClickTime = doubleClickTime;
                     hasChanges = true;
                 }
-                if (ImGui::SliderFloat("Mouse Double Click Max Distance", &io.MouseDoubleClickMaxDist, 0.0f, 20.0f, "%.1f")) {
-                    hasChanges = true;
-                }
-                if (ImGui::SliderFloat("Mouse Drag Threshold", &io.MouseDragThreshold, 0.0f, 20.0f, "%.1f")) {
-                    hasChanges = true;
-                }
-                if (ImGui::SliderFloat("Key Repeat Delay", &io.KeyRepeatDelay, 0.1f, 1.0f, "%.2f")) {
-                    hasChanges = true;
-                }
-                if (ImGui::SliderFloat("Key Repeat Rate", &io.KeyRepeatRate, 0.01f, 0.5f, "%.3f")) {
+
+                float dragThreshold = io.MouseDragThreshold;
+                if (ImGui::SliderFloat("Mouse Drag Threshold", &dragThreshold, 0.0f, 20.0f, "%.1f")) {
+                    io.MouseDragThreshold = dragThreshold;
                     hasChanges = true;
                 }
 
@@ -169,11 +158,6 @@ namespace Settings {
                     }
                 }
 
-                if (ImGui::Checkbox("Debug Highlight ID Conflicts", &configDebugHighlightIdConflicts)) {
-                    io.ConfigDebugHighlightIdConflicts = configDebugHighlightIdConflicts;
-                    hasChanges = true;
-                }
-
                 ImGui::Separator();
             }
 
@@ -200,6 +184,8 @@ namespace Settings {
     }
 
     bool ImGuiRenderSettingsTab::SaveSettings() {
+        if (!imguiContext) return false;
+
         EnsureInitialized();
         try {
             nlohmann::json j;
@@ -225,13 +211,11 @@ namespace Settings {
     }
 
     bool ImGuiRenderSettingsTab::LoadSettings() {
+        if (!imguiContext) return false;
+
         EnsureInitialized();
         try {
             std::string filePath = GetSettingsDirectory() + "/imgui_render_settings.json";
-
-            if (!std::filesystem::exists(filePath)) {
-                filePath = GetDefaultsDirectory() + "/imgui_render_defaults.json";
-            }
 
             if (!std::filesystem::exists(filePath)) {
                 LoadDefaults();
@@ -259,6 +243,8 @@ namespace Settings {
     }
 
     void ImGuiRenderSettingsTab::ResetToDefaults() {
+        if (!imguiContext) return;
+
         EnsureInitialized();
         LoadDefaults();
         ApplyAllSettingsToImGui();
@@ -266,32 +252,29 @@ namespace Settings {
     }
 
     void ImGuiRenderSettingsTab::CreateBackup() {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         backupConfigFlags = ImGui::GetIO().ConfigFlags;
     }
 
     void ImGuiRenderSettingsTab::RestoreFromBackup() {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         ImGui::GetIO().ConfigFlags = backupConfigFlags;
         LoadCurrentImGuiSettings();
         hasChanges = false;
     }
 
-    bool ImGuiRenderSettingsTab::HasUnsavedChanges() const {
-        return hasChanges;
-    }
-
     void ImGuiRenderSettingsTab::LoadCurrentImGuiSettings() {
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        if (!imguiContext) return;
+
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiIO& io = ImGui::GetIO();
+
         configWindowsResizeFromEdges = io.ConfigWindowsResizeFromEdges;
         configWindowsMoveFromTitleBarOnly = io.ConfigWindowsMoveFromTitleBarOnly;
         configDragClickToInputText = io.ConfigDragClickToInputText;
@@ -399,9 +382,9 @@ namespace Settings {
     }
 
     void ImGuiRenderSettingsTab::ApplyWindowBehaviorToImGui() {
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        if (!imguiContext) return;
+
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigWindowsResizeFromEdges = configWindowsResizeFromEdges;
         io.ConfigWindowsMoveFromTitleBarOnly = configWindowsMoveFromTitleBarOnly;
@@ -409,9 +392,9 @@ namespace Settings {
     }
 
     void ImGuiRenderSettingsTab::ApplyNavigationToImGui() {
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        if (!imguiContext) return;
+
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigNavMoveSetMousePos = configNavMoveSetMousePos;
         io.ConfigNavCaptureKeyboard = configNavCaptureKeyboard;
@@ -433,9 +416,9 @@ namespace Settings {
     }
 
     void ImGuiRenderSettingsTab::ApplyDockingToImGui() {
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        if (!imguiContext) return;
+
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigDockingWithShift = configDockingWithShift;
         io.ConfigDockingAlwaysTabBar = configDockingAlwaysTabBar;
@@ -450,9 +433,9 @@ namespace Settings {
     }
 
     void ImGuiRenderSettingsTab::ApplyViewportsToImGui() {
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        if (!imguiContext) return;
+
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigViewportsNoAutoMerge = configViewportsNoAutoMerge;
         io.ConfigViewportsNoTaskBarIcon = configViewportsNoTaskBarIcon;

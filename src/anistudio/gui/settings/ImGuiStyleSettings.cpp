@@ -3,22 +3,18 @@
 namespace Settings {
 
     void ImGuiStyleSettingsTab::EnsureInitialized() {
-        if (!isInitialized) {
-            if (imguiContext) {
-                ImGui::SetCurrentContext(imguiContext);
-            }
+        if (!isInitialized && imguiContext) {
+            ImGui::SetCurrentContext(imguiContext);
             backupStyle = ImGui::GetStyle();
-            LoadSettings();
-            CreateBackup();
             isInitialized = true;
         }
     }
 
     void ImGuiStyleSettingsTab::RenderFilteredUI(const std::set<std::string>& selectedCategories) {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
 
         if (ImGui::BeginChild("ImGuiStyleSettings", ImVec2(0, 0), false)) {
             ImGuiStyle& style = ImGui::GetStyle();
@@ -115,10 +111,10 @@ namespace Settings {
     }
 
     bool ImGuiStyleSettingsTab::SaveSettings() {
+        if (!imguiContext) return false;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiStyle& style = ImGui::GetStyle();
         std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
         SaveStyleToFile(style, filePath);
@@ -128,10 +124,10 @@ namespace Settings {
     }
 
     bool ImGuiStyleSettingsTab::LoadSettings() {
+        if (!imguiContext) return false;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         ImGuiStyle& style = ImGui::GetStyle();
         std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
         if (std::filesystem::exists(filePath)) {
@@ -145,33 +141,29 @@ namespace Settings {
     }
 
     void ImGuiStyleSettingsTab::ResetToDefaults() {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         SetCustomDarkTheme();
         hasChanges = true;
     }
 
     void ImGuiStyleSettingsTab::CreateBackup() {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         backupStyle = ImGui::GetStyle();
     }
 
     void ImGuiStyleSettingsTab::RestoreFromBackup() {
+        if (!imguiContext) return;
+
         EnsureInitialized();
-        if (imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
+        ImGui::SetCurrentContext(imguiContext);
         ImGui::GetStyle() = backupStyle;
         hasChanges = false;
-    }
-
-    bool ImGuiStyleSettingsTab::HasUnsavedChanges() const {
-        return hasChanges;
     }
 
     bool ImGuiStyleSettingsTab::ShowStyleSelector(const char* label) {

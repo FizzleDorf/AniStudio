@@ -4,6 +4,7 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include <imgui.h>
 
 namespace Settings {
     class ImGuiStyleSettingsTab : public BaseTabObject {
@@ -16,9 +17,16 @@ namespace Settings {
 
         void SetImGuiContext(ImGuiContext* context) {
             imguiContext = context;
+            if (imguiContext) {
+                LoadSettings();
+                CreateBackup();
+            }
         }
 
         void RenderUI() override {
+            if (!imguiContext) return;
+
+            ImGui::SetCurrentContext(imguiContext);
             EnsureInitialized();
             RenderFilteredUI({});
         }
@@ -29,7 +37,7 @@ namespace Settings {
         void ResetToDefaults() override;
         void CreateBackup() override;
         void RestoreFromBackup() override;
-        bool HasUnsavedChanges() const override;
+        bool HasUnsavedChanges() const override { return hasChanges; }
 
     private:
         ImGuiStyle backupStyle;
