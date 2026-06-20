@@ -111,7 +111,7 @@ namespace ANI {
 		// Get plugin directory from FilePathService
 		std::string pluginDirectory = Utils::FilePathService::GetPath("Plugins");
 		if (pluginDirectory.empty()) {
-			pluginDirectory = "../plugins";
+			pluginDirectory = "./plugins";
 			std::cerr << "[EngineCore] WARNING: Plugin directory not found in FilePathService, using default: " << pluginDirectory << std::endl;
 		}
 

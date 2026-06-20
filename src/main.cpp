@@ -22,7 +22,8 @@
 #include "timer/Timer.hpp"
 
 /*
- * This is just the main application loop that gets executed please see Core, AniEngine and/or AniStudio .hpp/.cpp for details
+ * This is just the main application loop. 
+ * Please see Core, AniEngine and AniStudio .hpp/.cpp for details.
  */
 int main(int argc, char* argv[]) {
 

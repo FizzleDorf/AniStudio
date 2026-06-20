@@ -715,14 +715,15 @@ namespace ECS {
 			}
 		}
 
-		// Create upscaler context from metadata
+		// Create upscaler context from metadata (updated API)
 		upscaler_ctx_t* CreateUpscalerContext(const nlohmann::json& metadata) {
 			try {
 				std::string esrganPath = "";
-				bool offload_params_to_cpu = false;
 				bool direct = false;
 				int n_threads = 4;
 				int tile_size = 64;
+				std::string backend = "";
+				std::string params_backend = "";
 
 				// Parse metadata to extract upscaler parameters
 				if (metadata.contains("components") && metadata["components"].is_array()) {
@@ -734,9 +735,6 @@ namespace ECS {
 								esrganPath = esrganData["modelPath"].get<std::string>();
 							}
 
-							if (esrganData.contains("offload_params_to_cpu")) {
-								offload_params_to_cpu = esrganData["offload_params_to_cpu"].get<bool>();
-							}
 							if (esrganData.contains("direct")) {
 								direct = esrganData["direct"].get<bool>();
 							}
@@ -745,6 +743,12 @@ namespace ECS {
 							}
 							if (esrganData.contains("tile_size")) {
 								tile_size = esrganData["tile_size"].get<int>();
+							}
+							if (esrganData.contains("backend") && !esrganData["backend"].is_null()) {
+								backend = esrganData["backend"].get<std::string>();
+							}
+							if (esrganData.contains("params_backend") && !esrganData["params_backend"].is_null()) {
+								params_backend = esrganData["params_backend"].get<std::string>();
 							}
 						}
 
@@ -763,11 +767,13 @@ namespace ECS {
 				}
 
 				std::cout << "Creating upscaler context with path: " << esrganPath << std::endl;
+				// Updated API: new_upscaler_ctx(path, direct, n_threads, tile_size, backend, params_backend)
 				return new_upscaler_ctx(esrganPath.c_str(),
-					offload_params_to_cpu,
 					direct,
 					n_threads,
-					tile_size);
+					tile_size,
+					backend.empty() ? nullptr : backend.c_str(),
+					params_backend.empty() ? nullptr : params_backend.c_str());
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error creating upscaler context: " << e.what() << std::endl;
@@ -911,7 +917,7 @@ namespace ECS {
 				std::cout << "Task completed for entity " << entityID << " with result: " << (result ? "success" : "failure") << std::endl;
 
 				return result;
-			};
+				};
 		}
 
 		// Static task functions - these match the actual function signatures
@@ -1014,7 +1020,7 @@ namespace ECS {
 				// Ensure vae_decode_only is false for edit (needs full VAE)
 				if (modifiedMetadata.contains("components") && modifiedMetadata["components"].is_array()) {
 					for (size_t i = 0; i < modifiedMetadata["components"].size(); ++i) {
-						auto& comp = modifiedMetadata["components"][i]; // This is now a non-const reference
+						auto& comp = modifiedMetadata["components"][i];
 						if (comp.contains("Vae")) {
 							auto& vae = comp["Vae"];
 							vae["vae_decode_only"] = false;
@@ -1294,7 +1300,7 @@ namespace ECS {
 
 			// Process completed tasks
 			if (!shuttingDown) {
-				for (const auto&[fullPath, taskType, entityID] : completedTasks) {
+				for (const auto& [fullPath, taskType, entityID] : completedTasks) {
 					ProcessCompletedTask(fullPath, taskType, entityID);
 				}
 			}

@@ -17,7 +17,6 @@ set STAGING_DIR=%ADDON_MAIN_DIR%\staging
 set STAGING_DLL=%STAGING_DIR%\%ADDON_NAME%.dll
 set LIBS_DIR=%ADDON_MAIN_DIR%\libs
 
-REM Backend options (set to ON to enable)
 set SD_CUDA=OFF
 set SD_VULKAN=OFF
 set SD_HIPBLAS=OFF
@@ -28,7 +27,6 @@ set SD_MUSA=OFF
 set SD_FAST_SOFTMAX=OFF
 set CLEAN_BUILD=0
 
-REM Parse command line arguments
 :parse_args
 if "%~1"=="" goto end_parse
 if /i "%~1"=="-clean" set CLEAN_BUILD=1
@@ -67,7 +65,6 @@ echo   MUSA: %SD_MUSA%
 echo   Fast Softmax: %SD_FAST_SOFTMAX%
 echo.
 
-REM Check if main project is built
 if not exist "%ROOT_DIR%\build\lib\AniEngineCore.lib" (
     echo ERROR: Main project not built yet!
     echo Please build the main AniStudio project first.
@@ -78,7 +75,6 @@ if not exist "%ROOT_DIR%\build\lib\AniEngineCore.lib" (
 
 echo [OK] Main project libraries found
 
-REM Clean old build if requested
 if %CLEAN_BUILD%==1 (
     if exist "%BUILD_DIR%" (
         echo Cleaning old build directory...
@@ -86,7 +82,6 @@ if %CLEAN_BUILD%==1 (
     )
 )
 
-REM Create directories
 mkdir "%BUILD_DIR%" 2>nul
 mkdir "%BUILT_ADDONS_BASE%" 2>nul
 mkdir "%ADDON_MAIN_DIR%" 2>nul
@@ -95,11 +90,9 @@ mkdir "%LIBS_DIR%" 2>nul
 
 cd /d "%BUILD_DIR%"
 
-REM Configure CMake
 if not exist "CMakeCache.txt" (
     echo Configuring CMake...
     
-    REM Build CMake command with backend options
     set CMAKE_CMD=cmake .. -DCMAKE_BUILD_TYPE=Release
     set CMAKE_CMD=!CMAKE_CMD! -DSD_CUDA=%SD_CUDA%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_VULKAN=%SD_VULKAN%
@@ -114,7 +107,7 @@ if not exist "CMakeCache.txt" (
     echo.
     !CMAKE_CMD!
     
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo ERROR: CMake configuration failed!
         pause
         exit /b 1
@@ -125,10 +118,9 @@ if not exist "CMakeCache.txt" (
     echo Note: To reconfigure with different backends, use -clean flag
 )
 
-REM Build the addon
 echo Building addon...
 cmake --build . --config Release --target %ADDON_NAME% 
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo ERROR: Build failed!
     pause
     exit /b 1
@@ -136,7 +128,6 @@ if %errorlevel% neq 0 (
 
 echo [OK] Addon build successful
 
-REM Check if DLL was created
 if exist "%STAGING_DLL%" (
     echo [OK] Addon DLL created: %STAGING_DLL%
     for %%I in ("%STAGING_DLL%") do echo Size: %%~zI bytes
@@ -155,7 +146,6 @@ echo.
 echo Addon DLL: %STAGING_DLL%
 echo.
 
-REM Check for backend libraries
 echo Checking for backend libraries...
 set LIBS_NEEDED=0
 

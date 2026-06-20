@@ -2,7 +2,7 @@
 #include <GLFW/glfw3.h>
 
 namespace ANI {
-    T_Timer::T_Timer() : deltaTime(0.0f), lastFrame(0.0f) {
+    T_Timer::T_Timer() : m_deltaTime(0.0f), m_lastFrame(0.0f) {
 
     }
 
@@ -11,8 +11,8 @@ namespace ANI {
     }
 
     void T_Timer::Tick() {
-        deltaTime = glfwGetTime() - lastFrame;
-        lastFrame = glfwGetTime();
+        m_deltaTime = glfwGetTime() - m_lastFrame;
+        m_lastFrame = glfwGetTime();
     }
 
     void T_Timer::Init() {

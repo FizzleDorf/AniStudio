@@ -23,16 +23,16 @@ namespace ANI {
 			return instance;
 		}
 
-		bool Run() const { return run; }
+		bool Run() const { return m_isRunning; }
 		void Init();
 		void Update(const float deltaT);
 		void Draw();
 		void Quit();
 
-		bool IsRunning() const { return run; }
-		GLFWwindow* GetWindow() const { return window; }
-		StudioCore& GetStudioCore() { return studioCore; }
+		bool IsRunning() const { return m_isRunning; }
 
+		GLFWwindow* GetWindow() const { return m_window; }
+		StudioCore& GetStudioCore() { return m_studioCore; }
 		ImGuiContext* GetImGuiContext() const { return ImGui::GetCurrentContext(); }
 
 	private:
@@ -43,15 +43,15 @@ namespace ANI {
 
 		void RegisterEventHandlers();
 
-		bool run;
-		GLFWwindow* window;
-		int videoWidth;
-		int videoHeight;
+		bool m_isRunning;
+		GLFWwindow* m_window;
+		int m_videoWidth;
+		int m_videoHeight;
 
-		double fpsSum;
-		int frameCount;
-		double timeElapsed;
+		double m_fpsSum;
+		int m_frameCount;
+		double m_timeElapsed;
 
-		StudioCore studioCore;
+		StudioCore m_studioCore;
 	};
 }

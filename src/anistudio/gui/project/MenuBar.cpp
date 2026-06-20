@@ -10,8 +10,8 @@
 
 namespace GUI {
 
-    MenuBar::MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ANI::StudioCore& studioCore)
-        : projectManager(projectMgr), viewManager(viewMgr), studioCore(studioCore) {
+    MenuBar::MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ANI::StudioCore& m_studioCore)
+        : projectManager(projectMgr), viewManager(viewMgr), m_studioCore(m_studioCore) {
 
         popupState.InitializeBuffers(projectMgr);
         popupState.LoadTemplates();
@@ -67,7 +67,7 @@ namespace GUI {
 
             if (ImGui::MenuItem("Settings...", "Ctrl+,")) {
                 // Access SettingsView through StudioCore
-                studioCore.GetSettingsView().Show();
+                m_studioCore.GetSettingsView().Show();
                 std::cout << "[MenuBar] Opening Settings dialog" << std::endl;
             }
 

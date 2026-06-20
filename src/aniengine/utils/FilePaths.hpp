@@ -26,74 +26,8 @@ namespace Utils
 	{
 	private:
 		std::unordered_map<std::string, std::string> m_pathMap;  // CHANGED: Use std::string as key
-		std::string m_executableDir;
 		std::string m_dataPath;
 		bool m_initialized = false;
-
-		// Get the directory where the executable is located
-		std::string GetExecutableDirectory() {
-			if (!m_executableDir.empty()) {
-				return m_executableDir;
-			}
-
-			std::cout << "[FilePaths] Detecting executable directory..." << std::endl;
-
-			try {
-				std::filesystem::path exePath;
-
-#ifdef _WIN32
-				char buffer[MAX_PATH];
-				DWORD length = GetModuleFileNameA(NULL, buffer, MAX_PATH);
-				if (length > 0 && length < MAX_PATH) {
-					exePath = std::filesystem::path(buffer);
-				}
-				else {
-					std::cerr << "[FilePaths] GetModuleFileName failed" << std::endl;
-				}
-#elif defined(__linux__)
-				char buffer[PATH_MAX];
-				ssize_t length = readlink("/proc/self/exe", buffer, PATH_MAX - 1);
-				if (length > 0) {
-					buffer[length] = '\0';
-					exePath = std::filesystem::path(buffer);
-				}
-				else {
-					std::cerr << "[FilePaths] readlink failed" << std::endl;
-				}
-#elif defined(__APPLE__)
-				char buffer[PATH_MAX];
-				uint32_t size = sizeof(buffer);
-				if (_NSGetExecutablePath(buffer, &size) == 0) {
-					char* resolved = realpath(buffer, nullptr);
-					if (resolved) {
-						exePath = std::filesystem::path(resolved);
-						free(resolved);
-					}
-					else {
-						std::cerr << "[FilePaths] realpath failed" << std::endl;
-					}
-				}
-				else {
-					std::cerr << "[FilePaths] _NSGetExecutablePath failed" << std::endl;
-				}
-#endif
-
-				if (!exePath.empty()) {
-					m_executableDir = exePath.parent_path().string();
-					std::cout << "[FilePaths] Executable directory: " << m_executableDir << std::endl;
-				}
-				else {
-					m_executableDir = std::filesystem::current_path().string();
-					std::cout << "[FilePaths] Using CWD: " << m_executableDir << std::endl;
-				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[FilePaths] Exception in GetExecutableDirectory: " << e.what() << std::endl;
-				m_executableDir = std::filesystem::current_path().string();
-			}
-
-			return m_executableDir;
-		}
 
 		// Safe directory creation with error handling
 		bool SafeCreateDirectories(const std::string& path) {
@@ -164,15 +98,9 @@ namespace Utils
 			std::cout << "[FilePaths] Initializing application paths..." << std::endl;
 
 			try {
-				// First, determine where the executable is
-				std::string exeDir = GetExecutableDirectory();
-				if (exeDir.empty()) {
-					std::cerr << "[FilePaths] FATAL: Could not determine executable directory!" << std::endl;
-					return;
-				}
 
 				// For build/bin/AniStudio.exe, we want build/ as our base
-				std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
+				std::filesystem::path basePath = std::filesystem::path(".");
 				std::cout << "[FilePaths] Base directory: " << basePath.string() << std::endl;
 
 				// Set data path if not already set
@@ -185,7 +113,6 @@ namespace Utils
 				std::cout << "[FilePaths] Loading saved paths..." << std::endl;
 				LoadFilePathDefaults();
 
-				// **CRITICAL: ALWAYS SET THESE PATHS, NO MATTER WHAT**
 				std::cout << "[FilePaths] Setting essential paths..." << std::endl;
 
 				// Application-level paths
@@ -278,7 +205,6 @@ namespace Utils
 					json[key] = path;
 				}
 
-				json["ExecutableDir"] = m_executableDir;
 				json["DataPath"] = m_dataPath;
 
 				std::string pathsFile = m_dataPath + "/paths.json";
@@ -328,11 +254,7 @@ namespace Utils
 				for (auto&[key, value] : json.items()) {
 					if (value.is_string()) {
 						std::string val = value.get<std::string>();
-						if (key == "ExecutableDir") {
-							m_executableDir = val;
-							std::cout << "[FilePaths] Loaded ExecutableDir: " << val << std::endl;
-						}
-						else if (key == "DataPath") {
+						if (key == "DataPath") {
 							m_dataPath = val;
 							std::cout << "[FilePaths] Loaded DataPath: " << val << std::endl;
 						}
@@ -520,7 +442,6 @@ namespace Utils
 		void PrintCurrentPaths() {
 			std::cout << "[FilePaths] ==================== Current Configuration ====================" << std::endl;
 			std::cout << "[FilePaths] Initialized: " << (m_initialized ? "YES" : "NO") << std::endl;
-			std::cout << "[FilePaths] Executable Dir: " << m_executableDir << std::endl;
 			std::cout << "[FilePaths] Data Path: " << m_dataPath << std::endl;
 
 			for (const auto&[key, path] : m_pathMap) {
@@ -532,7 +453,6 @@ namespace Utils
 
 		// Getters for internal state
 		bool IsInitialized() const { return m_initialized; }
-		const char* GetExecutableDir() const { return m_executableDir.c_str(); }
 		const char* GetDataPath() const { return m_dataPath.c_str(); }
 
 		// Check if a specific key exists

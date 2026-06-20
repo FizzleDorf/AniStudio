@@ -17,7 +17,7 @@ namespace GUI {
 
     class MenuBar {
     public:
-        MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ANI::StudioCore& studioCore);
+        MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ANI::StudioCore& m_studioCore);
 
         void Update(float deltaTime);
         void Render();
@@ -54,7 +54,7 @@ namespace GUI {
         // References
         ANI::ProjectManager& projectManager;
         ViewManager& viewManager;
-        ANI::StudioCore& studioCore;
+        ANI::StudioCore& m_studioCore;
 
         // Popup state
         ProjectPopupState popupState;

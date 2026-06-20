@@ -43,11 +43,6 @@ namespace Utils {
 					if (!vaePath.empty()) {
 						ctx_params.vae_path = vaePath.c_str();
 					}
-
-					if (vae.contains("vae_decode_only"))
-						ctx_params.vae_decode_only = vae["vae_decode_only"].get<bool>();
-					if (vae.contains("keep_vae_on_cpu"))
-						ctx_params.keep_vae_on_cpu = vae["keep_vae_on_cpu"].get<bool>();
 				}
 
 				// CLIP models
@@ -169,9 +164,6 @@ namespace Utils {
 					if (!controlnetPath.empty()) {
 						ctx_params.control_net_path = controlnetPath.c_str();
 					}
-
-					if (controlnet.contains("keep_control_net_on_cpu"))
-						ctx_params.keep_control_net_on_cpu = controlnet["keep_control_net_on_cpu"].get<bool>();
 				}
 
 				if (comp.contains("PhotoMaker") || comp.contains("StackedIdEmbed")) {
@@ -190,12 +182,6 @@ namespace Utils {
 					auto sampler = comp["Sampler"];
 					if (sampler.contains("n_threads"))
 						ctx_params.n_threads = sampler["n_threads"].get<int>();
-					if (sampler.contains("free_params_immediately"))
-						ctx_params.free_params_immediately = sampler["free_params_immediately"].get<bool>();
-					if (sampler.contains("offload_params_to_cpu"))
-						ctx_params.offload_params_to_cpu = sampler["offload_params_to_cpu"].get<bool>();
-					if (sampler.contains("keep_clip_on_cpu"))
-						ctx_params.keep_clip_on_cpu = sampler["keep_clip_on_cpu"].get<bool>();
 					if (sampler.contains("diffusion_flash_attn"))
 						ctx_params.diffusion_flash_attn = sampler["diffusion_flash_attn"].get<bool>();
 					if (sampler.contains("diffusion_conv_direct"))

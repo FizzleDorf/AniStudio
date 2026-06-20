@@ -5,10 +5,10 @@
 #include "ContextUtils.hpp"
 #include "PngMetadataUtils.hpp"
 #include "FilePathService.hpp"
-#include "sdcpp_utils\SchedulerUtil.hpp"
-#include "sdcpp_utils\SDGuidanceUtil.hpp"
-#include "sdcpp_utils\SLGUtil.hpp"
-#include "sdcpp_utils\SDImageUtil.hpp"
+#include "sdcpp_utils/SchedulerUtil.hpp"
+#include "sdcpp_utils/SDGuidanceUtil.hpp"
+#include "sdcpp_utils/SLGUtil.hpp"
+#include "sdcpp_utils/SDImageUtil.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <iostream>
@@ -18,17 +18,17 @@ namespace Utils
 {
 	// Forward declarations for shared utilities
 	uint64_t generateRandomSeed();
-	void SaveImage(const unsigned char *data, int width, int height, int channels,
-		const nlohmann::json &metadata, const std::string &fullPath);
+	void SaveImage(const unsigned char* data, int width, int height, int channels,
+		const nlohmann::json& metadata, const std::string& fullPath);
 
 	class Txt2Img
 	{
 	public:
 		// Main inference function using cached SD context
-		static bool RunInference(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
+		static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* sd_context = nullptr)
 		{
 			bool contextProvided = (sd_context != nullptr);
-			sd_image_t *result_images = nullptr;
+			sd_image_t* result_images = nullptr;
 			sd_img_gen_params_t gen_params;
 			sd_img_gen_params_init(&gen_params);
 
@@ -43,7 +43,7 @@ namespace Utils
 				// Parse all parameters using the utility functions
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
-					for (const auto &comp : metadata["components"])
+					for (const auto& comp : metadata["components"])
 					{
 						// Prompt component
 						if (comp.contains("Prompt"))
@@ -269,7 +269,7 @@ namespace Utils
 
 				return true;
 			}
-			catch (const std::exception &e)
+			catch (const std::exception& e)
 			{
 				std::cerr << "Exception during txt2img: " << e.what() << std::endl;
 

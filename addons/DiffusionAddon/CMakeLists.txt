@@ -133,9 +133,7 @@ endif()
 set(MAIN_LIB_DIR "${ANISTUDIO_ROOT}/build/lib")
 set(MAIN_BIN_DIR "${ANISTUDIO_ROOT}/build/bin")
 
-# ===== FIXED: Platform-agnostic library imports =====
 if(WIN32)
-    # On Windows, look for .lib import libraries in lib/ and .dlls in bin/
     if(EXISTS "${MAIN_LIB_DIR}/AniEngineCore.lib")
         add_library(AniEngineCore SHARED IMPORTED)
         set_target_properties(AniEngineCore PROPERTIES
@@ -158,7 +156,6 @@ if(WIN32)
         message(FATAL_ERROR "AniStudioCore.lib not found in ${MAIN_LIB_DIR}")
     endif()
 else()
-    # On Linux, look for .so files
     if(EXISTS "${MAIN_LIB_DIR}/AniEngineCore.so")
         add_library(AniEngineCore SHARED IMPORTED)
         set_target_properties(AniEngineCore PROPERTIES 
@@ -191,14 +188,53 @@ else()
         message(FATAL_ERROR "AniStudioCore.so not found in ${MAIN_LIB_DIR}")
     endif()
 endif()
-# ===== END FIX =====
 
 set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
+# ============================================================
+# FIX: Build stable-diffusion.cpp as subdirectory WITHOUT MinGW
+# ============================================================
+if(WIN32)
+    # Save original PATH
+    set(ORIGINAL_PATH "$ENV{PATH}")
+    
+    # Remove all msys64 entries from PATH
+    set(ENV{PATH} "")
+    foreach(TOKEN ${ORIGINAL_PATH})
+        string(FIND "${TOKEN}" "msys64" FOUND)
+        if(FOUND EQUAL -1)
+            if(NOT "$ENV{PATH}" STREQUAL "")
+                set(ENV{PATH} "$ENV{PATH};${TOKEN}")
+            else()
+                set(ENV{PATH} "${TOKEN}")
+            endif()
+        endif()
+    endforeach()
+    
+    # Also clear any environment variables that might point to MinGW
+    set(ENV{INCLUDE} "")
+    set(ENV{CPATH} "")
+    set(ENV{C_INCLUDE_PATH} "")
+    set(ENV{CPLUS_INCLUDE_PATH} "")
+    
+    # Force CMake to forget any previously detected MinGW paths
+    set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "")
+    set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "")
+    
+    message(STATUS "Temporarily removed MinGW from PATH for stable-diffusion.cpp")
+endif()
+
 if(EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp/CMakeLists.txt")
     add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
 endif()
+
+if(WIN32)
+    # Restore original PATH
+    set(ENV{PATH} "${ORIGINAL_PATH}")
+    message(STATUS "Restored original PATH after stable-diffusion.cpp")
+endif()
+# ============================================================
 
 if(NOT TARGET stable-diffusion)
     find_library(STABLE_DIFFUSION_LIB NAMES libstable-diffusion.a stable-diffusion.a libstable-diffusion.so 
@@ -279,21 +315,17 @@ target_link_libraries(DiffusionAddon PRIVATE
     pybind11::embed
 )
 
-# Platform-specific libraries
 if(WIN32)
-    # Windows specific libraries
     target_link_libraries(DiffusionAddon PRIVATE
         ws2_32
         winmm
         shlwapi
     )
     
-    # Ensure we're linking against the import libraries correctly
     target_link_options(DiffusionAddon PRIVATE
         "/FORCE:UNRESOLVED"
     )
 elseif(UNIX AND NOT APPLE)
-    # Linux specific libraries
     target_link_libraries(DiffusionAddon PRIVATE
         dl
         pthread
@@ -325,14 +357,12 @@ if(CURL_FOUND)
     target_compile_definitions(DiffusionAddon PRIVATE HAS_CURL)
 endif()
 
-# Export definition for Windows DLL
 if(WIN32)
     set_target_properties(DiffusionAddon PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
         PREFIX ""
     )
     
-    # Create a .def file for explicit exports if needed
     set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/DiffusionAddon.def")
     file(WRITE ${DEF_FILE} "EXPORTS\nCreatePlugin\nDestroyPlugin\n")
     target_sources(DiffusionAddon PRIVATE ${DEF_FILE})

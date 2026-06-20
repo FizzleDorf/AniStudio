@@ -15,18 +15,18 @@
 namespace Utils
 {
 	uint64_t generateRandomSeed();
-	void SaveImage(const unsigned char *data, int width, int height, int channels,
-		const nlohmann::json &metadata, const std::string &fullPath);
+	void SaveImage(const unsigned char* data, int width, int height, int channels,
+		const nlohmann::json& metadata, const std::string& fullPath);
 
 	class Img2Vid
 	{
 	public:
-		static bool RunImg2Vid(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
+		static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* sd_context = nullptr)
 		{
 			bool contextProvided = (sd_context != nullptr);
-			unsigned char *inputData = nullptr;
-			unsigned char *endInputData = nullptr;
-			sd_image_t *result_images = nullptr;
+			unsigned char* inputData = nullptr;
+			unsigned char* endInputData = nullptr;
+			sd_image_t* result_images = nullptr;
 			int num_frames_out = 0;
 			sd_vid_gen_params_t vid_params;
 			sd_vid_gen_params_init(&vid_params);
@@ -58,7 +58,7 @@ namespace Utils
 
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
-					for (const auto &comp : metadata["components"])
+					for (const auto& comp : metadata["components"])
 					{
 						if (comp.contains("InputImage"))
 						{
@@ -381,8 +381,9 @@ namespace Utils
 					vid_params.seed = static_cast<int64_t>(generateRandomSeed());
 				}
 
-				result_images = generate_video(sd_context, &vid_params, &num_frames_out);
-				if (!result_images || !result_images[0].data) {
+				// Updated API: generate_video now returns bool and takes output parameters by pointer
+				bool success = generate_video(sd_context, &vid_params, &result_images, &num_frames_out, nullptr);
+				if (!success || !result_images || num_frames_out == 0) {
 					throw std::runtime_error("generate_video failed");
 				}
 
@@ -431,7 +432,7 @@ namespace Utils
 
 				return true;
 			}
-			catch (const std::exception &e)
+			catch (const std::exception& e)
 			{
 				std::cerr << "Exception during img2vid: " << e.what() << std::endl;
 

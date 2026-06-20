@@ -8,7 +8,8 @@
 #include "StudioContext.hpp"
 #include "ProjectManager.hpp"
 #include "WindowState.hpp"
-
+#include <thread>
+#include <chrono>
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"
 
@@ -154,7 +155,7 @@ public:
 		return m_imguiContext != nullptr;
 	}
 
-	void OnShutdown() {
+	void OnShutdown() override {
 		LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
 		UnregisterEventHandlers();

@@ -141,7 +141,7 @@ namespace ANI {
 
         std::string pluginDirectory = Utils::FilePathService::GetPath("Plugins");
         if (pluginDirectory.empty()) {
-            pluginDirectory = "../plugins";
+            pluginDirectory = "./plugins";
             std::cerr << "[StudioCore] WARNING: Plugin directory not found in FilePathService, using default: " << pluginDirectory << std::endl;
         }
 
@@ -324,7 +324,7 @@ namespace ANI {
 
             std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
             if (defaultProjectPath.empty()) {
-                std::string exeDir = Utils::FilePathService::GetExecutableDir();
+                std::string exeDir = ".";
                 if (!exeDir.empty()) {
                     std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
                     defaultProjectPath = (basePath / "projects").string();
@@ -423,7 +423,7 @@ namespace ANI {
         std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
         if (defaultProjectPath.empty()) {
             std::cerr << "[StudioCore] CRITICAL: DefaultProject path is still empty!" << std::endl;
-            std::string exeDir = Utils::FilePathService::GetExecutableDir();
+            std::string exeDir = ".";
             if (!exeDir.empty()) {
                 std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
                 defaultProjectPath = (basePath / "projects").string();

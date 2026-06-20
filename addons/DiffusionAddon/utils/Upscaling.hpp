@@ -15,21 +15,21 @@
 
 namespace Utils
 {
-	void SaveImage(const unsigned char *data, int width, int height, int channels,
-		const nlohmann::json &metadata, const std::string &fullPath);
+	void SaveImage(const unsigned char* data, int width, int height, int channels,
+		const nlohmann::json& metadata, const std::string& fullPath);
 
 	class Upscaling
 	{
 	public:
 		// Note: upscaling doesn't use sd_ctx_t, but we keep the parameter for consistency
 		// The sd_context parameter is ignored for upscaling operations
-		static bool RunUpscaling(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
+		static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* sd_context = nullptr)
 		{
 			// Note: sd_context parameter is not used for upscaling, but kept for API consistency
 			(void)sd_context; // Mark as unused to avoid compiler warnings
 
-			upscaler_ctx_t *upscaler_context = nullptr;
-			unsigned char *inputData = nullptr;
+			upscaler_ctx_t* upscaler_context = nullptr;
+			unsigned char* inputData = nullptr;
 			sd_image_t upscaled_image = { 0, 0, 0, nullptr };
 
 			try
@@ -40,15 +40,16 @@ namespace Utils
 				std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
 				std::string outputFilename = "upscale_AniStudio.png";
 				uint32_t upscaleFactor = 4;
-				bool offload_params_to_cpu = false;
 				bool direct = false;
 				int n_threads = 4;
 				int tile_size = 64;
+				const char* backend = nullptr;
+				const char* params_backend = nullptr;
 
 				// Parse metadata to extract parameters
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
-					for (const auto &comp : metadata["components"])
+					for (const auto& comp : metadata["components"])
 					{
 						// Input image path
 						if (comp.contains("InputImage"))
@@ -108,15 +109,18 @@ namespace Utils
 							if (esrganData.contains("upscaleFactor"))
 								upscaleFactor = esrganData["upscaleFactor"].get<uint32_t>();
 
-							// Additional ESRGAN parameters
-							if (esrganData.contains("offload_params_to_cpu"))
-								offload_params_to_cpu = esrganData["offload_params_to_cpu"].get<bool>();
+							// Additional ESRGAN parameters - updated for new API
 							if (esrganData.contains("direct"))
 								direct = esrganData["direct"].get<bool>();
 							if (esrganData.contains("n_threads"))
 								n_threads = esrganData["n_threads"].get<int>();
 							if (esrganData.contains("tile_size"))
 								tile_size = esrganData["tile_size"].get<int>();
+							// Optional backend parameters
+							if (esrganData.contains("backend") && !esrganData["backend"].is_null())
+								backend = esrganData["backend"].get<std::string>().c_str();
+							if (esrganData.contains("params_backend") && !esrganData["params_backend"].is_null())
+								params_backend = esrganData["params_backend"].get<std::string>().c_str();
 						}
 
 						// Sampler component (some upscalers might use SD context)
@@ -205,18 +209,18 @@ namespace Utils
 
 				std::cout << "Output will be saved to: " << outputFilePath << std::endl;
 
-				// Initialize upscaler context
+				// Initialize upscaler context (updated API with backend parameters)
 				std::cout << "Initializing upscaler with model: " << modelPath << std::endl;
 				std::cout << "Parameters: threads=" << n_threads
-					<< ", offload_cpu=" << offload_params_to_cpu
 					<< ", direct=" << direct
 					<< ", tile_size=" << tile_size << std::endl;
 
 				upscaler_context = new_upscaler_ctx(modelPath.c_str(),
-					offload_params_to_cpu,
 					direct,
 					n_threads,
-					tile_size);
+					tile_size,
+					backend,
+					params_backend);
 
 				if (!upscaler_context)
 				{
@@ -278,7 +282,7 @@ namespace Utils
 
 				return true;
 			}
-			catch (const std::exception &e)
+			catch (const std::exception& e)
 			{
 				std::cerr << "Exception during upscaling: " << e.what() << std::endl;
 

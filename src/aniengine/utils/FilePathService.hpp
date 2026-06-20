@@ -112,15 +112,6 @@ namespace Utils {
 			}
 		}
 
-		static std::string GetExecutableDir() {
-			auto instance = GetInstance();
-			if (instance) {
-				const char* dir = instance->GetExecutableDir();
-				return dir ? std::string(dir) : "";
-			}
-			return "";
-		}
-
 		static std::string GetDataPath() {
 			auto instance = GetInstance();
 			if (instance) {
