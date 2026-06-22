@@ -10,205 +10,201 @@
 #include <iostream>
 #include <queue>
 #include <mutex>
+#include <functional>
 
 namespace ECS {
 
-	struct TextureCreationRequest {
-		EntityID entityID;
-		unsigned char* imageData;
-		int width;
-		int height;
-		int channels;
-	};
+    struct TextureCreationRequest {
+        EntityID entityID;
+        unsigned char* imageData;
+        int width;
+        int height;
+        int channels;
+        bool isVideo;
+        GLuint* targetTexture;
+    };
 
-	class TextureSystem : public BaseSystem {
-	public:
-		TextureSystem(EntityManager& entityMgr)
-			: BaseSystem(entityMgr), m_needsTextureCreation(false) {
-			sysName = "TextureSystem";
-			AddComponentSignature<ImageComponent>();
-			std::cout << "[TextureSystem] Constructor - Ready for texture creation" << std::endl;
-		}
+    class TextureSystem : public BaseSystem {
+    public:
+        using VideoTextureCallback = std::function<void(EntityID, unsigned char*, int, int, int, GLuint*)>;
 
-		~TextureSystem() override {
-			std::cout << "[TextureSystem] Destructor - cleaning up textures" << std::endl;
+        TextureSystem(EntityManager& entityMgr)
+            : BaseSystem(entityMgr), m_needsTextureCreation(false) {
+            sysName = "TextureSystem";
+            AddComponentSignature<ImageComponent>();
+        }
 
-			// Clean up all textures
-			for (auto entity : entities) {
-				if (mgr.HasComponent<ImageComponent>(entity)) {
-					auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-					DeleteTexture(imageComp);
-				}
-			}
-		}
+        ~TextureSystem() override {
+            for (auto entity : entities) {
+                if (mgr.HasComponent<ImageComponent>(entity)) {
+                    auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+                    DeleteTexture(imageComp);
+                }
+            }
+        }
 
-		void Start() override {
-			std::cout << "[TextureSystem] Started" << std::endl;
-		}
+        void Start() override {}
 
-		void Update(const float deltaT) override {
-			// Don't create textures here - just check if we have work to do
-			std::lock_guard<std::mutex> lock(queueMutex);
-			m_needsTextureCreation = !textureQueue.empty();
-		}
+        void Update(const float deltaT) override {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            m_needsTextureCreation = !textureQueue.empty();
+        }
 
-		// Called by ImageSystem callbacks to queue texture creation
-		void QueueTextureCreation(EntityID entityID, unsigned char* imageData, int width, int height, int channels) {
-			std::lock_guard<std::mutex> lock(queueMutex);
+        void QueueTextureCreation(EntityID entityID, unsigned char* imageData, int width, int height, int channels) {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            TextureCreationRequest request;
+            request.entityID = entityID;
+            request.imageData = imageData;
+            request.width = width;
+            request.height = height;
+            request.channels = channels;
+            request.isVideo = false;
+            request.targetTexture = nullptr;
+            textureQueue.push(request);
+            m_needsTextureCreation = true;
+        }
 
-			TextureCreationRequest request;
-			request.entityID = entityID;
-			request.imageData = imageData;
-			request.width = width;
-			request.height = height;
-			request.channels = channels;
+        void QueueVideoTextureCreation(EntityID entityID, unsigned char* data, int width, int height, int channels, GLuint* targetTexture) {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            TextureCreationRequest request;
+            request.entityID = entityID;
+            request.imageData = data;
+            request.width = width;
+            request.height = height;
+            request.channels = channels;
+            request.isVideo = true;
+            request.targetTexture = targetTexture;
+            textureQueue.push(request);
+            m_needsTextureCreation = true;
+        }
 
-			textureQueue.push(request);
-			m_needsTextureCreation = true;
+        void CreatePendingTextures() {
+            std::lock_guard<std::mutex> lock(queueMutex);
 
-			std::cout << "[TextureSystem] Queued texture creation for entity " << entityID
-				<< " (" << width << "x" << height << ")" << std::endl;
-		}
+            if (textureQueue.empty()) {
+                m_needsTextureCreation = false;
+                return;
+            }
 
-		// Called during render phase when OpenGL context is guaranteed to be current
-		void CreatePendingTextures() {
-			std::lock_guard<std::mutex> lock(queueMutex);
+            GLFWwindow* currentContext = glfwGetCurrentContext();
+            if (!currentContext) {
+                return;
+            }
 
-			if (textureQueue.empty()) {
-				m_needsTextureCreation = false;
-				return;
-			}
+            glGetError();
+            GLint textureUnits;
+            glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &textureUnits);
+            GLenum error = glGetError();
+            if (error != GL_NO_ERROR) {
+                return;
+            }
 
-			// VERIFY we have a valid OpenGL context
-			GLFWwindow* currentContext = glfwGetCurrentContext();
-			if (!currentContext) {
-				std::cout << "[TextureSystem] No OpenGL context current, deferring "
-					<< textureQueue.size() << " texture creations" << std::endl;
-				return;
-			}
+            while (!textureQueue.empty()) {
+                TextureCreationRequest request = textureQueue.front();
+                textureQueue.pop();
 
-			// Test OpenGL context validity
-			glGetError(); // Clear any previous errors
-			GLint textureUnits;
-			glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &textureUnits);
-			GLenum error = glGetError();
+                if (!mgr.IsEntityValid(request.entityID)) {
+                    if (request.imageData && !request.isVideo) {
+                        Utils::ImageUtils::FreeImageData(request.imageData);
+                    }
+                    continue;
+                }
 
-			if (error != GL_NO_ERROR) {
-				std::cerr << "[TextureSystem] OpenGL context error " << error
-					<< ", deferring texture creations" << std::endl;
-				return;
-			}
+                if (request.isVideo) {
+                    if (!request.targetTexture) {
+                        continue;
+                    }
+                    // --- FIX: delete old texture before creating new one ---
+                    if (*request.targetTexture != 0) {
+                        glDeleteTextures(1, request.targetTexture);
+                        *request.targetTexture = 0;
+                    }
+                    GLuint texID = Utils::OpenGLUtils::GenerateTexture(
+                        request.width, request.height, request.channels, request.imageData
+                    );
+                    if (texID != 0) {
+                        *request.targetTexture = texID;
+                    }
+                }
+                else {
+                    if (!mgr.HasComponent<ImageComponent>(request.entityID)) {
+                        if (request.imageData) {
+                            Utils::ImageUtils::FreeImageData(request.imageData);
+                        }
+                        continue;
+                    }
+                    auto& imageComp = mgr.GetComponent<ImageComponent>(request.entityID);
+                    if (imageComp.textureID != 0) {
+                        DeleteTexture(imageComp);
+                    }
+                    imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
+                        request.width, request.height, request.channels, request.imageData
+                    );
+                    if (imageComp.textureID != 0) {
+                        imageComp.width = request.width;
+                        imageComp.height = request.height;
+                        imageComp.channels = request.channels;
+                    }
+                }
+            }
+            m_needsTextureCreation = false;
+        }
 
-			std::cout << "[TextureSystem] Processing " << textureQueue.size()
-				<< " texture creation requests with valid OpenGL context" << std::endl;
+        void RemoveTexture(EntityID entityID) {
+            if (mgr.HasComponent<ImageComponent>(entityID)) {
+                auto& imageComp = mgr.GetComponent<ImageComponent>(entityID);
+                DeleteTexture(imageComp);
+            }
+        }
 
-			while (!textureQueue.empty()) {
-				TextureCreationRequest request = textureQueue.front();
-				textureQueue.pop();
+        GLuint GetTextureID(EntityID entityID) const {
+            if (mgr.HasComponent<ImageComponent>(entityID)) {
+                return mgr.GetComponent<ImageComponent>(entityID).textureID;
+            }
+            return 0;
+        }
 
-				std::cout << "[TextureSystem] Creating texture for entity " << request.entityID
-					<< " (" << request.width << "x" << request.height << ", "
-					<< request.channels << " channels)" << std::endl;
+        bool HasValidTexture(EntityID entityID) const {
+            if (mgr.HasComponent<ImageComponent>(entityID)) {
+                GLuint textureID = mgr.GetComponent<ImageComponent>(entityID).textureID;
+                return textureID != 0 && glIsTexture(textureID);
+            }
+            return false;
+        }
 
-				// Verify entity still exists and has ImageComponent
-				if (!mgr.IsEntityValid(request.entityID) ||
-					!mgr.HasComponent<ImageComponent>(request.entityID)) {
-					std::cout << "[TextureSystem] Entity " << request.entityID
-						<< " no longer valid, skipping texture creation" << std::endl;
+        bool HasPendingTextures() const { return m_needsTextureCreation; }
 
-					// Free the image data if entity is gone
-					if (request.imageData) {
-						Utils::ImageUtils::FreeImageData(request.imageData);
-					}
-					continue;
-				}
+        void RegisterVideoTextureCallback(const VideoTextureCallback& callback) {
+            m_videoTextureCallback = callback;
+        }
 
-				auto& imageComp = mgr.GetComponent<ImageComponent>(request.entityID);
+        void QueueVideoTexture(EntityID entityID, unsigned char* data, int width, int height, int channels, GLuint* targetTexture) {
+            if (m_videoTextureCallback) {
+                m_videoTextureCallback(entityID, data, width, height, channels, targetTexture);
+            }
+            else {
+                QueueVideoTextureCreation(entityID, data, width, height, channels, targetTexture);
+            }
+        }
 
-				// Delete old texture if it exists
-				if (imageComp.textureID != 0) {
-					DeleteTexture(imageComp);
-				}
+    private:
+        std::queue<TextureCreationRequest> textureQueue;
+        std::mutex queueMutex;
+        bool m_needsTextureCreation;
+        VideoTextureCallback m_videoTextureCallback;
 
-				// Create the texture
-				imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
-					request.width,
-					request.height,
-					request.channels,
-					request.imageData
-				);
-
-				if (imageComp.textureID != 0) {
-					std::cout << "[TextureSystem] Texture created successfully (ID: "
-						<< imageComp.textureID << ") for entity " << request.entityID << std::endl;
-
-					// Update component with texture dimensions
-					imageComp.width = request.width;
-					imageComp.height = request.height;
-					imageComp.channels = request.channels;
-				}
-				else {
-					std::cerr << "[TextureSystem] ERROR: Failed to create OpenGL texture for entity "
-						<< request.entityID << std::endl;
-				}
-			}
-
-			m_needsTextureCreation = false;
-		}
-
-		// Called to delete texture for an entity
-		void RemoveTexture(EntityID entityID) {
-			if (mgr.HasComponent<ImageComponent>(entityID)) {
-				auto& imageComp = mgr.GetComponent<ImageComponent>(entityID);
-				DeleteTexture(imageComp);
-				std::cout << "[TextureSystem] Removed texture for entity " << entityID << std::endl;
-			}
-		}
-
-		// Get texture ID for an entity
-		GLuint GetTextureID(EntityID entityID) const {
-			if (mgr.HasComponent<ImageComponent>(entityID)) {
-				return mgr.GetComponent<ImageComponent>(entityID).textureID;
-			}
-			return 0;
-		}
-
-		// Check if entity has a valid texture
-		bool HasValidTexture(EntityID entityID) const {
-			if (mgr.HasComponent<ImageComponent>(entityID)) {
-				GLuint textureID = mgr.GetComponent<ImageComponent>(entityID).textureID;
-				return textureID != 0 && glIsTexture(textureID);
-			}
-			return false;
-		}
-
-		// Check if there are pending textures to create
-		bool HasPendingTextures() const { return m_needsTextureCreation; }
-
-	private:
-		std::queue<TextureCreationRequest> textureQueue;
-		std::mutex queueMutex;
-		bool m_needsTextureCreation;
-
-		void DeleteTexture(ImageComponent& imageComp) {
-			if (imageComp.textureID != 0) {
-				// Check if we have a valid OpenGL context before deleting
-				GLFWwindow* currentContext = glfwGetCurrentContext();
-				if (currentContext) {
-					Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
-					std::cout << "[TextureSystem] Deleted texture ID: " << imageComp.textureID << std::endl;
-				}
-				else {
-					// If no context, just mark as 0 - texture will be cleaned up by system shutdown
-					std::cout << "[TextureSystem] No OpenGL context, marking texture ID "
-						<< imageComp.textureID << " for deletion" << std::endl;
-				}
-				imageComp.textureID = 0;
-				imageComp.width = 0;
-				imageComp.height = 0;
-				imageComp.channels = 0;
-			}
-		}
-	};
+        void DeleteTexture(ImageComponent& imageComp) {
+            if (imageComp.textureID != 0) {
+                GLFWwindow* currentContext = glfwGetCurrentContext();
+                if (currentContext) {
+                    Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
+                }
+                imageComp.textureID = 0;
+                imageComp.width = 0;
+                imageComp.height = 0;
+                imageComp.channels = 0;
+            }
+        }
+    };
 
 } // namespace ECS

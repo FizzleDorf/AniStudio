@@ -25,11 +25,10 @@
 #include "AniEngine.hpp"
 #include "StudioContext.hpp"
 #include "GUI.h"
+#include "ECS.h"
 #include "ProjectManager.hpp"
-#include "ViewState.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"
-#include "ViewTypes.hpp"
 #include "guiSystems.h"
 #include "StudioPluginManager.hpp"
 #include <imgui.h>

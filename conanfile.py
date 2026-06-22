@@ -31,8 +31,9 @@ class AniStudio(ConanFile):
         self.requires("zlib/1.2.11")
         self.requires("libpng/1.6.44")
         self.requires("exiv2/0.28.1")
-        self.requires("ffmpeg/4.4.4")
-        
+        self.requires("libwebp/1.3.2")
+        self.requires("ffmpeg/4.4.4", options={"shared": True})
+
         # versioning
         self.requires("neargye-semver/0.3.1")
 

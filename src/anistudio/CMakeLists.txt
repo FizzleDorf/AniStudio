@@ -117,12 +117,10 @@ target_link_libraries(AniStudioCore PRIVATE
     ImGuiFileDialog
     ImNodeFlow
     ImGuizmo
-    ${OpenCV_LIBS}
     ZLIB::ZLIB
     PNG::PNG
 )
 
-# ADD THIS - stb_image.cpp
 target_sources(AniStudioCore PRIVATE "${EXTERNAL_DIR}/stb_image/stb_image.cpp")
 
 if(ZEP_AVAILABLE AND TARGET Zep)

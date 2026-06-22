@@ -114,17 +114,16 @@ else()
     message(STATUS "Shader directory ${CMAKE_SOURCE_DIR}/src/shaders not found")
 endif()
 
-find_package(OpenCV REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
-find_package(FFmpeg REQUIRED COMPONENTS avformat avutil swscale)
-# find_package(PkgConfig REQUIRED)
 find_package(pybind11 REQUIRED)
 
-# Find X11 on Linux
+# Use Conan-provided FFmpeg targets
+find_package(ffmpeg CONFIG REQUIRED)
+
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
     if(NOT X11_FOUND)
@@ -148,18 +147,18 @@ set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniEngine shared" FO
 set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniStudio shared" FORCE)
 set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE} CACHE BOOL "AniStudio Zep" FORCE)
 
-# Set up external dependencies as interface libraries to propagate usage requirements
 add_library(AniEngineDeps INTERFACE)
+
 target_link_libraries(AniEngineDeps INTERFACE
-    ${OpenCV_LIBS}
     ZLIB::ZLIB
     PNG::PNG
     GLEW::GLEW
     glfw
+    pybind11::embed
+    ffmpeg::avcodec
     ffmpeg::avformat
     ffmpeg::avutil
     ffmpeg::swscale
-    pybind11::embed
 )
 
 if(UNIX AND NOT APPLE)
@@ -211,29 +210,21 @@ if(ZEP_AVAILABLE)
     target_compile_definitions(AniStudioDeps INTERFACE ZEP_AVAILABLE)
 endif()
 
-# Build AniEngine first
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
-    
-    # Ensure AniEngineCore uses the dependencies interface
     target_link_libraries(AniEngineCore PUBLIC AniEngineDeps)
 endif()
 
-# Build AniStudio second (depends on AniEngine)
 if(BUILD_ANISTUDIO)
     add_subdirectory(src/anistudio)
-    
-    # Ensure AniStudioCore uses the dependencies interface
     if(TARGET AniStudioCore)
         target_link_libraries(AniStudioCore PUBLIC AniEngineCore AniStudioDeps)
     endif()
 endif()
 
-# Build main application last
 if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
-        ${CMAKE_SOURCE_DIR}/src/pch.cpp
         ${CMAKE_SOURCE_DIR}/src/core/Core.cpp
         ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
     )
@@ -258,22 +249,18 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
         ${CMAKE_SOURCE_DIR}/include
     )
 
-    # Link only what's directly needed - AniStudioCore brings everything else
     target_link_libraries(${PROJECT_NAME} PRIVATE
         AniStudioCore
         glfw
         GLEW::GLEW
     )
 
-    # Ensure proper symbol resolution on Linux
     if(UNIX AND NOT APPLE)
         target_link_options(${PROJECT_NAME} PRIVATE
             -Wl,--no-as-needed
             -Wl,--copy-dt-needed-entries
             -Wl,-rpath-link,${CMAKE_BINARY_DIR}/lib
         )
-        
-        # Also link X11 directly for the executable
         target_link_libraries(${PROJECT_NAME} PRIVATE ${X11_LIBRARIES})
     endif()
 
@@ -283,7 +270,6 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     message(STATUS "  Links against: AniStudioCore (brings all engine and studio dependencies)")
 endif()
 
-# Function to add external plugins
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
 
@@ -333,7 +319,6 @@ function(add_external_plugin TARGET_NAME)
     message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
-# Installation rules
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
 

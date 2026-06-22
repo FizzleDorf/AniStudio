@@ -66,14 +66,10 @@ target_include_directories(AniEngineCore PUBLIC
 )
 
 target_link_libraries(AniEngineCore PUBLIC
-    ${OpenCV_LIBS}
     ZLIB::ZLIB
     PNG::PNG
     GLEW::GLEW
     glfw
-    ffmpeg::avformat
-    ffmpeg::avutil
-    ffmpeg::swscale
     pybind11::embed
 )
 

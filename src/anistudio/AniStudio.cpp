@@ -1,6 +1,6 @@
 #include "AniStudio.hpp"
-#include "StudioContext.hpp"
 #include "AllViews.h"
+#include "StudioContext.hpp"
 #include "FilePaths.hpp"
 #include "FilePathService.hpp"
 #include "ImGuiSettingsUtil.hpp"
@@ -35,7 +35,6 @@ namespace ANI {
             std::cout << "[StudioCore] Lazy creating SettingsView..." << std::endl;
             m_settingsView = std::make_unique<GUI::SettingsView>();
 
-            // Inject ImGui context if available
             if (imguiContext) {
                 m_settingsView->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
                 std::cout << "[StudioCore] Injected ImGui context into SettingsView" << std::endl;
@@ -52,7 +51,6 @@ namespace ANI {
             studioContext->imguiContext = context;
         }
 
-        // If SettingsView already exists, inject context
         if (m_settingsView) {
             m_settingsView->SetImGuiContext(static_cast<ImGuiContext*>(context));
         }
@@ -125,7 +123,6 @@ namespace ANI {
 
         std::cout << "[StudioCore] ImGui context verified - fonts loaded: " << io.Fonts->Fonts.Size << std::endl;
 
-        // Create StudioPluginManager and store in context
         studioContext->studioPluginManager = std::make_shared<Plugins::StudioPluginManager>(
             *studioContext->entityManager,
             *studioContext->viewManager,
@@ -313,7 +310,6 @@ namespace ANI {
 
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
 
-            // Create ProjectManagerView with StudioCore reference
             m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager, this);
 
             studioContext->entityManager->RegisterSystem<TextureSystem>();
@@ -379,7 +375,6 @@ namespace ANI {
 
         studioCore->studioContext->viewManager->SetEntityManager(*studioCore->studioContext->entityManager);
 
-        // Create ProjectManagerView with StudioCore reference
         studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager, studioCore.get());
 
         std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
@@ -499,8 +494,6 @@ namespace ANI {
 
         m_projectManagerView->Init();
         std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;
-
-        // SettingsView is NOT created here - lazy created when first opened
 
         m_menuBar = std::make_unique<GUI::MenuBar>(*studioContext->projectManager, *studioContext->viewManager, *this);
         std::cout << "[StudioCore] MenuBar created" << std::endl;
@@ -639,12 +632,12 @@ namespace ANI {
 
         ANI::Events::Ref().Poll();
         try {
+            engineCore.Update(deltaTime);
+
             auto textureSystem = GetEntityManager().GetSystem<ECS::TextureSystem>();
             if (textureSystem) {
                 textureSystem->CreatePendingTextures();
             }
-
-            engineCore.Update(deltaTime);
 
             if (studioContext->studioPluginManager) {
                 studioContext->studioPluginManager->updatePlugins(deltaTime);
@@ -711,7 +704,6 @@ namespace ANI {
                 }
             }
 
-            // Render settings popup if it exists and is visible
             if (m_settingsView && m_settingsView->IsVisible()) {
                 m_settingsView->Render();
             }
@@ -727,15 +719,13 @@ namespace ANI {
         auto& entityMgr = GetEntityManager();
         auto textureSystem = entityMgr.GetSystem<TextureSystem>();
         auto imageSystem = entityMgr.GetSystem<ImageSystem>();
+        auto videoSystem = entityMgr.GetSystem<VideoSystem>();
 
         if (textureSystem && imageSystem) {
             imageSystem->RegisterImageAddedCallback([this, textureSystem](EntityID entityID) {
                 auto& entityMgr = GetEntityManager();
                 if (entityMgr.HasComponent<ImageComponent>(entityID)) {
                     auto& imageComp = entityMgr.GetComponent<ImageComponent>(entityID);
-
-                    std::cout << "[StudioCore] CALLBACK: Image added for entity " << entityID << std::endl;
-
                     textureSystem->QueueTextureCreation(
                         entityID,
                         imageComp.imageData,
@@ -743,26 +733,28 @@ namespace ANI {
                         imageComp.height,
                         imageComp.channels
                     );
-
-                    std::cout << "[StudioCore] Queued texture creation for entity " << entityID << std::endl;
-
                     ANI::Events::Ref().QueueEventWithData("ImageLoaded", entityID);
-                    std::cout << "[StudioCore] Fired ImageLoaded event for entity " << entityID << std::endl;
                 }
                 });
 
             imageSystem->RegisterImageRemovedCallback([this, textureSystem](EntityID entityID) {
-                std::cout << "[StudioCore] CALLBACK: Image removed for entity " << entityID << std::endl;
                 textureSystem->RemoveTexture(entityID);
-
                 ANI::Events::Ref().QueueEventWithData("ImageRemoved", entityID);
-                std::cout << "[StudioCore] Fired ImageRemoved event for entity " << entityID << std::endl;
                 });
+
+            if (videoSystem) {
+                videoSystem->SetVideoTextureCallback(
+                    [textureSystem](EntityID entityID, unsigned char* data, int width, int height, int channels, GLuint* targetTexture) {
+                        textureSystem->QueueVideoTextureCreation(entityID, data, width, height, channels, targetTexture);
+                    }
+                );
+                std::cout << "[StudioCore] Video texture callback connected to TextureSystem" << std::endl;
+            }
 
             std::cout << "[StudioCore] Core system callbacks set up successfully" << std::endl;
         }
         else {
-            std::cerr << "[StudioCore] ERROR: Could not find TextureSystem or ImageSystem" << std::endl;
+            std::cerr << "[StudioCore] ERROR: Could not find required systems" << std::endl;
         }
     }
 
@@ -815,6 +807,7 @@ namespace ANI {
             studioContext->viewManager->SetActiveWorkspace(workspaceID);
 
             if (studioContext->projectManager && studioContext->projectManager->IsProjectOpen()) {
+                studioContext->projectManager->SetLastActiveWorkspace(workspaceID);
                 studioContext->projectManager->SetLastActiveWorkspace(workspaceID);
             }
         }

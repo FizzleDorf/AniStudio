@@ -3,515 +3,300 @@
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
 #include "VideoComponent.hpp"
-#include "ThreadPool.hpp"
-#include "ImageUtils.hpp"
-#include <GL/glew.h>
-#include <opencv2/opencv.hpp>
+#include "VideoUtils.hpp"
 #include <memory>
 #include <functional>
-#include <queue>
-#include <mutex>
+#include <vector>
 #include <chrono>
+#include <iostream>
+
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
+}
 
 namespace ECS {
 
-	class VideoSystem : public BaseSystem {
-	public:
-		using VideoCallback = std::function<void(EntityID)>;
-
-		VideoSystem(EntityManager& entityMgr)
-			: BaseSystem(entityMgr), lastFrameTime(std::chrono::high_resolution_clock::now()) {
-			sysName = "VideoSystem";
-			AddComponentSignature<VideoComponent>();
-
-			// Initialize FFmpeg - these functions are deprecated in newer FFmpeg versions
-			// but we're keeping them for compatibility with older versions
-#if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58, 9, 100)
-			av_register_all();
-			avcodec_register_all();
-#endif
-		}
-
-		~VideoSystem() override {
-			for (auto entity : entities) {
-				if (mgr.HasComponent<VideoComponent>(entity)) {
-					auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-					UnloadVideo(videoComp);
-				}
-			}
-		}
-
-		void Start() override {
-			for (auto entity : entities) {
-				if (mgr.HasComponent<VideoComponent>(entity)) {
-					auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-					LoadVideo(videoComp);
-				}
-			}
-		}
-
-		void Update(float deltaT) override {
-			auto currentTime = std::chrono::high_resolution_clock::now();
-			float actualDeltaT = std::chrono::duration<float>(currentTime - lastFrameTime).count();
-			lastFrameTime = currentTime;
-
-			for (auto entity : entities) {
-				if (mgr.HasComponent<VideoComponent>(entity)) {
-					auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-
-					UpdateVideoPlayback(videoComp, actualDeltaT);
-
-					if (videoComp.needsTextureUpdate) {
-						UpdateTexture(videoComp);
-						videoComp.needsTextureUpdate = false;
-					}
-				}
-			}
-		}
-
-		bool GetNextFrame(VideoComponent& videoComp) {
-			if (!videoComp.formatCtx) {
-				return false;
-			}
-
-			AVFrame* frame = av_frame_alloc();
-			AVPacket packet;
-			av_init_packet(&packet);
-			packet.data = NULL;
-			packet.size = 0;
-
-			int frameFinished = 0;
-			bool gotFrame = false;
-
-			// Keep reading packets until we get a video frame
-			while (av_read_frame(videoComp.formatCtx, &packet) >= 0) {
-				if (packet.stream_index == videoComp.videoStreamIdx) {
-					// Decode video frame
-					int ret = avcodec_send_packet(videoComp.codecCtx, &packet);
-					if (ret < 0) {
-						break;
-					}
-
-					ret = avcodec_receive_frame(videoComp.codecCtx, frame);
-					if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-						av_packet_unref(&packet);
-						continue;
-					}
-					else if (ret < 0) {
-						break;
-					}
-
-					// Successfully decoded a frame
-					ConvertFrameToRGB(videoComp, frame);
-					videoComp.currentFrame++;
-
-					// Handle looping
-					if (videoComp.currentFrame >= videoComp.frameCount) {
-						videoComp.currentFrame = 0;
-						SeekToFrame(videoComp, 0);
-					}
-
-					gotFrame = true;
-					break;
-				}
-				av_packet_unref(&packet);
-			}
-
-			av_frame_free(&frame);
-			return gotFrame;
-		}
-
-		bool SeekToFrame(VideoComponent& videoComp, int frameIndex) {
-			if (!videoComp.formatCtx || frameIndex < 0 || frameIndex >= videoComp.frameCount) {
-				return false;
-			}
-
-			// Calculate timestamp for seeking
-			int64_t timestamp = av_rescale_q(frameIndex,
-				av_make_q(1, videoComp.fps),
-				videoComp.formatCtx->streams[videoComp.videoStreamIdx]->time_base);
-
-			// Seek to the nearest keyframe before the target
-			if (av_seek_frame(videoComp.formatCtx, videoComp.videoStreamIdx,
-				timestamp, AVSEEK_FLAG_BACKWARD) < 0) {
-				std::cerr << "Error seeking to frame " << frameIndex << std::endl;
-				return false;
-			}
-
-			avcodec_flush_buffers(videoComp.codecCtx);
-
-			// We may need to decode several frames to reach our target
-			AVFrame* frame = av_frame_alloc();
-			AVPacket packet;
-			av_init_packet(&packet);
-			packet.data = NULL;
-			packet.size = 0;
-
-			int actualFrame = 0;
-			bool foundTargetFrame = false;
-
-			// Decode frames until we reach our target frame
-			while (av_read_frame(videoComp.formatCtx, &packet) >= 0) {
-				if (packet.stream_index == videoComp.videoStreamIdx) {
-					int ret = avcodec_send_packet(videoComp.codecCtx, &packet);
-					if (ret < 0) {
-						av_packet_unref(&packet);
-						continue;
-					}
-
-					ret = avcodec_receive_frame(videoComp.codecCtx, frame);
-					if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
-						av_packet_unref(&packet);
-						continue;
-					}
-					else if (ret < 0) {
-						av_packet_unref(&packet);
-						break;
-					}
-
-					// We found a frame
-					actualFrame++;
-
-					// If we've reached or passed our target frame, convert and use it
-					if (actualFrame >= frameIndex) {
-						ConvertFrameToRGB(videoComp, frame);
-						videoComp.currentFrame = frameIndex;
-						foundTargetFrame = true;
-						av_packet_unref(&packet);
-						break;
-					}
-				}
-				av_packet_unref(&packet);
-			}
-
-			av_frame_free(&frame);
-			return foundTargetFrame;
-		}
-
-		void RegisterVideoAddedCallback(const VideoCallback& callback) {
-			videoAddedCallbacks.push_back(callback);
-		}
-
-		void RegisterVideoRemovedCallback(const VideoCallback& callback) {
-			videoRemovedCallbacks.push_back(callback);
-		}
-
-		void SetVideo(const EntityID entity, const std::string& filePath) {
-			if (mgr.HasComponent<VideoComponent>(entity)) {
-				auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-
-				if (videoComp.formatCtx) {
-					UnloadVideo(videoComp);
-				}
-
-				videoComp.filePath = filePath;
-				size_t lastSlash = filePath.find_last_of("/\\");
-				videoComp.fileName = (lastSlash != std::string::npos) ?
-					filePath.substr(lastSlash + 1) : filePath;
-
-				LoadVideo(videoComp);
-				NotifyVideoAdded(entity);
-			}
-		}
-
-		void RemoveVideo(const EntityID entity) {
-			if (mgr.HasComponent<VideoComponent>(entity)) {
-				auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-				UnloadVideo(videoComp);
-				NotifyVideoRemoved(entity);
-				mgr.DestroyEntity(entity);
-			}
-		}
-
-		std::vector<EntityID> GetAllVideoEntities() const {
-			std::vector<EntityID> result;
-			for (auto entity : entities) {
-				if (mgr.HasComponent<VideoComponent>(entity)) {
-					result.push_back(entity);
-				}
-			}
-			return result;
-		}
-
-	private:
-		std::vector<VideoCallback> videoAddedCallbacks;
-		std::vector<VideoCallback> videoRemovedCallbacks;
-		std::mutex frameMutex;
-		std::chrono::high_resolution_clock::time_point lastFrameTime;
-
-		void ConvertFrameToRGB(VideoComponent& videoComp, AVFrame* frame) {
-			std::lock_guard<std::mutex> lock(frameMutex);
-
-			if (!videoComp.swsCtx) {
-				videoComp.swsCtx = sws_getContext(
-					frame->width, frame->height, (AVPixelFormat)frame->format,
-					frame->width, frame->height, AV_PIX_FMT_RGB24,
-					SWS_BILINEAR, nullptr, nullptr, nullptr);
-			}
-
-			// Allocate RGB frame if needed
-			if (!videoComp.rgbFrame) {
-				videoComp.rgbFrame = av_frame_alloc();
-				int size = av_image_get_buffer_size(AV_PIX_FMT_RGB24,
-					frame->width, frame->height, 1);
-				videoComp.frameBuffer = (uint8_t*)av_malloc(size);
-				av_image_fill_arrays(videoComp.rgbFrame->data, videoComp.rgbFrame->linesize,
-					videoComp.frameBuffer, AV_PIX_FMT_RGB24,
-					frame->width, frame->height, 1);
-			}
-
-			// Convert to RGB
-			sws_scale(videoComp.swsCtx, frame->data, frame->linesize, 0,
-				frame->height, videoComp.rgbFrame->data, videoComp.rgbFrame->linesize);
-
-			// Create OpenCV Mat from frame data
-			videoComp.currentFrameData.create(frame->height, frame->width, CV_8UC3);
-			memcpy(videoComp.currentFrameData.data, videoComp.frameBuffer,
-				frame->width * frame->height * 3);
-
-			// Ensure data is continuous
-			if (!videoComp.currentFrameData.isContinuous()) {
-				videoComp.currentFrameData = videoComp.currentFrameData.clone();
-			}
-
-			videoComp.needsTextureUpdate = true;
-		}
-
-		void UpdateTexture(VideoComponent& videoComp) {
-			// Delete existing texture if invalid
-			if (videoComp.currentTexture != 0 && !glIsTexture(videoComp.currentTexture)) {
-				glDeleteTextures(1, &videoComp.currentTexture);
-				videoComp.currentTexture = 0;
-			}
-
-			// Create new texture if needed
-			if (videoComp.currentTexture == 0) {
-				glGenTextures(1, &videoComp.currentTexture);
-				glBindTexture(GL_TEXTURE_2D, videoComp.currentTexture);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-				// Allocate storage
-				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8,
-					videoComp.width, videoComp.height,
-					0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-			}
-
-			// Update texture data
-			glBindTexture(GL_TEXTURE_2D, videoComp.currentTexture);
-
-			// Flip the image vertically (OpenGL expects 0,0 at bottom-left)
-			cv::Mat flipped;
-			cv::flip(videoComp.currentFrameData, flipped, 0);
-
-			// Check if frame data matches texture dimensions
-			if (flipped.cols != videoComp.width || flipped.rows != videoComp.height) {
-				cv::resize(flipped, flipped, cv::Size(videoComp.width, videoComp.height));
-			}
-
-			glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
-				flipped.cols, flipped.rows,
-				GL_RGB, GL_UNSIGNED_BYTE,
-				flipped.data);
-
-			GLenum err = glGetError();
-			if (err != GL_NO_ERROR) {
-				std::cerr << "OpenGL texture error after update: " << err << std::endl;
-			}
-		}
-
-		void NotifyVideoAdded(EntityID entity) {
-			for (const auto& callback : videoAddedCallbacks) {
-				callback(entity);
-			}
-		}
-
-		void NotifyVideoRemoved(EntityID entity) {
-			for (const auto& callback : videoRemovedCallbacks) {
-				callback(entity);
-			}
-		}
-
-		void LoadVideo(VideoComponent& videoComp) {
-			UnloadVideo(videoComp);
-
-			if (avformat_open_input(&videoComp.formatCtx, videoComp.filePath.c_str(), nullptr, nullptr) != 0) {
-				std::cerr << "Could not open video file: " << videoComp.filePath << std::endl;
-				return;
-			}
-
-			if (avformat_find_stream_info(videoComp.formatCtx, nullptr) < 0) {
-				std::cerr << "Could not find stream information" << std::endl;
-				avformat_close_input(&videoComp.formatCtx);
-				videoComp.formatCtx = nullptr;
-				return;
-			}
-
-			videoComp.videoStreamIdx = -1;
-			for (unsigned int i = 0; i < videoComp.formatCtx->nb_streams; i++) {
-				if (videoComp.formatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-					videoComp.videoStreamIdx = i;
-					break;
-				}
-			}
-
-			if (videoComp.videoStreamIdx == -1) {
-				std::cerr << "No video stream found" << std::endl;
-				avformat_close_input(&videoComp.formatCtx);
-				videoComp.formatCtx = nullptr;
-				return;
-			}
-
-			AVCodecParameters* codecPar = videoComp.formatCtx->streams[videoComp.videoStreamIdx]->codecpar;
-			AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
-			if (!codec) {
-				std::cerr << "Unsupported codec" << std::endl;
-				avformat_close_input(&videoComp.formatCtx);
-				videoComp.formatCtx = nullptr;
-				return;
-			}
-
-			videoComp.codecCtx = avcodec_alloc_context3(codec);
-			if (avcodec_parameters_to_context(videoComp.codecCtx, codecPar) < 0) {
-				std::cerr << "Could not copy codec context" << std::endl;
-				avformat_close_input(&videoComp.formatCtx);
-				videoComp.formatCtx = nullptr;
-				return;
-			}
-
-			if (avcodec_open2(videoComp.codecCtx, codec, nullptr) < 0) {
-				std::cerr << "Could not open codec" << std::endl;
-				avcodec_free_context(&videoComp.codecCtx);
-				avformat_close_input(&videoComp.formatCtx);
-				videoComp.formatCtx = nullptr;
-				videoComp.codecCtx = nullptr;
-				return;
-			}
-
-			videoComp.width = codecPar->width;
-			videoComp.height = codecPar->height;
-
-			// Calculate FPS
-			AVRational frame_rate = videoComp.formatCtx->streams[videoComp.videoStreamIdx]->avg_frame_rate;
-			if (frame_rate.num == 0 || frame_rate.den == 0) {
-				frame_rate = videoComp.formatCtx->streams[videoComp.videoStreamIdx]->r_frame_rate;
-			}
-			videoComp.fps = av_q2d(frame_rate);
-
-			// Try to get frame count
-			videoComp.frameCount = videoComp.formatCtx->streams[videoComp.videoStreamIdx]->nb_frames;
-			if (videoComp.frameCount <= 0) {
-				// Estimate frame count based on duration
-				if (videoComp.formatCtx->duration != AV_NOPTS_VALUE) {
-					videoComp.frameCount = (int)(videoComp.formatCtx->duration * videoComp.fps / AV_TIME_BASE);
-				}
-				else {
-					// Default to some reasonable value if we can't determine
-					videoComp.frameCount = 10000;
-					std::cerr << "Warning: Could not determine frame count, using default" << std::endl;
-				}
-			}
-
-			if (videoComp.width <= 0 || videoComp.height <= 0) {
-				std::cerr << "Invalid video dimensions: " << videoComp.width << "x" << videoComp.height << std::endl;
-				UnloadVideo(videoComp);
-				return;
-			}
-
-			if (videoComp.fps <= 0) {
-				videoComp.fps = 30.0;
-				std::cerr << "Invalid FPS, using default: " << videoComp.fps << std::endl;
-			}
-
-			if (videoComp.frameCount <= 0) {
-				std::cerr << "Couldn't determine frame count" << std::endl;
-				UnloadVideo(videoComp);
-				return;
-			}
-
-			// Reset playback state
-			videoComp.currentFrame = 0;
-			videoComp.isPlaying = false;
-			videoComp.playbackSpeed = 1.0f;
-
-			// Load the first frame
-			SeekToFrame(videoComp, 0);
-
-			std::cout << "Video loaded successfully:\n"
-				<< "Path: " << videoComp.filePath << "\n"
-				<< "Size: " << videoComp.width << "x" << videoComp.height << "\n"
-				<< "FPS: " << videoComp.fps << "\n"
-				<< "Frames: " << videoComp.frameCount << std::endl;
-		}
-
-		void UnloadVideo(VideoComponent& videoComp) {
-			videoComp.ReleaseTexture();
-
-			if (videoComp.swsCtx) {
-				sws_freeContext(videoComp.swsCtx);
-				videoComp.swsCtx = nullptr;
-			}
-
-			if (videoComp.rgbFrame) {
-				av_frame_free(&videoComp.rgbFrame);
-				videoComp.rgbFrame = nullptr;
-			}
-
-			if (videoComp.frameBuffer) {
-				av_free(videoComp.frameBuffer);
-				videoComp.frameBuffer = nullptr;
-			}
-
-			if (videoComp.codecCtx) {
-				avcodec_close(videoComp.codecCtx);
-				avcodec_free_context(&videoComp.codecCtx);
-				videoComp.codecCtx = nullptr;
-			}
-
-			if (videoComp.formatCtx) {
-				avformat_close_input(&videoComp.formatCtx);
-				videoComp.formatCtx = nullptr;
-			}
-
-			videoComp.width = 0;
-			videoComp.height = 0;
-			videoComp.fps = 0.0;
-			videoComp.frameCount = 0;
-			videoComp.currentFrame = 0;
-			videoComp.isPlaying = false;
-			videoComp.videoStreamIdx = -1;
-			videoComp.currentFrameData.release();
-		}
-
-		void UpdateVideoPlayback(VideoComponent& videoComp, float deltaTime) {
-			if (!videoComp.isPlaying || !videoComp.formatCtx)
-				return;
-
-			static float frameAccumulator = 0.0f;
-			frameAccumulator += deltaTime * videoComp.playbackSpeed;
-
-			const float frameDuration = 1.0f / static_cast<float>(videoComp.fps);
-
-			while (frameAccumulator >= frameDuration) {
-				frameAccumulator -= frameDuration;
-
-				// Get the next frame
-				if (!GetNextFrame(videoComp)) {
-					// If we can't get the next frame, try seeking to beginning
-					if (videoComp.currentFrame >= videoComp.frameCount - 1) {
-						SeekToFrame(videoComp, 0);
-					}
-					else {
-						// If that fails too, just stop playback
-						videoComp.isPlaying = false;
-						std::cerr << "Failed to get next frame, stopping playback" << std::endl;
-					}
-					break;
-				}
-			}
-		}
-	};
+    class VideoSystem : public BaseSystem {
+    public:
+        using VideoCallback = std::function<void(EntityID)>;
+        using VideoTextureCallback = std::function<void(EntityID, unsigned char*, int, int, int, GLuint*)>;
+
+        VideoSystem(EntityManager& entityMgr)
+            : BaseSystem(entityMgr), lastFrameTime(std::chrono::high_resolution_clock::now()) {
+            sysName = "VideoSystem";
+            AddComponentSignature<VideoComponent>();
+        }
+
+        ~VideoSystem() override {
+            for (auto entity : entities) {
+                if (mgr.HasComponent<VideoComponent>(entity)) {
+                    auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
+                    videoComp.UnloadVideo();
+                }
+            }
+        }
+
+        void Start() override {
+            for (auto entity : entities) {
+                if (mgr.HasComponent<VideoComponent>(entity)) {
+                    auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
+                    LoadVideo(videoComp, entity);
+                }
+            }
+        }
+
+        void Update(float deltaT) override {
+            // This is no longer used for playback (we drive it manually from VideoView)
+            // but we keep it for potential future use.
+        }
+
+        void SetVideo(EntityID entity, const std::string& filePath) {
+            if (mgr.HasComponent<VideoComponent>(entity)) {
+                auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
+                videoComp.UnloadVideo();
+                videoComp.filePath = filePath;
+                size_t lastSlash = filePath.find_last_of("/\\");
+                videoComp.fileName = (lastSlash != std::string::npos) ?
+                    filePath.substr(lastSlash + 1) : filePath;
+                LoadVideo(videoComp, entity);
+                NotifyVideoAdded(entity);
+            }
+        }
+
+        void RemoveVideo(EntityID entity) {
+            if (mgr.HasComponent<VideoComponent>(entity)) {
+                auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
+                videoComp.UnloadVideo();
+                NotifyVideoRemoved(entity);
+                mgr.DestroyEntity(entity);
+            }
+        }
+
+        std::vector<EntityID> GetAllVideoEntities() const {
+            std::vector<EntityID> result;
+            for (auto entity : entities) {
+                if (mgr.HasComponent<VideoComponent>(entity))
+                    result.push_back(entity);
+            }
+            return result;
+        }
+
+        void RegisterVideoAddedCallback(const VideoCallback& cb) { videoAddedCallbacks.push_back(cb); }
+        void RegisterVideoRemovedCallback(const VideoCallback& cb) { videoRemovedCallbacks.push_back(cb); }
+
+        void SetVideoTextureCallback(const VideoTextureCallback& callback) {
+            m_textureCallback = callback;
+        }
+
+        bool SeekToFrame(VideoComponent& videoComp, long long frameIndex) {
+            if (!videoComp.fmtCtx || videoComp.videoStreamIndex < 0 || frameIndex < 0 || frameIndex >= videoComp.frameCount)
+                return false;
+
+            double timeSec = static_cast<double>(frameIndex) / videoComp.fps;
+            int64_t target_ts = (int64_t)(timeSec * AV_TIME_BASE);
+            if (avformat_seek_file(videoComp.fmtCtx, -1, INT64_MIN, target_ts, target_ts, 0) < 0) {
+                avformat_seek_file(videoComp.fmtCtx, -1, INT64_MIN, 0, 0, 0);
+            }
+            avcodec_flush_buffers(videoComp.codecCtx);
+
+            videoComp.frameAccumulator = 0.0f;
+
+            if (DecodeNextFrame(videoComp)) {
+                if (m_textureCallback) {
+                    m_textureCallback(videoComp.GetID(), videoComp.frameDataRGBA.data(),
+                        videoComp.width, videoComp.height, 4,
+                        &videoComp.currentTexture);
+                }
+                videoComp.currentFrame = frameIndex;
+                return true;
+            }
+            return false;
+        }
+
+        // Public method to manually advance one frame (used by VideoView)
+        bool AdvanceOneFrame(VideoComponent& videoComp) {
+            if (!videoComp.fmtCtx || videoComp.videoStreamIndex < 0)
+                return false;
+            if (DecodeNextFrame(videoComp)) {
+                if (m_textureCallback) {
+                    m_textureCallback(videoComp.GetID(), videoComp.frameDataRGBA.data(),
+                        videoComp.width, videoComp.height, 4,
+                        &videoComp.currentTexture);
+                }
+                return true;
+            }
+            return false;
+        }
+
+    private:
+        std::vector<VideoCallback> videoAddedCallbacks;
+        std::vector<VideoCallback> videoRemovedCallbacks;
+        std::chrono::high_resolution_clock::time_point lastFrameTime;
+        VideoTextureCallback m_textureCallback;
+
+        void LoadVideo(VideoComponent& videoComp, EntityID entity) {
+            videoComp.UnloadVideo();
+
+            AVFormatContext* fmtCtx = nullptr;
+            if (avformat_open_input(&fmtCtx, videoComp.filePath.c_str(), nullptr, nullptr) < 0) {
+                std::cerr << "FFmpeg: could not open " << videoComp.filePath << std::endl;
+                return;
+            }
+            if (avformat_find_stream_info(fmtCtx, nullptr) < 0) {
+                avformat_close_input(&fmtCtx);
+                std::cerr << "FFmpeg: no stream info" << std::endl;
+                return;
+            }
+
+            int videoStream = -1;
+            for (unsigned i = 0; i < fmtCtx->nb_streams; ++i) {
+                if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+                    videoStream = i;
+                    break;
+                }
+            }
+            if (videoStream == -1) {
+                avformat_close_input(&fmtCtx);
+                std::cerr << "FFmpeg: no video stream" << std::endl;
+                return;
+            }
+
+            AVCodecParameters* codecPar = fmtCtx->streams[videoStream]->codecpar;
+            const AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
+            if (!codec) {
+                avformat_close_input(&fmtCtx);
+                std::cerr << "FFmpeg: decoder not found" << std::endl;
+                return;
+            }
+
+            AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
+            if (!codecCtx) {
+                avformat_close_input(&fmtCtx);
+                std::cerr << "FFmpeg: could not allocate codec context" << std::endl;
+                return;
+            }
+            if (avcodec_parameters_to_context(codecCtx, codecPar) < 0) {
+                avcodec_free_context(&codecCtx);
+                avformat_close_input(&fmtCtx);
+                std::cerr << "FFmpeg: failed to set codec parameters" << std::endl;
+                return;
+            }
+            if (avcodec_open2(codecCtx, codec, nullptr) < 0) {
+                avcodec_free_context(&codecCtx);
+                avformat_close_input(&fmtCtx);
+                std::cerr << "FFmpeg: could not open codec" << std::endl;
+                return;
+            }
+
+            videoComp.fmtCtx = fmtCtx;
+            videoComp.codecCtx = codecCtx;
+            videoComp.videoStreamIndex = videoStream;
+            videoComp.width = codecPar->width;
+            videoComp.height = codecPar->height;
+
+            AVStream* stream = fmtCtx->streams[videoStream];
+            double fps = av_q2d(stream->avg_frame_rate);
+            if (fps <= 0) fps = av_q2d(stream->r_frame_rate);
+            if (fps <= 0) fps = 30.0;
+            videoComp.fps = fps;
+
+            double duration = (fmtCtx->duration != AV_NOPTS_VALUE) ? (double)fmtCtx->duration / AV_TIME_BASE : 0.0;
+            videoComp.frameCount = (long long)(duration * fps);
+            if (videoComp.frameCount <= 0)
+                videoComp.frameCount = 1000;
+
+            videoComp.frame = av_frame_alloc();
+            videoComp.pkt = av_packet_alloc();
+
+            videoComp.swsCtx = sws_getContext(videoComp.width, videoComp.height, codecCtx->pix_fmt,
+                videoComp.width, videoComp.height, AV_PIX_FMT_RGBA,
+                SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+            avformat_seek_file(fmtCtx, -1, INT64_MIN, 0, 0, 0);
+            avcodec_flush_buffers(codecCtx);
+            videoComp.currentFrame = 0;
+            videoComp.isPlaying = false;
+            videoComp.playbackSpeed = 1.0f;
+            videoComp.frameAccumulator = 0.0f;
+
+            if (DecodeNextFrame(videoComp)) {
+                if (m_textureCallback) {
+                    m_textureCallback(videoComp.GetID(), videoComp.frameDataRGBA.data(),
+                        videoComp.width, videoComp.height, 4,
+                        &videoComp.currentTexture);
+                }
+            }
+
+            std::cout << "Video loaded: " << videoComp.filePath
+                << " (" << videoComp.width << "x" << videoComp.height
+                << ", " << videoComp.fps << " fps, " << videoComp.frameCount << " frames)" << std::endl;
+        }
+
+        bool DecodeNextFrame(VideoComponent& videoComp) {
+            if (!videoComp.fmtCtx || !videoComp.codecCtx || videoComp.videoStreamIndex < 0)
+                return false;
+
+            AVPacket* pkt = videoComp.pkt;
+            AVFrame* frame = videoComp.frame;
+
+            while (av_read_frame(videoComp.fmtCtx, pkt) >= 0) {
+                if (pkt->stream_index == videoComp.videoStreamIndex) {
+                    if (avcodec_send_packet(videoComp.codecCtx, pkt) == 0) {
+                        while (avcodec_receive_frame(videoComp.codecCtx, frame) == 0) {
+                            int width = frame->width;
+                            int height = frame->height;
+                            if (width != videoComp.width || height != videoComp.height) {
+                                videoComp.width = width;
+                                videoComp.height = height;
+                                if (videoComp.swsCtx) {
+                                    sws_freeContext(videoComp.swsCtx);
+                                }
+                                videoComp.swsCtx = sws_getContext(width, height, videoComp.codecCtx->pix_fmt,
+                                    width, height, AV_PIX_FMT_RGBA,
+                                    SWS_BILINEAR, nullptr, nullptr, nullptr);
+                            }
+
+                            size_t dataSize = width * height * 4;
+                            videoComp.frameDataRGBA.resize(dataSize);
+
+                            uint8_t* dst[1] = { videoComp.frameDataRGBA.data() };
+                            int dstLinesize[1] = { width * 4 };
+                            sws_scale(videoComp.swsCtx, frame->data, frame->linesize, 0, height, dst, dstLinesize);
+
+                            videoComp.width = width;
+                            videoComp.height = height;
+                            av_packet_unref(pkt);
+                            videoComp.currentFrame++;
+                            return true;
+                        }
+                    }
+                }
+                av_packet_unref(pkt);
+            }
+
+            if (videoComp.looping) {
+                avformat_seek_file(videoComp.fmtCtx, -1, INT64_MIN, 0, 0, 0);
+                avcodec_flush_buffers(videoComp.codecCtx);
+                videoComp.currentFrame = 0;
+                videoComp.frameAccumulator = 0.0f;
+                return DecodeNextFrame(videoComp);
+            }
+            else {
+                videoComp.isPlaying = false;
+                videoComp.frameAccumulator = 0.0f;
+                return false;
+            }
+        }
+
+        void NotifyVideoAdded(EntityID entity) {
+            for (const auto& cb : videoAddedCallbacks) cb(entity);
+        }
+        void NotifyVideoRemoved(EntityID entity) {
+            for (const auto& cb : videoRemovedCallbacks) cb(entity);
+        }
+    };
 
 } // namespace ECS

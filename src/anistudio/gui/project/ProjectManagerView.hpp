@@ -10,7 +10,7 @@ namespace GUI {
     class ProjectManagerView {
     private:
         ANI::ProjectManager& m_projectManager;
-        ANI::StudioCore* m_studioCore;  // Direct reference to StudioCore
+        ANI::StudioCore* m_studioCore;
         ProjectPopupState popupState;
         AutoLoadPopupState autoLoadState;
 
