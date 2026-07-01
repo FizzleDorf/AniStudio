@@ -75,6 +75,14 @@ namespace GUI {
 		ECS::EntityID GetCurrentEntity() const;
 		std::vector<std::string> GetCategoryRenderOrder() const;
 
+		// Component management
+		void ToggleComponent(ECS::EntityID entity, const std::string& name);
+		bool IsComponentPresent(ECS::EntityID entity, const std::string& name) const;
+		void SetModelMode(ECS::EntityID entity, bool useCheckpoint);
+		bool IsCheckpointMode(ECS::EntityID entity) const;
+		void ResetToDefaultComponents(ECS::EntityID entity);
+		std::vector<std::string> GetAvailableComponentNames() const;
+
 		// Metadata methods
 		void SaveMetadataToJson(const std::string& filepath);
 		void LoadMetadataFromJson(const std::string& filepath);

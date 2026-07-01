@@ -1152,9 +1152,6 @@ namespace ECS {
 								if (!defaultProject.empty() && defaultProject[0] != '\0') {
 									outputDir = defaultProject;
 								}
-								else {
-									outputDir = Utils::FilePathService::GetExecutableDir();
-								}
 							}
 						}
 

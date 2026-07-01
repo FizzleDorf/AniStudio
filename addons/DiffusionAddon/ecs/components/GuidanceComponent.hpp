@@ -2,6 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include <string>
+#include <vector>
 
 namespace ECS {
 
@@ -12,7 +13,7 @@ namespace ECS {
 			schema = {
 				{"title", "Guidance Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"distilled_guidance", "txt_cfg", "img_cfg"}},
+				{"propertyOrder", {"distilled_guidance", "txt_cfg", "img_cfg", "slg_scale", "slg_layer_start", "slg_layer_end"}},
 				{"properties", {
 					{"distilled_guidance", {
 						{"type", "number"},
@@ -57,18 +58,16 @@ namespace ECS {
 			};
 		}
 
-		// sd_guidance_params_t members
 		float txt_cfg = 7.0f;
 		float img_cfg = 1.5f;
 		float distilled_guidance = 3.5f;
 
-		// Override the GetPropertyMap method
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["distilled_guidance"] = &distilled_guidance;
-			properties["img_cfg"] = &img_cfg;
-			properties["txt_cfg"] = &txt_cfg;
-			return properties;
+			return {
+				{"distilled_guidance", &distilled_guidance},
+				{"img_cfg", &img_cfg},
+				{"txt_cfg", &txt_cfg}
+			};
 		}
 
 		GuidanceComponent& operator=(const GuidanceComponent& other) {
@@ -92,7 +91,6 @@ namespace ECS {
 			BaseComponent::Deserialize(j);
 
 			nlohmann::json componentData;
-
 			if (j.contains(compName)) {
 				componentData = j.at(compName);
 			}

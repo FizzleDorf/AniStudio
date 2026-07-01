@@ -17,7 +17,7 @@ namespace ECS {
 			schema = {
 				{"title", "Latent Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"latentWidth", "latentHeight", "batchSize", "current_rng_type"}},
+				{"propertyOrder", {"latentWidth", "latentHeight", "batchSize", "current_rng_type", "sampler_rng_type"}},
 				{"properties", {
 					{"latentWidth", {
 						{"type", "integer"},
@@ -41,21 +41,29 @@ namespace ECS {
 							{"max", 2048}
 						}}
 					}},
-					// {"batchSize", {
-					// 	{"type", "integer"},
-					// 	{"title", "Batch Size"},
-					// 	{"ui:widget", "input_int"},
-					// 	{"ui:options", {
-					// 		{"step", 1},
-					// 		{"step_fast", 4},
-					// 		{"min", 1},
-					// 		{"max", 16}
-					// 	}}
-					// }},
+					{"batchSize", {
+						{"type", "integer"},
+						{"title", "Batch Size"},
+						{"ui:widget", "input_int"},
+						{"ui:options", {
+							{"step", 1},
+							{"step_fast", 4},
+							{"min", 1},
+							{"max", 16}
+						}}
+					}},
 					{"current_rng_type", {
 						{"type", "integer"},
-						{"title", "RNG Type"},
-						{"description", "Random number generator type. CUDA RNG provides different results than CPU RNG for the same seed."},
+						{"title", "RNG Type (initial noise)"},
+						{"description", "Random number generator for initial latent noise."},
+						{"ui:widget", "combo"},
+						{"items", type_rng_items},
+						{"itemCount", type_rng_item_count}
+					}},
+					{"sampler_rng_type", {
+						{"type", "integer"},
+						{"title", "Sampler RNG Type"},
+						{"description", "Random number generator used during sampling."},
 						{"ui:widget", "combo"},
 						{"items", type_rng_items},
 						{"itemCount", type_rng_item_count}
@@ -64,24 +72,24 @@ namespace ECS {
 			};
 		}
 
-		// Core properties
 		int latentWidth = 512;
 		int latentHeight = 512;
 		int batchSize = 1;
-		rng_type_t current_rng_type = STD_DEFAULT_RNG;
+		enum rng_type_t current_rng_type = STD_DEFAULT_RNG;
+		enum rng_type_t sampler_rng_type = STD_DEFAULT_RNG;
 
-		// Additional properties for DiffusionView to use
 		bool useAspectRatio = false;
 		bool isDivisibleBy64 = true;
 		int longestSide = 768;
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["latentWidth"] = &latentWidth;
-			properties["latentHeight"] = &latentHeight;
-			properties["batchSize"] = &batchSize;
-			properties["current_rng_type"] = reinterpret_cast<int*>(&current_rng_type);
-			return properties;
+			return {
+				{"latentWidth", &latentWidth},
+				{"latentHeight", &latentHeight},
+				{"batchSize", &batchSize},
+				{"current_rng_type", reinterpret_cast<int*>(&current_rng_type)},
+				{"sampler_rng_type", reinterpret_cast<int*>(&sampler_rng_type)}
+			};
 		}
 
 		LatentComponent& operator=(const LatentComponent& other) {
@@ -90,6 +98,7 @@ namespace ECS {
 				latentHeight = other.latentHeight;
 				batchSize = other.batchSize;
 				current_rng_type = other.current_rng_type;
+				sampler_rng_type = other.sampler_rng_type;
 				useAspectRatio = other.useAspectRatio;
 				isDivisibleBy64 = other.isDivisibleBy64;
 				longestSide = other.longestSide;
@@ -98,33 +107,28 @@ namespace ECS {
 		}
 
 		nlohmann::json Serialize() const override {
-			nlohmann::json j;
-			j[compName] = {
+			return { {compName, {
 				{"latentWidth", latentWidth},
 				{"latentHeight", latentHeight},
 				{"batchSize", batchSize},
 				{"current_rng_type", static_cast<int>(current_rng_type)},
+				{"sampler_rng_type", static_cast<int>(sampler_rng_type)},
 				{"useAspectRatio", useAspectRatio},
 				{"isDivisibleBy64", isDivisibleBy64},
 				{"longestSide", longestSide}
-			};
-			return j;
+			}} };
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
 			BaseComponent::Deserialize(j);
 
 			nlohmann::json componentData;
-
-			// First try to get data by component name
 			if (j.contains(compName)) {
 				componentData = j.at(compName);
 			}
-			// If not found, look for any object that might contain our data
 			else if (j.is_object() && j.size() == 1) {
 				componentData = j.begin().value();
 			}
-			// Fallback: use the entire json
 			else {
 				componentData = j;
 			}
@@ -136,7 +140,9 @@ namespace ECS {
 			if (componentData.contains("batchSize"))
 				batchSize = componentData["batchSize"];
 			if (componentData.contains("current_rng_type"))
-				current_rng_type = static_cast<rng_type_t>(componentData["current_rng_type"]);
+				current_rng_type = static_cast<rng_type_t>(componentData["current_rng_type"].get<int>());
+			if (componentData.contains("sampler_rng_type"))
+				sampler_rng_type = static_cast<rng_type_t>(componentData["sampler_rng_type"].get<int>());
 			if (componentData.contains("useAspectRatio"))
 				useAspectRatio = componentData["useAspectRatio"];
 			if (componentData.contains("isDivisibleBy64"))

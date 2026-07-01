@@ -3,7 +3,6 @@
 #include "DiffusionCallbackUtils.hpp"
 
 namespace Utils {
-	// Parse context creation parameters from metadata
 	static bool ParseContextParams(const nlohmann::json& metadata, sd_ctx_params_t& ctx_params,
 		std::string& modelPath, std::string& vaePath, std::string& clipLPath,
 		std::string& clipGPath, std::string& clipVisionPath, std::string& t5xxlPath,
@@ -19,7 +18,6 @@ namespace Utils {
 			}
 
 			for (const auto& comp : metadata["components"]) {
-				// Checkpoint
 				if (comp.contains("Checkpoint")) {
 					auto model = comp["Checkpoint"];
 					if (model.contains("modelPath") && !model["modelPath"].is_null())
@@ -32,7 +30,6 @@ namespace Utils {
 					}
 				}
 
-				// VAE
 				if (comp.contains("Vae")) {
 					auto vae = comp["Vae"];
 					if (vae.contains("modelPath") && !vae["modelPath"].is_null())
@@ -45,7 +42,6 @@ namespace Utils {
 					}
 				}
 
-				// CLIP models
 				if (comp.contains("ClipL")) {
 					auto clipL = comp["ClipL"];
 					if (clipL.contains("modelPath") && !clipL["modelPath"].is_null())
@@ -106,8 +102,32 @@ namespace Utils {
 					}
 				}
 
+				if (comp.contains("LlmEncoder")) {
+					auto llm = comp["LlmEncoder"];
+					if (llm.contains("modelPath") && !llm["modelPath"].is_null())
+						llmPath = llm["modelPath"].get<std::string>();
+					else if (llm.contains("modelName") && !llm["modelName"].is_null())
+						llmPath = FilePathService::GetPath("Encoder") + "/" + llm["modelName"].get<std::string>();
+
+					if (!llmPath.empty()) {
+						ctx_params.llm_path = llmPath.c_str();
+					}
+				}
+
 				if (comp.contains("LLMVision")) {
 					auto llmVision = comp["LLMVision"];
+					if (llmVision.contains("modelPath") && !llmVision["modelPath"].is_null())
+						llmVisionPath = llmVision["modelPath"].get<std::string>();
+					else if (llmVision.contains("modelName") && !llmVision["modelName"].is_null())
+						llmVisionPath = FilePathService::GetPath("Encoder") + "/" + llmVision["modelName"].get<std::string>();
+
+					if (!llmVisionPath.empty()) {
+						ctx_params.llm_vision_path = llmVisionPath.c_str();
+					}
+				}
+
+				if (comp.contains("LlmVision")) {
+					auto llmVision = comp["LlmVision"];
 					if (llmVision.contains("modelPath") && !llmVision["modelPath"].is_null())
 						llmVisionPath = llmVision["modelPath"].get<std::string>();
 					else if (llmVision.contains("modelName") && !llmVision["modelName"].is_null())

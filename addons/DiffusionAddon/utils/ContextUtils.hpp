@@ -15,7 +15,6 @@
 
 namespace Utils {
 
-	// Cache entry with metadata and context
 	struct SDContextCacheEntry {
 		std::string cacheKey;
 		sd_ctx_t* context;
@@ -26,7 +25,6 @@ namespace Utils {
 		bool isLoading;
 		std::future<sd_ctx_t*> loadingFuture;
 
-		// String storage for context parameters (must outlive ctx_params)
 		std::string modelPath;
 		std::string vaePath;
 		std::string clipLPath;
@@ -60,7 +58,6 @@ namespace Utils {
 		static inline size_t totalContextsFailed = 0;
 
 	public:
-		// Generate a cache key from metadata
 		static std::string GenerateCacheKey(const nlohmann::json& metadata) {
 			try {
 				std::string key;
@@ -106,6 +103,26 @@ namespace Utils {
 								key += "|clipG:" + clipG["modelName"].get<std::string>();
 							}
 						}
+
+						if (comp.contains("LlmEncoder")) {
+							auto llm = comp["LlmEncoder"];
+							if (llm.contains("modelPath") && !llm["modelPath"].is_null() && !llm["modelPath"].get<std::string>().empty()) {
+								key += "|llm:" + llm["modelPath"].get<std::string>();
+							}
+							else if (llm.contains("modelName") && !llm["modelName"].is_null() && !llm["modelName"].get<std::string>().empty()) {
+								key += "|llm:" + llm["modelName"].get<std::string>();
+							}
+						}
+
+						if (comp.contains("LlmVision")) {
+							auto llmVision = comp["LlmVision"];
+							if (llmVision.contains("modelPath") && !llmVision["modelPath"].is_null() && !llmVision["modelPath"].get<std::string>().empty()) {
+								key += "|llmVision:" + llmVision["modelPath"].get<std::string>();
+							}
+							else if (llmVision.contains("modelName") && !llmVision["modelName"].is_null() && !llmVision["modelName"].get<std::string>().empty()) {
+								key += "|llmVision:" + llmVision["modelName"].get<std::string>();
+							}
+						}
 					}
 				}
 
@@ -135,7 +152,6 @@ namespace Utils {
 			}
 		}
 
-		// Check if metadata is similar enough to reuse context
 		static bool CanReuseContext(const nlohmann::json& cachedMetadata,
 			const nlohmann::json& newMetadata) {
 			try {
@@ -167,10 +183,22 @@ namespace Utils {
 									paths.push_back(clipG["modelPath"].get<std::string>());
 								}
 							}
+							if (comp.contains("LlmEncoder")) {
+								auto llm = comp["LlmEncoder"];
+								if (llm.contains("modelPath") && !llm["modelPath"].is_null() && !llm["modelPath"].get<std::string>().empty()) {
+									paths.push_back(llm["modelPath"].get<std::string>());
+								}
+							}
+							if (comp.contains("LlmVision")) {
+								auto llmVision = comp["LlmVision"];
+								if (llmVision.contains("modelPath") && !llmVision["modelPath"].is_null() && !llmVision["modelPath"].get<std::string>().empty()) {
+									paths.push_back(llmVision["modelPath"].get<std::string>());
+								}
+							}
 						}
 					}
 					return paths;
-				};
+					};
 
 				auto cachedPaths = getModelPaths(cachedMetadata);
 				auto newPaths = getModelPaths(newMetadata);
@@ -203,7 +231,7 @@ namespace Utils {
 						}
 					}
 					return { n_threads, wtype };
-				};
+					};
 
 				auto cachedSettings = getSamplerSettings(cachedMetadata);
 				auto newSettings = getSamplerSettings(newMetadata);
@@ -216,13 +244,11 @@ namespace Utils {
 			}
 		}
 
-		// Create new context from metadata using the parser utility
 		static sd_ctx_t* CreateNewContextInternal(const nlohmann::json& metadata,
 			std::shared_ptr<SDContextCacheEntry> entry) {
 			try {
 				sd_ctx_params_t ctx_params;
 
-				// Parse parameters into the entry's string storage
 				if (!ParseContextParams(metadata, ctx_params,
 					entry->modelPath, entry->vaePath, entry->clipLPath, entry->clipGPath,
 					entry->clipVisionPath, entry->t5xxlPath, entry->llmPath, entry->llmVisionPath,
@@ -237,6 +263,8 @@ namespace Utils {
 				std::cout << "  vae_path: " << (ctx_params.vae_path ? ctx_params.vae_path : "(empty)") << std::endl;
 				std::cout << "  clip_l_path: " << (ctx_params.clip_l_path ? ctx_params.clip_l_path : "(empty)") << std::endl;
 				std::cout << "  clip_g_path: " << (ctx_params.clip_g_path ? ctx_params.clip_g_path : "(empty)") << std::endl;
+				std::cout << "  llm_path: " << (ctx_params.llm_path ? ctx_params.llm_path : "(empty)") << std::endl;
+				std::cout << "  llm_vision_path: " << (ctx_params.llm_vision_path ? ctx_params.llm_vision_path : "(empty)") << std::endl;
 
 				sd_ctx_t* ctx = new_sd_ctx(&ctx_params);
 
@@ -248,28 +276,25 @@ namespace Utils {
 				std::cout << "DEBUG: SD context created successfully!" << std::endl;
 				return ctx;
 			}
-			catch (const std::exception &e) {
+			catch (const std::exception& e) {
 				std::cerr << "Error creating SD context: " << e.what() << std::endl;
 				return nullptr;
 			}
 		}
 
-		// Async function to create context
 		static std::future<sd_ctx_t*> CreateNewContextAsync(std::shared_ptr<SDContextCacheEntry> entry) {
 			return std::async(std::launch::async, [entry]() -> sd_ctx_t* {
 				return CreateNewContextInternal(entry->metadata, entry);
-			});
+				});
 		}
 
 	public:
-		// Create new context from metadata (public interface)
 		static sd_ctx_t* CreateNewContext(const nlohmann::json& metadata) {
 			auto entry = std::make_shared<SDContextCacheEntry>();
 			entry->metadata = metadata;
 			return CreateNewContextInternal(metadata, entry);
 		}
 
-		// Get or create context with async loading
 		static sd_ctx_t* GetOrCreateContext(const nlohmann::json& metadata) {
 			std::string cacheKey = GenerateCacheKey(metadata);
 
@@ -370,10 +395,6 @@ namespace Utils {
 			return nullptr;
 		}
 
-		// Rest of the class remains the same...
-		// (ReleaseContext, ClearAllContexts, GetCacheStats, etc.)
-
-		// Check if a context is currently loading for given metadata
 		static bool IsContextLoading(const nlohmann::json& metadata) {
 			std::string cacheKey = GenerateCacheKey(metadata);
 			std::lock_guard<std::mutex> lock(cacheMutex);
@@ -385,7 +406,6 @@ namespace Utils {
 			return false;
 		}
 
-		// Check if loading is complete and get context if ready
 		static sd_ctx_t* TryGetLoadedContext(const nlohmann::json& metadata) {
 			std::string cacheKey = GenerateCacheKey(metadata);
 			std::lock_guard<std::mutex> lock(cacheMutex);
@@ -423,7 +443,6 @@ namespace Utils {
 			return nullptr;
 		}
 
-		// Release context back to cache
 		static void ReleaseContext(sd_ctx_t* context) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -441,7 +460,6 @@ namespace Utils {
 			free_sd_ctx(context);
 		}
 
-		// Force free a specific context
 		static void ForceFreeContext(sd_ctx_t* context) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -456,7 +474,6 @@ namespace Utils {
 			free_sd_ctx(context);
 		}
 
-		// Clear all cached contexts
 		static void ClearAllContexts() {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -465,7 +482,6 @@ namespace Utils {
 			std::cout << "DEBUG: Cleared all cached contexts (" << count << " contexts)" << std::endl;
 		}
 
-		// Get cache statistics
 		static void GetCacheStats(size_t& totalCached, size_t& inUse, size_t& available) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -483,7 +499,6 @@ namespace Utils {
 			}
 		}
 
-		// Get loading statistics
 		static void GetLoadingStats(size_t& loadingCount, size_t& failedCount) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -497,7 +512,6 @@ namespace Utils {
 			failedCount = totalContextsFailed;
 		}
 
-		// List all cached contexts
 		static void ListCachedContexts() {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -532,11 +546,6 @@ namespace Utils {
 			std::cout << "==========================" << std::endl;
 		}
 
-		// ================================================
-		// Model Management API
-		// ================================================
-
-		// Unload specific model by path
 		static void UnloadSpecificModel(const std::string& modelPath) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -584,25 +593,21 @@ namespace Utils {
 			}
 		}
 
-		// Unload all models
 		static void UnloadAllModels() {
 			ClearAllContexts();
 		}
 
-		// Set maximum number of models to cache
 		static void SetMaxCacheSize(size_t size) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 			MAX_CACHE_SIZE = size;
 			std::cout << "DEBUG: Max cache size set to: " << MAX_CACHE_SIZE << std::endl;
 		}
 
-		// Get maximum cache size
 		static size_t GetMaxCacheSize() {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 			return MAX_CACHE_SIZE;
 		}
 
-		// Check if a specific model is currently loaded
 		static bool IsModelLoaded(const std::string& modelPath) {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 
@@ -628,14 +633,12 @@ namespace Utils {
 					}
 				}
 				catch (const std::exception& e) {
-					// Skip errors
 				}
 			}
 
 			return false;
 		}
 
-		// Get list of all loaded models
 		static std::vector<std::string> GetLoadedModels() {
 			std::lock_guard<std::mutex> lock(cacheMutex);
 			std::vector<std::string> models;
@@ -664,7 +667,6 @@ namespace Utils {
 					}
 				}
 				catch (const std::exception& e) {
-					// Skip errors
 				}
 			}
 
@@ -672,9 +674,8 @@ namespace Utils {
 		}
 	};
 
-	// Legacy function for backward compatibility
 	inline sd_ctx_t* InitializeStableDiffusionContext(const nlohmann::json& metadata) {
 		return SDContextManager::GetOrCreateContext(metadata);
 	}
 
-} // namespace Utils
+}

@@ -192,9 +192,6 @@ endif()
 set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-# ============================================================
-# FIX: Build stable-diffusion.cpp as subdirectory WITHOUT MinGW
-# ============================================================
 if(WIN32)
     # Save original PATH
     set(ORIGINAL_PATH "$ENV{PATH}")
@@ -234,7 +231,6 @@ if(WIN32)
     set(ENV{PATH} "${ORIGINAL_PATH}")
     message(STATUS "Restored original PATH after stable-diffusion.cpp")
 endif()
-# ============================================================
 
 if(NOT TARGET stable-diffusion)
     find_library(STABLE_DIFFUSION_LIB NAMES libstable-diffusion.a stable-diffusion.a libstable-diffusion.so 
@@ -266,11 +262,11 @@ target_include_directories(DiffusionAddon PRIVATE
     ${ANISTUDIO_ROOT}/src/aniengine/utils
     ${ANISTUDIO_ROOT}/src/aniengine/utils/media
     ${ANISTUDIO_ROOT}/src/anistudio/gui/base
-    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils
-    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/states
-    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/widgets
-    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/ui_schema
-    ${ANISTUDIO_ROOT}/src/anistudio/gui_utils/rendering
+    ${ANISTUDIO_ROOT}/src/anistudio/utils
+    ${ANISTUDIO_ROOT}/src/anistudio/utils/states
+    ${ANISTUDIO_ROOT}/src/anistudio/utils/widgets
+    ${ANISTUDIO_ROOT}/src/anistudio/utils/ui_schema
+    ${ANISTUDIO_ROOT}/src/anistudio/utils/rendering
     ${ANISTUDIO_ROOT}/src/anistudio/plugins
     ${ANISTUDIO_ROOT}/src/anistudio/gui/settings
     ${ANISTUDIO_ROOT}/src/anistudio

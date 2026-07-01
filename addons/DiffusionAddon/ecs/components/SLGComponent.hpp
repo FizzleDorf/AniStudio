@@ -1,7 +1,9 @@
 #pragma once
 
 #include "BaseComponent.hpp"
+#include "stable-diffusion.h"
 #include <string>
+#include <cstring>
 
 namespace ECS {
 
@@ -89,7 +91,6 @@ namespace ECS {
 		float layer_end = 1.0f;
 		float scale = 1.0f;
 
-		// Override the GetPropertyMap method
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["layers"] = layers;
@@ -107,7 +108,6 @@ namespace ECS {
 				layer_end = other.layer_end;
 				scale = other.scale;
 
-				// Deep copy the layers array
 				if (layers != nullptr) {
 					delete[] layers;
 					layers = nullptr;
@@ -125,6 +125,17 @@ namespace ECS {
 				delete[] layers;
 				layers = nullptr;
 			}
+		}
+
+		// Convert to C API struct
+		sd_slg_params_t ToSLGParams() const {
+			sd_slg_params_t params;
+			params.layers = layers;
+			params.layer_count = layer_count;
+			params.layer_start = layer_start;
+			params.layer_end = layer_end;
+			params.scale = scale;
+			return params;
 		}
 
 		nlohmann::json Serialize() const override {
@@ -148,7 +159,6 @@ namespace ECS {
 			BaseComponent::Deserialize(j);
 
 			nlohmann::json componentData;
-
 			if (j.contains(compName)) {
 				componentData = j.at(compName);
 			}
@@ -173,7 +183,6 @@ namespace ECS {
 			if (componentData.contains("scale"))
 				scale = componentData["scale"];
 
-			// Deserialize layers array
 			if (componentData.contains("layers") && componentData["layers"].is_array()) {
 				if (layers != nullptr) {
 					delete[] layers;

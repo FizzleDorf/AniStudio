@@ -351,7 +351,7 @@ namespace ECS {
 			schema = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"modelPath"}},
+				{"propertyOrder", {"modelPath", "lora_apply_mode"}},
 				{"properties", {
 					{"modelPath", {
 						{"type", "string"},
@@ -364,10 +364,20 @@ namespace ECS {
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for root LoRA directory"}
 						}}
+					}},
+					{"lora_apply_mode", {
+						{"type", "integer"},
+						{"title", "LoRA Apply Mode"},
+						{"description", "When to apply LoRAs (auto, immediately, at runtime)."},
+						{"ui:widget", "combo"},
+						{"items", lora_apply_mode_items},
+						{"itemCount", lora_apply_mode_item_count}
 					}}
 				}}
 			};
 		}
+
+		enum lora_apply_mode_t lora_apply_mode = LORA_APPLY_AUTO;
 
 		void RefreshSchema() override {
 			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
@@ -382,7 +392,8 @@ namespace ECS {
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
-				{"modelName", &modelName}
+				{"modelName", &modelName},
+				{"lora_apply_mode", reinterpret_cast<int*>(&lora_apply_mode)}
 			};
 		}
 
@@ -395,6 +406,7 @@ namespace ECS {
 				modelName = other.modelName;
 				modelPath = other.modelPath;
 				isModelLoaded = other.isModelLoaded;
+				lora_apply_mode = other.lora_apply_mode;
 			}
 			return *this;
 		}
@@ -402,81 +414,18 @@ namespace ECS {
 		nlohmann::json Serialize() const override {
 			return { {compName, {
 				{"modelName", modelName},
-				{"modelPath", modelPath}
+				{"modelPath", modelPath},
+				{"lora_apply_mode", static_cast<int>(lora_apply_mode)}
 			}} };
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
 			BaseModelComponent::Deserialize(j);
-		}
-	};
-
-	// Embedding Component
-	struct EmbeddingComponent : public BaseModelComponent {
-		EmbeddingComponent() {
-			compName = "Embedding";
-			modelPath = Utils::FilePathService::GetPath("Embed");
-
-			schema = {
-				{"title", "Text Embedding"},
-				{"type", "object"},
-				{"propertyOrder", {"modelPath"}},
-				{"properties", {
-					{"modelPath", {
-						{"type", "string"},
-						{"title", "Embedding Directory"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "directory"},
-							{"dialogDefaultPath", "Embed"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for textual inversion embedding files"}
-						}}
-					}}
-				}}
-			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Embed");
-				}
+			if (j.contains(compName)) {
+				auto comp = j[compName];
+				if (comp.contains("lora_apply_mode"))
+					lora_apply_mode = static_cast<lora_apply_mode_t>(comp["lora_apply_mode"].get<int>());
 			}
-		}
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelPath", &modelPath},
-				{"modelName", &modelName}
-			};
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Embed");
-		}
-
-		EmbeddingComponent& operator=(const EmbeddingComponent& other) {
-			if (this != &other) {
-				modelPath = other.modelPath;
-				modelName = other.modelName;
-				isModelLoaded = other.isModelLoaded;
-			}
-			return *this;
-		}
-
-		nlohmann::json Serialize() const override {
-			return { {compName, {
-				{"modelName", modelName},
-				{"modelPath", modelPath}
-			}} };
-		}
-
-		void Deserialize(const nlohmann::json& j) override {
-			BaseModelComponent::Deserialize(j);
 		}
 	};
 

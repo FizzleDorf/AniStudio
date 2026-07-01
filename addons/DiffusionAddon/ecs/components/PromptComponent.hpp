@@ -35,12 +35,6 @@ namespace ECS {
 							{"maxLength", 8192},
 							{"showMenuBar", true}
 						}}
-					}},
-					{"normalize_input", {
-						{"type", "boolean"},
-						{"title", "Normalize Input"},
-						{"description", "Normalize token inputs for more consistent prompt processing. May improve prompt adherence."},
-						{"ui:widget", "checkbox"}
 					}}
 				}}
 			};

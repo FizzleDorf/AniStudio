@@ -4,6 +4,7 @@
 #include "stable-diffusion.h"
 #include "DiffusionOptions.hpp"
 #include <string>
+#include <vector>
 
 namespace ECS {
 
@@ -17,12 +18,14 @@ namespace ECS {
 				{"type", "object"},
 				{"propertyOrder", {
 					"current_sample_method", "current_scheduler_method", "current_type_method",
-					"current_rng_type", "current_prediction_type",
-					"seed", "cfg", "steps", "eta", "denoise", "n_threads", "free_params_immediately",
-					"offload_params_to_cpu", "keep_clip_on_cpu", "keep_control_net_on_cpu", "keep_vae_on_cpu",
+					"current_prediction_type",
+					"seed", "steps", "eta", "denoise", "n_threads", "free_params_immediately",
+					"offload_params_to_cpu", "keep_clip_on_cpu", "keep_control_net_on_cpu",
 					"diffusion_flash_attn", "diffusion_conv_direct", "vae_conv_direct",
-					"force_sdxl_vae_conv_scale", "chroma_use_dit_mask", "chroma_use_t5_mask",
-					"chroma_t5_mask_pad", "flow_shift", "shifted_timestep"
+					"force_sdxl_vae_conv_scale", "shifted_timestep",
+					"lora_apply_mode", "enable_mmap", "qwen_image_zero_cond_t",
+					"max_vram", "stream_layers", "eager_load", "backend", "params_backend", "rpc_servers",
+					"extra_sample_args"
 				}},
 				{"properties", {
 					{"current_sample_method", {
@@ -62,17 +65,6 @@ namespace ECS {
 						{"title", "Seed"},
 						{"description", "Random seed for reproducible results. Use -1 for random seed, or any positive number for consistent output."},
 						{"ui:widget", "input_int"}
-					}},
-					{"cfg", {
-						{"type", "number"},
-						{"title", "CFG"},
-						{"description", "Classifier-Free Guidance scale. Higher values follow the prompt more closely but may reduce image quality. Typical range: 1-20."},
-						{"ui:widget", "input_float"},
-						{"ui:options", {
-							{"step", 0.5f},
-							{"step_fast", 1.0f},
-							{"format", "%.2f"}
-						}}
 					}},
 					{"steps", {
 						{"type", "integer"},
@@ -148,12 +140,6 @@ namespace ECS {
 						{"description", "Keep ControlNet models on CPU. Saves significant VRAM when using ControlNet but reduces performance."},
 						{"ui:widget", "checkbox"}
 					}},
-					{"keep_vae_on_cpu", {
-						{"type", "boolean"},
-						{"title", "VAE on CPU"},
-						{"description", "Keep VAE on CPU instead of GPU to save VRAM but significantly reduce performance."},
-						{"ui:widget", "checkbox"}
-					}},
 					{"diffusion_flash_attn", {
 						{"type", "boolean"},
 						{"title", "Flash Attention"},
@@ -178,41 +164,6 @@ namespace ECS {
 						{"description", "Force SDXL VAE to use scaling in convolutions. May improve quality for SDXL models."},
 						{"ui:widget", "checkbox"}
 					}},
-					{"chroma_use_dit_mask", {
-						{"type", "boolean"},
-						{"title", "Use DIT Mask"},
-						{"description", "Use DIT mask for chroma upsampling in video generation."},
-						{"ui:widget", "checkbox"}
-					}},
-					{"chroma_use_t5_mask", {
-						{"type", "boolean"},
-						{"title", "Use T5 Mask"},
-						{"description", "Use T5 mask for chroma upsampling in video generation."},
-						{"ui:widget", "checkbox"}
-					}},
-					{"chroma_t5_mask_pad", {
-						{"type", "integer"},
-						{"title", "T5 Mask Padding"},
-						{"description", "Padding size for T5 mask in chroma upsampling."},
-						{"ui:widget", "input_int"},
-						{"ui:options", {
-							{"step", 1},
-							{"step_fast", 4},
-							{"min", 0},
-							{"max", 64}
-						}}
-					}},
-					{"flow_shift", {
-						{"type", "number"},
-						{"title", "Flow Shift"},
-						{"description", "Flow shift parameter for FLUX model prediction type."},
-						{"ui:widget", "input_float"},
-						{"ui:options", {
-							{"step", 0.1f},
-							{"step_fast", 0.5f},
-							{"format", "%.2f"}
-						}}
-					}},
 					{"shifted_timestep", {
 						{"type", "integer"},
 						{"title", "Shifted Timestep"},
@@ -224,33 +175,90 @@ namespace ECS {
 							{"min", 0},
 							{"max", 1000}
 						}}
-					}}
+					}},
+				// New context parameters
+				{"lora_apply_mode", {
+					{"type", "integer"},
+					{"title", "LoRA Apply Mode"},
+					{"description", "When to apply LoRAs (auto, immediate, at runtime)."},
+					{"ui:widget", "combo"},
+					{"items", lora_apply_mode_items},
+					{"itemCount", lora_apply_mode_item_count}
+				}},
+				{"enable_mmap", {
+					{"type", "boolean"},
+					{"title", "Enable mmap"},
+					{"description", "Use memory-mapped file I/O for model loading. Reduces memory usage but may be slower."},
+					{"ui:widget", "checkbox"}
+				}},
+				{"qwen_image_zero_cond_t", {
+					{"type", "boolean"},
+					{"title", "Qwen Image Zero Cond T"},
+					{"description", "Enable Qwen image zero conditioning for LLM-based image generation."},
+					{"ui:widget", "checkbox"}
+				}},
+				{"max_vram", {
+					{"type", "string"},
+					{"title", "Max VRAM"},
+					{"description", "Maximum VRAM to use (in GiB) or backend assignment spec. '0' = disabled, '-1' = auto."},
+					{"ui:widget", "text"}
+				}},
+				{"stream_layers", {
+					{"type", "boolean"},
+					{"title", "Stream Layers"},
+					{"description", "Enable residency+prefetch streaming when max_vram is set."},
+					{"ui:widget", "checkbox"}
+				}},
+				{"eager_load", {
+					{"type", "boolean"},
+					{"title", "Eager Load"},
+					{"description", "Load all parameters at model-load time instead of lazily."},
+					{"ui:widget", "checkbox"}
+				}},
+				{"backend", {
+					{"type", "string"},
+					{"title", "Backend"},
+					{"description", "Backend to use for computation (e.g., 'cuda', 'cpu')."},
+					{"ui:widget", "text"}
+				}},
+				{"params_backend", {
+					{"type", "string"},
+					{"title", "Params Backend"},
+					{"description", "Backend to store model parameters."},
+					{"ui:widget", "text"}
+				}},
+				{"rpc_servers", {
+					{"type", "string"},
+					{"title", "RPC Servers"},
+					{"description", "RPC server endpoints for distributed inference."},
+					{"ui:widget", "text"}
+				}},
+				{"extra_sample_args", {
+					{"type", "string"},
+					{"title", "Extra Sample Args"},
+					{"description", "Additional arguments for sampling (advanced)."},
+					{"ui:widget", "text"}
 				}}
+			}}
 			};
 		}
 
 		// Core sampling parameters (from sd_sample_params_t)
 		int seed = -1;
 		int steps = 20;
-		float eta = 0.0f;  // Added: part of sd_sample_params_t
+		float eta = 0.0f;
 		float denoise = 1.0;
-		float cfg = 7.0;
 		int n_threads = 4;
 		bool free_params_immediately = true;
 
-		// System-wide control flags (from sd_ctx_params_t)
+		// Context flags (from sd_ctx_params_t)
 		bool offload_params_to_cpu = false;
 		bool keep_clip_on_cpu = false;
 		bool keep_control_net_on_cpu = false;
-		bool keep_vae_on_cpu = false;
 		bool diffusion_flash_attn = false;
 		bool diffusion_conv_direct = false;
 		bool vae_conv_direct = false;
 		bool force_sdxl_vae_conv_scale = false;
-		bool chroma_use_dit_mask = false;
-		bool chroma_use_t5_mask = false;
-		int chroma_t5_mask_pad = 0;
-		float flow_shift = 0.0f;
 		int shifted_timestep = 0;
 
 		// Method selections
@@ -259,34 +267,50 @@ namespace ECS {
 		sd_type_t current_type_method = SD_TYPE_F16;
 		prediction_t current_prediction_type = EPS_PRED;
 
+		// New context parameters
+		enum lora_apply_mode_t lora_apply_mode = LORA_APPLY_AUTO;
+		bool enable_mmap = true;
+		bool qwen_image_zero_cond_t = false;
+		std::string max_vram = "-1";
+		bool stream_layers = false;
+		bool eager_load = false;
+		std::string backend;
+		std::string params_backend;
+		std::string rpc_servers;
+		std::vector<float> custom_sigmas;
+		std::string extra_sample_args;
+
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
 			properties["seed"] = &seed;
 			properties["steps"] = &steps;
 			properties["eta"] = &eta;
 			properties["denoise"] = &denoise;
-			properties["cfg"] = &cfg;
 			properties["n_threads"] = &n_threads;
 			properties["free_params_immediately"] = &free_params_immediately;
 			properties["offload_params_to_cpu"] = &offload_params_to_cpu;
 			properties["keep_clip_on_cpu"] = &keep_clip_on_cpu;
 			properties["keep_control_net_on_cpu"] = &keep_control_net_on_cpu;
-			properties["keep_vae_on_cpu"] = &keep_vae_on_cpu;
 			properties["diffusion_flash_attn"] = &diffusion_flash_attn;
 			properties["diffusion_conv_direct"] = &diffusion_conv_direct;
 			properties["vae_conv_direct"] = &vae_conv_direct;
 			properties["force_sdxl_vae_conv_scale"] = &force_sdxl_vae_conv_scale;
-			properties["chroma_use_dit_mask"] = &chroma_use_dit_mask;
-			properties["chroma_use_t5_mask"] = &chroma_use_t5_mask;
-			properties["chroma_t5_mask_pad"] = &chroma_t5_mask_pad;
-			properties["flow_shift"] = &flow_shift;
 			properties["shifted_timestep"] = &shifted_timestep;
-
 			properties["current_sample_method"] = reinterpret_cast<int*>(&current_sample_method);
 			properties["current_scheduler_method"] = reinterpret_cast<int*>(&current_scheduler_method);
 			properties["current_type_method"] = reinterpret_cast<int*>(&current_type_method);
 			properties["current_prediction_type"] = reinterpret_cast<int*>(&current_prediction_type);
-
+			properties["lora_apply_mode"] = reinterpret_cast<int*>(&lora_apply_mode);
+			properties["enable_mmap"] = &enable_mmap;
+			properties["qwen_image_zero_cond_t"] = &qwen_image_zero_cond_t;
+			properties["max_vram"] = &max_vram;
+			properties["stream_layers"] = &stream_layers;
+			properties["eager_load"] = &eager_load;
+			properties["backend"] = &backend;
+			properties["params_backend"] = &params_backend;
+			properties["rpc_servers"] = &rpc_servers;
+			properties["extra_sample_args"] = &extra_sample_args;
+			// custom_sigmas is not directly exposed in UI, but serialized
 			return properties;
 		}
 
@@ -296,26 +320,31 @@ namespace ECS {
 				steps = other.steps;
 				eta = other.eta;
 				denoise = other.denoise;
-				cfg = other.cfg;
 				n_threads = other.n_threads;
 				free_params_immediately = other.free_params_immediately;
 				offload_params_to_cpu = other.offload_params_to_cpu;
 				keep_clip_on_cpu = other.keep_clip_on_cpu;
 				keep_control_net_on_cpu = other.keep_control_net_on_cpu;
-				keep_vae_on_cpu = other.keep_vae_on_cpu;
 				diffusion_flash_attn = other.diffusion_flash_attn;
 				diffusion_conv_direct = other.diffusion_conv_direct;
 				vae_conv_direct = other.vae_conv_direct;
 				force_sdxl_vae_conv_scale = other.force_sdxl_vae_conv_scale;
-				chroma_use_dit_mask = other.chroma_use_dit_mask;
-				chroma_use_t5_mask = other.chroma_use_t5_mask;
-				chroma_t5_mask_pad = other.chroma_t5_mask_pad;
-				flow_shift = other.flow_shift;
 				shifted_timestep = other.shifted_timestep;
 				current_sample_method = other.current_sample_method;
 				current_scheduler_method = other.current_scheduler_method;
 				current_type_method = other.current_type_method;
 				current_prediction_type = other.current_prediction_type;
+				lora_apply_mode = other.lora_apply_mode;
+				enable_mmap = other.enable_mmap;
+				qwen_image_zero_cond_t = other.qwen_image_zero_cond_t;
+				max_vram = other.max_vram;
+				stream_layers = other.stream_layers;
+				eager_load = other.eager_load;
+				backend = other.backend;
+				params_backend = other.params_backend;
+				rpc_servers = other.rpc_servers;
+				custom_sigmas = other.custom_sigmas;
+				extra_sample_args = other.extra_sample_args;
 			}
 			return *this;
 		}
@@ -325,27 +354,32 @@ namespace ECS {
 				{"seed", seed},
 				{"steps", steps},
 				{"eta", eta},
-				{"cfg", cfg},
 				{"denoise", denoise},
 				{"n_threads", n_threads},
 				{"free_params_immediately", free_params_immediately},
 				{"offload_params_to_cpu", offload_params_to_cpu},
 				{"keep_clip_on_cpu", keep_clip_on_cpu},
 				{"keep_control_net_on_cpu", keep_control_net_on_cpu},
-				{"keep_vae_on_cpu", keep_vae_on_cpu},
 				{"diffusion_flash_attn", diffusion_flash_attn},
 				{"diffusion_conv_direct", diffusion_conv_direct},
 				{"vae_conv_direct", vae_conv_direct},
 				{"force_sdxl_vae_conv_scale", force_sdxl_vae_conv_scale},
-				{"chroma_use_dit_mask", chroma_use_dit_mask},
-				{"chroma_use_t5_mask", chroma_use_t5_mask},
-				{"chroma_t5_mask_pad", chroma_t5_mask_pad},
-				{"flow_shift", flow_shift},
 				{"shifted_timestep", shifted_timestep},
 				{"current_sample_method", static_cast<int>(current_sample_method)},
 				{"current_scheduler_method", static_cast<int>(current_scheduler_method)},
 				{"current_type_method", static_cast<int>(current_type_method)},
-				{"current_prediction_type", static_cast<int>(current_prediction_type)}
+				{"current_prediction_type", static_cast<int>(current_prediction_type)},
+				{"lora_apply_mode", static_cast<int>(lora_apply_mode)},
+				{"enable_mmap", enable_mmap},
+				{"qwen_image_zero_cond_t", qwen_image_zero_cond_t},
+				{"max_vram", max_vram},
+				{"stream_layers", stream_layers},
+				{"eager_load", eager_load},
+				{"backend", backend},
+				{"params_backend", params_backend},
+				{"rpc_servers", rpc_servers},
+				{"custom_sigmas", custom_sigmas},
+				{"extra_sample_args", extra_sample_args}
 			}} };
 		}
 
@@ -374,8 +408,6 @@ namespace ECS {
 				steps = componentData["steps"];
 			if (componentData.contains("eta"))
 				eta = componentData["eta"];
-			if (componentData.contains("cfg"))
-				cfg = componentData["cfg"];
 			if (componentData.contains("denoise"))
 				denoise = componentData["denoise"];
 			if (componentData.contains("n_threads"))
@@ -388,8 +420,6 @@ namespace ECS {
 				keep_clip_on_cpu = componentData["keep_clip_on_cpu"].get<bool>();
 			if (componentData.contains("keep_control_net_on_cpu"))
 				keep_control_net_on_cpu = componentData["keep_control_net_on_cpu"].get<bool>();
-			if (componentData.contains("keep_vae_on_cpu"))
-				keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
 			if (componentData.contains("diffusion_flash_attn"))
 				diffusion_flash_attn = componentData["diffusion_flash_attn"].get<bool>();
 			if (componentData.contains("diffusion_conv_direct"))
@@ -398,24 +428,39 @@ namespace ECS {
 				vae_conv_direct = componentData["vae_conv_direct"].get<bool>();
 			if (componentData.contains("force_sdxl_vae_conv_scale"))
 				force_sdxl_vae_conv_scale = componentData["force_sdxl_vae_conv_scale"].get<bool>();
-			if (componentData.contains("chroma_use_dit_mask"))
-				chroma_use_dit_mask = componentData["chroma_use_dit_mask"].get<bool>();
-			if (componentData.contains("chroma_use_t5_mask"))
-				chroma_use_t5_mask = componentData["chroma_use_t5_mask"].get<bool>();
-			if (componentData.contains("chroma_t5_mask_pad"))
-				chroma_t5_mask_pad = componentData["chroma_t5_mask_pad"];
-			if (componentData.contains("flow_shift"))
-				flow_shift = componentData["flow_shift"];
 			if (componentData.contains("shifted_timestep"))
 				shifted_timestep = componentData["shifted_timestep"];
 			if (componentData.contains("current_sample_method"))
-				current_sample_method = static_cast<sample_method_t>(componentData["current_sample_method"]);
+				current_sample_method = static_cast<sample_method_t>(componentData["current_sample_method"].get<int>());
 			if (componentData.contains("current_scheduler_method"))
-				current_scheduler_method = static_cast<scheduler_t>(componentData["current_scheduler_method"]);
+				current_scheduler_method = static_cast<scheduler_t>(componentData["current_scheduler_method"].get<int>());
 			if (componentData.contains("current_type_method"))
-				current_type_method = static_cast<sd_type_t>(componentData["current_type_method"]);
+				current_type_method = static_cast<sd_type_t>(componentData["current_type_method"].get<int>());
 			if (componentData.contains("current_prediction_type"))
-				current_prediction_type = static_cast<prediction_t>(componentData["current_prediction_type"]);
+				current_prediction_type = static_cast<prediction_t>(componentData["current_prediction_type"].get<int>());
+			if (componentData.contains("lora_apply_mode"))
+				lora_apply_mode = static_cast<lora_apply_mode_t>(componentData["lora_apply_mode"].get<int>());
+			if (componentData.contains("enable_mmap"))
+				enable_mmap = componentData["enable_mmap"].get<bool>();
+			if (componentData.contains("qwen_image_zero_cond_t"))
+				qwen_image_zero_cond_t = componentData["qwen_image_zero_cond_t"].get<bool>();
+			if (componentData.contains("max_vram"))
+				max_vram = componentData["max_vram"].get<std::string>();
+			if (componentData.contains("stream_layers"))
+				stream_layers = componentData["stream_layers"].get<bool>();
+			if (componentData.contains("eager_load"))
+				eager_load = componentData["eager_load"].get<bool>();
+			if (componentData.contains("backend"))
+				backend = componentData["backend"].get<std::string>();
+			if (componentData.contains("params_backend"))
+				params_backend = componentData["params_backend"].get<std::string>();
+			if (componentData.contains("rpc_servers"))
+				rpc_servers = componentData["rpc_servers"].get<std::string>();
+			if (componentData.contains("custom_sigmas") && componentData["custom_sigmas"].is_array()) {
+				custom_sigmas = componentData["custom_sigmas"].get<std::vector<float>>();
+			}
+			if (componentData.contains("extra_sample_args"))
+				extra_sample_args = componentData["extra_sample_args"].get<std::string>();
 		}
 	};
 

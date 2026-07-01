@@ -31,12 +31,6 @@ namespace Utils {
 			{
 				// Get default project path from FilePaths
 				std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
-
-				if (defaultProjectPath.empty() || defaultProjectPath[0] == '\0') {
-					// Fallback to executable directory
-					defaultProjectPath = Utils::FilePathService::GetExecutableDir();
-				}
-
 				outputPath = defaultProjectPath + "/AniStudio_output.png";
 				std::cout << "Empty output path, using default: " << outputPath << std::endl;
 			}
@@ -49,12 +43,6 @@ namespace Utils {
 			{
 				// Get default project path from FilePaths
 				std::string defaultProjectPath = Utils::FilePathService::GetPath("DefaultProject");
-
-				if (defaultProjectPath.empty() || defaultProjectPath[0] == '\0') {
-					// Fallback to executable directory
-					defaultProjectPath = Utils::FilePathService::GetExecutableDir();
-				}
-
 				outputFilePath = std::filesystem::path(defaultProjectPath) / outputFilePath;
 				outputPath = outputFilePath.string();
 			}

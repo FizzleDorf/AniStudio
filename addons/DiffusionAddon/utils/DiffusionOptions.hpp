@@ -1,6 +1,5 @@
 #pragma once
 
-// sd_type constants - matching enum sd_type_t order with gaps
 constexpr const char* type_method_items[] = {
     "SD_TYPE_F32",
     "SD_TYPE_F16",
@@ -39,7 +38,6 @@ constexpr const char* type_method_items[] = {
 };
 constexpr const int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
 
-// sample_method_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* sample_method_items[] = {
     "EULER",
     "EULER_A",
@@ -62,7 +60,6 @@ constexpr const char* sample_method_items[] = {
 };
 constexpr const int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
 
-// scheduler_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* scheduler_method_items[] = {
     "DISCRETE",
     "KARRAS",
@@ -79,7 +76,6 @@ constexpr const char* scheduler_method_items[] = {
 };
 constexpr const int scheduler_method_item_count = sizeof(scheduler_method_items) / sizeof(scheduler_method_items[0]);
 
-// rng_type_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* type_rng_items[] = {
     "STD_DEFAULT_RNG",
     "CUDA_RNG",
@@ -87,7 +83,6 @@ constexpr const char* type_rng_items[] = {
 };
 constexpr const int type_rng_item_count = sizeof(type_rng_items) / sizeof(type_rng_items[0]);
 
-// prediction_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* prediction_type_items[] = {
     "EPS_PRED",
     "V_PRED",
@@ -98,7 +93,6 @@ constexpr const char* prediction_type_items[] = {
 };
 constexpr const int prediction_type_item_count = sizeof(prediction_type_items) / sizeof(prediction_type_items[0]);
 
-// preview_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* preview_type_items[] = {
     "PREVIEW_NONE",
     "PREVIEW_PROJ",
@@ -107,7 +101,6 @@ constexpr const char* preview_type_items[] = {
 };
 constexpr const int preview_type_item_count = sizeof(preview_type_items) / sizeof(preview_type_items[0]);
 
-// lora_apply_mode_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* lora_apply_mode_items[] = {
     "LORA_APPLY_AUTO",
     "LORA_APPLY_IMMEDIATELY",
@@ -115,7 +108,6 @@ constexpr const char* lora_apply_mode_items[] = {
 };
 constexpr const int lora_apply_mode_item_count = sizeof(lora_apply_mode_items) / sizeof(lora_apply_mode_items[0]);
 
-// cache_mode_t constants - matching exact enum order from stable-diffusion.h
 constexpr const char* cache_mode_items[] = {
     "DISABLED",
     "EASYCACHE",
@@ -126,3 +118,11 @@ constexpr const char* cache_mode_items[] = {
     "SPECTRUM"
 };
 constexpr const int cache_mode_item_count = sizeof(cache_mode_items) / sizeof(cache_mode_items[0]);
+
+constexpr const char* vae_format_items[] = {
+    "AUTO",
+    "FLUX",
+    "SD3",
+    "FLUX2"
+};
+constexpr const int vae_format_item_count = sizeof(vae_format_items) / sizeof(vae_format_items[0]);

@@ -11,25 +11,26 @@
 #include <stb_image_write.h>
 #include <iostream>
 #include <filesystem>
+#include <vector>
 
 namespace Utils
 {
 	uint64_t generateRandomSeed();
-	void SaveImage(const unsigned char *data, int width, int height, int channels,
-		const nlohmann::json &metadata, const std::string &fullPath);
+	void SaveImage(const unsigned char* data, int width, int height, int channels,
+		const nlohmann::json& metadata, const std::string& fullPath);
 
 	class Img2Img
 	{
 	public:
-		static bool RunImg2Img(const nlohmann::json &metadata, const std::string &fullPath, sd_ctx_t *sd_context = nullptr)
+		static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* sd_context = nullptr)
 		{
 			bool contextProvided = (sd_context != nullptr);
-			unsigned char *inputData = nullptr;
-			unsigned char *maskData = nullptr;
-			unsigned char *emptyMaskData = nullptr;
-			sd_image_t *result_image = nullptr;
+			unsigned char* inputData = nullptr;
+			unsigned char* maskData = nullptr;
+			unsigned char* emptyMaskData = nullptr;
+			sd_image_t* result_images = nullptr;
+			int num_result_images = 0;
 
-			// Arrays to track additional images that need cleanup
 			std::vector<sd_image_t> imagesToCleanup;
 			std::vector<sd_image_t> idImagesStorage;
 			std::vector<sd_image_t> refImagesStorage;
@@ -46,13 +47,8 @@ namespace Utils
 				int latentWidth = 0;
 				int latentHeight = 0;
 
-				// VAE tiling parameters
 				sd_tiling_params_t vae_tiling_params = { false, 64, 64, 0.0f, 64.0f, 64.0f };
-
-				// PhotoMaker parameters
 				sd_pm_params_t pm_params = { nullptr, 0, nullptr, 0.0f };
-
-				// ControlNet image
 				sd_image_t control_image = { 0, 0, 0, nullptr };
 				float control_strength = 0.0f;
 
@@ -61,7 +57,7 @@ namespace Utils
 
 				if (metadata.contains("components") && metadata["components"].is_array())
 				{
-					for (const auto &comp : metadata["components"])
+					for (const auto& comp : metadata["components"])
 					{
 						if (comp.contains("InputImage"))
 						{
@@ -132,7 +128,6 @@ namespace Utils
 								gen_params.sample_params.guidance.distilled_guidance = guidanceData["distilled_guidance"].get<float>();
 						}
 
-						// SLG component
 						if (comp.contains("SLG"))
 						{
 							nlohmann::json slgData = comp["SLG"];
@@ -169,7 +164,6 @@ namespace Utils
 								latentHeight = latentData["latentHeight"].get<int>();
 						}
 
-						// VAE component - read all tiling parameters
 						if (comp.contains("Vae"))
 						{
 							nlohmann::json vaeData = comp["Vae"];
@@ -187,7 +181,6 @@ namespace Utils
 								vae_tiling_params.rel_size_y = vaeData["rel_size_y"].get<float>();
 						}
 
-						// PhotoMaker component
 						if (comp.contains("PhotoMaker"))
 						{
 							nlohmann::json pmData = comp["PhotoMaker"];
@@ -202,7 +195,6 @@ namespace Utils
 							}
 						}
 
-						// ControlNet component
 						if (comp.contains("Controlnet"))
 						{
 							nlohmann::json controlNetData = comp["Controlnet"];
@@ -212,12 +204,9 @@ namespace Utils
 							}
 						}
 
-						// ControlNet Image component
 						if (comp.contains("ControlNetImage"))
 						{
 							nlohmann::json controlImageData = comp["ControlNetImage"];
-
-							// Load control image
 							if (controlImageData.contains("filePath") && !controlImageData["filePath"].is_null() &&
 								!controlImageData["filePath"].get<std::string>().empty())
 							{
@@ -227,19 +216,15 @@ namespace Utils
 									imagesToCleanup.push_back(control_image);
 								}
 							}
-
-							// Get control strength from image component if not set from ControlNet component
 							if (controlImageData.contains("strength") && !controlImageData["strength"].is_null() && control_strength == 0.0f)
 							{
 								control_strength = controlImageData["strength"].get<float>();
 							}
 						}
 
-						// PhotoMaker ID Images - can have multiple
 						if (comp.contains("PhotoMakerImage"))
 						{
 							nlohmann::json pmImageData = comp["PhotoMakerImage"];
-
 							if (pmImageData.contains("filePath") && !pmImageData["filePath"].is_null() &&
 								!pmImageData["filePath"].get<std::string>().empty())
 							{
@@ -252,11 +237,9 @@ namespace Utils
 							}
 						}
 
-						// Reference Image component (for img2img or style transfer)
 						if (comp.contains("ReferenceImage"))
 						{
 							nlohmann::json refImageData = comp["ReferenceImage"];
-
 							if (refImageData.contains("filePath") && !refImageData["filePath"].is_null() &&
 								!refImageData["filePath"].get<std::string>().empty())
 							{
@@ -267,8 +250,6 @@ namespace Utils
 									imagesToCleanup.push_back(ref_image);
 								}
 							}
-
-							// Get reference image settings
 							if (refImageData.contains("autoResize") && !refImageData["autoResize"].is_null())
 							{
 								gen_params.auto_resize_ref_image = refImageData["autoResize"].get<bool>();
@@ -285,18 +266,14 @@ namespace Utils
 				gen_params.negative_prompt = negPrompt.c_str();
 				gen_params.control_image = control_image;
 				gen_params.control_strength = control_strength;
-
-				// Set VAE tiling parameters
 				gen_params.vae_tiling_params = vae_tiling_params;
 
-				// Set up PhotoMaker ID images array
 				if (!idImagesStorage.empty()) {
 					pm_params.id_images_count = idImagesStorage.size();
 					pm_params.id_images = idImagesStorage.data();
 					gen_params.pm_params = pm_params;
 				}
 
-				// Set up reference images array
 				if (!refImagesStorage.empty()) {
 					gen_params.ref_images_count = refImagesStorage.size();
 					gen_params.ref_images = refImagesStorage.data();
@@ -310,9 +287,6 @@ namespace Utils
 					throw std::runtime_error("Input image file not found: " + inputImagePath);
 				}
 
-				std::cout << "=== Img2Img Debug ===" << std::endl;
-				std::cout << "Input image path: " << inputImagePath << std::endl;
-
 				int inputWidth, inputHeight, inputChannels;
 				inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
 				if (!inputData) {
@@ -320,17 +294,11 @@ namespace Utils
 				}
 				inputChannels = 3;
 
-				std::cout << "Loaded image dimensions: " << inputWidth << "x" << inputHeight << std::endl;
-
 				if (latentWidth <= 0 || latentHeight <= 0) {
 					latentWidth = inputWidth;
 					latentHeight = inputHeight;
 				}
-
 				if (latentWidth != inputWidth || latentHeight != inputHeight) {
-					std::cout << "WARNING: Latent dimensions (" << latentWidth << "x" << latentHeight
-						<< ") don't match input image (" << inputWidth << "x" << inputHeight << ")" << std::endl;
-					std::cout << "Auto-adjusting latent to match input image..." << std::endl;
 					latentWidth = inputWidth;
 					latentHeight = inputHeight;
 				}
@@ -343,7 +311,6 @@ namespace Utils
 					static_cast<uint32_t>(inputHeight),
 					3,
 					inputData };
-
 				gen_params.init_image = input_image;
 
 				if (maskImagePath.empty() || !std::filesystem::exists(maskImagePath))
@@ -351,7 +318,6 @@ namespace Utils
 					size_t maskSize = inputWidth * inputHeight;
 					emptyMaskData = new unsigned char[maskSize];
 					std::memset(emptyMaskData, 255, maskSize);
-
 					gen_params.mask_image.width = static_cast<uint32_t>(inputWidth);
 					gen_params.mask_image.height = static_cast<uint32_t>(inputHeight);
 					gen_params.mask_image.channel = 1;
@@ -361,13 +327,15 @@ namespace Utils
 				{
 					int maskWidth, maskHeight, maskChannels;
 					maskData = stbi_load(maskImagePath.c_str(), &maskWidth, &maskHeight, &maskChannels, 1);
-
-					if (!maskData)
+					if (!maskData || maskWidth != inputWidth || maskHeight != inputHeight)
 					{
+						if (maskData) {
+							stbi_image_free(maskData);
+							maskData = nullptr;
+						}
 						size_t maskSize = inputWidth * inputHeight;
 						emptyMaskData = new unsigned char[maskSize];
 						std::memset(emptyMaskData, 255, maskSize);
-
 						gen_params.mask_image.width = static_cast<uint32_t>(inputWidth);
 						gen_params.mask_image.height = static_cast<uint32_t>(inputHeight);
 						gen_params.mask_image.channel = 1;
@@ -375,41 +343,16 @@ namespace Utils
 					}
 					else
 					{
-						if (maskWidth != inputWidth || maskHeight != inputHeight)
-						{
-							stbi_image_free(maskData);
-							maskData = nullptr;
-
-							size_t maskSize = inputWidth * inputHeight;
-							emptyMaskData = new unsigned char[maskSize];
-							std::memset(emptyMaskData, 255, maskSize);
-
-							gen_params.mask_image.width = static_cast<uint32_t>(inputWidth);
-							gen_params.mask_image.height = static_cast<uint32_t>(inputHeight);
-							gen_params.mask_image.channel = 1;
-							gen_params.mask_image.data = emptyMaskData;
-						}
-						else
-						{
-							gen_params.mask_image.width = static_cast<uint32_t>(maskWidth);
-							gen_params.mask_image.height = static_cast<uint32_t>(maskHeight);
-							gen_params.mask_image.channel = 1;
-							gen_params.mask_image.data = maskData;
-						}
+						gen_params.mask_image.width = static_cast<uint32_t>(maskWidth);
+						gen_params.mask_image.height = static_cast<uint32_t>(maskHeight);
+						gen_params.mask_image.channel = 1;
+						gen_params.mask_image.data = maskData;
 					}
 				}
 
-				std::cout << "Final settings:" << std::endl;
-				std::cout << "  - Input image: " << inputWidth << "x" << inputHeight << std::endl;
-				std::cout << "  - Target size: " << gen_params.width << "x" << gen_params.height << std::endl;
-				std::cout << "  - Strength: " << gen_params.strength << std::endl;
-				std::cout << "=====================" << std::endl;
-
-				// Get SD context if not provided
 				if (!contextProvided) {
 					sd_context = SDContextManager::GetOrCreateContext(metadata);
 				}
-
 				if (!sd_context) {
 					throw std::runtime_error("Failed to initialize Stable Diffusion context!");
 				}
@@ -418,38 +361,30 @@ namespace Utils
 					gen_params.seed = static_cast<int64_t>(generateRandomSeed());
 				}
 
-				result_image = generate_image(sd_context, &gen_params);
-				if (!result_image || !result_image->data) {
+				bool success = generate_image(sd_context, &gen_params, &result_images, &num_result_images);
+				if (!success || num_result_images == 0 || !result_images || !result_images[0].data) {
 					throw std::runtime_error("generate_image failed");
 				}
 
-				SaveImage(result_image->data, result_image->width, result_image->height,
-					result_image->channel, metadata, fullPath);
+				SaveImage(result_images[0].data, result_images[0].width, result_images[0].height,
+					result_images[0].channel, metadata, fullPath);
 
-				// Cleanup
-				CleanupResources(inputData, maskData, emptyMaskData, result_image,
+				CleanupResources(inputData, maskData, emptyMaskData, result_images, num_result_images,
 					slg_layers, imagesToCleanup);
 
-				// Release context back to cache if we acquired it
 				if (!contextProvided) {
 					SDContextManager::ReleaseContext(sd_context);
 				}
-
 				return true;
 			}
-			catch (const std::exception &e)
+			catch (const std::exception& e)
 			{
 				std::cerr << "Exception during img2img: " << e.what() << std::endl;
-
-				// Cleanup on error
-				CleanupResources(inputData, maskData, emptyMaskData, result_image,
+				CleanupResources(inputData, maskData, emptyMaskData, result_images, num_result_images,
 					slg_layers, imagesToCleanup);
-
-				// Release context back to cache if we acquired it
 				if (!contextProvided && sd_context) {
 					SDContextManager::ReleaseContext(sd_context);
 				}
-
 				return false;
 			}
 		}
@@ -458,11 +393,11 @@ namespace Utils
 		static void CleanupResources(unsigned char* inputData,
 			unsigned char* maskData,
 			unsigned char* emptyMaskData,
-			sd_image_t* result_image,
+			sd_image_t* result_images,
+			int num_result_images,
 			int* slg_layers,
 			std::vector<sd_image_t>& imagesToCleanup) {
 
-			// Cleanup main image data
 			if (inputData) {
 				stbi_image_free(inputData);
 				inputData = nullptr;
@@ -475,31 +410,28 @@ namespace Utils
 				delete[] emptyMaskData;
 				emptyMaskData = nullptr;
 			}
-			if (result_image) {
-				free(result_image);
-				result_image = nullptr;
+			if (result_images) {
+				free_sd_images(result_images, num_result_images);
+				result_images = nullptr;
 			}
-
-			// Cleanup SLG layers array if it was allocated
-			if (slg_layers != nullptr)
-			{
+			if (slg_layers) {
 				delete[] slg_layers;
+				slg_layers = nullptr;
 			}
-
-			// Cleanup additional loaded images
 			for (auto& img : imagesToCleanup) {
-				FreeSDImage(img);
+				if (img.data) {
+					stbi_image_free(img.data);
+					img.data = nullptr;
+				}
 			}
+			imagesToCleanup.clear();
 		}
 
-		// Helper function to load image from file to sd_image_t
 		static sd_image_t LoadImageToSDImage(const std::string& filePath) {
 			sd_image_t result = { 0, 0, 0, nullptr };
-
 			if (filePath.empty() || !std::filesystem::exists(filePath)) {
 				return result;
 			}
-
 			int width, height, channels;
 			unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
 			if (data) {
@@ -508,16 +440,7 @@ namespace Utils
 				result.channel = channels;
 				result.data = data;
 			}
-
 			return result;
-		}
-
-		// Helper to free sd_image_t data
-		static void FreeSDImage(sd_image_t& img) {
-			if (img.data) {
-				stbi_image_free(img.data);
-				img.data = nullptr;
-			}
 		}
 	};
 }

@@ -64,10 +64,6 @@ namespace GUI {
 		else if (!defaultProject.empty() && defaultProject[0] != '\0') {
 			outputComp.filePath = defaultProject;
 		}
-		else {
-			// Fallback to executable directory if all else fails
-			outputComp.filePath = Utils::FilePathService::GetExecutableDir();
-		}
 
 		auto& esrganComp = mgr.GetComponent<EsrganComponent>(upscaleEntity);
 		esrganComp.upscaleFactor = 2;
@@ -90,7 +86,6 @@ namespace GUI {
 	void UpscaleView::RenderEntityComponents(const EntityID entity) {
 		if (entity == 0 || !IsEntitySafeToUse(entity)) return;
 
-		// Get all components and organize by category
 		auto componentIds = mgr.GetEntityComponents(entity);
 		std::map<std::string, std::vector<std::pair<ComponentTypeID, std::string>>> categorizedComponents;
 
@@ -103,10 +98,8 @@ namespace GUI {
 			categorizedComponents[category].emplace_back(compId, componentName);
 		}
 
-		// Get the desired render order
 		std::vector<std::string> renderOrder = GetCategoryRenderOrder();
 
-		// First render categories in the specified order
 		for (const auto& category : renderOrder) {
 			auto it = categorizedComponents.find(category);
 			if (it != categorizedComponents.end()) {
@@ -115,12 +108,10 @@ namespace GUI {
 						RenderComponent(entity, compId, componentName);
 					}
 				}
-				// Remove from map so it doesn't render again
 				categorizedComponents.erase(it);
 			}
 		}
 
-		// Render remaining categories that weren't in the ordered list
 		for (const auto&[category, components] : categorizedComponents) {
 			if (ImGui::CollapsingHeader(category.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
 				for (const auto&[compId, componentName] : components) {
@@ -131,7 +122,6 @@ namespace GUI {
 	}
 
 	void UpscaleView::RenderComponent(EntityID entity, ComponentTypeID compId, const std::string& componentName) {
-		// Component visibility checkbox
 		if (componentVisibility.find(componentName) == componentVisibility.end()) {
 			componentVisibility[componentName] = true;
 		}
@@ -145,20 +135,16 @@ namespace GUI {
 
 		ImGui::Indent();
 
-		// Store cursor position for context menu
 		ImVec2 contentStart = ImGui::GetCursorScreenPos();
 
-		// Get component and render its UI
 		auto* component = mgr.GetComponentById(entity, compId);
 		if (component && !component->schema.empty()) {
 			try {
 				auto properties = component->GetPropertyMap();
 
-				// Special handling for specific components
 				if (componentName == "InputImage") {
 					UISchema::RenderSchema(component->schema, properties);
 
-					// Add button to use image dimensions for output estimation
 					if (ImGui::Button("Show Output Estimate", ImVec2(-1.0f, 0))) {
 						if (mgr.HasComponent<InputImageComponent>(entity) && mgr.HasComponent<EsrganComponent>(entity)) {
 							auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
@@ -193,7 +179,6 @@ namespace GUI {
 					}
 				}
 				else {
-					// Standard component rendering
 					UISchema::RenderSchema(component->schema, properties);
 				}
 			}
@@ -203,7 +188,6 @@ namespace GUI {
 			}
 		}
 
-		// Add context menu for component
 		ImVec2 contentEnd = ImGui::GetCursorScreenPos();
 		ImVec2 contentSize = ImVec2(ImGui::GetContentRegionAvail().x, contentEnd.y - contentStart.y);
 
@@ -312,43 +296,33 @@ namespace GUI {
 		}
 	}
 
-	// UpscaleView.cpp - HandleUpscaleEvent()
 	void UpscaleView::HandleUpscaleEvent() {
 		std::cout << "Creating entity for upscaling..." << std::endl;
 
-		// Clone the template entity for processing (like DiffusionView does)
 		EntityID newEntity = mgr.CloneEntity(upscaleEntity);
 		if (newEntity == 0) {
 			std::cerr << "Failed to create new entity!" << std::endl;
 			return;
 		}
 
-		// Ensure output component is properly configured
 		if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
 			auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
 
 			std::string defaultProject = Utils::FilePathService::GetPath("DefaultProject");
 
 			if (outputComp.filePath.empty()) {
-				// Use DefaultProject path if available
 				if (!defaultProject.empty() && defaultProject[0] != '\0') {
 					outputComp.filePath = defaultProject;
-				}
-				else {
-					// Fallback to executable directory
-					outputComp.filePath = Utils::FilePathService::GetExecutableDir();
-				}
+				}	
 			}
 
 			if (outputComp.fileName.empty()) {
 				outputComp.fileName = "AniStudio_upscaled";
 			}
 
-			// Create output directory if it doesn't exist
 			std::filesystem::create_directories(outputComp.filePath);
 		}
 
-		// NEW: Use proper event system with data
 		auto taskData = std::make_pair(newEntity, ECS::SDCPPSystem::TaskType::Upscaling);
 		ANI::Events::Ref().QueueEventWithData("QueueDiffusionTask", taskData);
 
@@ -358,7 +332,6 @@ namespace GUI {
 	void UpscaleView::RenderQueueList() {
 		ImGui::SetNextWindowSize(ImVec2(300, 500), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin("Upscale Queue")) {
-			// Get progress data from DiffusionCallbackUtils
 			const auto& progressData = DiffusionCallbackUtils::GetProgressData();
 			int currentStep = progressData.currentStep;
 			int totalSteps = progressData.totalSteps;
@@ -380,7 +353,6 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			// Queue count input
 			if (ImGui::InputInt("Queue #", &numQueues, 1, 4)) {
 				if (numQueues < 1) {
 					numQueues = 1;
@@ -395,7 +367,6 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			// Control buttons - EXACTLY LIKE DIFFUSIONVIEW
 			if (isPaused) {
 				if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
 					ANI::Events::Ref().QueueEvent("ResumeDiffusionWorker");
@@ -419,7 +390,6 @@ namespace GUI {
 
 			ImGui::Separator();
 
-			// Queue table with move/remove operations - EXACT COPY FROM DIFFUSIONVIEW
 			if (ImGui::BeginTable("Queue", 3,
 				ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 
@@ -449,7 +419,7 @@ namespace GUI {
 							ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
 						}
 
-						// Controls column - EXACT SAME AS DIFFUSIONVIEW
+						// Controls column
 						ImGui::TableNextColumn();
 						if (!item.processing) {
 							if (i > 0) {
@@ -498,10 +468,8 @@ namespace GUI {
 	}
 
 	void UpscaleView::Render() {
-		// Render queue controls window - SAME PATTERN AS DIFFUSIONVIEW
 		RenderQueueList();
 
-		// Main upscale configuration window
 		ImGui::SetNextWindowSize(ImVec2(400, 800), ImGuiCond_FirstUseEver);
 		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 
@@ -516,16 +484,13 @@ namespace GUI {
 				ImGui::Separator();
 			}
 
-			// Render the upscale entity components using UISchema
 			RenderEntityComponents(upscaleEntity);
 
-			// Run button at the bottom
 			ImGui::Separator();
 			if (ImGui::Button("Run Upscale", ImVec2(-FLT_MIN, 0))) {
 				HandleUpscaleEvent();
 			}
 
-			// Quick queue button
 			ImGui::SameLine();
 			if (ImGui::Button("Queue 4", ImVec2(-FLT_MIN, 0))) {
 				numQueues = 4;
@@ -575,11 +540,7 @@ namespace GUI {
 
 	void UpscaleView::RenderMetadataControls() {
 
-		// Get default path for file dialogs
 		std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
-		if (defaultPath.empty() || defaultPath[0] == '\0') {
-			defaultPath = Utils::FilePathService::GetExecutableDir();
-		}
 
 		if (ImGui::Button("Save Settings", ImVec2(-FLT_MIN, 0))) {
 			IGFD::FileDialogConfig config;
@@ -617,7 +578,7 @@ namespace GUI {
 			nlohmann::json metadata = Serialize();
 			std::ofstream file(filepath);
 			if (file.is_open()) {
-				file << metadata.dump(4); // Pretty print with 4-space indentation
+				file << metadata.dump(4);
 				file.close();
 				std::cout << "Settings saved to: " << filepath << std::endl;
 			}

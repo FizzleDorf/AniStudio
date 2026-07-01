@@ -35,7 +35,6 @@ namespace ECS {
 		}
 
 		void RefreshSchema() override {
-			// Update the default path in the schema to current Checkpoint path
 			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
@@ -87,7 +86,6 @@ namespace ECS {
 		}
 
 		void RefreshSchema() override {
-			// Update the default path in the schema to current Unet path
 			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
@@ -110,7 +108,6 @@ namespace ECS {
 			return *this;
 		}
 	};
-
 
 	struct HighNoiseDiffusionModelComponent : public BaseModelComponent {
 		HighNoiseDiffusionModelComponent() {
@@ -154,6 +151,160 @@ namespace ECS {
 		}
 
 		HighNoiseDiffusionModelComponent& operator=(const HighNoiseDiffusionModelComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	struct UncondDiffusionModelComponent : public BaseModelComponent {
+		UncondDiffusionModelComponent() {
+			compName = "UncondDiffusionModel";
+			schema = {
+				{"title", "Unconditional Diffusion Model"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Uncond UNet"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "UNet Models"},
+							{"dialogDefaultPath", "Unet"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for unconditional diffusion model files"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Unet");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePathService::GetPath("Unet");
+		}
+
+		UncondDiffusionModelComponent& operator=(const UncondDiffusionModelComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	// ---- NEW COMPONENTS ----
+
+	// Audio VAE Component
+	struct AudioVAEComponent : public BaseModelComponent {
+		AudioVAEComponent() {
+			compName = "AudioVAE";
+			schema = {
+				{"title", "Audio VAE Settings"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Audio VAE"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt"},
+							{"filterName", "Audio VAE Models"},
+							{"dialogDefaultPath", "Vae"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for audio VAE model files (for audio/video models)"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Vae");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePathService::GetPath("Vae");
+		}
+
+		AudioVAEComponent& operator=(const AudioVAEComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
+	// Embeddings Connectors Component (for models like flux with special connectors)
+	struct EmbeddingComponent : public BaseModelComponent {
+		EmbeddingComponent() {
+			compName = "Embedding";
+			schema = {
+				{"title", "Embeddings Connectors"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Connectors Path"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "Connector Models"},
+							{"dialogDefaultPath", "Encoder"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for embeddings connector model files"}
+						}}
+					}}
+				}}
+			};
+		}
+
+		void RefreshSchema() override {
+			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
+				auto& prop = schema["properties"]["modelPath"];
+				if (prop.contains("ui:options")) {
+					auto& options = prop["ui:options"];
+					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
+				}
+			}
+		}
+
+		std::filesystem::path GetDefaultDirectory() const override {
+			return Utils::FilePathService::GetPath("Encoder");
+		}
+
+		EmbeddingComponent& operator=(const EmbeddingComponent& other) {
 			if (this != &other) {
 				modelPath = other.modelPath;
 				modelName = other.modelName;
