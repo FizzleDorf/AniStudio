@@ -19,7 +19,7 @@ namespace GUI {
 	public:
 		std::string viewName = "Base_View";
 
-		BaseView(ECS::EntityManager &entityMgr) : mgr(entityMgr) {}
+		BaseView(ECS::EntityManager& entityMgr) : mgr(entityMgr) {}
 		virtual ~BaseView() {}
 
 		static constexpr const char* GetMetadataJSON() {
@@ -36,7 +36,7 @@ namespace GUI {
 				nlohmann::json j = nlohmann::json::parse(T::GetMetadataJSON());
 				return j.get<ViewMetadata>();
 			}
-			catch (const std::exception& e) {
+			catch (const std::exception&) {
 				ViewMetadata meta;
 				meta.displayName = "Unknown";
 				meta.category = "Unknown";
@@ -71,13 +71,13 @@ namespace GUI {
 			return j;
 		}
 
-		virtual void Deserialize(const nlohmann::json &j) {
+		virtual void Deserialize(const nlohmann::json& j) {
 			if (j.contains("viewName"))
 				viewName = j["viewName"];
 		}
 
 	protected:
-		ECS::EntityManager &mgr;
+		ECS::EntityManager& mgr;
 		bool windowOpen = true;
 		bool isHidden = true;
 

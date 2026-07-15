@@ -10,11 +10,11 @@
 struct ImGuiContext;
 
 namespace GUI {
-	struct ViewManager;
+	class ViewManager;
 }
 
 namespace ANI {
-	struct StudioContext;
+	class StudioContext;
 }
 
 namespace Plugins {

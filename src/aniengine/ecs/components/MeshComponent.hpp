@@ -118,7 +118,8 @@ namespace ECS {
 			if (!isLoaded || VAO == 0) return;
 
 			glBindVertexArray(VAO);
-			glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+			// Explicit cast to avoid C4267 warning (size_t Å® GLsizei)
+			glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 		}
 

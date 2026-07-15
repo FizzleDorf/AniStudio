@@ -1,20 +1,17 @@
 #pragma once
 #include <functional>
-#include <unordered_map>
 #include <string>
-#include <vector>
 #include <memory>
-#include <iostream>
 #include <any>
 
 #ifdef _WIN32
-    #ifdef BUILDING_ANISTUDIO
-        #define ANISTUDIO_API __declspec(dllexport)
-    #else
-        #define ANISTUDIO_API __declspec(dllimport)
-    #endif
+#ifdef BUILDING_ANISTUDIO
+#define ANISTUDIO_API __declspec(dllexport)
 #else
-    #define ANISTUDIO_API __attribute__((visibility("default")))
+#define ANISTUDIO_API __declspec(dllimport)
+#endif
+#else
+#define ANISTUDIO_API __attribute__((visibility("default")))
 #endif
 
 namespace ANI {
@@ -32,15 +29,10 @@ namespace ANI {
         void RegisterEvent(const std::string& eventName, EventCallback callback);
         void RegisterEventWithData(const std::string& eventName, EventCallbackWithData callback);
         void QueueEvent(const std::string& eventName);
-        
+
         template<typename T>
         void QueueEventWithData(const std::string& eventName, const T& data) {
-            QueuedEvent event;
-            event.eventName = eventName;
-            event.hasData = true;
-            event.data = std::make_any<T>(data);
-            eventQueue.push_back(event);
-            std::cout << "[Events] Queued event with data: " << eventName << std::endl;
+            QueueEventWithDataImpl(eventName, std::make_any<T>(data));
         }
 
         void Poll();
@@ -53,18 +45,16 @@ namespace ANI {
     private:
         Events();
 
-        struct EventData {
-            std::vector<EventCallback> simpleCallbacks;
-            std::vector<EventCallbackWithData> dataCallbacks;
-        };
+        struct Impl;
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4251)
+#endif
+        std::unique_ptr<Impl> pImpl;
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
-        struct QueuedEvent {
-            std::string eventName;
-            bool hasData = false;
-            std::any data;
-        };
-
-        std::unordered_map<std::string, EventData> eventHandlers;
-        std::vector<QueuedEvent> eventQueue;
+        void QueueEventWithDataImpl(const std::string& eventName, const std::any& data);
     };
 }

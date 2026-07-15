@@ -326,7 +326,7 @@ namespace Utils {
 			if (clipboardData.contains("data") && clipboardData["data"].contains("components")) {
 				const auto& components = clipboardData["data"]["components"];
 				if (components.is_array()) {
-					componentCount = components.size();
+					componentCount = static_cast<int>(components.size());
 				}
 			}
 			return "Entity (" + std::to_string(componentCount) + " components)";

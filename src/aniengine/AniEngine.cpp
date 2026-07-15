@@ -13,217 +13,254 @@ using namespace ECS;
 
 namespace ANI {
 
-    EngineCore::EngineCore()
-        : initialized(false), running(false) {
-        std::cout << "[EngineCore] Constructor called" << std::endl;
-    }
+	struct EngineCore::Impl {
+		bool initialized = false;
+		bool running = false;
+		std::shared_ptr<EngineContext> context;
+	};
 
-    EngineCore::~EngineCore() {
-        if (initialized) {
-            Shutdown();
-        }
-    }
+	EngineCore::EngineCore() : pImpl(std::make_unique<Impl>()) {
+		std::cout << "[EngineCore] Constructor called" << std::endl;
+	}
 
-    void EngineCore::RegisterCoreComponents() {
-        if (!context || !context->entityManager) {
-            std::cerr << "[EngineCore] Context or EntityManager not initialized!" << std::endl;
-            return;
-        }
+	EngineCore::~EngineCore() {
+		if (pImpl->initialized) {
+			Shutdown();
+		}
+	}
 
-        auto& entityManager = *context->entityManager;
+	void EngineCore::RegisterCoreComponents() {
+		if (!pImpl->context || !pImpl->context->entityManager) {
+			std::cerr << "[EngineCore] Context or EntityManager not initialized!" << std::endl;
+			return;
+		}
 
-        entityManager.RegisterComponent<ImageComponent>("Image");
-        entityManager.RegisterComponent<InputImageComponent>("InputImage");
-        entityManager.RegisterComponent<OutputImageComponent>("OutputImage");
-        entityManager.RegisterComponent<MaskImageComponent>("MaskImage");
+		auto& entityManager = *pImpl->context->entityManager;
 
-        entityManager.RegisterComponent<VideoComponent>("Video");
-        entityManager.RegisterComponent<InputVideoComponent>("InputVideo");
-        entityManager.RegisterComponent<OutputVideoComponent>("OutputVideo");
-        entityManager.RegisterComponent<PythonComponent>("Python");
+		entityManager.RegisterComponent<ImageComponent>("Image");
+		entityManager.RegisterComponent<InputImageComponent>("InputImage");
+		entityManager.RegisterComponent<OutputImageComponent>("OutputImage");
+		entityManager.RegisterComponent<MaskImageComponent>("MaskImage");
 
-        entityManager.RegisterComponent<ECS::TransformComponent>("Transform");
-        entityManager.RegisterComponent<ECS::MeshComponent>("Mesh");
-        entityManager.RegisterComponent<ECS::CameraComponent>("Camera");
+		entityManager.RegisterComponent<VideoComponent>("Video");
+		entityManager.RegisterComponent<InputVideoComponent>("InputVideo");
+		entityManager.RegisterComponent<OutputVideoComponent>("OutputVideo");
+		entityManager.RegisterComponent<PythonComponent>("Python");
 
-        std::cout << "[EngineCore] Core components registered" << std::endl;
-    }
+		entityManager.RegisterComponent<ECS::TransformComponent>("Transform");
+		entityManager.RegisterComponent<ECS::MeshComponent>("Mesh");
+		entityManager.RegisterComponent<ECS::CameraComponent>("Camera");
 
-    void EngineCore::RegisterCoreSystems() {
-        if (!context || !context->entityManager) {
-            std::cerr << "[EngineCore] Context or EntityManager not initialized!" << std::endl;
-            return;
-        }
+		std::cout << "[EngineCore] Core components registered" << std::endl;
+	}
 
-        auto& entityManager = *context->entityManager;
+	void EngineCore::RegisterCoreSystems() {
+		if (!pImpl->context || !pImpl->context->entityManager) {
+			std::cerr << "[EngineCore] Context or EntityManager not initialized!" << std::endl;
+			return;
+		}
 
-        entityManager.RegisterSystem<ImageSystem>();
-        entityManager.RegisterSystem<VideoSystem>();
-        entityManager.RegisterSystem<PythonSystem>();
-        entityManager.RegisterSystem<FilePathSystem>();
+		auto& entityManager = *pImpl->context->entityManager;
 
-        std::cout << "[EngineCore] Core systems registered" << std::endl;
-    }
+		entityManager.RegisterSystem<ImageSystem>();
+		entityManager.RegisterSystem<VideoSystem>();
+		entityManager.RegisterSystem<PythonSystem>();
+		entityManager.RegisterSystem<FilePathSystem>();
 
-    void EngineCore::InitializeCorePaths() {
-        auto fileSys = context->entityManager->GetSystem<FilePathSystem>();
-        if (!fileSys) {
-            std::cerr << "[EngineCore] FilePathSystem not available!" << std::endl;
-            return;
-        }
+		std::cout << "[EngineCore] Core systems registered" << std::endl;
+	}
 
-        std::filesystem::path base = std::filesystem::current_path();
+	void EngineCore::InitializeCorePaths() {
+		auto fileSys = pImpl->context->entityManager->GetSystem<FilePathSystem>();
+		if (!fileSys) {
+			std::cerr << "[EngineCore] FilePathSystem not available!" << std::endl;
+			return;
+		}
 
-        std::string dataPath = (base / "data" / "defaults").string();
-        std::string assetsPath = (base / "assets").string();
+		std::filesystem::path base = std::filesystem::current_path();
 
-        fileSys->SetPath("DataPath", dataPath);
-        fileSys->SetPath("AssetsFolder", assetsPath);
+		std::string dataPath = (base / "data" / "defaults").string();
+		std::string assetsPath = (base / "assets").string();
 
-        std::error_code ec;
-        std::filesystem::create_directories(dataPath, ec);
-        std::filesystem::create_directories(assetsPath, ec);
+		fileSys->SetPath("DataPath", dataPath);
+		fileSys->SetPath("AssetsFolder", assetsPath);
 
-        std::cout << "[EngineCore] Core paths initialized (DataPath, AssetsFolder)" << std::endl;
-    }
+		std::error_code ec;
+		std::filesystem::create_directories(dataPath, ec);
+		std::filesystem::create_directories(assetsPath, ec);
 
-    void EngineCore::InitializePlugins() {
-        if (!context || !context->pluginManager) {
-            std::cerr << "[EngineCore] PluginManager not created in context!" << std::endl;
-            return;
-        }
+		std::cout << "[EngineCore] Core paths initialized (DataPath, AssetsFolder)" << std::endl;
+	}
 
-        auto fileSys = context->entityManager->GetSystem<FilePathSystem>();
-        if (!fileSys) {
-            std::cerr << "[EngineCore] FilePathSystem not available for plugin initialization!" << std::endl;
-            return;
-        }
+	void EngineCore::InitializePlugins() {
+		if (!pImpl->context || !pImpl->context->pluginManager) {
+			std::cerr << "[EngineCore] PluginManager not created in context!" << std::endl;
+			return;
+		}
 
-        std::string pluginDirectory = fileSys->GetPath("Plugins");
-        if (pluginDirectory.empty()) {
-            pluginDirectory = "./plugins";
-            std::cerr << "[EngineCore] WARNING: Plugins path not set, using default: " << pluginDirectory << std::endl;
-        }
+		auto fileSys = pImpl->context->entityManager->GetSystem<FilePathSystem>();
+		if (!fileSys) {
+			std::cerr << "[EngineCore] FilePathSystem not available for plugin initialization!" << std::endl;
+			return;
+		}
 
-        std::cout << "[EngineCore] Initializing plugins from: " << pluginDirectory << std::endl;
+		std::string pluginDirectory = fileSys->GetPath("Plugins");
+		if (pluginDirectory.empty()) {
+			pluginDirectory = "./plugins";
+			std::cerr << "[EngineCore] WARNING: Plugins path not set, using default: " << pluginDirectory << std::endl;
+		}
 
-        if (!std::filesystem::exists(pluginDirectory)) {
-            std::filesystem::create_directories(pluginDirectory);
-            std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
-        }
+		std::cout << "[EngineCore] Initializing plugins from: " << pluginDirectory << std::endl;
 
-        std::string dataPath = fileSys->GetPath("DataPath");
-        if (!dataPath.empty()) {
-            std::cout << "[EngineCore] Setting global data path: " << dataPath << std::endl;
-            context->pluginManager->SetGlobalDataPath(dataPath);
-        }
-        else {
-            std::cerr << "[EngineCore] ERROR: Data path not available from FilePathSystem!" << std::endl;
-        }
+		if (!std::filesystem::exists(pluginDirectory)) {
+			std::filesystem::create_directories(pluginDirectory);
+			std::cout << "[EngineCore] Created plugin directory: " << pluginDirectory << std::endl;
+		}
 
-        context->pluginManager->scanPluginDirectory(pluginDirectory);
-        context->pluginManager->LoadGlobalPluginState();
+		std::string dataPath = fileSys->GetPath("DataPath");
+		if (!dataPath.empty()) {
+			std::cout << "[EngineCore] Setting global data path: " << dataPath << std::endl;
+			pImpl->context->pluginManager->SetGlobalDataPath(dataPath);
+		}
+		else {
+			std::cerr << "[EngineCore] ERROR: Data path not available from FilePathSystem!" << std::endl;
+		}
 
-        std::cout << "[EngineCore] Plugin system initialized with selective loading" << std::endl;
-    }
+		pImpl->context->pluginManager->scanPluginDirectory(pluginDirectory);
+		pImpl->context->pluginManager->LoadGlobalPluginState();
 
-    bool EngineCore::Initialize() {
-        if (initialized) {
-            std::cerr << "[EngineCore] Already initialized!" << std::endl;
-            return false;
-        }
+		std::cout << "[EngineCore] Plugin system initialized with selective loading" << std::endl;
+	}
 
-        try {
-            std::cout << "[EngineCore] =========================================" << std::endl;
-            std::cout << "[EngineCore] Initializing..." << std::endl;
+	bool EngineCore::Initialize() {
+		if (pImpl->initialized) {
+			std::cerr << "[EngineCore] Already initialized!" << std::endl;
+			return false;
+		}
 
-            context = EngineContext::Create();
+		try {
+			std::cout << "[EngineCore] =========================================" << std::endl;
+			std::cout << "[EngineCore] Initializing..." << std::endl;
 
-            if (!context->isValid()) {
-                std::cerr << "[EngineCore] Failed to create valid EngineContext!" << std::endl;
-                return false;
-            }
+			pImpl->context = EngineContext::Create();
 
-            auto& entityManager = *context->entityManager;
-            const ECS::EntityID temp = entityManager.AddNewEntity();
-            entityManager.DestroyEntity(temp);
+			if (!pImpl->context->isValid()) {
+				std::cerr << "[EngineCore] Failed to create valid EngineContext!" << std::endl;
+				return false;
+			}
 
-            RegisterCoreComponents();
-            RegisterCoreSystems();
+			auto& entityManager = *pImpl->context->entityManager;
+			const ECS::EntityID temp = entityManager.AddNewEntity();
+			entityManager.DestroyEntity(temp);
 
-            InitializeCorePaths();
+			RegisterCoreComponents();
+			RegisterCoreSystems();
 
-            std::cout << "[EngineCore] Engine context created successfully" << std::endl;
+			InitializeCorePaths();
 
-            InitializePlugins();
+			std::cout << "[EngineCore] Engine context created successfully" << std::endl;
 
-            initialized = true;
-            running = true;
+			InitializePlugins();
 
-            std::cout << "[EngineCore] Initialized successfully" << std::endl;
-            std::cout << "[EngineCore] EntityManager address: " << context->entityManager.get() << std::endl;
-            std::cout << "[EngineCore] =========================================" << std::endl;
-            return true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[EngineCore] Initialization failed: " << e.what() << std::endl;
-            return false;
-        }
-    }
+			pImpl->initialized = true;
+			pImpl->running = true;
 
-    std::unique_ptr<EngineCore> EngineCore::CreateWithContext(std::shared_ptr<EngineContext> existingContext) {
-        if (!existingContext || !existingContext->isValid()) {
-            std::cerr << "[EngineCore] Invalid context provided to CreateWithContext!" << std::endl;
-            return nullptr;
-        }
+			std::cout << "[EngineCore] Initialized successfully" << std::endl;
+			std::cout << "[EngineCore] EntityManager address: " << pImpl->context->entityManager.get() << std::endl;
+			std::cout << "[EngineCore] =========================================" << std::endl;
+			return true;
+		}
+		catch (const std::exception& e) {
+			std::cerr << "[EngineCore] Initialization failed: " << e.what() << std::endl;
+			return false;
+		}
+	}
 
-        auto engineCore = std::make_unique<EngineCore>();
-        engineCore->context = existingContext;
+	std::unique_ptr<EngineCore> EngineCore::CreateWithContext(std::shared_ptr<EngineContext> existingContext) {
+		if (!existingContext || !existingContext->isValid()) {
+			std::cerr << "[EngineCore] Invalid context provided to CreateWithContext!" << std::endl;
+			return nullptr;
+		}
 
-        engineCore->RegisterCoreComponents();
-        engineCore->RegisterCoreSystems();
-        engineCore->InitializeCorePaths();
-        engineCore->InitializePlugins();
+		auto engineCore = std::make_unique<EngineCore>();
+		engineCore->pImpl->context = existingContext;
 
-        engineCore->initialized = true;
-        engineCore->running = true;
+		engineCore->RegisterCoreComponents();
+		engineCore->RegisterCoreSystems();
+		engineCore->InitializeCorePaths();
+		engineCore->InitializePlugins();
 
-        std::cout << "[EngineCore] Created with existing context successfully" << std::endl;
-        return engineCore;
-    }
+		engineCore->pImpl->initialized = true;
+		engineCore->pImpl->running = true;
 
-    void EngineCore::Shutdown() {
-        if (!initialized || !context) return;
+		std::cout << "[EngineCore] Created with existing context successfully" << std::endl;
+		return engineCore;
+	}
 
-        std::cout << "[EngineCore] Shutting down..." << std::endl;
+	void EngineCore::Shutdown() {
+		if (!pImpl->initialized || !pImpl->context) return;
 
-        running = false;
+		std::cout << "[EngineCore] Shutting down..." << std::endl;
 
-        if (context->pluginManager) {
-            std::cout << "[EngineCore] Saving global plugin state..." << std::endl;
-            context->pluginManager->SaveGlobalPluginState();
-        }
+		pImpl->running = false;
 
-        if (context->entityManager) {
-            context->entityManager->Reset();
-        }
+		if (pImpl->context->pluginManager) {
+			std::cout << "[EngineCore] Saving global plugin state..." << std::endl;
+			pImpl->context->pluginManager->SaveGlobalPluginState();
+		}
 
-        context.reset();
+		if (pImpl->context->entityManager) {
+			pImpl->context->entityManager->Reset();
+		}
 
-        initialized = false;
+		pImpl->context.reset();
 
-        std::cout << "[EngineCore] Shutdown complete" << std::endl;
-    }
+		pImpl->initialized = false;
 
-    void EngineCore::Update(float deltaTime) {
-        if (!initialized || !context) return;
+		std::cout << "[EngineCore] Shutdown complete" << std::endl;
+	}
 
-        context->entityManager->Update(deltaTime);
+	void EngineCore::Update(float deltaTime) {
+		if (!pImpl->initialized || !pImpl->context) return;
 
-        if (context->pluginManager) {
-            context->pluginManager->checkForChanges();
-            context->pluginManager->updatePlugins(deltaTime);
-        }
-    }
+		pImpl->context->entityManager->Update(deltaTime);
 
-} // namespace ANI
+		if (pImpl->context->pluginManager) {
+			pImpl->context->pluginManager->checkForChanges();
+			pImpl->context->pluginManager->updatePlugins(deltaTime);
+		}
+	}
+
+	ECS::EntityManager& EngineCore::GetEntityManager() {
+		if (!pImpl->context || !pImpl->context->entityManager) {
+			throw std::runtime_error("EngineContext or EntityManager not initialized");
+		}
+		return *pImpl->context->entityManager;
+	}
+
+	Plugins::PluginManager* EngineCore::GetPluginManager() {
+		return pImpl->context ? pImpl->context->pluginManager.get() : nullptr;
+	}
+
+	std::shared_ptr<EngineContext> EngineCore::GetEngineContext() const {
+		return pImpl->context;
+	}
+
+	bool EngineCore::IsRunning() const {
+		return pImpl->running;
+	}
+
+	void EngineCore::SetRunning(bool isRunning) {
+		pImpl->running = isRunning;
+	}
+
+	bool EngineCore::IsInitialized() const {
+		return pImpl->initialized;
+	}
+
+	void EngineCore::SetPluginDirectory(const std::string& directory) {
+		if (pImpl->context) {
+			pImpl->context->pluginDirectory = directory;
+		}
+	}
+}

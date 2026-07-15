@@ -138,7 +138,7 @@ namespace Utils
             softwareText.lang_key = nullptr;
             texts.push_back(softwareText);
 
-            png_set_text(pngWrite, infoWrite, texts.data(), texts.size());
+            png_set_text(pngWrite, infoWrite, texts.data(), static_cast<int>(texts.size()));
             png_write_info(pngWrite, infoWrite);
 
             std::vector<png_byte> row(png_get_rowbytes(png, info));

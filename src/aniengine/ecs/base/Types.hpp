@@ -19,7 +19,7 @@
 #endif
 
 namespace ECS {
-	class BaseComponent;
+	struct BaseComponent;
 	class BaseSystem;
 
 	using EntityID = size_t;

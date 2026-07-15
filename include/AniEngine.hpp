@@ -20,8 +20,6 @@
 
 #pragma once
 
-#define ANI_ENGINE_API
-
 #ifdef _WIN32
 #ifdef BUILDING_ANIENGINE
 #define ANI_ENGINE_API __declspec(dllexport)
@@ -64,39 +62,26 @@ namespace ANI {
 		void Update(float deltaTime);
 
 		// Manager access via context
-		ECS::EntityManager& GetEntityManager() {
-			if (!context || !context->entityManager) {
-				throw std::runtime_error("EngineContext or EntityManager not initialized");
-			}
-			return *context->entityManager;
-		}
-
-		Plugins::PluginManager* GetPluginManager() {
-			return context ? context->pluginManager.get() : nullptr;
-		}
+		ECS::EntityManager& GetEntityManager();
+		Plugins::PluginManager* GetPluginManager();
 
 		// Context access
-		std::shared_ptr<EngineContext> GetEngineContext() const { return context; }
+		std::shared_ptr<EngineContext> GetEngineContext() const;
 
 		// Create EngineCore with existing context
 		static std::unique_ptr<EngineCore> CreateWithContext(std::shared_ptr<EngineContext> existingContext);
 
 		// Engine state
-		bool IsRunning() const { return running; }
-		void SetRunning(bool isRunning) { running = isRunning; }
-		bool IsInitialized() const { return initialized; }
+		bool IsRunning() const;
+		void SetRunning(bool isRunning);
+		bool IsInitialized() const;
 
 		// Plugin management
-		void SetPluginDirectory(const std::string& directory) {
-			if (context) {
-				context->pluginDirectory = directory;
-			}
-		}
+		void SetPluginDirectory(const std::string& directory);
 
 	private:
-		bool initialized;
-		bool running;
-		std::shared_ptr<EngineContext> context;
+		struct Impl;
+		std::unique_ptr<Impl> pImpl;
 
 		// Component/System registration
 		void RegisterCoreComponents();

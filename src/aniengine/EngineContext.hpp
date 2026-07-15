@@ -8,7 +8,8 @@ namespace GUI { class ViewManager; }
 
 namespace ANI {
 
-    struct EngineContext {
+    class EngineContext {
+    public:
         std::shared_ptr<ECS::EntityManager> entityManager;
         std::shared_ptr<Plugins::PluginManager> pluginManager;
 

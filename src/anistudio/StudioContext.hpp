@@ -9,7 +9,8 @@ namespace Utils { class WindowState; }
 
 namespace ANI {
 
-	struct StudioContext : public EngineContext {
+	class StudioContext : public EngineContext {
+	public:
 		std::shared_ptr<GUI::ViewManager> viewManager;
 		std::shared_ptr<ProjectManager> projectManager;
 		std::shared_ptr<Utils::WindowState> windowState;
