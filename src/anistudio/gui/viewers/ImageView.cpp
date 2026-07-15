@@ -2,7 +2,6 @@
 #include "ImageUtils.hpp"
 #include "ImGuiFileDialog.h"
 #include "Events.hpp"
-#include "AssetManager.hpp"
 #include "TextureSystem.hpp"
 #include "FilePathSystem.hpp"
 #include <algorithm>

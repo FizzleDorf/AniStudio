@@ -6,6 +6,7 @@
 #include "Components.h"
 #include "systems.h"
 #include "FilePathSystem.hpp"
+#include "ThreadPoolSystem.hpp"
 #include <iostream>
 #include <filesystem>
 
@@ -66,6 +67,7 @@ namespace ANI {
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
 		entityManager.RegisterSystem<FilePathSystem>();
+		entityManager.RegisterSystem<ThreadPoolSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;
 	}

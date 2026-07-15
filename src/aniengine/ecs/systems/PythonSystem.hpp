@@ -2,7 +2,6 @@
 
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
-#include "ThreadPool.hpp"
 #include "PythonComponent.hpp"
 #include <string>
 #include <mutex>
@@ -30,7 +29,6 @@ namespace ECS {
 		}
 
 		~PythonSystem() override {
-			// Cleanup handled automatically
 		}
 
 		void Update(float deltaTime) override {
@@ -56,7 +54,6 @@ namespace ECS {
 
 		std::string GetPythonExecutable(const PythonComponent& comp) {
 			if (comp.useVirtualEnv && !comp.pythonExecutable.empty()) {
-				// Convert relative path to absolute path for Windows compatibility
 				std::filesystem::path pythonPath(comp.pythonExecutable);
 				if (pythonPath.is_relative()) {
 					pythonPath = std::filesystem::absolute(pythonPath);
@@ -66,7 +63,7 @@ namespace ECS {
 					return pythonPath.string();
 				}
 			}
-			return "python"; // Fallback to system python
+			return "python";
 		}
 
 		std::pair<std::string, std::string> RunCommand(const std::string& command) {
@@ -74,7 +71,6 @@ namespace ECS {
 			std::string error;
 
 #ifdef _WIN32
-			// Windows implementation
 			SECURITY_ATTRIBUTES sa;
 			sa.nLength = sizeof(SECURITY_ATTRIBUTES);
 			sa.lpSecurityDescriptor = NULL;
@@ -97,20 +93,17 @@ namespace ECS {
 			si.dwFlags |= STARTF_USESTDHANDLES;
 			ZeroMemory(&pi, sizeof(pi));
 
-			// Use the command directly without cmd /c wrapper since we're already formatting it properly
 			std::string cmdLine = command;
 			if (CreateProcessA(NULL, const_cast<char*>(cmdLine.c_str()), NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
 				CloseHandle(hStdoutWrite);
 				CloseHandle(hStderrWrite);
 
-				// Read stdout
 				DWORD dwRead;
 				char buffer[4096];
 				while (ReadFile(hStdoutRead, buffer, sizeof(buffer), &dwRead, NULL) && dwRead != 0) {
 					output.append(buffer, dwRead);
 				}
 
-				// Read stderr
 				while (ReadFile(hStderrRead, buffer, sizeof(buffer), &dwRead, NULL) && dwRead != 0) {
 					error.append(buffer, dwRead);
 				}
@@ -127,7 +120,6 @@ namespace ECS {
 			CloseHandle(hStderrRead);
 
 #else
-			// Unix/Linux implementation using popen
 			FILE* pipe = popen((command + " 2>&1").c_str(), "r");
 			if (pipe) {
 				char buffer[128];
@@ -148,7 +140,6 @@ namespace ECS {
 		}
 
 		std::string CreateTempScriptFile(const std::string& script) {
-			
 			std::filesystem::path tempDir = std::filesystem::temp_directory_path();
 			std::filesystem::path tempFile = tempDir / "anistudio_temp_script.py";
 			return tempFile.string();
@@ -163,7 +154,6 @@ namespace ECS {
 
 				std::string pythonExe = GetPythonExecutable(comp);
 
-				// Create a temporary file for the script
 				std::string tempFile = CreateTempScriptFile(script);
 
 				std::ofstream scriptFile(tempFile);
@@ -180,14 +170,13 @@ namespace ECS {
 
 				std::cout << "Executing command: " << command << std::endl;
 
-				auto[output, error] = RunCommand(command);
+				auto [output, error] = RunCommand(command);
 
 				comp.output = output;
 				if (!error.empty()) {
 					comp.error = error;
 				}
 
-				// Clean up temp file
 				try {
 					std::filesystem::remove(tempFile);
 				}
@@ -217,7 +206,6 @@ namespace ECS {
 				comp.error.clear();
 				comp.output.clear();
 
-				// Check if file exists
 				if (!std::filesystem::exists(filePath)) {
 					comp.error = "File not found: " + filePath;
 					return;
@@ -230,7 +218,7 @@ namespace ECS {
 
 				std::cout << "Executing file command: " << command << std::endl;
 
-				auto[output, error] = RunCommand(command);
+				auto [output, error] = RunCommand(command);
 
 				comp.output = output;
 				if (!error.empty()) {

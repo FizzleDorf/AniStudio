@@ -14,8 +14,6 @@ namespace Utils {
 		: entityManager(entityMgr) {
 	}
 
-	// ===== MAIN RENDER FUNCTIONS =====
-
 	void ContextMenuUtils::RenderImageContextMenu(ECS::EntityID entityId) {
 		if (!entityManager.IsEntityValid(entityId)) {
 			return;
@@ -166,8 +164,6 @@ namespace Utils {
 		}
 	}
 
-	// ===== PASTE OPERATIONS =====
-
 	bool ContextMenuUtils::PasteEntity(ECS::EntityID targetEntityId) {
 		if (!HasClipboardEntity() || !entityManager.IsEntityValid(targetEntityId)) {
 			return false;
@@ -192,34 +188,29 @@ namespace Utils {
 			return false;
 		}
 
-		// Check if component is registered
 		if (!entityManager.IsComponentNameRegistered(componentName)) {
 			return false;
 		}
 
-		// Get or create component in target entity
 		ECS::ComponentTypeID componentId = entityManager.GetComponentTypeIdByName(componentName);
 		bool hadComponent = entityManager.HasComponentById(targetEntityId, componentId);
 
 		if (!hadComponent) {
-			// Create a simple component structure to add to entity
 			nlohmann::json tempEntityData;
 			tempEntityData["components"] = nlohmann::json::array();
 
 			nlohmann::json compJson;
-			compJson[componentName] = nlohmann::json::object(); // Empty object to create component
+			compJson[componentName] = nlohmann::json::object();
 			tempEntityData["components"].push_back(compJson);
 
 			entityManager.DeserializeEntity(tempEntityData, targetEntityId);
 		}
 
-		// Apply component data
 		auto* component = entityManager.GetComponentById(targetEntityId, componentId);
 		if (component) {
-			// Create proper JSON structure for deserialization
-			nlohmann::json properJson;
-			properJson[componentName] = componentData;
-			component->Deserialize(properJson);
+			nlohmann::json a;
+			a[componentName] = componentData;
+			component->Deserialize(a);
 			return true;
 		}
 
