@@ -22,8 +22,39 @@ namespace ECS {
         ThreadPoolSystem(const ThreadPoolSystem&) = delete;
         ThreadPoolSystem& operator=(const ThreadPoolSystem&) = delete;
 
+        // Pool class
+        class Pool {
+        public:
+            explicit Pool(size_t numThreads);
+            ~Pool();
+
+            Pool(const Pool&) = delete;
+            Pool& operator=(const Pool&) = delete;
+
+            template<typename F, typename... Args>
+            auto submit(F&& f, Args&&... args)
+                -> std::future<std::invoke_result_t<F, Args...>>;
+
+            void terminate();
+            void clearQueue();
+            size_t queueSize() const;
+            size_t activeCount() const;
+            bool isTerminating() const;
+            size_t size() const;
+
+        private:
+            void startThreads(size_t numThreads);
+
+            std::vector<std::thread> m_workers;
+            std::queue<std::function<void()>> m_tasks;
+            mutable std::mutex m_mutex;
+            std::condition_variable m_condition;
+            std::atomic<bool> m_stop{ false };
+            std::atomic<bool> m_terminate{ false };
+            std::atomic<size_t> m_active{ 0 };
+        };
+
         // Pool accessors
-        class Pool;
         Pool& getDiffusionPool() { return *m_diffusionPool; }
         Pool& getIOPool() { return *m_ioPool; }
         Pool& getGeneralPool() { return *m_generalPool; }
@@ -59,41 +90,11 @@ namespace ECS {
         void terminateAll();
 
     private:
-        class Pool {
-        public:
-            explicit Pool(size_t numThreads);
-            ~Pool();
-
-            Pool(const Pool&) = delete;
-            Pool& operator=(const Pool&) = delete;
-
-            template<typename F, typename... Args>
-            auto submit(F&& f, Args&&... args)
-                -> std::future<std::invoke_result_t<F, Args...>>;
-
-            void terminate();
-            void clearQueue();
-            size_t queueSize() const;
-            size_t activeCount() const;
-            bool isTerminating() const;
-            size_t size() const;
-
-        private:
-            void startThreads(size_t numThreads);
-
-            std::vector<std::thread> m_workers;
-            std::queue<std::function<void()>> m_tasks;
-            mutable std::mutex m_mutex;
-            std::condition_variable m_condition;
-            std::atomic<bool> m_stop{ false };
-            std::atomic<bool> m_terminate{ false };
-            std::atomic<size_t> m_active{ 0 };
-        };
-
         std::unique_ptr<Pool> m_diffusionPool;
         std::unique_ptr<Pool> m_ioPool;
         std::unique_ptr<Pool> m_generalPool;
     };
+
 
     template<typename F, typename... Args>
     auto ThreadPoolSystem::submitDiffusion(F&& f, Args&&... args)
@@ -115,7 +116,6 @@ namespace ECS {
     {
         return m_generalPool->submit(std::forward<F>(f), std::forward<Args>(args)...);
     }
-
 
     inline ThreadPoolSystem::Pool::Pool(size_t numThreads) {
         startThreads(numThreads > 0 ? numThreads : std::thread::hardware_concurrency());

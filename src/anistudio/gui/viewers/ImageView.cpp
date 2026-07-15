@@ -1,6 +1,7 @@
+// ImageView.cpp
 #include "ImageView.hpp"
 #include "ImageUtils.hpp"
-#include "ImGuiFileDialog.h"
+#include "FileDialogUtil.hpp"
 #include "Events.hpp"
 #include "TextureSystem.hpp"
 #include "FilePathSystem.hpp"
@@ -124,16 +125,17 @@ namespace GUI {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
                 if (ImGui::MenuItem("Load Image(s)")) {
-                    IGFD::FileDialogConfig config;
                     auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
                     std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : "";
                     if (defaultPath.empty()) {
                         defaultPath = ".";
                     }
-                    config.path = defaultPath;
-                    config.countSelectionMax = 0;
-                    ImGuiFileDialog::Instance()->OpenDialog("LoadImageDialog", "Choose Image(s)",
-                        filters, config);
+                    std::vector<std::string> outPaths;
+                    if (FileDialog::OpenFiles("Choose Image(s)", filters, outPaths, defaultPath)) {
+                        if (!outPaths.empty()) {
+                            LoadImages(outPaths);
+                        }
+                    }
                 }
 
                 ImGui::Separator();
@@ -143,15 +145,19 @@ namespace GUI {
                 }
 
                 if (ImGui::MenuItem("Save Image As...", nullptr, false, selectedEntityID != 0)) {
-                    IGFD::FileDialogConfig config;
                     auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
                     std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : "";
                     if (defaultPath.empty()) {
                         defaultPath = ".";
                     }
-                    config.path = defaultPath;
-                    ImGuiFileDialog::Instance()->OpenDialog("SaveImageAsDialog", "Save Image As",
-                        filters, config);
+                    std::string outPath;
+                    if (selectedEntityID != 0) {
+                        const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+                        std::string defaultName = imageComp.fileName;
+                        if (FileDialog::SaveFile("Save Image As", filters, defaultName, outPath, defaultPath)) {
+                            SaveSelectedImageAs(outPath);
+                        }
+                    }
                 }
 
                 ImGui::Separator();
@@ -198,26 +204,6 @@ namespace GUI {
             }
 
             ImGui::EndMenuBar();
-        }
-
-        if (ImGuiFileDialog::Instance()->Display("LoadImageDialog", 32, ImVec2(700, 400))) {
-            if (ImGuiFileDialog::Instance()->IsOk()) {
-                std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
-                std::vector<std::string> filePaths;
-                for (const auto& [fileName, filePath] : selection) {
-                    filePaths.push_back(filePath);
-                }
-                LoadImages(filePaths);
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-
-        if (ImGuiFileDialog::Instance()->Display("SaveImageAsDialog")) {
-            if (ImGuiFileDialog::Instance()->IsOk() && selectedEntityID != 0) {
-                std::string savePath = ImGuiFileDialog::Instance()->GetFilePathName();
-                SaveSelectedImageAs(savePath);
-            }
-            ImGuiFileDialog::Instance()->Close();
         }
     }
 

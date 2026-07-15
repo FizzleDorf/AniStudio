@@ -14,13 +14,13 @@
 #include <algorithm>
 #include <vector>
 #include <fstream>
-#include <ImGuiFileDialog.h>
+#include "FileDialogUtil.hpp"
 
 namespace Utils {
 
 	class ZepTextEditor {
 	public:
-		ZepTextEditor() : isInitialized(false) {
+		ZepTextEditor() : isInitialized(false), defaultDialogPath("data/defaults") {
 		}
 
 		~ZepTextEditor() = default;
@@ -36,12 +36,10 @@ namespace Utils {
 				editor = std::make_unique<Zep::ZepEditor_ImGui>(
 					rootPath,
 					Zep::NVec2f(1.0f, 1.0f)
-					);
+				);
 
-				// Initialize with default buffer from data/defaults/buffer.txt
 				LoadDefaultBuffer();
 
-				// Force standard mode by default
 				editor->SetGlobalMode(Zep::ZepMode_Standard::StaticName());
 
 				ApplyCurrentConfiguration();
@@ -54,7 +52,6 @@ namespace Utils {
 			}
 		}
 
-		// Enhanced Render method with optional child window creation
 		void Render(ImVec2 position, ImVec2 size, bool createChildWindow = false) {
 			if (!editor || !isInitialized) {
 				ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Editor not initialized");
@@ -62,7 +59,6 @@ namespace Utils {
 			}
 
 			if (createChildWindow) {
-				// Schema rendering path - create child window with menu bar support
 				ImGuiWindowFlags childFlags = ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 				if (showMenuBar) {
 					childFlags |= ImGuiWindowFlags_MenuBar;
@@ -81,15 +77,14 @@ namespace Utils {
 				ImGui::EndChild();
 			}
 			else {
-				// ZepView path - no child window, render directly
 				RenderEditor();
 			}
-
-			// Handle file dialogs
-			HandleFileDialogs();
 		}
 
-		// Configuration methods
+		void SetDefaultDialogPath(const std::string& path) {
+			defaultDialogPath = path;
+		}
+
 		void SetShowLineNumbers(bool show) {
 			showLineNumbers = show;
 			ApplyCurrentConfiguration();
@@ -168,7 +163,6 @@ namespace Utils {
 			}
 		}
 
-		// Set the file type for syntax highlighting
 		void SetFileType(const std::string& extension) {
 			if (!editor || !isInitialized) return;
 
@@ -190,12 +184,10 @@ namespace Utils {
 			}
 		}
 
-		// Get the current file type
 		std::string GetFileType() const {
 			return currentFileType;
 		}
 
-		// Getters
 		bool GetShowLineNumbers() const { return showLineNumbers; }
 		bool GetWordWrap() const { return wordWrap; }
 		bool GetReadOnly() const { return readOnly; }
@@ -207,7 +199,6 @@ namespace Utils {
 		bool GetShowMenuBar() const { return showMenuBar; }
 		float GetFontSize() const { return currentFontSize; }
 
-		// Text methods
 		std::string GetText() const {
 			if (editor && isInitialized) {
 				auto* buffer = editor->GetActiveBuffer();
@@ -228,7 +219,6 @@ namespace Utils {
 			}
 		}
 
-		// File operations
 		bool LoadFile(const std::string& filePath) {
 			if (editor && isInitialized) {
 				try {
@@ -236,7 +226,6 @@ namespace Utils {
 					if (buffer) {
 						buffer->Load(std::filesystem::path(filePath));
 
-						// Auto-detect file type from extension
 						std::filesystem::path path(filePath);
 						if (path.has_extension()) {
 							currentFileType = path.extension().string();
@@ -254,16 +243,13 @@ namespace Utils {
 			return false;
 		}
 
-		// Create a new file with the specified path
 		bool CreateNewFile(const std::string& filePath) {
 			if (editor && isInitialized) {
 				try {
-					// Clear the editor content
 					auto* buffer = editor->GetActiveBuffer();
 					if (buffer) {
 						buffer->SetText("");
 
-						// Set the file path and detect file type
 						std::filesystem::path path(filePath);
 						currentFilePath = filePath;
 
@@ -272,13 +258,11 @@ namespace Utils {
 							SetFileType(currentFileType);
 						}
 						else {
-							SetFileType(".txt"); // Default to plain text
+							SetFileType(".txt");
 						}
 
-						// Create the directory if it doesn't exist
 						std::filesystem::create_directories(path.parent_path());
 
-						// Create the empty file
 						std::ofstream file(filePath);
 						if (file.is_open()) {
 							file.close();
@@ -305,9 +289,7 @@ namespace Utils {
 					if (buffer) {
 						std::string pathToUse = filePath.empty() ? currentFilePath : filePath;
 						if (pathToUse.empty()) {
-							// No path specified, need to open save dialog
-							OpenSaveDialog();
-							return false; // Will save when dialog completes
+							return SaveFileAs();
 						}
 
 						buffer->SetFilePath(std::filesystem::path(pathToUse));
@@ -326,34 +308,43 @@ namespace Utils {
 			return false;
 		}
 
-		// Create a new file
+		bool SaveFileAs() {
+			std::string outPath;
+			std::string filter = "All Files{.*,.txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf},"
+				"All Files{.*}";
+			if (FileDialog::SaveFile("Save Text File", filter, "newfile.txt", outPath, defaultDialogPath)) {
+				return SaveFile(outPath);
+			}
+			return false;
+		}
+
 		void NewFile() {
-			IGFD::FileDialogConfig config;
-			config.path = "data/defaults";
-			ImGuiFileDialog::Instance()->OpenDialog("NewTextFileDialog", "Create New File",
-				".txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf",
-				config);
+			std::string outPath;
+			std::string filter = "All Files{.*,.txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf},"
+				"All Files{.*}";
+			if (FileDialog::SaveFile("Create New File", filter, "newfile.txt", outPath, defaultDialogPath)) {
+				CreateNewFile(outPath);
+			}
 		}
 
-		// Open file dialog
 		void OpenLoadDialog() {
-			IGFD::FileDialogConfig config;
-			config.path = "data/defaults";
-			ImGuiFileDialog::Instance()->OpenDialog("LoadTextFileDialog", "Load Text File",
-				".*,.txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf",
-				config);
+			std::string outPath;
+			std::string filter = "All Files{.*,.txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf},"
+				"All Files{.*}";
+			if (FileDialog::OpenFile("Load Text File", filter, outPath, defaultDialogPath)) {
+				LoadFile(outPath);
+			}
 		}
 
-		// Open save dialog
 		void OpenSaveDialog() {
-			IGFD::FileDialogConfig config;
-			config.path = "data/defaults";
-			ImGuiFileDialog::Instance()->OpenDialog("SaveTextFileDialog", "Save Text File",
-				".txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf",
-				config);
+			std::string outPath;
+			std::string filter = "All Files{.*,.txt,.cpp,.hpp,.h,.c,.cc,.cxx,.py,.js,.ts,.java,.cs,.rs,.go,.json,.xml,.html,.css,.md,.yml,.yaml,.toml,.vert,.frag,.hlsl,.bat,.sh,.log,.ini,.cfg,.conf},"
+				"All Files{.*}";
+			if (FileDialog::SaveFile("Save Text File", filter, "newfile.txt", outPath, defaultDialogPath)) {
+				SaveFile(outPath);
+			}
 		}
 
-		// Search functionality
 		void SetSearchTerm(const std::string& term) {
 			currentSearchTerm = term;
 			PerformSearch();
@@ -434,17 +425,14 @@ namespace Utils {
 		}
 
 	private:
-		// Load default buffer from data/defaults/buffer.txt
 		void LoadDefaultBuffer() {
 			std::filesystem::path defaultPath = std::filesystem::current_path() / ".." / "data" / "defaults" / "buffer.txt";
 
 			try {
-				// Ensure the directory exists
 				std::filesystem::create_directories(defaultPath.parent_path());
 
 				std::string defaultText;
 				if (std::filesystem::exists(defaultPath)) {
-					// Load from existing file
 					std::ifstream file(defaultPath);
 					if (file.is_open()) {
 						defaultText = std::string((std::istreambuf_iterator<char>(file)),
@@ -453,10 +441,8 @@ namespace Utils {
 					}
 				}
 				else {
-					// Create default content
 					defaultText = "// Welcome to AniStudio Text Editor\n";
 
-					// Save the default content
 					std::ofstream file(defaultPath);
 					if (file.is_open()) {
 						file << defaultText;
@@ -464,49 +450,16 @@ namespace Utils {
 					}
 				}
 
-				// Initialize with the default text
 				editor->InitWithText("buffer.txt", defaultText);
-				SetFileType(".txt"); // Default file type
+				SetFileType(".txt");
 			}
 			catch (const std::exception& e) {
 				std::cerr << "Error loading default buffer: " << e.what() << std::endl;
-				// Fallback to empty buffer
 				editor->InitWithText("buffer.txt", "");
 				SetFileType(".txt");
 			}
 		}
 
-		// Handle file dialogs
-		void HandleFileDialogs() {
-			// Handle new file dialog
-			if (ImGuiFileDialog::Instance()->Display("NewTextFileDialog", 32, ImVec2(700, 400))) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-					CreateNewFile(filePath);
-				}
-				ImGuiFileDialog::Instance()->Close();
-			}
-
-			// Handle load dialog
-			if (ImGuiFileDialog::Instance()->Display("LoadTextFileDialog", 32, ImVec2(700, 400))) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-					LoadFile(filePath);
-				}
-				ImGuiFileDialog::Instance()->Close();
-			}
-
-			// Handle save dialog
-			if (ImGuiFileDialog::Instance()->Display("SaveTextFileDialog", 32, ImVec2(700, 400))) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-					SaveFile(filePath);
-				}
-				ImGuiFileDialog::Instance()->Close();
-			}
-		}
-
-		// Apply theme using Zep's actual theme system
 		void ApplyTheme() {
 			if (!editor || !isInitialized) return;
 
@@ -514,7 +467,6 @@ namespace Utils {
 				auto& theme = editor->GetTheme();
 
 				if (currentTheme == "dark") {
-					// Set dark theme colors
 					theme.SetThemeType(Zep::ThemeType::Dark);
 					theme.SetColor(Zep::ThemeColor::Background, Zep::NVec4f(0.1f, 0.1f, 0.1f, 1.0f));
 					theme.SetColor(Zep::ThemeColor::Text, Zep::NVec4f(0.9f, 0.9f, 0.9f, 1.0f));
@@ -529,7 +481,6 @@ namespace Utils {
 					theme.SetColor(Zep::ThemeColor::CursorInsert, Zep::NVec4f(1.0f, 1.0f, 1.0f, 1.0f));
 				}
 				else if (currentTheme == "light") {
-					// Set light theme colors
 					theme.SetThemeType(Zep::ThemeType::Light);
 					theme.SetColor(Zep::ThemeColor::Background, Zep::NVec4f(1.0f, 1.0f, 1.0f, 1.0f));
 					theme.SetColor(Zep::ThemeColor::Text, Zep::NVec4f(0.0f, 0.0f, 0.0f, 1.0f));
@@ -544,7 +495,6 @@ namespace Utils {
 					theme.SetColor(Zep::ThemeColor::CursorInsert, Zep::NVec4f(0.0f, 0.0f, 0.0f, 1.0f));
 				}
 				else if (currentTheme == "classic") {
-					// Set classic/retro theme colors
 					theme.SetThemeType(Zep::ThemeType::Dark);
 					theme.SetColor(Zep::ThemeColor::Background, Zep::NVec4f(0.0f, 0.0f, 0.3f, 1.0f));
 					theme.SetColor(Zep::ThemeColor::Text, Zep::NVec4f(0.9f, 0.9f, 0.9f, 1.0f));
@@ -566,7 +516,6 @@ namespace Utils {
 			}
 		}
 
-		// Apply syntax highlighting using Zep's actual API
 		void ApplySyntaxHighlighting() {
 			if (!editor || !isInitialized) return;
 
@@ -574,13 +523,11 @@ namespace Utils {
 				auto* buffer = editor->GetActiveBuffer();
 				if (buffer) {
 					if (enableSyntaxHighlighting && !currentFileType.empty()) {
-						// Set file path with the correct extension for syntax detection
 						std::string filename = "buffer" + currentFileType;
 						buffer->SetFilePath(std::filesystem::path(filename));
 						editor->RequestRefresh();
 					}
 					else {
-						// Disable syntax highlighting by using no extension
 						buffer->SetFilePath(std::filesystem::path("buffer"));
 						editor->RequestRefresh();
 					}
@@ -591,14 +538,11 @@ namespace Utils {
 			}
 		}
 
-		// Internal render method that handles the actual editor rendering
 		void RenderEditor() {
-			// Handle keyboard shortcuts when window is focused
 			if (ImGui::IsWindowFocused()) {
 				HandleKeyboardShortcuts();
 			}
 
-			// Handle right-click context menu
 			if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(1)) {
 				ImGui::OpenPopup("ZepContextMenu");
 			}
@@ -608,17 +552,14 @@ namespace Utils {
 				ImGui::EndPopup();
 			}
 
-			// Render menu bar if enabled
 			if (showMenuBar) {
 				RenderMenuBar();
 			}
 
-			// Render search panel if enabled (between menu bar and editor)
 			if (showSearchBox) {
 				RenderSearchPanel();
 			}
 
-			// Get display region
 			auto min = ImGui::GetCursorScreenPos();
 			auto max = ImGui::GetContentRegionAvail();
 			max.x = std::max(1.0f, max.x);
@@ -628,18 +569,14 @@ namespace Utils {
 			max.y = min.y + max.y;
 			editor->SetDisplayRegion(Zep::NVec2f(min.x, min.y), Zep::NVec2f(max.x, max.y));
 
-			// Handle mouse input for text selection
 			HandleMouseInput();
 
-			// Render Zep editor with vanilla implementation
 			editor->Display();
 			editor->HandleInput();
 
-			// Apply any scheduled selections after Zep has processed input
 			HandleScheduledSelections();
 		}
 
-		// Handle mouse input for text selection
 		void HandleMouseInput() {
 			if (!ImGui::IsWindowHovered()) return;
 
@@ -647,13 +584,10 @@ namespace Utils {
 			Zep::NVec2f mousePos(io.MousePos.x, io.MousePos.y);
 			double currentTime = ImGui::GetTime();
 
-			// Handle single clicks with multi-click detection
 			if (ImGui::IsMouseClicked(0)) {
 				HandleMouseClick(mousePos, currentTime);
 			}
 
-			// Let Zep handle all mouse input for proper drag selection
-			// This will override our multi-click selection if the user drags
 			if (ImGui::IsMouseClicked(0)) {
 				editor->OnMouseDown(mousePos, Zep::ZepMouseButton::Left);
 			}
@@ -667,9 +601,7 @@ namespace Utils {
 			}
 		}
 
-		// Handle mouse clicks with multi-click detection
 		void HandleMouseClick(const Zep::NVec2f& mousePos, double currentTime) {
-			// Check if this is a consecutive click
 			float distance = 0.0f;
 			bool isConsecutiveClick = false;
 
@@ -692,19 +624,15 @@ namespace Utils {
 			lastClickTime = currentTime;
 			lastClickPosition = mousePos;
 
-			// Handle multi-click selections after a short delay to ensure Zep has positioned the cursor
 			if (consecutiveClicks == 2) {
-				// Schedule word selection for next frame
 				scheduleWordSelection = true;
 			}
 			else if (consecutiveClicks >= 3) {
-				// Schedule line selection for next frame  
 				scheduleLineSelection = true;
-				consecutiveClicks = 3; // Cap at 3
+				consecutiveClicks = 3;
 			}
 		}
 
-		// Apply scheduled selections (called after Zep processes input)
 		void HandleScheduledSelections() {
 			if (scheduleWordSelection) {
 				SelectWordAtCursor();
@@ -717,7 +645,6 @@ namespace Utils {
 			}
 		}
 
-		// Select word at current cursor position
 		void SelectWordAtCursor() {
 			if (!editor || !isInitialized) return;
 
@@ -728,11 +655,9 @@ namespace Utils {
 
 				auto cursorPos = window->GetBufferCursor();
 
-				// Find word boundaries
 				auto wordStart = cursorPos;
 				auto wordEnd = cursorPos;
 
-				// Find start of word
 				while (wordStart > buffer->Begin()) {
 					auto prevIter = wordStart;
 					prevIter.Move(-1);
@@ -741,14 +666,12 @@ namespace Utils {
 					wordStart = prevIter;
 				}
 
-				// Find end of word
 				while (wordEnd < buffer->End()) {
 					char ch = *wordEnd;
 					if (!IsWordCharacter(ch)) break;
 					wordEnd.Move(1);
 				}
 
-				// Select the word
 				if (wordStart != wordEnd) {
 					buffer->SetSelection(Zep::GlyphRange(wordStart, wordEnd));
 					window->SetBufferCursor(wordEnd);
@@ -759,7 +682,6 @@ namespace Utils {
 			}
 		}
 
-		// Select line at current cursor position
 		void SelectLineAtCursor() {
 			if (!editor || !isInitialized) return;
 
@@ -770,11 +692,9 @@ namespace Utils {
 
 				auto cursorPos = window->GetBufferCursor();
 
-				// Find line boundaries
 				auto lineStart = cursorPos;
 				auto lineEnd = cursorPos;
 
-				// Find start of line
 				while (lineStart > buffer->Begin()) {
 					auto prevIter = lineStart;
 					prevIter.Move(-1);
@@ -784,16 +704,14 @@ namespace Utils {
 					lineStart = prevIter;
 				}
 
-				// Find end of line (include the newline character)
 				while (lineEnd < buffer->End()) {
 					if (*lineEnd == '\n') {
-						lineEnd.Move(1); // Include the newline
+						lineEnd.Move(1);
 						break;
 					}
 					lineEnd.Move(1);
 				}
 
-				// Select the entire line
 				if (lineStart != lineEnd) {
 					buffer->SetSelection(Zep::GlyphRange(lineStart, lineEnd));
 					window->SetBufferCursor(lineEnd);
@@ -804,84 +722,69 @@ namespace Utils {
 			}
 		}
 
-		// Check if character is part of a word (for word selection)
 		bool IsWordCharacter(char ch) {
 			return std::isalnum(static_cast<unsigned char>(ch)) || ch == '_';
 		}
 
-		// Handle keyboard shortcuts
 		void HandleKeyboardShortcuts() {
 			auto& io = ImGui::GetIO();
 
-			// Handle Delete and Backspace for selected text first
 			if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
 				DeleteSelection();
-				return; // Don't process other shortcuts
+				return;
 			}
 
 			if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
 				DeleteSelection();
-				return; // Don't process other shortcuts
+				return;
 			}
 
-			// Ctrl+F - Toggle search
 			if (ImGui::IsKeyPressed(ImGuiKey_F) && io.KeyCtrl) {
 				ToggleSearchBox();
 			}
 
-			// Ctrl+A - Select all
 			if (ImGui::IsKeyPressed(ImGuiKey_A) && io.KeyCtrl) {
 				SelectAll();
 			}
 
-			// Ctrl+C - Copy
 			if (ImGui::IsKeyPressed(ImGuiKey_C) && io.KeyCtrl) {
 				CopySelection();
 			}
 
-			// Ctrl+V - Paste
 			if (ImGui::IsKeyPressed(ImGuiKey_V) && io.KeyCtrl) {
 				PasteAtCursor();
 			}
 
-			// Ctrl+X - Cut
 			if (ImGui::IsKeyPressed(ImGuiKey_X) && io.KeyCtrl) {
 				CutSelection();
 			}
 
-			// Ctrl+Z - Undo
 			if (ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyCtrl && !io.KeyShift) {
 				Undo();
 			}
 
-			// Ctrl+Y or Ctrl+Shift+Z - Redo
 			if ((ImGui::IsKeyPressed(ImGuiKey_Y) && io.KeyCtrl) ||
 				(ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyCtrl && io.KeyShift)) {
 				Redo();
 			}
 
-			// Ctrl+N - New file
 			if (ImGui::IsKeyPressed(ImGuiKey_N) && io.KeyCtrl) {
 				NewFile();
 			}
 
-			// Ctrl+O - Open file
 			if (ImGui::IsKeyPressed(ImGuiKey_O) && io.KeyCtrl) {
 				OpenLoadDialog();
 			}
 
-			// Ctrl+S - Save file
 			if (ImGui::IsKeyPressed(ImGuiKey_S) && io.KeyCtrl && !io.KeyShift) {
 				SaveFile();
 			}
 
-			// Ctrl+Shift+S - Save As
 			if (ImGui::IsKeyPressed(ImGuiKey_S) && io.KeyCtrl && io.KeyShift) {
 				OpenSaveDialog();
 			}
 		}
 
-		// Delete current selection or single character
 		void DeleteSelection() {
 			if (!editor || !isInitialized) return;
 
@@ -889,14 +792,12 @@ namespace Utils {
 				auto* buffer = editor->GetActiveBuffer();
 				if (buffer) {
 					if (buffer->HasSelection()) {
-						// Delete the selected text
 						auto selection = buffer->GetInclusiveSelection();
 						Zep::ChangeRecord record;
 						buffer->Delete(selection.first, selection.second, record);
 						buffer->ClearSelection();
 					}
 					else {
-						// Delete single character at cursor (like normal delete key)
 						auto* window = editor->GetActiveWindow();
 						if (window) {
 							auto cursor = window->GetBufferCursor();
@@ -915,7 +816,6 @@ namespace Utils {
 			}
 		}
 
-		// Undo last action
 		void Undo() {
 			if (!editor || !isInitialized) return;
 
@@ -939,7 +839,6 @@ namespace Utils {
 			}
 		}
 
-		// Redo last undone action
 		void Redo() {
 			if (!editor || !isInitialized) return;
 
@@ -963,21 +862,18 @@ namespace Utils {
 			}
 		}
 
-		// Check if undo is available
 		bool CanUndo() const {
 			if (!editor || !isInitialized) return false;
 			auto* buffer = editor->GetActiveBuffer();
 			return buffer ? !buffer->GetUndoStack().empty() : false;
 		}
 
-		// Check if redo is available
 		bool CanRedo() const {
 			if (!editor || !isInitialized) return false;
 			auto* buffer = editor->GetActiveBuffer();
 			return buffer ? !buffer->GetRedoStack().empty() : false;
 		}
 
-		// Copy current selection to clipboard
 		void CopySelection() {
 			if (!editor || !isInitialized) return;
 
@@ -989,7 +885,6 @@ namespace Utils {
 			}
 		}
 
-		// Cut current selection to clipboard
 		void CutSelection() {
 			if (!editor || !isInitialized) return;
 
@@ -999,14 +894,12 @@ namespace Utils {
 				std::string selectedText = buffer->GetBufferText(selection.first, selection.second);
 				ImGui::SetClipboardText(selectedText.c_str());
 
-				// Delete the selected text
 				Zep::ChangeRecord record;
 				buffer->Delete(selection.first, selection.second, record);
 				buffer->ClearSelection();
 			}
 		}
 
-		// Paste clipboard content at current cursor position
 		void PasteAtCursor() {
 			if (!editor || !isInitialized) return;
 
@@ -1022,7 +915,6 @@ namespace Utils {
 			}
 		}
 
-		// Select all text in the buffer
 		void SelectAll() {
 			if (!editor || !isInitialized) return;
 
@@ -1032,7 +924,6 @@ namespace Utils {
 			}
 		}
 
-		// Search panel rendering
 		void RenderSearchPanel() {
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyleColorVec4(ImGuiCol_MenuBarBg));
@@ -1145,7 +1036,6 @@ namespace Utils {
 			ImGui::PopStyleVar();
 		}
 
-		// Enhanced Menu Bar with file operations and syntax highlighting submenu
 		void RenderMenuBar() {
 			if (ImGui::BeginMenuBar()) {
 				if (ImGui::BeginMenu("File")) {
@@ -1226,13 +1116,10 @@ namespace Utils {
 					ImGui::EndMenu();
 				}
 
-				// Syntax Highlighting submenu
 				if (ImGui::BeginMenu("Syntax")) {
-					// Display current file type
 					ImGui::Text("Current: %s", currentFileType.empty() ? "Plain Text" : currentFileType.c_str());
 					ImGui::Separator();
 
-					// Common file types
 					if (ImGui::MenuItem("Plain Text", nullptr, currentFileType == ".txt")) {
 						SetFileType(".txt");
 					}
@@ -1370,10 +1257,8 @@ namespace Utils {
 			}
 		}
 
-		// Context Menu
 		void RenderContextMenu() {
 			if (ImGui::MenuItem("Show Menu Bar", nullptr, &showMenuBar)) {
-				// Toggle handled automatically by reference
 			}
 
 			ImGui::Separator();
@@ -1456,7 +1341,6 @@ namespace Utils {
 						}
 					}
 
-					// Apply syntax highlighting when configuration changes
 					ApplySyntaxHighlighting();
 				}
 			}
@@ -1570,7 +1454,6 @@ namespace Utils {
 		std::unique_ptr<Zep::ZepEditor_ImGui> editor;
 		bool isInitialized;
 
-		// Configuration state
 		bool showLineNumbers = true;
 		bool wordWrap = true;
 		bool readOnly = false;
@@ -1585,24 +1468,21 @@ namespace Utils {
 		std::string currentSearchTerm;
 		float currentFontSize = 14.0f;
 
-		// File management
 		std::string currentFileType = ".txt";
 		std::string currentFilePath;
+		std::string defaultDialogPath;
 
-		// Search state
 		bool searchCaseSensitive = false;
 		bool searchRegex = false;
 		std::vector<std::pair<size_t, size_t>> searchResults;
 		int currentSearchIndex = -1;
 
-		// Mouse click tracking for multi-click selection
 		double lastClickTime = 0.0;
 		int consecutiveClicks = 0;
 		Zep::NVec2f lastClickPosition;
 		bool scheduleWordSelection = false;
 		bool scheduleLineSelection = false;
 
-		// Click timing constants
 		static constexpr double DOUBLE_CLICK_TIME = 0.5;
 		static constexpr float CLICK_POSITION_TOLERANCE = 5.0f;
 	};

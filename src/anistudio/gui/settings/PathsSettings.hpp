@@ -1,7 +1,7 @@
 #pragma once
 
 #include "BaseTabObject.hpp"
-#include "ImGuiFileDialog.h"
+#include "FileDialogUtil.hpp"
 #include "FilePathSystem.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -80,7 +80,6 @@ namespace Settings {
 
                 auto modelRootIt = pathMap.find("ModelRoot");
                 if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
-                    // Apply model root subdirectories
                     UpdateModelSubdirectories(modelRootIt->second);
                 }
 
@@ -225,46 +224,31 @@ namespace Settings {
             bool isFileSelector = (pathKey == "ClipL" || pathKey == "ClipG" || pathKey == "T5XXL");
 
             if (ImGui::Button(buttonID.c_str())) {
-                IGFD::FileDialogConfig config;
-                config.path = path.empty() ? "." : path;
-                config.flags = ImGuiFileDialogFlags_Modal;
-                std::string dialogID = std::string("ChoosePath##") + label;
+                std::string defaultPath = path.empty() ? "." : path;
 
                 if (isFileSelector) {
-                    ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
-                        "Select File",
-                        "All Files{.*},.safetensors{.safetensors},.ckpt{.ckpt},.pth{.pth}",
-                        config);
-                }
-                else {
-                    ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
-                        "Select Directory",
-                        nullptr,
-                        config);
-                }
-            }
-
-            std::string dialogID = std::string("ChoosePath##") + label;
-            if (ImGuiFileDialog::Instance()->Display(dialogID.c_str(), 32, ImVec2(500, 400))) {
-                if (ImGuiFileDialog::Instance()->IsOk()) {
-                    std::string selectedPath;
-                    if (isFileSelector) {
-                        selectedPath = ImGuiFileDialog::Instance()->GetFilePathName();
-                    }
-                    else {
-                        selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-                    }
-
-                    if (!selectedPath.empty() && selectedPath != path) {
-                        path = selectedPath;
-                        hasChanges = true;
-
-                        if (pathKey == "ModelRoot" && !path.empty()) {
-                            UpdateModelSubdirectories(path);
+                    std::string outPath;
+                    std::string filter = "All Files{.*},SafeTensors{.safetensors},Checkpoint{.ckpt},PyTorch{.pth}";
+                    if (FileDialog::OpenFile("Select File", filter, outPath, defaultPath)) {
+                        if (!outPath.empty() && outPath != path) {
+                            path = outPath;
+                            hasChanges = true;
                         }
                     }
                 }
-                ImGuiFileDialog::Instance()->Close();
+                else {
+                    std::string outPath;
+                    if (FileDialog::SelectFolder("Select Directory", outPath, defaultPath)) {
+                        if (!outPath.empty() && outPath != path) {
+                            path = outPath;
+                            hasChanges = true;
+
+                            if (pathKey == "ModelRoot" && !path.empty()) {
+                                UpdateModelSubdirectories(path);
+                            }
+                        }
+                    }
+                }
             }
 
             ImGui::SameLine();

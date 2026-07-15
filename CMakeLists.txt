@@ -180,7 +180,6 @@ target_link_libraries(AniStudioDeps INTERFACE
     AniEngineDeps
     exiv2::exiv2
     ImGui
-    ImGuiFileDialog
     ImNodeFlow
     ImGuizmo
 )
@@ -197,7 +196,6 @@ endif()
 target_compile_definitions(AniStudioDeps INTERFACE
     GLEW_STATIC
     IMGUI_DEFINE_MATH_OPERATORS
-    IMGUI_FILEDIALOG_AVAILABLE
     IMGUI_NODES_AVAILABLE
     IMNODEFLOW_AVAILABLE
     IMGUIZMO_AVAILABLE
@@ -369,11 +367,6 @@ message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  Shared libraries: ${BUILD_SHARED_LIBS}")
 message(STATUS "  Runtime library: ${CMAKE_MSVC_RUNTIME_LIBRARY}")
-message(STATUS "")
-message(STATUS "Components:")
-message(STATUS "  AniEngine: ${BUILD_ANIENGINE}")
-message(STATUS "  AniStudio: ${BUILD_ANISTUDIO}")
-message(STATUS "  Main App: ${BUILD_MAIN_APP}")
 message(STATUS "")
 message(STATUS "Output directories:")
 message(STATUS "  Binaries: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")

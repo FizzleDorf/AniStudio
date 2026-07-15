@@ -1,10 +1,10 @@
+// SequencerView.hpp
 #ifndef SEQUENCER_VIEW_HPP
 #define SEQUENCER_VIEW_HPP
 
 #include "GUI.h"
 #include "pch.h"
 #include <ImSequencer.h>
-#include "ImGuiFileDialog.h"
 
 namespace GUI {
 

@@ -220,24 +220,16 @@ namespace GUI {
     }
 
     void VideoView::RenderControls() {
-        if (ImGui::Button("Load Video(s)")) {
-            IGFD::FileDialogConfig config;
-            config.path = ".";
-            config.countSelectionMax = 0;
-            ImGuiFileDialog::Instance()->OpenDialog("LoadVideoDialog", "Choose Video(s)",
-                filters, config);
-        }
+        static std::string lastVideoFolder;
 
-        if (ImGuiFileDialog::Instance()->Display("LoadVideoDialog", 32, ImVec2(700, 400))) {
-            if (ImGuiFileDialog::Instance()->IsOk()) {
-                std::map<std::string, std::string> selection = ImGuiFileDialog::Instance()->GetSelection();
-                std::vector<std::string> filePaths;
-                for (const auto& [fileName, filePath] : selection) {
-                    filePaths.push_back(filePath);
+        if (ImGui::Button("Load Video(s)")) {
+            std::vector<std::string> filePaths;
+            if (FileDialog::OpenFiles("Choose Video(s)", FileDialog::FilterType::VIDEO_FILE, filePaths, lastVideoFolder)) {
+                if (!filePaths.empty()) {
+                    LoadVideos(filePaths);
+                    lastVideoFolder = std::filesystem::path(filePaths[0]).parent_path().string();
                 }
-                LoadVideos(filePaths);
             }
-            ImGuiFileDialog::Instance()->Close();
         }
 
         ImGui::SameLine();

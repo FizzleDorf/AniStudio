@@ -61,7 +61,6 @@ target_include_directories(AniEngineCore PUBLIC
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/cr/cr"
-    "${EXTERNAL_DIR}/imgui_filedialog/stb"
     "${EXTERNAL_DIR}/stb_image"
 )
 

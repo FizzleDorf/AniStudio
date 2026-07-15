@@ -23,10 +23,6 @@ if(NOT TARGET ImGui)
     add_subdirectory("${EXTERNAL_DIR}/imgui" "${CMAKE_BINARY_DIR}/_external/imgui")
 endif()
 
-if(NOT TARGET ImGuiFileDialog)
-    add_subdirectory("${EXTERNAL_DIR}/imgui_filedialog" "${CMAKE_BINARY_DIR}/_external/imgui_filedialog")
-endif()
-
 if(NOT TARGET ImNodeFlow)
     add_subdirectory("${EXTERNAL_DIR}/ImNodeFlow" "${CMAKE_BINARY_DIR}/_external/ImNodeFlow")
 endif()
@@ -44,6 +40,14 @@ if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
     set(ZEP_AVAILABLE TRUE)
 elseif(TARGET Zep)
     set(ZEP_AVAILABLE TRUE)
+endif()
+
+set(NFD_AVAILABLE FALSE)
+if(EXISTS "${EXTERNAL_DIR}/nativefiledialog-extended/CMakeLists.txt" AND NOT TARGET nfd)
+    add_subdirectory("${EXTERNAL_DIR}/nativefiledialog-extended" "${CMAKE_BINARY_DIR}/_external/nativefiledialog-extended")
+    set(NFD_AVAILABLE TRUE)
+elseif(TARGET nfd)
+    set(NFD_AVAILABLE TRUE)
 endif()
 
 set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVE})
@@ -97,12 +101,13 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/imgui"
     "${EXTERNAL_DIR}/imgui/backends"
-    "${EXTERNAL_DIR}/imgui_filedialog"
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"
     "${EXTERNAL_DIR}/imgui_markdown"
     "${EXTERNAL_DIR}/zep/include"
     "${EXTERNAL_DIR}/stb"
+    # NFD headers
+    $<BUILD_INTERFACE:${EXTERNAL_DIR}/nfd/src/include>
 )
 
 target_link_libraries(AniStudioCore PUBLIC
@@ -114,12 +119,16 @@ target_link_libraries(AniStudioCore PUBLIC
 
 target_link_libraries(AniStudioCore PRIVATE
     ImGui
-    ImGuiFileDialog
     ImNodeFlow
     ImGuizmo
     ZLIB::ZLIB
     PNG::PNG
 )
+
+if(NFD_AVAILABLE)
+    target_link_libraries(AniStudioCore PRIVATE nfd)
+    target_compile_definitions(AniStudioCore PUBLIC NFD_AVAILABLE)
+endif()
 
 target_sources(AniStudioCore PRIVATE "${EXTERNAL_DIR}/stb_image/stb_image.cpp")
 
@@ -131,7 +140,6 @@ endif()
 target_compile_definitions(AniStudioCore PUBLIC
     GLEW_STATIC
     IMGUI_DEFINE_MATH_OPERATORS
-    IMGUI_FILEDIALOG_AVAILABLE
     IMGUI_NODES_AVAILABLE
     IMNODEFLOW_AVAILABLE
     IMGUIZMO_AVAILABLE

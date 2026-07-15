@@ -103,7 +103,7 @@ echo.
 
 :: Check if executable was created
 if exist bin\AniStudio.exe (
-    echo AniStudio executable: bin\AniStudio.exe
+    echo AniStudio executable: AniStudio.exe
     
     :: Ask if user wants to run the application
     set /p RUN_APP="Run AniStudio now? (y/n): "
@@ -112,7 +112,7 @@ if exist bin\AniStudio.exe (
         bin\AniStudio.exe
     )
 ) else (
-    echo Warning: AniStudio.exe was not found in bin directory
+    echo Warning: AniStudio.exe was not found
 )
 
 goto :success_exit

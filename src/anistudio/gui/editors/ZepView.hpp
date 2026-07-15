@@ -1,3 +1,4 @@
+// ZepView.hpp
 #pragma once
 
 #include "GUI.h"
@@ -5,7 +6,7 @@
 #include "ZepUtils.hpp"
 #include "PythonComponent.hpp"
 #include "PythonSystem.hpp"
-#include "ImGuiFileDialog.h"
+#include "FileDialogUtil.hpp"
 #include <memory>
 #include <string>
 #include <filesystem>
@@ -56,8 +57,7 @@ namespace GUI {
         void ExecuteCurrentScript();
         void ClearPythonOutput();
         void OpenFileDialog();
-        void SaveFileDialog();
         void SaveAsFileDialog();
-        void HandleFileDialogs();
+        void SaveFileDialog();
     };
 }

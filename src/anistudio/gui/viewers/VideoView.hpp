@@ -3,7 +3,7 @@
 #include "GUI.h"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
-#include "ImGuiFileDialog.h"
+#include "FileDialogUtil.hpp"
 #include "../events/Events.hpp"
 #include <pch.h>
 

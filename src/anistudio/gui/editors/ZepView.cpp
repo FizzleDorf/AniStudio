@@ -1,3 +1,4 @@
+// ZepView.cpp
 #include "ZepView.hpp"
 #include "FilePathSystem.hpp"
 #include <algorithm>
@@ -67,8 +68,6 @@ namespace GUI {
             if (IsPythonFile() && showVirtualEnvSettings) {
                 RenderVirtualEnvDialog();
             }
-
-            HandleFileDialogs();
 
             ImVec2 contentSize = ImGui::GetContentRegionAvail();
             ImVec2 editorPos = ImGui::GetCursorScreenPos();
@@ -256,10 +255,14 @@ namespace GUI {
 
                     ImGui::SameLine();
                     if (ImGui::Button("Browse##Venv")) {
-                        IGFD::FileDialogConfig config;
+                        std::string folderPath;
                         auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
-                        config.path = fileSys ? fileSys->GetPath("DefaultProject") : ".";
-                        ImGuiFileDialog::Instance()->OpenDialog("ChooseVenvDialog", "Choose Virtual Environment Directory", nullptr, config);
+                        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+                        if (FileDialog::SelectFolder("Choose Virtual Environment Directory", folderPath, defaultPath)) {
+                            pythonComp.virtualEnvPath = folderPath;
+                            pythonComp.UpdateVirtualEnvPaths();
+                            strncpy(venvPathBuffer, folderPath.c_str(), sizeof(venvPathBuffer) - 1);
+                        }
                     }
 
                     if (ImGui::Button("Reset to Default")) {
@@ -447,76 +450,66 @@ if __name__ == "__main__":
     }
 
     void ZepView::OpenFileDialog() {
-        IGFD::FileDialogConfig config;
+        std::string outPath;
+        std::string filter = "All Code Files{.py,.cpp,.hpp,.h,.c,.txt,.md},"
+            "Python{.py},"
+            "C++{.cpp,.hpp,.h},"
+            "C{.c},"
+            "Text{.txt},"
+            "Markdown{.md},"
+            "All Files{.*}";
         auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
-        config.path = fileSys ? fileSys->GetPath("DefaultProject") : ".";
-        ImGuiFileDialog::Instance()->OpenDialog("OpenCodeFile", "Choose Code File", ".py,.cpp,.hpp,.h,.c,.txt,.md", config);
+        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+        if (FileDialog::OpenFile("Open Code File", filter, outPath, defaultPath)) {
+            LoadFile(outPath);
+        }
     }
 
     void ZepView::SaveFileDialog() {
-        IGFD::FileDialogConfig config;
-        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
-        config.path = fileSys ? fileSys->GetPath("DefaultProject") : ".";
-
-        std::string filter = ".txt";
+        std::string outPath;
+        std::string filter;
         if (IsPythonFile()) {
-            filter = ".py";
+            filter = "Python{.py},All Files{.*}";
         }
         else if (!currentFilePath.empty()) {
             std::filesystem::path path(currentFilePath);
             std::string ext = path.extension().string();
             if (!ext.empty()) {
-                filter = ext;
+                filter = std::string(ext.substr(1)) + "{" + ext + "},All Files{.*}";
+            }
+            else {
+                filter = "All Files{.*}";
             }
         }
-
-        ImGuiFileDialog::Instance()->OpenDialog("SaveCodeFile", "Save Code File", filter.c_str(), config);
+        else {
+            filter = "All Files{.*}";
+        }
+        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+        std::string defaultName = "newfile.txt";
+        if (IsPythonFile()) defaultName = "script.py";
+        else if (!currentFilePath.empty()) defaultName = std::filesystem::path(currentFilePath).filename().string();
+        if (FileDialog::SaveFile("Save Code File", filter, defaultName, outPath, defaultPath)) {
+            SaveFile(outPath);
+        }
     }
 
     void ZepView::SaveAsFileDialog() {
-        IGFD::FileDialogConfig config;
+        std::string outPath;
+        std::string filter = "All Code Files{.py,.cpp,.hpp,.h,.c,.txt,.md},"
+            "Python{.py},"
+            "C++{.cpp,.hpp,.h},"
+            "C{.c},"
+            "Text{.txt},"
+            "Markdown{.md},"
+            "All Files{.*}";
         auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
-        config.path = fileSys ? fileSys->GetPath("DefaultProject") : ".";
-        ImGuiFileDialog::Instance()->OpenDialog("SaveAsCodeFile", "Save Code File As", ".py,.cpp,.hpp,.h,.c,.txt,.md", config);
-    }
-
-    void ZepView::HandleFileDialogs() {
-        if (ImGuiFileDialog::Instance()->Display("OpenCodeFile", 32, ImVec2(700, 400))) {
-            if (ImGuiFileDialog::Instance()->IsOk()) {
-                std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-                LoadFile(filePath);
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-
-        if (ImGuiFileDialog::Instance()->Display("SaveCodeFile", 32, ImVec2(700, 400))) {
-            if (ImGuiFileDialog::Instance()->IsOk()) {
-                std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-                SaveFile(filePath);
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-
-        if (ImGuiFileDialog::Instance()->Display("SaveAsCodeFile", 32, ImVec2(700, 400))) {
-            if (ImGuiFileDialog::Instance()->IsOk()) {
-                std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
-                SaveFile(filePath);
-            }
-            ImGuiFileDialog::Instance()->Close();
-        }
-
-        if (ImGuiFileDialog::Instance()->Display("ChooseVenvDialog", 32, ImVec2(700, 400))) {
-            if (ImGuiFileDialog::Instance()->IsOk()) {
-                std::string venvPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-                if (pythonEntity != 0 && mgr.HasComponent<ECS::PythonComponent>(pythonEntity)) {
-                    auto& pythonComp = mgr.GetComponent<ECS::PythonComponent>(pythonEntity);
-                    pythonComp.virtualEnvPath = venvPath;
-                    pythonComp.UpdateVirtualEnvPaths();
-                    strncpy(venvPathBuffer, venvPath.c_str(), sizeof(venvPathBuffer) - 1);
-                }
-            }
-            ImGuiFileDialog::Instance()->Close();
+        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+        std::string defaultName = "newfile.txt";
+        if (IsPythonFile()) defaultName = "script.py";
+        else if (!currentFilePath.empty()) defaultName = std::filesystem::path(currentFilePath).filename().string();
+        if (FileDialog::SaveFile("Save Code File As", filter, defaultName, outPath, defaultPath)) {
+            SaveFile(outPath);
         }
     }
-
 }

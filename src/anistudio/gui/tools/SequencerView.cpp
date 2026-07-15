@@ -1,3 +1,4 @@
+// SequencerView.cpp
 #include "SequencerView.hpp"
 #include <GLFW/glfw3.h>
 #include <iostream>
