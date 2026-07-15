@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GUI.h"
-#include "FilePaths.hpp"
 #include "ImNodeFlow.h"
 #include "ECS.h"
 #include <string>
@@ -17,44 +16,36 @@ namespace GUI {
 
     class NodeView : public BaseView {
     public:
-		static constexpr const char* GetMetadataJSON() {
-			return R"({
+        static constexpr const char* GetMetadataJSON() {
+            return R"({
             "displayName": "Node View",
             "category": "Tools",
             "description": "Moar Nodes."
         })";
-		}
+        }
 
         NodeView(ECS::EntityManager& entityMgr);
         ~NodeView() = default;
 
-        // Delete copy constructor and assignment operator
         NodeView(const NodeView&) = delete;
         NodeView& operator=(const NodeView&) = delete;
 
-        // Move constructor and assignment operator
         NodeView(NodeView&&) = default;
         NodeView& operator=(NodeView&&) = default;
 
-        // Overrides from BaseView
         void Init() override;
         void Render() override;
         nlohmann::json Serialize() const override;
         void Deserialize(const nlohmann::json& j) override;
 
     private:
-        // Node editor instance
         std::unique_ptr<ImFlow::ImNodeFlow> m_nodeFlow;
-
-        // Node registry
         std::vector<std::shared_ptr<ImFlow::BaseNode>> m_registeredNodes;
 
-        // Helper methods
         void RegisterNodeTypes();
         void SetupContext();
     };
 
-    // Basic number node that can output a value
     class NumberNode : public ImFlow::BaseNode {
     public:
         NumberNode();
@@ -65,7 +56,6 @@ namespace GUI {
         std::shared_ptr<ImFlow::OutPin<float>> m_output;
     };
 
-    // Operation node that takes inputs and produces an output
     class OperationNode : public ImFlow::BaseNode {
     public:
         enum Operation {

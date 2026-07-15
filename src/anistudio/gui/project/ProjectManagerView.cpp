@@ -16,7 +16,7 @@ namespace GUI {
         std::cout << "[ProjectManagerView] Startup view initialized" << std::endl;
 
         popupState.InitializeBuffers(m_projectManager);
-        popupState.LoadTemplates();
+        popupState.LoadTemplates(m_projectManager);
         popupState.RefreshRecentProjects(m_projectManager);
 
         autoLoadState.showPopup = false;
@@ -57,12 +57,10 @@ namespace GUI {
         bool isOpen = true;
         if (ImGui::Begin("Welcome to AniStudio##StartupWindow", &isOpen, flags)) {
 
-            // Title section
             ImGui::Text("Welcome to AniStudio");
             ImGui::Text("Media Creation & AI Generation Tool");
             ImGui::Separator();
 
-            // Recent projects section
             ImGui::Text("Recent Projects:");
             auto recentProjects = m_projectManager.GetRecentProjects();
 
@@ -100,28 +98,23 @@ namespace GUI {
 
             ImGui::Separator();
 
-            // Calculate vertical padding to center text in 64px button
             float buttonHeight = 48.0f;
             float textHeight = ImGui::GetFontSize();
             float verticalPadding = (buttonHeight - textHeight) / 2.0f;
 
-            // Set frame padding for vertical centering
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(ImGui::GetStyle().FramePadding.x, verticalPadding));
 
-            // New Project button
             if (ImGui::Button("New Project", ImVec2(-FLT_MIN, buttonHeight))) {
                 popupState.showNewProjectPopup = true;
                 std::cout << "[ProjectManagerView] Opening New Project dialog" << std::endl;
             }
 
-            // Open Project button
             if (ImGui::Button("Open Project", ImVec2(-FLT_MIN, buttonHeight))) {
                 popupState.showLoadProjectPopup = true;
                 popupState.RefreshRecentProjects(m_projectManager);
                 std::cout << "[ProjectManagerView] Opening Load Project dialog" << std::endl;
             }
 
-            // Settings button - Opens settings through StudioCore
             if (ImGui::Button("Settings", ImVec2(-FLT_MIN, buttonHeight))) {
                 if (m_studioCore) {
                     m_studioCore->GetSettingsView().Show();
@@ -132,18 +125,12 @@ namespace GUI {
                 }
             }
 
-            // Exit button
             if (ImGui::Button("Exit", ImVec2(-FLT_MIN, buttonHeight))) {
                 std::cout << "[ProjectManagerView] Exiting application" << std::endl;
                 exit(0);
             }
 
-            // Restore the original frame padding
             ImGui::PopStyleVar();
-
-            // Version footer (always at bottom)
-            // TODO: engine, studio and core versions here eventually
-            // ImGui::TextDisabled("AniStudio v1.0.0");
         }
         ImGui::End();
     }

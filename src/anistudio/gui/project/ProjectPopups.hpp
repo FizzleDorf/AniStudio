@@ -9,42 +9,31 @@ namespace ANI { class ProjectManager; }
 
 namespace GUI {
 
-	// Simple popup state structure
-	struct ProjectPopupState {
-		bool showNewProjectPopup = false;
-		bool showLoadProjectPopup = false;
+    struct ProjectPopupState {
+        bool showNewProjectPopup = false;
+        bool showLoadProjectPopup = false;
 
-		// Project creation data
-		char projectNameBuffer[256] = { 0 };
-		char projectPathBuffer[512] = { 0 };
-		std::vector<ProjectTemplate> templates;
-		int selectedTemplate = -1;
+        char projectNameBuffer[256] = { 0 };
+        char projectPathBuffer[512] = { 0 };
+        std::vector<ProjectTemplate> templates;
+        int selectedTemplate = -1;
+        std::vector<std::string> recentProjects;
 
-		// Recent projects cache
-		std::vector<std::string> recentProjects;
+        ProjectPopupState() = default;
 
-		ProjectPopupState() = default;
+        void InitializeBuffers(ANI::ProjectManager& projectMgr);
+        void LoadTemplates(ANI::ProjectManager& projectMgr);      // now takes a reference
+        void RefreshRecentProjects(ANI::ProjectManager& projectMgr);
 
-		void InitializeBuffers(ANI::ProjectManager& projectMgr);
-		void LoadTemplates();
-		void RefreshRecentProjects(ANI::ProjectManager& projectMgr);
+        std::string GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const;
+    };
 
-		// Helper method for generating default project names
-		std::string GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const;
-	};
-
-	// Static popup rendering functions that can be used anywhere
-	namespace ProjectPopups {
-
-		// Call these from any Render() function
-		void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
-		void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
-
-		// Helper functions
-		void ShowTemplateSelector(ProjectPopupState& state);
-		void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
-		void CreateProject(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
-
-	} // namespace ProjectPopups
+    namespace ProjectPopups {
+        void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
+        void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
+        void ShowTemplateSelector(ProjectPopupState& state);
+        void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
+        void CreateProject(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
+    }
 
 } // namespace GUI

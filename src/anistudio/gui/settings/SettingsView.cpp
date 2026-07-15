@@ -1,10 +1,10 @@
-// SettingsView.cpp
 #include "SettingsView.hpp"
 #include "PathsSettings.hpp"
 #include "GeneralSettings.hpp"
 #include "ImGuiStyleSettings.hpp"
 #include "ImGuiRenderSettings.hpp"
 #include "SettingsManager.hpp"
+#include "EntityManager.hpp"
 #include <iostream>
 #include <algorithm>
 #include <imgui_internal.h>
@@ -32,6 +32,11 @@ namespace GUI {
         std::cout << "[SettingsView] Initialized (settings will load when context is set)" << std::endl;
     }
 
+    void SettingsView::SetEntityManager(ECS::EntityManager& mgr) {
+        m_entityManager = &mgr;
+        std::cout << "[SettingsView] EntityManager set" << std::endl;
+    }
+
     void SettingsView::SetImGuiContext(ImGuiContext* context) {
         imguiContext = context;
         std::cout << "[SettingsView] ImGui context set to: " << imguiContext << std::endl;
@@ -41,7 +46,6 @@ namespace GUI {
             return;
         }
 
-        // Set context for all ImGui-related tabs
         for (const auto& tab : settingsManager->GetTabs()) {
             std::string tabName = tab->GetTabName();
             if (tabName == "ImGui Style") {
@@ -60,7 +64,6 @@ namespace GUI {
             }
         }
 
-        // Now load settings with the context set
         LoadAllSettingsWithContext();
     }
 
@@ -96,9 +99,14 @@ namespace GUI {
             settingsManager->RegisterTab(std::move(generalTab));
             std::cout << "[SettingsView] Registered General tab" << std::endl;
 
-            auto pathsTab = std::make_unique<Settings::PathsSettingsTab>();
-            settingsManager->RegisterTab(std::move(pathsTab));
-            std::cout << "[SettingsView] Registered Paths tab" << std::endl;
+            if (m_entityManager) {
+                auto pathsTab = std::make_unique<Settings::PathsSettingsTab>(*m_entityManager);
+                settingsManager->RegisterTab(std::move(pathsTab));
+                std::cout << "[SettingsView] Registered Paths tab with EntityManager" << std::endl;
+            }
+            else {
+                std::cerr << "[SettingsView] EntityManager not set, cannot create PathsSettingsTab" << std::endl;
+            }
 
             auto styleTab = std::make_unique<Settings::ImGuiStyleSettingsTab>();
             settingsManager->RegisterTab(std::move(styleTab));

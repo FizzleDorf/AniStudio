@@ -1,9 +1,7 @@
-// VideoComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
 #include "OpenGLWrapper.hpp"
-#include "FilePathService.hpp"
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -24,7 +22,7 @@ namespace ECS {
         SwsContext* swsCtx = nullptr;
         int videoStreamIndex = -1;
 
-        std::string fileName = "Untitled";
+        std::string fileName = "AniStudio";
         std::string filePath = "";
         int width = 0;
         int height = 0;
@@ -43,7 +41,6 @@ namespace ECS {
 
         VideoComponent() {
             compName = "Video";
-            InitializeFilePathFromService();
         }
 
         ~VideoComponent() {
@@ -153,15 +150,6 @@ namespace ECS {
                 frameAccumulator = other.frameAccumulator;
             }
             return *this;
-        }
-
-    protected:
-        void InitializeFilePathFromService() {
-            if (Utils::FilePathService::IsInitialized()) {
-                std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
-                if (!defaultPath.empty())
-                    filePath = defaultPath;
-            }
         }
     };
 

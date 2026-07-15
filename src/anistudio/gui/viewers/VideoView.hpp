@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GUI.h"
-#include "FilePaths.hpp"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
 #include "ImGuiFileDialog.h"

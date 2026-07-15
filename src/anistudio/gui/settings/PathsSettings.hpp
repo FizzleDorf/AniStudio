@@ -2,372 +2,376 @@
 
 #include "BaseTabObject.hpp"
 #include "ImGuiFileDialog.h"
-#include "FilePathService.hpp"
+#include "FilePathSystem.hpp"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <filesystem>
 #include <iostream>
 #include <map>
 #include <vector>
+#include <memory>
 
 namespace Settings {
 
-	class PathsSettingsTab : public BaseTabObject {
-	public:
-		PathsSettingsTab() : BaseTabObject("Paths", "Application") {
-			InitializePathCategories();
-			LoadCurrentPaths();
-			CreateBackup();
-		}
+    class PathsSettingsTab : public BaseTabObject {
+    public:
+        PathsSettingsTab(ECS::EntityManager& entityMgr)
+            : BaseTabObject("Paths", "Application"), m_entityManager(entityMgr) {
+            InitializePathCategories();
+            LoadCurrentPaths();
+            CreateBackup();
+        }
 
-		void RenderUI() override {
-			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
-				for (const auto& category : pathCategories) {
-					RenderCategory(category.first, category.second);
-				}
+        void RenderUI() override {
+            if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
+                for (const auto& category : pathCategories) {
+                    RenderCategory(category.first, category.second);
+                }
 
-				ImGui::Separator();
+                ImGui::Separator();
 
-				auto modelRootIt = pathMap.find("ModelRoot");
-				if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
-					if (ImGui::Button("Reset Model Paths to Root")) {
-						ResetModelPathsToRoot(modelRootIt->second);
-					}
-					ImGui::SameLine();
-					ImGui::TextDisabled("(Will update all model subdirectories)");
-				}
+                auto modelRootIt = pathMap.find("ModelRoot");
+                if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
+                    if (ImGui::Button("Reset Model Paths to Root")) {
+                        ResetModelPathsToRoot(modelRootIt->second);
+                    }
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("(Will update all model subdirectories)");
+                }
 
-				ImGui::Separator();
-				RenderActionButtons();
-			}
-			ImGui::EndChild();
-		}
+                ImGui::Separator();
+                RenderActionButtons();
+            }
+            ImGui::EndChild();
+        }
 
-		void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
-			if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
-				for (const auto& category : pathCategories) {
-					if (ShouldRenderCategory(category.first, selectedCategories)) {
-						RenderCategory(category.first, category.second);
-					}
-				}
+        void RenderFilteredUI(const std::set<std::string>& selectedCategories) override {
+            if (ImGui::BeginChild("PathsSettings", ImVec2(0, 0), false)) {
+                for (const auto& category : pathCategories) {
+                    if (ShouldRenderCategory(category.first, selectedCategories)) {
+                        RenderCategory(category.first, category.second);
+                    }
+                }
 
-				auto modelRootIt = pathMap.find("ModelRoot");
-				if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
-					if (ImGui::Button("Reset Model Paths to Root")) {
-						ResetModelPathsToRoot(modelRootIt->second);
-					}
-				}
+                auto modelRootIt = pathMap.find("ModelRoot");
+                if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
+                    if (ImGui::Button("Reset Model Paths to Root")) {
+                        ResetModelPathsToRoot(modelRootIt->second);
+                    }
+                }
 
-				RenderActionButtons();
-			}
-			ImGui::EndChild();
-		}
+                RenderActionButtons();
+            }
+            ImGui::EndChild();
+        }
 
-		bool SaveSettings() override {
-			try {
-				// Apply changes to FilePathService
-				for (const auto&[key, value] : pathMap) {
-					if (key == "LastOpenProject") continue;
-					Utils::FilePathService::SetPath(key, value);
-				}
+        bool SaveSettings() override {
+            try {
+                auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+                if (!fileSys) {
+                    std::cerr << "[PathsSettings] FilePathSystem not available!" << std::endl;
+                    return false;
+                }
 
-				// Apply model root if set
-				auto modelRootIt = pathMap.find("ModelRoot");
-				if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
-					Utils::FilePathService::SetByModelRoot();
-				}
+                for (const auto& [key, value] : pathMap) {
+                    if (key == "LastOpenProject") continue;
+                    fileSys->SetPath(key, value);
+                }
 
-				// Save to file system
-				Utils::FilePathService::SaveFilepathDefaults();
+                auto modelRootIt = pathMap.find("ModelRoot");
+                if (modelRootIt != pathMap.end() && !modelRootIt->second.empty()) {
+                    // Apply model root subdirectories
+                    UpdateModelSubdirectories(modelRootIt->second);
+                }
 
-				hasChanges = false;
-				CreateBackup();
-				return true;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[PathsSettings] Error saving settings: " << e.what() << std::endl;
-				return false;
-			}
-		}
+                hasChanges = false;
+                CreateBackup();
+                return true;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[PathsSettings] Error saving settings: " << e.what() << std::endl;
+                return false;
+            }
+        }
 
-		bool LoadSettings() override {
-			try {
-				// Reload paths from FilePathService
-				LoadCurrentPaths();
-				hasChanges = false;
-				CreateBackup();
-				return true;
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[PathsSettings] Error loading settings: " << e.what() << std::endl;
-				return false;
-			}
-		}
+        bool LoadSettings() override {
+            try {
+                LoadCurrentPaths();
+                hasChanges = false;
+                CreateBackup();
+                return true;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[PathsSettings] Error loading settings: " << e.what() << std::endl;
+                return false;
+            }
+        }
 
-		void ResetToDefaults() override {
-			// Clear all paths except LastOpenProject
-			for (auto&[key, value] : pathMap) {
-				if (key != "LastOpenProject") {
-					value.clear();
-				}
-			}
-			hasChanges = true;
-		}
+        void ResetToDefaults() override {
+            for (auto& [key, value] : pathMap) {
+                if (key != "LastOpenProject") {
+                    value.clear();
+                }
+            }
+            hasChanges = true;
+        }
 
-		void CreateBackup() override {
-			backupPathMap = pathMap;
-		}
+        void CreateBackup() override {
+            backupPathMap = pathMap;
+        }
 
-		void RestoreFromBackup() override {
-			pathMap = backupPathMap;
-			hasChanges = false;
-		}
+        void RestoreFromBackup() override {
+            pathMap = backupPathMap;
+            hasChanges = false;
+        }
 
-		bool HasUnsavedChanges() const override {
-			return hasChanges;
-		}
+        bool HasUnsavedChanges() const override {
+            return hasChanges;
+        }
 
-	private:
-		std::map<std::string, std::string> pathMap;
-		std::map<std::string, std::string> backupPathMap;
-		std::map<std::string, std::vector<std::string>> pathCategories;
-		bool hasChanges = false;
+    private:
+        ECS::EntityManager& m_entityManager;
+        std::map<std::string, std::string> pathMap;
+        std::map<std::string, std::string> backupPathMap;
+        std::map<std::string, std::vector<std::string>> pathCategories;
+        bool hasChanges = false;
 
-		void InitializePathCategories() {
-			pathCategories["General Paths"] = {
-				"DefaultProject",
-				"AssetsFolder",
-				"OutputFolder",
-				"VirtualEnv",
-				"Scripts",
-				"Plugins",
-				"ImguiState"
-			};
+        void InitializePathCategories() {
+            pathCategories["General Paths"] = {
+                "DefaultProject",
+                "AssetsFolder",
+                "OutputFolder",
+                "VirtualEnv",
+                "Scripts",
+                "Plugins",
+                "ImguiState"
+            };
 
-			pathCategories["Model Paths"] = {
-				"ModelRoot",
-				"Checkpoint",
-				"Encoder",
-				"Vae",
-				"Unet",
-				"Lora",
-				"ControlNet",
-				"Upscale",
-				"Embed"
-			};
+            pathCategories["Model Paths"] = {
+                "ModelRoot",
+                "Checkpoint",
+                "Encoder",
+                "Vae",
+                "Unet",
+                "Lora",
+                "ControlNet",
+                "Upscale",
+                "Embed"
+            };
 
-			pathCategories["CLIP Files"] = {
-				"ClipL",
-				"ClipG",
-				"T5XXL"
-			};
-		}
+            pathCategories["CLIP Files"] = {
+                "ClipL",
+                "ClipG",
+                "T5XXL"
+            };
+        }
 
-		void LoadCurrentPaths() {
-			pathMap.clear();
+        void LoadCurrentPaths() {
+            pathMap.clear();
 
-			// Load all paths from FilePathService
-			for (const auto&[category, keys] : pathCategories) {
-				for (const auto& key : keys) {
-					pathMap[key] = Utils::FilePathService::GetPath(key);
-				}
-			}
+            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            if (!fileSys) return;
 
-			// Add LastOpenProject if it exists in FilePathService
-			std::string lastProject = Utils::FilePathService::GetPath("LastOpenProject");
-			if (!lastProject.empty()) {
-				pathMap["LastOpenProject"] = lastProject;
-			}
-		}
+            for (const auto& [category, keys] : pathCategories) {
+                for (const auto& key : keys) {
+                    pathMap[key] = fileSys->GetPath(key);
+                }
+            }
 
-		void RenderCategory(const std::string& categoryName, const std::vector<std::string>& pathKeys) {
-			ImGui::Text("%s", categoryName.c_str());
-			ImGui::Spacing();
+            std::string lastProject = fileSys->GetPath("LastOpenProject");
+            if (!lastProject.empty()) {
+                pathMap["LastOpenProject"] = lastProject;
+            }
+        }
 
-			if (ImGui::BeginTable((categoryName + "Table").c_str(), 3,
-				ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        void RenderCategory(const std::string& categoryName, const std::vector<std::string>& pathKeys) {
+            ImGui::Text("%s", categoryName.c_str());
+            ImGui::Spacing();
 
-				ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-				ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
-				ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
-				ImGui::TableHeadersRow();
+            if (ImGui::BeginTable((categoryName + "Table").c_str(), 3,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
 
-				for (const auto& key : pathKeys) {
-					auto it = pathMap.find(key);
-					if (it != pathMap.end()) {
-						RenderPathRow(key.c_str(), it->second, key);
-					}
-				}
+                ImGui::TableSetupColumn("Path Name", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+                ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+                ImGui::TableSetupColumn("Full Path", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
 
-				ImGui::EndTable();
-			}
-			ImGui::Separator();
-		}
+                for (const auto& key : pathKeys) {
+                    auto it = pathMap.find(key);
+                    if (it != pathMap.end()) {
+                        RenderPathRow(key.c_str(), it->second, key);
+                    }
+                }
 
-		void RenderPathRow(const char* label, std::string& path, const std::string& pathKey) {
-			if (pathKey == "LastOpenProject") {
-				return;
-			}
+                ImGui::EndTable();
+            }
+            ImGui::Separator();
+        }
 
-			ImGui::TableNextRow();
+        void RenderPathRow(const char* label, std::string& path, const std::string& pathKey) {
+            if (pathKey == "LastOpenProject") {
+                return;
+            }
 
-			ImGui::TableNextColumn();
-			std::string displayName = FormatDisplayName(label);
-			ImGui::TextUnformatted(displayName.c_str());
+            ImGui::TableNextRow();
 
-			ImGui::TableNextColumn();
-			std::string buttonID = std::string("...##") + label;
+            ImGui::TableNextColumn();
+            std::string displayName = FormatDisplayName(label);
+            ImGui::TextUnformatted(displayName.c_str());
 
-			bool isFileSelector = (pathKey == "ClipL" || pathKey == "ClipG" || pathKey == "T5XXL");
+            ImGui::TableNextColumn();
+            std::string buttonID = std::string("...##") + label;
 
-			if (ImGui::Button(buttonID.c_str())) {
-				IGFD::FileDialogConfig config;
-				config.path = path.empty() ? "." : path;
-				config.flags = ImGuiFileDialogFlags_Modal;
-				std::string dialogID = std::string("ChoosePath##") + label;
+            bool isFileSelector = (pathKey == "ClipL" || pathKey == "ClipG" || pathKey == "T5XXL");
 
-				if (isFileSelector) {
-					ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
-						"Select File",
-						"All Files{.*},.safetensors{.safetensors},.ckpt{.ckpt},.pth{.pth}",
-						config);
-				}
-				else {
-					ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
-						"Select Directory",
-						nullptr,
-						config);
-				}
-			}
+            if (ImGui::Button(buttonID.c_str())) {
+                IGFD::FileDialogConfig config;
+                config.path = path.empty() ? "." : path;
+                config.flags = ImGuiFileDialogFlags_Modal;
+                std::string dialogID = std::string("ChoosePath##") + label;
 
-			std::string dialogID = std::string("ChoosePath##") + label;
-			if (ImGuiFileDialog::Instance()->Display(dialogID.c_str(), 32, ImVec2(500, 400))) {
-				if (ImGuiFileDialog::Instance()->IsOk()) {
-					std::string selectedPath;
-					if (isFileSelector) {
-						selectedPath = ImGuiFileDialog::Instance()->GetFilePathName();
-					}
-					else {
-						selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
-					}
+                if (isFileSelector) {
+                    ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
+                        "Select File",
+                        "All Files{.*},.safetensors{.safetensors},.ckpt{.ckpt},.pth{.pth}",
+                        config);
+                }
+                else {
+                    ImGuiFileDialog::Instance()->OpenDialog(dialogID.c_str(),
+                        "Select Directory",
+                        nullptr,
+                        config);
+                }
+            }
 
-					if (!selectedPath.empty() && selectedPath != path) {
-						path = selectedPath;
-						hasChanges = true;
+            std::string dialogID = std::string("ChoosePath##") + label;
+            if (ImGuiFileDialog::Instance()->Display(dialogID.c_str(), 32, ImVec2(500, 400))) {
+                if (ImGuiFileDialog::Instance()->IsOk()) {
+                    std::string selectedPath;
+                    if (isFileSelector) {
+                        selectedPath = ImGuiFileDialog::Instance()->GetFilePathName();
+                    }
+                    else {
+                        selectedPath = ImGuiFileDialog::Instance()->GetCurrentPath();
+                    }
 
-						if (pathKey == "ModelRoot" && !path.empty()) {
-							UpdateModelSubdirectories(path);
-						}
-					}
-				}
-				ImGuiFileDialog::Instance()->Close();
-			}
+                    if (!selectedPath.empty() && selectedPath != path) {
+                        path = selectedPath;
+                        hasChanges = true;
 
-			ImGui::SameLine();
-			std::string resetID = std::string("R##") + label;
-			if (ImGui::Button(resetID.c_str())) {
-				if (!path.empty()) {
-					path.clear();
-					hasChanges = true;
-				}
-			}
-			if (ImGui::IsItemHovered()) {
-				ImGui::SetTooltip("Clear this path");
-			}
+                        if (pathKey == "ModelRoot" && !path.empty()) {
+                            UpdateModelSubdirectories(path);
+                        }
+                    }
+                }
+                ImGuiFileDialog::Instance()->Close();
+            }
 
-			ImGui::TableNextColumn();
-			if (path.empty()) {
-				ImGui::TextDisabled("(not set)");
-			}
-			else {
-				std::string displayPath = path;
-				if (displayPath.length() > 60) {
-					displayPath = "..." + displayPath.substr(displayPath.length() - 57);
-				}
-				ImGui::Text("%s", displayPath.c_str());
-				if (ImGui::IsItemHovered() && path.length() > 60) {
-					ImGui::SetTooltip("%s", path.c_str());
-				}
-			}
-		}
+            ImGui::SameLine();
+            std::string resetID = std::string("R##") + label;
+            if (ImGui::Button(resetID.c_str())) {
+                if (!path.empty()) {
+                    path.clear();
+                    hasChanges = true;
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Clear this path");
+            }
 
-		void ResetModelPathsToRoot(const std::string& modelRoot) {
-			if (modelRoot.empty()) return;
-			UpdateModelSubdirectories(modelRoot);
-			hasChanges = true;
-		}
+            ImGui::TableNextColumn();
+            if (path.empty()) {
+                ImGui::TextDisabled("(not set)");
+            }
+            else {
+                std::string displayPath = path;
+                if (displayPath.length() > 60) {
+                    displayPath = "..." + displayPath.substr(displayPath.length() - 57);
+                }
+                ImGui::Text("%s", displayPath.c_str());
+                if (ImGui::IsItemHovered() && path.length() > 60) {
+                    ImGui::SetTooltip("%s", path.c_str());
+                }
+            }
+        }
 
-		void UpdateModelSubdirectories(const std::string& modelRoot) {
-			std::map<std::string, std::string> modelSubdirs = {
-				{"Checkpoint", "/checkpoints"},
-				{"Encoder", "/clip"},
-				{"Vae", "/vae"},
-				{"Unet", "/unet"},
-				{"Lora", "/loras"},
-				{"ControlNet", "/controlnet"},
-				{"Upscale", "/upscale_models"},
-				{"Embed", "/embeddings"}
-			};
+        void ResetModelPathsToRoot(const std::string& modelRoot) {
+            if (modelRoot.empty()) return;
+            UpdateModelSubdirectories(modelRoot);
+            hasChanges = true;
+        }
 
-			for (const auto&[key, subdir] : modelSubdirs) {
-				pathMap[key] = modelRoot + subdir;
-			}
+        void UpdateModelSubdirectories(const std::string& modelRoot) {
+            std::map<std::string, std::string> modelSubdirs = {
+                {"Checkpoint", "/checkpoints"},
+                {"Encoder", "/clip"},
+                {"Vae", "/vae"},
+                {"Unet", "/unet"},
+                {"Lora", "/loras"},
+                {"ControlNet", "/controlnet"},
+                {"Upscale", "/upscale_models"},
+                {"Embed", "/embeddings"}
+            };
 
-			std::string encoderDir = modelRoot + "/clip";
-			pathMap["ClipL"] = encoderDir + "/clip_l.safetensors";
-			pathMap["ClipG"] = encoderDir + "/clip_g.safetensors";
-			pathMap["T5XXL"] = encoderDir + "/t5xxl.safetensors";
-		}
+            for (const auto& [key, subdir] : modelSubdirs) {
+                pathMap[key] = modelRoot + subdir;
+            }
 
-		std::string FormatDisplayName(const std::string& key) {
-			std::string result;
-			bool lastWasLower = false;
+            std::string encoderDir = modelRoot + "/clip";
+            pathMap["ClipL"] = encoderDir + "/clip_l.safetensors";
+            pathMap["ClipG"] = encoderDir + "/clip_g.safetensors";
+            pathMap["T5XXL"] = encoderDir + "/t5xxl.safetensors";
+        }
 
-			for (char c : key) {
-				if (isupper(c) && lastWasLower) {
-					result += ' ';
-					result += c;
-				}
-				else if (c == '_' || c == '-') {
-					result += ' ';
-				}
-				else {
-					result += c;
-				}
-				lastWasLower = islower(c);
-			}
+        std::string FormatDisplayName(const std::string& key) {
+            std::string result;
+            bool lastWasLower = false;
 
-			if (!result.empty()) {
-				result[0] = toupper(result[0]);
-			}
+            for (char c : key) {
+                if (isupper(c) && lastWasLower) {
+                    result += ' ';
+                    result += c;
+                }
+                else if (c == '_' || c == '-') {
+                    result += ' ';
+                }
+                else {
+                    result += c;
+                }
+                lastWasLower = islower(c);
+            }
 
-			return result;
-		}
+            if (!result.empty()) {
+                result[0] = toupper(result[0]);
+            }
 
-		void RenderActionButtons() {
-			if (hasChanges) {
-				ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-				ImGui::SameLine();
-			}
+            return result;
+        }
 
-			if (ImGui::Button("Save Settings")) {
-				SaveSettings();
-			}
+        void RenderActionButtons() {
+            if (hasChanges) {
+                ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
+                ImGui::SameLine();
+            }
 
-			ImGui::SameLine();
+            if (ImGui::Button("Save Settings")) {
+                SaveSettings();
+            }
 
-			if (ImGui::Button("Reset to Defaults")) {
-				ResetToDefaults();
-			}
+            ImGui::SameLine();
 
-			ImGui::SameLine();
+            if (ImGui::Button("Reset to Defaults")) {
+                ResetToDefaults();
+            }
 
-			if (hasChanges) {
-				if (ImGui::Button("Revert Changes")) {
-					RestoreFromBackup();
-				}
-			}
-		}
-	};
+            ImGui::SameLine();
+
+            if (hasChanges) {
+                if (ImGui::Button("Revert Changes")) {
+                    RestoreFromBackup();
+                }
+            }
+        }
+    };
 
 } // namespace Settings

@@ -2,771 +2,708 @@
 
 #include "BaseComponent.hpp"
 #include "OpenGLWrapper.hpp"
-#include "FilePathService.hpp"
 #include <string>
 #include <stb_image.h>
 #include <memory>
 
 namespace ECS {
-	struct ImageComponent : public BaseComponent {
-		std::string fileName = "AniStudio";                  // Default file name
-		std::string filePath = "";                           // File path - initialized via service
-		unsigned char *imageData = nullptr;                  // Pointer to image data - DO NOT FREE in destructor for base class
-		int width = 0;                                       // Image width
-		int height = 0;                                      // Image height
-		int channels = 0;                                    // Number of color channels
-		GLuint textureID = 0;                                // OpenGL texture ID
-
-		ImageComponent() {
-			compName = "Image";
-			compCategory = "Image";
-			InitializeFilePathFromService();
-			setupBaseSchema();
-		}
-
-		virtual ~ImageComponent() {
-			// Base ImageComponent doesn't own imageData - managed by ImageSystem
-			// Only cleanup texture
-			if (textureID != 0) {
-				glDeleteTextures(1, &textureID);
-				textureID = 0;
-			}
-		}
-
-		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["fileName"] = &fileName;
-			properties["filePath"] = &filePath;
-			return properties;
-		}
-
-		// Serialize the component to JSON
-		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j;
-			j["compName"] = compName;
-			j[compName] = {
-				{"width", width},
-				{"height", height},
-				{"channels", channels},
-				{"fileName", fileName},
-				{"filePath", filePath}
-			};
-			return j;
-		}
-
-		// Deserialize the component from JSON
-		virtual void Deserialize(const nlohmann::json& j) override {
-			BaseComponent::Deserialize(j);
-
-			nlohmann::json componentData;
-
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-			else {
-				for (auto it = j.begin(); it != j.end(); ++it) {
-					if (it.key() == compName) {
-						componentData = it.value();
-						break;
-					}
-				}
-				if (componentData.empty()) {
-					componentData = j;
-				}
-			}
-
-			if (componentData.contains("width"))
-				width = componentData["width"];
-			if (componentData.contains("height"))
-				height = componentData["height"];
-			if (componentData.contains("channels"))
-				channels = componentData["channels"];
-			if (componentData.contains("fileName"))
-				fileName = componentData["fileName"];
-			if (componentData.contains("filePath"))
-				filePath = componentData["filePath"];
-		}
-
-		ImageComponent &operator=(const ImageComponent &other) {
-			if (this != &other) {
-				fileName = other.fileName;
-				filePath = other.filePath;
-				width = other.width;
-				height = other.height;
-				channels = other.channels;
-				// Don't copy imageData pointer - each component manages its own
-				// Don't copy textureID - each component needs its own texture
-			}
-			return *this;
-		}
-
-		// Copy constructor
-		ImageComponent(const ImageComponent& other) : BaseComponent(other) {
-			fileName = other.fileName;
-			filePath = other.filePath;
-			width = other.width;
-			height = other.height;
-			channels = other.channels;
-			imageData = nullptr; // Don't copy raw pointer
-			textureID = 0; // Don't copy texture ID
-			InitializeFilePathFromService();
-			setupBaseSchema();
-		}
-
-	protected:
-		void setupBaseSchema() {
-			schema = {
-				{"title", "Image"},
-				{"type", "object"},
-				{"properties", {
-					{"fileName", {
-						{"type", "string"},
-						{"title", "File Name"}
-					}},
-					{"filePath", {
-						{"type", "string"},
-						{"title", "File Path"}
-					}}
-				}}
-			};
-		}
-
-		// Initialize file path from the service
-		void InitializeFilePathFromService() {
-			if (Utils::FilePathService::IsInitialized()) {
-				// Try OutputFolder first, then DefaultProject
-				std::string outputPath = Utils::FilePathService::GetPath("OutputFolder");
-				if (!outputPath.empty()) {
-					filePath = outputPath;
-				}
-				else {
-					std::string defaultPath = Utils::FilePathService::GetPath("DefaultProject");
-					if (!defaultPath.empty()) {
-						filePath = defaultPath;
-					}
-				}
-			}
-		}
-	};
-
-	struct InputImageComponent : public ImageComponent {
-		std::shared_ptr<unsigned char[]> ownedImageData; // Smart pointer for owned data
-
-		InputImageComponent() {
-			compName = "InputImage";
-			compCategory = "Image";
-			fileName = "";
-			filePath = "";  // Input images start with empty path
-			width = 0;
-			height = 0;
-			channels = 0;
-			setupInputSchema();
-		}
-
-		virtual ~InputImageComponent() {
-			// Cleanup happens automatically via shared_ptr
-			// Texture cleanup handled by base class
-		}
-
-		// Get property map for UI rendering - MUST INCLUDE ALL PROPERTIES
-		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["fileName"] = &fileName;
-			properties["filePath"] = &filePath;
-			properties["width"] = &width;
-			properties["height"] = &height;
-			properties["channels"] = &channels;
-			return properties;
-		}
-
-		// Serialize the component to JSON - MUST INCLUDE ALL PROPERTIES
-		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j;
-			j["compName"] = compName;
-			j[compName] = {
-				{"fileName", fileName},
-				{"filePath", filePath},
-				{"width", width},
-				{"height", height},
-				{"channels", channels}
-			};
-			return j;
-		}
-
-		// Deserialize the component from JSON
-		virtual void Deserialize(const nlohmann::json& j) override {
-			BaseComponent::Deserialize(j);
-
-			nlohmann::json componentData;
-
-			// Handle different JSON structures
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-			else {
-				// Try to find component data by name
-				for (auto it = j.begin(); it != j.end(); ++it) {
-					if (it.key() == compName) {
-						componentData = it.value();
-						break;
-					}
-				}
-				if (componentData.empty()) {
-					componentData = j;
-				}
-			}
-
-			// Load ALL properties from JSON
-			if (componentData.contains("fileName"))
-				fileName = componentData["fileName"];
-			if (componentData.contains("filePath"))
-				filePath = componentData["filePath"];
-			if (componentData.contains("width"))
-				width = componentData["width"];
-			if (componentData.contains("height"))
-				height = componentData["height"];
-			if (componentData.contains("channels"))
-				channels = componentData["channels"];
-		}
-
-		void SetImageData(unsigned char* data, int w, int h, int ch) {
-			if (data && w > 0 && h > 0 && ch > 0) {
-				// Calculate data size
-				size_t dataSize = w * h * ch;
-
-				// Create shared_ptr with custom deleter
-				ownedImageData = std::shared_ptr<unsigned char[]>(
-					data,
-					[](unsigned char* ptr) {
-					if (ptr) {
-						stbi_image_free(ptr);
-					}
-				}
-				);
-
-				// Set the raw pointer for backward compatibility
-				imageData = ownedImageData.get();
-				width = w;
-				height = h;
-				channels = ch;
-			}
-			else {
-				ClearImageData();
-			}
-		}
-
-		void ClearImageData() {
-			ownedImageData.reset();
-			imageData = nullptr;
-			width = 0;
-			height = 0;
-			channels = 0;
-		}
-
-		// Copy constructor
-		InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
-			compName = "InputImage";
-			setupInputSchema();
-
-			// Copy scalar values
-			fileName = other.fileName;
-			filePath = other.filePath;
-			width = other.width;
-			height = other.height;
-			channels = other.channels;
-
-			// Deep copy image data if it exists
-			if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-				// Create a deep copy of the image data
-				size_t dataSize = other.width * other.height * other.channels;
-				unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
-				if (newData) {
-					memcpy(newData, other.ownedImageData.get(), dataSize);
-					SetImageData(newData, other.width, other.height, other.channels);
-				}
-			}
-		}
-
-		InputImageComponent &operator=(const InputImageComponent &other) {
-			if (this != &other) {
-				// Call base assignment
-				ImageComponent::operator=(other);
-				compName = "InputImage";
-
-				// Copy scalar values
-				fileName = other.fileName;
-				filePath = other.filePath;
-				width = other.width;
-				height = other.height;
-				channels = other.channels;
-
-				// Deep copy image data if it exists
-				if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-					size_t dataSize = other.width * other.height * other.channels;
-					unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
-					if (newData) {
-						memcpy(newData, other.ownedImageData.get(), dataSize);
-						SetImageData(newData, other.width, other.height, other.channels);
-					}
-				}
-				else {
-					ClearImageData();
-				}
-				setupInputSchema();
-			}
-			return *this;
-		}
-
-	private:
-		void setupInputSchema() {
-			schema = {
-				{"title", "Input Image"},
-				{"type", "object"},
-				{"properties", {
-					{"filePath", {
-						{"type", "string"},
-						{"title", "Input Image File"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "file"},
-							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
-							{"filterName", "Image Files"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for image files (.png, .jpg, .jpeg, .bmp, .tga)"}
-						}}
-					}}
-				}},
-				{"propertyOrder", {"filePath", "fileName", "width", "height", "channels"}}
-			};
-		}
-	};
-
-	struct OutputImageComponent : public ImageComponent {
-		std::string fileExtension = ".png";  // Selected file extension
-		std::vector<std::string> supportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
-		int selectedExtensionIndex = 0;  // Index for combo widget
-
-		OutputImageComponent() {
-			compName = "OutputImage";
-			compCategory = "Image";
-			// Set default output directory using the service
-			fileName = "AniStudio";
-			setupOutputSchema();
-		}
-
-		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["fileName"] = &fileName;
-			properties["filePath"] = &filePath;  // ADD FILEPATH TO PROPERTIES!
-			properties["selectedExtensionIndex"] = &selectedExtensionIndex;
-			properties["supportedExtensions"] = &supportedExtensions;
-			return properties;
-		}
-
-		// Serialize the component to JSON
-		virtual nlohmann::json Serialize() const override {
-			auto j = ImageComponent::Serialize();
-			j[compName]["fileExtension"] = fileExtension;
-			j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
-			return j;
-		}
-
-		// Deserialize the component from JSON
-		virtual void Deserialize(const nlohmann::json& j) override {
-			ImageComponent::Deserialize(j);
-
-			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-
-			if (componentData.contains("fileExtension"))
-				fileExtension = componentData["fileExtension"];
-			if (componentData.contains("selectedExtensionIndex"))
-				selectedExtensionIndex = componentData["selectedExtensionIndex"];
-		}
-
-		OutputImageComponent &operator=(const OutputImageComponent &other) {
-			if (this != &other) {
-				ImageComponent::operator=(other);
-				compName = "OutputImage";
-				fileExtension = other.fileExtension;
-				selectedExtensionIndex = other.selectedExtensionIndex;
-				supportedExtensions = other.supportedExtensions;
-				setupOutputSchema();
-			}
-			return *this;
-		}
-
-		// Copy constructor
-		OutputImageComponent(const OutputImageComponent& other) : ImageComponent(other) {
-			compName = "OutputImage";
-			fileExtension = other.fileExtension;
-			selectedExtensionIndex = other.selectedExtensionIndex;
-			supportedExtensions = other.supportedExtensions;
-			// If filePath is empty in the copy, reset to project output directory
-			setupOutputSchema();
-		}
-
-	private:
-		void setupOutputSchema() {
-
-			schema = {
-				{"title", "Output Image"},
-				{"type", "object"},
-				{"properties", {
-					{"filePath", {
-						{"type", "string"},
-						{"title", "Output Directory"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "directory"},
-							{"defaultPath", "OutputFolder"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Reset"},
-							{"browseTooltip", "Browse to select output directory for saving images"}
-						}}
-					}},
-					{"fileName", {
-						{"type", "string"},
-						{"title", "File Name"},
-						{"ui:widget", "input_text"},
-						{"ui:options", {
-							{"dialogDefaultPath", "OutputFolder"},
-							{"defaultPath", "OutputFolder"},
-							{"resetButtonText", "Reset to Default"}
-						}}
-					}},
-					{"selectedExtensionIndex", {
-						{"type", "integer"},
-						{"title", "File Format"},
-						{"ui:widget", "combo"},
-						{"minimum", 0},
-						{"maximum", 4},
-						{"items", {
-							{{"label", "PNG (.png)"}},
-							{{"label", "JPEG (.jpg)"}},
-							{{"label", "JPEG (.jpeg)"}},
-							{{"label", "Bitmap (.bmp)"}},
-							{{"label", "Targa (.tga)"}}
-						}},
-						{"ui:options", {
-							{"resetButtonText", "Reset to PNG"}
-						}}
-					}}
-				}},
-				{"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}
-			};
-		}
-	};
-
-	struct ControlNetImageComponent : public InputImageComponent {
-		std::string controlType = "canny";  // Type of control: canny, depth, normal, etc.
-		float strength = 1.0f;
-		float startStep = 0.0f;
-		float endStep = 1.0f;
-
-		ControlNetImageComponent() : InputImageComponent() {
-			compName = "ControlNetImage";
-			compCategory = "Image";
-			setupControlNetSchema();
-		}
-
-		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			auto properties = InputImageComponent::GetPropertyMap();
-			properties["controlType"] = &controlType;
-			properties["strength"] = &strength;
-			properties["startStep"] = &startStep;
-			properties["endStep"] = &endStep;
-			return properties;
-		}
-
-		// Serialize the component to JSON
-		virtual nlohmann::json Serialize() const override {
-			auto j = InputImageComponent::Serialize();
-			j[compName]["controlType"] = controlType;
-			j[compName]["strength"] = strength;
-			j[compName]["startStep"] = startStep;
-			j[compName]["endStep"] = endStep;
-			return j;
-		}
-
-		// Deserialize the component from JSON
-		virtual void Deserialize(const nlohmann::json& j) override {
-			InputImageComponent::Deserialize(j);
-
-			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-
-			if (componentData.contains("controlType"))
-				controlType = componentData["controlType"];
-			if (componentData.contains("strength"))
-				strength = componentData["strength"];
-			if (componentData.contains("startStep"))
-				startStep = componentData["startStep"];
-			if (componentData.contains("endStep"))
-				endStep = componentData["endStep"];
-		}
-
-	private:
-		void setupControlNetSchema() {
-			schema = {
-				{"title", "ControlNet Image"},
-				{"type", "object"},
-				{"properties", {
-					{"filePath", {
-						{"type", "string"},
-						{"title", "Control Image"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "file"},
-							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
-							{"filterName", "ControlNet Images"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for control images (edge maps, depth maps, etc.)"}
-						}}
-					}},
-					{"controlType", {
-						{"type", "string"},
-						{"title", "Control Type"},
-						{"ui:widget", "combo"},
-						{"items", {
-							{{"label", "Canny Edge"}},
-							{{"label", "Depth Map"}},
-							{{"label", "Normal Map"}},
-							{{"label", "Scribble"}},
-							{{"label", "Segmentation"}},
-							{{"label", "OpenPose"}}
-						}}
-					}},
-					{"strength", {
-						{"type", "number"},
-						{"title", "Strength"},
-						{"description", "How strongly the ControlNet influences generation"},
-						{"ui:widget", "slider_float"},
-						{"minimum", 0.0},
-						{"maximum", 2.0},
-						{"ui:options", {
-							{"step", 0.05},
-							{"format", "%.2f"}
-						}}
-					}},
-					{"startStep", {
-						{"type", "number"},
-						{"title", "Start Step"},
-						{"description", "When to start applying ControlNet (0.0 = beginning)"},
-						{"ui:widget", "slider_float"},
-						{"minimum", 0.0},
-						{"maximum", 1.0},
-						{"ui:options", {
-							{"step", 0.05},
-							{"format", "%.2f"}
-						}}
-					}},
-					{"endStep", {
-						{"type", "number"},
-						{"title", "End Step"},
-						{"description", "When to stop applying ControlNet (1.0 = end)"},
-						{"ui:widget", "slider_float"},
-						{"minimum", 0.0},
-						{"maximum", 1.0},
-						{"ui:options", {
-							{"step", 0.05},
-							{"format", "%.2f"}
-						}}
-					}}
-				}},
-				{"propertyOrder", {"filePath", "controlType", "strength", "startStep", "endStep"}}
-			};
-		}
-	};
-
-	struct PhotoMakerImageComponent : public InputImageComponent {
-		float styleStrength = 1.0f;
-		bool isPrimaryID = true;  // Whether this is the primary ID image
-
-		PhotoMakerImageComponent() : InputImageComponent() {
-			compName = "PhotoMakerImage";
-			compCategory = "Image";
-			setupPhotoMakerSchema();
-		}
-
-		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			auto properties = InputImageComponent::GetPropertyMap();
-			properties["styleStrength"] = &styleStrength;
-			properties["isPrimaryID"] = &isPrimaryID;
-			return properties;
-		}
-
-		// Serialize the component to JSON
-		virtual nlohmann::json Serialize() const override {
-			auto j = InputImageComponent::Serialize();
-			j[compName]["styleStrength"] = styleStrength;
-			j[compName]["isPrimaryID"] = isPrimaryID;
-			return j;
-		}
-
-		// Deserialize the component from JSON
-		virtual void Deserialize(const nlohmann::json& j) override {
-			InputImageComponent::Deserialize(j);
-
-			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-
-			if (componentData.contains("styleStrength"))
-				styleStrength = componentData["styleStrength"];
-			if (componentData.contains("isPrimaryID"))
-				isPrimaryID = componentData["isPrimaryID"];
-		}
-
-	private:
-		void setupPhotoMakerSchema() {
-			schema = {
-				{"title", "PhotoMaker ID Image"},
-				{"type", "object"},
-				{"properties", {
-					{"filePath", {
-						{"type", "string"},
-						{"title", "ID Image"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "file"},
-							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
-							{"filterName", "ID Images"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for identity reference images for PhotoMaker"}
-						}}
-					}},
-					{"styleStrength", {
-						{"type", "number"},
-						{"title", "Style Strength"},
-						{"description", "How strongly the style from this image influences generation"},
-						{"ui:widget", "slider_float"},
-						{"minimum", 0.0},
-						{"maximum", 2.0},
-						{"ui:options", {
-							{"step", 0.05},
-							{"format", "%.2f"}
-						}}
-					}},
-					{"isPrimaryID", {
-						{"type", "boolean"},
-						{"title", "Primary ID"},
-						{"description", "Whether this is the primary identity reference image"},
-						{"ui:widget", "checkbox"}
-					}}
-				}},
-				{"propertyOrder", {"filePath", "styleStrength", "isPrimaryID"}}
-			};
-		}
-	};
-
-	struct MaskImageComponent : public ImageComponent {
-		float value = 0.75f;
-		std::string maskFilePath = "";  // Full path to mask image file
-
-		MaskImageComponent() {
-			compName = "MaskImageComponent";
-			fileName = "";
-			filePath = "";  // Mask images don't need default path
-			setupMaskSchema();
-		}
-
-		// Get property map for UI rendering
-		virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-			properties["maskFilePath"] = &maskFilePath;
-			properties["value"] = &value;
-			return properties;
-		}
-
-		// Serialize the component to JSON
-		virtual nlohmann::json Serialize() const override {
-			nlohmann::json j = ImageComponent::Serialize();
-			j[compName]["value"] = value;
-			j[compName]["maskFilePath"] = maskFilePath;
-			return j;
-		}
-
-		// Deserialize the component from JSON
-		virtual void Deserialize(const nlohmann::json& j) override {
-			ImageComponent::Deserialize(j);
-
-			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
-			}
-
-			if (componentData.contains("value"))
-				value = componentData["value"];
-			if (componentData.contains("maskFilePath"))
-				maskFilePath = componentData["maskFilePath"];
-		}
-
-		MaskImageComponent &operator=(const MaskImageComponent &other) {
-			if (this != &other) {
-				ImageComponent::operator=(other);
-				compName = "MaskImageComponent";
-				value = other.value;
-				maskFilePath = other.maskFilePath;
-				setupMaskSchema();
-			}
-			return *this;
-		}
-
-		// Copy constructor
-		MaskImageComponent(const MaskImageComponent& other) : ImageComponent(other) {
-			compName = "MaskImageComponent";
-			value = other.value;
-			maskFilePath = other.maskFilePath;
-			setupMaskSchema();
-		}
-
-	private:
-		void setupMaskSchema() {
-			schema = {
-				{"title", "Mask Image"},
-				{"type", "object"},
-				{"properties", {
-					{"maskFilePath", {
-						{"type", "string"},
-						{"title", "Mask Image File"},
-						{"ui:widget", "file_selector"},
-						{"ui:options", {
-							{"mode", "file"},
-							{"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
-							{"filterName", "Image Files"},
-							{"buttonText", "Browse..."},
-							{"resetButtonText", "Clear"},
-							{"browseTooltip", "Browse for mask image files (grayscale images)"}
-						}}
-					}},
-					{"value", {
-						{"type", "number"},
-						{"title", "Mask Strength"},
-						{"description", "Strength of the mask effect (0.0 to 1.0)"},
-						{"ui:widget", "slider_float"},
-						{"minimum", 0.0},
-						{"maximum", 1.0},
-						{"ui:options", {
-							{"step", 0.01},
-							{"format", "%.2f"}
-						}}
-					}}
-				}},
-				{"propertyOrder", {"maskFilePath", "value"}}
-			};
-		}
-	};
+    struct ImageComponent : public BaseComponent {
+        std::string fileName = "AniStudio";
+        std::string filePath = "";
+        unsigned char* imageData = nullptr;
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        GLuint textureID = 0;
+
+        ImageComponent() {
+            compName = "Image";
+            compCategory = "Image";
+            setupBaseSchema();
+        }
+
+        virtual ~ImageComponent() {
+            if (textureID != 0) {
+                glDeleteTextures(1, &textureID);
+                textureID = 0;
+            }
+        }
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+            properties["fileName"] = &fileName;
+            properties["filePath"] = &filePath;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j["compName"] = compName;
+            j[compName] = {
+                {"width", width},
+                {"height", height},
+                {"channels", channels},
+                {"fileName", fileName},
+                {"filePath", filePath}
+            };
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            BaseComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("width"))
+                width = componentData["width"];
+            if (componentData.contains("height"))
+                height = componentData["height"];
+            if (componentData.contains("channels"))
+                channels = componentData["channels"];
+            if (componentData.contains("fileName"))
+                fileName = componentData["fileName"];
+            if (componentData.contains("filePath"))
+                filePath = componentData["filePath"];
+        }
+
+        ImageComponent& operator=(const ImageComponent& other) {
+            if (this != &other) {
+                fileName = other.fileName;
+                filePath = other.filePath;
+                width = other.width;
+                height = other.height;
+                channels = other.channels;
+            }
+            return *this;
+        }
+
+        ImageComponent(const ImageComponent& other) : BaseComponent(other) {
+            fileName = other.fileName;
+            filePath = other.filePath;
+            width = other.width;
+            height = other.height;
+            channels = other.channels;
+            imageData = nullptr;
+            textureID = 0;
+            setupBaseSchema();
+        }
+
+    protected:
+        void setupBaseSchema() {
+            schema = {
+                {"title", "Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"fileName", {
+                        {"type", "string"},
+                        {"title", "File Name"}
+                    }},
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "File Path"}
+                    }}
+                }}
+            };
+        }
+    };
+
+    struct InputImageComponent : public ImageComponent {
+        std::shared_ptr<unsigned char[]> ownedImageData;
+
+        InputImageComponent() {
+            compName = "InputImage";
+            compCategory = "Image";
+            fileName = "";
+            filePath = "";
+            width = 0;
+            height = 0;
+            channels = 0;
+            setupInputSchema();
+        }
+
+        virtual ~InputImageComponent() {
+        }
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+            properties["fileName"] = &fileName;
+            properties["filePath"] = &filePath;
+            properties["width"] = &width;
+            properties["height"] = &height;
+            properties["channels"] = &channels;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j["compName"] = compName;
+            j[compName] = {
+                {"fileName", fileName},
+                {"filePath", filePath},
+                {"width", width},
+                {"height", height},
+                {"channels", channels}
+            };
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            BaseComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("fileName"))
+                fileName = componentData["fileName"];
+            if (componentData.contains("filePath"))
+                filePath = componentData["filePath"];
+            if (componentData.contains("width"))
+                width = componentData["width"];
+            if (componentData.contains("height"))
+                height = componentData["height"];
+            if (componentData.contains("channels"))
+                channels = componentData["channels"];
+        }
+
+        void SetImageData(unsigned char* data, int w, int h, int ch) {
+            if (data && w > 0 && h > 0 && ch > 0) {
+                size_t dataSize = w * h * ch;
+
+                ownedImageData = std::shared_ptr<unsigned char[]>(
+                    data,
+                    [](unsigned char* ptr) {
+                        if (ptr) {
+                            stbi_image_free(ptr);
+                        }
+                    }
+                );
+
+                imageData = ownedImageData.get();
+                width = w;
+                height = h;
+                channels = ch;
+            }
+            else {
+                ClearImageData();
+            }
+        }
+
+        void ClearImageData() {
+            ownedImageData.reset();
+            imageData = nullptr;
+            width = 0;
+            height = 0;
+            channels = 0;
+        }
+
+        InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
+            compName = "InputImage";
+            setupInputSchema();
+
+            fileName = other.fileName;
+            filePath = other.filePath;
+            width = other.width;
+            height = other.height;
+            channels = other.channels;
+
+            if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
+                size_t dataSize = other.width * other.height * other.channels;
+                unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+                if (newData) {
+                    memcpy(newData, other.ownedImageData.get(), dataSize);
+                    SetImageData(newData, other.width, other.height, other.channels);
+                }
+            }
+        }
+
+        InputImageComponent& operator=(const InputImageComponent& other) {
+            if (this != &other) {
+                ImageComponent::operator=(other);
+                compName = "InputImage";
+
+                fileName = other.fileName;
+                filePath = other.filePath;
+                width = other.width;
+                height = other.height;
+                channels = other.channels;
+
+                if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
+                    size_t dataSize = other.width * other.height * other.channels;
+                    unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+                    if (newData) {
+                        memcpy(newData, other.ownedImageData.get(), dataSize);
+                        SetImageData(newData, other.width, other.height, other.channels);
+                    }
+                }
+                else {
+                    ClearImageData();
+                }
+                setupInputSchema();
+            }
+            return *this;
+        }
+
+    private:
+        void setupInputSchema() {
+            schema = {
+                {"title", "Input Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "Input Image File"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "file"},
+                            {"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+                            {"filterName", "Image Files"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Clear"},
+                            {"browseTooltip", "Browse for image files (.png, .jpg, .jpeg, .bmp, .tga)"}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "fileName", "width", "height", "channels"}}
+            };
+        }
+    };
+
+    struct OutputImageComponent : public ImageComponent {
+        std::string fileExtension = ".png";
+        std::vector<std::string> supportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
+        int selectedExtensionIndex = 0;
+
+        OutputImageComponent() {
+            compName = "OutputImage";
+            compCategory = "Image";
+            fileName = "AniStudio";
+            setupOutputSchema();
+        }
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+            properties["fileName"] = &fileName;
+            properties["filePath"] = &filePath;
+            properties["selectedExtensionIndex"] = &selectedExtensionIndex;
+            properties["supportedExtensions"] = &supportedExtensions;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            auto j = ImageComponent::Serialize();
+            j[compName]["fileExtension"] = fileExtension;
+            j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            ImageComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+
+            if (componentData.contains("fileExtension"))
+                fileExtension = componentData["fileExtension"];
+            if (componentData.contains("selectedExtensionIndex"))
+                selectedExtensionIndex = componentData["selectedExtensionIndex"];
+        }
+
+        OutputImageComponent& operator=(const OutputImageComponent& other) {
+            if (this != &other) {
+                ImageComponent::operator=(other);
+                compName = "OutputImage";
+                fileExtension = other.fileExtension;
+                selectedExtensionIndex = other.selectedExtensionIndex;
+                supportedExtensions = other.supportedExtensions;
+                setupOutputSchema();
+            }
+            return *this;
+        }
+
+        OutputImageComponent(const OutputImageComponent& other) : ImageComponent(other) {
+            compName = "OutputImage";
+            fileExtension = other.fileExtension;
+            selectedExtensionIndex = other.selectedExtensionIndex;
+            supportedExtensions = other.supportedExtensions;
+            setupOutputSchema();
+        }
+
+    private:
+        void setupOutputSchema() {
+            schema = {
+                {"title", "Output Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "Output Directory"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "directory"},
+                            {"defaultPath", "OutputFolder"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Reset"},
+                            {"browseTooltip", "Browse to select output directory for saving images"}
+                        }}
+                    }},
+                    {"fileName", {
+                        {"type", "string"},
+                        {"title", "File Name"},
+                        {"ui:widget", "input_text"},
+                        {"ui:options", {
+                            {"dialogDefaultPath", "OutputFolder"},
+                            {"defaultPath", "OutputFolder"},
+                            {"resetButtonText", "Reset to Default"}
+                        }}
+                    }},
+                    {"selectedExtensionIndex", {
+                        {"type", "integer"},
+                        {"title", "File Format"},
+                        {"ui:widget", "combo"},
+                        {"minimum", 0},
+                        {"maximum", 4},
+                        {"items", {
+                            {{"label", "PNG (.png)"}},
+                            {{"label", "JPEG (.jpg)"}},
+                            {{"label", "JPEG (.jpeg)"}},
+                            {{"label", "Bitmap (.bmp)"}},
+                            {{"label", "Targa (.tga)"}}
+                        }},
+                        {"ui:options", {
+                            {"resetButtonText", "Reset to PNG"}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}
+            };
+        }
+    };
+
+    struct ControlNetImageComponent : public InputImageComponent {
+        std::string controlType = "canny";
+        float strength = 1.0f;
+        float startStep = 0.0f;
+        float endStep = 1.0f;
+
+        ControlNetImageComponent() : InputImageComponent() {
+            compName = "ControlNetImage";
+            compCategory = "Image";
+            setupControlNetSchema();
+        }
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            auto properties = InputImageComponent::GetPropertyMap();
+            properties["controlType"] = &controlType;
+            properties["strength"] = &strength;
+            properties["startStep"] = &startStep;
+            properties["endStep"] = &endStep;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            auto j = InputImageComponent::Serialize();
+            j[compName]["controlType"] = controlType;
+            j[compName]["strength"] = strength;
+            j[compName]["startStep"] = startStep;
+            j[compName]["endStep"] = endStep;
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            InputImageComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+
+            if (componentData.contains("controlType"))
+                controlType = componentData["controlType"];
+            if (componentData.contains("strength"))
+                strength = componentData["strength"];
+            if (componentData.contains("startStep"))
+                startStep = componentData["startStep"];
+            if (componentData.contains("endStep"))
+                endStep = componentData["endStep"];
+        }
+
+    private:
+        void setupControlNetSchema() {
+            schema = {
+                {"title", "ControlNet Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "Control Image"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "file"},
+                            {"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+                            {"filterName", "ControlNet Images"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Clear"},
+                            {"browseTooltip", "Browse for control images (edge maps, depth maps, etc.)"}
+                        }}
+                    }},
+                    {"controlType", {
+                        {"type", "string"},
+                        {"title", "Control Type"},
+                        {"ui:widget", "combo"},
+                        {"items", {
+                            {{"label", "Canny Edge"}},
+                            {{"label", "Depth Map"}},
+                            {{"label", "Normal Map"}},
+                            {{"label", "Scribble"}},
+                            {{"label", "Segmentation"}},
+                            {{"label", "OpenPose"}}
+                        }}
+                    }},
+                    {"strength", {
+                        {"type", "number"},
+                        {"title", "Strength"},
+                        {"description", "How strongly the ControlNet influences generation"},
+                        {"ui:widget", "slider_float"},
+                        {"minimum", 0.0},
+                        {"maximum", 2.0},
+                        {"ui:options", {
+                            {"step", 0.05},
+                            {"format", "%.2f"}
+                        }}
+                    }},
+                    {"startStep", {
+                        {"type", "number"},
+                        {"title", "Start Step"},
+                        {"description", "When to start applying ControlNet (0.0 = beginning)"},
+                        {"ui:widget", "slider_float"},
+                        {"minimum", 0.0},
+                        {"maximum", 1.0},
+                        {"ui:options", {
+                            {"step", 0.05},
+                            {"format", "%.2f"}
+                        }}
+                    }},
+                    {"endStep", {
+                        {"type", "number"},
+                        {"title", "End Step"},
+                        {"description", "When to stop applying ControlNet (1.0 = end)"},
+                        {"ui:widget", "slider_float"},
+                        {"minimum", 0.0},
+                        {"maximum", 1.0},
+                        {"ui:options", {
+                            {"step", 0.05},
+                            {"format", "%.2f"}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "controlType", "strength", "startStep", "endStep"}}
+            };
+        }
+    };
+
+    struct PhotoMakerImageComponent : public InputImageComponent {
+        float styleStrength = 1.0f;
+        bool isPrimaryID = true;
+
+        PhotoMakerImageComponent() : InputImageComponent() {
+            compName = "PhotoMakerImage";
+            compCategory = "Image";
+            setupPhotoMakerSchema();
+        }
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            auto properties = InputImageComponent::GetPropertyMap();
+            properties["styleStrength"] = &styleStrength;
+            properties["isPrimaryID"] = &isPrimaryID;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            auto j = InputImageComponent::Serialize();
+            j[compName]["styleStrength"] = styleStrength;
+            j[compName]["isPrimaryID"] = isPrimaryID;
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            InputImageComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+
+            if (componentData.contains("styleStrength"))
+                styleStrength = componentData["styleStrength"];
+            if (componentData.contains("isPrimaryID"))
+                isPrimaryID = componentData["isPrimaryID"];
+        }
+
+    private:
+        void setupPhotoMakerSchema() {
+            schema = {
+                {"title", "PhotoMaker ID Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "ID Image"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "file"},
+                            {"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+                            {"filterName", "ID Images"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Clear"},
+                            {"browseTooltip", "Browse for identity reference images for PhotoMaker"}
+                        }}
+                    }},
+                    {"styleStrength", {
+                        {"type", "number"},
+                        {"title", "Style Strength"},
+                        {"description", "How strongly the style from this image influences generation"},
+                        {"ui:widget", "slider_float"},
+                        {"minimum", 0.0},
+                        {"maximum", 2.0},
+                        {"ui:options", {
+                            {"step", 0.05},
+                            {"format", "%.2f"}
+                        }}
+                    }},
+                    {"isPrimaryID", {
+                        {"type", "boolean"},
+                        {"title", "Primary ID"},
+                        {"description", "Whether this is the primary identity reference image"},
+                        {"ui:widget", "checkbox"}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "styleStrength", "isPrimaryID"}}
+            };
+        }
+    };
+
+    struct MaskImageComponent : public ImageComponent {
+        float value = 0.75f;
+        std::string maskFilePath = "";
+
+        MaskImageComponent() {
+            compName = "MaskImageComponent";
+            fileName = "";
+            filePath = "";
+            setupMaskSchema();
+        }
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+            properties["maskFilePath"] = &maskFilePath;
+            properties["value"] = &value;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            nlohmann::json j = ImageComponent::Serialize();
+            j[compName]["value"] = value;
+            j[compName]["maskFilePath"] = maskFilePath;
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            ImageComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+
+            if (componentData.contains("value"))
+                value = componentData["value"];
+            if (componentData.contains("maskFilePath"))
+                maskFilePath = componentData["maskFilePath"];
+        }
+
+        MaskImageComponent& operator=(const MaskImageComponent& other) {
+            if (this != &other) {
+                ImageComponent::operator=(other);
+                compName = "MaskImageComponent";
+                value = other.value;
+                maskFilePath = other.maskFilePath;
+                setupMaskSchema();
+            }
+            return *this;
+        }
+
+        MaskImageComponent(const MaskImageComponent& other) : ImageComponent(other) {
+            compName = "MaskImageComponent";
+            value = other.value;
+            maskFilePath = other.maskFilePath;
+            setupMaskSchema();
+        }
+
+    private:
+        void setupMaskSchema() {
+            schema = {
+                {"title", "Mask Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"maskFilePath", {
+                        {"type", "string"},
+                        {"title", "Mask Image File"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "file"},
+                            {"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+                            {"filterName", "Image Files"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Clear"},
+                            {"browseTooltip", "Browse for mask image files (grayscale images)"}
+                        }}
+                    }},
+                    {"value", {
+                        {"type", "number"},
+                        {"title", "Mask Strength"},
+                        {"description", "Strength of the mask effect (0.0 to 1.0)"},
+                        {"ui:widget", "slider_float"},
+                        {"minimum", 0.0},
+                        {"maximum", 1.0},
+                        {"ui:options", {
+                            {"step", 0.01},
+                            {"format", "%.2f"}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"maskFilePath", "value"}}
+            };
+        }
+    };
 } // namespace ECS

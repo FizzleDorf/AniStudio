@@ -1,4 +1,3 @@
-// SettingsView.hpp
 #pragma once
 
 #include "GUI.h"
@@ -8,9 +7,8 @@
 #include <set>
 #include <memory>
 
-namespace Settings {
-    class SettingsManager;
-}
+namespace ECS { class EntityManager; }
+namespace Settings { class SettingsManager; }
 
 namespace GUI {
 
@@ -20,6 +18,7 @@ namespace GUI {
         virtual ~SettingsView() = default;
 
         void SetImGuiContext(ImGuiContext* context);
+        void SetEntityManager(ECS::EntityManager& mgr);
         void Render();
         void Show() { showPopup = true; }
         void Hide() { showPopup = false; }
@@ -41,6 +40,7 @@ namespace GUI {
 
         ImGuiContext* imguiContext;
         bool settingsLoaded;
+        ECS::EntityManager* m_entityManager = nullptr;
 
         void RegisterCoreTabs();
         void UpdateCategoriesForActiveTab(const std::string& activeTabName);

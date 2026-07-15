@@ -40,21 +40,19 @@ namespace ANI {
 			context->projectManager = std::make_shared<ProjectManager>(
 				*context->viewManager,
 				*context->entityManager
-				);
+			);
 			return context;
 		}
 
-		// Convert from base context
 		static std::shared_ptr<StudioContext> FromEngine(
 			std::shared_ptr<EngineContext> engineContext) {
 
 			if (!engineContext) return nullptr;
 
 			auto studioContext = std::make_shared<StudioContext>();
-			// Copy base context members
+			
 			studioContext->entityManager = engineContext->entityManager;
 			studioContext->pluginManager = engineContext->pluginManager;
-			studioContext->filePaths = engineContext->filePaths;
 			studioContext->pluginDirectory = engineContext->pluginDirectory;
 			studioContext->hotReloadEnabled = engineContext->hotReloadEnabled;
 
@@ -64,7 +62,7 @@ namespace ANI {
 			studioContext->projectManager = std::make_shared<ProjectManager>(
 				*studioContext->viewManager,
 				*studioContext->entityManager
-				);
+			);
 
 			return studioContext;
 		}

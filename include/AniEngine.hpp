@@ -106,6 +106,6 @@ namespace ANI {
 		void InitializePlugins();
 
 		// File path service initialization
-		void InitializeFilePathService();
+		void InitializeCorePaths();
 	};
 }

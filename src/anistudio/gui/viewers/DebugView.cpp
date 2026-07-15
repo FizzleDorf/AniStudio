@@ -3,199 +3,182 @@
 
 namespace GUI {
 
-	void DebugView::Init() {
-		RefreshEntities();
-	}
+    void DebugView::Init() {
+        RefreshEntities();
+    }
 
-	void DebugView::RefreshEntities() {
-		entities = mgr.GetAllEntities();
-		entityIndex = entities.empty() ? -1 : static_cast<int>(entities.size()) - 1;
-	}
+    void DebugView::RefreshEntities() {
+        entities = mgr.GetAllEntities();
+        entityIndex = entities.empty() ? -1 : static_cast<int>(entities.size()) - 1;
+    }
 
-	void DebugView::Render() {
-		RenderEntityPanel();
-		RenderSystemPanel();
-	}
+    void DebugView::Render() {
+        RenderEntityPanel();
+        RenderSystemPanel();
+    }
 
-	void DebugView::RenderEntityPanel() {
-		if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
-			
-			if (ImGui::Button("Refresh Entities")) {
-				RefreshEntities();
-			}
+    void DebugView::RenderEntityPanel() {
+        if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
 
-			ImGui::SameLine();
-			ImGui::Text("Total Entities: %zu", entities.size());
+            if (ImGui::Button("Refresh Entities")) {
+                RefreshEntities();
+            }
 
-			ImGui::Separator();
+            ImGui::SameLine();
+            ImGui::Text("Total Entities: %zu", entities.size());
 
-			// Show entities in a scrollable region
-			if (ImGui::BeginChild("EntityList", ImVec2(0, -200), true)) {
-				for (size_t i = 0; i < entities.size(); ++i) {
-					ECS::EntityID entity = entities[i];
-					bool isSelected = (entity == selectedEntity);
+            ImGui::Separator();
 
-					if (ImGui::Selectable((std::string("Entity ") + std::to_string(entity)).c_str(), isSelected)) {
-						selectedEntity = entity;
-						entityIndex = static_cast<int>(i);
-					}
+            if (ImGui::BeginChild("EntityList", ImVec2(0, -200), true)) {
+                for (size_t i = 0; i < entities.size(); ++i) {
+                    ECS::EntityID entity = entities[i];
+                    bool isSelected = (entity == selectedEntity);
 
-					// Show component details when expanded
-					if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
+                    if (ImGui::Selectable((std::string("Entity ") + std::to_string(entity)).c_str(), isSelected)) {
+                        selectedEntity = entity;
+                        entityIndex = static_cast<int>(i);
+                    }
 
-						// Get regular components
-						auto components = mgr.GetEntityComponents(entity);
+                    if (ImGui::TreeNode((std::string("Entity Details: ") + std::to_string(entity)).c_str())) {
 
-						ImGui::Text("Components (%zu):", components.size());
-						ImGui::Indent();
+                        auto components = mgr.GetEntityComponents(entity);
 
-						for (auto compType : components) {
-							std::string componentName = mgr.GetComponentNameById(compType);
+                        ImGui::Text("Components (%zu):", components.size());
+                        ImGui::Indent();
 
-							// Check if this is a plugin component
-							bool isPluginComponent = mgr.HasPluginComponent(entity, compType);
+                        for (auto compType : components) {
+                            std::string componentName = mgr.GetComponentNameById(compType);
 
-							if (isPluginComponent) {
-								ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 1.0f, 0.5f, 1.0f)); // Green for plugin components
-								ImGui::Text("[PLUGIN] %s (ID: %u)", componentName.c_str(), compType);
-								ImGui::PopStyleColor();
+                            bool isPluginComponent = mgr.HasPluginComponent(entity, compType);
 
-								// Try to show plugin component data
-								void* pluginComponent = mgr.GetPluginComponent(entity, compType);
-								if (pluginComponent) {
-									// For ExampleComponent specifically, show its data
-									if (componentName == "ExampleComponent") {
-										// We know the structure of ExampleComponent
-										struct ExampleComponentData {
-											ECS::EntityID entityID;
-											std::string message;
-											float value;
-										};
+                            if (isPluginComponent) {
+                                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.5f, 1.0f, 0.5f, 1.0f));
+                                ImGui::Text("[PLUGIN] %s (ID: %u)", componentName.c_str(), compType);
+                                ImGui::PopStyleColor();
 
-										ExampleComponentData* exampleComp = static_cast<ExampleComponentData*>(pluginComponent);
-										ImGui::Indent();
-										ImGui::Text("Entity ID: %zu", exampleComp->entityID);
-										ImGui::Text("Message: %s", exampleComp->message.c_str());
-										ImGui::Text("Value: %.2f", exampleComp->value);
-										ImGui::Unindent();
-									}
-									else {
-										ImGui::Indent();
-										ImGui::Text("Plugin component data available");
-										ImGui::Unindent();
-									}
-								}
-							}
-							else {
-								ImGui::Text("Component: %s (ID: %u)", componentName.c_str(), compType);
-							}
-						}
+                                void* pluginComponent = mgr.GetPluginComponent(entity, compType);
+                                if (pluginComponent) {
+                                    if (componentName == "ExampleComponent") {
+                                        struct ExampleComponentData {
+                                            ECS::EntityID entityID;
+                                            std::string message;
+                                            float value;
+                                        };
 
-						ImGui::Unindent();
-						ImGui::TreePop();
-					}
-				}
-			}
-			ImGui::EndChild();
+                                        ExampleComponentData* exampleComp = static_cast<ExampleComponentData*>(pluginComponent);
+                                        ImGui::Indent();
+                                        ImGui::Text("Entity ID: %zu", exampleComp->entityID);
+                                        ImGui::Text("Message: %s", exampleComp->message.c_str());
+                                        ImGui::Text("Value: %.2f", exampleComp->value);
+                                        ImGui::Unindent();
+                                    }
+                                    else {
+                                        ImGui::Indent();
+                                        ImGui::Text("Plugin component data available");
+                                        ImGui::Unindent();
+                                    }
+                                }
+                            }
+                            else {
+                                ImGui::Text("Component: %s (ID: %u)", componentName.c_str(), compType);
+                            }
+                        }
 
-			// Entity creation/deletion controls
-			ImGui::Separator();
+                        ImGui::Unindent();
+                        ImGui::TreePop();
+                    }
+                }
+            }
+            ImGui::EndChild();
 
-			if (ImGui::Button("Create New Entity")) {
-				ECS::EntityID newEntity = mgr.AddNewEntity();
-				RefreshEntities();
-				selectedEntity = newEntity;
-				std::cout << "[DebugView] Created new entity: " << newEntity << std::endl;
-			}
+            ImGui::Separator();
 
-			ImGui::SameLine();
+            if (ImGui::Button("Create New Entity")) {
+                ECS::EntityID newEntity = mgr.AddNewEntity();
+                RefreshEntities();
+                selectedEntity = newEntity;
+                std::cout << "[DebugView] Created new entity: " << newEntity << std::endl;
+            }
 
-			if (ImGui::Button("Delete Selected Entity") && selectedEntity != static_cast<ECS::EntityID>(-1)) {
-				std::cout << "[DebugView] Deleting entity: " << selectedEntity << std::endl;
-				mgr.DestroyEntity(selectedEntity);
-				selectedEntity = static_cast<ECS::EntityID>(-1);
-				RefreshEntities();
-			}
+            ImGui::SameLine();
 
-			// Show selected entity info
-			if (selectedEntity != static_cast<ECS::EntityID>(-1)) {
-				ImGui::Separator();
-				ImGui::Text("Selected Entity: %zu", selectedEntity);
+            if (ImGui::Button("Delete Selected Entity") && selectedEntity != static_cast<ECS::EntityID>(-1)) {
+                std::cout << "[DebugView] Deleting entity: " << selectedEntity << std::endl;
+                mgr.DestroyEntity(selectedEntity);
+                selectedEntity = static_cast<ECS::EntityID>(-1);
+                RefreshEntities();
+            }
 
-				auto components = mgr.GetEntityComponents(selectedEntity);
-				ImGui::Text("Total Components: %zu", components.size());
+            if (selectedEntity != static_cast<ECS::EntityID>(-1)) {
+                ImGui::Separator();
+                ImGui::Text("Selected Entity: %zu", selectedEntity);
 
-				// Count plugin vs regular components
-				int regularComponents = 0;
-				int pluginComponents = 0;
+                auto components = mgr.GetEntityComponents(selectedEntity);
+                ImGui::Text("Total Components: %zu", components.size());
 
-				for (auto compType : components) {
-					if (mgr.HasPluginComponent(selectedEntity, compType)) {
-						pluginComponents++;
-					}
-					else {
-						regularComponents++;
-					}
-				}
+                int regularComponents = 0;
+                int pluginComponents = 0;
 
-				ImGui::Text("Regular Components: %d", regularComponents);
-				ImGui::Text("Plugin Components: %d", pluginComponents);
-			}
-		}
-		ImGui::End();
+                for (auto compType : components) {
+                    if (mgr.HasPluginComponent(selectedEntity, compType)) {
+                        pluginComponents++;
+                    }
+                    else {
+                        regularComponents++;
+                    }
+                }
 
-		if (!windowOpen) {
-			std::unordered_map<std::string, std::any> eventData;
-			eventData["workspaceID"] = GetID();
-			eventData["viewTypeName"] = viewName;
-			ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
-		}
-	}
+                ImGui::Text("Regular Components: %d", regularComponents);
+                ImGui::Text("Plugin Components: %d", pluginComponents);
+            }
+        }
+        ImGui::End();
 
-	void DebugView::RenderSystemPanel() {
-		if (ImGui::Begin("Active Systems", nullptr)) {
+        if (!windowOpen) {
+            std::unordered_map<std::string, std::any> eventData;
+            eventData["workspaceID"] = GetID();
+            eventData["viewTypeName"] = viewName;
+            ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+        }
+    }
 
-			ImGui::Text("Registered Systems");
-			ImGui::Separator();
+    void DebugView::RenderSystemPanel() {
+        if (ImGui::Begin("Active Systems", nullptr)) {
 
-			// Show regular systems
-			const auto& systems = mgr.GetRegisteredSystems();
-			ImGui::Text("Regular Systems (%zu):", systems.size());
+            ImGui::Text("Registered Systems");
+            ImGui::Separator();
 
-			for (const auto &[id, aniSystem] : systems) {
-				if (ImGui::TreeNode((std::string("System ") + std::to_string(id) + " " + aniSystem->GetSystemName()).c_str())) {
-					ImGui::Text("System ID: %zu", id);
-					ImGui::Text("System Name: %s", aniSystem->GetSystemName().c_str());
+            const auto& systems = mgr.GetRegisteredSystems();
+            ImGui::Text("Regular Systems (%zu):", systems.size());
 
-					// We can't directly access the entities member since it's protected
-					// Instead, we'll show that the system exists and is active
-					ImGui::Text("Status: Active");
+            for (const auto& [id, aniSystem] : systems) {
+                if (ImGui::TreeNode((std::string("System ") + std::to_string(id) + " " + aniSystem->GetSystemName()).c_str())) {
+                    ImGui::Text("System ID: %zu", id);
+                    ImGui::Text("System Name: %s", aniSystem->GetSystemName().c_str());
+                    ImGui::Text("Status: Active");
+                    ImGui::TreePop();
+                }
+            }
 
-					ImGui::TreePop();
-				}
-			}
+            ImGui::Separator();
 
-			ImGui::Separator();
+            ImGui::Text("Plugin Systems:");
+            ImGui::Text("(Plugin system info not directly accessible)");
+            ImGui::Text("Check console output for plugin system updates");
 
-			// Show plugin systems - we need to add a method to get these
-			ImGui::Text("Plugin Systems:");
-			ImGui::Text("(Plugin system info not directly accessible)");
-			ImGui::Text("Check console output for plugin system updates");
+            ImGui::Separator();
 
-			ImGui::Separator();
+            if (ImGui::Button("Refresh Systems")) {
+                std::cout << "[DebugView] System refresh requested" << std::endl;
+            }
 
-			// System controls
-			if (ImGui::Button("Refresh Systems")) {
-				std::cout << "[DebugView] System refresh requested" << std::endl;
-			}
+            ImGui::SameLine();
 
-			ImGui::SameLine();
-
-			if (ImGui::Button("Print Registry Debug Info")) {
-				mgr.DebugPrintRegisteredComponents();
-			}
-		}
-		ImGui::End();
-	}
+            if (ImGui::Button("Print Registry Debug Info")) {
+                mgr.DebugPrintRegisteredComponents();
+            }
+        }
+        ImGui::End();
+    }
 
 } // namespace GUI

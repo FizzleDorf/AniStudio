@@ -2,7 +2,6 @@
 #define SEQUENCER_VIEW_HPP
 
 #include "GUI.h"
-#include "FilePaths.hpp"
 #include "pch.h"
 #include <ImSequencer.h>
 #include "ImGuiFileDialog.h"
@@ -29,18 +28,15 @@ namespace GUI {
 
         SequencerView(ECS::EntityManager& entityMgr);
         ~SequencerView() = default;
-        // Sequencer control
+
         void Play();
         void Pause();
         void Stop();
 
-        // Render the view
         void Render();
 
-        // Add a track
         void AddTrack(const std::string& name, ECS::EntityID entity);
 
-        // Implement SequenceInterface
         int GetFrameMin() const override;
         int GetFrameMax() const override;
         int GetItemCount() const override;
@@ -48,11 +44,11 @@ namespace GUI {
         const char* GetItemLabel(int index) const override;
 
     private:
-        std::vector<Track> tracks; // Stores the tracks
-        int currentFrame;          // Current playback frame
-        bool playing;              // Is the sequencer playing
-        float playbackSpeed;       // Playback speed
-        double lastTime;           // Last time for frame calculation
+        std::vector<Track> tracks;
+        int currentFrame;
+        bool playing;
+        float playbackSpeed;
+        double lastTime;
     };
 
 }
