@@ -43,14 +43,6 @@ namespace GUI {
 
         ECS::EntityID lastGeneratedVideoID;
 
-        const char* filters = "Video files{.mp4,.avi,.mkv,.mov,.webm}"
-            ".mp4,.avi,.mkv,.mov,.webm"
-            "{.mp4},MP4"
-            "{.avi},AVI"
-            "{.mkv},MKV"
-            "{.mov},MOV"
-            "{.webm},WEBM";
-
         void RefreshVideoEntities();
         void RenderVideoInfo();
         void RenderControls();

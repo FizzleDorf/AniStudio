@@ -2,6 +2,7 @@
 #include "ProjectManager.hpp"
 #include "Events.hpp"
 #include "FilePathSystem.hpp"
+#include "FileDialogUtil.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -146,7 +147,11 @@ namespace GUI {
                 ImGui::InputText("##ProjectPath", state.projectPathBuffer, sizeof(state.projectPathBuffer));
                 ImGui::SameLine();
                 if (ImGui::Button("Browse...##PathBrowse")) {
-                    std::cout << "[ProjectPopups] Browse button clicked" << std::endl;
+                    std::string selectedPath;
+                    if (FileDialog::SelectFolder("Select Project Location", selectedPath, state.projectPathBuffer)) {
+                        strncpy(state.projectPathBuffer, selectedPath.c_str(), sizeof(state.projectPathBuffer) - 1);
+                        state.projectPathBuffer[sizeof(state.projectPathBuffer) - 1] = '\0';
+                    }
                 }
 
                 ImGui::Separator();
@@ -208,7 +213,17 @@ namespace GUI {
 
                 ImGui::SetCursorPosX(startX);
                 if (ImGui::Button("Browse for Project...", ImVec2(buttonWidth, 30))) {
-                    std::cout << "[ProjectPopups] Browse for project (file dialog not implemented)" << std::endl;
+                    std::string selectedPath;
+                    if (FileDialog::SelectFolder("Select Project Folder", selectedPath)) {
+                        if (projectMgr.LoadProject(selectedPath)) {
+                            std::cout << "[ProjectPopups] Loaded project: " << selectedPath << std::endl;
+                            state.showLoadProjectPopup = false;
+                            ImGui::CloseCurrentPopup();
+                        }
+                        else {
+                            std::cerr << "[ProjectPopups] Failed to load project: " << projectMgr.GetLastError() << std::endl;
+                        }
+                    }
                 }
 
                 ImGui::SameLine(0, spacing);

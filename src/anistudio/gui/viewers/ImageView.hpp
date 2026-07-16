@@ -40,8 +40,6 @@ namespace GUI {
 
         std::vector<ECS::EntityID> imageEntities;
 
-        const char* filters;
-
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
         std::shared_ptr<ECS::ImageSystem> imageSystem;

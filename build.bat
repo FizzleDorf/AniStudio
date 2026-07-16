@@ -102,14 +102,14 @@ echo Plugins location: %CD%\plugins
 echo.
 
 :: Check if executable was created
-if exist bin\AniStudio.exe (
+if exist AniStudio.exe (
     echo AniStudio executable: AniStudio.exe
     
     :: Ask if user wants to run the application
     set /p RUN_APP="Run AniStudio now? (y/n): "
     if /i "!RUN_APP!"=="y" (
         echo Starting AniStudio...
-        bin\AniStudio.exe
+        AniStudio.exe
     )
 ) else (
     echo Warning: AniStudio.exe was not found
