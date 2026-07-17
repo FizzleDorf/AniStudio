@@ -3,8 +3,6 @@
 #include "DiffusionOptions.hpp"
 #include "ECS.h"
 #include "ViewManager.hpp"
-#include "FilePaths.hpp"
-#include "ImGuiFileDialog.h"
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"
 #include "ConversionComponent.hpp"

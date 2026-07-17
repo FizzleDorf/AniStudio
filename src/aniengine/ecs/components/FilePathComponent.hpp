@@ -37,7 +37,6 @@ namespace ECS {
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            if (j.contains("compName")) compName = j["compName"];
             if (j.contains("paths") && j["paths"].is_object()) {
                 for (auto& [key, value] : j["paths"].items()) {
                     if (value.is_string()) m_paths[key] = value.get<std::string>();

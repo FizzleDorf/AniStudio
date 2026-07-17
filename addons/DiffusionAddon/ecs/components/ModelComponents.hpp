@@ -290,18 +290,8 @@ namespace ECS {
 			};
 		}
 
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
+		const char* GetDefaultDirectory() const override {
+			return "Encoder";
 		}
 
 		EmbeddingComponent& operator=(const EmbeddingComponent& other) {

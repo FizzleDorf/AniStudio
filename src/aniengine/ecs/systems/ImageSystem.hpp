@@ -105,11 +105,16 @@ namespace ECS {
 
         void RemoveImage(const EntityID entity) {
             if (mgr.HasComponent<ImageComponent>(entity)) {
-                CancelPendingLoad(entity);
-
                 if (mgr.HasComponent<InputImageComponent>(entity)) {
                     auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
                     inputComp.ClearImageData();
+                }
+                else {
+                    auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+                    if (imageComp.imageData) {
+                        Utils::ImageUtils::FreeImageData(imageComp.imageData);
+                        imageComp.imageData = nullptr;
+                    }
                 }
 
                 NotifyImageRemoved(entity);

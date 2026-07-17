@@ -1,6 +1,5 @@
 #pragma once
 #include "BaseComponent.hpp"
-#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -21,7 +20,7 @@ namespace ECS {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
 					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = GetDefaultDirectory().string();
+					options["dialogDefaultPath"] = "";
 				}
 			}
 		}
@@ -102,8 +101,8 @@ namespace ECS {
 		}
 
 		// Get the appropriate default directory for this model type
-		virtual std::filesystem::path GetDefaultDirectory() const {
-			return Utils::FilePathService::GetPath("Checkpoint"); // Base class default
+		virtual const char* GetDefaultDirectory() const {
+			return compCategory;
 		}
 	};
 }

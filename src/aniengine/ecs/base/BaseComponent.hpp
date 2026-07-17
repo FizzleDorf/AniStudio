@@ -11,8 +11,8 @@
 
 namespace ECS {
 	struct BaseComponent {
-		std::string compName = "Base_Component";
-		std::string compCategory = "";
+		const char * compName = "Base_Component";
+		const char * compCategory = "";
 
 		// Single schema definition for node, inputs, outputs, and UI
 		nlohmann::json schema = {};
@@ -73,8 +73,8 @@ namespace ECS {
 
 		// Deserialize from JSON
 		virtual void Deserialize(const nlohmann::json& j) {
-			if (j.contains("compName"))
-				compName = j["compName"];
+			//if (j.contains("compName"))
+				// compName = j["compName"];
 		}
 
 	private:

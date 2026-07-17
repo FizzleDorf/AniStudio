@@ -152,16 +152,6 @@ namespace ECS {
         bool vae_decode_only = false;
         bool isTiled = false;
 
-        void RefreshSchema() override {
-            if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-                auto& prop = schema["properties"]["modelPath"];
-                if (prop.contains("ui:options")) {
-                    auto& options = prop["ui:options"];
-                    options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Vae");
-                }
-            }
-        }
-
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
                 {"modelPath", &modelPath},
@@ -290,18 +280,8 @@ namespace ECS {
             };
         }
 
-        void RefreshSchema() override {
-            if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-                auto& prop = schema["properties"]["modelPath"];
-                if (prop.contains("ui:options")) {
-                    auto& options = prop["ui:options"];
-                    options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Vae");
-                }
-            }
-        }
-
-        std::filesystem::path GetDefaultDirectory() const override {
-            return Utils::FilePathService::GetPath("Vae");
+        const char * GetDefaultDirectory() const override {
+            return "Vae";
         }
 
         TaesdComponent& operator=(const TaesdComponent& other) {

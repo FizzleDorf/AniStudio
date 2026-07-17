@@ -30,7 +30,7 @@ namespace GUI {
 
         if (ImGui::BeginMenuBar()) {
             ShowFileMenu();
-            ShowEditMenu();
+            // ShowEditMenu();
             ShowWorkspaceMenu();
             ShowCustomCategoryMenus();
             ShowHelpMenu();
@@ -211,7 +211,7 @@ namespace GUI {
         std::set<std::string> customCategories;
         auto allViews = viewManager.GetRegisteredViews();
 
-        std::set<std::string> standardMenus = { "File", "Edit", "Workspace", "Help" };
+        std::set<std::string> standardMenus = { "File", /*"Edit",*/ "Workspace", "Help" };
 
         for (const auto& [viewTypeName, typeID] : allViews) {
             auto meta = viewManager.GetViewMetadata(viewTypeName);
