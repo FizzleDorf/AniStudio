@@ -168,10 +168,6 @@ namespace ECS {
             };
         }
 
-        std::filesystem::path GetDefaultDirectory() const override {
-            return Utils::FilePathService::GetPath("Vae");
-        }
-
         VaeComponent& operator=(const VaeComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -278,10 +274,6 @@ namespace ECS {
                     }}
                 }}
             };
-        }
-
-        const char * GetDefaultDirectory() const override {
-            return "Vae";
         }
 
         TaesdComponent& operator=(const TaesdComponent& other) {

@@ -114,8 +114,12 @@ if(NOT TARGET ImGui AND EXISTS "${EXTERNAL_DIR}/imgui/CMakeLists.txt")
     add_subdirectory("${EXTERNAL_DIR}/imgui" "${CMAKE_BINARY_DIR}/imgui")
 endif()
 
-if(NOT TARGET ImGuiFileDialog AND EXISTS "${EXTERNAL_DIR}/imgui_filedialog/CMakeLists.txt")
-    add_subdirectory("${EXTERNAL_DIR}/imgui_filedialog" "${CMAKE_BINARY_DIR}/imgui_filedialog")
+set(NFD_AVAILABLE FALSE)
+if(EXISTS "${EXTERNAL_DIR}/nativefiledialog-extended/CMakeLists.txt" AND NOT TARGET nfd)
+    add_subdirectory("${EXTERNAL_DIR}/nativefiledialog-extended" "${CMAKE_BINARY_DIR}/_external/nativefiledialog-extended")
+    set(NFD_AVAILABLE TRUE)
+elseif(TARGET nfd)
+    set(NFD_AVAILABLE TRUE)
 endif()
 
 if(NOT TARGET Zep::Zep AND EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt")
@@ -286,13 +290,12 @@ target_include_directories(DiffusionAddon PUBLIC
     "${EXTERNAL_DIR}/cr/cr"
     "${EXTERNAL_DIR}/stable-diffusion.cpp"
     "${EXTERNAL_DIR}/stb_image"
-    "${EXTERNAL_DIR}/imgui_filedialog"
-    "${EXTERNAL_DIR}/imgui_filedialog/stb"
     "${EXTERNAL_DIR}/imgui_nodes"
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"
     "${EXTERNAL_DIR}/imgui_markdown"
     "${EXTERNAL_DIR}/zep/include"
+    "${EXTERNAL_DIR}/nativefiledialog-extended/include"
 )
 
 target_link_libraries(DiffusionAddon PRIVATE
@@ -306,9 +309,9 @@ target_link_libraries(DiffusionAddon PRIVATE
     OpenGL::GL
     exiv2::exiv2
     ImGui
-    ImGuiFileDialog
     stable-diffusion
     pybind11::embed
+    nfd
 )
 
 if(WIN32)
@@ -377,6 +380,7 @@ target_compile_definitions(DiffusionAddon PRIVATE
     PCH_DISABLED
     $<$<CONFIG:Debug>:DEBUG>
     $<$<CONFIG:Release>:NDEBUG>
+    NFD_AVAILABLE
 )
 
 set(ADDON_STAGING_DIR "${ANISTUDIO_ROOT}/build/addons/DiffusionAddon/staging")

@@ -5,7 +5,6 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp"
 #include "SaveUtils.hpp"
-#include "FilePathService.hpp"
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -13,6 +12,10 @@
 #include <filesystem>
 #include <thread>
 #include <cstdlib>
+
+// Forward declaration of global FilePathSystem pointer
+namespace ECS { class FilePathSystem; }
+namespace Utils { extern ECS::FilePathSystem* g_FilePathSystem; }
 
 namespace Utils
 {
@@ -24,7 +27,7 @@ namespace Utils
     public:
         static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* sd_context = nullptr)
         {
-            (void)sd_context; // Mark as unused
+            (void)sd_context;
 
             upscaler_ctx_t* upscaler_context = nullptr;
             unsigned char* inputData = nullptr;
@@ -33,10 +36,9 @@ namespace Utils
 
             try
             {
-                // Extract parameters from metadata
                 std::string inputImagePath = "";
-                std::string modelPath = Utils::FilePathService::GetPath("Upscale");
-                std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
+                std::string modelPath = "";
+                std::string outputPath = "";
                 std::string outputFilename = "upscale_AniStudio.png";
                 uint32_t upscaleFactor = 4;
                 bool direct = false;
@@ -45,12 +47,12 @@ namespace Utils
                 const char* backend = nullptr;
                 const char* params_backend = nullptr;
 
-                // Parse metadata to extract parameters
+                auto* fs = g_FilePathSystem;
+
                 if (metadata.contains("components") && metadata["components"].is_array())
                 {
                     for (const auto& comp : metadata["components"])
                     {
-                        // Input image path
                         if (comp.contains("InputImage"))
                         {
                             nlohmann::json inputImageData = comp["InputImage"];
@@ -61,7 +63,6 @@ namespace Utils
                             }
                         }
 
-                        // Output settings
                         if (comp.contains("OutputImage"))
                         {
                             nlohmann::json outputImageData = comp["OutputImage"];
@@ -77,7 +78,6 @@ namespace Utils
                             }
                         }
 
-                        // Esrgan component
                         if (comp.contains("Esrgan"))
                         {
                             nlohmann::json esrganData = comp["Esrgan"];
@@ -86,10 +86,10 @@ namespace Utils
                             {
                                 modelPath = esrganData["modelPath"].get<std::string>();
                             }
-                            else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null() && !esrganData["modelName"].get<std::string>().empty())
+                            else if (esrganData.contains("modelName") && !esrganData["modelName"].is_null() && !esrganData["modelName"].get<std::string>().empty() && fs)
                             {
                                 std::string modelName = esrganData["modelName"].get<std::string>();
-                                std::string upscaleDir = Utils::FilePathService::GetPath("Upscale");
+                                std::string upscaleDir = fs->GetPath("Upscale");
                                 if (!upscaleDir.empty() && upscaleDir[0] != '\0') {
                                     modelPath = (std::filesystem::path(upscaleDir) / modelName).string();
                                 }
@@ -110,7 +110,6 @@ namespace Utils
                                 params_backend = esrganData["params_backend"].get<std::string>().c_str();
                         }
 
-                        // Sampler component (some upscalers might use SD context)
                         if (comp.contains("Sampler"))
                         {
                             nlohmann::json samplerData = comp["Sampler"];
@@ -120,7 +119,10 @@ namespace Utils
                     }
                 }
 
-                // Validate parameters
+                if (modelPath.empty() && fs) {
+                    modelPath = fs->GetPath("Upscale");
+                }
+
                 if (inputImagePath.empty())
                 {
                     throw std::runtime_error("Input image path is empty!");
@@ -131,20 +133,20 @@ namespace Utils
                     throw std::runtime_error("ESRGAN model path is empty!");
                 }
 
-                // Check if model file exists
                 if (!std::filesystem::exists(modelPath)) {
                     std::cerr << "Warning: ESRGAN model file not found: " << modelPath << std::endl;
-                    std::string upscaleDir = Utils::FilePathService::GetPath("Upscale");
-                    if (!upscaleDir.empty()) {
-                        std::string altPath = (std::filesystem::path(upscaleDir) / std::filesystem::path(modelPath).filename()).string();
-                        if (std::filesystem::exists(altPath)) {
-                            std::cout << "Found model at alternative path: " << altPath << std::endl;
-                            modelPath = altPath;
+                    if (fs) {
+                        std::string upscaleDir = fs->GetPath("Upscale");
+                        if (!upscaleDir.empty()) {
+                            std::string altPath = (std::filesystem::path(upscaleDir) / std::filesystem::path(modelPath).filename()).string();
+                            if (std::filesystem::exists(altPath)) {
+                                std::cout << "Found model at alternative path: " << altPath << std::endl;
+                                modelPath = altPath;
+                            }
                         }
                     }
                 }
 
-                // Load input image - force 3 channels for consistency
                 int inputWidth, inputHeight, inputChannels;
                 std::cout << "Loading input image from: " << inputImagePath << std::endl;
                 inputData = stbi_load(inputImagePath.c_str(), &inputWidth, &inputHeight, &inputChannels, 3);
@@ -159,7 +161,6 @@ namespace Utils
                 std::cout << "Input image loaded: " << inputWidth << "x" << inputHeight
                     << " with " << inputChannels << " channels (forced RGB)" << std::endl;
 
-                // Determine output file path
                 std::string outputFilePath;
                 if (!fullPath.empty())
                 {
@@ -170,7 +171,7 @@ namespace Utils
                     std::filesystem::path outputDir(outputPath);
                     std::filesystem::path outputFile(outputFilename);
                     if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(outputDir)) {
-                        std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
+                        std::string outputFolder = fs ? fs->GetPath("OutputFolder") : "";
                         if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
                             outputDir = outputFolder;
                         }
@@ -181,7 +182,6 @@ namespace Utils
 
                 std::cout << "Output will be saved to: " << outputFilePath << std::endl;
 
-                // Initialize upscaler context (updated API)
                 std::cout << "Initializing upscaler with model: " << modelPath << std::endl;
                 std::cout << "Parameters: threads=" << n_threads
                     << ", direct=" << direct
@@ -199,7 +199,6 @@ namespace Utils
                     throw std::runtime_error("Failed to initialize upscaler context!");
                 }
 
-                // Check actual upscale factor from context
                 int actual_upscale_factor = get_upscale_factor(upscaler_context);
                 if (actual_upscale_factor > 0 && actual_upscale_factor != upscaleFactor) {
                     std::cout << "Note: Model supports upscale factor " << actual_upscale_factor
@@ -207,7 +206,6 @@ namespace Utils
                     upscaleFactor = actual_upscale_factor;
                 }
 
-                // Create input image struct
                 sd_image_t input_image = {
                     static_cast<uint32_t>(inputWidth),
                     static_cast<uint32_t>(inputHeight),
@@ -222,17 +220,14 @@ namespace Utils
                     throw std::runtime_error("Upscaling failed - no output image produced");
                 }
 
-                // Use the first output image (the library usually returns exactly one)
                 sd_image_t& upscaled_image = upscaled_images[0];
                 std::cout << "Upscaling successful: " << upscaled_image.width << "x"
                     << upscaled_image.height << "x" << upscaled_image.channel << std::endl;
 
-                // Save the upscaled image
                 SaveImage(upscaled_image.data, upscaled_image.width, upscaled_image.height,
                     upscaled_image.channel, metadata, outputFilePath);
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-                // Cleanup resources
                 if (inputData)
                 {
                     stbi_image_free(inputData);
@@ -240,7 +235,6 @@ namespace Utils
                 }
                 if (upscaled_images)
                 {
-                    // Use the library's dedicated free function
                     free_sd_images(upscaled_images, num_upscaled);
                     upscaled_images = nullptr;
                 }
@@ -276,4 +270,4 @@ namespace Utils
             }
         }
     };
-} // namespace Utils
+}

@@ -19,8 +19,7 @@ namespace GUI {
     }
 
     void PluginView::Init() {
-        std::filesystem::path executablePath = std::filesystem::current_path();
-        std::filesystem::path buildPath = executablePath.parent_path();
+        std::filesystem::path buildPath = std::filesystem::current_path();
 
         std::filesystem::path pluginsPath = buildPath / "plugins";
         m_searchDirectories.push_back(PluginDirectoryInfo(pluginsPath, true));
@@ -40,8 +39,7 @@ namespace GUI {
         m_pluginManager.enableHotReload(m_hotReloadEnabled);
 
         std::cout << "[PluginView] Initialized with " << m_searchDirectories.size() << " search directories" << std::endl;
-        std::cout << "[PluginView] Current path: " << executablePath << std::endl;
-        std::cout << "[PluginView] Build path: " << buildPath << std::endl;
+        std::cout << "[PluginView] Current path: " << buildPath << std::endl;
         std::cout << "[PluginView] Plugin search path: " << pluginsPath << std::endl;
         std::cout << "[PluginView] Addon search path: " << addonsPath << std::endl;
     }

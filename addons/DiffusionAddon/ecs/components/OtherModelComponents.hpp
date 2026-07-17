@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -33,20 +32,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("PhotoMaker");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("PhotoMaker");
 		}
 
 		PhotoMakerComponent& operator=(const PhotoMakerComponent& other) {
@@ -137,17 +122,6 @@ namespace ECS {
 		float applyEnd = 1.0f;
 		bool keep_control_net_cpu = false;
 
-		void RefreshSchema() override {
-			// Update the default path in the schema to current ControlNet path
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("ControlNet");
-				}
-			}
-		}
-
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
@@ -157,10 +131,6 @@ namespace ECS {
 				{"applyEnd", &applyEnd},
 				{"keep_control_net_cpu", &keep_control_net_cpu}
 			};
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("ControlNet");
 		}
 
 		ControlNetComponent& operator=(const ControlNetComponent& other) {
@@ -273,17 +243,6 @@ namespace ECS {
 		uint32_t tileSize = 512;
 		bool preserveAspectRatio = true;
 
-		void RefreshSchema() override {
-			// Update the default path in the schema to current Upscale path
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Upscale");
-				}
-			}
-		}
-
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
@@ -291,10 +250,6 @@ namespace ECS {
 				{"upscaleFactor", reinterpret_cast<int*>(&upscaleFactor)},
 				{"preserveAspectRatio", &preserveAspectRatio}
 			};
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Upscale");
 		}
 
 		EsrganComponent& operator=(const EsrganComponent& other) {
@@ -347,7 +302,7 @@ namespace ECS {
 	struct LoraComponent : public ECS::BaseModelComponent {
 		LoraComponent() {
 			compName = "Lora";
-			modelPath = Utils::FilePathService::GetPath("Lora");
+			modelPath = "";
 			schema = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},
@@ -379,26 +334,12 @@ namespace ECS {
 
 		enum lora_apply_mode_t lora_apply_mode = LORA_APPLY_AUTO;
 
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Lora");
-				}
-			}
-		}
-
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"modelPath", &modelPath},
 				{"modelName", &modelName},
 				{"lora_apply_mode", reinterpret_cast<int*>(&lora_apply_mode)}
 			};
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Lora");
 		}
 
 		LoraComponent& operator=(const LoraComponent& other) {
@@ -428,5 +369,4 @@ namespace ECS {
 			}
 		}
 	};
-
 }

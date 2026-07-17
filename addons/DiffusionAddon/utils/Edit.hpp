@@ -5,7 +5,6 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp"
 #include "SaveUtils.hpp"
-#include "FilePathService.hpp"
 #include "pch.h"
 #include <stb_image.h>
 #include <stb_image_write.h>
@@ -13,6 +12,10 @@
 #include <filesystem>
 #include <thread>
 #include <cstdlib>
+
+// Forward declaration of global FilePathSystem pointer
+namespace ECS { class FilePathSystem; }
+namespace Utils { extern ECS::FilePathSystem* g_FilePathSystem; }
 
 namespace Utils
 {
@@ -27,50 +30,40 @@ namespace Utils
         {
             bool contextProvided = (sd_context != nullptr);
             std::vector<unsigned char*> refImageData;
-            sd_image_t* result_images = nullptr;        // array returned by generate_image
+            sd_image_t* result_images = nullptr;
             int num_result_images = 0;
             sd_img_gen_params_t gen_params;
             sd_img_gen_params_init(&gen_params);
 
-            // Additional structures for advanced features
             std::vector<sd_image_t> imagesToCleanup;
             std::vector<sd_image_t> idImagesStorage;
-            std::vector<sd_image_t> refImagesStorage; // For multiple reference images
+            std::vector<sd_image_t> refImagesStorage;
             int* slg_layers = nullptr;
 
             try
             {
-                // Extract parameters from metadata
                 std::vector<std::string> refImagePaths;
-                std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
+                std::string outputPath = "";
                 std::string outputFilename = "edit_output.png";
                 std::string posPrompt = "";
                 std::string negPrompt = "";
 
-                // VAE tiling parameters
                 sd_tiling_params_t vae_tiling_params = { false, 64, 64, 0.0f, 64.0f, 64.0f };
-
-                // PhotoMaker parameters
                 sd_pm_params_t pm_params = { nullptr, 0, nullptr, 0.0f };
-
-                // ControlNet image
                 sd_image_t control_image = { 0, 0, 0, nullptr };
                 float control_strength = 0.0f;
-
-                // Cache parameters
                 sd_cache_params_t cache_params;
                 sd_cache_params_init(&cache_params);
 
-                // Debug logging for metadata
+                auto* fs = g_FilePathSystem;
+
                 std::cout << "Edit metadata:" << std::endl;
                 std::cout << metadata.dump(2) << std::endl;
 
-                // Parse metadata to extract parameters
                 if (metadata.contains("components") && metadata["components"].is_array())
                 {
                     for (const auto& comp : metadata["components"])
                     {
-                        // --- Reference Images ---
                         if (comp.contains("ReferenceImages"))
                         {
                             nlohmann::json refImagesData = comp["ReferenceImages"];
@@ -92,7 +85,6 @@ namespace Utils
                             }
                         }
 
-                        // --- Output Image ---
                         if (comp.contains("OutputImage"))
                         {
                             nlohmann::json outputImageData = comp["OutputImage"];
@@ -108,7 +100,6 @@ namespace Utils
                             }
                         }
 
-                        // --- Prompt ---
                         if (comp.contains("Prompt"))
                         {
                             nlohmann::json promptData = comp["Prompt"];
@@ -118,7 +109,6 @@ namespace Utils
                                 negPrompt = promptData["negPrompt"].get<std::string>();
                         }
 
-                        // --- ClipSkip ---
                         if (comp.contains("ClipSkip"))
                         {
                             nlohmann::json clipSkipData = comp["ClipSkip"];
@@ -126,12 +116,10 @@ namespace Utils
                                 gen_params.clip_skip = clipSkipData["clipSkip"].get<int>();
                         }
 
-                        // --- Sampler ---
                         if (comp.contains("Sampler"))
                         {
                             nlohmann::json samplerData = comp["Sampler"];
 
-                            // Core generation params
                             if (samplerData.contains("seed") && !samplerData["seed"].is_null())
                                 gen_params.seed = static_cast<int64_t>(samplerData["seed"].get<int>());
                             if (samplerData.contains("denoise") && !samplerData["denoise"].is_null())
@@ -139,7 +127,6 @@ namespace Utils
                             if (samplerData.contains("batchSize") && !samplerData["batchSize"].is_null())
                                 gen_params.batch_count = samplerData["batchSize"].get<int>();
 
-                            // sample_params fields
                             if (samplerData.contains("steps") && !samplerData["steps"].is_null())
                                 gen_params.sample_params.sample_steps = samplerData["steps"].get<int>();
                             if (samplerData.contains("eta") && !samplerData["eta"].is_null())
@@ -153,7 +140,6 @@ namespace Utils
                             if (samplerData.contains("extra_sample_args") && !samplerData["extra_sample_args"].is_null())
                                 gen_params.sample_params.extra_sample_args = samplerData["extra_sample_args"].get<std::string>().c_str();
 
-                            // Custom sigmas
                             if (samplerData.contains("custom_sigmas") && samplerData["custom_sigmas"].is_array())
                             {
                                 auto sigmas = samplerData["custom_sigmas"].get<std::vector<float>>();
@@ -163,14 +149,10 @@ namespace Utils
                                     std::copy(sigmas.begin(), sigmas.end(), sigma_data);
                                     gen_params.sample_params.custom_sigmas = sigma_data;
                                     gen_params.sample_params.custom_sigmas_count = static_cast<int>(sigmas.size());
-                                    // Note: We'll need to delete this later; for simplicity we don't free here,
-                                    // but proper cleanup would be needed.
                                 }
                             }
-
                         }
 
-                        // --- Guidance ---
                         if (comp.contains("Guidance"))
                         {
                             nlohmann::json guidanceData = comp["Guidance"];
@@ -182,7 +164,6 @@ namespace Utils
                                 gen_params.sample_params.guidance.distilled_guidance = guidanceData["distilled_guidance"].get<float>();
                         }
 
-                        // --- SLG (LayerSkip) ---
                         if (comp.contains("SLG"))
                         {
                             nlohmann::json slgData = comp["SLG"];
@@ -210,7 +191,6 @@ namespace Utils
                             }
                         }
 
-                        // --- Latent ---
                         if (comp.contains("Latent"))
                         {
                             nlohmann::json latentData = comp["Latent"];
@@ -222,7 +202,6 @@ namespace Utils
                                 gen_params.batch_count = latentData["batchSize"].get<int>();
                         }
 
-                        // --- Vae ---
                         if (comp.contains("Vae"))
                         {
                             nlohmann::json vaeData = comp["Vae"];
@@ -240,7 +219,6 @@ namespace Utils
                                 vae_tiling_params.rel_size_y = vaeData["rel_size_y"].get<float>();
                         }
 
-                        // --- ControlNet ---
                         if (comp.contains("Controlnet"))
                         {
                             nlohmann::json controlData = comp["Controlnet"];
@@ -248,7 +226,6 @@ namespace Utils
                                 control_strength = controlData["cnStrength"].get<float>();
                         }
 
-                        // --- ControlNet Image ---
                         if (comp.contains("ControlNetImage"))
                         {
                             nlohmann::json controlImageData = comp["ControlNetImage"];
@@ -267,7 +244,6 @@ namespace Utils
                             }
                         }
 
-                        // --- PhotoMaker ---
                         if (comp.contains("PhotoMaker"))
                         {
                             nlohmann::json pmData = comp["PhotoMaker"];
@@ -280,7 +256,6 @@ namespace Utils
                             }
                         }
 
-                        // --- PhotoMaker ID Images ---
                         if (comp.contains("PhotoMakerImage"))
                         {
                             nlohmann::json pmImageData = comp["PhotoMakerImage"];
@@ -296,7 +271,6 @@ namespace Utils
                             }
                         }
 
-                        // --- EasyCache ---
                         if (comp.contains("EasyCache"))
                         {
                             nlohmann::json cacheData = comp["EasyCache"];
@@ -308,7 +282,6 @@ namespace Utils
                                 cache_params.start_percent = cacheData["start_percent"].get<float>();
                             if (cacheData.contains("end_percent") && !cacheData["end_percent"].is_null())
                                 cache_params.end_percent = cacheData["end_percent"].get<float>();
-                            // More cache fields can be parsed if needed
                         }
 
                         if (comp.contains("Chroma"))
@@ -321,18 +294,13 @@ namespace Utils
                 gen_params.prompt = posPrompt.c_str();
                 gen_params.negative_prompt = negPrompt.c_str();
 
-                // Initialize empty mask and control image for edit operations
                 gen_params.mask_image = { 0, 0, 0, nullptr };
                 gen_params.control_image = control_image;
                 gen_params.control_strength = control_strength;
 
-                // Set VAE tiling parameters
                 gen_params.vae_tiling_params = vae_tiling_params;
-
-                // Set cache parameters
                 gen_params.cache = cache_params;
 
-                // Set up PhotoMaker parameters if available
                 if (pm_params.id_embed_path != nullptr || !idImagesStorage.empty()) {
                     if (!idImagesStorage.empty()) {
                         pm_params.id_images_count = idImagesStorage.size();
@@ -341,13 +309,11 @@ namespace Utils
                     gen_params.pm_params = pm_params;
                 }
 
-                // Validate parameters
                 if (refImagePaths.empty())
                 {
                     throw std::runtime_error("No reference images provided for edit operation!");
                 }
 
-                // Load reference images into sd_image_t vector
                 for (const std::string& imagePath : refImagePaths)
                 {
                     if (!std::filesystem::exists(imagePath))
@@ -387,20 +353,17 @@ namespace Utils
                     refImagesStorage.push_back(ref_img);
                 }
 
-                // Set the first reference image as init_image for edit operations
                 if (!refImagesStorage.empty())
                 {
                     gen_params.init_image = refImagesStorage[0];
                 }
 
-                // Set multiple reference images if available
                 if (refImagesStorage.size() > 1)
                 {
                     gen_params.ref_images = refImagesStorage.data();
                     gen_params.ref_images_count = static_cast<int>(refImagesStorage.size());
                 }
 
-                // Get SD context if not provided
                 if (!contextProvided) {
                     sd_context = SDContextManager::GetOrCreateContext(metadata);
                 }
@@ -410,7 +373,6 @@ namespace Utils
                     throw std::runtime_error("Failed to initialize Stable Diffusion context!");
                 }
 
-                // Ensure valid seed
                 if (gen_params.seed < 0)
                 {
                     gen_params.seed = static_cast<int64_t>(generateRandomSeed());
@@ -430,7 +392,6 @@ namespace Utils
                     throw std::runtime_error("generate_image failed - no output image produced");
                 }
 
-                // Use the first image
                 sd_image_t* first_image = &result_images[0];
                 if (!first_image->data) {
                     throw std::runtime_error("generate_image produced invalid image data");
@@ -439,15 +400,12 @@ namespace Utils
                 std::cout << "Edit successful: " << first_image->width << "x" << first_image->height
                     << "x" << first_image->channel << ", saving to: " << fullPath << std::endl;
 
-                // Save the result image
                 SaveImage(first_image->data, first_image->width, first_image->height,
                     first_image->channel, metadata, fullPath);
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-                // Cleanup
                 CleanupResources(refImageData, result_images, num_result_images, slg_layers, imagesToCleanup);
 
-                // Release context back to cache if we acquired it
                 if (!contextProvided) {
                     SDContextManager::ReleaseContext(sd_context);
                 }
@@ -458,10 +416,8 @@ namespace Utils
             {
                 std::cerr << "Exception during edit: " << e.what() << std::endl;
 
-                // Cleanup on error
                 CleanupResources(refImageData, result_images, num_result_images, slg_layers, imagesToCleanup);
 
-                // Release context back to cache if we acquired it
                 if (!contextProvided && sd_context) {
                     SDContextManager::ReleaseContext(sd_context);
                 }
@@ -477,7 +433,6 @@ namespace Utils
             int* slg_layers,
             std::vector<sd_image_t>& imagesToCleanup) {
 
-            // Cleanup reference images
             for (unsigned char* imageData : refImageData)
             {
                 if (imageData)
@@ -487,13 +442,11 @@ namespace Utils
             }
             refImageData.clear();
 
-            // Cleanup SLG layers array if it was allocated
             if (slg_layers != nullptr)
             {
                 delete[] slg_layers;
             }
 
-            // Cleanup additional loaded images (control, id images, etc.)
             for (auto& img : imagesToCleanup) {
                 if (img.data) {
                     stbi_image_free(img.data);
@@ -502,7 +455,6 @@ namespace Utils
             }
             imagesToCleanup.clear();
 
-            // Cleanup result images (array) using the library's dedicated function
             if (result_images)
             {
                 free_sd_images(result_images, num_result_images);
@@ -510,7 +462,6 @@ namespace Utils
             }
         }
 
-        // Helper function to load image from file to sd_image_t
         static sd_image_t LoadImageToSDImage(const std::string& filePath) {
             sd_image_t result = { 0, 0, 0, nullptr };
 
@@ -530,4 +481,4 @@ namespace Utils
             return result;
         }
     };
-} // namespace Utils
+}

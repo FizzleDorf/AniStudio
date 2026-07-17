@@ -8,7 +8,6 @@
 #include <vector>
 #include <iostream>
 
-// Include centralized Engine property types
 #include "PropertyTypes.hpp"
 #include "ui_schema/UISchemaUtils.hpp"
 #include "ui_schema/UISchemaContext.hpp"
@@ -25,392 +24,358 @@
 
 namespace UISchema {
 
-	// Window state management for separate windows
-	static std::unordered_map<std::string, bool>& GetWindowStates() {
-		static std::unordered_map<std::string, bool> windowStates;
-		return windowStates;
-	}
+    static std::unordered_map<std::string, bool>& GetWindowStates() {
+        static std::unordered_map<std::string, bool> windowStates;
+        return windowStates;
+    }
 
-	// Tooltip rendering utility function
-	static void RenderTooltipIfPresent(const nlohmann::json& propSchema, float delay = 0.5f) {
-		std::string tooltipText;
+    static void RenderTooltipIfPresent(const nlohmann::json& propSchema, float delay = 0.5f) {
+        std::string tooltipText;
 
-		// Check for ui:tooltip first (explicit tooltip)
-		if (propSchema.contains("ui:tooltip") && propSchema["ui:tooltip"].is_string()) {
-			tooltipText = propSchema["ui:tooltip"].get<std::string>();
-		}
-		// Fall back to description
-		else if (propSchema.contains("description") && propSchema["description"].is_string()) {
-			tooltipText = propSchema["description"].get<std::string>();
-		}
+        if (propSchema.contains("ui:tooltip") && propSchema["ui:tooltip"].is_string()) {
+            tooltipText = propSchema["ui:tooltip"].get<std::string>();
+        }
+        else if (propSchema.contains("description") && propSchema["description"].is_string()) {
+            tooltipText = propSchema["description"].get<std::string>();
+        }
 
-		if (!tooltipText.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
-			ImGui::BeginTooltip();
+        if (!tooltipText.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+            ImGui::BeginTooltip();
+            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+            ImGui::TextUnformatted(tooltipText.c_str());
+            ImGui::PopTextWrapPos();
+            ImGui::EndTooltip();
+        }
+    }
 
-			// Support multiline tooltips
-			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
-			ImGui::TextUnformatted(tooltipText.c_str());
-			ImGui::PopTextWrapPos();
+    static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
+    static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
+        PropertyVariant& propVariant, const nlohmann::json& propSchema,
+        const PropertyMap& allProperties, const std::string& componentName, int entityId);
+    static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
+    static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
+        const nlohmann::json& propSchema, const PropertyMap& allProperties, const std::string& componentName, int entityId);
+    static void SetupTableColumns(const nlohmann::json& tableSchema, int columns);
+    static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
 
-			ImGui::EndTooltip();
-		}
-	}
+    static bool RenderSchema(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName = "", int entityId = 0) {
+        if (!schema.is_object()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid schema: not an object");
+            return false;
+        }
 
-	// Forward declarations
-	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
-	static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
-		PropertyVariant& propVariant, const nlohmann::json& propSchema,
-		const PropertyMap& allProperties, const std::string& componentName, int entityId);
-	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
-	static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
-		const nlohmann::json& propSchema, const PropertyMap& allProperties, const std::string& componentName, int entityId);
-	static void SetupTableColumns(const nlohmann::json& tableSchema, int columns);
-	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId);
+        bool fileDialogModified = FileDialogWidgets::ProcessDialog();
+        bool mediaLoadModified = MediaLoadingWidgets::ProcessDialog();
 
-	// Main rendering functions - ADD COMPONENT NAME AND ENTITY ID PARAMETERS
-	static bool RenderSchema(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName = "", int entityId = 0) {
-		if (!schema.is_object()) {
-			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid schema: not an object");
-			return false;
-		}
+        PushStyleFromSchema(schema);
+        bool modified = false;
 
-		// Process any file dialogs and media loaders first and track if they caused modifications
-		bool fileDialogModified = FileDialogWidgets::ProcessDialog();
-		bool mediaLoadModified = MediaLoadingWidgets::ProcessDialog();
+        if (schema.contains("ui:separate_windows") && schema["ui:separate_windows"].get<bool>()) {
+            modified = RenderSeparateWindows(schema, properties, componentName, entityId);
+        }
+        else if (schema.contains("ui:table") && schema["ui:table"].is_object()) {
+            modified = RenderTable(schema, properties, componentName, entityId);
+        }
+        else if (schema.contains("properties") && schema["properties"].is_object()) {
+            modified = RenderPropertiesForm(schema, properties, componentName, entityId);
+        }
 
-		PushStyleFromSchema(schema);
-		bool modified = false;
+        PopStyleFromSchema(schema);
 
-		// Check if this schema should create separate windows
-		if (schema.contains("ui:separate_windows") && schema["ui:separate_windows"].get<bool>()) {
-			modified = RenderSeparateWindows(schema, properties, componentName, entityId);
-		}
-		else if (schema.contains("ui:table") && schema["ui:table"].is_object()) {
-			modified = RenderTable(schema, properties, componentName, entityId);
-		}
-		else if (schema.contains("properties") && schema["properties"].is_object()) {
-			modified = RenderPropertiesForm(schema, properties, componentName, entityId);
-		}
+        return modified || fileDialogModified || mediaLoadModified || FileDialogWidgets::WasModified() || MediaLoadingWidgets::WasModified();
+    }
 
-		PopStyleFromSchema(schema);
+    static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
+        bool modified = false;
+        auto& windowStates = GetWindowStates();
 
-		// Return true if any widgets or dialogs were modified
-		return modified || fileDialogModified || mediaLoadModified || FileDialogWidgets::WasModified() || MediaLoadingWidgets::WasModified();
-	}
+        if (!schema.contains("properties") || !schema["properties"].is_object()) {
+            return false;
+        }
 
-	// Handle separate window rendering
-	static bool RenderSeparateWindows(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
-		bool modified = false;
-		auto& windowStates = GetWindowStates();
+        std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
 
-		if (!schema.contains("properties") || !schema["properties"].is_object()) {
-			return false;
-		}
+        for (const auto& propName : propertyOrder) {
+            if (schema["properties"].contains(propName)) {
+                const auto& propSchema = schema["properties"][propName];
 
-		std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
+                if (propSchema.contains("ui:window") && propSchema["ui:window"].get<bool>()) {
 
-		for (const auto& propName : propertyOrder) {
-			if (schema["properties"].contains(propName)) {
-				const auto& propSchema = schema["properties"][propName];
+                    if (properties.find(propName) == properties.end()) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Property not found: %s", propName.c_str());
+                        continue;
+                    }
 
-				// Check if this property should have its own window
-				if (propSchema.contains("ui:window") && propSchema["ui:window"].get<bool>()) {
+                    std::string windowName = propName;
+                    if (propSchema.contains("ui:window_name") && propSchema["ui:window_name"].is_string()) {
+                        windowName = propSchema["ui:window_name"].get<std::string>();
+                    }
 
-					if (properties.find(propName) == properties.end()) {
-						ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Property not found: %s", propName.c_str());
-						continue;
-					}
+                    std::string windowId = componentName + "_" + propName + "_" + std::to_string(entityId) + "_window_" + windowName;
 
-					// Get window name
-					std::string windowName = propName;
-					if (propSchema.contains("ui:window_name") && propSchema["ui:window_name"].is_string()) {
-						windowName = propSchema["ui:window_name"].get<std::string>();
-					}
+                    if (windowStates.find(windowId) == windowStates.end()) {
+                        windowStates[windowId] = false;
+                    }
 
-					// CREATE UNIQUE WINDOW ID USING COMPONENT NAME AND ENTITY ID
-					std::string windowId = componentName + "_" + propName + "_" + std::to_string(entityId) + "_window_" + windowName;
+                    std::string checkboxLabel = windowName + " Editor##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+                    ImGui::Checkbox(checkboxLabel.c_str(), &windowStates[windowId]);
+                    RenderTooltipIfPresent(propSchema);
 
-					// Initialize window state
-					if (windowStates.find(windowId) == windowStates.end()) {
-						windowStates[windowId] = false;
-					}
+                    ImGui::SameLine();
+                    if (std::holds_alternative<std::string*>(properties[propName])) {
+                        std::string* strPtr = std::get<std::string*>(properties[propName]);
+                        ImGui::Text("(%zu chars)", strPtr->length());
+                    }
 
-					// Render checkbox to toggle window
-					std::string checkboxLabel = windowName + " Editor##" + componentName + "_" + propName + "_" + std::to_string(entityId);
-					ImGui::Checkbox(checkboxLabel.c_str(), &windowStates[windowId]);
-					RenderTooltipIfPresent(propSchema);
+                    if (windowStates[windowId]) {
+                        bool& showWindow = windowStates[windowId];
 
-					// Show status
-					ImGui::SameLine();
-					if (std::holds_alternative<std::string*>(properties[propName])) {
-						std::string* strPtr = std::get<std::string*>(properties[propName]);
-						ImGui::Text("(%zu chars)", strPtr->length());
-					}
+                        if (ImGui::Begin(windowId.c_str(), &showWindow)) {
 
-					// Render the window immediately if it should be shown
-					if (windowStates[windowId]) {
-						bool& showWindow = windowStates[windowId];
+                            std::string widgetType = GetWidgetType(propSchema);
+                            PropertyVariant& propVariant = properties[propName];
 
-						if (ImGui::Begin(windowId.c_str(), &showWindow)) {
+                            try {
+                                std::string uniqueLabel = "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+                                if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
+                                    modified = true;
+                                }
+                            }
+                            catch (const std::exception& e) {
+                                ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+                                    "Error rendering property %s: %s", propName.c_str(), e.what());
+                            }
+                        }
+                        ImGui::End();
+                    }
+                }
+                else {
+                    std::string widgetType = GetWidgetType(propSchema);
+                    std::string label = GetPropertyLabel(propName, propSchema);
+                    PropertyVariant& propVariant = properties[propName];
 
-							std::string widgetType = GetWidgetType(propSchema);
-							PropertyVariant& propVariant = properties[propName];
+                    try {
+                        std::string uniqueLabel = label + "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+                        if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
+                            modified = true;
+                        }
+                    }
+                    catch (const std::exception& e) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+                            "Error rendering property %s: %s", propName.c_str(), e.what());
+                    }
+                }
+            }
+        }
 
-							try {
-								std::string uniqueLabel = "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
-								if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
-									modified = true;
-								}
-							}
-							catch (const std::exception& e) {
-								ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-									"Error rendering property %s: %s", propName.c_str(), e.what());
-							}
-						}
-						ImGui::End();
-					}
-				}
-				else {
-					// Regular property rendering for properties without ui:window
-					std::string widgetType = GetWidgetType(propSchema);
-					std::string label = GetPropertyLabel(propName, propSchema);
-					PropertyVariant& propVariant = properties[propName];
+        return modified;
+    }
 
-					try {
-						// CREATE UNIQUE LABEL USING COMPONENT NAME AND ENTITY ID
-						std::string uniqueLabel = label + "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
-						if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
-							modified = true;
-						}
-					}
-					catch (const std::exception& e) {
-						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-							"Error rendering property %s: %s", propName.c_str(), e.what());
-					}
-				}
-			}
-		}
+    static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
+        bool modified = false;
+        std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
 
-		return modified;
-	}
+        for (const auto& propName : propertyOrder) {
+            if (schema["properties"].contains(propName)) {
+                const auto& propSchema = schema["properties"][propName];
 
-	static bool RenderPropertiesForm(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
-		bool modified = false;
-		std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
+                if (properties.find(propName) == properties.end()) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Property not found: %s", propName.c_str());
+                    continue;
+                }
 
-		for (const auto& propName : propertyOrder) {
-			if (schema["properties"].contains(propName)) {
-				const auto& propSchema = schema["properties"][propName];
+                std::string widgetType = GetWidgetType(propSchema);
+                std::string label = GetPropertyLabel(propName, propSchema);
+                PropertyVariant& propVariant = properties[propName];
 
-				if (properties.find(propName) == properties.end()) {
-					ImGui::TextColored(ImVec4(1.0f, 0.3f, 0.3f, 1.0f), "Property not found: %s", propName.c_str());
-					continue;
-				}
+                try {
+                    std::string uniqueLabel = label + "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+                    if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
+                        modified = true;
+                    }
+                }
+                catch (const std::exception& e) {
+                    ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
+                        "Error rendering property %s: %s", propName.c_str(), e.what());
+                }
+            }
+        }
 
-				std::string widgetType = GetWidgetType(propSchema);
-				std::string label = GetPropertyLabel(propName, propSchema);
-				PropertyVariant& propVariant = properties[propName];
+        return modified;
+    }
 
-				try {
-					// CREATE UNIQUE LABEL USING COMPONENT NAME AND ENTITY ID
-					std::string uniqueLabel = label + "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
-					if (RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, properties, componentName, entityId)) {
-						modified = true;
-					}
-				}
-				catch (const std::exception& e) {
-					ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f),
-						"Error rendering property %s: %s", propName.c_str(), e.what());
-				}
-			}
-		}
+    static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
+        PropertyVariant& propVariant, const nlohmann::json& propSchema,
+        const PropertyMap& allProperties, const std::string& componentName, int entityId) {
 
-		return modified;
-	}
+        bool modified = false;
 
-	static bool RenderPropertyWidget(const std::string& label, const std::string& widgetType,
-		PropertyVariant& propVariant, const nlohmann::json& propSchema,
-		const PropertyMap& allProperties, const std::string& componentName, int entityId) {
+        UIRenderContext context(componentName, entityId);
 
-		bool modified = false;
+        if (std::holds_alternative<bool*>(propVariant)) {
+            bool* value = std::get<bool*>(propVariant);
+            modified = BoolWidgets::Render(label, value, widgetType, propSchema);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<int*>(propVariant)) {
+            int* value = std::get<int*>(propVariant);
+            modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties, context);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<float*>(propVariant)) {
+            float* value = std::get<float*>(propVariant);
+            modified = FloatWidgets::Render(label, value, widgetType, propSchema);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<double*>(propVariant)) {
+            double* value = std::get<double*>(propVariant);
+            modified = DoubleWidgets::Render(label, value, widgetType, propSchema);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<std::string*>(propVariant)) {
+            std::string* value = std::get<std::string*>(propVariant);
+            if (widgetType == "file_selector") {
+                modified = FileDialogWidgets::Render(label, value, widgetType, propSchema, context);
+            }
+            else if (widgetType == "media_loader") {
+                modified = MediaLoadingWidgets::Render(label, widgetType, propSchema, allProperties);
+            }
+            else {
+                std::string propName = "";
+                std::string originalLabel = label;
 
-		// Create context for widgets that need it
-		UIRenderContext context(componentName, entityId);
+                size_t hashPos = label.find("##");
+                if (hashPos != std::string::npos) {
+                    originalLabel = label.substr(0, hashPos);
+                    std::string uniquePart = label.substr(hashPos + 2);
+                    size_t firstUnderscore = uniquePart.find('_');
+                    size_t secondUnderscore = uniquePart.find('_', firstUnderscore + 1);
+                    if (firstUnderscore != std::string::npos && secondUnderscore != std::string::npos) {
+                        propName = uniquePart.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1);
+                    }
+                }
 
-		if (std::holds_alternative<bool*>(propVariant)) {
-			bool* value = std::get<bool*>(propVariant);
-			modified = BoolWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<int*>(propVariant)) {
-			int* value = std::get<int*>(propVariant);
-			// IntWidgets has context parameter
-			modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties, context);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<float*>(propVariant)) {
-			float* value = std::get<float*>(propVariant);
-			modified = FloatWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<double*>(propVariant)) {
-			double* value = std::get<double*>(propVariant);
-			modified = DoubleWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<std::string*>(propVariant)) {
-			std::string* value = std::get<std::string*>(propVariant);
-			if (widgetType == "file_selector") {
-				// FileDialogWidgets has context parameter
-				modified = FileDialogWidgets::Render(label, value, widgetType, propSchema, context);
-			}
-			else if (widgetType == "media_loader") {
-				// MediaLoadingWidgets doesn't have context parameter
-				modified = MediaLoadingWidgets::Render(label, widgetType, propSchema, allProperties);
-			}
-			else {
-				// StringWidgets gets unique ID with no display text, handles display internally
-				// Extract property name from the unique label
-				std::string propName = "";
-				std::string originalLabel = label;
+                std::string stringWidgetLabel = "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
 
-				size_t hashPos = label.find("##");
-				if (hashPos != std::string::npos) {
-					originalLabel = label.substr(0, hashPos);
-					std::string uniquePart = label.substr(hashPos + 2);
-					size_t firstUnderscore = uniquePart.find('_');
-					size_t secondUnderscore = uniquePart.find('_', firstUnderscore + 1);
-					if (firstUnderscore != std::string::npos && secondUnderscore != std::string::npos) {
-						propName = uniquePart.substr(firstUnderscore + 1, secondUnderscore - firstUnderscore - 1);
-					}
-				}
+                nlohmann::json modifiedSchema = propSchema;
+                modifiedSchema["ui:displayName"] = originalLabel;
 
-				// Create unique label with no display text: ##compName_propName_entityId
-				std::string stringWidgetLabel = "##" + componentName + "_" + propName + "_" + std::to_string(entityId);
+                modified = StringWidgets::Render(stringWidgetLabel, value, widgetType, modifiedSchema, context);
+            }
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<ImVec2*>(propVariant)) {
+            ImVec2* value = std::get<ImVec2*>(propVariant);
+            modified = Vec2Widgets::Render(label, value, widgetType, propSchema);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<ImVec4*>(propVariant)) {
+            ImVec4* value = std::get<ImVec4*>(propVariant);
+            modified = Vec4Widgets::Render(label, value, widgetType, propSchema);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<std::vector<std::string>*>(propVariant)) {
+            std::vector<std::string>* value = std::get<std::vector<std::string>*>(propVariant);
+            modified = StringArrayWidgets::Render(label, value, widgetType, propSchema);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unsupported property type");
+        }
 
-				// Store display name in the schema for StringWidgets to access
-				nlohmann::json modifiedSchema = propSchema;
-				modifiedSchema["ui:displayName"] = originalLabel;
+        return modified;
+    }
 
-				modified = StringWidgets::Render(stringWidgetLabel, value, widgetType, modifiedSchema, context);
-			}
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<ImVec2*>(propVariant)) {
-			ImVec2* value = std::get<ImVec2*>(propVariant);
-			modified = Vec2Widgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<ImVec4*>(propVariant)) {
-			ImVec4* value = std::get<ImVec4*>(propVariant);
-			modified = Vec4Widgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else if (std::holds_alternative<std::vector<std::string>*>(propVariant)) {
-			std::vector<std::string>* value = std::get<std::vector<std::string>*>(propVariant);
-			modified = StringArrayWidgets::Render(label, value, widgetType, propSchema);
-			RenderTooltipIfPresent(propSchema);
-		}
-		else {
-			ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Unsupported property type");
-		}
+    static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
+        if (!schema.contains("ui:table") || !schema["ui:table"].is_object()) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid table schema");
+            return false;
+        }
 
-		return modified;
-	}
+        const auto& tableSchema = schema["ui:table"];
+        int columns = GetSchemaValue<int>(tableSchema, "columns", 2);
+        ImGuiTableFlags flags = GetTableFlags(tableSchema);
 
-	static bool RenderTable(const nlohmann::json& schema, PropertyMap& properties, const std::string& componentName, int entityId) {
-		if (!schema.contains("ui:table") || !schema["ui:table"].is_object()) {
-			ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid table schema");
-			return false;
-		}
+        std::string tableId = componentName + "_table_" + std::to_string(entityId);
+        bool tableCreated = ImGui::BeginTable(tableId.c_str(), columns, flags);
+        if (!tableCreated) return false;
 
-		const auto& tableSchema = schema["ui:table"];
-		int columns = GetSchemaValue<int>(tableSchema, "columns", 2);
-		ImGuiTableFlags flags = GetTableFlags(tableSchema);
+        SetupTableColumns(tableSchema, columns);
 
-		// CREATE UNIQUE TABLE ID
-		std::string tableId = componentName + "_table_" + std::to_string(entityId);
-		bool tableCreated = ImGui::BeginTable(tableId.c_str(), columns, flags);
-		if (!tableCreated) return false;
+        bool showHeaders = GetSchemaValue<bool>(tableSchema, "showHeaders", false);
+        if (showHeaders) {
+            ImGui::TableHeadersRow();
+        }
 
-		SetupTableColumns(tableSchema, columns);
+        bool modified = false;
+        std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
 
-		bool showHeaders = GetSchemaValue<bool>(tableSchema, "showHeaders", false);
-		if (showHeaders) {
-			ImGui::TableHeadersRow();
-		}
+        if (schema.contains("properties") && schema["properties"].is_object()) {
+            for (const auto& propName : propertyOrder) {
+                if (schema["properties"].contains(propName)) {
+                    const auto& propSchema = schema["properties"][propName];
 
-		bool modified = false;
-		std::vector<std::string> propertyOrder = GetPropertyOrder(schema);
+                    if (properties.find(propName) == properties.end()) continue;
 
-		if (schema.contains("properties") && schema["properties"].is_object()) {
-			for (const auto& propName : propertyOrder) {
-				if (schema["properties"].contains(propName)) {
-					const auto& propSchema = schema["properties"][propName];
+                    ImGui::TableNextRow();
+                    std::string label = GetPropertyLabel(propName, propSchema);
 
-					if (properties.find(propName) == properties.end()) continue;
+                    ImGui::TableNextColumn();
+                    ImGui::Text("%s", label.c_str());
+                    RenderTooltipIfPresent(propSchema);
 
-					ImGui::TableNextRow();
-					std::string label = GetPropertyLabel(propName, propSchema);
+                    ImGui::TableNextColumn();
+                    std::string widgetType = GetWidgetType(propSchema);
+                    PropertyVariant& propVariant = properties[propName];
 
-					ImGui::TableNextColumn();
-					ImGui::Text("%s", label.c_str());
-					RenderTooltipIfPresent(propSchema);
+                    std::string pushId = componentName + "_" + propName + "_" + std::to_string(entityId) + "_table";
+                    ImGui::PushID(pushId.c_str());
 
-					ImGui::TableNextColumn();
-					std::string widgetType = GetWidgetType(propSchema);
-					PropertyVariant& propVariant = properties[propName];
+                    try {
+                        if (RenderTableWidget(widgetType, propVariant, propSchema, properties, componentName, entityId)) {
+                            modified = true;
+                        }
+                    }
+                    catch (const std::exception& e) {
+                        ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
+                    }
 
-					// USE COMPONENT NAME AND ENTITY ID FOR UNIQUE PUSH ID
-					std::string pushId = componentName + "_" + propName + "_" + std::to_string(entityId) + "_table";
-					ImGui::PushID(pushId.c_str());
+                    ImGui::PopID();
+                }
+            }
+        }
 
-					try {
-						if (RenderTableWidget(widgetType, propVariant, propSchema, properties, componentName, entityId)) {
-							modified = true;
-						}
-					}
-					catch (const std::exception& e) {
-						ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error: %s", e.what());
-					}
+        ImGui::EndTable();
+        return modified;
+    }
 
-					ImGui::PopID();
-				}
-			}
-		}
+    static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
+        const nlohmann::json& propSchema, const PropertyMap& allProperties, const std::string& componentName, int entityId) {
+        std::string uniqueLabel = "##" + componentName + "_value_" + std::to_string(entityId);
+        bool modified = RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, allProperties, componentName, entityId);
+        return modified;
+    }
 
-		ImGui::EndTable();
-		return modified;
-	}
+    static void SetupTableColumns(const nlohmann::json& tableSchema, int columns) {
+        if (tableSchema.contains("columnSetup") && tableSchema["columnSetup"].is_object()) {
+            for (auto it = tableSchema["columnSetup"].begin(); it != tableSchema["columnSetup"].end(); ++it) {
+                const std::string& colName = it.key();
 
-	static bool RenderTableWidget(const std::string& widgetType, PropertyVariant& propVariant,
-		const nlohmann::json& propSchema, const PropertyMap& allProperties, const std::string& componentName, int entityId) {
-		// Use empty label for table widgets since label is in first column
-		std::string uniqueLabel = "##" + componentName + "_value_" + std::to_string(entityId);
-		bool modified = RenderPropertyWidget(uniqueLabel, widgetType, propVariant, propSchema, allProperties, componentName, entityId);
-		return modified;
-	}
+                if (it.value().is_array() && it.value().size() >= 2) {
+                    ImGuiTableColumnFlags colFlags = static_cast<ImGuiTableColumnFlags>(it.value()[0].get<int>());
+                    float width = it.value()[1].get<float>();
+                    ImGui::TableSetupColumn(colName.c_str(), colFlags, width);
+                }
+                else {
+                    ImGui::TableSetupColumn(colName.c_str());
+                }
+            }
+        }
+        else {
+            for (int i = 0; i < columns; i++) {
+                ImGui::TableSetupColumn(("Col" + std::to_string(i)).c_str());
+            }
+        }
+    }
 
-	static void SetupTableColumns(const nlohmann::json& tableSchema, int columns) {
-		if (tableSchema.contains("columnSetup") && tableSchema["columnSetup"].is_object()) {
-			for (auto it = tableSchema["columnSetup"].begin(); it != tableSchema["columnSetup"].end(); ++it) {
-				const std::string& colName = it.key();
-
-				if (it.value().is_array() && it.value().size() >= 2) {
-					ImGuiTableColumnFlags colFlags = static_cast<ImGuiTableColumnFlags>(it.value()[0].get<int>());
-					float width = it.value()[1].get<float>();
-					ImGui::TableSetupColumn(colName.c_str(), colFlags, width);
-				}
-				else {
-					ImGui::TableSetupColumn(colName.c_str());
-				}
-			}
-		}
-		else {
-			for (int i = 0; i < columns; i++) {
-				ImGui::TableSetupColumn(("Col" + std::to_string(i)).c_str());
-			}
-		}
-	}
-
-} // namespace UISchema
+}

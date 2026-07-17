@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -33,21 +32,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			// Update the default path in the schema to current Encoder path
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		ClipVisionComponent& operator=(const ClipVisionComponent& other) {
@@ -86,20 +70,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		LlmVisionComponent& operator=(const LlmVisionComponent& other) {

@@ -1,12 +1,30 @@
+// FileDialogUtil.cpp
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
 #include <nfd.hpp>
 #include <vector>
 #include <string>
+#include <iostream>
 
 namespace FileDialog {
 
+    static bool EnsureNFDInitialized() {
+        static bool initialized = false;
+        if (!initialized) {
+            nfdresult_t initResult = NFD::Init();
+            if (initResult == NFD_OKAY) {
+                initialized = true;
+            }
+            else {
+                std::cerr << "NFD::Init() failed with error: " << NFD::GetError() << std::endl;
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool OpenFile(const std::string& title, FilterType type, std::string& outPath, const std::string& defaultPath) {
+        if (!EnsureNFDInitialized()) return false;
         const nfdu8filteritem_t* filterList;
         nfdfiltersize_t filterCount;
         GetFilterItems(type, filterList, filterCount);
@@ -27,6 +45,7 @@ namespace FileDialog {
     }
 
     bool OpenFiles(const std::string& title, FilterType type, std::vector<std::string>& outPaths, const std::string& defaultPath) {
+        if (!EnsureNFDInitialized()) return false;
         const nfdu8filteritem_t* filterList;
         nfdfiltersize_t filterCount;
         GetFilterItems(type, filterList, filterCount);
@@ -56,6 +75,7 @@ namespace FileDialog {
     }
 
     bool SaveFile(const std::string& title, FilterType type, const std::string& defaultName, std::string& outPath, const std::string& defaultPath) {
+        if (!EnsureNFDInitialized()) return false;
         const nfdu8filteritem_t* filterList;
         nfdfiltersize_t filterCount;
         GetFilterItems(type, filterList, filterCount);
@@ -77,6 +97,7 @@ namespace FileDialog {
     }
 
     bool SelectFolder(const std::string& title, std::string& outPath, const std::string& defaultPath) {
+        if (!EnsureNFDInitialized()) return false;
         nfdu8char_t* outPtr = nullptr;
         nfdresult_t result = NFD::PickFolder(outPtr,
             defaultPath.empty() ? nullptr : defaultPath.c_str(),

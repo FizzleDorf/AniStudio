@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -32,20 +31,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Checkpoint");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Checkpoint");
 		}
 
 		CheckpointComponent& operator=(const CheckpointComponent& other) {
@@ -85,20 +70,6 @@ namespace ECS {
 			};
 		}
 
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Unet");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Unet");
-		}
-
 		DiffusionModelComponent& operator=(const DiffusionModelComponent& other) {
 			if (this != &other) {
 				modelPath = other.modelPath;
@@ -134,20 +105,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Unet");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Unet");
 		}
 
 		HighNoiseDiffusionModelComponent& operator=(const HighNoiseDiffusionModelComponent& other) {
@@ -186,20 +143,6 @@ namespace ECS {
 			};
 		}
 
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Unet");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Unet");
-		}
-
 		UncondDiffusionModelComponent& operator=(const UncondDiffusionModelComponent& other) {
 			if (this != &other) {
 				modelPath = other.modelPath;
@@ -209,8 +152,6 @@ namespace ECS {
 			return *this;
 		}
 	};
-
-	// ---- NEW COMPONENTS ----
 
 	// Audio VAE Component
 	struct AudioVAEComponent : public BaseModelComponent {
@@ -237,20 +178,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Vae");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Vae");
 		}
 
 		AudioVAEComponent& operator=(const AudioVAEComponent& other) {
@@ -288,10 +215,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		const char* GetDefaultDirectory() const override {
-			return "Encoder";
 		}
 
 		EmbeddingComponent& operator=(const EmbeddingComponent& other) {

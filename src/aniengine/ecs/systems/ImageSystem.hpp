@@ -102,7 +102,7 @@ namespace ECS {
                 LoadImageAsync(entity, filePath);
             }
         }
-
+        
         void RemoveImage(const EntityID entity) {
             if (mgr.HasComponent<ImageComponent>(entity)) {
                 if (mgr.HasComponent<InputImageComponent>(entity)) {

@@ -6,11 +6,14 @@
 #include "RngUtils.hpp"
 #include "ContextUtils.hpp"
 #include "SaveUtils.hpp"
-#include "FilePathService.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <iostream>
 #include <filesystem>
+
+// Forward declaration of global FilePathSystem pointer
+namespace ECS { class FilePathSystem; }
+namespace Utils { extern ECS::FilePathSystem* g_FilePathSystem; }
 
 namespace Utils
 {
@@ -31,7 +34,6 @@ namespace Utils
             sd_vid_gen_params_t vid_params;
             sd_vid_gen_params_init(&vid_params);
 
-            // Additional structures for advanced features
             std::vector<sd_image_t> imagesToCleanup;
             std::vector<sd_image_t> idImagesStorage;
             std::vector<sd_image_t> controlFramesStorage;
@@ -41,24 +43,18 @@ namespace Utils
             {
                 std::string inputImagePath = "";
                 std::string endImagePath = "";
-                std::string outputPath = Utils::FilePathService::GetPath("DefaultProject");
+                std::string outputPath = "";
                 std::string outputFilename = "img2vid_output";
                 std::string posPrompt = "";
                 std::string negPrompt = "";
                 int latentWidth = 0;
                 int latentHeight = 0;
 
-                // VAE tiling parameters
                 sd_tiling_params_t vae_tiling_params = { false, 64, 64, 0.0f, 64.0f, 64.0f };
-
-                // PhotoMaker parameters
                 sd_pm_params_t pm_params = { nullptr, 0, nullptr, 0.0f };
-
-                // Cache parameters
                 sd_cache_params_t cache_params;
                 sd_cache_params_init(&cache_params);
 
-                // Video-specific parameters
                 int video_frames = 25;
                 float vace_strength = 0.0f;
                 int motion_bucket_id = 127;
@@ -68,9 +64,10 @@ namespace Utils
                 float moe_boundary = 0.0f;
                 float flow_shift = 3.0f;
 
-                // High noise sampler (Wan 2.2 dual-model)
                 sd_sample_params_t high_noise_sample_params;
                 sd_sample_params_init(&high_noise_sample_params);
+
+                auto* fs = g_FilePathSystem;
 
                 if (metadata.contains("components") && metadata["components"].is_array())
                 {
@@ -182,7 +179,6 @@ namespace Utils
                                     std::copy(sigmas.begin(), sigmas.end(), sigma_data);
                                     vid_params.sample_params.custom_sigmas = sigma_data;
                                     vid_params.sample_params.custom_sigmas_count = static_cast<int>(sigmas.size());
-                                    // Also set for high_noise? Usually they share, but we can set separately if needed
                                 }
                             }
                         }
@@ -198,7 +194,6 @@ namespace Utils
                                 high_noise_sample_params.sample_steps = highNoiseData["high_noise_steps"].get<int>();
                             if (highNoiseData.contains("high_noise_eta") && !highNoiseData["high_noise_eta"].is_null())
                                 high_noise_sample_params.eta = highNoiseData["high_noise_eta"].get<float>();
-                            // high_noise_cfg is not part of sample_params; it's guidance, we'll set it below if needed
                         }
 
                         if (comp.contains("Guidance"))
@@ -331,7 +326,6 @@ namespace Utils
                     }
                 }
 
-                // Apply parsed values
                 vid_params.prompt = posPrompt.c_str();
                 vid_params.negative_prompt = negPrompt.c_str();
                 vid_params.video_frames = video_frames;
@@ -341,21 +335,16 @@ namespace Utils
                 vid_params.vae_tiling_params = vae_tiling_params;
                 vid_params.cache = cache_params;
 
-                // Flow shift and other sample params
                 vid_params.sample_params.flow_shift = flow_shift;
                 high_noise_sample_params.flow_shift = flow_shift;
 
-                // Set high noise sample params
                 vid_params.high_noise_sample_params = high_noise_sample_params;
 
-                // Set PhotoMaker
                 if (!idImagesStorage.empty()) {
                     pm_params.id_images_count = idImagesStorage.size();
                     pm_params.id_images = idImagesStorage.data();
-                    // vid_params currently doesn't have pm_params; if needed, we can add, but for now ignore
                 }
 
-                // Set control frames
                 if (!controlFramesStorage.empty()) {
                     vid_params.control_frames = controlFramesStorage.data();
                     vid_params.control_frames_size = static_cast<int>(controlFramesStorage.size());
@@ -439,7 +428,6 @@ namespace Utils
                 std::cout << "  - Control frames: " << controlFramesStorage.size() << std::endl;
                 std::cout << "=====================" << std::endl;
 
-                // Get SD context if not provided
                 if (!contextProvided) {
                     sd_context = SDContextManager::GetOrCreateContext(metadata);
                 }
@@ -459,17 +447,15 @@ namespace Utils
 
                 std::cout << "Generated " << num_frames_out << " frames" << std::endl;
 
-                // Ensure output directory exists
                 std::filesystem::path frameDir(outputPath);
                 if (outputPath.empty() || outputPath[0] == '\0' || !std::filesystem::exists(frameDir)) {
-                    std::string outputFolder = Utils::FilePathService::GetPath("OutputFolder");
+                    std::string outputFolder = fs ? fs->GetPath("OutputFolder") : "";
                     if (!outputFolder.empty() && outputFolder[0] != '\0' && std::filesystem::exists(outputFolder)) {
                         frameDir = outputFolder;
                     }
                 }
                 std::filesystem::create_directories(frameDir);
 
-                // Save individual frames
                 for (int frame_idx = 0; frame_idx < num_frames_out; ++frame_idx) {
                     std::string frameFilename = outputFilename + "_frame_" + std::to_string(frame_idx) + ".png";
                     std::string frameFullPath = (frameDir / frameFilename).string();
@@ -482,11 +468,9 @@ namespace Utils
                         frameFullPath);
                 }
 
-                // Cleanup
                 CleanupResources(inputData, endInputData, result_images, num_frames_out,
                     slg_layers, imagesToCleanup);
 
-                // Release context back to cache if we acquired it
                 if (!contextProvided) {
                     SDContextManager::ReleaseContext(sd_context);
                 }

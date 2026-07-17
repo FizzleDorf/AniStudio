@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseComponent.hpp"
-#include "FilePaths.hpp"
 
 namespace ECS {
 

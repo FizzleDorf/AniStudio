@@ -1,9 +1,11 @@
+// DiffusionAddon.cpp
 #include "BasePlugin.hpp"
 #include "EntityManager.hpp"
 #include "ViewManager.hpp"
 #include "Events.hpp"
 #include "DiffusionCallbackUtils.hpp"
-#include "FilePathService.hpp"
+#include "FilePathSystem.hpp"
+#include "FilePathComponent.hpp"
 #include "EngineContext.hpp"
 #include "StudioContext.hpp"
 #include "ProjectManager.hpp"
@@ -20,430 +22,466 @@
 #include "ModelCacheView.hpp"
 
 #include <iostream>
+#include <filesystem>
 
-// Platform-specific export macro for plugins
 #if defined(_WIN32) || defined(_WIN64)
-    #define PLUGIN_EXPORT __declspec(dllexport)
+#define PLUGIN_EXPORT __declspec(dllexport)
 #else
-    #define PLUGIN_EXPORT __attribute__((visibility("default")))
+#define PLUGIN_EXPORT __attribute__((visibility("default")))
 #endif
+
+namespace Utils {
+    ECS::FilePathSystem* g_FilePathSystem = nullptr;
+}
 
 class DiffusionAddon : public Plugins::BasePlugin {
 public:
-	DiffusionAddon() : BasePlugin("DiffusionAddon", "1.0.0"), m_imguiContext(nullptr) {}
+    DiffusionAddon() : BasePlugin("DiffusionAddon", "1.0.0"), m_imguiContext(nullptr) {}
 
-	bool OnEngineInit(ECS::EntityManager& entityMgr) override {
-		LogInfo("Initializing Stable Diffusion Addon...");
+    bool OnEngineInit(ECS::EntityManager& entityMgr) override {
+        LogInfo("Initializing Stable Diffusion Addon...");
 
-		auto context = GetEngineContext();
+        auto context = GetEngineContext();
 
-		if (!context) {
-			auto studioCtx = GetStudioContext();
-			if (studioCtx) {
-				context = std::static_pointer_cast<ANI::EngineContext>(studioCtx);
-				LogInfo("Got EngineContext from StudioContext fallback");
-			}
-		}
+        if (!context) {
+            auto studioCtx = GetStudioContext();
+            if (studioCtx) {
+                context = std::static_pointer_cast<ANI::EngineContext>(studioCtx);
+                LogInfo("Got EngineContext from StudioContext fallback");
+            }
+        }
 
-		if (!context) {
-			LogError("Engine context is null! Plugin cannot initialize.");
-			return false;
-		}
+        if (!context) {
+            LogError("Engine context is null! Plugin cannot initialize.");
+            return false;
+        }
 
-		LogInfo("Engine context obtained successfully");
+        LogInfo("Engine context obtained successfully");
 
-		if (Utils::FilePathService::IsInitialized()) {
-			LogInfo("FilePathService already initialized");
-		}
-		else {
-			if (context->filePaths) {
-				Utils::FilePathService::SetInstance(context->filePaths);
-				LogInfo("FilePathService set with context FilePaths");
-			}
-			else {
-				LogError("No FilePaths in context to set in FilePathService!");
-				return false;
-			}
-		}
+        auto fs = entityMgr.GetSystem<ECS::FilePathSystem>();
+        if (!fs) {
+            LogError("FilePathSystem not found! Cannot initialize.");
+            return false;
+        }
+        Utils::g_FilePathSystem = fs.get();
+        LogInfo("FilePathSystem obtained.");
 
-		std::string modelRoot = Utils::FilePathService::GetPath("ModelRoot");
-		if (!modelRoot.empty()) {
-			LogInfo("Model root path: " + modelRoot);
-		}
-		else {
-			LogError("Model root path is empty!");
-			return false;
-		}
+        std::string modelRoot = fs->GetPath("ModelRoot");
+        if (modelRoot.empty()) {
+            std::string dataPath = fs->GetPath("DataPath");
+            if (!dataPath.empty()) {
+                modelRoot = (std::filesystem::path(dataPath) / "models").string();
+            }
+            else {
+                modelRoot = (std::filesystem::current_path() / "models").string();
+            }
+            fs->SetPath("ModelRoot", modelRoot);
+            LogInfo("Set default ModelRoot to: " + modelRoot);
+        }
 
-		// Base SDCPP Components
-		entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
-		entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
-		entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
-		entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
-		entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
-		entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
-		entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
-		entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
-		entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
-		entityMgr.RegisterComponent<ECS::LlmEncoderComponent>("LlmEncoder");
-		entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision");
-		entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
-		entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
-		entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
+        LogInfo("Model root path: " + modelRoot);
 
-		// Other settings
-		entityMgr.RegisterComponent<ECS::ClipSkipComponent>("ClipSkip");
-		entityMgr.RegisterComponent<ECS::SLGComponent>("SLG");
-		entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
-		entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
-		entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
-		entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
+        if (!modelRoot.empty()) {
+            auto setDefaultPath = [&](const std::string& key, const std::string& subdir) {
+                std::string path = (std::filesystem::path(modelRoot) / subdir).string();
+                if (!fs->HasPath(key)) {
+                    fs->SetPath(key, path);
+                    std::filesystem::create_directories(path);
+                }
+                };
+            setDefaultPath("Checkpoint", "checkpoints");
+            setDefaultPath("Unet", "unet");
+            setDefaultPath("Vae", "vae");
+            setDefaultPath("Taesd", "taesd");
+            setDefaultPath("Lora", "lora");
+            setDefaultPath("Embed", "embed");
+            setDefaultPath("Encoder", "encoder");
+            setDefaultPath("ControlNet", "controlnet");
+        }
 
-		// Advanced
-		entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
-		entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
-		entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
-		entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
-		entityMgr.RegisterComponent<ECS::LatentTransformComponent>("LatentTransform");
-		entityMgr.RegisterComponent<ECS::LayerSkipComponent>("LayerSkip");
-		entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
-		entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
-		entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
+        std::string configPath = fs->GetPath("DataPath");
+        if (!configPath.empty()) {
+            std::string filePath = (std::filesystem::path(configPath) / "filepaths.json").string();
+            if (std::filesystem::exists(filePath))
+                fs->LoadFromFile(filePath);
+        }
 
-		entityMgr.RegisterSystem<ECS::SDCPPSystem>();
+        entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
+        entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
+        entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
+        entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
+        entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
+        entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
+        entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
+        entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
+        entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
+        entityMgr.RegisterComponent<ECS::LlmEncoderComponent>("LlmEncoder");
+        entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision");
+        entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
+        entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
+        entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
 
-		m_entityMgr = &entityMgr;
+        entityMgr.RegisterComponent<ECS::ClipSkipComponent>("ClipSkip");
+        entityMgr.RegisterComponent<ECS::SLGComponent>("SLG");
+        entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
+        entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
+        entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
+        entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
 
-		RegisterEventHandlers();
+        entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
+        entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
+        entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
+        entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
+        entityMgr.RegisterComponent<ECS::LatentTransformComponent>("LatentTransform");
+        entityMgr.RegisterComponent<ECS::LayerSkipComponent>("LayerSkip");
+        entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
+        entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
+        entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
 
-		LogInfo("SDCPPSystem registered");
-		LogInfo("Stable Diffusion Addon initialized");
-		return true;
-	}
+        entityMgr.RegisterSystem<ECS::SDCPPSystem>();
 
-	bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr) override {
-		LogInfo("Registering Stable Diffusion views...");
+        m_entityMgr = &entityMgr;
 
-		if (!m_imguiContext) {
-			LogError("ImGui context not set! Make sure SetImGuiContext was called.");
-			return false;
-		}
+        RegisterEventHandlers();
 
-		ImGui::SetCurrentContext(m_imguiContext);
-		LogInfo("ImGui context set for DiffusionAddon");
+        LogInfo("SDCPPSystem registered");
+        LogInfo("Stable Diffusion Addon initialized");
+        return true;
+    }
 
-		std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
+    bool OnStudioInit(ECS::EntityManager& entityMgr, GUI::ViewManager& viewMgr) override {
+        LogInfo("Registering Stable Diffusion views...");
 
-		m_viewMgr = &viewMgr;
+        if (!m_imguiContext) {
+            LogError("ImGui context not set! Make sure SetImGuiContext was called.");
+            return false;
+        }
 
-		viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "Diffusion");
-		viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");
-		viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
-		viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
-		viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "Diffusion");
+        ImGui::SetCurrentContext(m_imguiContext);
+        LogInfo("ImGui context set for DiffusionAddon");
 
-		LogInfo("Views registered via direct ViewManager");
-		return true;
-	}
+        std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
 
-	void SetImGuiContext(ImGuiContext* context) override {
-		m_imguiContext = context;
-		LogInfo("ImGui context set for DiffusionAddon: " + std::to_string(reinterpret_cast<uintptr_t>(m_imguiContext)));
-	}
+        m_viewMgr = &viewMgr;
 
-	bool HasValidImGuiContext() const override {
-		return m_imguiContext != nullptr;
-	}
+        viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "Diffusion");
+        viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");
+        viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
+        viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
+        viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "Diffusion");
 
-	void OnShutdown() override {
-		LogInfo("SHUTTING DOWN DIFFUSION ADDON");
+        LogInfo("Views registered via direct ViewManager");
+        return true;
+    }
 
-		UnregisterEventHandlers();
+    void SetImGuiContext(ImGuiContext* context) override {
+        m_imguiContext = context;
+        LogInfo("ImGui context set for DiffusionAddon: " + std::to_string(reinterpret_cast<uintptr_t>(m_imguiContext)));
+    }
 
-		if (m_entityMgr) {
-			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-			if (system) {
-				system->TerminateImmediately();
-				LogInfo("SDCPPSystem terminated");
+    bool HasValidImGuiContext() const override {
+        return m_imguiContext != nullptr;
+    }
 
-				std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    void OnShutdown() override {
+        LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
-				try {
-					m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-					LogInfo("Unregistered SDCPPSystem");
-				}
-				catch (const std::exception& e) {
-					LogError("Error unregistering SDCPPSystem: " + std::string(e.what()));
-				}
-			}
-		}
+        auto fs = m_entityMgr ? m_entityMgr->GetSystem<ECS::FilePathSystem>() : nullptr;
+        if (fs) {
+            std::string configPath = fs->GetPath("DataPath");
+            if (!configPath.empty()) {
+                std::string filePath = (std::filesystem::path(configPath) / "filepaths.json").string();
+                fs->SaveToFile(filePath);
+            }
+        }
 
-		if (m_viewMgr) {
-			const char* viewNames[] = {
-				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
-			};
+        UnregisterEventHandlers();
 
-			for (const char* viewName : viewNames) {
-				try {
-					m_viewMgr->CloseAllViewsOfType(viewName);
-					LogInfo("Closed all views of type: " + std::string(viewName));
-					std::this_thread::sleep_for(std::chrono::milliseconds(50));
-				}
-				catch (...) {
-				}
-			}
-		}
+        if (m_entityMgr) {
+            auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+            if (system) {
+                system->TerminateImmediately();
+                LogInfo("SDCPPSystem terminated");
 
-		if (m_entityMgr) {
-			auto allEntities = m_entityMgr->GetAllEntities();
-			std::vector<EntityID> entitiesToDestroy;
+                std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
-			for (EntityID entity : allEntities) {
-				if (CheckEntityForDiffusionComponents(entity)) {
-					entitiesToDestroy.push_back(entity);
-				}
-			}
+                try {
+                    m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
+                    LogInfo("Unregistered SDCPPSystem");
+                }
+                catch (const std::exception& e) {
+                    LogError("Error unregistering SDCPPSystem: " + std::string(e.what()));
+                }
+            }
+        }
 
-			LogInfo("Found " + std::to_string(entitiesToDestroy.size()) +
-				" entities to destroy out of " + std::to_string(allEntities.size()));
+        if (m_viewMgr) {
+            const char* viewNames[] = {
+                "DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
+            };
 
-			for (auto it = entitiesToDestroy.rbegin(); it != entitiesToDestroy.rend(); ++it) {
-				try {
-					m_entityMgr->DestroyEntity(*it);
-					LogInfo("Destroyed entity: " + std::to_string(*it));
-				}
-				catch (const std::exception& e) {
-					LogError("Error destroying entity " + std::to_string(*it) + ": " + std::string(e.what()));
-				}
-			}
-		}
+            for (const char* viewName : viewNames) {
+                try {
+                    m_viewMgr->CloseAllViewsOfType(viewName);
+                    LogInfo("Closed all views of type: " + std::string(viewName));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                catch (...) {
+                }
+            }
+        }
 
-		if (m_viewMgr) {
-			const char* viewNames[] = {
-				"DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
-			};
+        if (m_entityMgr) {
+            auto allEntities = m_entityMgr->GetAllEntities();
+            std::vector<EntityID> entitiesToDestroy;
 
-			for (const char* viewName : viewNames) {
-				try {
-					m_viewMgr->UnregisterView(viewName);
-					LogInfo("Unregistered view: " + std::string(viewName));
-					std::this_thread::sleep_for(std::chrono::milliseconds(50));
-				}
-				catch (const std::exception& e) {
-					LogError("Error unregistering view " + std::string(viewName) + ": " + std::string(e.what()));
-				}
-			}
-		}
+            for (EntityID entity : allEntities) {
+                if (CheckEntityForDiffusionComponents(entity)) {
+                    entitiesToDestroy.push_back(entity);
+                }
+            }
 
-		m_entityMgr = nullptr;
-		m_viewMgr = nullptr;
-		m_imguiContext = nullptr;
+            LogInfo("Found " + std::to_string(entitiesToDestroy.size()) +
+                " entities to destroy out of " + std::to_string(allEntities.size()));
 
-		LogInfo("DiffusionAddon shutdown complete");
-	}
+            for (auto it = entitiesToDestroy.rbegin(); it != entitiesToDestroy.rend(); ++it) {
+                try {
+                    m_entityMgr->DestroyEntity(*it);
+                    LogInfo("Destroyed entity: " + std::to_string(*it));
+                }
+                catch (const std::exception& e) {
+                    LogError("Error destroying entity " + std::to_string(*it) + ": " + std::string(e.what()));
+                }
+            }
+        }
 
-	bool CheckEntityForDiffusionComponents(EntityID entity) {
-		if (!m_entityMgr) return false;
+        if (m_viewMgr) {
+            const char* viewNames[] = {
+                "DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
+            };
 
-		try {
-			if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity)) return true;
-			if (m_entityMgr->HasComponent<ECS::CheckpointComponent>(entity)) return true;
-			if (m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity)) return true;
-			if (m_entityMgr->HasComponent<ECS::LatentComponent>(entity)) return true;
-			return false;
-		}
-		catch (...) {
-			return false;
-		}
-	}
+            for (const char* viewName : viewNames) {
+                try {
+                    m_viewMgr->UnregisterView(viewName);
+                    LogInfo("Unregistered view: " + std::string(viewName));
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                }
+                catch (const std::exception& e) {
+                    LogError("Error unregistering view " + std::string(viewName) + ": " + std::string(e.what()));
+                }
+            }
+        }
 
-	void OnUpdate(float deltaTime) override {}
+        Utils::g_FilePathSystem = nullptr;
+        m_entityMgr = nullptr;
+        m_viewMgr = nullptr;
+        m_imguiContext = nullptr;
+
+        LogInfo("DiffusionAddon shutdown complete");
+    }
+
+    bool CheckEntityForDiffusionComponents(EntityID entity) {
+        if (!m_entityMgr) return false;
+
+        try {
+            if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity)) return true;
+            if (m_entityMgr->HasComponent<ECS::CheckpointComponent>(entity)) return true;
+            if (m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity)) return true;
+            if (m_entityMgr->HasComponent<ECS::LatentComponent>(entity)) return true;
+            return false;
+        }
+        catch (...) {
+            return false;
+        }
+    }
+
+    void OnUpdate(float deltaTime) override {}
 
 private:
-	std::vector<std::string> m_registeredEvents;
+    std::vector<std::string> m_registeredEvents;
 
-	void RegisterEventHandlers() {
-		auto& events = ANI::Events::Ref();
+    void RegisterEventHandlers() {
+        auto& events = ANI::Events::Ref();
 
-		m_registeredEvents = {
-			"QueueDiffusionTask",
-			"RemoveFromDiffusionQueue",
-			"MoveInDiffusionQueue",
-			"StopCurrentDiffusionTask",
-			"ClearDiffusionQueue",
-			"PauseDiffusionWorker",
-			"ResumeDiffusionWorker"
-		};
+        m_registeredEvents = {
+            "QueueDiffusionTask",
+            "RemoveFromDiffusionQueue",
+            "MoveInDiffusionQueue",
+            "StopCurrentDiffusionTask",
+            "ClearDiffusionQueue",
+            "PauseDiffusionWorker",
+            "ResumeDiffusionWorker"
+        };
 
-		events.RegisterEventWithData("QueueDiffusionTask",
-			[this](const std::any& data) {
-			this->OnQueueDiffusionTask(data);
-		});
+        events.RegisterEventWithData("QueueDiffusionTask",
+            [this](const std::any& data) {
+                this->OnQueueDiffusionTask(data);
+            });
 
-		events.RegisterEventWithData("RemoveFromDiffusionQueue",
-			[this](const std::any& data) {
-			this->OnRemoveFromDiffusionQueue(data);
-		});
+        events.RegisterEventWithData("RemoveFromDiffusionQueue",
+            [this](const std::any& data) {
+                this->OnRemoveFromDiffusionQueue(data);
+            });
 
-		events.RegisterEventWithData("MoveInDiffusionQueue",
-			[this](const std::any& data) {
-			this->OnMoveInDiffusionQueue(data);
-		});
+        events.RegisterEventWithData("MoveInDiffusionQueue",
+            [this](const std::any& data) {
+                this->OnMoveInDiffusionQueue(data);
+            });
 
-		events.RegisterEvent("StopCurrentDiffusionTask",
-			[this]() {
-			this->OnStopCurrentDiffusionTask();
-		});
+        events.RegisterEvent("StopCurrentDiffusionTask",
+            [this]() {
+                this->OnStopCurrentDiffusionTask();
+            });
 
-		events.RegisterEvent("ClearDiffusionQueue",
-			[this]() {
-			this->OnClearDiffusionQueue();
-		});
+        events.RegisterEvent("ClearDiffusionQueue",
+            [this]() {
+                this->OnClearDiffusionQueue();
+            });
 
-		events.RegisterEvent("PauseDiffusionWorker",
-			[this]() {
-			this->OnPauseDiffusionWorker();
-		});
+        events.RegisterEvent("PauseDiffusionWorker",
+            [this]() {
+                this->OnPauseDiffusionWorker();
+            });
 
-		events.RegisterEvent("ResumeDiffusionWorker",
-			[this]() {
-			this->OnResumeDiffusionWorker();
-		});
+        events.RegisterEvent("ResumeDiffusionWorker",
+            [this]() {
+                this->OnResumeDiffusionWorker();
+            });
 
-		LogInfo("Diffusion event handlers registered");
-	}
+        LogInfo("Diffusion event handlers registered");
+    }
 
-	void UnregisterEventHandlers() {
-		LogInfo("Unregistering diffusion event handlers");
-		auto& events = ANI::Events::Ref();
+    void UnregisterEventHandlers() {
+        LogInfo("Unregistering diffusion event handlers");
+        auto& events = ANI::Events::Ref();
 
-		for (const auto& eventName : m_registeredEvents) {
-			try {
-				events.UnregisterEvent(eventName);
-				LogInfo("Unregistered event: " + eventName);
-			}
-			catch (const std::exception& e) {
-				LogError("Failed to unregister event " + eventName + ": " + e.what());
-			}
-		}
-		m_registeredEvents.clear();
-	}
+        for (const auto& eventName : m_registeredEvents) {
+            try {
+                events.UnregisterEvent(eventName);
+                LogInfo("Unregistered event: " + eventName);
+            }
+            catch (const std::exception& e) {
+                LogError("Failed to unregister event " + eventName + ": " + e.what());
+            }
+        }
+        m_registeredEvents.clear();
+    }
 
-	void OnQueueDiffusionTask(const std::any& data) {
-		try {
-			auto taskData = std::any_cast<std::pair<ECS::EntityID, ECS::SDCPPSystem::TaskType>>(data);
-			auto entityID = taskData.first;
-			auto taskType = taskData.second;
+    void OnQueueDiffusionTask(const std::any& data) {
+        try {
+            auto taskData = std::any_cast<std::pair<ECS::EntityID, ECS::SDCPPSystem::TaskType>>(data);
+            auto entityID = taskData.first;
+            auto taskType = taskData.second;
 
-			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-			if (system) {
-				system->QueueTask(entityID, taskType);
-				LogInfo("Queued diffusion task for entity " + std::to_string(entityID));
-			}
-			else {
-				LogError("SDCPPSystem not found when queuing task");
-			}
-		}
-		catch (const std::bad_any_cast& e) {
-			LogError("Invalid data type for QueueDiffusionTask event: " + std::string(e.what()));
-		}
-	}
+            auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+            if (system) {
+                system->QueueTask(entityID, taskType);
+                LogInfo("Queued diffusion task for entity " + std::to_string(entityID));
+            }
+            else {
+                LogError("SDCPPSystem not found when queuing task");
+            }
+        }
+        catch (const std::bad_any_cast& e) {
+            LogError("Invalid data type for QueueDiffusionTask event: " + std::string(e.what()));
+        }
+    }
 
-	void OnRemoveFromDiffusionQueue(const std::any& data) {
-		try {
-			auto index = std::any_cast<size_t>(data);
+    void OnRemoveFromDiffusionQueue(const std::any& data) {
+        try {
+            auto index = std::any_cast<size_t>(data);
 
-			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-			if (system) {
-				system->RemoveFromQueue(index);
-				LogInfo("Removed item from diffusion queue at index " + std::to_string(index));
-			}
-			else {
-				LogError("SDCPPSystem not found when removing from queue");
-			}
-		}
-		catch (const std::bad_any_cast& e) {
-			LogError("Invalid data type for RemoveFromDiffusionQueue event: " + std::string(e.what()));
-		}
-	}
+            auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+            if (system) {
+                system->RemoveFromQueue(index);
+                LogInfo("Removed item from diffusion queue at index " + std::to_string(index));
+            }
+            else {
+                LogError("SDCPPSystem not found when removing from queue");
+            }
+        }
+        catch (const std::bad_any_cast& e) {
+            LogError("Invalid data type for RemoveFromDiffusionQueue event: " + std::string(e.what()));
+        }
+    }
 
-	void OnMoveInDiffusionQueue(const std::any& data) {
-		try {
-			auto indices = std::any_cast<std::pair<size_t, size_t>>(data);
-			auto fromIndex = indices.first;
-			auto toIndex = indices.second;
+    void OnMoveInDiffusionQueue(const std::any& data) {
+        try {
+            auto indices = std::any_cast<std::pair<size_t, size_t>>(data);
+            auto fromIndex = indices.first;
+            auto toIndex = indices.second;
 
-			auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-			if (system) {
-				system->MoveInQueue(fromIndex, toIndex);
-				LogInfo("Moved item in diffusion queue from " + std::to_string(fromIndex) + " to " + std::to_string(toIndex));
-			}
-			else {
-				LogError("SDCPPSystem not found when moving in queue");
-			}
-		}
-		catch (const std::bad_any_cast& e) {
-			LogError("Invalid data type for MoveInDiffusionQueue event: " + std::string(e.what()));
-		}
-	}
+            auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+            if (system) {
+                system->MoveInQueue(fromIndex, toIndex);
+                LogInfo("Moved item in diffusion queue from " + std::to_string(fromIndex) + " to " + std::to_string(toIndex));
+            }
+            else {
+                LogError("SDCPPSystem not found when moving in queue");
+            }
+        }
+        catch (const std::bad_any_cast& e) {
+            LogError("Invalid data type for MoveInDiffusionQueue event: " + std::string(e.what()));
+        }
+    }
 
-	void OnStopCurrentDiffusionTask() {
-		auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-		if (system) {
-			system->StopCurrentTask();
-			LogInfo("Stopped current diffusion task");
-		}
-		else {
-			LogError("SDCPPSystem not found when stopping task");
-		}
-	}
+    void OnStopCurrentDiffusionTask() {
+        auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+        if (system) {
+            system->StopCurrentTask();
+            LogInfo("Stopped current diffusion task");
+        }
+        else {
+            LogError("SDCPPSystem not found when stopping task");
+        }
+    }
 
-	void OnClearDiffusionQueue() {
-		auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-		if (system) {
-			system->ClearQueue();
-			LogInfo("Cleared diffusion queue");
-		}
-		else {
-			LogError("SDCPPSystem not found when clearing queue");
-		}
-	}
+    void OnClearDiffusionQueue() {
+        auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+        if (system) {
+            system->ClearQueue();
+            LogInfo("Cleared diffusion queue");
+        }
+        else {
+            LogError("SDCPPSystem not found when clearing queue");
+        }
+    }
 
-	void OnPauseDiffusionWorker() {
-		auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-		if (system) {
-			system->PauseWorker();
-			LogInfo("Paused diffusion worker");
-		}
-		else {
-			LogError("SDCPPSystem not found when pausing worker");
-		}
-	}
+    void OnPauseDiffusionWorker() {
+        auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+        if (system) {
+            system->PauseWorker();
+            LogInfo("Paused diffusion worker");
+        }
+        else {
+            LogError("SDCPPSystem not found when pausing worker");
+        }
+    }
 
-	void OnResumeDiffusionWorker() {
-		auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-		if (system) {
-			system->ResumeWorker();
-			LogInfo("Resumed diffusion worker");
-		}
-		else {
-			LogError("SDCPPSystem not found when resuming worker");
-		}
-	}
+    void OnResumeDiffusionWorker() {
+        auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+        if (system) {
+            system->ResumeWorker();
+            LogInfo("Resumed diffusion worker");
+        }
+        else {
+            LogError("SDCPPSystem not found when resuming worker");
+        }
+    }
 
 private:
-	ECS::SystemTypeID m_systemId = 0;
-	ECS::EntityManager* m_entityMgr = nullptr;
-	GUI::ViewManager* m_viewMgr = nullptr;
-	ImGuiContext* m_imguiContext = nullptr;
+    ECS::SystemTypeID m_systemId = 0;
+    ECS::EntityManager* m_entityMgr = nullptr;
+    GUI::ViewManager* m_viewMgr = nullptr;
+    ImGuiContext* m_imguiContext = nullptr;
 };
 
 extern "C" {
-	PLUGIN_EXPORT Plugins::BasePlugin* CreatePlugin() {
-		return new DiffusionAddon();
-	}
+    PLUGIN_EXPORT Plugins::BasePlugin* CreatePlugin() {
+        return new DiffusionAddon();
+    }
 
-	PLUGIN_EXPORT void DestroyPlugin(Plugins::BasePlugin* plugin) {
-		delete plugin;
-	}
+    PLUGIN_EXPORT void DestroyPlugin(Plugins::BasePlugin* plugin) {
+        delete plugin;
+    }
 }

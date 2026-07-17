@@ -1,7 +1,6 @@
 #pragma once
 
 #include "BaseModelComponent.hpp"
-#include "FilePathService.hpp"
 #include "PropertyTypes.hpp"
 #include <string>
 
@@ -32,21 +31,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			// Update the default path in the schema to current Encoder path
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		ClipGComponent& operator=(const ClipGComponent& other) {
@@ -87,21 +71,6 @@ namespace ECS {
 			};
 		}
 
-		void RefreshSchema() override {
-			// Update the default path in the schema to current Encoder path
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
-		}
-
 		ClipLComponent& operator=(const ClipLComponent& other) {
 			if (this != &other) {
 				modelPath = other.modelPath;
@@ -140,21 +109,6 @@ namespace ECS {
 			};
 		}
 
-		void RefreshSchema() override {
-			// Update the default path in the schema to current Encoder path
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
-		}
-
 		T5XXLComponent& operator=(const T5XXLComponent& other) {
 			if (this != &other) {
 				modelPath = other.modelPath;
@@ -191,20 +145,6 @@ namespace ECS {
 					}}
 				}}
 			};
-		}
-
-		void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = Utils::FilePathService::GetPath("Encoder");
-				}
-			}
-		}
-
-		std::filesystem::path GetDefaultDirectory() const override {
-			return Utils::FilePathService::GetPath("Encoder");
 		}
 
 		LlmEncoderComponent& operator=(const LlmEncoderComponent& other) {

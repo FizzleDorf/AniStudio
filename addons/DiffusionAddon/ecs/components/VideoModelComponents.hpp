@@ -4,7 +4,6 @@
 #include "ModelComponents.hpp"
 #include "stable-diffusion.h"
 #include "DiffusionOptions.hpp"
-#include "FilePathService.hpp"
 #include <string>
 
 namespace ECS {
@@ -210,20 +209,6 @@ namespace ECS {
 			if (componentData.contains("flow_shift"))
 				flow_shift = componentData["flow_shift"];
 		}
-
-		// Helper to fill a sd_vid_gen_params_t (you need to provide main and 
-		// high-noise sample params)
-		void FillVideoGenParams(sd_vid_gen_params_t* params,
-			const sd_sample_params_t& main_sample_params,
-			const sd_sample_params_t& high_noise_sample_params) const {
-			sd_vid_gen_params_init(params);
-			params->video_frames = video_frames;
-			params->fps = fps;
-			params->vace_strength = vace_strength;
-			params->moe_boundary = moe_boundary;
-			params->sample_params = main_sample_params;
-			params->high_noise_sample_params = high_noise_sample_params;
-		}
 	};
 
 	// High Noise Sampler Component for Wan 2.2 dual sampling
@@ -298,8 +283,8 @@ namespace ECS {
 		// High noise sampling parameters
 		sample_method_t high_noise_sample_method = EULER_SAMPLE_METHOD;
 		scheduler_t high_noise_scheduler_method = DISCRETE_SCHEDULER;
-		float high_noise_cfg = 3.5f;
 		int high_noise_steps = 8;
+		float high_noise_cfg = 3.5f;
 		float high_noise_eta = 0.0f;
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -362,18 +347,6 @@ namespace ECS {
 				high_noise_steps = componentData["high_noise_steps"];
 			if (componentData.contains("high_noise_eta"))
 				high_noise_eta = componentData["high_noise_eta"];
-		}
-
-		// Convert to a sd_sample_params_t (fills only the fields we have, 
-		// others remain default)
-		sd_sample_params_t ToSampleParams() const {
-			sd_sample_params_t params;
-			sd_sample_params_init(&params);
-			params.sample_method = high_noise_sample_method;
-			params.scheduler = high_noise_scheduler_method;
-			params.sample_steps = high_noise_steps;
-			params.eta = high_noise_eta;
-			return params;
 		}
 	};
 

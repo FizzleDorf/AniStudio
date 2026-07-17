@@ -7,7 +7,7 @@ namespace ECS {
 
 	struct BaseModelComponent : public BaseComponent {
 		BaseModelComponent() {
-			compName = "BaseModelComponent";
+			compName = "Models";
 			compCategory = "Models";
 		}
 		std::string modelPath = "";
@@ -61,48 +61,11 @@ namespace ECS {
 				modelName = componentData["modelName"];
 			if (componentData.contains("modelPath"))
 				modelPath = componentData["modelPath"];
-
-			// Auto-populate missing fields
-			UpdatePathsFromName();
-		}
-
-		// Helper to update paths - only as fallback when data is incomplete
-		virtual void UpdatePathsFromName() {
-			// just clear everything if there is no path
-			if (modelPath.empty()) {
-				modelName.clear();
-				return;
-			}
-
-			// If we have a valid full path, just ensure modelName is set
-			if (!modelPath.empty() && std::filesystem::exists(modelPath)) {
-				if (modelName.empty()) {
-					std::filesystem::path pathObj(modelPath);
-					modelName = pathObj.filename().string();
-				}
-				return;
-			}
-
-			// If modelName contains a full path, split it properly
-			if (!modelName.empty()) {
-				std::filesystem::path namePath(modelName);
-				if (namePath.is_absolute()) {
-					modelPath = modelName;
-					modelName = namePath.filename().string();
-					return;
-				}
-			}
-
-			// Fallback: construct path from name using default directory
-			if (!modelName.empty() && modelPath.empty()) {
-				std::filesystem::path fallbackPath = GetDefaultDirectory() / modelName;
-				modelPath = fallbackPath.string();
-			}
 		}
 
 		// Get the appropriate default directory for this model type
 		virtual const char* GetDefaultDirectory() const {
-			return compCategory;
+			return compName;
 		}
 	};
 }

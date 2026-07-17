@@ -4,7 +4,6 @@
 #include "pch.h"
 #include "ContextUtils.hpp"
 #include "PngMetadataUtils.hpp"
-#include "FilePathService.hpp"
 #include "sdcpp_utils/SchedulerUtil.hpp"
 #include "sdcpp_utils/SDGuidanceUtil.hpp"
 #include "sdcpp_utils/SLGUtil.hpp"
@@ -15,6 +14,9 @@
 #include <filesystem>
 #include <memory>
 #include <vector>
+
+// Forward declaration of global FilePathSystem pointer - only needed if Txt2Img uses it
+// (Currently Txt2Img doesn't use FilePathService directly)
 
 namespace Utils
 {

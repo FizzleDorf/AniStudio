@@ -22,7 +22,7 @@ namespace GUI {
         ProjectPopupState() = default;
 
         void InitializeBuffers(ANI::ProjectManager& projectMgr);
-        void LoadTemplates(ANI::ProjectManager& projectMgr);      // now takes a reference
+        void LoadTemplates(ANI::ProjectManager& projectMgr);
         void RefreshRecentProjects(ANI::ProjectManager& projectMgr);
 
         std::string GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const;
