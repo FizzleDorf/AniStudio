@@ -1,5 +1,5 @@
 {
-    "configDebugHighlightIdConflicts": false,
+    "configDebugHighlightIdConflicts": true,
     "configDockingAlwaysTabBar": false,
     "configDockingEnable": true,
     "configDockingTransparentPayload": false,
@@ -8,7 +8,7 @@
     "configInputTextCursorBlink": true,
     "configInputTextEnterKeepActive": false,
     "configMacOSXBehaviors": false,
-    "configMemoryCompactTimer": -1.0,
+    "configMemoryCompactTimer": 60.0,
     "configNavCaptureKeyboard": true,
     "configNavEnableGamepad": false,
     "configNavEnableKeyboard": true,

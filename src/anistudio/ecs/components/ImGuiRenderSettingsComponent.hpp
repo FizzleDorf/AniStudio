@@ -1,46 +1,24 @@
 #pragma once
-
-#include "BaseTabObject.hpp"
-#include <nlohmann/json.hpp>
-#include <fstream>
-#include <filesystem>
-#include <iostream>
+#include "BaseSettingsComponent.hpp"
 #include <imgui.h>
 
-namespace Settings {
+namespace ECS {
 
-    class ImGuiRenderSettingsTab : public BaseTabObject {
+    class ImGuiRenderSettingsComponent : public BaseSettingsComponent {
     public:
-        ImGuiRenderSettingsTab() : BaseTabObject("ImGui Render", "Interface") {
-            hasChanges = false;
-            isInitialized = false;
-            imguiContext = nullptr;
-        }
+        ImGuiRenderSettingsComponent();
 
-        void SetImGuiContext(ImGuiContext* context) {
-            imguiContext = context;
-            if (imguiContext) {
-                // Load settings immediately when context is set
-                LoadSettings();
-                CreateBackup();
-            }
-        }
-
-        void RenderUI() override {
-            if (!imguiContext) return;
-
-            ImGui::SetCurrentContext(imguiContext);
-            EnsureInitialized();
-            RenderFilteredUI({});
-        }
-
-        void RenderFilteredUI(const std::set<std::string>& selectedCategories) override;
+        std::string GetTabName() const override { return "ImGui Render"; }
+        std::string GetTabCategory() const override { return "Interface"; }
+        void RenderUI() override;
+        void RenderFilteredUI(const std::string& filter) override;
         bool SaveSettings() override;
         bool LoadSettings() override;
         void ResetToDefaults() override;
         void CreateBackup() override;
         void RestoreFromBackup() override;
         bool HasUnsavedChanges() const override { return hasChanges; }
+        void SetImGuiContext(ImGuiContext* context) override { imguiContext = context; }
 
     private:
         bool configWindowsResizeFromEdges = true;
@@ -66,15 +44,15 @@ namespace Settings {
         bool configInputTextCursorBlink = true;
         bool configInputTextEnterKeepActive = false;
 
+        ImGuiConfigFlags backupConfigFlags = ImGuiConfigFlags_None;
         bool hasChanges = false;
         bool isInitialized = false;
-        ImGuiContext* imguiContext;
-        ImGuiConfigFlags backupConfigFlags = ImGuiConfigFlags_None;
+        ImGuiContext* imguiContext = nullptr;
 
         void EnsureInitialized();
         void LoadCurrentImGuiSettings();
         void LoadDefaults();
-        void SerializeSettings(nlohmann::json& j);
+        void SerializeSettings(nlohmann::json& j) const;
         void DeserializeSettings(const nlohmann::json& j);
         void ApplyAllSettingsToImGui();
         void ApplyWindowBehaviorToImGui();
@@ -82,6 +60,7 @@ namespace Settings {
         void ApplyDockingToImGui();
         void ApplyViewportsToImGui();
         void RenderActionButtons();
+        bool FilterPass(const std::string& section, const std::string& filter) const;
     };
 
-} // namespace Settings
+} // namespace ECS

@@ -1,14 +1,14 @@
 #pragma once
 
 #include "GUI.h"
-#include "BaseTabObject.hpp"
 #include <string>
-#include <vector>
-#include <set>
 #include <memory>
 
-namespace ECS { class EntityManager; }
-namespace Settings { class SettingsManager; }
+namespace ECS {
+    class EntityManager;
+    class SettingsSystem;
+    class FilePathSystem;
+}
 
 namespace GUI {
 
@@ -19,45 +19,39 @@ namespace GUI {
 
         void SetImGuiContext(ImGuiContext* context);
         void SetEntityManager(ECS::EntityManager& mgr);
-        void Render();
+
         void Show() { showPopup = true; }
         void Hide() { showPopup = false; }
         bool IsVisible() const { return showPopup; }
 
+        void Render();
+
     private:
-        std::unique_ptr<Settings::SettingsManager> settingsManager;
+        ECS::EntityManager* m_entityManager = nullptr;
+        ECS::SettingsSystem* m_settingsSystem = nullptr;
+        ECS::FilePathSystem* m_filePathSystem = nullptr;
+        ImGuiContext* imguiContext = nullptr;
 
-        bool showPopup;
-        bool showSavePopup;
-        bool showUnsavedChangesDialog;
-        bool pendingClose;
+        bool showPopup = false;
+        bool showUnsavedChangesDialog = false;
+        bool pendingClose = false;
+        bool settingsLoaded = false;
 
-        float filterListWidth;
-        std::set<std::string> availableCategories;
-        std::set<std::string> selectedCategories;
-        std::string lastSelectedCategory;
+        bool showSaveNotification = false;
+
         std::string currentActiveTab;
 
-        ImGuiContext* imguiContext;
-        bool settingsLoaded;
-        ECS::EntityManager* m_entityManager = nullptr;
+        char filterBuffer[256] = "";
+        char pathFilterBuffer[256] = "";
 
-        void RegisterCoreTabs();
-        void UpdateCategoriesForActiveTab(const std::string& activeTabName);
-        std::vector<std::string> GetCategoriesFromTab(Settings::BaseTabObject* tab);
-        void RenderFilteredTabContent(Settings::BaseTabObject* tab, const std::set<std::string>& selectedCategories);
-        void HandleCategorySelection(const std::string& categoryName, bool ctrlHeld, bool shiftHeld);
-        void SelectAllCategories();
-        void DeselectAll();
         void HandlePopupClose();
-        void LoadAllSettingsWithContext();
 
         void RenderMainContent();
-        void RenderFilterList();
-        void RenderSelectedCategoriesContent();
+        void RenderTabsAndContent();
         void RenderActionButtons();
-        void RenderSaveConfirmationPopup();
         void RenderUnsavedChangesDialog();
+
+        void RenderPathsTab();
     };
 
 } // namespace GUI

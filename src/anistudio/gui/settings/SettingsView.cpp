@@ -1,200 +1,68 @@
 #include "SettingsView.hpp"
-#include "PathsSettings.hpp"
-#include "GeneralSettings.hpp"
-#include "ImGuiStyleSettings.hpp"
-#include "ImGuiRenderSettings.hpp"
-#include "SettingsManager.hpp"
+
 #include "EntityManager.hpp"
+#include "SettingsSystem.hpp"
+#include "BaseSettingsComponent.hpp"
+#include "FilePathSystem.hpp"
+
+#include <imgui.h>
+#include <imgui_internal.h>
 #include <iostream>
 #include <algorithm>
-#include <imgui_internal.h>
+#include <map>
+
+#include "FileDialogUtil.hpp"
 
 namespace GUI {
 
-    SettingsView::SettingsView()
-        : showPopup(false), showSavePopup(false),
-        showUnsavedChangesDialog(false), pendingClose(false),
-        filterListWidth(250.0f), currentActiveTab(""),
-        imguiContext(nullptr), settingsLoaded(false) {
-
-        std::cout << "[SettingsView] Constructor - Creating SettingsManager..." << std::endl;
-        settingsManager = std::make_unique<Settings::SettingsManager>();
-
-        std::cout << "[SettingsView] Registering core tabs..." << std::endl;
-        RegisterCoreTabs();
-
-        const auto& tabs = settingsManager->GetTabs();
-        if (!tabs.empty()) {
-            std::cout << "[SettingsView] First tab: " << tabs[0]->GetTabName() << std::endl;
-            UpdateCategoriesForActiveTab(tabs[0]->GetTabName());
-        }
-
-        std::cout << "[SettingsView] Initialized (settings will load when context is set)" << std::endl;
+    SettingsView::SettingsView() {
+        filterBuffer[0] = '\0';
+        pathFilterBuffer[0] = '\0';
     }
 
     void SettingsView::SetEntityManager(ECS::EntityManager& mgr) {
         m_entityManager = &mgr;
-        std::cout << "[SettingsView] EntityManager set" << std::endl;
+        m_settingsSystem = mgr.GetSystem<ECS::SettingsSystem>().get();
+        m_filePathSystem = mgr.GetSystem<ECS::FilePathSystem>().get();
+
+        if (m_settingsSystem) {
+            if (imguiContext) {
+                m_settingsSystem->SetImGuiContext(imguiContext);
+            }
+            if (!settingsLoaded) {
+                m_settingsSystem->LoadAllSettings();
+                settingsLoaded = true;
+            }
+            auto comps = m_settingsSystem->GetAllSettingsComponents();
+            if (!comps.empty()) {
+                currentActiveTab = comps[0]->GetTabName();
+            }
+        }
     }
 
     void SettingsView::SetImGuiContext(ImGuiContext* context) {
         imguiContext = context;
-        std::cout << "[SettingsView] ImGui context set to: " << imguiContext << std::endl;
-
-        if (!imguiContext) {
-            std::cerr << "[SettingsView] Warning: ImGui context is null!" << std::endl;
-            return;
+        if (m_settingsSystem && imguiContext) {
+            m_settingsSystem->SetImGuiContext(imguiContext);
         }
-
-        for (const auto& tab : settingsManager->GetTabs()) {
-            std::string tabName = tab->GetTabName();
-            if (tabName == "ImGui Style") {
-                auto* styleTab = dynamic_cast<Settings::ImGuiStyleSettingsTab*>(tab.get());
-                if (styleTab) {
-                    styleTab->SetImGuiContext(imguiContext);
-                    std::cout << "[SettingsView] Set ImGui context for ImGui Style tab" << std::endl;
-                }
-            }
-            else if (tabName == "ImGui Render") {
-                auto* renderTab = dynamic_cast<Settings::ImGuiRenderSettingsTab*>(tab.get());
-                if (renderTab) {
-                    renderTab->SetImGuiContext(imguiContext);
-                    std::cout << "[SettingsView] Set ImGui context for ImGui Render tab" << std::endl;
-                }
-            }
-        }
-
-        LoadAllSettingsWithContext();
-    }
-
-    void SettingsView::LoadAllSettingsWithContext() {
-        if (settingsLoaded) {
-            return;
-        }
-
-        if (!imguiContext) {
-            std::cerr << "[SettingsView] Cannot load settings: ImGui context is null!" << std::endl;
-            return;
-        }
-
-        std::cout << "[SettingsView] Loading all settings with ImGui context..." << std::endl;
-
-        ImGui::SetCurrentContext(imguiContext);
-
-        try {
-            settingsManager->LoadAllSettings();
-            std::cout << "[SettingsView] Settings loaded successfully" << std::endl;
-            settingsLoaded = true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[SettingsView] Error loading settings: " << e.what() << std::endl;
-        }
-    }
-
-    void SettingsView::RegisterCoreTabs() {
-        std::cout << "[SettingsView] Registering core tabs..." << std::endl;
-
-        try {
-            auto generalTab = std::make_unique<Settings::GeneralSettingsTab>();
-            settingsManager->RegisterTab(std::move(generalTab));
-            std::cout << "[SettingsView] Registered General tab" << std::endl;
-
-            if (m_entityManager) {
-                auto pathsTab = std::make_unique<Settings::PathsSettingsTab>(*m_entityManager);
-                settingsManager->RegisterTab(std::move(pathsTab));
-                std::cout << "[SettingsView] Registered Paths tab with EntityManager" << std::endl;
-            }
-            else {
-                std::cerr << "[SettingsView] EntityManager not set, cannot create PathsSettingsTab" << std::endl;
-            }
-
-            auto styleTab = std::make_unique<Settings::ImGuiStyleSettingsTab>();
-            settingsManager->RegisterTab(std::move(styleTab));
-            std::cout << "[SettingsView] Registered ImGui Style tab" << std::endl;
-
-            auto renderTab = std::make_unique<Settings::ImGuiRenderSettingsTab>();
-            settingsManager->RegisterTab(std::move(renderTab));
-            std::cout << "[SettingsView] Registered ImGui Render tab" << std::endl;
-
-            std::cout << "[SettingsView] All core tabs registered successfully" << std::endl;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[SettingsView] Exception registering core tabs: " << e.what() << std::endl;
-        }
-    }
-
-    void SettingsView::UpdateCategoriesForActiveTab(const std::string& activeTabName) {
-        availableCategories.clear();
-
-        for (const auto& tab : settingsManager->GetTabs()) {
-            if (tab->GetTabName() == activeTabName) {
-                auto tabCategories = GetCategoriesFromTab(tab.get());
-                for (const auto& category : tabCategories) {
-                    availableCategories.insert(category);
-                }
-                break;
-            }
-        }
-
-        SelectAllCategories();
-    }
-
-    std::vector<std::string> SettingsView::GetCategoriesFromTab(Settings::BaseTabObject* tab) {
-        auto tabCategories = tab->GetCategories();
-        if (!tabCategories.empty()) {
-            return tabCategories;
-        }
-
-        std::string tabName = tab->GetTabName();
-
-        if (tabName == "General") {
-            return { "Startup Settings", "Auto-Save Settings", "Confirmation Dialogs", "Performance Settings", "Logging Settings" };
-        }
-        else if (tabName == "Paths") {
-            return { "General Paths", "Model Paths" };
-        }
-        else if (tabName == "ImGui Style") {
-            return { "Style Presets", "Font Settings", "Size Settings", "Border Settings", "Rounding Settings", "Color Settings" };
-        }
-        else if (tabName == "ImGui Render") {
-            return { "Display Settings", "Input Settings", "Window Behavior", "Navigation Settings", "Docking Settings", "Multi-Viewport Settings", "Memory & Performance", "Input Text Settings" };
-        }
-
-        return {};
-    }
-
-    void SettingsView::RenderFilteredTabContent(Settings::BaseTabObject* tab, const std::set<std::string>& selectedCategories) {
-        if (!tab) return;
-
-        std::string tabName = tab->GetTabName();
-        if ((tabName == "ImGui Style" || tabName == "ImGui Render") && imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-        }
-
-        tab->RenderFilteredUI(selectedCategories);
     }
 
     void SettingsView::Render() {
         if (!showPopup) return;
-
-        if (!imguiContext) {
-            std::cerr << "[SettingsView] Cannot render: ImGui context is null!" << std::endl;
-            return;
-        }
+        if (!imguiContext) return;
 
         ImGui::SetCurrentContext(imguiContext);
         ImGui::OpenPopup("Settings##SettingsPopup");
 
-        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_Appearing);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
-            ImGuiWindowFlags_Modal;
-
         bool isOpen = true;
-        if (ImGui::BeginPopupModal("Settings##SettingsPopup", &isOpen, flags)) {
+        if (ImGui::BeginPopupModal("Settings##SettingsPopup", &isOpen,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
+            ImGuiWindowFlags_Modal)) {
             RenderMainContent();
             ImGui::EndPopup();
         }
@@ -203,12 +71,11 @@ namespace GUI {
             HandlePopupClose();
         }
 
-        RenderSaveConfirmationPopup();
         RenderUnsavedChangesDialog();
     }
 
     void SettingsView::HandlePopupClose() {
-        if (settingsManager->HasAnyUnsavedChanges()) {
+        if (m_settingsSystem && m_settingsSystem->HasAnyUnsavedChanges()) {
             showUnsavedChangesDialog = true;
             pendingClose = true;
         }
@@ -218,23 +85,26 @@ namespace GUI {
     }
 
     void SettingsView::RenderMainContent() {
-        const auto& tabs = settingsManager->GetTabs();
-        if (tabs.empty()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "No settings tabs available!");
+        if (!m_settingsSystem) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "SettingsSystem not available!");
             return;
         }
 
-        ImGui::BeginChild("SettingsSplit", ImVec2(0, -50), false);
+        ImGui::BeginChild("SettingsArea", ImVec2(0, -50), false);
 
-        ImGui::BeginChild("FilterList", ImVec2(filterListWidth, 0), true);
-        RenderFilterList();
-        ImGui::EndChild();
-
+        ImGui::Text("Search");
         ImGui::SameLine();
+        ImGui::InputText("##SettingsFilter", filterBuffer, sizeof(filterBuffer));
 
-        ImGui::BeginChild("ContentArea", ImVec2(0, 0), true);
-        RenderSelectedCategoriesContent();
-        ImGui::EndChild();
+        if (showSaveNotification) {
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Settings saved.");
+            showSaveNotification = false;
+        }
+
+        ImGui::Separator();
+
+        RenderTabsAndContent();
 
         ImGui::EndChild();
 
@@ -242,152 +112,200 @@ namespace GUI {
         RenderActionButtons();
     }
 
-    void SettingsView::RenderFilterList() {
-        ImGui::Text("Settings Categories");
-        ImGui::Separator();
-
-        if (ImGui::Button("Show All Categories", ImVec2(-1, 0))) {
-            SelectAllCategories();
-        }
-
-        if (ImGui::Button("Deselect All", ImVec2(-1, 0))) {
-            DeselectAll();
-        }
-
-        ImGui::Separator();
-
-        if (availableCategories.empty()) {
-            ImGui::TextDisabled("No categories available");
-        }
-        else {
-            for (const auto& category : availableCategories) {
-                bool isSelected = selectedCategories.find(category) != selectedCategories.end();
-
-                ImGui::PushStyleColor(ImGuiCol_Text, isSelected ?
-                    ImVec4(0.4f, 0.8f, 1.0f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-
-                bool clicked = ImGui::Selectable(
-                    category.c_str(),
-                    isSelected,
-                    ImGuiSelectableFlags_AllowDoubleClick
-                );
-
-                ImGui::PopStyleColor();
-
-                if (clicked) {
-                    HandleCategorySelection(category,
-                        ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
-                }
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Selected: %zu categories", selectedCategories.size());
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-            "Ctrl+Click: Multi-select");
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-            "Shift+Click: Range select");
-    }
-
-    void SettingsView::RenderSelectedCategoriesContent() {
-        const auto& tabs = settingsManager->GetTabs();
+    void SettingsView::RenderTabsAndContent() {
+        auto comps = m_settingsSystem->GetAllSettingsComponents();
 
         if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
-            for (const auto& tab : tabs) {
-                std::string tabTitle = tab->GetTabName() + " Settings";
-                std::string tabName = tab->GetTabName();
+            for (auto* comp : comps) {
+                if (!comp) continue;
+                std::string tabTitle = comp->GetTabName() + " Settings";
+                std::string tabName = comp->GetTabName();
 
                 if (ImGui::BeginTabItem(tabTitle.c_str())) {
                     if (currentActiveTab != tabName) {
                         currentActiveTab = tabName;
-                        UpdateCategoriesForActiveTab(tabName);
                     }
-
-                    ImGui::BeginChild("TabContent", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-                    RenderFilteredTabContent(tab.get(), selectedCategories);
+                    ImGui::BeginChild("TabContent", ImVec2(0, 0), false,
+                        ImGuiWindowFlags_AlwaysVerticalScrollbar);
+                    comp->RenderFilteredUI(std::string(filterBuffer));
                     ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
             }
-            ImGui::EndTabBar();
-        }
 
-        if (currentActiveTab.empty() && !tabs.empty()) {
-            currentActiveTab = tabs[0]->GetTabName();
-            UpdateCategoriesForActiveTab(currentActiveTab);
-        }
-    }
-
-    void SettingsView::HandleCategorySelection(const std::string& categoryName, bool ctrlHeld, bool shiftHeld) {
-        if (!ctrlHeld && !shiftHeld) {
-            selectedCategories.clear();
-            selectedCategories.insert(categoryName);
-            lastSelectedCategory = categoryName;
-        }
-        else if (ctrlHeld) {
-            if (selectedCategories.count(categoryName)) {
-                selectedCategories.erase(categoryName);
-            }
-            else {
-                selectedCategories.insert(categoryName);
-            }
-            lastSelectedCategory = categoryName;
-        }
-        else if (shiftHeld && !lastSelectedCategory.empty()) {
-            std::vector<std::string> categoryOrder(availableCategories.begin(), availableCategories.end());
-            std::sort(categoryOrder.begin(), categoryOrder.end());
-
-            auto startIt = std::find(categoryOrder.begin(), categoryOrder.end(), lastSelectedCategory);
-            auto endIt = std::find(categoryOrder.begin(), categoryOrder.end(), categoryName);
-
-            if (startIt != categoryOrder.end() && endIt != categoryOrder.end()) {
-                if (startIt > endIt) std::swap(startIt, endIt);
-
-                for (auto it = startIt; it <= endIt; ++it) {
-                    selectedCategories.insert(*it);
+            if (m_filePathSystem) {
+                if (ImGui::BeginTabItem("Paths Settings")) {
+                    if (currentActiveTab != "Paths") {
+                        currentActiveTab = "Paths";
+                    }
+                    ImGui::BeginChild("PathsTabContent", ImVec2(0, 0), false,
+                        ImGuiWindowFlags_AlwaysVerticalScrollbar);
+                    RenderPathsTab();
+                    ImGui::EndChild();
+                    ImGui::EndTabItem();
                 }
             }
+
+            ImGui::EndTabBar();
         }
     }
 
-    void SettingsView::SelectAllCategories() {
-        selectedCategories = availableCategories;
-    }
+    void SettingsView::RenderPathsTab() {
+        if (!m_filePathSystem) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "FilePathSystem not available.");
+            return;
+        }
 
-    void SettingsView::DeselectAll() {
-        selectedCategories.clear();
+        ImGui::Text("Filter paths");
+        ImGui::SameLine();
+        ImGui::InputText("##PathFilter", pathFilterBuffer, sizeof(pathFilterBuffer));
+        ImGui::Separator();
+
+        std::vector<std::string> allKeys = m_filePathSystem->GetAllKeys();
+        if (allKeys.empty()) {
+            ImGui::TextDisabled("No paths registered.");
+            return;
+        }
+
+        std::string filterStr = pathFilterBuffer;
+        std::transform(filterStr.begin(), filterStr.end(), filterStr.begin(), ::tolower);
+
+        if (ImGui::BeginTable("PathsTable", 4,
+            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY)) {
+
+            ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+            ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 40.0f);
+            ImGui::TableSetupColumn("Clear", ImGuiTableColumnFlags_WidthFixed, 40.0f);
+            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+
+            for (const auto& key : allKeys) {
+                if (!filterStr.empty()) {
+                    std::string lowerKey = key;
+                    std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), ::tolower);
+                    if (lowerKey.find(filterStr) == std::string::npos) continue;
+                }
+
+                std::string currentPath = m_filePathSystem->GetPath(key);
+                bool isFileSelector = (key == "ClipL" || key == "ClipG" || key == "T5XXL");
+
+                ImGui::TableNextRow();
+
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(key.c_str());
+
+                ImGui::TableNextColumn();
+                if (ImGui::Button("...", ImVec2(30, 0))) {
+                    std::string defaultPath = currentPath.empty() ? "." : currentPath;
+                    std::string newPath;
+                    if (isFileSelector) {
+                        std::string filter = "All Files{.*},SafeTensors{.safetensors},Checkpoint{.ckpt},PyTorch{.pth}";
+                        if (FileDialog::OpenFile("Select File", filter, newPath, defaultPath)) {
+                            if (!newPath.empty() && newPath != currentPath) {
+                                m_filePathSystem->SetPath(key, newPath);
+                            }
+                        }
+                    }
+                    else {
+                        if (FileDialog::SelectFolder("Select Directory", newPath, defaultPath)) {
+                            if (!newPath.empty() && newPath != currentPath) {
+                                m_filePathSystem->SetPath(key, newPath);
+                            }
+                        }
+                    }
+                }
+
+                ImGui::TableNextColumn();
+                if (ImGui::Button("X", ImVec2(30, 0))) {
+                    m_filePathSystem->SetPath(key, "");
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("Clear this path");
+                }
+
+                ImGui::TableNextColumn();
+                if (currentPath.empty()) {
+                    ImGui::TextDisabled("(not set)");
+                }
+                else {
+                    std::string displayPath = currentPath;
+                    if (displayPath.length() > 60) {
+                        displayPath = "..." + displayPath.substr(displayPath.length() - 57);
+                    }
+                    ImGui::Text("%s", displayPath.c_str());
+                    if (ImGui::IsItemHovered() && currentPath.length() > 60) {
+                        ImGui::SetTooltip("%s", currentPath.c_str());
+                    }
+                }
+            }
+
+            ImGui::EndTable();
+        }
+
+        ImGui::Separator();
+        std::string modelRoot = m_filePathSystem->GetPath("ModelRoot");
+        if (!modelRoot.empty()) {
+            if (ImGui::Button("Reset Model Subdirectories to Root")) {
+                std::map<std::string, std::string> subdirs = {
+                    {"Checkpoint", "/checkpoints"},
+                    {"Encoder", "/clip"},
+                    {"Vae", "/vae"},
+                    {"Unet", "/unet"},
+                    {"Lora", "/loras"},
+                    {"ControlNet", "/controlnet"},
+                    {"Upscale", "/upscale_models"},
+                    {"Embed", "/embeddings"}
+                };
+                for (const auto& [key, subdir] : subdirs) {
+                    m_filePathSystem->SetPath(key, modelRoot + subdir);
+                }
+                std::string clipDir = modelRoot + "/clip";
+                m_filePathSystem->SetPath("ClipL", clipDir + "/clip_l.safetensors");
+                m_filePathSystem->SetPath("ClipG", clipDir + "/clip_g.safetensors");
+                m_filePathSystem->SetPath("T5XXL", clipDir + "/t5xxl.safetensors");
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("(Updates all model-related paths)");
+        }
     }
 
     void SettingsView::RenderActionButtons() {
-        if (settingsManager->HasAnyUnsavedChanges()) {
+        if (!m_settingsSystem) return;
+
+        if (m_settingsSystem->HasAnyUnsavedChanges()) {
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "* Unsaved changes");
             ImGui::SameLine();
         }
 
         if (ImGui::Button("Apply")) {
-            if (settingsManager->SaveAllSettings()) {
-                showSavePopup = true;
+            if (m_settingsSystem->SaveAllSettings()) {
+                if (m_filePathSystem) {
+                    m_filePathSystem->SaveToFile("../data/settings/paths.json");
+                }
+                showSaveNotification = true;
             }
         }
-
         ImGui::SameLine();
 
         if (ImGui::Button("Save and Close")) {
-            if (settingsManager->SaveAllSettings()) {
+            if (m_settingsSystem->SaveAllSettings()) {
+                if (m_filePathSystem) {
+                    m_filePathSystem->SaveToFile("../data/settings/paths.json");
+                }
                 showPopup = false;
                 ImGui::CloseCurrentPopup();
             }
         }
 
-        if (settingsManager->HasAnyUnsavedChanges()) {
+        if (m_settingsSystem->HasAnyUnsavedChanges()) {
             ImGui::SameLine();
             if (ImGui::Button("Cancel Changes")) {
-                settingsManager->RestoreAllFromBackups();
+                m_settingsSystem->RestoreAllFromBackups();
             }
-
             ImGui::SameLine();
             if (ImGui::Button("Reset to Defaults")) {
-                settingsManager->ResetAllToDefaults();
+                m_settingsSystem->ResetAllToDefaults();
             }
         }
 
@@ -397,50 +315,40 @@ namespace GUI {
         }
     }
 
-    void SettingsView::RenderSaveConfirmationPopup() {
-        if (showSavePopup) {
-            ImGui::OpenPopup("Settings Saved");
-        }
-
-        if (ImGui::BeginPopupModal("Settings Saved", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("All settings have been saved successfully.");
-            ImGui::Separator();
-            if (ImGui::Button("OK")) {
-                showSavePopup = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
-    }
-
     void SettingsView::RenderUnsavedChangesDialog() {
         if (showUnsavedChangesDialog) {
             ImGui::OpenPopup("Unsaved Changes");
         }
 
-        if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        if (ImGui::BeginPopupModal("Unsaved Changes", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("You have unsaved changes. What would you like to do?");
             ImGui::Separator();
 
             if (ImGui::Button("Apply and Close", ImVec2(120, 0))) {
-                if (settingsManager->SaveAllSettings()) {
+                if (m_settingsSystem && m_settingsSystem->SaveAllSettings()) {
+                    if (m_filePathSystem) {
+                        m_filePathSystem->SaveToFile("../data/settings/paths.json");
+                    }
                     showUnsavedChangesDialog = false;
                     showPopup = false;
                     pendingClose = false;
                     ImGui::CloseCurrentPopup();
                 }
             }
-
             ImGui::SameLine();
+
             if (ImGui::Button("Discard Changes", ImVec2(120, 0))) {
-                settingsManager->RestoreAllFromBackups();
+                if (m_settingsSystem) {
+                    m_settingsSystem->RestoreAllFromBackups();
+                }
                 showUnsavedChangesDialog = false;
                 showPopup = false;
                 pendingClose = false;
                 ImGui::CloseCurrentPopup();
             }
-
             ImGui::SameLine();
+
             if (ImGui::Button("Cancel", ImVec2(120, 0))) {
                 showUnsavedChangesDialog = false;
                 pendingClose = false;

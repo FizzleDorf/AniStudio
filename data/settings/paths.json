@@ -1,0 +1,8 @@
+{
+    "compName": "FilePathComponent",
+    "paths": {
+        "AssetsFolder": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\assets",
+        "DataPath": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults",
+        "DefaultProject": "projects"
+    }
+}

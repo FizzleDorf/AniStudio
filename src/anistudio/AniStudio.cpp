@@ -5,6 +5,8 @@
 #include "ImGuiSettingsUtil.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "Events.hpp"
+#include "guiComponents.h"
+#include "guiSystems.h"
 #include "SettingsView.hpp"
 #include "MenuBar.hpp"
 #include "ProjectManagerView.hpp"
@@ -38,6 +40,11 @@ namespace ANI {
                 m_settingsView->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
                 std::cout << "[StudioCore] Injected ImGui context into SettingsView" << std::endl;
             }
+
+            if (studioContext && studioContext->entityManager) {
+                m_settingsView->SetEntityManager(*studioContext->entityManager);
+                std::cout << "[StudioCore] Injected EntityManager into SettingsView" << std::endl;
+            }
         }
         return *m_settingsView;
     }
@@ -52,6 +59,15 @@ namespace ANI {
 
         if (m_settingsView) {
             m_settingsView->SetImGuiContext(static_cast<ImGuiContext*>(context));
+        }
+
+        if (studioContext && studioContext->entityManager) {
+            auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
+            if (settingsSystem) {
+                settingsSystem->SetImGuiContext(static_cast<ImGuiContext*>(context));
+                settingsSystem->LoadAllSettings();
+                std::cout << "[StudioCore] SettingsSystem updated with new ImGui context." << std::endl;
+            }
         }
     }
 
@@ -321,6 +337,14 @@ namespace ANI {
             m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager, this);
 
             studioContext->entityManager->RegisterSystem<TextureSystem>();
+            studioContext->entityManager->RegisterSystem<ECS::SettingsSystem>();
+
+            auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
+            if (settingsSystem && imguiContext) {
+                settingsSystem->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
+                settingsSystem->LoadAllSettings();
+                std::cout << "[StudioCore] SettingsSystem initialized with ImGui context and settings loaded." << std::endl;
+            }
 
             auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
             std::string defaultProjectPath;
@@ -460,39 +484,12 @@ namespace ANI {
             std::cerr << "[StudioCore] WARNING: Could not get ImguiState path from FilePathSystem!" << std::endl;
         }
 
-        std::cout << "[StudioCore] Loading ImGui style..." << std::endl;
-        std::string dataPath = fileSys->GetPath("DataPath");
-        std::string stylePath = dataPath + "/settings/imgui_style.json";
-        if (std::filesystem::exists(stylePath)) {
-            LoadStyleFromFile(ImGui::GetStyle(), stylePath);
-            std::cout << "[StudioCore] Loaded custom style from: " << stylePath << std::endl;
-        }
-        else {
-            SetCustomDarkTheme();
-            std::cout << "[StudioCore] Using custom dark theme as default" << std::endl;
-        }
-
         if (!io.Fonts || io.Fonts->Fonts.Size == 0) {
             std::cerr << "[StudioCore] ERROR: ImGui fonts not loaded!" << std::endl;
             return;
         }
 
         std::cout << "[StudioCore] ImGui is ready" << std::endl;
-
-        std::cout << "[StudioCore] Loading ImGui IO settings..." << std::endl;
-        try {
-            std::string settingsPath = dataPath + "/settings/imgui_render_settings.json";
-            if (std::filesystem::exists(settingsPath)) {
-                Utils::ImGuiSettingsUtil::LoadFromFile(settingsPath, io);
-                std::cout << "[StudioCore] ImGui IO settings loaded from file" << std::endl;
-            }
-            else {
-                std::cout << "[StudioCore] No saved ImGui IO settings, using defaults with docking" << std::endl;
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[StudioCore] Warning: Failed to load ImGui IO settings: " << e.what() << std::endl;
-        }
 
         InitializeStudioPlugins();
         std::cout << "[StudioCore] Plugins initialized" << std::endl;
@@ -829,4 +826,4 @@ namespace ANI {
         return 0;
     }
 
-} // namespace ANI
+}
