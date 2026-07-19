@@ -1,0 +1,25 @@
+{
+    "WindowPadding": [8, 8],
+    "FramePadding": [4, 3],
+    "ItemSpacing": [8, 4],
+    "ItemInnerSpacing": [4, 4],
+    "IndentSpacing": 21,
+    "ScrollbarSize": 14,
+    "GrabMinSize": 10,
+    "WindowBorderSize": 0,
+    "ChildBorderSize": 0,
+    "PopupBorderSize": 0,
+    "FrameBorderSize": 0,
+    "TabBorderSize": 0,
+    "WindowRounding": 6,
+    "ChildRounding": 4,
+    "FrameRounding": 4,
+    "PopupRounding": 4,
+    "ScrollbarRounding": 9,
+    "GrabRounding": 4,
+    "TabRounding": 4,
+    "Colors": [
+        {"name": "Text", "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0},
+        {"name": "WindowBg", "r": 0.14, "g": 0.14, "b": 0.14, "a": 1.0}
+    ]
+}

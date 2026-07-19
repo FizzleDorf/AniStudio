@@ -8,6 +8,7 @@
 #include "guiComponents.h"
 #include "guiSystems.h"
 #include "SettingsView.hpp"
+#include "FontSettingsComponent.hpp"
 #include "MenuBar.hpp"
 #include "ProjectManagerView.hpp"
 #include <iostream>
@@ -635,6 +636,11 @@ namespace ANI {
 
     void StudioCore::Update(float deltaTime) {
         if (!running || !initialized || !studioContext) return;
+
+        auto* fontComp = ECS::FontSettingsComponent::GetInstance();
+        if (fontComp) {
+            fontComp->CheckAndRebuildFonts();
+        }
 
         ANI::Events::Ref().Poll();
         try {

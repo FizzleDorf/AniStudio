@@ -89,6 +89,7 @@ List of Renderer Backends:
     imgui_impl_dx11.cpp         ; DirectX11
     imgui_impl_dx12.cpp         ; DirectX12
     imgui_impl_metal.mm         ; Metal (ObjC or C++)
+    imgui_impl_metal4.mm        ; Metal 4 (ObjC or C++)
     imgui_impl_opengl2.cpp      ; OpenGL 2 (legacy fixed pipeline. Don't use with modern OpenGL code!)
     imgui_impl_opengl3.cpp      ; OpenGL 3/4, OpenGL ES 2/3, WebGL
     imgui_impl_sdlgpu3.cpp      ; SDL_GPU (portable 3D graphics API of SDL3)
@@ -100,6 +101,7 @@ List of Renderer Backends:
 List of high-level Frameworks Backends (combining Platform + Renderer):
 
     imgui_impl_allegro5.cpp
+    imgui_impl_null.cpp
 
 Emscripten is also supported!
 The SDL2+GL, SDL3+GL, GLFW+GL and GLFW+WebGPU examples are all ready to build and run with Emscripten.
@@ -182,6 +184,7 @@ The Platform backends in impl_impl_XXX.cpp files contain many implementations.
   - `ImGuiBackendFlags_HasSetMousePos`: supports io.WantSetMousePos requests to reposition the OS mouse position (only used if io.ConfigNavMoveSetMousePos is set).
   - `ImGuiBackendFlags_PlatformHasViewports` supports multiple viewports. (multi-viewports only)
   - `ImGuiBackendFlags_HasMouseHoveredViewport` supports calling io.AddMouseViewportEvent() with the viewport under the mouse. IF POSSIBLE, ignore viewports with the ImGuiViewportFlags_NoInputs flag. If this cannot be done, Dear ImGui needs to use a flawed heuristic to find the viewport under mouse position, as it doesn't know about foreign windows. (multi-viewports only)
+  - `ImGuiBackendFlags_HasParentViewport` supports honoring viewport->ParentViewportId value, by applying the corresponding parent/child relation at the Platform level.
 
 **In your `ImGui_ImplXXX_NewFrame()` function:**
 - Set `io.DeltaTime` to the time elapsed (in seconds) since last frame.
@@ -254,8 +257,8 @@ void MyImGuiBackend_RenderDrawData(ImDrawData* draw_data)
             const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
             if (pcmd->UserCallback)
             {
-                if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
-                    MyEngineSetupenderState();
+                if (pcmd->UserCallback == platform_io.DrawCallback_ResetRenderState)
+                    MyEngineSetupSenderState();
                 else
                     pcmd->UserCallback(cmd_list, pcmd);
             }
@@ -336,7 +339,7 @@ void MyImGuiBackend_UpdateTexture(ImTextureData* tex)
     {
         // Create texture based on tex->Width, tex->Height.
         // - Most backends only support tex->Format == ImTextureFormat_RGBA32.
-        // - Backends for particularly memory constrainted platforms may support tex->Format == ImTextureFormat_Alpha8.
+        // - Backends for particularly memory constrained platforms may support tex->Format == ImTextureFormat_Alpha8.
 
         // Upload all texture pixels
         // - Read from our CPU-side copy of the texture and copy to your graphics API.

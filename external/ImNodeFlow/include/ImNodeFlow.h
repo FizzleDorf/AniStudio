@@ -2,7 +2,6 @@
 #define IM_NODE_FLOW
 #pragma once
 
-#include <cstdint>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -12,6 +11,7 @@
 #include <algorithm>
 #include <functional>
 #include <unordered_map>
+#include <cstdint>
 #include <imgui.h>
 #include "../src/imgui_bezier_math.h"
 #include "../src/context_wrapper.h"
@@ -415,6 +415,13 @@ namespace ImFlow
          * @return Const reference to editor's grid scroll
          */
         const ImVec2& getScroll() { return m_context.scroll(); }
+        
+        /**
+         * @brief <BR>Get the scale adjusted screen space mouse delta, needed for dragging
+         * 
+         * @return scale adjusted mouse delta.
+         */
+        ImVec2 getScreenSpaceDelta(){return m_context.getScreenDelta(); }
 
         /**
          * @brief <BR>Get editor's list of nodes
@@ -811,6 +818,12 @@ namespace ImFlow
         const ImVec2& getSize() { return  m_size; }
 
         /**
+         * @brief <BR>Get node size
+         * @return Const reference to the node's size
+         */
+        const ImVec2& getFullSize() { return m_fullSize; }
+
+        /**
          * @brief <BR>Get node position
          * @return Const reference to the node's position
          */
@@ -887,6 +900,7 @@ namespace ImFlow
         std::string m_title;
         ImVec2 m_pos, m_posTarget;
         ImVec2 m_size;
+        ImVec2 m_fullSize;
         ImNodeFlow* m_inf = nullptr;
         std::shared_ptr<NodeStyle> m_style;
         bool m_selected = false, m_selectedNext = false;
@@ -927,7 +941,7 @@ namespace ImFlow
          * @param style Style of the pin
          */
         explicit Pin(PinUID uid, std::string name, std::shared_ptr<PinStyle> style, PinType kind, BaseNode* parent, ImNodeFlow** inf)
-            :m_uid(uid), m_name(std::move(name)), m_style(std::move(style)), m_type(kind), m_parent(parent), m_inf(inf)
+            :m_uid(uid), m_name(std::move(name)), m_type(kind), m_parent(parent), m_inf(inf), m_style(std::move(style))
             {
                 if(!m_style)
                     m_style = PinStyle::cyan();

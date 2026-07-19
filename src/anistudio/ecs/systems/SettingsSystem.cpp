@@ -4,6 +4,7 @@
 #include "GeneralSettingsComponent.hpp"
 #include "ImGuiStyleSettingsComponent.hpp"
 #include "ImGuiRenderSettingsComponent.hpp"
+#include "FontSettingsComponent.hpp"
 #include "FilePathSystem.hpp"
 
 #include <iostream>
@@ -25,6 +26,7 @@ namespace ECS {
         RegisterAndAddSettingsComponent<GeneralSettingsComponent>();
         RegisterAndAddSettingsComponent<ImGuiStyleSettingsComponent>();
         RegisterAndAddSettingsComponent<ImGuiRenderSettingsComponent>();
+        RegisterAndAddSettingsComponent<FontSettingsComponent>();
 
         LoadAllSettings();
         for (auto* comp : GetAllSettingsComponents()) {

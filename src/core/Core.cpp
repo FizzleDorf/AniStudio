@@ -318,8 +318,6 @@ namespace ANI {
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		std::cout << "[Core] Enabled docking by default" << '\n';
 
-		// CRITICAL FIX: Don't try to use FilePaths here. Use a temporary INI path
-		// The proper path will be set in AniStudio.cpp after FilePaths is initialized
 		std::cout << "[Core] Setting temporary INI file path..." << '\n';
 		std::string iniFilePath = "imgui.ini";
 
