@@ -1,4 +1,3 @@
-// DiffusionAddon.cpp
 #include "BasePlugin.hpp"
 #include "EntityManager.hpp"
 #include "ViewManager.hpp"
@@ -23,6 +22,7 @@
 
 #include <iostream>
 #include <filesystem>
+#include "MissingPathsPopup.hpp"
 
 #if defined(_WIN32) || defined(_WIN64)
 #define PLUGIN_EXPORT __declspec(dllexport)
@@ -66,46 +66,53 @@ public:
         Utils::g_FilePathSystem = fs.get();
         LogInfo("FilePathSystem obtained.");
 
-        std::string modelRoot = fs->GetPath("ModelRoot");
-        if (modelRoot.empty()) {
-            std::string dataPath = fs->GetPath("DataPath");
-            if (!dataPath.empty()) {
-                modelRoot = (std::filesystem::path(dataPath) / "models").string();
+        // Register ModelRoot key if missing (empty)
+        if (!fs->HasPath("ModelRoot")) {
+            fs->SetPath("ModelRoot", "");
+        }
+        // Compute default path for ModelRoot (for the "Use Default" button)
+        std::string dataPath = fs->GetPath("DataPath");
+        std::string defaultModelRoot;
+        if (!dataPath.empty()) {
+            defaultModelRoot = (std::filesystem::path(dataPath) / "models").string();
+        }
+        else {
+            defaultModelRoot = (std::filesystem::current_path() / "models").string();
+        }
+        Utils::SetDefaultPath("ModelRoot", defaultModelRoot);
+
+        // Ensure subdirectory keys exist as empty, register defaults
+        const std::vector<std::pair<std::string, std::string>> modelKeys = {
+            {"Checkpoint", "checkpoints"},
+            {"Unet", "unet"},
+            {"Vae", "vae"},
+            {"Taesd", "taesd"},
+            {"Lora", "lora"},
+            {"Embed", "embed"},
+            {"Encoder", "encoder"},
+            {"ControlNet", "controlnet"}
+        };
+
+        for (const auto& [key, subdir] : modelKeys) {
+            if (!fs->HasPath(key)) {
+                fs->SetPath(key, "");
             }
-            else {
-                modelRoot = (std::filesystem::current_path() / "models").string();
-            }
-            fs->SetPath("ModelRoot", modelRoot);
-            LogInfo("Set default ModelRoot to: " + modelRoot);
+            // Register default path using ModelRoot default
+            std::string defaultPath = (std::filesystem::path(defaultModelRoot) / subdir).string();
+            Utils::SetDefaultPath(key, defaultPath);
         }
 
-        LogInfo("Model root path: " + modelRoot);
-
-        if (!modelRoot.empty()) {
-            auto setDefaultPath = [&](const std::string& key, const std::string& subdir) {
-                std::string path = (std::filesystem::path(modelRoot) / subdir).string();
-                if (!fs->HasPath(key)) {
-                    fs->SetPath(key, path);
-                    std::filesystem::create_directories(path);
-                }
-                };
-            setDefaultPath("Checkpoint", "checkpoints");
-            setDefaultPath("Unet", "unet");
-            setDefaultPath("Vae", "vae");
-            setDefaultPath("Taesd", "taesd");
-            setDefaultPath("Lora", "lora");
-            setDefaultPath("Embed", "embed");
-            setDefaultPath("Encoder", "encoder");
-            setDefaultPath("ControlNet", "controlnet");
-        }
-
-        std::string configPath = fs->GetPath("DataPath");
-        if (!configPath.empty()) {
-            std::string filePath = (std::filesystem::path(configPath) / "filepaths.json").string();
+        // Load existing filepaths if any
+        if (!dataPath.empty()) {
+            std::string filePath = (std::filesystem::path(dataPath) / "filepaths.json").string();
             if (std::filesystem::exists(filePath))
                 fs->LoadFromFile(filePath);
         }
 
+        // Check for missing paths and trigger popup if any
+        Utils::CheckMissingPaths(fs);
+
+        // Register components and system
         entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
         entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
         entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");

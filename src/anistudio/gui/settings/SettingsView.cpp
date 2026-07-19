@@ -191,6 +191,7 @@ namespace GUI {
                 bool isFileSelector = (key == "ClipL" || key == "ClipG" || key == "T5XXL");
 
                 ImGui::TableNextRow();
+                ImGui::PushID(key.c_str());
 
                 ImGui::TableNextColumn();
                 ImGui::TextUnformatted(key.c_str());
@@ -238,6 +239,8 @@ namespace GUI {
                         ImGui::SetTooltip("%s", currentPath.c_str());
                     }
                 }
+
+                ImGui::PopID();
             }
 
             ImGui::EndTable();

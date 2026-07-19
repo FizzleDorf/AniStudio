@@ -4,7 +4,7 @@
     "confirmBeforeDeleteAssets": true,
     "confirmBeforeExit": true,
     "confirmBeforeOverwriteFiles": true,
-    "enableHardwareAcceleration": true,
+    "enableHardwareAcceleration": false,
     "enableLogging": true,
     "loadLastProject": true,
     "logLevel": 2,

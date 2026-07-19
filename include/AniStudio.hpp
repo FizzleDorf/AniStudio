@@ -37,6 +37,8 @@
 #include <memory>
 #include <set>
 #include <unordered_map>
+#include <vector>
+#include <string>
 
 namespace GUI {
     class MenuBar;
@@ -118,6 +120,7 @@ namespace ANI {
         bool initialized;
         bool running;
         bool m_isShuttingDown;
+        bool m_showMissingPathsPopup;
 
         std::shared_ptr<StudioContext> studioContext;
 
@@ -134,6 +137,9 @@ namespace ANI {
         std::unique_ptr<GUI::SettingsView> m_settingsView;
         bool m_showProjectManagerView = false;
 
+        // Missing paths storage
+        std::vector<std::string> m_missingKeys;
+
         // Use existing WindowState utility
         Utils::WindowState m_windowState;
 
@@ -147,5 +153,9 @@ namespace ANI {
         void SyncWindowStateFromGLFW();
         void ApplyWindowStateToGLFW();
         std::string GetDefaultWindowStatePath() const;
+
+        // File path helpers
+        void EnsureCorePaths();
+        std::string GetDefaultPathForKey(const std::string& key) const;
     };
 }

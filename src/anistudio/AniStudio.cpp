@@ -16,6 +16,8 @@
 #include <filesystem>
 #include <imgui.h>
 #include "GuiStyleHelpers.hpp"
+#include "FileDialogUtil.hpp"
+#include "MissingPathsPopup.hpp"
 
 namespace ANI {
 
@@ -335,7 +337,7 @@ namespace ANI {
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
 
             m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager, this);
-           
+
             studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             studioContext->entityManager->RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
             studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
@@ -432,6 +434,32 @@ namespace ANI {
         return studioCore;
     }
 
+    void StudioCore::EnsureCorePaths() {
+        auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
+        if (!fileSys) return;
+
+        const std::vector<std::string> coreKeys = {
+            "DataPath", "DefaultProject", "Plugins", "ImguiState",
+            "Assets", "Docs", "Scripts", "Templates", "Shaders"
+        };
+
+        for (const auto& key : coreKeys) {
+            if (!fileSys->HasPath(key)) {
+                fileSys->SetPath(key, "");
+            }
+        }
+
+        Utils::SetDefaultPath("DataPath", "./data");
+        Utils::SetDefaultPath("DefaultProject", "./projects");
+        Utils::SetDefaultPath("Plugins", "./plugins");
+        Utils::SetDefaultPath("ImguiState", "./data/imgui.ini");
+        Utils::SetDefaultPath("Assets", "./assets");
+        Utils::SetDefaultPath("Docs", "./docs");
+        Utils::SetDefaultPath("Scripts", "./scripts");
+        Utils::SetDefaultPath("Templates", "./data/templates");
+        Utils::SetDefaultPath("Shaders", "./shaders");
+    }
+
     void StudioCore::CompleteInitialization() {
         static bool completedInitialization = false;
         if (completedInitialization) return;
@@ -496,8 +524,25 @@ namespace ANI {
 
         std::cout << "[StudioCore] ImGui is ready" << std::endl;
 
+        std::string dataPath = fileSys->GetPath("DataPath");
+        if (dataPath.empty()) {
+            dataPath = "./data";
+            fileSys->SetPath("DataPath", dataPath);
+        }
+        if (!std::filesystem::exists(dataPath)) {
+            std::filesystem::create_directories(dataPath);
+        }
+
+        std::string filepathsFile = dataPath + "/filepaths.json";
+        fileSys->LoadFromFile(filepathsFile);
+
+        EnsureCorePaths();
+
+        Utils::CheckMissingPaths(fileSys);
+
         InitializeStudioPlugins();
-        std::cout << "[StudioCore] Plugins initialized" << std::endl;
+
+        Utils::CheckMissingPaths(fileSys);
 
         RegisterCoreViews();
         std::cout << "[StudioCore] Core views registered" << std::endl;
@@ -524,6 +569,17 @@ namespace ANI {
     void StudioCore::OnProjectLoaded(const std::string& projectPath) {
         std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
 
+        auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
+        if (fileSys) {
+            fileSys->SetPath("CurrentProject", projectPath);
+            fileSys->SetPath("ProjectData", projectPath + "/data");
+            fileSys->SetPath("ProjectAssets", projectPath + "/assets");
+            fileSys->SetPath("ProjectOutput", projectPath + "/output");
+            std::filesystem::create_directories(projectPath + "/data");
+            std::filesystem::create_directories(projectPath + "/assets");
+            std::filesystem::create_directories(projectPath + "/output");
+        }
+
         if (studioContext && studioContext->studioPluginManager) {
             std::cout << "[StudioCore] Setting plugin manager project context: " << projectPath << std::endl;
             studioContext->studioPluginManager->SetProjectContext(projectPath);
@@ -536,6 +592,17 @@ namespace ANI {
     void StudioCore::OnProjectCreated(const std::string& projectPath) {
         std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
 
+        auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
+        if (fileSys) {
+            fileSys->SetPath("CurrentProject", projectPath);
+            fileSys->SetPath("ProjectData", projectPath + "/data");
+            fileSys->SetPath("ProjectAssets", projectPath + "/assets");
+            fileSys->SetPath("ProjectOutput", projectPath + "/output");
+            std::filesystem::create_directories(projectPath + "/data");
+            std::filesystem::create_directories(projectPath + "/assets");
+            std::filesystem::create_directories(projectPath + "/output");
+        }
+
         if (studioContext && studioContext->studioPluginManager) {
             std::cout << "[StudioCore] Setting plugin manager project context for new project: " << projectPath << std::endl;
             studioContext->studioPluginManager->SetProjectContext(projectPath);
@@ -547,6 +614,14 @@ namespace ANI {
 
     void StudioCore::OnProjectClosed() {
         std::cout << "[StudioCore] OnProjectClosed() called" << std::endl;
+
+        auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
+        if (fileSys) {
+            fileSys->SetPath("CurrentProject", "");
+            fileSys->SetPath("ProjectData", "");
+            fileSys->SetPath("ProjectAssets", "");
+            fileSys->SetPath("ProjectOutput", "");
+        }
 
         if (studioContext && studioContext->studioPluginManager) {
             std::cout << "[StudioCore] Saving project plugin state and reverting to global..." << std::endl;
@@ -718,6 +793,8 @@ namespace ANI {
             if (m_settingsView && m_settingsView->IsVisible()) {
                 m_settingsView->Render();
             }
+
+            Utils::RenderMissingPathsPopup();
         }
         catch (const std::exception& e) {
             std::cerr << "[StudioCore] Render error: " << e.what() << std::endl;

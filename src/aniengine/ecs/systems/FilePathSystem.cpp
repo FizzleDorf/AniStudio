@@ -67,4 +67,22 @@ namespace ECS {
         auto* comp = GetComponent();
         if (comp) comp->Deserialize(j);
     }
-} //namespace ECS
+
+    void FilePathSystem::SetMissingPathsCallback(std::function<void(const std::vector<std::string>&)> callback) {
+        m_missingPathsCallback = callback;
+    }
+
+    void FilePathSystem::CheckAndPromptMissingPaths() {
+        auto* comp = GetComponent();
+        if (!comp) return;
+        std::vector<std::string> missing;
+        for (const auto& key : comp->GetAllKeys()) {
+            if (comp->GetPath(key).empty()) {
+                missing.push_back(key);
+            }
+        }
+        if (!missing.empty() && m_missingPathsCallback) {
+            m_missingPathsCallback(missing);
+        }
+    }
+}
