@@ -1,9 +1,7 @@
 #pragma once
-
 #include "BaseSystem.hpp"
-#include "Types.hpp"
-#include <imgui.h>
 #include <vector>
+#include <imgui.h>
 
 namespace ECS {
 
@@ -12,14 +10,14 @@ namespace ECS {
 
     class SettingsSystem : public BaseSystem {
     public:
-        explicit SettingsSystem(EntityManager& mgr);
-        virtual ~SettingsSystem() = default;
+        SettingsSystem(EntityManager& mgr);
 
         void Start() override;
-        void Update(float deltaT) override {}
         void Destroy() override;
+        void Update(float deltaT) override;
 
         std::vector<BaseSettingsComponent*> GetAllSettingsComponents() const;
+        BaseSettingsComponent* GetSettingsComponent(ComponentTypeID typeId) const;
 
         bool SaveAllSettings();
         bool LoadAllSettings();
@@ -29,17 +27,13 @@ namespace ECS {
 
         void SetImGuiContext(ImGuiContext* context);
 
-        FilePathSystem* GetFilePathSystem() const { return filePathSystem; }
-
     private:
-        EntityID settingsEntity = 0;
-        std::vector<ComponentTypeID> settingsComponentTypes;
-        FilePathSystem* filePathSystem = nullptr;
-
         template<typename T>
         ComponentTypeID RegisterAndAddSettingsComponent();
 
-        BaseSettingsComponent* GetSettingsComponent(ComponentTypeID typeId) const;
+        EntityID settingsEntity = 0;
+        std::vector<ComponentTypeID> settingsComponentTypes;
+        FilePathSystem* filePathSystem = nullptr;
     };
 
-} // namespace ECS
+}

@@ -1,8 +1,20 @@
 {
     "compName": "FilePathComponent",
     "paths": {
-        "AssetsFolder": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\assets",
+        "AssetsFolder": "",
+        "Checkpoint": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\checkpoints",
+        "ControlNet": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\controlnet",
         "DataPath": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults",
-        "DefaultProject": "projects"
+        "DefaultProject": "projects",
+        "Embed": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\embed",
+        "Encoder": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\encoder",
+        "LastOpenProject": "",
+        "Lora": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\lora",
+        "ModelRoot": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models",
+        "OutputFolder": "",
+        "ProjectDataPath": "",
+        "Taesd": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\taesd",
+        "Unet": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\unet",
+        "Vae": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults\\models\\vae"
     }
 }

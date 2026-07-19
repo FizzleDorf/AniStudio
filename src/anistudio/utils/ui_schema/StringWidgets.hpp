@@ -296,7 +296,7 @@ namespace UISchema {
 			std::string childId = uniqueBaseId + "_textarea_child";
 
 			// Use child window for vertical resizing with ResizeY flag
-			if (ImGui::BeginChild(childId.c_str(), ImVec2(0, std::max(minHeight, initialHeight)), ImGuiChildFlags_Border | ImGuiChildFlags_ResizeY)) {
+			if (ImGui::BeginChild(childId.c_str(), ImVec2(0, std::max(minHeight, initialHeight)), ImGuiChildFlags_ResizeY)) {
 				// Generate unique textarea ID with ## prefix to hide the label
 				std::string textareaId = "##" + uniqueBaseId + "_textarea_input";
 

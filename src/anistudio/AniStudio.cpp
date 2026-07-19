@@ -8,7 +8,6 @@
 #include "guiComponents.h"
 #include "guiSystems.h"
 #include "SettingsView.hpp"
-#include "FontSettingsComponent.hpp"
 #include "MenuBar.hpp"
 #include "ProjectManagerView.hpp"
 #include <iostream>
@@ -336,6 +335,11 @@ namespace ANI {
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
 
             m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager, this);
+           
+            studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
+            studioContext->entityManager->RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
+            studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
+            studioContext->entityManager->RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
 
             studioContext->entityManager->RegisterSystem<TextureSystem>();
             studioContext->entityManager->RegisterSystem<ECS::SettingsSystem>();
@@ -636,11 +640,6 @@ namespace ANI {
 
     void StudioCore::Update(float deltaTime) {
         if (!running || !initialized || !studioContext) return;
-
-        auto* fontComp = ECS::FontSettingsComponent::GetInstance();
-        if (fontComp) {
-            fontComp->CheckAndRebuildFonts();
-        }
 
         ANI::Events::Ref().Poll();
         try {

@@ -1,12 +1,10 @@
 #include "SettingsSystem.hpp"
-
 #include "EntityManager.hpp"
 #include "GeneralSettingsComponent.hpp"
 #include "ImGuiStyleSettingsComponent.hpp"
 #include "ImGuiRenderSettingsComponent.hpp"
 #include "FontSettingsComponent.hpp"
 #include "FilePathSystem.hpp"
-
 #include <iostream>
 
 namespace ECS {
@@ -41,6 +39,13 @@ namespace ECS {
         }
         settingsComponentTypes.clear();
         filePathSystem = nullptr;
+    }
+
+    void SettingsSystem::Update(float deltaT) {
+        if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<FontSettingsComponent>(settingsEntity)) {
+            auto& fontComp = mgr.GetComponent<FontSettingsComponent>(settingsEntity);
+            fontComp.CheckAndRebuildFonts();
+        }
     }
 
     std::vector<BaseSettingsComponent*> SettingsSystem::GetAllSettingsComponents() const {
@@ -111,4 +116,4 @@ namespace ECS {
         }
     }
 
-} // namespace ECS
+}

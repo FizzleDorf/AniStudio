@@ -1,5 +1,5 @@
-// FontSettingsComponent.hpp
 #pragma once
+
 #include "BaseSettingsComponent.hpp"
 #include <imgui.h>
 #include <string>
