@@ -44,9 +44,6 @@ namespace ECS {
             if (FilterPass("Style Presets", filter)) {
                 if (ShowStyleSelector("Theme")) hasChanges = true;
             }
-            if (FilterPass("Font Settings", filter)) {
-                ShowFontSelector("Default Font");
-            }
             if (FilterPass("Size Settings", filter)) {
                 if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;

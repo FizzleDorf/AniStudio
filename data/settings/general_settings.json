@@ -7,7 +7,7 @@
     "enableHardwareAcceleration": false,
     "enableLogging": true,
     "loadLastProject": true,
-    "logLevel": 2,
+    "logLevel": 3,
     "logToFile": true,
     "maxLogFileSize": 10,
     "maxRecentProjects": 10,

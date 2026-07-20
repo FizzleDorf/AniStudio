@@ -87,7 +87,7 @@ namespace ECS {
             }
             ImGui::EndCombo();
         }
-        ImGui::TextUnformatted("Global Scale");
+        ImGui::TextUnformatted("Global Font Scale");
         float scaleValue = m_globalFontScale;
         if (ImGui::SliderFloat("##GlobalFontScale", &scaleValue, 0.5f, 2.5f, "%.2fx")) {
             m_globalFontScale = scaleValue;
@@ -224,7 +224,7 @@ namespace ECS {
 
     bool FontSettingsComponent::SaveSettings() {
         try {
-            std::filesystem::path settingsPath = "../data/settings/fonts.json";
+            std::filesystem::path settingsPath = "./data/settings/fonts.json";
             std::filesystem::path dir = settingsPath.parent_path();
             if (!dir.empty() && !std::filesystem::exists(dir)) {
                 std::filesystem::create_directories(dir);
@@ -248,7 +248,7 @@ namespace ECS {
 
     bool FontSettingsComponent::LoadSettings() {
         EnsureInitialized();
-        const std::string settingsPath = "../data/settings/fonts.json";
+        const std::string settingsPath = "./data/settings/fonts.json";
         std::ifstream file(settingsPath);
         if (!file.is_open()) {
             selectedFontName = "Default";

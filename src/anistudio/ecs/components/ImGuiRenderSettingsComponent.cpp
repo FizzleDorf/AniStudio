@@ -43,14 +43,6 @@ namespace ECS {
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Warning: Some changes require application restart");
             ImGui::Separator();
 
-            if (FilterPass("Display Settings", filter)) {
-                float fontScale = io.FontGlobalScale;
-                if (ImGui::SliderFloat("Global Font Scale", &fontScale, 0.5f, 2.0f, "%.2f")) {
-                    io.FontGlobalScale = fontScale;
-                    hasChanges = true;
-                }
-                ImGui::Separator();
-            }
             if (FilterPass("Input Settings", filter)) {
                 float doubleClickTime = io.MouseDoubleClickTime;
                 if (ImGui::SliderFloat("Mouse Double Click Time", &doubleClickTime, 0.1f, 1.0f, "%.2f")) {

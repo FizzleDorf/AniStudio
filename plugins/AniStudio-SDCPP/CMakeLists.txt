@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 cmake_policy(SET CMP0091 NEW)
 
-project(DiffusionAddon)
+project(AniStudio-SDCPP)
 
 if(UNIX AND NOT APPLE)
     set(ENV{CPATH} "")
@@ -49,6 +49,8 @@ option(SD_SYCL "Enable SYCL backend" OFF)
 option(SD_MUSA "Enable MUSA backend" OFF)
 option(SD_FAST_SOFTMAX "Enable fast softmax" OFF)
 
+option(SD_USE_SYSTEM_GGML "Use system-installed GGML library" OFF)
+
 if(SD_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
@@ -89,6 +91,25 @@ if(SD_SYCL)
     endif()
 endif()
 
+set(BACKEND_SUFFIX "")
+if(SD_CUDA)
+    set(BACKEND_SUFFIX "_CUDA")
+elseif(SD_VULKAN)
+    set(BACKEND_SUFFIX "_VULKAN")
+elseif(SD_HIPBLAS)
+    set(BACKEND_SUFFIX "_HIP")
+elseif(SD_METAL)
+    set(BACKEND_SUFFIX "_METAL")
+elseif(SD_OPENCL)
+    set(BACKEND_SUFFIX "_OPENCL")
+elseif(SD_SYCL)
+    set(BACKEND_SUFFIX "_SYCL")
+elseif(SD_MUSA)
+    set(BACKEND_SUFFIX "_MUSA")
+else()
+    set(BACKEND_SUFFIX "_CPU")
+endif()
+
 get_filename_component(ANISTUDIO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 get_filename_component(CONAN_TOOLCHAIN_PATH "${ANISTUDIO_ROOT}/build/conan/conan_toolchain.cmake" ABSOLUTE)
 
@@ -107,6 +128,13 @@ find_package(FFmpeg REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(CURL QUIET)
+
+if(SD_USE_SYSTEM_GGML)
+    if(NOT ggml_DIR AND DEFINED CONAN_LLAMA_CPP_ROOT)
+        set(ggml_DIR "${CONAN_LLAMA_CPP_ROOT}/lib/cmake/ggml")
+    endif()
+    find_package(ggml CONFIG REQUIRED)
+endif()
 
 set(EXTERNAL_DIR "${ANISTUDIO_ROOT}/external")
 
@@ -197,10 +225,7 @@ set(SD_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 if(WIN32)
-    # Save original PATH
     set(ORIGINAL_PATH "$ENV{PATH}")
-    
-    # Remove all msys64 entries from PATH
     set(ENV{PATH} "")
     foreach(TOKEN ${ORIGINAL_PATH})
         string(FIND "${TOKEN}" "msys64" FOUND)
@@ -212,18 +237,17 @@ if(WIN32)
             endif()
         endif()
     endforeach()
-    
-    # Also clear any environment variables that might point to MinGW
     set(ENV{INCLUDE} "")
     set(ENV{CPATH} "")
     set(ENV{C_INCLUDE_PATH} "")
     set(ENV{CPLUS_INCLUDE_PATH} "")
-    
-    # Force CMake to forget any previously detected MinGW paths
     set(CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES "")
     set(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES "")
-    
     message(STATUS "Temporarily removed MinGW from PATH for stable-diffusion.cpp")
+endif()
+
+if(SD_USE_SYSTEM_GGML)
+    set(SD_USE_SYSTEM_GGML ON CACHE BOOL "" FORCE)
 endif()
 
 if(EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp/CMakeLists.txt")
@@ -231,7 +255,6 @@ if(EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp/CMakeLists.txt")
 endif()
 
 if(WIN32)
-    # Restore original PATH
     set(ENV{PATH} "${ORIGINAL_PATH}")
     message(STATUS "Restored original PATH after stable-diffusion.cpp")
 endif()
@@ -252,11 +275,12 @@ file(GLOB_RECURSE DIFFUSION_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/gui/*.cpp"
     "${ANISTUDIO_ROOT}/src/anistudio/gui_utils/states/*.cpp"
 )
-list(APPEND DIFFUSION_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/DiffusionAddon.cpp")
+list(APPEND DIFFUSION_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/AniStudio-SDCPP.cpp")
 
-add_library(DiffusionAddon SHARED ${DIFFUSION_SOURCES})
+set(TARGET_NAME "AniStudio-SDCPP${BACKEND_SUFFIX}")
+add_library(${TARGET_NAME} SHARED ${DIFFUSION_SOURCES})
 
-target_include_directories(DiffusionAddon PRIVATE
+target_include_directories(${TARGET_NAME} PRIVATE
     ${ANISTUDIO_ROOT}/src/aniengine
     ${ANISTUDIO_ROOT}/src/aniengine/ecs
     ${ANISTUDIO_ROOT}/src/aniengine/ecs/base
@@ -284,7 +308,7 @@ target_include_directories(DiffusionAddon PRIVATE
     gui
 )
 
-target_include_directories(DiffusionAddon PUBLIC
+target_include_directories(${TARGET_NAME} PUBLIC
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/cr/cr"
@@ -298,7 +322,7 @@ target_include_directories(DiffusionAddon PUBLIC
     "${EXTERNAL_DIR}/nativefiledialog-extended/include"
 )
 
-target_link_libraries(DiffusionAddon PRIVATE
+target_link_libraries(${TARGET_NAME} PRIVATE
     AniStudioCore
     AniEngineCore
     ${OpenCV_LIBS}
@@ -314,59 +338,60 @@ target_link_libraries(DiffusionAddon PRIVATE
     nfd
 )
 
+if(SD_USE_SYSTEM_GGML)
+    target_link_libraries(${TARGET_NAME} PRIVATE ggml::ggml)
+endif()
+
 if(WIN32)
-    target_link_libraries(DiffusionAddon PRIVATE
+    target_link_libraries(${TARGET_NAME} PRIVATE
         ws2_32
         winmm
         shlwapi
     )
-    
-    target_link_options(DiffusionAddon PRIVATE
+    target_link_options(${TARGET_NAME} PRIVATE
         "/FORCE:UNRESOLVED"
     )
 elseif(UNIX AND NOT APPLE)
-    target_link_libraries(DiffusionAddon PRIVATE
+    target_link_libraries(${TARGET_NAME} PRIVATE
         dl
         pthread
         stdc++fs
         rt
     )
-    
-    target_link_options(DiffusionAddon PRIVATE
+    target_link_options(${TARGET_NAME} PRIVATE
         "-Wl,--unresolved-symbols=ignore-all"
     )
 endif()
 
 if(SD_CUDA)
-    target_link_libraries(DiffusionAddon PRIVATE CUDA::cudart CUDA::cublas CUDA::curand)
+    target_link_libraries(${TARGET_NAME} PRIVATE CUDA::cudart CUDA::cublas CUDA::curand)
     foreach(CUDA_T ggml-cuda ggml_cuda ggml-backend-cuda common-cuda)
         if(TARGET ${CUDA_T})
-            target_link_libraries(DiffusionAddon PRIVATE ${CUDA_T})
+            target_link_libraries(${TARGET_NAME} PRIVATE ${CUDA_T})
         endif()
     endforeach()
 endif()
 
 if(ZEP_AVAILABLE AND TARGET Zep::Zep)
-    target_link_libraries(DiffusionAddon PRIVATE Zep::Zep)
-    target_compile_definitions(DiffusionAddon PRIVATE ZEP_AVAILABLE)
+    target_link_libraries(${TARGET_NAME} PRIVATE Zep::Zep)
+    target_compile_definitions(${TARGET_NAME} PRIVATE ZEP_AVAILABLE)
 endif()
 
 if(CURL_FOUND)
-    target_link_libraries(DiffusionAddon PRIVATE CURL::libcurl)
-    target_compile_definitions(DiffusionAddon PRIVATE HAS_CURL)
+    target_link_libraries(${TARGET_NAME} PRIVATE CURL::libcurl)
+    target_compile_definitions(${TARGET_NAME} PRIVATE HAS_CURL)
 endif()
 
 if(WIN32)
-    set_target_properties(DiffusionAddon PROPERTIES
+    set_target_properties(${TARGET_NAME} PROPERTIES
         WINDOWS_EXPORT_ALL_SYMBOLS ON
         PREFIX ""
     )
-    
-    set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/DiffusionAddon.def")
+    set(DEF_FILE "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.def")
     file(WRITE ${DEF_FILE} "EXPORTS\nCreatePlugin\nDestroyPlugin\n")
-    target_sources(DiffusionAddon PRIVATE ${DEF_FILE})
+    target_sources(${TARGET_NAME} PRIVATE ${DEF_FILE})
 else()
-    set_target_properties(DiffusionAddon PROPERTIES
+    set_target_properties(${TARGET_NAME} PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON
@@ -374,7 +399,7 @@ else()
     )
 endif()
 
-target_compile_definitions(DiffusionAddon PRIVATE 
+target_compile_definitions(${TARGET_NAME} PRIVATE 
     GLEW_STATIC
     IMGUI_DEFINE_MATH_OPERATORS
     PCH_DISABLED
@@ -383,10 +408,10 @@ target_compile_definitions(DiffusionAddon PRIVATE
     NFD_AVAILABLE
 )
 
-set(ADDON_STAGING_DIR "${ANISTUDIO_ROOT}/build/addons/DiffusionAddon/staging")
+set(ADDON_STAGING_DIR "${ANISTUDIO_ROOT}/build/plugins/${TARGET_NAME}/staging")
 file(MAKE_DIRECTORY "${ADDON_STAGING_DIR}")
 
-set_target_properties(DiffusionAddon PROPERTIES
+set_target_properties(${TARGET_NAME} PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${ADDON_STAGING_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${ADDON_STAGING_DIR}"
     LIBRARY_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
@@ -395,7 +420,7 @@ set_target_properties(DiffusionAddon PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${ADDON_STAGING_DIR}"
 )
 
-message(STATUS "Configured DiffusionAddon for Staging: ${ADDON_STAGING_DIR}")
+message(STATUS "Configured ${TARGET_NAME} for Staging: ${ADDON_STAGING_DIR}")
 message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
 if(WIN32)
     message(STATUS "Windows build: Looking for DLLs in ${MAIN_BIN_DIR}")

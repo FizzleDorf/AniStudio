@@ -2,20 +2,18 @@
 setlocal enabledelayedexpansion
 
 echo ================================
-echo DiffusionAddon Build Script
+echo AniStudio-SDCPP Build Script
 echo ================================
 echo.
 
 set ADDON_DIR=%~dp0
-set BUILD_DIR=%ADDON_DIR%build
-set ROOT_DIR=%ADDON_DIR%..\..
+set ADDON_DIR=%ADDON_DIR:~0,-1%
+set BUILD_DIR=%ADDON_DIR%\build
+set ROOT_DIR=%ADDON_DIR%\..\..
 
-set ADDON_NAME=DiffusionAddon
-set BUILT_ADDONS_BASE=%ROOT_DIR%\build\addons
+set ADDON_NAME=AniStudio-SDCPP
+set BUILT_ADDONS_BASE=%ROOT_DIR%\build\plugins
 set ADDON_MAIN_DIR=%BUILT_ADDONS_BASE%\%ADDON_NAME%
-set STAGING_DIR=%ADDON_MAIN_DIR%\staging
-set STAGING_DLL=%STAGING_DIR%\%ADDON_NAME%.dll
-set LIBS_DIR=%ADDON_MAIN_DIR%\libs
 
 set SD_CUDA=OFF
 set SD_VULKAN=OFF
@@ -25,6 +23,7 @@ set SD_OPENCL=OFF
 set SD_SYCL=OFF
 set SD_MUSA=OFF
 set SD_FAST_SOFTMAX=OFF
+set SD_USE_SYSTEM_GGML=OFF
 set CLEAN_BUILD=0
 
 :parse_args
@@ -38,6 +37,7 @@ if /i "%~1"=="--opencl" set SD_OPENCL=ON
 if /i "%~1"=="--sycl" set SD_SYCL=ON
 if /i "%~1"=="--musa" set SD_MUSA=ON
 if /i "%~1"=="--fast-softmax" set SD_FAST_SOFTMAX=ON
+if /i "%~1"=="--system-ggml" set SD_USE_SYSTEM_GGML=ON
 shift
 goto parse_args
 :end_parse
@@ -45,14 +45,10 @@ goto parse_args
 cd /d "%ADDON_DIR%"
 
 echo Directory Configuration:
-echo   Addon Name: %ADDON_NAME%
+echo   Addon Base Name: %ADDON_NAME%
 echo   Source Dir: %ADDON_DIR%
 echo   AniStudio Root: %ROOT_DIR%
 echo   Built Addons Base: %BUILT_ADDONS_BASE%
-echo   Addon Main Dir: %ADDON_MAIN_DIR%
-echo   Staging Dir: %STAGING_DIR%
-echo   Libraries Dir: %LIBS_DIR%
-echo   Build Target: %STAGING_DLL%
 echo.
 echo Backend Configuration:
 echo   CUDA: %SD_CUDA%
@@ -63,6 +59,27 @@ echo   OpenCL: %SD_OPENCL%
 echo   SYCL: %SD_SYCL%
 echo   MUSA: %SD_MUSA%
 echo   Fast Softmax: %SD_FAST_SOFTMAX%
+echo   Use System GGML: %SD_USE_SYSTEM_GGML%
+echo.
+
+set BACKEND_SUFFIX=_CPU
+if "%SD_CUDA%"=="ON" set BACKEND_SUFFIX=_CUDA
+if "%SD_VULKAN%"=="ON" set BACKEND_SUFFIX=_VULKAN
+if "%SD_HIPBLAS%"=="ON" set BACKEND_SUFFIX=_HIP
+if "%SD_METAL%"=="ON" set BACKEND_SUFFIX=_METAL
+if "%SD_OPENCL%"=="ON" set BACKEND_SUFFIX=_OPENCL
+if "%SD_SYCL%"=="ON" set BACKEND_SUFFIX=_SYCL
+if "%SD_MUSA%"=="ON" set BACKEND_SUFFIX=_MUSA
+
+set TARGET_NAME=%ADDON_NAME%%BACKEND_SUFFIX%
+set ADDON_MAIN_DIR=%BUILT_ADDONS_BASE%\%TARGET_NAME%
+set STAGING_DIR=%ADDON_MAIN_DIR%\staging
+set STAGING_DLL=%STAGING_DIR%\%TARGET_NAME%.dll
+set LIBS_DIR=%ADDON_MAIN_DIR%\libs
+
+echo Computed Target: %TARGET_NAME%
+echo   Staging Dir: %STAGING_DIR%
+echo   DLL: %STAGING_DLL%
 echo.
 
 if not exist "%ROOT_DIR%\build\lib\AniEngineCore.lib" (
@@ -72,13 +89,23 @@ if not exist "%ROOT_DIR%\build\lib\AniEngineCore.lib" (
     pause
     exit /b 1
 )
-
 echo [OK] Main project libraries found
+
+if not exist "%ROOT_DIR%\build\conan\conan_toolchain.cmake" (
+    echo WARNING: Conan toolchain not found. Please run 'conan install' first.
+    echo You can use the provided conanfile.txt and install.bat.
+    echo Continuing anyway, but build may fail if dependencies are missing.
+    echo.
+)
 
 if %CLEAN_BUILD%==1 (
     if exist "%BUILD_DIR%" (
         echo Cleaning old build directory...
         rmdir /s /q "%BUILD_DIR%"
+    )
+    if exist "%ADDON_MAIN_DIR%" (
+        echo Cleaning old addon directory...
+        rmdir /s /q "%ADDON_MAIN_DIR%"
     )
 )
 
@@ -89,6 +116,23 @@ mkdir "%STAGING_DIR%" 2>nul
 mkdir "%LIBS_DIR%" 2>nul
 
 cd /d "%BUILD_DIR%"
+
+set CACHE_SOURCE=
+if exist CMakeCache.txt (
+    for /f "tokens=2 delims==" %%a in ('findstr "CMAKE_HOME_DIRECTORY" CMakeCache.txt') do set CACHE_SOURCE=%%a
+    set "CACHE_SOURCE=!CACHE_SOURCE:\\=/!"
+    set "CACHE_SOURCE=!CACHE_SOURCE:/=!"
+    set "ADDON_DIR_NORM=!ADDON_DIR:\\=/!"
+    set "ADDON_DIR_NORM=!ADDON_DIR_NORM:/=!"
+    if not "!CACHE_SOURCE!"=="!ADDON_DIR_NORM!" (
+        echo Warning: CMake cache points to a different source directory.
+        echo   Cache says: !CACHE_SOURCE!
+        echo   Current source: %ADDON_DIR%
+        echo Deleting stale cache...
+        del CMakeCache.txt
+        rmdir /s /q CMakeFiles 2>nul
+    )
+)
 
 if not exist "CMakeCache.txt" (
     echo Configuring CMake...
@@ -102,6 +146,7 @@ if not exist "CMakeCache.txt" (
     set CMAKE_CMD=!CMAKE_CMD! -DSD_SYCL=%SD_SYCL%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_MUSA=%SD_MUSA%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_FAST_SOFTMAX=%SD_FAST_SOFTMAX%
+    set CMAKE_CMD=!CMAKE_CMD! -DSD_USE_SYSTEM_GGML=%SD_USE_SYSTEM_GGML%
     
     echo Running: !CMAKE_CMD!
     echo.
@@ -119,7 +164,7 @@ if not exist "CMakeCache.txt" (
 )
 
 echo Building addon...
-cmake --build . --config Release --target %ADDON_NAME% 
+cmake --build . --config Release --target %TARGET_NAME%
 if !errorlevel! neq 0 (
     echo ERROR: Build failed!
     pause
@@ -153,33 +198,34 @@ if "%SD_CUDA%"=="ON" (
     echo   CUDA enabled - ensure CUDA runtime libraries are available
     set LIBS_NEEDED=1
 )
-
 if "%SD_VULKAN%"=="ON" (
     echo   Vulkan enabled - ensure Vulkan SDK libraries are available
     set LIBS_NEEDED=1
 )
-
 if "%SD_OPENCL%"=="ON" (
     echo   OpenCL enabled - ensure OpenCL runtime is available
+    set LIBS_NEEDED=1
+)
+if "%SD_USE_SYSTEM_GGML%"=="ON" (
+    echo   System GGML used - ensure ggml.dll is in PATH or alongside the addon
     set LIBS_NEEDED=1
 )
 
 if %LIBS_NEEDED%==1 (
     echo.
-    echo IMPORTANT: Ensure all required backend libraries are available at runtime!
-    echo Place stable-diffusion.dll and backend-specific DLLs in:
+    echo IMPORTANT: Ensure all required backend and runtime libraries are available.
+    echo Place any required DLLs in:
     echo   - %STAGING_DIR%
     echo   - %ROOT_DIR%\build\bin
 )
 
 echo.
 echo Usage:
-echo   build.bat [-clean] [--cuda] [--vulkan] [--opencl] [--hipblas] [--metal]
+echo   build.bat [-clean] [--cuda] [--vulkan] [--opencl] [--hipblas] [--metal] [--system-ggml]
 echo.
 echo Examples:
-echo   build.bat --cuda              Build with CUDA support
-echo   build.bat --vulkan --opencl   Build with Vulkan and OpenCL
-echo   build.bat -clean --cuda       Clean rebuild with CUDA
+echo   build.bat --cuda --system-ggml          Build with CUDA and system GGML
+echo   build.bat --vulkan --opencl             Build with Vulkan and OpenCL (CPU fallback)
+echo   build.bat -clean --cuda                 Clean rebuild with CUDA
 echo.
-
 pause
