@@ -1,14 +1,96 @@
 #include "ImGuiStyleSettingsComponent.hpp"
+#include "FilePathSystem.hpp"
 #include <fstream>
 #include <filesystem>
-#include <iostream>
-#include <nlohmann/json.hpp>
 #include <algorithm>
+#include <nlohmann/json.hpp>
 
 namespace ECS {
 
     ImGuiStyleSettingsComponent::ImGuiStyleSettingsComponent() {
         compName = "ImGuiStyleSettingsComponent";
+    }
+
+    std::string ImGuiStyleSettingsComponent::GetStylesDirectory() const {
+        if (m_filePathSystem) {
+            std::string dir = m_filePathSystem->GetPath("styles");
+            if (!dir.empty()) {
+                if (dir.back() != '/' && dir.back() != '\\')
+                    dir += '/';
+                return dir;
+            }
+        }
+        return "./data/styles/";
+    }
+
+    void ImGuiStyleSettingsComponent::EnsureInitialized() {
+        if (!isInitialized && imguiContext) {
+            ImGui::SetCurrentContext(imguiContext);
+            currentStyle = ImGui::GetStyle();
+            backupStyle = currentStyle;
+            isInitialized = true;
+            ScanStylesDirectory();
+            RebuildDisplayList();
+            selectedStyleIndex = 0;
+        }
+    }
+
+    void ImGuiStyleSettingsComponent::ScanStylesDirectory() {
+        availableStyles.clear();
+        std::string dirPath = GetStylesDirectory();
+        if (!std::filesystem::exists(dirPath)) {
+            std::filesystem::create_directories(dirPath);
+        }
+        for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+            if (!entry.is_regular_file()) continue;
+            std::string ext = entry.path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            if (ext == ".json") {
+                StyleFileEntry sfe;
+                sfe.name = entry.path().stem().string();
+                sfe.path = entry.path().string();
+                availableStyles.push_back(sfe);
+            }
+        }
+        std::sort(availableStyles.begin(), availableStyles.end(),
+            [](const StyleFileEntry& a, const StyleFileEntry& b) { return a.name < b.name; });
+    }
+
+    void ImGuiStyleSettingsComponent::RebuildDisplayList() {
+        displayNames.clear();
+        displayNames.reserve(4 + availableStyles.size());
+        displayNames.push_back("Dark");
+        displayNames.push_back("Light");
+        displayNames.push_back("Classic");
+        displayNames.push_back("Custom Dark");
+        for (const auto& entry : availableStyles) {
+            displayNames.push_back(entry.name);
+        }
+        if (selectedStyleIndex < 0 || selectedStyleIndex >= (int)displayNames.size())
+            selectedStyleIndex = 0;
+    }
+
+    void ImGuiStyleSettingsComponent::ApplyBuiltInStyle(int index) {
+        switch (index) {
+        case 0: ImGui::StyleColorsDark(); break;
+        case 1: ImGui::StyleColorsLight(); break;
+        case 2: ImGui::StyleColorsClassic(); break;
+        case 3: SetCustomDarkTheme(); break;
+        default: ImGui::StyleColorsDark(); break;
+        }
+        currentStyle = ImGui::GetStyle();
+        currentStyleFile.clear();
+        hasChanges = true;
+    }
+
+    void ImGuiStyleSettingsComponent::ApplyFileStyle(const std::string& path) {
+        ImGuiStyle loadedStyle;
+        if (LoadStyleFromFile(loadedStyle, path)) {
+            currentStyle = loadedStyle;
+            ImGui::GetStyle() = currentStyle;
+            currentStyleFile = path;
+            hasChanges = true;
+        }
     }
 
     bool ImGuiStyleSettingsComponent::FilterPass(const std::string& section, const std::string& filter) const {
@@ -18,15 +100,6 @@ namespace ECS {
         std::string f = filter;
         std::transform(f.begin(), f.end(), f.begin(), ::tolower);
         return lower.find(f) != std::string::npos;
-    }
-
-    void ImGuiStyleSettingsComponent::EnsureInitialized() {
-        if (!isInitialized && imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-            currentStyle = ImGui::GetStyle();
-            backupStyle = currentStyle;
-            isInitialized = true;
-        }
     }
 
     void ImGuiStyleSettingsComponent::RenderUI() {
@@ -42,8 +115,60 @@ namespace ECS {
             ImGuiStyle& style = currentStyle;
 
             if (FilterPass("Style Presets", filter)) {
-                if (ShowStyleSelector("Theme")) hasChanges = true;
+                const char* preview = displayNames[selectedStyleIndex].c_str();
+                if (ImGui::BeginCombo("Theme", preview)) {
+                    for (int i = 0; i < (int)displayNames.size(); ++i) {
+                        bool isSelected = (i == selectedStyleIndex);
+                        if (ImGui::Selectable(displayNames[i].c_str(), isSelected)) {
+                            selectedStyleIndex = i;
+                            if (i < 4) {
+                                ApplyBuiltInStyle(i);
+                            }
+                            else {
+                                int fileIdx = i - 4;
+                                if (fileIdx < (int)availableStyles.size()) {
+                                    ApplyFileStyle(availableStyles[fileIdx].path);
+                                }
+                            }
+                        }
+                        if (isSelected) {
+                            ImGui::SetItemDefaultFocus();
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+
+                ImGui::SameLine();
+                if (ImGui::Button("Refresh List")) {
+                    ScanStylesDirectory();
+                    RebuildDisplayList();
+                    if (selectedStyleIndex >= (int)displayNames.size())
+                        selectedStyleIndex = 0;
+                }
+
+                ImGui::Separator();
+                ImGui::Text("Save current style as:");
+                ImGui::InputText("Filename", saveAsFilename, IM_ARRAYSIZE(saveAsFilename));
+                ImGui::SameLine();
+                if (ImGui::Button("Save As")) {
+                    std::string filename(saveAsFilename);
+                    if (filename.size() < 5 || filename.substr(filename.size() - 5) != ".json")
+                        filename += ".json";
+                    std::string fullPath = GetStylesDirectory() + filename;
+                    std::filesystem::create_directories(std::filesystem::path(fullPath).parent_path());
+                    SaveStyleToFile(currentStyle, fullPath);
+                    ScanStylesDirectory();
+                    RebuildDisplayList();
+                    for (int i = 0; i < (int)availableStyles.size(); ++i) {
+                        if (availableStyles[i].name == filename) {
+                            selectedStyleIndex = 4 + i;
+                            break;
+                        }
+                    }
+                }
+                ImGui::Separator();
             }
+
             if (FilterPass("Size Settings", filter)) {
                 if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
@@ -53,6 +178,7 @@ namespace ECS {
                 if (ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.1f")) hasChanges = true;
             }
+
             if (FilterPass("Border Settings", filter)) {
                 if (ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
@@ -60,6 +186,7 @@ namespace ECS {
                 if (ImGui::SliderFloat("Frame Border Size", &style.FrameBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
             }
+
             if (FilterPass("Rounding Settings", filter)) {
                 if (ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
@@ -69,6 +196,7 @@ namespace ECS {
                 if (ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
                 if (ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
             }
+
             if (FilterPass("Color Settings", filter)) {
                 static ImGuiTextFilter colorFilter;
                 colorFilter.Draw("Filter Colors", ImGui::GetFontSize() * 16);
@@ -108,6 +236,17 @@ namespace ECS {
         ImGui::EndChild();
     }
 
+    void ImGuiStyleSettingsComponent::RenderActionButtons() {
+        if (ImGui::Button("Save Settings")) SaveSettings();
+        ImGui::SameLine();
+        if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
+        ImGui::SameLine();
+        if (ImGui::Button("Revert Changes")) RestoreFromBackup();
+        if (hasChanges) {
+            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
+        }
+    }
+
     bool ImGuiStyleSettingsComponent::SaveSettings() {
         if (!imguiContext) return false;
         EnsureInitialized();
@@ -136,6 +275,9 @@ namespace ECS {
         ImGui::GetStyle() = currentStyle;
         hasChanges = false;
         CreateBackup();
+        currentStyleFile.clear();
+        selectedStyleIndex = 0;
+        RebuildDisplayList();
         return true;
     }
 
@@ -144,6 +286,8 @@ namespace ECS {
         EnsureInitialized();
         SetCustomDarkTheme();
         currentStyle = ImGui::GetStyle();
+        currentStyleFile.clear();
+        selectedStyleIndex = 3;
         hasChanges = true;
     }
 
@@ -158,49 +302,9 @@ namespace ECS {
         EnsureInitialized();
         currentStyle = backupStyle;
         ImGui::GetStyle() = currentStyle;
+        currentStyleFile.clear();
+        selectedStyleIndex = 0;
         hasChanges = false;
-    }
-
-    bool ImGuiStyleSettingsComponent::ShowStyleSelector(const char* label) {
-        static int styleIdx = 0;
-        if (ImGui::Combo(label, &styleIdx, "Dark\0Light\0Classic\0Custom Dark\0")) {
-            switch (styleIdx) {
-            case 0: ImGui::StyleColorsDark(); break;
-            case 1: ImGui::StyleColorsLight(); break;
-            case 2: ImGui::StyleColorsClassic(); break;
-            case 3: SetCustomDarkTheme(); break;
-            }
-            currentStyle = ImGui::GetStyle();
-            return true;
-        }
-        return false;
-    }
-
-    void ImGuiStyleSettingsComponent::ShowFontSelector(const char* label) {
-        ImGuiIO& io = ImGui::GetIO();
-        ImFont* fontCurrent = ImGui::GetFont();
-        if (ImGui::BeginCombo(label, fontCurrent->GetDebugName())) {
-            for (ImFont* font : io.Fonts->Fonts) {
-                ImGui::PushID((void*)font);
-                if (ImGui::Selectable(font->GetDebugName(), font == fontCurrent)) {
-                    io.FontDefault = font;
-                    hasChanges = true;
-                }
-                ImGui::PopID();
-            }
-            ImGui::EndCombo();
-        }
-    }
-
-    void ImGuiStyleSettingsComponent::RenderActionButtons() {
-        if (ImGui::Button("Save Settings")) SaveSettings();
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
-        ImGui::SameLine();
-        if (ImGui::Button("Revert Changes")) RestoreFromBackup();
-        if (hasChanges) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-        }
     }
 
     void ImGuiStyleSettingsComponent::SaveStyleToFile(const ImGuiStyle& style, const std::string& filename) {
@@ -283,4 +387,4 @@ namespace ECS {
         style.PopupBorderSize = 0.0f;
     }
 
-} // namespace ECS
+}
