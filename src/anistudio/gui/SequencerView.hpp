@@ -26,7 +26,14 @@ namespace GUI {
         })";
         }
 
-        SequencerView(ECS::EntityManager& entityMgr);
+        SequencerView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm),
+            currentFrame(0),
+            playing(false),
+            playbackSpeed(30.0f),
+            lastTime(0.0) {
+            viewName = "SequencerView";
+        }
         ~SequencerView() = default;
 
         void Play();

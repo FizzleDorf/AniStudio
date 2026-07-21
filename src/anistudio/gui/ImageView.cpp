@@ -10,29 +10,11 @@
 
 namespace GUI {
 
-	ImageView::ImageView(ECS::EntityManager& entityMgr)
-		: BaseView(entityMgr),
-		selectedEntityID(0),
-		imgIndex(0),
-		showHistory(true),
-		autoSwitchOnLoad(true),
-		zoom(1.0f),
-		offsetX(0.0f),
-		offsetY(0.0f),
-		lastEntityCount(0),
-		contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(entityMgr))
-	{
-		viewName = "ImageView";
-	}
-
-	ImageView::~ImageView() {
-	}
-
 	void ImageView::Init() {
-		imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+		imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
 		if (!imageSystem) {
-			mgr.RegisterSystem<ECS::ImageSystem>();
-			imageSystem = mgr.GetSystem<ECS::ImageSystem>();
+			m_entityManager.RegisterSystem<ECS::ImageSystem>();
+			imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
 		}
 
 		if (imageSystem) {
@@ -50,7 +32,7 @@ namespace GUI {
 
 	void ImageView::Update(const float deltaT) {
 		size_t currentCount = 0;
-		for (auto entityID : mgr.GetAllEntities()) {
+		for (auto entityID : m_entityManager.GetAllEntities()) {
 			if (IsImageComponentOnly(entityID)) {
 				currentCount++;
 			}
@@ -120,7 +102,7 @@ namespace GUI {
 		if (ImGui::BeginMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("Load Image(s)")) {
-					auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+					auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
 					std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : "";
 					if (defaultPath.empty()) {
 						defaultPath = ".";
@@ -140,14 +122,14 @@ namespace GUI {
 				}
 
 				if (ImGui::MenuItem("Save Image As...", nullptr, false, selectedEntityID != 0)) {
-					auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+					auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
 					std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : "";
 					if (defaultPath.empty()) {
 						defaultPath = ".";
 					}
 					std::string outPath;
 					if (selectedEntityID != 0) {
-						const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+						const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 						std::string defaultName = imageComp.fileName;
 						if (FileDialog::SaveFile("Save Image As", FileDialog::FilterType::IMAGE_FILE, defaultName, outPath, defaultPath)) {
 							SaveSelectedImageAs(outPath);
@@ -244,7 +226,7 @@ namespace GUI {
 
 	void ImageView::RefreshImageEntities() {
 		imageEntities.clear();
-		for (auto entityID : mgr.GetAllEntities()) {
+		for (auto entityID : m_entityManager.GetAllEntities()) {
 			if (IsImageComponentOnly(entityID)) {
 				imageEntities.push_back(entityID);
 			}
@@ -253,10 +235,10 @@ namespace GUI {
 	}
 
 	void ImageView::RenderImageInfo() {
-		if (selectedEntityID != 0 && mgr.IsEntityValid(selectedEntityID) &&
-			mgr.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
+		if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+			m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
 			try {
-				const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+				const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 				ImGui::Text("File: %s", imageComp.fileName.c_str());
 				ImGui::Text("Dimensions: %dx%d", imageComp.width, imageComp.height);
 				ImGui::SameLine();
@@ -322,12 +304,12 @@ namespace GUI {
 		for (size_t i = 0; i < imageEntities.size(); ++i) {
 			ECS::EntityID entityID = imageEntities[i];
 
-			if (!mgr.IsEntityValid(entityID) || !mgr.HasComponent<ECS::ImageComponent>(entityID)) {
+			if (!m_entityManager.IsEntityValid(entityID) || !m_entityManager.HasComponent<ECS::ImageComponent>(entityID)) {
 				continue;
 			}
 
 			try {
-				const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(entityID);
+				const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
 
 				ImGui::BeginGroup();
 
@@ -396,14 +378,14 @@ namespace GUI {
 	}
 
 	void ImageView::RenderSelectedImage() {
-		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID) ||
-			!mgr.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
+		if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+			!m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
 			ImGui::Text("No image selected or entity invalid.");
 			return;
 		}
 
 		try {
-			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+			const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
 			if (imageComp.textureID == 0 || imageComp.width <= 0 || imageComp.height <= 0) {
 				ImGui::Text("Image loading... (Texture ID: %u, Size: %dx%d)",
@@ -491,8 +473,8 @@ namespace GUI {
 			for (const auto& filePath : filePaths) {
 				if (filePath.empty()) continue;
 
-				ECS::EntityID entity = mgr.AddNewEntity();
-				auto& imageComp = mgr.AddComponent<ECS::ImageComponent>(entity);
+				ECS::EntityID entity = m_entityManager.AddNewEntity();
+				auto& imageComp = m_entityManager.AddComponent<ECS::ImageComponent>(entity);
 
 				imageComp.filePath = filePath;
 				imageComp.fileName = std::filesystem::path(filePath).filename().string();
@@ -508,10 +490,10 @@ namespace GUI {
 	}
 
 	void ImageView::SaveSelectedImage() {
-		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
+		if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
 
 		try {
-			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+			const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
 			if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
 				Utils::ImageUtils::SaveImage(imageComp.filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
@@ -527,10 +509,10 @@ namespace GUI {
 	}
 
 	void ImageView::SaveSelectedImageAs(const std::string& filePath) {
-		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
+		if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
 
 		try {
-			const auto& imageComp = mgr.GetComponent<ECS::ImageComponent>(selectedEntityID);
+			const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
 			if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
 				Utils::ImageUtils::SaveImage(filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
@@ -546,14 +528,14 @@ namespace GUI {
 	}
 
 	void ImageView::RemoveSelectedImage() {
-		if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
+		if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
 
 		try {
 			if (imageSystem) {
 				imageSystem->RemoveImage(selectedEntityID);
 			}
 			else {
-				mgr.DestroyEntity(selectedEntityID);
+				m_entityManager.DestroyEntity(selectedEntityID);
 			}
 
 			OnImageRemoved(selectedEntityID);
@@ -589,11 +571,11 @@ namespace GUI {
 	}
 
 	bool ImageView::IsImageComponentOnly(ECS::EntityID entityId) const {
-		if (!mgr.IsEntityValid(entityId)) return false;
+		if (!m_entityManager.IsEntityValid(entityId)) return false;
 
-		return mgr.HasComponent<ECS::ImageComponent>(entityId) &&
-			!mgr.HasComponent<ECS::InputImageComponent>(entityId) &&
-			!mgr.HasComponent<ECS::OutputImageComponent>(entityId);
+		return m_entityManager.HasComponent<ECS::ImageComponent>(entityId) &&
+			!m_entityManager.HasComponent<ECS::InputImageComponent>(entityId) &&
+			!m_entityManager.HasComponent<ECS::OutputImageComponent>(entityId);
 	}
 
 } // namespace GUI

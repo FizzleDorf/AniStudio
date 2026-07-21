@@ -19,8 +19,21 @@ namespace GUI {
         })";
         }
 
-        VideoView(ECS::EntityManager& entityMgr);
-        ~VideoView();
+        VideoView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm), 
+            selectedEntityID(0),
+            videoIndex(0),
+            showHistory(true),
+            zoom(1.0f),
+            offsetX(0.0f),
+            offsetY(0.0f),
+            isPlaying(false),
+            playbackSpeed(1.0f),
+            lastEntityCount(0),
+            lastGeneratedVideoID(0) {
+            viewName = "VideoView";
+        }
+        ~VideoView() = default;
 
         void Init() override;
         void Update(float deltaT) override;

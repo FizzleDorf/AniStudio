@@ -91,8 +91,8 @@ namespace ANI {
 
         if (studioContext->studioPluginManager) {
             viewManager.RegisterViewWithFactory("PluginView", "Tools",
-                [this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-                    return std::make_unique<GUI::PluginView>(mgr, *studioContext->studioPluginManager);
+                [this](ECS::EntityManager& mgr, GUI::ViewManager& vm) -> std::unique_ptr<GUI::BaseView> {
+                    return std::make_unique<GUI::PluginView>(mgr, vm, *studioContext->studioPluginManager);
                 },
                 []() -> GUI::ViewMetadata {
                     return GUI::BaseView::GetMetadataFor<GUI::PluginView>();
@@ -101,8 +101,8 @@ namespace ANI {
         }
 
         viewManager.RegisterViewWithFactory("WorkspaceView", "Views",
-            [this](ECS::EntityManager& mgr) -> std::unique_ptr<GUI::BaseView> {
-                return std::make_unique<GUI::WorkspaceView>(mgr, *studioContext->viewManager);
+            [this](ECS::EntityManager& mgr, GUI::ViewManager& vm) -> std::unique_ptr<GUI::BaseView> {
+                return std::make_unique<GUI::WorkspaceView>(mgr, vm);
             },
             []() -> GUI::ViewMetadata { return GUI::WorkspaceView::GetMetadata(); }
         );

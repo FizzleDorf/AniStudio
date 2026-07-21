@@ -16,19 +16,6 @@
 
 namespace GUI {
 
-    HelpView::HelpView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) {
-        viewName = "HelpView";
-    }
-
-    HelpView::~HelpView() {
-        CleanupImageCache();
-    }
-
-    void HelpView::Init() {
-        SetupMarkdownConfig();
-        LoadDocuments();
-    }
-
     void HelpView::SetupMarkdownConfig() {
         markdownConfig.linkCallback = LinkCallback;
         markdownConfig.imageCallback = ImageCallback;
@@ -47,7 +34,7 @@ namespace GUI {
         documentIndex.clear();
 
         // Get the base data path from ECS FilePathSystem
-        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();  // fixed: use auto, not auto*
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();  // fixed: use auto, not auto*
         std::string dataPath = fileSys ? fileSys->GetPath("DataPath") : "";
 
         // List of possible base directories to search for documentation
@@ -144,6 +131,10 @@ namespace GUI {
         }
     }
 
+    void HelpView::Init()
+    {
+    }
+
     void HelpView::Render() {
         ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
 
@@ -171,7 +162,7 @@ namespace GUI {
                 ImGui::Text("Debug Information:");
                 std::string currentPath = std::filesystem::current_path().string();
                 ImGui::Text("Current working directory: %s", currentPath.c_str());
-                auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();  // fixed: use auto
+                auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();  // fixed: use auto
                 if (fileSys) {
                     ImGui::Text("DataPath: %s", fileSys->GetPath("DataPath").c_str());
                 }

@@ -20,8 +20,20 @@ namespace GUI {
         })";
         }
 
-        ImageView(ECS::EntityManager& entityMgr);
-        ~ImageView();
+        ImageView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm),
+            selectedEntityID(0),
+            imgIndex(0),
+            showHistory(true),
+            autoSwitchOnLoad(true),
+            zoom(1.0f),
+            offsetX(0.0f),
+            offsetY(0.0f),
+            lastEntityCount(0),
+            contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(m_entityManager)) {
+            viewName = "ImageView";
+        }
+        ~ImageView() = default;
 
         void Init() override;
         void Update(const float deltaT) override;

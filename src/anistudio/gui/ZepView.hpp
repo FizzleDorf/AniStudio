@@ -23,8 +23,14 @@ namespace GUI {
         })";
         }
 
-        ZepView(ECS::EntityManager& entityMgr);
-
+        ZepView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm), pythonEntity(0), showVirtualEnvSettings(false) {
+            viewName = "ZepView";
+            textEditor = std::make_unique<Utils::ZepTextEditor>();
+            venvPathBuffer[0] = '\0';
+        }
+        ~ZepView() = default;
+        
         void Init() override;
         void Update(const float deltaT) override;
         void Render() override;

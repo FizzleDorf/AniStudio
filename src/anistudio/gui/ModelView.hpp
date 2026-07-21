@@ -12,7 +12,11 @@ namespace GUI {
 
 	class ModelView : public BaseView {
 	public:
-		ModelView(ECS::EntityManager& mgr);
+		ModelView(ECS::EntityManager& mgr, ViewManager& vm)
+			: BaseView(mgr, vm) {
+			viewName = "ModelView";
+		}
+		~ModelView() = default;
 
 		void Init() override;
 		void Update(float deltaTime) override;

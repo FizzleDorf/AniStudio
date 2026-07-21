@@ -5,9 +5,6 @@
 #include "Events.hpp"
 
 namespace GUI {
-    SequencerView::SequencerView(ECS::EntityManager& entityMgr) : BaseView(entityMgr), currentFrame(0), playing(false), playbackSpeed(30.0f), lastTime(0.0) {
-        viewName = "SequencerView";
-    }
 
     void SequencerView::AddTrack(const std::string& name, ECS::EntityID entity) {
         tracks.push_back({ name, entity, 0, 100, false });

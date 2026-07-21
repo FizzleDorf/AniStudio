@@ -5,39 +5,23 @@
 
 namespace GUI {
 
-    VideoView::VideoView(ECS::EntityManager& entityMgr)
-        : BaseView(entityMgr),
-        selectedEntityID(0),
-        videoIndex(0),
-        showHistory(true),
-        zoom(1.0f),
-        offsetX(0.0f),
-        offsetY(0.0f),
-        isPlaying(false),
-        playbackSpeed(1.0f),
-        lastEntityCount(0),
-        lastGeneratedVideoID(0)
-    {
-        viewName = "VideoView";
-        std::cout << "[VideoView] Constructor called" << std::endl;
-    }
-
-    VideoView::~VideoView() {
-        std::cout << "[VideoView] Destructor called - NO CALLBACKS TO UNREGISTER" << std::endl;
-    }
-
     void VideoView::Init() {
         std::cout << "[VideoView] Initializing..." << std::endl;
 
-        auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+        if (!ImGui::GetCurrentContext()) {
+            std::cerr << "[VideoView] No ImGui context in Init()!" << std::endl;
+            return;
+        }
+
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (!videoSystem) {
             std::cout << "[VideoView] Registering VideoSystem..." << std::endl;
-            mgr.RegisterSystem<ECS::VideoSystem>();
-            videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+            m_entityManager.RegisterSystem<ECS::VideoSystem>();
+            videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         }
 
         if (videoSystem) {
-            auto textureSystem = mgr.GetSystem<ECS::TextureSystem>();
+            auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
             if (textureSystem) {
                 videoSystem->SetVideoTextureCallback(
                     [textureSystem](ECS::EntityID entityID, unsigned char* data,
@@ -59,8 +43,8 @@ namespace GUI {
     void VideoView::Update(float deltaT) {
         // Refresh entity list if count changed
         size_t currentCount = 0;
-        for (auto entityID : mgr.GetAllEntities()) {
-            if (mgr.HasComponent<ECS::VideoComponent>(entityID)) {
+        for (auto entityID : m_entityManager.GetAllEntities()) {
+            if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
                 currentCount++;
             }
         }
@@ -68,7 +52,7 @@ namespace GUI {
         if (currentCount != lastEntityCount) {
             RefreshVideoEntities();
             // If our selected entity is no longer valid, reset selection
-            if (selectedEntityID != 0 && !mgr.IsEntityValid(selectedEntityID)) {
+            if (selectedEntityID != 0 && !m_entityManager.IsEntityValid(selectedEntityID)) {
                 selectedEntityID = 0;
                 videoIndex = 0;
             }
@@ -99,18 +83,18 @@ namespace GUI {
         }
 
         // ensure selected entity is still valid and has the component
-        if (selectedEntityID != 0 && mgr.IsEntityValid(selectedEntityID) &&
-            mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
             if (videoComp.isPlaying && videoComp.fmtCtx) {
                 videoComp.frameAccumulator += deltaT * videoComp.playbackSpeed;
                 float frameDuration = 1.0f / static_cast<float>(videoComp.fps);
-                auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+                auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
                 while (videoComp.frameAccumulator >= frameDuration) {
                     videoComp.frameAccumulator -= frameDuration;
                     if (videoSystem) {
                         // Re-check entity validity before advancing, in case it was removed during this loop
-                        if (!mgr.IsEntityValid(selectedEntityID) || !mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+                        if (!m_entityManager.IsEntityValid(selectedEntityID) || !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
                             videoComp.isPlaying = false;
                             break;
                         }
@@ -181,8 +165,8 @@ namespace GUI {
     void VideoView::RefreshVideoEntities() {
         try {
             videoEntities.clear();
-            for (auto entityID : mgr.GetAllEntities()) {
-                if (mgr.HasComponent<ECS::VideoComponent>(entityID)) {
+            for (auto entityID : m_entityManager.GetAllEntities()) {
+                if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
                     videoEntities.push_back(entityID);
                 }
             }
@@ -197,10 +181,10 @@ namespace GUI {
     }
 
     void VideoView::RenderVideoInfo() {
-        if (selectedEntityID != 0 && mgr.IsEntityValid(selectedEntityID) &&
-            mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             try {
-                const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+                const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
                 ImGui::Text("File: %s", videoComp.fileName.c_str());
                 ImGui::Text("Dimensions: %dx%d, FPS: %.2f, Frames: %d",
                     videoComp.width, videoComp.height, videoComp.fps, videoComp.frameCount);
@@ -311,18 +295,18 @@ namespace GUI {
     void VideoView::RenderPlaybackControls() {
         ImGui::Separator();
 
-        if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID) ||
-            !mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             ImGui::Text("No video selected.");
             return;
         }
 
         try {
-            auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
 
             int currentFrame = videoComp.currentFrame;
             if (ImGui::SliderInt("Frame", &currentFrame, 0, videoComp.frameCount - 1)) {
-                auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+                auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
                 if (videoSystem) {
                     videoSystem->SeekToFrame(videoComp, currentFrame);
                 }
@@ -340,7 +324,7 @@ namespace GUI {
             if (ImGui::Button("Stop")) {
                 videoComp.isPlaying = false;
                 videoComp.frameAccumulator = 0.0f;
-                auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+                auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
                 if (videoSystem) {
                     videoSystem->SeekToFrame(videoComp, 0);
                 }
@@ -374,12 +358,12 @@ namespace GUI {
         for (size_t i = 0; i < videoEntities.size(); ++i) {
             ECS::EntityID entityID = videoEntities[i];
 
-            if (!mgr.IsEntityValid(entityID) || !mgr.HasComponent<ECS::VideoComponent>(entityID)) {
+            if (!m_entityManager.IsEntityValid(entityID) || !m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
                 continue;
             }
 
             try {
-                const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(entityID);
+                const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
 
                 ImGui::BeginGroup();
 
@@ -458,14 +442,14 @@ namespace GUI {
     }
 
     void VideoView::RenderSelectedVideo() {
-        if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID) ||
-            !mgr.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             ImGui::Text("No video selected or entity invalid.");
             return;
         }
 
         try {
-            const auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
 
             if (videoComp.currentTexture == 0 || videoComp.width <= 0 || videoComp.height <= 0) {
                 ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
@@ -546,7 +530,7 @@ namespace GUI {
     void VideoView::LoadVideos(const std::vector<std::string>& filePaths) {
         std::cout << "[VideoView] Loading " << filePaths.size() << " videos..." << std::endl;
 
-        auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (!videoSystem) {
             std::cerr << "[VideoView] Error: VideoSystem not found!" << std::endl;
             return;
@@ -556,8 +540,8 @@ namespace GUI {
             for (const auto& filePath : filePaths) {
                 if (filePath.empty()) continue;
 
-                ECS::EntityID entity = mgr.AddNewEntity();
-                mgr.AddComponent<ECS::VideoComponent>(entity);
+                ECS::EntityID entity = m_entityManager.AddNewEntity();
+                m_entityManager.AddComponent<ECS::VideoComponent>(entity);
                 videoSystem->SetVideo(entity, filePath);
 
                 std::cout << "[VideoView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
@@ -569,15 +553,15 @@ namespace GUI {
     }
 
     void VideoView::RemoveSelectedVideo() {
-        if (selectedEntityID == 0 || !mgr.IsEntityValid(selectedEntityID)) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
 
         try {
             // Pause the video to stop any ongoing decoding
-            auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
             videoComp.isPlaying = false;
             videoComp.frameAccumulator = 0.0f;
 
-            auto videoSystem = mgr.GetSystem<ECS::VideoSystem>();
+            auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
             if (videoSystem) {
                 videoSystem->RemoveVideo(selectedEntityID);
             }
@@ -597,8 +581,8 @@ namespace GUI {
     void VideoView::PauseAllVideos() {
         try {
             for (auto entityID : videoEntities) {
-                if (mgr.IsEntityValid(entityID) && mgr.HasComponent<ECS::VideoComponent>(entityID)) {
-                    auto& videoComp = mgr.GetComponent<ECS::VideoComponent>(entityID);
+                if (m_entityManager.IsEntityValid(entityID) && m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
+                    auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
                     videoComp.isPlaying = false;
                 }
             }

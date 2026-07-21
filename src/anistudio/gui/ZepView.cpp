@@ -7,13 +7,6 @@
 
 namespace GUI {
 
-    ZepView::ZepView(ECS::EntityManager& entityMgr)
-        : BaseView(entityMgr), pythonEntity(0), showVirtualEnvSettings(false) {
-        viewName = "ZepView";
-        textEditor = std::make_unique<Utils::ZepTextEditor>();
-        venvPathBuffer[0] = '\0';
-    }
-
     void ZepView::Init() {
         if (!textEditor->Initialize()) {
             std::cerr << "Failed to initialize ZepTextEditor" << std::endl;
@@ -23,8 +16,8 @@ namespace GUI {
     }
 
     void ZepView::Update(const float deltaT) {
-        if (IsPythonFile() && pythonEntity != 0 && mgr.HasComponent<ECS::PythonComponent>(pythonEntity)) {
-            auto& pythonComp = mgr.GetComponent<ECS::PythonComponent>(pythonEntity);
+        if (IsPythonFile() && pythonEntity != 0 && m_entityManager.HasComponent<ECS::PythonComponent>(pythonEntity)) {
+            auto& pythonComp = m_entityManager.GetComponent<ECS::PythonComponent>(pythonEntity);
 
             if (!pythonComp.output.empty() && pythonComp.output != lastDisplayedOutput) {
                 std::cout << "Python Output: " << pythonComp.output << std::endl;
@@ -144,13 +137,13 @@ namespace GUI {
     }
 
     void ZepView::InitializePythonEntity() {
-        if (!mgr.GetSystem<ECS::PythonSystem>()) {
-            mgr.RegisterSystem<ECS::PythonSystem>();
+        if (!m_entityManager.GetSystem<ECS::PythonSystem>()) {
+            m_entityManager.RegisterSystem<ECS::PythonSystem>();
             std::cout << "PythonSystem registered" << std::endl;
         }
 
-        pythonEntity = mgr.AddNewEntity();
-        mgr.AddComponent<ECS::PythonComponent>(pythonEntity);
+        pythonEntity = m_entityManager.AddNewEntity();
+        m_entityManager.AddComponent<ECS::PythonComponent>(pythonEntity);
         std::cout << "Python entity created for script execution" << std::endl;
     }
 
@@ -212,8 +205,8 @@ namespace GUI {
             }
 
             ImGui::Separator();
-            if (pythonEntity != 0 && mgr.HasComponent<ECS::PythonComponent>(pythonEntity)) {
-                auto& pythonComp = mgr.GetComponent<ECS::PythonComponent>(pythonEntity);
+            if (pythonEntity != 0 && m_entityManager.HasComponent<ECS::PythonComponent>(pythonEntity)) {
+                auto& pythonComp = m_entityManager.GetComponent<ECS::PythonComponent>(pythonEntity);
 
                 if (pythonComp.useVirtualEnv) {
                     std::string venvName = pythonComp.virtualEnvPath.empty() ?
@@ -233,8 +226,8 @@ namespace GUI {
         ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Virtual Environment Settings", &showVirtualEnvSettings)) {
 
-            if (pythonEntity != 0 && mgr.HasComponent<ECS::PythonComponent>(pythonEntity)) {
-                auto& pythonComp = mgr.GetComponent<ECS::PythonComponent>(pythonEntity);
+            if (pythonEntity != 0 && m_entityManager.HasComponent<ECS::PythonComponent>(pythonEntity)) {
+                auto& pythonComp = m_entityManager.GetComponent<ECS::PythonComponent>(pythonEntity);
 
                 ImGui::Text("Python Virtual Environment Configuration");
                 ImGui::Separator();
@@ -256,7 +249,7 @@ namespace GUI {
                     ImGui::SameLine();
                     if (ImGui::Button("Browse##Venv")) {
                         std::string folderPath;
-                        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+                        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
                         std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
                         if (FileDialog::SelectFolder("Choose Virtual Environment Directory", folderPath, defaultPath)) {
                             pythonComp.virtualEnvPath = folderPath;
@@ -266,7 +259,7 @@ namespace GUI {
                     }
 
                     if (ImGui::Button("Reset to Default")) {
-                        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+                        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
                         pythonComp.virtualEnvPath = fileSys ? fileSys->GetPath("VirtualEnv") : "";
                         pythonComp.UpdateVirtualEnvPaths();
                         strncpy(venvPathBuffer, pythonComp.virtualEnvPath.c_str(), sizeof(venvPathBuffer) - 1);
@@ -297,7 +290,7 @@ namespace GUI {
     }
 
     void ZepView::LoadDefaultPythonScript() {
-        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
         std::string defaultProjectPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
         std::string defaultScriptPath = defaultProjectPath + "/scripts/default_script.py";
 
@@ -420,7 +413,7 @@ if __name__ == "__main__":
 
         std::string scriptText = GetText();
         if (!scriptText.empty() && pythonEntity != 0) {
-            auto& pythonComp = mgr.GetComponent<ECS::PythonComponent>(pythonEntity);
+            auto& pythonComp = m_entityManager.GetComponent<ECS::PythonComponent>(pythonEntity);
 
             pythonComp.output.clear();
             pythonComp.error.clear();
@@ -439,8 +432,8 @@ if __name__ == "__main__":
     }
 
     void ZepView::ClearPythonOutput() {
-        if (pythonEntity != 0 && mgr.HasComponent<ECS::PythonComponent>(pythonEntity)) {
-            auto& pythonComp = mgr.GetComponent<ECS::PythonComponent>(pythonEntity);
+        if (pythonEntity != 0 && m_entityManager.HasComponent<ECS::PythonComponent>(pythonEntity)) {
+            auto& pythonComp = m_entityManager.GetComponent<ECS::PythonComponent>(pythonEntity);
             pythonComp.output.clear();
             pythonComp.error.clear();
             lastDisplayedOutput.clear();
@@ -458,7 +451,7 @@ if __name__ == "__main__":
             "Text{.txt},"
             "Markdown{.md},"
             "All Files{.*}";
-        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
         std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
         if (FileDialog::OpenFile("Open Code File", filter, outPath, defaultPath)) {
             LoadFile(outPath);
@@ -484,7 +477,7 @@ if __name__ == "__main__":
         else {
             filter = "All Files{.*}";
         }
-        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
         std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
         std::string defaultName = "newfile.txt";
         if (IsPythonFile()) defaultName = "script.py";
@@ -503,7 +496,7 @@ if __name__ == "__main__":
             "Text{.txt},"
             "Markdown{.md},"
             "All Files{.*}";
-        auto fileSys = mgr.GetSystem<ECS::FilePathSystem>();
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
         std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
         std::string defaultName = "newfile.txt";
         if (IsPythonFile()) defaultName = "script.py";

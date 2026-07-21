@@ -73,8 +73,9 @@ namespace GUI {
         })";
 		}
 
-		VideoSequencerView(ECS::EntityManager& entityMgr);
-		~VideoSequencerView();
+		VideoSequencerView(ECS::EntityManager& mgr, ViewManager& vm)
+			: BaseView(mgr, vm);
+		~VideoSequencerView() = default;
 
 		void Init() override;
 		void Update(float deltaT) override;

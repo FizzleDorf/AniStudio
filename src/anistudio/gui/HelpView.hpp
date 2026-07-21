@@ -38,8 +38,13 @@ namespace GUI {
         })";
         }
 
-        HelpView(ECS::EntityManager& entityMgr);
-        ~HelpView();
+        HelpView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm) {
+            viewName = "HelpView";
+        }
+        ~HelpView() {
+            CleanupImageCache();
+        }
 
         void Init() override;
         void Render() override;

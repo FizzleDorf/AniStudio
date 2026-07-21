@@ -7,6 +7,8 @@
 
 namespace GUI {
 
+	class ViewManager;
+
 	struct ViewMetadata {
 		std::string displayName;
 		std::string category;
@@ -19,7 +21,9 @@ namespace GUI {
 	public:
 		std::string viewName = "Base_View";
 
-		BaseView(ECS::EntityManager& entityMgr) : mgr(entityMgr) {}
+		BaseView(ECS::EntityManager& entityMgr, ViewManager& viewMgr)
+			: m_entityManager(entityMgr), m_viewManager(viewMgr) {
+		}
 		virtual ~BaseView() {}
 
 		static constexpr const char* GetMetadataJSON() {
@@ -76,8 +80,10 @@ namespace GUI {
 				viewName = j["viewName"];
 		}
 
+		ViewManager& GetViewManager() const { return m_viewManager; }
+
 	protected:
-		ECS::EntityManager& mgr;
+		ECS::EntityManager& m_entityManager;
 		bool windowOpen = true;
 		bool isHidden = true;
 
@@ -88,6 +94,7 @@ namespace GUI {
 	private:
 		friend class ViewManager;
 		WorkspaceID workspaceID;
+		ViewManager& m_viewManager;
 	};
 
 } // namespace GUI

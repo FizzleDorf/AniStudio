@@ -10,7 +10,6 @@
 
 namespace GUI {
 
-    // Forward declarations for node types
     class NumberNode;
     class OperationNode;
 
@@ -24,7 +23,18 @@ namespace GUI {
         })";
         }
 
-        NodeView(ECS::EntityManager& entityMgr);
+        NodeView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm) {
+            viewName = "NodeView";
+            m_nodeFlow = std::make_unique<ImFlow::ImNodeFlow>("NodeView");
+
+            auto& style = m_nodeFlow->getStyle();
+            style.grid_size = 32.0f;
+            style.grid_subdivisions = 4.0f;
+            style.colors.background = IM_COL32(40, 40, 40, 255);
+            style.colors.grid = IM_COL32(100, 100, 100, 40);
+            style.colors.subGrid = IM_COL32(80, 80, 80, 20);
+        }
         ~NodeView() = default;
 
         NodeView(const NodeView&) = delete;

@@ -46,7 +46,13 @@ namespace GUI {
             })";
         }
 
-        PluginView(ECS::EntityManager& entityMgr, Plugins::StudioPluginManager& pluginMgr);
+        PluginView(ECS::EntityManager& mgr,
+            ViewManager& vm,
+            Plugins::StudioPluginManager& pluginMgr)
+            : BaseView(mgr, vm),
+            m_pluginManager(pluginMgr) {
+            viewName = "PluginView";
+        }
         ~PluginView() = default;
 
         void Init() override;

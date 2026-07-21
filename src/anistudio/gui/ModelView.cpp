@@ -5,11 +5,6 @@
 
 namespace GUI {
 
-	ModelView::ModelView(ECS::EntityManager& mgr) : BaseView(mgr) {
-		viewName = "ModelView";
-		std::cout << "[ModelView] Constructor called" << std::endl;
-	}
-
 	void ModelView::Init() {
 		std::cout << "[ModelView] Initializing..." << std::endl;
 
@@ -18,13 +13,13 @@ namespace GUI {
 			ImGuizmo::SetImGuiContext(ImGui::GetCurrentContext());
 
 			// Create camera entity with proper error checking
-			cameraEntity = mgr.AddNewEntity();
+			cameraEntity = m_entityManager.AddNewEntity();
 			std::cout << "[ModelView] Created camera entity: " << cameraEntity << std::endl;
 
 			// Add components with validation
-			if (mgr.IsEntityValid(cameraEntity)) {
-				auto& transform = mgr.AddComponent<ECS::TransformComponent>(cameraEntity);
-				auto& camera = mgr.AddComponent<ECS::CameraComponent>(cameraEntity);
+			if (m_entityManager.IsEntityValid(cameraEntity)) {
+				auto& transform = m_entityManager.AddComponent<ECS::TransformComponent>(cameraEntity);
+				auto& camera = m_entityManager.AddComponent<ECS::CameraComponent>(cameraEntity);
 
 				transform.SetPosition(glm::vec3(0.0f, 0.0f, 5.0f));
 				camera.SetAspectRatio(16.0f / 9.0f);
@@ -177,16 +172,16 @@ namespace GUI {
 
 	void ModelView::CreateNewCube() {
 		try {
-			ECS::EntityID cubeEntity = mgr.AddNewEntity();
+			ECS::EntityID cubeEntity = m_entityManager.AddNewEntity();
 			std::cout << "[ModelView] Created cube entity: " << cubeEntity << std::endl;
 
-			if (mgr.IsEntityValid(cubeEntity)) {
+			if (m_entityManager.IsEntityValid(cubeEntity)) {
 				// Add transform component
-				auto& transform = mgr.AddComponent<ECS::TransformComponent>(cubeEntity);
+				auto& transform = m_entityManager.AddComponent<ECS::TransformComponent>(cubeEntity);
 				transform.SetPosition(glm::vec3(0.0f, 0.0f, 0.0f));
 
 				// Add mesh component
-				auto& mesh = mgr.AddComponent<ECS::MeshComponent>(cubeEntity);
+				auto& mesh = m_entityManager.AddComponent<ECS::MeshComponent>(cubeEntity);
 				mesh.color = glm::vec3(0.7f, 0.3f, 0.8f); // Purple color
 
 				// Create simple cube data (no OpenGL setup for now)
@@ -227,8 +222,8 @@ namespace GUI {
 
 	void ModelView::UpdateCameraAspectRatio(float aspectRatio) {
 		try {
-			if (mgr.IsEntityValid(cameraEntity) && mgr.HasComponent<ECS::CameraComponent>(cameraEntity)) {
-				auto& camera = mgr.GetComponent<ECS::CameraComponent>(cameraEntity);
+			if (m_entityManager.IsEntityValid(cameraEntity) && m_entityManager.HasComponent<ECS::CameraComponent>(cameraEntity)) {
+				auto& camera = m_entityManager.GetComponent<ECS::CameraComponent>(cameraEntity);
 				camera.SetAspectRatio(aspectRatio);
 			}
 		}
@@ -241,11 +236,11 @@ namespace GUI {
 		if (!isViewportFocused) return;
 
 		try {
-			if (!mgr.IsEntityValid(cameraEntity) || !mgr.HasComponent<ECS::CameraComponent>(cameraEntity)) {
+			if (!m_entityManager.IsEntityValid(cameraEntity) || !m_entityManager.HasComponent<ECS::CameraComponent>(cameraEntity)) {
 				return;
 			}
 
-			auto& camera = mgr.GetComponent<ECS::CameraComponent>(cameraEntity);
+			auto& camera = m_entityManager.GetComponent<ECS::CameraComponent>(cameraEntity);
 
 			// Keyboard movement
 			if (ImGui::IsKeyDown(ImGuiKey_W)) camera.ProcessKeyboard(0, deltaTime); // Forward
@@ -388,13 +383,13 @@ namespace GUI {
 
 	void ModelView::RenderSimple3DObjects(const ImVec2& viewportPos, const ImVec2& viewportSize) {
 		// Get camera for proper 3D projection
-		if (!mgr.IsEntityValid(cameraEntity) || !mgr.HasComponent<ECS::CameraComponent>(cameraEntity)) {
+		if (!m_entityManager.IsEntityValid(cameraEntity) || !m_entityManager.HasComponent<ECS::CameraComponent>(cameraEntity)) {
 			return;
 		}
 
 		try {
-			auto& camera = mgr.GetComponent<ECS::CameraComponent>(cameraEntity);
-			auto& cameraTransform = mgr.GetComponent<ECS::TransformComponent>(cameraEntity);
+			auto& camera = m_entityManager.GetComponent<ECS::CameraComponent>(cameraEntity);
+			auto& cameraTransform = m_entityManager.GetComponent<ECS::TransformComponent>(cameraEntity);
 
 			glm::mat4 view = camera.GetViewMatrix();
 			glm::mat4 projection = camera.GetProjectionMatrix();
@@ -407,13 +402,13 @@ namespace GUI {
 					continue; // Skip invalid entities
 				}
 
-				if (mgr.HasComponent<ECS::TransformComponent>(entity)) {
-					auto& transform = mgr.GetComponent<ECS::TransformComponent>(entity);
+				if (m_entityManager.HasComponent<ECS::TransformComponent>(entity)) {
+					auto& transform = m_entityManager.GetComponent<ECS::TransformComponent>(entity);
 
 					// Get color from mesh component
 					ImU32 color = IM_COL32(150, 75, 200, 255);
-					if (mgr.HasComponent<ECS::MeshComponent>(entity)) {
-						auto& mesh = mgr.GetComponent<ECS::MeshComponent>(entity);
+					if (m_entityManager.HasComponent<ECS::MeshComponent>(entity)) {
+						auto& mesh = m_entityManager.GetComponent<ECS::MeshComponent>(entity);
 						color = IM_COL32(
 							(int)(mesh.color.r * 255),
 							(int)(mesh.color.g * 255),
@@ -466,10 +461,10 @@ namespace GUI {
 
 	void ModelView::DrawCubeWireframe(const ImVec2& viewportPos, const ImVec2& viewportSize,
 		const ECS::TransformComponent& transform, ImU32 color, bool isSelected) {
-		if (!mgr.IsEntityValid(cameraEntity)) return;
+		if (!m_entityManager.IsEntityValid(cameraEntity)) return;
 
 		try {
-			auto& camera = mgr.GetComponent<ECS::CameraComponent>(cameraEntity);
+			auto& camera = m_entityManager.GetComponent<ECS::CameraComponent>(cameraEntity);
 			glm::mat4 view = camera.GetViewMatrix();
 			glm::mat4 projection = camera.GetProjectionMatrix();
 			glm::mat4 model = transform.GetTransformMatrix();
@@ -563,7 +558,7 @@ namespace GUI {
 			ImGui::Separator();
 
 			// List camera
-			if (mgr.IsEntityValid(cameraEntity)) {
+			if (m_entityManager.IsEntityValid(cameraEntity)) {
 				bool selected = std::find(selectedEntities.begin(), selectedEntities.end(), cameraEntity) != selectedEntities.end();
 				if (ImGui::Selectable("Camera", selected)) {
 					selectedEntities.clear();
@@ -597,7 +592,7 @@ namespace GUI {
 							}
 
 							// Destroy entity
-							mgr.DestroyEntity(entity);
+							m_entityManager.DestroyEntity(entity);
 
 							// Remove from scene objects
 							sceneObjects.erase(sceneObjects.begin() + i);
@@ -638,8 +633,8 @@ namespace GUI {
 
 				try {
 					// Show transform component if available
-					if (mgr.HasComponent<ECS::TransformComponent>(selectedEntity)) {
-						auto& transform = mgr.GetComponent<ECS::TransformComponent>(selectedEntity);
+					if (m_entityManager.HasComponent<ECS::TransformComponent>(selectedEntity)) {
+						auto& transform = m_entityManager.GetComponent<ECS::TransformComponent>(selectedEntity);
 
 						ImGui::Separator();
 						ImGui::Text("Transform");
@@ -661,8 +656,8 @@ namespace GUI {
 					}
 
 					// Show mesh component if available
-					if (mgr.HasComponent<ECS::MeshComponent>(selectedEntity)) {
-						auto& mesh = mgr.GetComponent<ECS::MeshComponent>(selectedEntity);
+					if (m_entityManager.HasComponent<ECS::MeshComponent>(selectedEntity)) {
+						auto& mesh = m_entityManager.GetComponent<ECS::MeshComponent>(selectedEntity);
 
 						ImGui::Separator();
 						ImGui::Text("Mesh");
@@ -673,8 +668,8 @@ namespace GUI {
 					}
 
 					// Show camera component if available
-					if (mgr.HasComponent<ECS::CameraComponent>(selectedEntity)) {
-						auto& camera = mgr.GetComponent<ECS::CameraComponent>(selectedEntity);
+					if (m_entityManager.HasComponent<ECS::CameraComponent>(selectedEntity)) {
+						auto& camera = m_entityManager.GetComponent<ECS::CameraComponent>(selectedEntity);
 
 						ImGui::Separator();
 						ImGui::Text("Camera");
@@ -700,7 +695,7 @@ namespace GUI {
 
 	bool ModelView::IsEntitySafe(ECS::EntityID entity) const {
 		try {
-			return mgr.IsEntityValid(entity);
+			return m_entityManager.IsEntityValid(entity);
 		}
 		catch (const std::exception& e) {
 			std::cerr << "[ModelView] Exception checking entity safety: " << e.what() << std::endl;

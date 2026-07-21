@@ -18,8 +18,11 @@ namespace GUI {
         })";
         }
 
-        DebugView(ECS::EntityManager& entityMgr) : BaseView(entityMgr) { viewName = "DebugView"; }
-        ~DebugView() {}
+        DebugView(ECS::EntityManager& mgr, ViewManager& vm)
+            : BaseView(mgr, vm) { 
+            viewName = "DebugView"; 
+        }
+        ~DebugView() = default;
         void Init();
         void Render();
         void RenderEntityPanel();

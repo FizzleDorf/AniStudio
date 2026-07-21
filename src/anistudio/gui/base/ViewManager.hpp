@@ -21,7 +21,7 @@ using json = nlohmann::json;
 
 namespace GUI {
 
-	using ViewCreationCallback = std::function<std::unique_ptr<BaseView>(ECS::EntityManager&)>;
+	using ViewCreationCallback = std::function<std::unique_ptr<BaseView>(ECS::EntityManager&, ViewManager&)>;
 
 	class ViewManager {
 	public:
@@ -254,8 +254,8 @@ namespace GUI {
 		viewMetadata[name] = []() -> ViewMetadata {
 			return BaseView::GetMetadataFor<T>();
 		};
-		viewFactories[name] = [](ECS::EntityManager& mgr) -> std::unique_ptr<BaseView> {
-			return std::make_unique<T>(mgr);
+		viewFactories[name] = [](ECS::EntityManager& mgr, ViewManager& vm) -> std::unique_ptr<BaseView> {
+			return std::make_unique<T>(mgr, vm);
 		};
 
 		std::cout << "Registered view type: " << name << " with ID: " << typeId << std::endl;

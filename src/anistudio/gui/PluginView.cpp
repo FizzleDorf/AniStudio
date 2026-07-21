@@ -13,11 +13,6 @@
 
 namespace GUI {
 
-    PluginView::PluginView(ECS::EntityManager& entityMgr, Plugins::StudioPluginManager& pluginMgr)
-        : BaseView(entityMgr), m_pluginManager(pluginMgr) {
-        viewName = "PluginView";
-    }
-
     void PluginView::Init() {
         std::filesystem::path buildPath = std::filesystem::current_path();
 
