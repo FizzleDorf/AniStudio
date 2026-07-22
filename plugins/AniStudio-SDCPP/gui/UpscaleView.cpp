@@ -18,19 +18,6 @@ using namespace Utils;
 
 namespace GUI {
 
-    UpscaleView::UpscaleView(EntityManager& entityMgr, ImGuiContext* mainContext) : BaseView(entityMgr),
-        isFilenameChanged(false) {
-        viewName = "UpscaleView";
-        windowOpen = true;
-        contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(entityMgr);
-    }
-
-    UpscaleView::~UpscaleView() {
-        if (upscaleEntity != 0) {
-            mgr.DestroyEntity(upscaleEntity);
-        }
-    }
-
     void UpscaleView::Init() {
         GUI::DiffusionCallbackUtils::InitializeCallbacks();
         ResetEntity();
@@ -38,17 +25,17 @@ namespace GUI {
 
     void UpscaleView::ResetEntity() {
         if (upscaleEntity != 0) {
-            mgr.DestroyEntity(upscaleEntity);
+            m_entityManager.DestroyEntity(upscaleEntity);
             upscaleEntity = 0;
         }
 
-        upscaleEntity = mgr.AddNewEntity();
+        upscaleEntity = m_entityManager.AddNewEntity();
 
-        mgr.AddComponent<InputImageComponent>(upscaleEntity);
-        mgr.AddComponent<OutputImageComponent>(upscaleEntity);
-        mgr.AddComponent<EsrganComponent>(upscaleEntity);
+        m_entityManager.AddComponent<InputImageComponent>(upscaleEntity);
+        m_entityManager.AddComponent<OutputImageComponent>(upscaleEntity);
+        m_entityManager.AddComponent<EsrganComponent>(upscaleEntity);
 
-        auto& outputComp = mgr.GetComponent<OutputImageComponent>(upscaleEntity);
+        auto& outputComp = m_entityManager.GetComponent<OutputImageComponent>(upscaleEntity);
 
         std::string outputFolder = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("OutputFolder") : "";
         std::string defaultProject = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
@@ -62,13 +49,13 @@ namespace GUI {
             outputComp.filePath = defaultProject;
         }
 
-        auto& esrganComp = mgr.GetComponent<EsrganComponent>(upscaleEntity);
+        auto& esrganComp = m_entityManager.GetComponent<EsrganComponent>(upscaleEntity);
         esrganComp.upscaleFactor = 2;
         esrganComp.preserveAspectRatio = true;
     }
 
     bool UpscaleView::IsEntitySafeToUse(ECS::EntityID entity) const {
-        return mgr.IsEntityValid(entity);
+        return m_entityManager.IsEntityValid(entity);
     }
 
     std::vector<std::string> UpscaleView::GetCategoryRenderOrder() const {
@@ -83,12 +70,12 @@ namespace GUI {
     void UpscaleView::RenderEntityComponents(const EntityID entity) {
         if (entity == 0 || !IsEntitySafeToUse(entity)) return;
 
-        auto componentIds = mgr.GetEntityComponents(entity);
+        auto componentIds = m_entityManager.GetEntityComponents(entity);
         std::map<std::string, std::vector<std::pair<ComponentTypeID, std::string>>> categorizedComponents;
 
         for (ComponentTypeID compId : componentIds) {
-            std::string componentName = mgr.GetComponentNameById(compId);
-            auto* component = mgr.GetComponentByIdConst(entity, compId);
+            std::string componentName = m_entityManager.GetComponentNameById(compId);
+            auto* component = m_entityManager.GetComponentByIdConst(entity, compId);
             if (!component) continue;
 
             std::string category = std::string(component->compCategory).empty() ? "Uncategorized" : component->compCategory;
@@ -134,7 +121,7 @@ namespace GUI {
 
         ImVec2 contentStart = ImGui::GetCursorScreenPos();
 
-        auto* component = mgr.GetComponentById(entity, compId);
+        auto* component = m_entityManager.GetComponentById(entity, compId);
         if (component && !component->schema.empty()) {
             try {
                 auto properties = component->GetPropertyMap();
@@ -143,9 +130,9 @@ namespace GUI {
                     UISchema::RenderSchema(component->schema, properties);
 
                     if (ImGui::Button("Show Output Estimate", ImVec2(-1.0f, 0))) {
-                        if (mgr.HasComponent<InputImageComponent>(entity) && mgr.HasComponent<EsrganComponent>(entity)) {
-                            auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
-                            auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+                        if (m_entityManager.HasComponent<InputImageComponent>(entity) && m_entityManager.HasComponent<EsrganComponent>(entity)) {
+                            auto& inputComp = m_entityManager.GetComponent<InputImageComponent>(entity);
+                            auto& esrganComp = m_entityManager.GetComponent<EsrganComponent>(entity);
 
                             if (inputComp.width > 0 && inputComp.height > 0) {
                                 int outWidth = inputComp.width * esrganComp.upscaleFactor;
@@ -160,12 +147,12 @@ namespace GUI {
                 else if (componentName == "Esrgan") {
                     UISchema::RenderSchema(component->schema, properties);
 
-                    if (mgr.HasComponent<EsrganComponent>(entity)) {
-                        auto& esrganComp = mgr.GetComponent<EsrganComponent>(entity);
+                    if (m_entityManager.HasComponent<EsrganComponent>(entity)) {
+                        auto& esrganComp = m_entityManager.GetComponent<EsrganComponent>(entity);
                         ImGui::Text("Current factor: %dx", esrganComp.upscaleFactor);
 
-                        if (mgr.HasComponent<InputImageComponent>(entity)) {
-                            auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
+                        if (m_entityManager.HasComponent<InputImageComponent>(entity)) {
+                            auto& inputComp = m_entityManager.GetComponent<InputImageComponent>(entity);
                             if (inputComp.width > 0 && inputComp.height > 0) {
                                 int outWidth = inputComp.width * esrganComp.upscaleFactor;
                                 int outHeight = inputComp.height * esrganComp.upscaleFactor;
@@ -227,7 +214,7 @@ namespace GUI {
                 if (ImGui::MenuItem("Paste Entity")) {
                     nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
                     if (clipboardData.contains("data")) {
-                        mgr.DeserializeEntity(clipboardData["data"], entity);
+                        m_entityManager.DeserializeEntity(clipboardData["data"], entity);
                     }
                 }
             }
@@ -275,7 +262,7 @@ namespace GUI {
                 if (ImGui::MenuItem("Paste Entity")) {
                     nlohmann::json clipboardData = contextMenuUtils->GetClipboardData();
                     if (clipboardData.contains("data")) {
-                        mgr.DeserializeEntity(clipboardData["data"], upscaleEntity);
+                        m_entityManager.DeserializeEntity(clipboardData["data"], upscaleEntity);
                     }
                 }
 
@@ -294,14 +281,14 @@ namespace GUI {
     void UpscaleView::HandleUpscaleEvent() {
         std::cout << "Creating entity for upscaling..." << std::endl;
 
-        EntityID newEntity = mgr.CloneEntity(upscaleEntity);
+        EntityID newEntity = m_entityManager.CloneEntity(upscaleEntity);
         if (newEntity == 0) {
             std::cerr << "Failed to create new entity!" << std::endl;
             return;
         }
 
-        if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
-            auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+        if (m_entityManager.HasComponent<OutputImageComponent>(newEntity)) {
+            auto& outputComp = m_entityManager.GetComponent<OutputImageComponent>(newEntity);
 
             std::string defaultProject = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
 
@@ -393,7 +380,7 @@ namespace GUI {
                 ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
-                auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+                auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
                 if (sdSystem) {
                     auto queueItems = sdSystem->GetQueueSnapshot();
                     for (size_t i = 0; i < queueItems.size(); i++) {
@@ -508,7 +495,7 @@ namespace GUI {
             return nlohmann::json();
         }
 
-        nlohmann::json j = mgr.SerializeEntity(upscaleEntity);
+        nlohmann::json j = m_entityManager.SerializeEntity(upscaleEntity);
         j["componentVisibility"] = componentVisibility;
         return j;
     }
@@ -520,7 +507,7 @@ namespace GUI {
         }
 
         try {
-            mgr.DeserializeEntity(j, upscaleEntity);
+            m_entityManager.DeserializeEntity(j, upscaleEntity);
             if (j.contains("componentVisibility")) {
                 componentVisibility = j["componentVisibility"];
             }

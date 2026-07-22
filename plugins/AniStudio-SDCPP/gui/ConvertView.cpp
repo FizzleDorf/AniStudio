@@ -16,54 +16,49 @@ using namespace ANI;
 
 namespace GUI {
 
-    ConvertView::ConvertView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext) : BaseView(entityMgr) {
-        viewName = "ConvertView";
-        windowOpen = true;
-    }
-
     void ConvertView::Init() {
         GUI::DiffusionCallbackUtils::InitializeCallbacks();
         InitializeEntity();
     }
 
     void ConvertView::InitializeEntity() {
-        if (convertEntity != 0 && mgr.IsEntityValid(convertEntity)) {
-            mgr.DestroyEntity(convertEntity);
+        if (convertEntity != 0 && m_entityManager.IsEntityValid(convertEntity)) {
+            m_entityManager.DestroyEntity(convertEntity);
         }
 
-        convertEntity = mgr.AddNewEntity();
+        convertEntity = m_entityManager.AddNewEntity();
 
-        mgr.AddComponent<CheckpointComponent>(convertEntity);
-        mgr.AddComponent<VaeComponent>(convertEntity);
-        mgr.AddComponent<SamplerComponent>(convertEntity);
-        mgr.AddComponent<ConversionComponent>(convertEntity);
+        m_entityManager.AddComponent<CheckpointComponent>(convertEntity);
+        m_entityManager.AddComponent<VaeComponent>(convertEntity);
+        m_entityManager.AddComponent<SamplerComponent>(convertEntity);
+        m_entityManager.AddComponent<ConversionComponent>(convertEntity);
 
-        if (mgr.HasComponent<CheckpointComponent>(convertEntity)) {
-            auto& checkpoint = mgr.GetComponent<CheckpointComponent>(convertEntity);
+        if (m_entityManager.HasComponent<CheckpointComponent>(convertEntity)) {
+            auto& checkpoint = m_entityManager.GetComponent<CheckpointComponent>(convertEntity);
             checkpoint.modelPath = "";
             checkpoint.modelName = "";
         }
 
-        if (mgr.HasComponent<VaeComponent>(convertEntity)) {
-            auto& vae = mgr.GetComponent<VaeComponent>(convertEntity);
+        if (m_entityManager.HasComponent<VaeComponent>(convertEntity)) {
+            auto& vae = m_entityManager.GetComponent<VaeComponent>(convertEntity);
             vae.modelPath = "";
             vae.modelName = "";
         }
 
-        if (mgr.HasComponent<SamplerComponent>(convertEntity)) {
-            auto& sampler = mgr.GetComponent<SamplerComponent>(convertEntity);
+        if (m_entityManager.HasComponent<SamplerComponent>(convertEntity)) {
+            auto& sampler = m_entityManager.GetComponent<SamplerComponent>(convertEntity);
             sampler.current_type_method = sd_type_t::SD_TYPE_COUNT;
         }
 
-        if (mgr.HasComponent<ConversionComponent>(convertEntity)) {
-            auto& conversion = mgr.GetComponent<ConversionComponent>(convertEntity);
+        if (m_entityManager.HasComponent<ConversionComponent>(convertEntity)) {
+            auto& conversion = m_entityManager.GetComponent<ConversionComponent>(convertEntity);
             conversion.tensorTypeRules = "";
             conversion.convertName = true;
         }
 
-        auto componentIds = mgr.GetEntityComponents(convertEntity);
+        auto componentIds = m_entityManager.GetEntityComponents(convertEntity);
         for (ComponentTypeID compId : componentIds) {
-            auto* component = mgr.GetComponentById(convertEntity, compId);
+            auto* component = m_entityManager.GetComponentById(convertEntity, compId);
             if (component) {
                 component->RefreshSchema();
             }
@@ -79,17 +74,17 @@ namespace GUI {
     }
 
     void ConvertView::RenderEntityComponents() {
-        if (convertEntity == 0 || !mgr.IsEntityValid(convertEntity)) {
+        if (convertEntity == 0 || !m_entityManager.IsEntityValid(convertEntity)) {
             InitializeEntity();
             return;
         }
 
-        auto componentIds = mgr.GetEntityComponents(convertEntity);
+        auto componentIds = m_entityManager.GetEntityComponents(convertEntity);
         std::map<std::string, std::vector<std::pair<ComponentTypeID, std::string>>> categorizedComponents;
 
         for (ComponentTypeID compId : componentIds) {
-            std::string componentName = mgr.GetComponentNameById(compId);
-            auto* component = mgr.GetComponentByIdConst(convertEntity, compId);
+            std::string componentName = m_entityManager.GetComponentNameById(compId);
+            auto* component = m_entityManager.GetComponentByIdConst(convertEntity, compId);
             if (!component) continue;
 
             std::string category = std::string(component->compCategory).empty() ? "Uncategorized" : component->compCategory;
@@ -133,22 +128,22 @@ namespace GUI {
 
         ImGui::Indent();
 
-        auto* component = mgr.GetComponentById(convertEntity, compId);
+        auto* component = m_entityManager.GetComponentById(convertEntity, compId);
         if (component && !component->schema.empty()) {
             try {
                 auto properties = component->GetPropertyMap();
                 UISchema::RenderSchema(component->schema, properties);
 
                 if (componentName == "Sampler") {
-                    if (mgr.HasComponent<SamplerComponent>(convertEntity)) {
-                        auto& sampler = mgr.GetComponent<SamplerComponent>(convertEntity);
+                    if (m_entityManager.HasComponent<SamplerComponent>(convertEntity)) {
+                        auto& sampler = m_entityManager.GetComponent<SamplerComponent>(convertEntity);
                         const char* typeName = sd_type_name(static_cast<sd_type_t>(sampler.current_type_method));
                         ImGui::Text("Quantization: %s", typeName);
                     }
                 }
                 else if (componentName == "Conversion") {
-                    if (mgr.HasComponent<ConversionComponent>(convertEntity)) {
-                        auto& conversion = mgr.GetComponent<ConversionComponent>(convertEntity);
+                    if (m_entityManager.HasComponent<ConversionComponent>(convertEntity)) {
+                        auto& conversion = m_entityManager.GetComponent<ConversionComponent>(convertEntity);
                         ImGui::TextDisabled("Tensor rules: %s",
                             conversion.tensorTypeRules.empty() ? "None" : conversion.tensorTypeRules.c_str());
                         ImGui::TextDisabled("Convert names: %s",
@@ -190,10 +185,10 @@ namespace GUI {
     }
 
     void ConvertView::Convert() {
-        auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+        auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         if (!sdSystem) {
-            mgr.RegisterSystem<ECS::SDCPPSystem>();
-            sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+            m_entityManager.RegisterSystem<ECS::SDCPPSystem>();
+            sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         }
 
         if (!sdSystem) {
@@ -201,8 +196,8 @@ namespace GUI {
             return;
         }
 
-        nlohmann::json entityData = mgr.SerializeEntity(convertEntity);
-        EntityID newEntity = mgr.DeserializeEntity(entityData);
+        nlohmann::json entityData = m_entityManager.SerializeEntity(convertEntity);
+        EntityID newEntity = m_entityManager.DeserializeEntity(entityData);
 
         if (newEntity == 0) {
             std::cerr << "Failed to create conversion entity!" << std::endl;
@@ -277,7 +272,7 @@ namespace GUI {
 
             ImGui::Separator();
 
-            auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+            auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
             if (sdSystem && ImGui::BeginTable("Queue", 3,
                 ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
 

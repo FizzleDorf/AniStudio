@@ -20,17 +20,6 @@ using namespace ANI;
 
 namespace GUI {
 
-    VideoDiffusionView::VideoDiffusionView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext)
-        : BaseView(entityMgr) {
-        viewName = "VideoDiffusionView";
-        windowOpen = true;
-    }
-
-    VideoDiffusionView::~VideoDiffusionView() {
-        if (img2vidEntity != 0)
-            mgr.DestroyEntity(img2vidEntity);
-    }
-
     void VideoDiffusionView::InitializeComponentVisibility() {
         componentVisibility["ModelComponent"] = true;
         componentVisibility["ClipLComponent"] = true;
@@ -69,37 +58,37 @@ namespace GUI {
 
     void VideoDiffusionView::ResetEntities() {
         if (img2vidEntity != 0) {
-            mgr.DestroyEntity(img2vidEntity);
+            m_entityManager.DestroyEntity(img2vidEntity);
             img2vidEntity = 0;
         }
 
-        img2vidEntity = mgr.AddNewEntity();
+        img2vidEntity = m_entityManager.AddNewEntity();
 
-        mgr.AddComponent<ClipLComponent>(img2vidEntity);
-        mgr.AddComponent<ClipGComponent>(img2vidEntity);
-        mgr.AddComponent<ClipVisionComponent>(img2vidEntity);
-        mgr.AddComponent<T5XXLComponent>(img2vidEntity);
-        mgr.AddComponent<DiffusionModelComponent>(img2vidEntity);
-        mgr.AddComponent<HighNoiseDiffusionModelComponent>(img2vidEntity);
-        mgr.AddComponent<VaeComponent>(img2vidEntity);
-        mgr.AddComponent<LoraComponent>(img2vidEntity);
-        mgr.AddComponent<TaesdComponent>(img2vidEntity);
-        mgr.AddComponent<LatentComponent>(img2vidEntity);
-        mgr.AddComponent<SamplerComponent>(img2vidEntity);
-        mgr.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);
-        mgr.AddComponent<VideoParamsComponent>(img2vidEntity);
-        mgr.AddComponent<GuidanceComponent>(img2vidEntity);
-        mgr.AddComponent<ClipSkipComponent>(img2vidEntity);
-        mgr.AddComponent<PromptComponent>(img2vidEntity);
-        mgr.AddComponent<LayerSkipComponent>(img2vidEntity);
-        mgr.AddComponent<OutputImageComponent>(img2vidEntity);
-        mgr.AddComponent<InputImageComponent>(img2vidEntity);
+        m_entityManager.AddComponent<ClipLComponent>(img2vidEntity);
+        m_entityManager.AddComponent<ClipGComponent>(img2vidEntity);
+        m_entityManager.AddComponent<ClipVisionComponent>(img2vidEntity);
+        m_entityManager.AddComponent<T5XXLComponent>(img2vidEntity);
+        m_entityManager.AddComponent<DiffusionModelComponent>(img2vidEntity);
+        m_entityManager.AddComponent<HighNoiseDiffusionModelComponent>(img2vidEntity);
+        m_entityManager.AddComponent<VaeComponent>(img2vidEntity);
+        m_entityManager.AddComponent<LoraComponent>(img2vidEntity);
+        m_entityManager.AddComponent<TaesdComponent>(img2vidEntity);
+        m_entityManager.AddComponent<LatentComponent>(img2vidEntity);
+        m_entityManager.AddComponent<SamplerComponent>(img2vidEntity);
+        m_entityManager.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);
+        m_entityManager.AddComponent<VideoParamsComponent>(img2vidEntity);
+        m_entityManager.AddComponent<GuidanceComponent>(img2vidEntity);
+        m_entityManager.AddComponent<ClipSkipComponent>(img2vidEntity);
+        m_entityManager.AddComponent<PromptComponent>(img2vidEntity);
+        m_entityManager.AddComponent<LayerSkipComponent>(img2vidEntity);
+        m_entityManager.AddComponent<OutputImageComponent>(img2vidEntity);
+        m_entityManager.AddComponent<InputImageComponent>(img2vidEntity);
 
-        mgr.GetComponent<SamplerComponent>(img2vidEntity).denoise = 0.6f;
+        m_entityManager.GetComponent<SamplerComponent>(img2vidEntity).denoise = 0.6f;
     }
 
     bool VideoDiffusionView::IsEntitySafeToUse(EntityID entity) const {
-        return mgr.IsEntityValid(entity);
+        return m_entityManager.IsEntityValid(entity);
     }
 
     void VideoDiffusionView::RenderComponentWithCheckbox(const EntityID entity, const std::string& componentName, const std::string& displayName, const std::function<void()>& renderFunc) {
@@ -126,8 +115,8 @@ namespace GUI {
             if (ImGui::BeginTabBar("ModelTabs")) {
                 if (ImGui::BeginTabItem("Full")) {
                     RenderComponentWithCheckbox(entity, "CheckpointComponent", "Checkpoint", [&]() {
-                        if (mgr.HasComponent<CheckpointComponent>(entity)) {
-                            auto& comp = mgr.GetComponent<CheckpointComponent>(entity);
+                        if (m_entityManager.HasComponent<CheckpointComponent>(entity)) {
+                            auto& comp = m_entityManager.GetComponent<CheckpointComponent>(entity);
                             if (!comp.schema.empty()) {
                                 try {
                                     auto properties = comp.GetPropertyMap();
@@ -141,8 +130,8 @@ namespace GUI {
                         });
 
                     RenderComponentWithCheckbox(entity, "VaeComponent", "VAE", [&]() {
-                        if (mgr.HasComponent<VaeComponent>(entity)) {
-                            auto& comp = mgr.GetComponent<VaeComponent>(entity);
+                        if (m_entityManager.HasComponent<VaeComponent>(entity)) {
+                            auto& comp = m_entityManager.GetComponent<VaeComponent>(entity);
                             if (!comp.schema.empty()) {
                                 try {
                                     auto properties = comp.GetPropertyMap();
@@ -159,8 +148,8 @@ namespace GUI {
                 }
                 if (ImGui::BeginTabItem("Split")) {
                     RenderComponentWithCheckbox(entity, "DiffusionModelComponent", "Diffusion Model", [&]() {
-                        if (mgr.HasComponent<DiffusionModelComponent>(entity)) {
-                            auto& comp = mgr.GetComponent<DiffusionModelComponent>(entity);
+                        if (m_entityManager.HasComponent<DiffusionModelComponent>(entity)) {
+                            auto& comp = m_entityManager.GetComponent<DiffusionModelComponent>(entity);
                             if (!comp.schema.empty()) {
                                 try {
                                     auto properties = comp.GetPropertyMap();
@@ -174,8 +163,8 @@ namespace GUI {
                         });
 
                     RenderComponentWithCheckbox(entity, "HighNoiseDiffusionModelComponent", "High Noise Model", [&]() {
-                        if (mgr.HasComponent<HighNoiseDiffusionModelComponent>(entity)) {
-                            auto& comp = mgr.GetComponent<HighNoiseDiffusionModelComponent>(entity);
+                        if (m_entityManager.HasComponent<HighNoiseDiffusionModelComponent>(entity)) {
+                            auto& comp = m_entityManager.GetComponent<HighNoiseDiffusionModelComponent>(entity);
                             if (!comp.schema.empty()) {
                                 try {
                                     auto properties = comp.GetPropertyMap();
@@ -190,8 +179,8 @@ namespace GUI {
 
                     if (ImGui::CollapsingHeader("Text Encoders", ImGuiTreeNodeFlags_DefaultOpen)) {
                         RenderComponentWithCheckbox(entity, "ClipLComponent", "CLIP-L", [&]() {
-                            if (mgr.HasComponent<ClipLComponent>(entity)) {
-                                auto& comp = mgr.GetComponent<ClipLComponent>(entity);
+                            if (m_entityManager.HasComponent<ClipLComponent>(entity)) {
+                                auto& comp = m_entityManager.GetComponent<ClipLComponent>(entity);
                                 if (!comp.schema.empty()) {
                                     try {
                                         auto properties = comp.GetPropertyMap();
@@ -205,8 +194,8 @@ namespace GUI {
                             });
 
                         RenderComponentWithCheckbox(entity, "ClipGComponent", "CLIP-G", [&]() {
-                            if (mgr.HasComponent<ClipGComponent>(entity)) {
-                                auto& comp = mgr.GetComponent<ClipGComponent>(entity);
+                            if (m_entityManager.HasComponent<ClipGComponent>(entity)) {
+                                auto& comp = m_entityManager.GetComponent<ClipGComponent>(entity);
                                 if (!comp.schema.empty()) {
                                     try {
                                         auto properties = comp.GetPropertyMap();
@@ -220,8 +209,8 @@ namespace GUI {
                             });
 
                         RenderComponentWithCheckbox(entity, "ClipVisionComponent", "CLIP Vision", [&]() {
-                            if (mgr.HasComponent<ClipVisionComponent>(entity)) {
-                                auto& comp = mgr.GetComponent<ClipVisionComponent>(entity);
+                            if (m_entityManager.HasComponent<ClipVisionComponent>(entity)) {
+                                auto& comp = m_entityManager.GetComponent<ClipVisionComponent>(entity);
                                 if (!comp.schema.empty()) {
                                     try {
                                         auto properties = comp.GetPropertyMap();
@@ -235,8 +224,8 @@ namespace GUI {
                             });
 
                         RenderComponentWithCheckbox(entity, "T5XXLComponent", "T5-XXL", [&]() {
-                            if (mgr.HasComponent<T5XXLComponent>(entity)) {
-                                auto& comp = mgr.GetComponent<T5XXLComponent>(entity);
+                            if (m_entityManager.HasComponent<T5XXLComponent>(entity)) {
+                                auto& comp = m_entityManager.GetComponent<T5XXLComponent>(entity);
                                 if (!comp.schema.empty()) {
                                     try {
                                         auto properties = comp.GetPropertyMap();
@@ -251,8 +240,8 @@ namespace GUI {
                     }
 
                     RenderComponentWithCheckbox(entity, "VaeComponent", "VAE", [&]() {
-                        if (mgr.HasComponent<VaeComponent>(entity)) {
-                            auto& comp = mgr.GetComponent<VaeComponent>(entity);
+                        if (m_entityManager.HasComponent<VaeComponent>(entity)) {
+                            auto& comp = m_entityManager.GetComponent<VaeComponent>(entity);
                             if (!comp.schema.empty()) {
                                 try {
                                     auto properties = comp.GetPropertyMap();
@@ -273,8 +262,8 @@ namespace GUI {
 
         if (ImGui::CollapsingHeader("Video Generation Options", ImGuiTreeNodeFlags_DefaultOpen)) {
             RenderComponentWithCheckbox(entity, "LatentComponent", "Video Dimensions", [&]() {
-                if (mgr.HasComponent<LatentComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<LatentComponent>(entity);
+                if (m_entityManager.HasComponent<LatentComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<LatentComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -294,8 +283,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "VideoParamsComponent", "Video Parameters", [&]() {
-                if (mgr.HasComponent<VideoParamsComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<VideoParamsComponent>(entity);
+                if (m_entityManager.HasComponent<VideoParamsComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<VideoParamsComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -313,8 +302,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "SamplerComponent", "Main Sampler", [&]() {
-                if (mgr.HasComponent<SamplerComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<SamplerComponent>(entity);
+                if (m_entityManager.HasComponent<SamplerComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<SamplerComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -328,8 +317,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "HighNoiseSamplerComponent", "High Noise Sampler", [&]() {
-                if (mgr.HasComponent<HighNoiseSamplerComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<HighNoiseSamplerComponent>(entity);
+                if (m_entityManager.HasComponent<HighNoiseSamplerComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<HighNoiseSamplerComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -343,8 +332,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "GuidanceComponent", "Guidance", [&]() {
-                if (mgr.HasComponent<GuidanceComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<GuidanceComponent>(entity);
+                if (m_entityManager.HasComponent<GuidanceComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<GuidanceComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -358,8 +347,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "PromptComponent", "Prompts", [&]() {
-                if (mgr.HasComponent<PromptComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<PromptComponent>(entity);
+                if (m_entityManager.HasComponent<PromptComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<PromptComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -375,8 +364,8 @@ namespace GUI {
 
         if (ImGui::CollapsingHeader("Input/Output Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
             RenderComponentWithCheckbox(entity, "InputImageComponent", "Input Image", [&]() {
-                if (mgr.HasComponent<InputImageComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<InputImageComponent>(entity);
+                if (m_entityManager.HasComponent<InputImageComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<InputImageComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -390,8 +379,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "OutputImageComponent", "Output Settings", [&]() {
-                if (mgr.HasComponent<OutputImageComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<OutputImageComponent>(entity);
+                if (m_entityManager.HasComponent<OutputImageComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<OutputImageComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -407,8 +396,8 @@ namespace GUI {
 
         if (ImGui::CollapsingHeader("Advanced Options")) {
             RenderComponentWithCheckbox(entity, "ClipSkipComponent", "CLIP Skip", [&]() {
-                if (mgr.HasComponent<ClipSkipComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<ClipSkipComponent>(entity);
+                if (m_entityManager.HasComponent<ClipSkipComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<ClipSkipComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -422,8 +411,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "LayerSkipComponent", "Layer Skip", [&]() {
-                if (mgr.HasComponent<LayerSkipComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<LayerSkipComponent>(entity);
+                if (m_entityManager.HasComponent<LayerSkipComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<LayerSkipComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -437,8 +426,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "LoraComponent", "LoRA", [&]() {
-                if (mgr.HasComponent<LoraComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<LoraComponent>(entity);
+                if (m_entityManager.HasComponent<LoraComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<LoraComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -452,8 +441,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "TaesdComponent", "TAESD", [&]() {
-                if (mgr.HasComponent<TaesdComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<TaesdComponent>(entity);
+                if (m_entityManager.HasComponent<TaesdComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<TaesdComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -467,8 +456,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "ControlNetComponent", "ControlNet", [&]() {
-                if (mgr.HasComponent<ControlNetComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<ControlNetComponent>(entity);
+                if (m_entityManager.HasComponent<ControlNetComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<ControlNetComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -482,8 +471,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "EmbeddingComponent", "Embeddings", [&]() {
-                if (mgr.HasComponent<EmbeddingComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<EmbeddingComponent>(entity);
+                if (m_entityManager.HasComponent<EmbeddingComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<EmbeddingComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -497,8 +486,8 @@ namespace GUI {
                 });
 
             RenderComponentWithCheckbox(entity, "EsrganComponent", "ESRGAN Upscaler", [&]() {
-                if (mgr.HasComponent<EsrganComponent>(entity)) {
-                    auto& comp = mgr.GetComponent<EsrganComponent>(entity);
+                if (m_entityManager.HasComponent<EsrganComponent>(entity)) {
+                    auto& comp = m_entityManager.GetComponent<EsrganComponent>(entity);
                     if (!comp.schema.empty()) {
                         try {
                             auto properties = comp.GetPropertyMap();
@@ -535,14 +524,14 @@ namespace GUI {
     void VideoDiffusionView::HandleImg2VidEvent() {
         std::cout << "Adding new Img2Vid entity..." << std::endl;
 
-        EntityID newEntity = mgr.CloneEntity(img2vidEntity);
+        EntityID newEntity = m_entityManager.CloneEntity(img2vidEntity);
         if (newEntity == 0) {
             std::cerr << "Failed to create new entity!" << std::endl;
             return;
         }
 
-        if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
-            auto& outputComp = mgr.GetComponent<OutputImageComponent>(newEntity);
+        if (m_entityManager.HasComponent<OutputImageComponent>(newEntity)) {
+            auto& outputComp = m_entityManager.GetComponent<OutputImageComponent>(newEntity);
             if (outputComp.filePath.empty()) {
                 outputComp.filePath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
             }
@@ -588,8 +577,8 @@ namespace GUI {
             ImGui::Separator();
 
             if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
-                if (mgr.HasComponent<LoraComponent>(img2vidEntity)) {
-                    auto& loraComp = mgr.GetComponent<LoraComponent>(img2vidEntity);
+                if (m_entityManager.HasComponent<LoraComponent>(img2vidEntity)) {
+                    auto& loraComp = m_entityManager.GetComponent<LoraComponent>(img2vidEntity);
                     loraComp.modelPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("Lora") : "";
                 }
 
@@ -629,7 +618,7 @@ namespace GUI {
                 ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
-                auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+                auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
                 if (sdSystem) {
                     auto queueItems = sdSystem->GetQueueSnapshot();
                     for (size_t i = 0; i < queueItems.size(); i++) {
@@ -720,7 +709,7 @@ namespace GUI {
     }
 
     nlohmann::json VideoDiffusionView::Serialize() const {
-        nlohmann::json j = mgr.SerializeEntity(img2vidEntity);
+        nlohmann::json j = m_entityManager.SerializeEntity(img2vidEntity);
         j["componentVisibility"] = componentVisibility;
         return j;
     }
@@ -732,7 +721,7 @@ namespace GUI {
         }
 
         try {
-            mgr.DeserializeEntity(j, img2vidEntity);
+            m_entityManager.DeserializeEntity(j, img2vidEntity);
 
             if (j.contains("componentVisibility")) {
                 componentVisibility = j["componentVisibility"];

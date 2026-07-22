@@ -28,8 +28,20 @@ namespace GUI {
         })";
 		}
 
-		UpscaleView(EntityManager &entityMgr, ImGuiContext* mainContext = nullptr);
-		~UpscaleView();
+		UpscaleView(ECS::EntityManager& mgr, ViewManager& vm)
+			: BaseView(mgr, vm),
+			isFilenameChanged(false)
+		{
+			viewName = "UpscaleView";
+			windowOpen = true;
+			contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(mgr);
+		}
+
+		~UpscaleView() {
+			if (upscaleEntity != 0) {
+				m_entityManager.DestroyEntity(upscaleEntity);
+			}
+		}
 
 		void Init() override;
 		nlohmann::json Serialize() const override;

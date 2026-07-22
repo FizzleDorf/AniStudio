@@ -11,8 +11,8 @@ namespace GUI {
 
 	class ModelCacheView : public BaseView {
 	public:
-		ModelCacheView(ECS::EntityManager& entityMgr)
-			: BaseView(entityMgr)
+		ModelCacheView(ECS::EntityManager& m_entityManager, ViewManager& vm)
+			: BaseView(m_entityManager,vm)
 			, maxCacheSize(3)
 			, selectedModelIndex(-1)
 			, showConfirmDialog(false)
@@ -31,7 +31,7 @@ namespace GUI {
 
 		void Init() override {
 			// Get initial cache size
-			auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+			auto sdcppSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
 			if (sdcppSystem) {
 				maxCacheSize = sdcppSystem->GetMaxModelCache();
 				strcpy(maxCacheInput, std::to_string(maxCacheSize).c_str());
@@ -95,7 +95,7 @@ namespace GUI {
 		std::string confirmMessage;
 
 		void RefreshModelList() {
-			auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+			auto sdcppSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
 			if (sdcppSystem) {
 				loadedModels = sdcppSystem->GetLoadedModels();
 
@@ -107,7 +107,7 @@ namespace GUI {
 		}
 
 		void RenderContent() {
-			auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+			auto sdcppSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
 			if (!sdcppSystem) {
 				ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f),
 					"SDCPPSystem not available!");
@@ -371,7 +371,7 @@ namespace GUI {
 		}
 
 		void ExecuteConfirmedAction() {
-			auto sdcppSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+			auto sdcppSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
 			if (!sdcppSystem) return;
 
 			switch (confirmAction) {

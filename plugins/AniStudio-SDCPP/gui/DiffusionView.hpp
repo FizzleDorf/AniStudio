@@ -21,8 +21,20 @@ namespace GUI {
         })";
 		}
 
-		DiffusionView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext = nullptr);
-		~DiffusionView();
+		DiffusionView::DiffusionView(ECS::EntityManager& mgr, ViewManager& vm)
+			: BaseView(mgr, vm)
+		{
+			viewName = "DiffusionView";
+			windowOpen = true;
+			contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
+		}
+		
+		~DiffusionView() {
+			QuickSave();
+			if (txt2imgEntity != 0) m_entityManager.DestroyEntity(txt2imgEntity);
+			if (img2imgEntity != 0) m_entityManager.DestroyEntity(img2imgEntity);
+			if (editEntity != 0) m_entityManager.DestroyEntity(editEntity);
+		}
 
 		void Init() override;
 		void Render() override;

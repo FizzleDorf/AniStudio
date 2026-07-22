@@ -22,7 +22,12 @@ namespace GUI {
         })";
 		}
 
-		ConvertView(ECS::EntityManager &entityMgr, ImGuiContext* mainContext = nullptr);
+		ConvertView::ConvertView(ECS::EntityManager& mgr, ViewManager& vm)
+			: BaseView(mgr, vm)
+		{
+			viewName = "ConvertView";
+			windowOpen = true;
+		}
 		~ConvertView() = default;
 
 		void Init() override;

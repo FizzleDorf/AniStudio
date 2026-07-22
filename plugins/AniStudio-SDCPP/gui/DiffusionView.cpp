@@ -23,19 +23,6 @@ using namespace ANI;
 
 namespace GUI {
 
-    DiffusionView::DiffusionView(EntityManager& entityMgr, ImGuiContext* mainContext) : BaseView(entityMgr) {
-        viewName = "DiffusionView";
-        windowOpen = true;
-        contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(entityMgr);
-    }
-
-    DiffusionView::~DiffusionView() {
-        QuickSave();
-        if (txt2imgEntity != 0) mgr.DestroyEntity(txt2imgEntity);
-        if (img2imgEntity != 0) mgr.DestroyEntity(img2imgEntity);
-        if (editEntity != 0) mgr.DestroyEntity(editEntity);
-    }
-
     void DiffusionView::Init() {
         GUI::DiffusionCallbackUtils::InitializeCallbacks();
         ResetEntities();
@@ -43,306 +30,306 @@ namespace GUI {
     }
 
     void DiffusionView::ResetEntities() {
-        if (txt2imgEntity != 0) mgr.DestroyEntity(txt2imgEntity);
-        if (img2imgEntity != 0) mgr.DestroyEntity(img2imgEntity);
-        if (editEntity != 0) mgr.DestroyEntity(editEntity);
+        if (txt2imgEntity != 0) m_entityManager.DestroyEntity(txt2imgEntity);
+        if (img2imgEntity != 0) m_entityManager.DestroyEntity(img2imgEntity);
+        if (editEntity != 0) m_entityManager.DestroyEntity(editEntity);
 
         txt2imgEntity = CreateEntityWithComponents(false);
         img2imgEntity = CreateEntityWithComponents(true);
         editEntity = CreateEntityWithComponents(true);
 
-        if (mgr.HasComponent<SamplerComponent>(img2imgEntity)) {
-            mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;
+        if (m_entityManager.HasComponent<SamplerComponent>(img2imgEntity)) {
+            m_entityManager.GetComponent<SamplerComponent>(img2imgEntity).denoise = 0.6f;
         }
-        if (mgr.HasComponent<SamplerComponent>(editEntity)) {
-            mgr.GetComponent<SamplerComponent>(editEntity).denoise = 0.6f;
+        if (m_entityManager.HasComponent<SamplerComponent>(editEntity)) {
+            m_entityManager.GetComponent<SamplerComponent>(editEntity).denoise = 0.6f;
         }
     }
 
     ECS::EntityID DiffusionView::CreateEntityWithComponents(bool includeInputImage) {
-        EntityID entity = mgr.AddNewEntity();
+        EntityID entity = m_entityManager.AddNewEntity();
 
-        mgr.AddComponent<CheckpointComponent>(entity);
-        mgr.AddComponent<LatentComponent>(entity);
-        mgr.AddComponent<SamplerComponent>(entity);
-        mgr.AddComponent<GuidanceComponent>(entity);
-        mgr.AddComponent<ClipSkipComponent>(entity);
-        mgr.AddComponent<PromptComponent>(entity);
-        mgr.AddComponent<OutputImageComponent>(entity);
+        m_entityManager.AddComponent<CheckpointComponent>(entity);
+        m_entityManager.AddComponent<LatentComponent>(entity);
+        m_entityManager.AddComponent<SamplerComponent>(entity);
+        m_entityManager.AddComponent<GuidanceComponent>(entity);
+        m_entityManager.AddComponent<ClipSkipComponent>(entity);
+        m_entityManager.AddComponent<PromptComponent>(entity);
+        m_entityManager.AddComponent<OutputImageComponent>(entity);
 
         if (includeInputImage) {
-            mgr.AddComponent<InputImageComponent>(entity);
+            m_entityManager.AddComponent<InputImageComponent>(entity);
         }
 
         return entity;
     }
 
     bool DiffusionView::IsEntitySafeToUse(ECS::EntityID entity) const {
-        return mgr.IsEntityValid(entity);
+        return m_entityManager.IsEntityValid(entity);
     }
 
     void DiffusionView::ToggleComponent(EntityID entity, const std::string& name) {
         if (entity == 0 || !IsEntitySafeToUse(entity)) return;
         if (name == "InputImage") {
-            if (mgr.HasComponent<InputImageComponent>(entity))
-                mgr.RemoveComponent<InputImageComponent>(entity);
+            if (m_entityManager.HasComponent<InputImageComponent>(entity))
+                m_entityManager.RemoveComponent<InputImageComponent>(entity);
             else
-                mgr.AddComponent<InputImageComponent>(entity);
+                m_entityManager.AddComponent<InputImageComponent>(entity);
             return;
         }
         if (name == "CheckpointComponent") {
-            if (mgr.HasComponent<CheckpointComponent>(entity))
-                mgr.RemoveComponent<CheckpointComponent>(entity);
+            if (m_entityManager.HasComponent<CheckpointComponent>(entity))
+                m_entityManager.RemoveComponent<CheckpointComponent>(entity);
             else
-                mgr.AddComponent<CheckpointComponent>(entity);
+                m_entityManager.AddComponent<CheckpointComponent>(entity);
         }
         else if (name == "DiffusionModelComponent") {
-            if (mgr.HasComponent<DiffusionModelComponent>(entity))
-                mgr.RemoveComponent<DiffusionModelComponent>(entity);
+            if (m_entityManager.HasComponent<DiffusionModelComponent>(entity))
+                m_entityManager.RemoveComponent<DiffusionModelComponent>(entity);
             else
-                mgr.AddComponent<DiffusionModelComponent>(entity);
+                m_entityManager.AddComponent<DiffusionModelComponent>(entity);
         }
         else if (name == "ClipLComponent") {
-            if (mgr.HasComponent<ClipLComponent>(entity))
-                mgr.RemoveComponent<ClipLComponent>(entity);
+            if (m_entityManager.HasComponent<ClipLComponent>(entity))
+                m_entityManager.RemoveComponent<ClipLComponent>(entity);
             else
-                mgr.AddComponent<ClipLComponent>(entity);
+                m_entityManager.AddComponent<ClipLComponent>(entity);
         }
         else if (name == "ClipGComponent") {
-            if (mgr.HasComponent<ClipGComponent>(entity))
-                mgr.RemoveComponent<ClipGComponent>(entity);
+            if (m_entityManager.HasComponent<ClipGComponent>(entity))
+                m_entityManager.RemoveComponent<ClipGComponent>(entity);
             else
-                mgr.AddComponent<ClipGComponent>(entity);
+                m_entityManager.AddComponent<ClipGComponent>(entity);
         }
         else if (name == "T5XXLComponent") {
-            if (mgr.HasComponent<T5XXLComponent>(entity))
-                mgr.RemoveComponent<T5XXLComponent>(entity);
+            if (m_entityManager.HasComponent<T5XXLComponent>(entity))
+                m_entityManager.RemoveComponent<T5XXLComponent>(entity);
             else
-                mgr.AddComponent<T5XXLComponent>(entity);
+                m_entityManager.AddComponent<T5XXLComponent>(entity);
         }
         else if (name == "ClipVisionComponent") {
-            if (mgr.HasComponent<ClipVisionComponent>(entity))
-                mgr.RemoveComponent<ClipVisionComponent>(entity);
+            if (m_entityManager.HasComponent<ClipVisionComponent>(entity))
+                m_entityManager.RemoveComponent<ClipVisionComponent>(entity);
             else
-                mgr.AddComponent<ClipVisionComponent>(entity);
+                m_entityManager.AddComponent<ClipVisionComponent>(entity);
         }
         else if (name == "LlmEncoderComponent") {
-            if (mgr.HasComponent<LlmEncoderComponent>(entity))
-                mgr.RemoveComponent<LlmEncoderComponent>(entity);
+            if (m_entityManager.HasComponent<LlmEncoderComponent>(entity))
+                m_entityManager.RemoveComponent<LlmEncoderComponent>(entity);
             else
-                mgr.AddComponent<LlmEncoderComponent>(entity);
+                m_entityManager.AddComponent<LlmEncoderComponent>(entity);
         }
         else if (name == "LlmVisionComponent") {
-            if (mgr.HasComponent<LlmVisionComponent>(entity))
-                mgr.RemoveComponent<LlmVisionComponent>(entity);
+            if (m_entityManager.HasComponent<LlmVisionComponent>(entity))
+                m_entityManager.RemoveComponent<LlmVisionComponent>(entity);
             else
-                mgr.AddComponent<LlmVisionComponent>(entity);
+                m_entityManager.AddComponent<LlmVisionComponent>(entity);
         }
         else if (name == "VaeComponent") {
-            if (mgr.HasComponent<VaeComponent>(entity))
-                mgr.RemoveComponent<VaeComponent>(entity);
+            if (m_entityManager.HasComponent<VaeComponent>(entity))
+                m_entityManager.RemoveComponent<VaeComponent>(entity);
             else
-                mgr.AddComponent<VaeComponent>(entity);
+                m_entityManager.AddComponent<VaeComponent>(entity);
         }
         else if (name == "TaesdComponent") {
-            if (mgr.HasComponent<TaesdComponent>(entity))
-                mgr.RemoveComponent<TaesdComponent>(entity);
+            if (m_entityManager.HasComponent<TaesdComponent>(entity))
+                m_entityManager.RemoveComponent<TaesdComponent>(entity);
             else
-                mgr.AddComponent<TaesdComponent>(entity);
+                m_entityManager.AddComponent<TaesdComponent>(entity);
         }
         else if (name == "LoraComponent") {
-            if (mgr.HasComponent<LoraComponent>(entity))
-                mgr.RemoveComponent<LoraComponent>(entity);
+            if (m_entityManager.HasComponent<LoraComponent>(entity))
+                m_entityManager.RemoveComponent<LoraComponent>(entity);
             else
-                mgr.AddComponent<LoraComponent>(entity);
+                m_entityManager.AddComponent<LoraComponent>(entity);
         }
         else if (name == "ControlNetComponent") {
-            if (mgr.HasComponent<ControlNetComponent>(entity))
-                mgr.RemoveComponent<ControlNetComponent>(entity);
+            if (m_entityManager.HasComponent<ControlNetComponent>(entity))
+                m_entityManager.RemoveComponent<ControlNetComponent>(entity);
             else
-                mgr.AddComponent<ControlNetComponent>(entity);
+                m_entityManager.AddComponent<ControlNetComponent>(entity);
         }
         else if (name == "EmbeddingComponent") {
-            if (mgr.HasComponent<EmbeddingComponent>(entity))
-                mgr.RemoveComponent<EmbeddingComponent>(entity);
+            if (m_entityManager.HasComponent<EmbeddingComponent>(entity))
+                m_entityManager.RemoveComponent<EmbeddingComponent>(entity);
             else
-                mgr.AddComponent<EmbeddingComponent>(entity);
+                m_entityManager.AddComponent<EmbeddingComponent>(entity);
         }
         else if (name == "PhotoMakerComponent") {
-            if (mgr.HasComponent<PhotoMakerComponent>(entity))
-                mgr.RemoveComponent<PhotoMakerComponent>(entity);
+            if (m_entityManager.HasComponent<PhotoMakerComponent>(entity))
+                m_entityManager.RemoveComponent<PhotoMakerComponent>(entity);
             else
-                mgr.AddComponent<PhotoMakerComponent>(entity);
+                m_entityManager.AddComponent<PhotoMakerComponent>(entity);
         }
         else if (name == "StackedIdEmbedComponent") {
-            if (mgr.HasComponent<StackedIdEmbedComponent>(entity))
-                mgr.RemoveComponent<StackedIdEmbedComponent>(entity);
+            if (m_entityManager.HasComponent<StackedIdEmbedComponent>(entity))
+                m_entityManager.RemoveComponent<StackedIdEmbedComponent>(entity);
             else
-                mgr.AddComponent<StackedIdEmbedComponent>(entity);
+                m_entityManager.AddComponent<StackedIdEmbedComponent>(entity);
         }
         else if (name == "LatentComponent") {
-            if (mgr.HasComponent<LatentComponent>(entity))
-                mgr.RemoveComponent<LatentComponent>(entity);
+            if (m_entityManager.HasComponent<LatentComponent>(entity))
+                m_entityManager.RemoveComponent<LatentComponent>(entity);
             else
-                mgr.AddComponent<LatentComponent>(entity);
+                m_entityManager.AddComponent<LatentComponent>(entity);
         }
         else if (name == "SamplerComponent") {
-            if (mgr.HasComponent<SamplerComponent>(entity))
-                mgr.RemoveComponent<SamplerComponent>(entity);
+            if (m_entityManager.HasComponent<SamplerComponent>(entity))
+                m_entityManager.RemoveComponent<SamplerComponent>(entity);
             else
-                mgr.AddComponent<SamplerComponent>(entity);
+                m_entityManager.AddComponent<SamplerComponent>(entity);
         }
         else if (name == "GuidanceComponent") {
-            if (mgr.HasComponent<GuidanceComponent>(entity))
-                mgr.RemoveComponent<GuidanceComponent>(entity);
+            if (m_entityManager.HasComponent<GuidanceComponent>(entity))
+                m_entityManager.RemoveComponent<GuidanceComponent>(entity);
             else
-                mgr.AddComponent<GuidanceComponent>(entity);
+                m_entityManager.AddComponent<GuidanceComponent>(entity);
         }
         else if (name == "ClipSkipComponent") {
-            if (mgr.HasComponent<ClipSkipComponent>(entity))
-                mgr.RemoveComponent<ClipSkipComponent>(entity);
+            if (m_entityManager.HasComponent<ClipSkipComponent>(entity))
+                m_entityManager.RemoveComponent<ClipSkipComponent>(entity);
             else
-                mgr.AddComponent<ClipSkipComponent>(entity);
+                m_entityManager.AddComponent<ClipSkipComponent>(entity);
         }
         else if (name == "PromptComponent") {
-            if (mgr.HasComponent<PromptComponent>(entity))
-                mgr.RemoveComponent<PromptComponent>(entity);
+            if (m_entityManager.HasComponent<PromptComponent>(entity))
+                m_entityManager.RemoveComponent<PromptComponent>(entity);
             else
-                mgr.AddComponent<PromptComponent>(entity);
+                m_entityManager.AddComponent<PromptComponent>(entity);
         }
         else if (name == "LayerSkipComponent") {
-            if (mgr.HasComponent<LayerSkipComponent>(entity))
-                mgr.RemoveComponent<LayerSkipComponent>(entity);
+            if (m_entityManager.HasComponent<LayerSkipComponent>(entity))
+                m_entityManager.RemoveComponent<LayerSkipComponent>(entity);
             else
-                mgr.AddComponent<LayerSkipComponent>(entity);
+                m_entityManager.AddComponent<LayerSkipComponent>(entity);
         }
         else if (name == "ChromaComponent") {
-            if (mgr.HasComponent<ChromaComponent>(entity))
-                mgr.RemoveComponent<ChromaComponent>(entity);
+            if (m_entityManager.HasComponent<ChromaComponent>(entity))
+                m_entityManager.RemoveComponent<ChromaComponent>(entity);
             else
-                mgr.AddComponent<ChromaComponent>(entity);
+                m_entityManager.AddComponent<ChromaComponent>(entity);
         }
         else if (name == "SLGComponent") {
-            if (mgr.HasComponent<SLGComponent>(entity))
-                mgr.RemoveComponent<SLGComponent>(entity);
+            if (m_entityManager.HasComponent<SLGComponent>(entity))
+                m_entityManager.RemoveComponent<SLGComponent>(entity);
             else
-                mgr.AddComponent<SLGComponent>(entity);
+                m_entityManager.AddComponent<SLGComponent>(entity);
         }
         else if (name == "EasyCacheComponent") {
-            if (mgr.HasComponent<EasyCacheComponent>(entity))
-                mgr.RemoveComponent<EasyCacheComponent>(entity);
+            if (m_entityManager.HasComponent<EasyCacheComponent>(entity))
+                m_entityManager.RemoveComponent<EasyCacheComponent>(entity);
             else
-                mgr.AddComponent<EasyCacheComponent>(entity);
+                m_entityManager.AddComponent<EasyCacheComponent>(entity);
         }
         else if (name == "ConversionComponent") {
-            if (mgr.HasComponent<ConversionComponent>(entity))
-                mgr.RemoveComponent<ConversionComponent>(entity);
+            if (m_entityManager.HasComponent<ConversionComponent>(entity))
+                m_entityManager.RemoveComponent<ConversionComponent>(entity);
             else
-                mgr.AddComponent<ConversionComponent>(entity);
+                m_entityManager.AddComponent<ConversionComponent>(entity);
         }
     }
 
     bool DiffusionView::IsComponentPresent(EntityID entity, const std::string& name) const {
         if (entity == 0 || !IsEntitySafeToUse(entity)) return false;
         if (name == "InputImage")
-            return mgr.HasComponent<InputImageComponent>(entity);
+            return m_entityManager.HasComponent<InputImageComponent>(entity);
         if (name == "CheckpointComponent")
-            return mgr.HasComponent<CheckpointComponent>(entity);
+            return m_entityManager.HasComponent<CheckpointComponent>(entity);
         if (name == "DiffusionModelComponent")
-            return mgr.HasComponent<DiffusionModelComponent>(entity);
+            return m_entityManager.HasComponent<DiffusionModelComponent>(entity);
         if (name == "ClipLComponent")
-            return mgr.HasComponent<ClipLComponent>(entity);
+            return m_entityManager.HasComponent<ClipLComponent>(entity);
         if (name == "ClipGComponent")
-            return mgr.HasComponent<ClipGComponent>(entity);
+            return m_entityManager.HasComponent<ClipGComponent>(entity);
         if (name == "T5XXLComponent")
-            return mgr.HasComponent<T5XXLComponent>(entity);
+            return m_entityManager.HasComponent<T5XXLComponent>(entity);
         if (name == "ClipVisionComponent")
-            return mgr.HasComponent<ClipVisionComponent>(entity);
+            return m_entityManager.HasComponent<ClipVisionComponent>(entity);
         if (name == "LlmEncoderComponent")
-            return mgr.HasComponent<LlmEncoderComponent>(entity);
+            return m_entityManager.HasComponent<LlmEncoderComponent>(entity);
         if (name == "LlmVisionComponent")
-            return mgr.HasComponent<LlmVisionComponent>(entity);
+            return m_entityManager.HasComponent<LlmVisionComponent>(entity);
         if (name == "VaeComponent")
-            return mgr.HasComponent<VaeComponent>(entity);
+            return m_entityManager.HasComponent<VaeComponent>(entity);
         if (name == "TaesdComponent")
-            return mgr.HasComponent<TaesdComponent>(entity);
+            return m_entityManager.HasComponent<TaesdComponent>(entity);
         if (name == "LoraComponent")
-            return mgr.HasComponent<LoraComponent>(entity);
+            return m_entityManager.HasComponent<LoraComponent>(entity);
         if (name == "ControlNetComponent")
-            return mgr.HasComponent<ControlNetComponent>(entity);
+            return m_entityManager.HasComponent<ControlNetComponent>(entity);
         if (name == "EmbeddingComponent")
-            return mgr.HasComponent<EmbeddingComponent>(entity);
+            return m_entityManager.HasComponent<EmbeddingComponent>(entity);
         if (name == "PhotoMakerComponent")
-            return mgr.HasComponent<PhotoMakerComponent>(entity);
+            return m_entityManager.HasComponent<PhotoMakerComponent>(entity);
         if (name == "StackedIdEmbedComponent")
-            return mgr.HasComponent<StackedIdEmbedComponent>(entity);
+            return m_entityManager.HasComponent<StackedIdEmbedComponent>(entity);
         if (name == "LatentComponent")
-            return mgr.HasComponent<LatentComponent>(entity);
+            return m_entityManager.HasComponent<LatentComponent>(entity);
         if (name == "SamplerComponent")
-            return mgr.HasComponent<SamplerComponent>(entity);
+            return m_entityManager.HasComponent<SamplerComponent>(entity);
         if (name == "GuidanceComponent")
-            return mgr.HasComponent<GuidanceComponent>(entity);
+            return m_entityManager.HasComponent<GuidanceComponent>(entity);
         if (name == "ClipSkipComponent")
-            return mgr.HasComponent<ClipSkipComponent>(entity);
+            return m_entityManager.HasComponent<ClipSkipComponent>(entity);
         if (name == "PromptComponent")
-            return mgr.HasComponent<PromptComponent>(entity);
+            return m_entityManager.HasComponent<PromptComponent>(entity);
         if (name == "LayerSkipComponent")
-            return mgr.HasComponent<LayerSkipComponent>(entity);
+            return m_entityManager.HasComponent<LayerSkipComponent>(entity);
         if (name == "ChromaComponent")
-            return mgr.HasComponent<ChromaComponent>(entity);
+            return m_entityManager.HasComponent<ChromaComponent>(entity);
         if (name == "SLGComponent")
-            return mgr.HasComponent<SLGComponent>(entity);
+            return m_entityManager.HasComponent<SLGComponent>(entity);
         if (name == "EasyCacheComponent")
-            return mgr.HasComponent<EasyCacheComponent>(entity);
+            return m_entityManager.HasComponent<EasyCacheComponent>(entity);
         if (name == "ConversionComponent")
-            return mgr.HasComponent<ConversionComponent>(entity);
+            return m_entityManager.HasComponent<ConversionComponent>(entity);
         return false;
     }
 
     void DiffusionView::SetModelMode(EntityID entity, bool useCheckpoint) {
         if (entity == 0 || !IsEntitySafeToUse(entity)) return;
         if (useCheckpoint) {
-            if (!mgr.HasComponent<CheckpointComponent>(entity))
-                mgr.AddComponent<CheckpointComponent>(entity);
-            mgr.RemoveComponent<DiffusionModelComponent>(entity);
-            mgr.RemoveComponent<ClipLComponent>(entity);
-            mgr.RemoveComponent<ClipGComponent>(entity);
-            mgr.RemoveComponent<T5XXLComponent>(entity);
-            mgr.RemoveComponent<ClipVisionComponent>(entity);
-            mgr.RemoveComponent<LlmEncoderComponent>(entity);
-            mgr.RemoveComponent<LlmVisionComponent>(entity);
-            mgr.RemoveComponent<VaeComponent>(entity);
-            mgr.RemoveComponent<TaesdComponent>(entity);
+            if (!m_entityManager.HasComponent<CheckpointComponent>(entity))
+                m_entityManager.AddComponent<CheckpointComponent>(entity);
+            m_entityManager.RemoveComponent<DiffusionModelComponent>(entity);
+            m_entityManager.RemoveComponent<ClipLComponent>(entity);
+            m_entityManager.RemoveComponent<ClipGComponent>(entity);
+            m_entityManager.RemoveComponent<T5XXLComponent>(entity);
+            m_entityManager.RemoveComponent<ClipVisionComponent>(entity);
+            m_entityManager.RemoveComponent<LlmEncoderComponent>(entity);
+            m_entityManager.RemoveComponent<LlmVisionComponent>(entity);
+            m_entityManager.RemoveComponent<VaeComponent>(entity);
+            m_entityManager.RemoveComponent<TaesdComponent>(entity);
         }
         else {
-            mgr.RemoveComponent<CheckpointComponent>(entity);
-            if (!mgr.HasComponent<DiffusionModelComponent>(entity))
-                mgr.AddComponent<DiffusionModelComponent>(entity);
-            if (!mgr.HasComponent<ClipLComponent>(entity))
-                mgr.AddComponent<ClipLComponent>(entity);
-            if (!mgr.HasComponent<ClipGComponent>(entity))
-                mgr.AddComponent<ClipGComponent>(entity);
-            if (!mgr.HasComponent<T5XXLComponent>(entity))
-                mgr.AddComponent<T5XXLComponent>(entity);
-            if (!mgr.HasComponent<ClipVisionComponent>(entity))
-                mgr.AddComponent<ClipVisionComponent>(entity);
-            if (!mgr.HasComponent<LlmEncoderComponent>(entity))
-                mgr.AddComponent<LlmEncoderComponent>(entity);
-            if (!mgr.HasComponent<LlmVisionComponent>(entity))
-                mgr.AddComponent<LlmVisionComponent>(entity);
-            if (!mgr.HasComponent<VaeComponent>(entity))
-                mgr.AddComponent<VaeComponent>(entity);
-            if (!mgr.HasComponent<TaesdComponent>(entity))
-                mgr.AddComponent<TaesdComponent>(entity);
+            m_entityManager.RemoveComponent<CheckpointComponent>(entity);
+            if (!m_entityManager.HasComponent<DiffusionModelComponent>(entity))
+                m_entityManager.AddComponent<DiffusionModelComponent>(entity);
+            if (!m_entityManager.HasComponent<ClipLComponent>(entity))
+                m_entityManager.AddComponent<ClipLComponent>(entity);
+            if (!m_entityManager.HasComponent<ClipGComponent>(entity))
+                m_entityManager.AddComponent<ClipGComponent>(entity);
+            if (!m_entityManager.HasComponent<T5XXLComponent>(entity))
+                m_entityManager.AddComponent<T5XXLComponent>(entity);
+            if (!m_entityManager.HasComponent<ClipVisionComponent>(entity))
+                m_entityManager.AddComponent<ClipVisionComponent>(entity);
+            if (!m_entityManager.HasComponent<LlmEncoderComponent>(entity))
+                m_entityManager.AddComponent<LlmEncoderComponent>(entity);
+            if (!m_entityManager.HasComponent<LlmVisionComponent>(entity))
+                m_entityManager.AddComponent<LlmVisionComponent>(entity);
+            if (!m_entityManager.HasComponent<VaeComponent>(entity))
+                m_entityManager.AddComponent<VaeComponent>(entity);
+            if (!m_entityManager.HasComponent<TaesdComponent>(entity))
+                m_entityManager.AddComponent<TaesdComponent>(entity);
         }
     }
 
     bool DiffusionView::IsCheckpointMode(EntityID entity) const {
-        return mgr.HasComponent<CheckpointComponent>(entity);
+        return m_entityManager.HasComponent<CheckpointComponent>(entity);
     }
 
     void DiffusionView::ResetToDefaultComponents(EntityID entity) {
-        std::vector<std::string> all = mgr.GetAllRegisteredComponentNames();
+        std::vector<std::string> all = m_entityManager.GetAllRegisteredComponentNames();
         for (const std::string& name : all) {
             if (name == "InputImage") continue;
             if (name == "CheckpointComponent" || name == "LatentComponent" ||
@@ -407,7 +394,7 @@ namespace GUI {
                     ResetToDefaultComponents(current);
                 ImGui::Separator();
 
-                std::vector<std::string> all = mgr.GetAllRegisteredComponentNames();
+                std::vector<std::string> all = m_entityManager.GetAllRegisteredComponentNames();
                 std::sort(all.begin(), all.end());
                 for (const std::string& name : all) {
                     if (name == "BaseModelComponent" || name == "BaseComponent") continue;
@@ -422,7 +409,7 @@ namespace GUI {
                         ToggleComponent(current, name);
                 }
                 if (currentMode != 0) {
-                    bool hasInput = mgr.HasComponent<InputImageComponent>(current);
+                    bool hasInput = m_entityManager.HasComponent<InputImageComponent>(current);
                     if (ImGui::MenuItem("InputImage", nullptr, hasInput))
                         ToggleComponent(current, "InputImage");
                 }
@@ -433,14 +420,14 @@ namespace GUI {
     }
 
     void DiffusionView::RenderComponent(EntityID entity, ComponentTypeID compId, const std::string& name) {
-        auto* comp = mgr.GetComponentById(entity, compId);
+        auto* comp = m_entityManager.GetComponentById(entity, compId);
         if (!comp || comp->schema.empty()) return;
         try {
             auto props = comp->GetPropertyMap();
             if (name == "Latent") {
                 UISchema::RenderSchema(comp->schema, props);
-                if (mgr.HasComponent<LatentComponent>(entity)) {
-                    auto& l = mgr.GetComponent<LatentComponent>(entity);
+                if (m_entityManager.HasComponent<LatentComponent>(entity)) {
+                    auto& l = m_entityManager.GetComponent<LatentComponent>(entity);
                     int w = std::max(64, ((l.latentWidth + 32) / 64) * 64);
                     int h = std::max(64, ((l.latentHeight + 32) / 64) * 64);
                     if (w != l.latentWidth || h != l.latentHeight) {
@@ -457,8 +444,8 @@ namespace GUI {
             }
             else if (name == "InputImage") {
                 UISchema::RenderSchema(comp->schema, props);
-                if (mgr.HasComponent<InputImageComponent>(entity)) {
-                    auto& in = mgr.GetComponent<InputImageComponent>(entity);
+                if (m_entityManager.HasComponent<InputImageComponent>(entity)) {
+                    auto& in = m_entityManager.GetComponent<InputImageComponent>(entity);
                     if (!in.filePath.empty()) {
                         ImGui::Text("Selected: %s", in.filePath.c_str());
                         if (in.width <= 0 || in.height <= 0) {
@@ -472,8 +459,8 @@ namespace GUI {
                         if (in.width > 0 && in.height > 0)
                             ImGui::Text("Dimensions: %dx%d", in.width, in.height);
                         if (ImGui::Button("Set Latent to Image Size", ImVec2(-1.0f, 0))) {
-                            if (mgr.HasComponent<LatentComponent>(entity)) {
-                                auto& l = mgr.GetComponent<LatentComponent>(entity);
+                            if (m_entityManager.HasComponent<LatentComponent>(entity)) {
+                                auto& l = m_entityManager.GetComponent<LatentComponent>(entity);
                                 if (in.width > 0 && in.height > 0) {
                                     l.latentWidth = in.width;
                                     l.latentHeight = in.height;
@@ -498,9 +485,9 @@ namespace GUI {
     void DiffusionView::RenderEntityComponents(const EntityID entity) {
         if (entity == 0 || !IsEntitySafeToUse(entity)) return;
 
-        auto componentIds = mgr.GetEntityComponents(entity);
+        auto componentIds = m_entityManager.GetEntityComponents(entity);
         for (ComponentTypeID compId : componentIds) {
-            std::string name = mgr.GetComponentNameById(compId);
+            std::string name = m_entityManager.GetComponentNameById(compId);
             if (name == "InputImage" && currentMode == 0) continue;
             if (name == "BaseComponent" || name == "BaseModelComponent") continue;
 
@@ -536,20 +523,20 @@ namespace GUI {
     }
 
     void DiffusionView::HandleT2IEvent() {
-        EntityID newEntity = mgr.CloneEntity(txt2imgEntity);
+        EntityID newEntity = m_entityManager.CloneEntity(txt2imgEntity);
         if (newEntity == 0) return;
-        auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+        auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         if (sdSystem)
             sdSystem->QueueTask(newEntity, ECS::SDCPPSystem::TaskType::Inference);
         else
-            mgr.DestroyEntity(newEntity);
+            m_entityManager.DestroyEntity(newEntity);
     }
 
     void DiffusionView::HandleI2IEvent() {
-        EntityID newEntity = mgr.CloneEntity(img2imgEntity);
+        EntityID newEntity = m_entityManager.CloneEntity(img2imgEntity);
         if (newEntity == 0) return;
-        if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
-            auto& out = mgr.GetComponent<OutputImageComponent>(newEntity);
+        if (m_entityManager.HasComponent<OutputImageComponent>(newEntity)) {
+            auto& out = m_entityManager.GetComponent<OutputImageComponent>(newEntity);
             if (out.filePath.empty())
                 out.filePath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
             if (out.fileName.empty())
@@ -561,10 +548,10 @@ namespace GUI {
     }
 
     void DiffusionView::HandleEditEvent() {
-        EntityID newEntity = mgr.CloneEntity(editEntity);
+        EntityID newEntity = m_entityManager.CloneEntity(editEntity);
         if (newEntity == 0) return;
-        if (mgr.HasComponent<OutputImageComponent>(newEntity)) {
-            auto& out = mgr.GetComponent<OutputImageComponent>(newEntity);
+        if (m_entityManager.HasComponent<OutputImageComponent>(newEntity)) {
+            auto& out = m_entityManager.GetComponent<OutputImageComponent>(newEntity);
             if (out.filePath.empty())
                 out.filePath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
             if (out.fileName.empty())
@@ -608,8 +595,8 @@ namespace GUI {
                 if (numQueues < 1) numQueues = 1;
             if (ImGui::Button("Queue", ImVec2(-FLT_MIN, 0))) {
                 EntityID target = GetCurrentEntity();
-                if (mgr.HasComponent<LoraComponent>(target)) {
-                    auto& lora = mgr.GetComponent<LoraComponent>(target);
+                if (m_entityManager.HasComponent<LoraComponent>(target)) {
+                    auto& lora = m_entityManager.GetComponent<LoraComponent>(target);
                     if (lora.modelPath.empty())
                         lora.modelPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("Lora") : "";
                 }
@@ -646,7 +633,7 @@ namespace GUI {
                 ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
-                auto sdSystem = mgr.GetSystem<ECS::SDCPPSystem>();
+                auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
                 if (sdSystem) {
                     auto items = sdSystem->GetQueueSnapshot();
                     for (size_t i = 0; i < items.size(); ++i) {
@@ -743,9 +730,9 @@ namespace GUI {
 
     nlohmann::json DiffusionView::Serialize() const {
         nlohmann::json j;
-        j["txt2imgEntity"] = mgr.SerializeEntity(txt2imgEntity);
-        j["img2imgEntity"] = mgr.SerializeEntity(img2imgEntity);
-        j["editEntity"] = mgr.SerializeEntity(editEntity);
+        j["txt2imgEntity"] = m_entityManager.SerializeEntity(txt2imgEntity);
+        j["img2imgEntity"] = m_entityManager.SerializeEntity(img2imgEntity);
+        j["editEntity"] = m_entityManager.SerializeEntity(editEntity);
         j["componentVisibility"] = componentVisibility;
         j["currentMode"] = currentMode;
         j["numQueues"] = numQueues;
@@ -756,11 +743,11 @@ namespace GUI {
     void DiffusionView::Deserialize(const nlohmann::json& j) {
         try {
             if (j.contains("txt2imgEntity"))
-                mgr.DeserializeEntity(j["txt2imgEntity"], txt2imgEntity);
+                m_entityManager.DeserializeEntity(j["txt2imgEntity"], txt2imgEntity);
             if (j.contains("img2imgEntity"))
-                mgr.DeserializeEntity(j["img2imgEntity"], img2imgEntity);
+                m_entityManager.DeserializeEntity(j["img2imgEntity"], img2imgEntity);
             if (j.contains("editEntity"))
-                mgr.DeserializeEntity(j["editEntity"], editEntity);
+                m_entityManager.DeserializeEntity(j["editEntity"], editEntity);
             if (j.contains("componentVisibility"))
                 componentVisibility = j["componentVisibility"];
             if (j.contains("currentMode"))
@@ -882,20 +869,20 @@ namespace GUI {
         try {
             EntityID target = GetCurrentEntity();
             if (target != 0) {
-                mgr.DeserializeEntity(j, txt2imgEntity);
+                m_entityManager.DeserializeEntity(j, txt2imgEntity);
                 if (j.contains("components")) {
-                    nlohmann::json data = mgr.SerializeEntity(txt2imgEntity);
+                    nlohmann::json data = m_entityManager.SerializeEntity(txt2imgEntity);
                     float imgDenoise = 0.6f, editDenoise = 0.6f;
-                    if (mgr.HasComponent<SamplerComponent>(img2imgEntity))
-                        imgDenoise = mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise;
-                    if (mgr.HasComponent<SamplerComponent>(editEntity))
-                        editDenoise = mgr.GetComponent<SamplerComponent>(editEntity).denoise;
-                    mgr.DeserializeEntity(data, img2imgEntity);
-                    mgr.DeserializeEntity(data, editEntity);
-                    if (mgr.HasComponent<SamplerComponent>(img2imgEntity))
-                        mgr.GetComponent<SamplerComponent>(img2imgEntity).denoise = imgDenoise;
-                    if (mgr.HasComponent<SamplerComponent>(editEntity))
-                        mgr.GetComponent<SamplerComponent>(editEntity).denoise = editDenoise;
+                    if (m_entityManager.HasComponent<SamplerComponent>(img2imgEntity))
+                        imgDenoise = m_entityManager.GetComponent<SamplerComponent>(img2imgEntity).denoise;
+                    if (m_entityManager.HasComponent<SamplerComponent>(editEntity))
+                        editDenoise = m_entityManager.GetComponent<SamplerComponent>(editEntity).denoise;
+                    m_entityManager.DeserializeEntity(data, img2imgEntity);
+                    m_entityManager.DeserializeEntity(data, editEntity);
+                    if (m_entityManager.HasComponent<SamplerComponent>(img2imgEntity))
+                        m_entityManager.GetComponent<SamplerComponent>(img2imgEntity).denoise = imgDenoise;
+                    if (m_entityManager.HasComponent<SamplerComponent>(editEntity))
+                        m_entityManager.GetComponent<SamplerComponent>(editEntity).denoise = editDenoise;
                 }
             }
             if (j.contains("componentVisibility"))

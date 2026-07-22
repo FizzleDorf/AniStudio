@@ -10,9 +10,16 @@ namespace GUI {
 
 	class VideoDiffusionView : public BaseView {
 	public:
-		VideoDiffusionView(ECS::EntityManager& entityMgr, ImGuiContext* mainContext = nullptr);
-		virtual ~VideoDiffusionView();
-
+		VideoDiffusionView(ECS::EntityManager& mgr, ViewManager& vm)
+			: BaseView(mgr, vm)
+		{
+			viewName = "VideoDiffusionView";
+			windowOpen = true;
+		}
+		~VideoDiffusionView() {
+			if (img2vidEntity != 0)
+				m_entityManager.DestroyEntity(img2vidEntity);
+		}
 		static constexpr const char* GetMetadataJSON() {
 			return R"({
                 "displayName": "Video Diffusion",
