@@ -1,6 +1,6 @@
 {
     "pluginScopes": {
-        "DiffusionAddon": false
+        "AniStudio-SDCPP_CUDA": false
     },
     "version": "1.0"
 }

@@ -255,14 +255,6 @@ namespace Utils
                                     imagesToCleanup.push_back(ref_image);
                                 }
                             }
-                            if (refImageData.contains("autoResize") && !refImageData["autoResize"].is_null())
-                            {
-                                gen_params.auto_resize_ref_image = refImageData["autoResize"].get<bool>();
-                            }
-                            if (refImageData.contains("increaseIndex") && !refImageData["increaseIndex"].is_null())
-                            {
-                                gen_params.increase_ref_index = refImageData["increaseIndex"].get<bool>();
-                            }
                         }
                     }
                 }

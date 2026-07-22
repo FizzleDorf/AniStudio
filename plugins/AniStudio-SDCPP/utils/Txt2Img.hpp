@@ -15,9 +15,6 @@
 #include <memory>
 #include <vector>
 
-// Forward declaration of global FilePathSystem pointer - only needed if Txt2Img uses it
-// (Currently Txt2Img doesn't use FilePathService directly)
-
 namespace Utils
 {
     uint64_t generateRandomSeed();
@@ -198,10 +195,6 @@ namespace Utils
                                 refImagesStorage.push_back(ref_image);
                             }
                             nlohmann::json refImageData = comp["ReferenceImage"];
-                            if (refImageData.contains("autoResize") && !refImageData["autoResize"].is_null())
-                                gen_params.auto_resize_ref_image = refImageData["autoResize"].get<bool>();
-                            if (refImageData.contains("increaseIndex") && !refImageData["increaseIndex"].is_null())
-                                gen_params.increase_ref_index = refImageData["increaseIndex"].get<bool>();
                         }
 
                         if (comp.contains("ControlNetImage"))
