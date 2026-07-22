@@ -8,12 +8,10 @@ echo.
 
 set ADDON_DIR=%~dp0
 set ADDON_DIR=%ADDON_DIR:~0,-1%
-set BUILD_DIR=%ADDON_DIR%\build
 set ROOT_DIR=%ADDON_DIR%\..\..
 
 set ADDON_NAME=AniStudio-SDCPP
 set BUILT_ADDONS_BASE=%ROOT_DIR%\build\plugins
-set ADDON_MAIN_DIR=%BUILT_ADDONS_BASE%\%ADDON_NAME%
 
 set SD_CUDA=OFF
 set SD_VULKAN=OFF
@@ -36,7 +34,6 @@ if /i "%~1"=="--metal" set SD_METAL=ON
 if /i "%~1"=="--opencl" set SD_OPENCL=ON
 if /i "%~1"=="--sycl" set SD_SYCL=ON
 if /i "%~1"=="--musa" set SD_MUSA=ON
-if /i "%~1"=="--fast-softmax" set SD_FAST_SOFTMAX=ON
 if /i "%~1"=="--system-ggml" set SD_USE_SYSTEM_GGML=ON
 shift
 goto parse_args
@@ -58,7 +55,6 @@ echo   Metal: %SD_METAL%
 echo   OpenCL: %SD_OPENCL%
 echo   SYCL: %SD_SYCL%
 echo   MUSA: %SD_MUSA%
-echo   Fast Softmax: %SD_FAST_SOFTMAX%
 echo   Use System GGML: %SD_USE_SYSTEM_GGML%
 echo.
 
@@ -73,11 +69,13 @@ if "%SD_MUSA%"=="ON" set BACKEND_SUFFIX=_MUSA
 
 set TARGET_NAME=%ADDON_NAME%%BACKEND_SUFFIX%
 set ADDON_MAIN_DIR=%BUILT_ADDONS_BASE%\%TARGET_NAME%
+set BUILD_DIR=%ADDON_MAIN_DIR%\build
 set STAGING_DIR=%ADDON_MAIN_DIR%\staging
 set STAGING_DLL=%STAGING_DIR%\%TARGET_NAME%.dll
 set LIBS_DIR=%ADDON_MAIN_DIR%\libs
 
 echo Computed Target: %TARGET_NAME%
+echo   Build Dir: %BUILD_DIR%
 echo   Staging Dir: %STAGING_DIR%
 echo   DLL: %STAGING_DLL%
 echo.
@@ -110,7 +108,6 @@ if %CLEAN_BUILD%==1 (
 )
 
 mkdir "%BUILD_DIR%" 2>nul
-mkdir "%BUILT_ADDONS_BASE%" 2>nul
 mkdir "%ADDON_MAIN_DIR%" 2>nul
 mkdir "%STAGING_DIR%" 2>nul
 mkdir "%LIBS_DIR%" 2>nul
@@ -137,7 +134,7 @@ if exist CMakeCache.txt (
 if not exist "CMakeCache.txt" (
     echo Configuring CMake...
     
-    set CMAKE_CMD=cmake .. -DCMAKE_BUILD_TYPE=Release
+    set CMAKE_CMD=cmake "%ADDON_DIR%" -DCMAKE_BUILD_TYPE=Release
     set CMAKE_CMD=!CMAKE_CMD! -DSD_CUDA=%SD_CUDA%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_VULKAN=%SD_VULKAN%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_HIPBLAS=%SD_HIPBLAS%
@@ -145,7 +142,6 @@ if not exist "CMakeCache.txt" (
     set CMAKE_CMD=!CMAKE_CMD! -DSD_OPENCL=%SD_OPENCL%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_SYCL=%SD_SYCL%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_MUSA=%SD_MUSA%
-    set CMAKE_CMD=!CMAKE_CMD! -DSD_FAST_SOFTMAX=%SD_FAST_SOFTMAX%
     set CMAKE_CMD=!CMAKE_CMD! -DSD_USE_SYSTEM_GGML=%SD_USE_SYSTEM_GGML%
     
     echo Running: !CMAKE_CMD!

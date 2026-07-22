@@ -1,7 +1,0 @@
-[requires]
-llama-cpp/b3542
-[generators]
-CMakeDeps
-CMakeToolchain
-[layout]
-cmake_layout

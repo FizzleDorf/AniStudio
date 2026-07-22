@@ -250,8 +250,11 @@ if(SD_USE_SYSTEM_GGML)
     set(SD_USE_SYSTEM_GGML ON CACHE BOOL "" FORCE)
 endif()
 
-if(EXISTS "${EXTERNAL_DIR}/stable-diffusion.cpp/CMakeLists.txt")
-    add_subdirectory("${EXTERNAL_DIR}/stable-diffusion.cpp" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
+set(SDCPP_SUBMODULE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/stable-diffusion.cpp")
+set(SDCPP_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/stable-diffusion.cpp")
+
+if(EXISTS "${SDCPP_SUBMODULE_DIR}/CMakeLists.txt")
+    add_subdirectory("${SDCPP_SUBMODULE_DIR}" "${SDCPP_BINARY_DIR}")
 endif()
 
 if(WIN32)
@@ -259,13 +262,20 @@ if(WIN32)
     message(STATUS "Restored original PATH after stable-diffusion.cpp")
 endif()
 
+# Fix MSVC section limit (C1128) for the stable-diffusion library
+if(MSVC)
+    if(TARGET stable-diffusion)
+        target_compile_options(stable-diffusion PRIVATE /bigobj)
+    endif()
+endif()
+
 if(NOT TARGET stable-diffusion)
     find_library(STABLE_DIFFUSION_LIB NAMES libstable-diffusion.a stable-diffusion.a libstable-diffusion.so 
-                 PATHS "${MAIN_LIB_DIR}" "${CMAKE_BINARY_DIR}/stable-diffusion.cpp")
+                 PATHS "${MAIN_LIB_DIR}" "${SDCPP_BINARY_DIR}")
     if(STABLE_DIFFUSION_LIB)
         add_library(stable-diffusion UNKNOWN IMPORTED)
         set_target_properties(stable-diffusion PROPERTIES IMPORTED_LOCATION "${STABLE_DIFFUSION_LIB}"
-                              INTERFACE_INCLUDE_DIRECTORIES "${EXTERNAL_DIR}/stable-diffusion.cpp")
+                              INTERFACE_INCLUDE_DIRECTORIES "${SDCPP_SUBMODULE_DIR}")
     endif()
 endif()
 
@@ -312,7 +322,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/cr/cr"
-    "${EXTERNAL_DIR}/stable-diffusion.cpp"
+    "${SDCPP_SUBMODULE_DIR}"
     "${EXTERNAL_DIR}/stb_image"
     "${EXTERNAL_DIR}/imgui_nodes"
     "${EXTERNAL_DIR}/ImNodeFlow/include"
