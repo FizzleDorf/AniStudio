@@ -2,30 +2,14 @@
     "compName": "FilePathComponent",
     "paths": {
         "Assets": "",
-        "AssetsFolder": "projects\\AniProject5/assets",
-        "Checkpoint": "",
-        "ControlNet": "",
-        "CurrentProject": "projects\\AniProject5",
+        "AssetsFolder": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\assets",
         "DataPath": "F:\\Stable_Diffusion_Stuff\\AniStudio\\build\\data\\defaults",
         "DefaultProject": "projects",
         "Docs": "",
-        "Embed": "",
-        "Encoder": "",
         "ImguiState": "",
-        "LastOpenProject": "projects\\AniProject5",
-        "Lora": "",
-        "ModelRoot": "",
-        "OutputFolder": "projects\\AniProject5/output",
         "Plugins": "",
-        "ProjectAssets": "projects\\AniProject5/assets",
-        "ProjectData": "projects\\AniProject5/data",
-        "ProjectDataPath": "projects\\AniProject5/data",
-        "ProjectOutput": "projects\\AniProject5/output",
         "Scripts": "",
         "Shaders": "",
-        "Taesd": "",
-        "Templates": "",
-        "Unet": "",
-        "Vae": ""
+        "Templates": ""
     }
 }

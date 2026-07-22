@@ -114,6 +114,44 @@ else()
     message(STATUS "Shader directory ${CMAKE_SOURCE_DIR}/src/shaders not found")
 endif()
 
+# === Copy the assets folder ===
+if(EXISTS "${CMAKE_SOURCE_DIR}/assets")
+    file(COPY "${CMAKE_SOURCE_DIR}/assets/" DESTINATION "${CMAKE_BINARY_DIR}/assets")
+    message(STATUS "Copied assets directory to ${CMAKE_BINARY_DIR}/assets")
+else()
+    message(STATUS "Assets directory not found at ${CMAKE_SOURCE_DIR}/assets")
+endif()
+
+# === Copy additional files and directories to build root ===
+if(EXISTS "${CMAKE_SOURCE_DIR}/README.md")
+    file(COPY "${CMAKE_SOURCE_DIR}/README.md" DESTINATION "${CMAKE_BINARY_DIR}")
+    message(STATUS "Copied README.md to ${CMAKE_BINARY_DIR}")
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/LICENSE-LGPL-3.0.txt")
+    file(COPY "${CMAKE_SOURCE_DIR}/LICENSE-LGPL-3.0.txt" DESTINATION "${CMAKE_BINARY_DIR}")
+    message(STATUS "Copied LICENSE-LGPL-3.0.txt to ${CMAKE_BINARY_DIR}")
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/LICENSE-COMMERCIAL.txt")
+    file(COPY "${CMAKE_SOURCE_DIR}/LICENSE-COMMERCIAL.txt" DESTINATION "${CMAKE_BINARY_DIR}")
+    message(STATUS "Copied LICENSE-COMMERCIAL.txt to ${CMAKE_BINARY_DIR}")
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/shader")
+    file(COPY "${CMAKE_SOURCE_DIR}/shader/" DESTINATION "${CMAKE_BINARY_DIR}/shader")
+    message(STATUS "Copied shader directory to ${CMAKE_BINARY_DIR}/shader")
+else()
+    message(STATUS "shader directory not found at ${CMAKE_SOURCE_DIR}/shader")
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/docs")
+    file(COPY "${CMAKE_SOURCE_DIR}/docs/" DESTINATION "${CMAKE_BINARY_DIR}/docs")
+    message(STATUS "Copied docs directory to ${CMAKE_BINARY_DIR}/docs")
+else()
+    message(STATUS "docs directory not found at ${CMAKE_SOURCE_DIR}/docs")
+endif()
+
 find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
@@ -221,11 +259,16 @@ if(BUILD_ANISTUDIO)
 endif()
 
 if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
+
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
         ${CMAKE_SOURCE_DIR}/src/core/Core.cpp
         ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
     )
+
+    if(WIN32)
+        target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/app.rc)
+    endif()
 
     set_target_properties(${PROJECT_NAME} PROPERTIES
         WIN32_EXECUTABLE FALSE
@@ -355,6 +398,42 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     if(EXISTS ${CMAKE_BINARY_DIR}/shaders)
         install(DIRECTORY ${CMAKE_BINARY_DIR}/shaders/
             DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/shaders
+        )
+    endif()
+
+    if(EXISTS ${CMAKE_BINARY_DIR}/assets)
+        install(DIRECTORY ${CMAKE_BINARY_DIR}/assets/
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/assets
+        )
+    endif()
+
+    if(EXISTS ${CMAKE_BINARY_DIR}/README.md)
+        install(FILES ${CMAKE_BINARY_DIR}/README.md
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
+        )
+    endif()
+
+    if(EXISTS ${CMAKE_BINARY_DIR}/LICENSE-LGPL-3.0.txt)
+        install(FILES ${CMAKE_BINARY_DIR}/LICENSE-LGPL-3.0.txt
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
+        )
+    endif()
+
+    if(EXISTS ${CMAKE_BINARY_DIR}/LICENSE-COMMERCIAL.txt)
+        install(FILES ${CMAKE_BINARY_DIR}/LICENSE-COMMERCIAL.txt
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
+        )
+    endif()
+
+    if(EXISTS ${CMAKE_BINARY_DIR}/shader)
+        install(DIRECTORY ${CMAKE_BINARY_DIR}/shader/
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/shader
+        )
+    endif()
+
+    if(EXISTS ${CMAKE_BINARY_DIR}/docs)
+        install(DIRECTORY ${CMAKE_BINARY_DIR}/docs/
+            DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}/docs
         )
     endif()
 

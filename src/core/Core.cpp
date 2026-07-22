@@ -355,7 +355,23 @@ namespace ANI {
 			std::cout << "[Core] Default font added" << '\n';
 		}
 		std::cout << "[Core] Font count: " << io.Fonts->Fonts.Size << '\n';
-
+		
+		const char* iconPath = "assets/favicom.jpg";
+		if (std::filesystem::exists(iconPath)) {
+			int width, height, channels;
+			unsigned char* data = stbi_load(iconPath, &width, &height, &channels, 4);
+			if (data) {
+				GLFWimage icon;
+				icon.width = width;
+				icon.height = height;
+				icon.pixels = data;
+				glfwSetWindowIcon(m_window, 1, &icon);
+				stbi_image_free(data);
+			}
+			else {
+				std::cerr << "[Core] Failed to load window icon: " << stbi_failure_reason() << std::endl;
+			}
+		}
 		std::cout << "[Core] Window initialization COMPLETE" << '\n';
 		return true;
 	}
