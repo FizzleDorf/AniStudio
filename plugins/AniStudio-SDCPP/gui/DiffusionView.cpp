@@ -53,7 +53,6 @@ namespace GUI {
         m_entityManager.AddComponent<LatentComponent>(entity);
         m_entityManager.AddComponent<SamplerComponent>(entity);
         m_entityManager.AddComponent<GuidanceComponent>(entity);
-        m_entityManager.AddComponent<ClipSkipComponent>(entity);
         m_entityManager.AddComponent<PromptComponent>(entity);
         m_entityManager.AddComponent<OutputImageComponent>(entity);
 
@@ -185,41 +184,11 @@ namespace GUI {
             else
                 m_entityManager.AddComponent<GuidanceComponent>(entity);
         }
-        else if (name == "ClipSkipComponent") {
-            if (m_entityManager.HasComponent<ClipSkipComponent>(entity))
-                m_entityManager.RemoveComponent<ClipSkipComponent>(entity);
-            else
-                m_entityManager.AddComponent<ClipSkipComponent>(entity);
-        }
         else if (name == "PromptComponent") {
             if (m_entityManager.HasComponent<PromptComponent>(entity))
                 m_entityManager.RemoveComponent<PromptComponent>(entity);
             else
                 m_entityManager.AddComponent<PromptComponent>(entity);
-        }
-        else if (name == "LayerSkipComponent") {
-            if (m_entityManager.HasComponent<LayerSkipComponent>(entity))
-                m_entityManager.RemoveComponent<LayerSkipComponent>(entity);
-            else
-                m_entityManager.AddComponent<LayerSkipComponent>(entity);
-        }
-        else if (name == "ChromaComponent") {
-            if (m_entityManager.HasComponent<ChromaComponent>(entity))
-                m_entityManager.RemoveComponent<ChromaComponent>(entity);
-            else
-                m_entityManager.AddComponent<ChromaComponent>(entity);
-        }
-        else if (name == "SLGComponent") {
-            if (m_entityManager.HasComponent<SLGComponent>(entity))
-                m_entityManager.RemoveComponent<SLGComponent>(entity);
-            else
-                m_entityManager.AddComponent<SLGComponent>(entity);
-        }
-        else if (name == "EasyCacheComponent") {
-            if (m_entityManager.HasComponent<EasyCacheComponent>(entity))
-                m_entityManager.RemoveComponent<EasyCacheComponent>(entity);
-            else
-                m_entityManager.AddComponent<EasyCacheComponent>(entity);
         }
         else if (name == "ConversionComponent") {
             if (m_entityManager.HasComponent<ConversionComponent>(entity))
@@ -227,6 +196,7 @@ namespace GUI {
             else
                 m_entityManager.AddComponent<ConversionComponent>(entity);
         }
+        // Additional components can be added here as needed.
     }
 
     bool DiffusionView::IsComponentPresent(EntityID entity, const std::string& name) const {
@@ -269,18 +239,8 @@ namespace GUI {
             return m_entityManager.HasComponent<SamplerComponent>(entity);
         if (name == "GuidanceComponent")
             return m_entityManager.HasComponent<GuidanceComponent>(entity);
-        if (name == "ClipSkipComponent")
-            return m_entityManager.HasComponent<ClipSkipComponent>(entity);
         if (name == "PromptComponent")
             return m_entityManager.HasComponent<PromptComponent>(entity);
-        if (name == "LayerSkipComponent")
-            return m_entityManager.HasComponent<LayerSkipComponent>(entity);
-        if (name == "ChromaComponent")
-            return m_entityManager.HasComponent<ChromaComponent>(entity);
-        if (name == "SLGComponent")
-            return m_entityManager.HasComponent<SLGComponent>(entity);
-        if (name == "EasyCacheComponent")
-            return m_entityManager.HasComponent<EasyCacheComponent>(entity);
         if (name == "ConversionComponent")
             return m_entityManager.HasComponent<ConversionComponent>(entity);
         return false;
@@ -334,8 +294,7 @@ namespace GUI {
             if (name == "InputImage") continue;
             if (name == "CheckpointComponent" || name == "LatentComponent" ||
                 name == "SamplerComponent" || name == "GuidanceComponent" ||
-                name == "ClipSkipComponent" || name == "PromptComponent" ||
-                name == "OutputImageComponent") {
+                name == "PromptComponent" || name == "OutputImageComponent") {
                 if (!IsComponentPresent(entity, name))
                     ToggleComponent(entity, name);
             }
@@ -609,6 +568,16 @@ namespace GUI {
                 }
             }
             ImGui::Separator();
+
+            auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
+            if (sdSystem) {
+                isPaused = sdSystem->IsPaused();
+            }
+
+            if (ImGui::Button("Cancel", ImVec2(-FLT_MIN, 0))) {
+                ANI::Events::Ref().QueueEvent("CancelCurrentDiffusionTask");
+            }
+
             if (isPaused) {
                 if (ImGui::Button("Resume", ImVec2(-FLT_MIN, 0))) {
                     ANI::Events::Ref().QueueEvent("ResumeDiffusionWorker");
@@ -621,10 +590,19 @@ namespace GUI {
                     isPaused = true;
                 }
             }
-            if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0)))
+
+            if (ImGui::Button("Stop", ImVec2(-FLT_MIN, 0))) {
                 ANI::Events::Ref().QueueEvent("StopCurrentDiffusionTask");
-            if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0)))
+            }
+
+            if (ImGui::Button("Clear Queue", ImVec2(-FLT_MIN, 0))) {
                 ANI::Events::Ref().QueueEvent("ClearDiffusionQueue");
+            }
+
+            if (ImGui::Button("Clear All", ImVec2(-FLT_MIN, 0))) {
+                ANI::Events::Ref().QueueEvent("ClearAllDiffusionTasks");
+            }
+
             ImGui::Separator();
 
             if (ImGui::BeginTable("Queue", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp)) {
@@ -633,7 +611,6 @@ namespace GUI {
                 ImGui::TableSetupColumn("Controls", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableHeadersRow();
 
-                auto sdSystem = m_entityManager.GetSystem<ECS::SDCPPSystem>();
                 if (sdSystem) {
                     auto items = sdSystem->GetQueueSnapshot();
                     for (size_t i = 0; i < items.size(); ++i) {

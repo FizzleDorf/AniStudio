@@ -9,7 +9,7 @@
 
 namespace ECS {
 
-    SettingsSystem::SettingsSystem(EntityManager& mgr) : BaseSystem(mgr) {
+    SettingsSystem::SettingsSystem(EntityManager& mgr) : BaseSystem(mgr), settingsEntity(mgr.AddNewEntity()) {
         sysName = "SettingsSystem";
     }
 

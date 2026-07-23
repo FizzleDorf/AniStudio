@@ -56,7 +56,9 @@ constexpr const char* sample_method_items[] = {
     "ER_SDE",
     "EULER_CFG_PP",
     "EULER_A_CFG_PP",
-    "EULER_GE"
+    "EULER_GE",
+    "DPMPP2M_SDE",
+    "DPMPP2M_SDE_BT"
 };
 constexpr const int sample_method_item_count = sizeof(sample_method_items) / sizeof(sample_method_items[0]);
 
@@ -72,7 +74,11 @@ constexpr const char* scheduler_method_items[] = {
     "KL_OPTIMAL",
     "LCM",
     "BONG_TANGENT",
-    "LTX2"
+    "LTX2",
+    "LOGIT_NORMAL",
+    "FLUX2",
+    "FLUX",
+    "BETA"
 };
 constexpr const int scheduler_method_item_count = sizeof(scheduler_method_items) / sizeof(scheduler_method_items[0]);
 
@@ -88,8 +94,8 @@ constexpr const char* prediction_type_items[] = {
     "V_PRED",
     "EDM_V_PRED",
     "FLOW_PRED",
-    "FLUX_FLOW_PRED",
-    "FLUX2_FLOW_PRED"
+    "SEFI_FLOW_PRED",
+    "MINIT2I_FLOW_PRED"
 };
 constexpr const int prediction_type_item_count = sizeof(prediction_type_items) / sizeof(prediction_type_items[0]);
 
@@ -123,6 +129,7 @@ constexpr const char* vae_format_items[] = {
     "AUTO",
     "FLUX",
     "SD3",
-    "FLUX2"
+    "FLUX2",
+    "WAN"
 };
 constexpr const int vae_format_item_count = sizeof(vae_format_items) / sizeof(vae_format_items[0]);

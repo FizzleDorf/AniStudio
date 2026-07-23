@@ -15,7 +15,6 @@ namespace ECS {
 		bool isModelLoaded = false;
 
 		virtual void RefreshSchema() override {
-			// Update paths in schema to reflect current FilePaths settings
 			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
 				auto& prop = schema["properties"]["modelPath"];
 				if (prop.contains("ui:options")) {
@@ -63,7 +62,6 @@ namespace ECS {
 				modelPath = componentData["modelPath"];
 		}
 
-		// Get the appropriate default directory for this model type
 		virtual const char* GetDefaultDirectory() const {
 			return compName;
 		}

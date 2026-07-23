@@ -10,13 +10,13 @@
 
 namespace ECS {
 
-    // TODO: Probably a better way of doing this
     inline sd_vae_format_t vae_format_index_to_enum(int index) {
         switch (index) {
         case 0: return SD_VAE_FORMAT_AUTO;
         case 1: return SD_VAE_FORMAT_FLUX;
         case 2: return SD_VAE_FORMAT_SD3;
         case 3: return SD_VAE_FORMAT_FLUX2;
+        case 4: return SD_VAE_FORMAT_WAN;
         default: return SD_VAE_FORMAT_AUTO;
         }
     }
@@ -27,6 +27,7 @@ namespace ECS {
         case SD_VAE_FORMAT_FLUX:  return 1;
         case SD_VAE_FORMAT_SD3:   return 2;
         case SD_VAE_FORMAT_FLUX2: return 3;
+        case SD_VAE_FORMAT_WAN:   return 4;
         default: return 0;
         }
     }
@@ -38,7 +39,7 @@ namespace ECS {
             schema = {
                 {"title", "VAE Settings"},
                 {"type", "object"},
-                {"propertyOrder", {"modelPath", "isTiled", "tile_size_x", "tile_size_y", "target_overlap", "rel_size_x", "rel_size_y", "keep_vae_on_cpu", "vae_decode_only", "vae_format"}},
+                {"propertyOrder", {"modelPath", "isTiled", "temporal_tiling", "tile_size_x", "tile_size_y", "target_overlap", "rel_size_x", "rel_size_y", "extra_tiling_args", "keep_vae_on_cpu", "vae_decode_only", "vae_format"}},
                 {"properties", {
                     {"modelPath", {
                         {"type", "string"},
@@ -58,6 +59,12 @@ namespace ECS {
                         {"type", "boolean"},
                         {"title", "Tiled VAE"},
                         {"description", "Enable tiled VAE processing to reduce memory usage for large images. Trades speed for memory efficiency."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"temporal_tiling", {
+                        {"type", "boolean"},
+                        {"title", "Temporal Tiling"},
+                        {"description", "Enable temporal tiling for video processing."},
                         {"ui:widget", "checkbox"}
                     }},
                     {"tile_size_x", {
@@ -120,6 +127,12 @@ namespace ECS {
                             {"max", 512.0f}
                         }}
                     }},
+                    {"extra_tiling_args", {
+                        {"type", "string"},
+                        {"title", "Extra Tiling Args"},
+                        {"description", "Additional tiling arguments as a string."},
+                        {"ui:widget", "textarea"}
+                    }},
                     {"keep_vae_on_cpu", {
                         {"type", "boolean"},
                         {"title", "Keep VAE on CPU"},
@@ -135,7 +148,7 @@ namespace ECS {
                     {"vae_format", {
                         {"type", "integer"},
                         {"title", "VAE Format"},
-                        {"description", "Format of the VAE model (auto, flux, sd3, flux2)."},
+                        {"description", "Format of the VAE model (auto, flux, sd3, flux2, wan)."},
                         {"ui:widget", "combo"},
                         {"items", vae_format_items},
                         {"itemCount", vae_format_item_count}
@@ -145,23 +158,27 @@ namespace ECS {
         }
 
         int vae_format = 0;
-        int tile_size_x, tile_size_y = 64;
+        int tile_size_x = 64, tile_size_y = 64;
         float target_overlap = 0;
-        float rel_size_x, rel_size_y = 64;
+        float rel_size_x = 64, rel_size_y = 64;
         bool keep_vae_on_cpu = false;
         bool vae_decode_only = false;
         bool isTiled = false;
+        bool temporal_tiling = false;
+        std::string extra_tiling_args;
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
                 {"modelPath", &modelPath},
                 {"modelName", &modelName},
                 {"isTiled", &isTiled},
+                {"temporal_tiling", &temporal_tiling},
                 {"tile_size_x", &tile_size_x},
                 {"tile_size_y", &tile_size_y},
                 {"target_overlap", &target_overlap},
                 {"rel_size_x", &rel_size_x},
                 {"rel_size_y", &rel_size_y},
+                {"extra_tiling_args", &extra_tiling_args},
                 {"keep_vae_on_cpu", &keep_vae_on_cpu},
                 {"vae_decode_only", &vae_decode_only},
                 {"vae_format", &vae_format}
@@ -174,11 +191,13 @@ namespace ECS {
                 modelName = other.modelName;
                 isModelLoaded = other.isModelLoaded;
                 isTiled = other.isTiled;
+                temporal_tiling = other.temporal_tiling;
                 tile_size_x = other.tile_size_x;
                 tile_size_y = other.tile_size_y;
                 target_overlap = other.target_overlap;
                 rel_size_x = other.rel_size_x;
                 rel_size_y = other.rel_size_y;
+                extra_tiling_args = other.extra_tiling_args;
                 keep_vae_on_cpu = other.keep_vae_on_cpu;
                 vae_decode_only = other.vae_decode_only;
                 vae_format = other.vae_format;
@@ -187,16 +206,17 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            // Store the actual enum value for backward compatibility
             return { {compName, {
                 {"modelName", modelName},
                 {"modelPath", modelPath},
                 {"isTiled", isTiled},
+                {"temporal_tiling", temporal_tiling},
                 {"tile_size_x", tile_size_x},
                 {"tile_size_y", tile_size_y},
                 {"target_overlap", target_overlap},
                 {"rel_size_x", rel_size_x},
                 {"rel_size_y", rel_size_y},
+                {"extra_tiling_args", extra_tiling_args},
                 {"keep_vae_on_cpu", keep_vae_on_cpu},
                 {"vae_decode_only", vae_decode_only},
                 {"vae_format", static_cast<int>(vae_format_index_to_enum(vae_format))}
@@ -224,6 +244,8 @@ namespace ECS {
 
             if (componentData.contains("isTiled"))
                 isTiled = componentData["isTiled"].get<bool>();
+            if (componentData.contains("temporal_tiling"))
+                temporal_tiling = componentData["temporal_tiling"].get<bool>();
             if (componentData.contains("tile_size_x"))
                 tile_size_x = componentData["tile_size_x"].get<int>();
             if (componentData.contains("tile_size_y"))
@@ -234,6 +256,8 @@ namespace ECS {
                 rel_size_x = componentData["rel_size_x"].get<float>();
             if (componentData.contains("rel_size_y"))
                 rel_size_y = componentData["rel_size_y"].get<float>();
+            if (componentData.contains("extra_tiling_args"))
+                extra_tiling_args = componentData["extra_tiling_args"].get<std::string>();
             if (componentData.contains("keep_vae_on_cpu"))
                 keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
             if (componentData.contains("vae_decode_only"))

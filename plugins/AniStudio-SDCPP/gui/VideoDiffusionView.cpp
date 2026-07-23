@@ -36,9 +36,7 @@ namespace GUI {
         componentVisibility["HighNoiseSamplerComponent"] = true;
         componentVisibility["VideoParamsComponent"] = true;
         componentVisibility["GuidanceComponent"] = true;
-        componentVisibility["ClipSkipComponent"] = true;
         componentVisibility["PromptComponent"] = true;
-        componentVisibility["LayerSkipComponent"] = true;
         componentVisibility["OutputImageComponent"] = true;
         componentVisibility["InputImageComponent"] = true;
         componentVisibility["EndImageComponent"] = true;
@@ -53,7 +51,6 @@ namespace GUI {
     }
 
     void VideoDiffusionView::Update(float deltaT) {
-
     }
 
     void VideoDiffusionView::ResetEntities() {
@@ -78,9 +75,7 @@ namespace GUI {
         m_entityManager.AddComponent<HighNoiseSamplerComponent>(img2vidEntity);
         m_entityManager.AddComponent<VideoParamsComponent>(img2vidEntity);
         m_entityManager.AddComponent<GuidanceComponent>(img2vidEntity);
-        m_entityManager.AddComponent<ClipSkipComponent>(img2vidEntity);
         m_entityManager.AddComponent<PromptComponent>(img2vidEntity);
-        m_entityManager.AddComponent<LayerSkipComponent>(img2vidEntity);
         m_entityManager.AddComponent<OutputImageComponent>(img2vidEntity);
         m_entityManager.AddComponent<InputImageComponent>(img2vidEntity);
 
@@ -395,36 +390,6 @@ namespace GUI {
         }
 
         if (ImGui::CollapsingHeader("Advanced Options")) {
-            RenderComponentWithCheckbox(entity, "ClipSkipComponent", "CLIP Skip", [&]() {
-                if (m_entityManager.HasComponent<ClipSkipComponent>(entity)) {
-                    auto& comp = m_entityManager.GetComponent<ClipSkipComponent>(entity);
-                    if (!comp.schema.empty()) {
-                        try {
-                            auto properties = comp.GetPropertyMap();
-                            UISchema::RenderSchema(comp.schema, properties);
-                        }
-                        catch (const std::exception& e) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering ClipSkipComponent: %s", e.what());
-                        }
-                    }
-                }
-                });
-
-            RenderComponentWithCheckbox(entity, "LayerSkipComponent", "Layer Skip", [&]() {
-                if (m_entityManager.HasComponent<LayerSkipComponent>(entity)) {
-                    auto& comp = m_entityManager.GetComponent<LayerSkipComponent>(entity);
-                    if (!comp.schema.empty()) {
-                        try {
-                            auto properties = comp.GetPropertyMap();
-                            UISchema::RenderSchema(comp.schema, properties);
-                        }
-                        catch (const std::exception& e) {
-                            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Error rendering LayerSkipComponent: %s", e.what());
-                        }
-                    }
-                }
-                });
-
             RenderComponentWithCheckbox(entity, "LoraComponent", "LoRA", [&]() {
                 if (m_entityManager.HasComponent<LoraComponent>(entity)) {
                     auto& comp = m_entityManager.GetComponent<LoraComponent>(entity);

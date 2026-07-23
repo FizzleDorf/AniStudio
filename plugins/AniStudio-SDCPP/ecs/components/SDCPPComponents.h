@@ -4,7 +4,6 @@
 #include "PromptComponent.hpp"
 #include "SamplerComponent.hpp"
 #include "GuidanceComponent.hpp"
-#include "ClipSkipComponent.hpp"
 
 // Models
 #include "ModelComponents.hpp"
@@ -13,14 +12,15 @@
 #include "OtherModelComponents.hpp"
 #include "VisionModelComponents.hpp"
 #include "VideoModelComponents.hpp"
-#include "SLGComponent.hpp"
 
 // Latents
 #include "LatentComponent.hpp"
-#include "LatentTransformComponent.hpp"
 
 // Other
-#include "LayerSkipComponent.hpp"
 #include "ChromaComponent.hpp"
 #include "SDCacheComponent.hpp"
 #include "ConversionComponent.hpp"
+#include "EmbeddingComponent.hpp"
+#include "SDCPPSettingsComponent.hpp"
+#include "SDCPPImageComponents.hpp"
+#include "HiresComponent.hpp"

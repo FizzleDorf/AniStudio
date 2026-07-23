@@ -300,6 +300,8 @@ target_include_directories(${TARGET_NAME} PRIVATE
     ${ANISTUDIO_ROOT}/src/aniengine/utils
     ${ANISTUDIO_ROOT}/src/aniengine/utils/media
     ${ANISTUDIO_ROOT}/src/anistudio/gui/base
+    ${ANISTUDIO_ROOT}/src/anistudio/ecs/components
+    ${ANISTUDIO_ROOT}/src/anistudio/ecs/systems
     ${ANISTUDIO_ROOT}/src/anistudio/utils
     ${ANISTUDIO_ROOT}/src/anistudio/utils/states
     ${ANISTUDIO_ROOT}/src/anistudio/utils/widgets

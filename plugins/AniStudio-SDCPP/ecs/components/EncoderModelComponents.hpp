@@ -5,7 +5,7 @@
 #include <string>
 
 namespace ECS {
-	
+
 	// Clip G Encoder
 	struct ClipGComponent : public BaseModelComponent {
 		ClipGComponent() {

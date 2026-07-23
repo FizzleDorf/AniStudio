@@ -30,7 +30,6 @@ namespace GUI {
 
         m_entityManager.AddComponent<CheckpointComponent>(convertEntity);
         m_entityManager.AddComponent<VaeComponent>(convertEntity);
-        m_entityManager.AddComponent<SamplerComponent>(convertEntity);
         m_entityManager.AddComponent<ConversionComponent>(convertEntity);
 
         if (m_entityManager.HasComponent<CheckpointComponent>(convertEntity)) {
@@ -43,11 +42,6 @@ namespace GUI {
             auto& vae = m_entityManager.GetComponent<VaeComponent>(convertEntity);
             vae.modelPath = "";
             vae.modelName = "";
-        }
-
-        if (m_entityManager.HasComponent<SamplerComponent>(convertEntity)) {
-            auto& sampler = m_entityManager.GetComponent<SamplerComponent>(convertEntity);
-            sampler.current_type_method = sd_type_t::SD_TYPE_COUNT;
         }
 
         if (m_entityManager.HasComponent<ConversionComponent>(convertEntity)) {
@@ -68,7 +62,6 @@ namespace GUI {
     std::vector<std::string> ConvertView::GetCategoryRenderOrder() const {
         return {
             "Models",
-            "Sampling",
             "Tools"
         };
     }
@@ -134,20 +127,14 @@ namespace GUI {
                 auto properties = component->GetPropertyMap();
                 UISchema::RenderSchema(component->schema, properties);
 
-                if (componentName == "Sampler") {
-                    if (m_entityManager.HasComponent<SamplerComponent>(convertEntity)) {
-                        auto& sampler = m_entityManager.GetComponent<SamplerComponent>(convertEntity);
-                        const char* typeName = sd_type_name(static_cast<sd_type_t>(sampler.current_type_method));
-                        ImGui::Text("Quantization: %s", typeName);
-                    }
-                }
-                else if (componentName == "Conversion") {
+                if (componentName == "Conversion") {
                     if (m_entityManager.HasComponent<ConversionComponent>(convertEntity)) {
                         auto& conversion = m_entityManager.GetComponent<ConversionComponent>(convertEntity);
                         ImGui::TextDisabled("Tensor rules: %s",
                             conversion.tensorTypeRules.empty() ? "None" : conversion.tensorTypeRules.c_str());
                         ImGui::TextDisabled("Convert names: %s",
                             conversion.convertName ? "Yes" : "No");
+                        ImGui::TextDisabled("Output type: %s", conversion.outputType.c_str());
                     }
                 }
             }

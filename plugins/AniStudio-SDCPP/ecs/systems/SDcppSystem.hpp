@@ -5,19 +5,16 @@
 #include "rng.hpp"
 #include "SDCPPComponents.h"
 #include "Components.h"
-#include "Txt2Img.hpp"
-#include "Img2Img.hpp"
-#include "Img2Vid.hpp"
-#include "Edit.hpp"
-#include "Upscaling.hpp"
-#include "Conversion.hpp"
+#include "SDCPPUtils.hpp"
 #include "PngMetadataUtils.hpp"
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
-#include "ContextUtils.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPoolSystem.hpp"
+#include "SettingsSystem.hpp"
+#include "FilePathSystem.hpp"
+#include "ModelCacheSystem.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include <filesystem>
@@ -29,8 +26,11 @@
 #include <optional>
 #include <future>
 #include <thread>
+#include <mutex>
+#include <random>
 
 namespace ECS {
+
     class SDCPPSystem : public BaseSystem {
     public:
         enum class TaskType {
@@ -47,102 +47,57 @@ namespace ECS {
             bool processing = false;
             TaskType taskType;
             QueueItem() = default;
-            QueueItem(const QueueItem& other) = default;
-            QueueItem& operator=(const QueueItem& other) = default;
+            QueueItem(const QueueItem&) = default;
+            QueueItem& operator=(const QueueItem&) = default;
         };
 
         struct TaskData {
             EntityID entityID = 0;
             bool processing = false;
+            bool cancelled = false;
             TaskType taskType;
             nlohmann::json metadata;
             std::string fullPath;
             std::future<bool> result;
+            sd_ctx_t* sdContext = nullptr;
 
-            union {
-                sd_ctx_t* sdContext;
-                upscaler_ctx_t* upscalerContext;
-            };
-
-            bool contextAcquired = false;
-            bool modelLoading = false;
-
-            enum ContextType {
-                NoContext,
-                SDContext,
-                UpscalerContext
-            } contextType = NoContext;
-
-            TaskData() : sdContext(nullptr), contextType(NoContext) {}
-
+            TaskData() = default;
             TaskData(TaskData&& other) noexcept
-                : entityID(other.entityID), processing(other.processing), taskType(other.taskType),
-                metadata(std::move(other.metadata)), fullPath(std::move(other.fullPath)),
-                result(std::move(other.result)), contextAcquired(other.contextAcquired),
-                modelLoading(other.modelLoading), contextType(other.contextType) {
-                switch (contextType) {
-                case SDContext: sdContext = other.sdContext; other.sdContext = nullptr; break;
-                case UpscalerContext: upscalerContext = other.upscalerContext; other.upscalerContext = nullptr; break;
-                default: sdContext = nullptr; break;
-                }
+                : entityID(other.entityID), processing(other.processing), cancelled(other.cancelled),
+                taskType(other.taskType), metadata(std::move(other.metadata)),
+                fullPath(std::move(other.fullPath)), result(std::move(other.result)),
+                sdContext(other.sdContext) {
+                other.sdContext = nullptr;
             }
-
             TaskData& operator=(TaskData&& other) noexcept {
                 if (this != &other) {
-                    CleanupContext();
                     entityID = other.entityID;
                     processing = other.processing;
+                    cancelled = other.cancelled;
                     taskType = other.taskType;
                     metadata = std::move(other.metadata);
                     fullPath = std::move(other.fullPath);
                     result = std::move(other.result);
-                    contextAcquired = other.contextAcquired;
-                    modelLoading = other.modelLoading;
-                    contextType = other.contextType;
-                    switch (contextType) {
-                    case SDContext: sdContext = other.sdContext; other.sdContext = nullptr; break;
-                    case UpscalerContext: upscalerContext = other.upscalerContext; other.upscalerContext = nullptr; break;
-                    default: sdContext = nullptr; break;
-                    }
+                    sdContext = other.sdContext;
+                    other.sdContext = nullptr;
                 }
                 return *this;
             }
-
             TaskData(const TaskData&) = delete;
             TaskData& operator=(const TaskData&) = delete;
-
             ~TaskData() {
-                CleanupContext();
+                sdContext = nullptr;
             }
-
-            void CleanupContext() {
-                switch (contextType) {
-                case SDContext:
-                    if (sdContext) {
-                        if (contextAcquired && !modelLoading)
-                            Utils::SDContextManager::ReleaseContext(sdContext);
-                        else
-                            Utils::SDContextManager::ForceFreeContext(sdContext);
-                        sdContext = nullptr;
-                    }
-                    break;
-                case UpscalerContext:
-                    if (upscalerContext) {
-                        free_upscaler_ctx(upscalerContext);
-                        upscalerContext = nullptr;
-                    }
-                    break;
-                default: break;
-                }
-                contextType = NoContext;
-                contextAcquired = false;
-                modelLoading = false;
+            void Cancel() {
+                cancelled = true;
+                if (sdContext) sd_cancel_generation(sdContext, SD_CANCEL_ALL);
             }
         };
 
         SDCPPSystem(EntityManager& entityMgr)
             : BaseSystem(entityMgr), pauseWorker(false), hasActiveTask(false), clearRequested(false) {
             sysName = "SDCPPSystem";
+            m_filePathSystem = mgr.GetSystem<FilePathSystem>();
         }
 
         ~SDCPPSystem() { Shutdown(); }
@@ -154,13 +109,9 @@ namespace ECS {
                 pauseWorker = true;
             }
             StopCurrentTask();
-            ClearQueue();
-            if (workerThread.joinable())
-                workerThread.join();
-            if (m_threadPool) {
-                m_threadPool->terminateAll();
-            }
-            Utils::SDContextManager::ClearAllContexts();
+            ClearAllTasks();
+            if (workerThread.joinable()) workerThread.join();
+            if (m_threadPool) m_threadPool->terminateAll();
         }
 
         void TerminateImmediately() {
@@ -168,13 +119,9 @@ namespace ECS {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 shuttingDown = true;
                 pauseWorker = true;
-                terminateFlag = true;
             }
-            ClearQueue();
-            Utils::SDContextManager::ClearAllContexts();
-            if (m_threadPool) {
-                m_threadPool->terminateAll();
-            }
+            ClearAllTasks();
+            if (m_threadPool) m_threadPool->terminateAll();
         }
 
         void QueueTask(EntityID entityID, TaskType taskType) {
@@ -182,21 +129,50 @@ namespace ECS {
                 std::cerr << "[QueueTask] Invalid entity\n";
                 return;
             }
+
+            auto settingsSys = mgr.GetSystem<SettingsSystem>();
+            if (settingsSys) {
+                EntityID settingsEntity = settingsSys->GetSettingsEntity();
+                if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<SDCPPSettingsComponent>(settingsEntity)) {
+                    auto& globalSettings = mgr.GetComponent<SDCPPSettingsComponent>(settingsEntity);
+                    if (!mgr.HasComponent<SDCPPSettingsComponent>(entityID)) {
+                        mgr.AddComponent<SDCPPSettingsComponent>(entityID);
+                    }
+                    auto& taskSettings = mgr.GetComponent<SDCPPSettingsComponent>(entityID);
+                    taskSettings.lora_apply_mode = globalSettings.lora_apply_mode;
+                    taskSettings.enable_mmap = globalSettings.enable_mmap;
+                    taskSettings.flash_attn = globalSettings.flash_attn;
+                    taskSettings.diffusion_flash_attn = globalSettings.diffusion_flash_attn;
+                    taskSettings.tae_preview_only = globalSettings.tae_preview_only;
+                    taskSettings.diffusion_conv_direct = globalSettings.diffusion_conv_direct;
+                    taskSettings.vae_conv_direct = globalSettings.vae_conv_direct;
+                    taskSettings.force_sdxl_vae_conv_scale = globalSettings.force_sdxl_vae_conv_scale;
+                    taskSettings.vae_format = globalSettings.vae_format;
+                    taskSettings.max_vram = globalSettings.max_vram;
+                    taskSettings.stream_layers = globalSettings.stream_layers;
+                    taskSettings.eager_load = globalSettings.eager_load;
+                    taskSettings.backend = globalSettings.backend;
+                    taskSettings.params_backend = globalSettings.params_backend;
+                    taskSettings.split_mode = globalSettings.split_mode;
+                    taskSettings.auto_fit = globalSettings.auto_fit;
+                    taskSettings.rpc_servers = globalSettings.rpc_servers;
+                }
+            }
+
             std::lock_guard<std::mutex> lock(queueMutex);
             if (shuttingDown) return;
             TaskData taskData;
             taskData.entityID = entityID;
             taskData.processing = false;
+            taskData.cancelled = false;
             taskData.taskType = taskType;
-            taskData.modelLoading = false;
-            taskData.contextType = TaskData::NoContext;
 
             if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
                 taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
                 if (mgr.HasComponent<SamplerComponent>(entityID)) {
                     auto& sampler = mgr.GetComponent<SamplerComponent>(entityID);
                     if (sampler.seed < 0) {
-                        sampler.seed = static_cast<int>(Utils::generateRandomSeed());
+                        sampler.seed = static_cast<int>(std::random_device{}());
                     }
                 }
             }
@@ -218,14 +194,11 @@ namespace ECS {
             }
             ProcessQueues();
             CheckTaskCompletion();
-            CheckModelLoadingFailures();
         }
 
         void RemoveFromQueue(size_t index) {
             std::lock_guard<std::mutex> lock(queueMutex);
             if (index < taskQueue.size() && !taskQueue[index].processing) {
-                taskQueue[index].CleanupContext();
-                entitiesNeedingCleanup.push_back(taskQueue[index].entityID);
                 taskQueue.erase(taskQueue.begin() + index);
             }
         }
@@ -255,68 +228,59 @@ namespace ECS {
 
         void StopCurrentTask() {
             std::lock_guard<std::mutex> lock(queueMutex);
-            if (hasActiveTask && activeThreadId != std::thread::id{}) {
-                terminateFlag = true;
+            for (auto& task : taskQueue) {
+                if (task.processing) {
+                    task.Cancel();
+                    break;
+                }
+            }
+            pauseWorker = true;
+        }
+
+        void CancelCurrentTask() {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            for (auto& task : taskQueue) {
+                if (task.processing) {
+                    task.Cancel();
+                    break;
+                }
             }
         }
 
-        void ClearQueue() { clearRequested = true; }
+        void ClearQueuedTasks() {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            taskQueue.erase(std::remove_if(taskQueue.begin(), taskQueue.end(),
+                [](const TaskData& t) { return !t.processing; }), taskQueue.end());
+            if (taskQueue.empty()) {
+                hasActiveTask = false;
+            }
+        }
+
+        void ClearAllTasks() {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            for (auto& task : taskQueue) {
+                if (task.processing) {
+                    task.Cancel();
+                }
+            }
+            taskQueue.clear();
+            hasActiveTask = false;
+            clearRequested = false;
+        }
+
         void PauseWorker() { std::lock_guard<std::mutex> lock(queueMutex); pauseWorker = true; }
         void ResumeWorker() { std::lock_guard<std::mutex> lock(queueMutex); pauseWorker = false; }
 
-        size_t GetNumThreads() const {
-            return m_threadPool ? m_threadPool->getDiffusionPool().size() : 0;
-        }
-        size_t GetQueuedTaskCount() const {
-            return m_threadPool ? m_threadPool->getDiffusionPool().queueSize() : 0;
-        }
-        size_t GetActiveTaskCount() const {
-            return m_threadPool ? m_threadPool->getDiffusionPool().activeCount() : 0;
-        }
-        bool HasActiveTask() const { std::lock_guard<std::mutex> lock(queueMutex); return hasActiveTask; }
-        std::thread::id GetActiveThreadId() const { std::lock_guard<std::mutex> lock(queueMutex); return activeThreadId; }
-        size_t GetQueueSize() const { std::lock_guard<std::mutex> lock(queueMutex); return taskQueue.size(); }
-        EntityID GetLastGeneratedVideo() const { std::lock_guard<std::mutex> lock(queueMutex); return lastGeneratedVideoEntity; }
+        bool IsPaused() const { std::lock_guard<std::mutex> lock(queueMutex); return pauseWorker; }
 
-        void ClearAllSDContexts() { Utils::SDContextManager::ClearAllContexts(); }
-        void ListSDContexts() { Utils::SDContextManager::ListCachedContexts(); }
-        std::tuple<size_t, size_t, size_t> GetSDContextStats() {
-            size_t total, inUse, available;
-            Utils::SDContextManager::GetCacheStats(total, inUse, available);
-            return std::make_tuple(total, inUse, available);
-        }
-        std::tuple<size_t, size_t> GetModelLoadingStats() {
-            size_t loading, failed;
-            Utils::SDContextManager::GetLoadingStats(loading, failed);
-            return std::make_tuple(loading, failed);
-        }
-        void ForceModelReload() { std::lock_guard<std::mutex> lock(queueMutex); forceModelReload = true; }
-        void SetMaxModelCache(size_t maxModels) { Utils::SDContextManager::SetMaxCacheSize(maxModels); }
-        size_t GetMaxModelCache() const { return Utils::SDContextManager::GetMaxCacheSize(); }
-        void UnloadModel(const std::string& modelPath) {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            bool inUse = false;
-            for (const auto& task : taskQueue) {
-                if (task.processing && task.sdContext) { inUse = true; break; }
-            }
-            if (!inUse) Utils::SDContextManager::UnloadSpecificModel(modelPath);
-        }
-        void UnloadAllModels() {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            if (!hasActiveTask) Utils::SDContextManager::UnloadAllModels();
-        }
-        void ForceUnloadIdleModels() {
-            Utils::SDContextManager::UnloadAllModels();
-        }
-        bool IsModelLoaded(const std::string& modelPath) const { return Utils::SDContextManager::IsModelLoaded(modelPath); }
-        std::vector<std::string> GetLoadedModels() const { return Utils::SDContextManager::GetLoadedModels(); }
-        std::tuple<size_t, size_t, size_t> GetModelCacheStats() const {
-            size_t total, inUse, available;
-            Utils::SDContextManager::GetCacheStats(total, inUse, available);
-            return std::make_tuple(total, inUse, available);
-        }
+        size_t GetNumThreads() const { return m_threadPool ? m_threadPool->getDiffusionPool().size() : 0; }
+        size_t GetQueuedTaskCount() const { return m_threadPool ? m_threadPool->getDiffusionPool().queueSize() : 0; }
+        size_t GetActiveTaskCount() const { return m_threadPool ? m_threadPool->getDiffusionPool().activeCount() : 0; }
+        bool HasActiveTask() const { std::lock_guard<std::mutex> lock(queueMutex); return hasActiveTask; }
+        size_t GetQueueSize() const { std::lock_guard<std::mutex> lock(queueMutex); return taskQueue.size(); }
 
         void Start() override {
+            m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
             m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
             if (!m_threadPool) {
                 std::cerr << "[SDCPPSystem] ThreadPoolSystem not available\n";
@@ -324,93 +288,21 @@ namespace ECS {
             workerThread = std::thread([this]() { WorkerThread(); });
         }
 
-        void Destroy() override {
-            Shutdown();
-            BaseSystem::Destroy();
-        }
+        void Destroy() override { Shutdown(); BaseSystem::Destroy(); }
 
     private:
         std::vector<TaskData> taskQueue;
         std::atomic<bool> pauseWorker{ false };
         std::atomic<bool> shuttingDown{ false };
-        std::atomic<bool> terminateFlag{ false };
         std::atomic<bool> clearRequested{ false };
-        std::atomic<bool> forceModelReload{ false };
         std::vector<EntityID> entitiesNeedingCleanup;
         mutable std::mutex queueMutex;
-        EntityID lastGeneratedVideoEntity{ 0 };
         std::thread workerThread;
         bool hasActiveTask{ false };
         std::thread::id activeThreadId{};
         std::shared_ptr<ThreadPoolSystem> m_threadPool;
-
-        TaskData::ContextType GetRequiredContextType(TaskType taskType) {
-            switch (taskType) {
-            case TaskType::Inference:
-            case TaskType::Img2Img:
-            case TaskType::Img2Vid:
-            case TaskType::Edit:
-                return TaskData::SDContext;
-            case TaskType::Upscaling:
-                return TaskData::UpscalerContext;
-            default:
-                return TaskData::NoContext;
-            }
-        }
-
-        bool IsTaskReadyForProcessing(TaskData& task) {
-            switch (task.contextType) {
-            case TaskData::SDContext:
-                if (task.sdContext != nullptr && !task.modelLoading) return true;
-                if (task.modelLoading) {
-                    sd_ctx_t* loaded = Utils::SDContextManager::TryGetLoadedContext(task.metadata);
-                    if (loaded) {
-                        task.sdContext = loaded;
-                        task.modelLoading = false;
-                        task.contextAcquired = true;
-                        return true;
-                    }
-                    return false;
-                }
-                return false;
-            case TaskData::UpscalerContext:
-                return task.upscalerContext != nullptr;
-            case TaskData::NoContext:
-                return true;
-            default:
-                return false;
-            }
-        }
-
-        bool AcquireContextForTask(TaskData& task) {
-            switch (task.contextType) {
-            case TaskData::SDContext: {
-                if (forceModelReload) {
-                    task.sdContext = Utils::SDContextManager::CreateNewContext(task.metadata);
-                    task.modelLoading = false;
-                    forceModelReload = false;
-                    task.contextAcquired = (task.sdContext != nullptr);
-                    return task.contextAcquired;
-                }
-                task.sdContext = Utils::SDContextManager::GetOrCreateContext(task.metadata);
-                if (!task.sdContext) {
-                    task.modelLoading = true;
-                    return false;
-                }
-                task.modelLoading = false;
-                task.contextAcquired = true;
-                return true;
-            }
-            case TaskData::UpscalerContext: {
-                task.upscalerContext = CreateUpscalerContext(task.metadata);
-                task.contextAcquired = (task.upscalerContext != nullptr);
-                return task.contextAcquired;
-            }
-            default:
-                task.contextAcquired = true;
-                return true;
-            }
-        }
+        std::shared_ptr<FilePathSystem> m_filePathSystem;
+        std::shared_ptr<ModelCacheSystem> m_cacheSystem;
 
         upscaler_ctx_t* CreateUpscalerContext(const nlohmann::json& metadata) {
             std::string esrganPath;
@@ -443,26 +335,6 @@ namespace ECS {
                 params_backend.empty() ? nullptr : params_backend.c_str());
         }
 
-        void CheckModelLoadingFailures() {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            for (auto& task : taskQueue) {
-                if (!task.processing && task.modelLoading && task.contextType == TaskData::SDContext) {
-                    if (!Utils::SDContextManager::IsContextLoading(task.metadata)) {
-                        sd_ctx_t* loaded = Utils::SDContextManager::TryGetLoadedContext(task.metadata);
-                        if (loaded == nullptr) {
-                            task.modelLoading = false;
-                            task.contextAcquired = false;
-                        }
-                        else {
-                            task.sdContext = loaded;
-                            task.modelLoading = false;
-                            task.contextAcquired = true;
-                        }
-                    }
-                }
-            }
-        }
-
         void LoadImageViaImageSystem(EntityID targetEntity, const std::string& filePath) {
             if (auto imgSys = mgr.GetSystem<ImageSystem>()) {
                 if (!mgr.HasComponent<ImageComponent>(targetEntity))
@@ -479,95 +351,165 @@ namespace ECS {
                 vidComp.filePath = filePath;
                 vidComp.fileName = std::filesystem::path(filePath).filename().string();
                 vidSys->SetVideo(videoEntity, filePath);
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    lastGeneratedVideoEntity = videoEntity;
-                }
             }
         }
 
         void HandleClearRequest() {
             std::lock_guard<std::mutex> lock(queueMutex);
-            for (auto& task : taskQueue)
-                if (!task.processing) task.CleanupContext();
-            taskQueue.erase(std::remove_if(taskQueue.begin(), taskQueue.end(),
-                [](const TaskData& t) { return !t.processing; }), taskQueue.end());
+            ClearQueuedTasks();
         }
 
-        template<typename Func, typename... Args>
-        auto CreateTaskWrapper(EntityID entityID, Func&& func, Args&&... args) {
-            return [this, entityID, func = std::forward<Func>(func), args...]() -> bool {
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    hasActiveTask = true;
-                    activeThreadId = std::this_thread::get_id();
-                    terminateFlag = false;
-                }
-                bool result = false;
-                try {
-                    result = func(args...);
-                }
-                catch (...) {}
-                {
-                    std::lock_guard<std::mutex> lock(queueMutex);
-                    hasActiveTask = false;
-                    activeThreadId = std::thread::id{};
-                    terminateFlag = false;
-                }
-                return result;
-                };
+        static uint64_t GenerateSeed() {
+            static std::random_device rd;
+            static std::mt19937_64 gen(rd());
+            return gen();
         }
 
         static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-            if (Utils::SDContextManager::IsContextLoading(metadata)) return false;
-            return Utils::Txt2Img::RunInference(metadata, fullPath, context);
-        }
-
-        static bool RunConversion(const nlohmann::json& metadata) {
-            return Utils::Conversion::ConvertToGGUF(metadata);
+            SDCPP::ResourceManager res;
+            sd_img_gen_params_t params;
+            sd_img_gen_params_init(&params);
+            if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
+            if (params.seed < 0) params.seed = static_cast<int64_t>(GenerateSeed());
+            sd_image_t* images = nullptr;
+            int count = 0;
+            bool ok = generate_image(context, &params, &images, &count);
+            if (ok && count > 0 && images && images[0].data) {
+                Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height, images[0].channel, images[0].data);
+                Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+                free_sd_images(images, count);
+                return true;
+            }
+            if (images) free_sd_images(images, count);
+            return false;
         }
 
         static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-            if (Utils::SDContextManager::IsContextLoading(metadata)) return false;
-            nlohmann::json modified = metadata;
-            if (modified.contains("components") && modified["components"].is_array()) {
-                for (auto& comp : modified["components"]) {
-                    if (comp.contains("Vae")) {
-                        comp["Vae"]["vae_decode_only"] = false;
-                    }
-                }
+            SDCPP::ResourceManager res;
+            sd_img_gen_params_t params;
+            sd_img_gen_params_init(&params);
+            if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
+            if (params.seed < 0) params.seed = static_cast<int64_t>(GenerateSeed());
+            sd_image_t* images = nullptr;
+            int count = 0;
+            bool ok = generate_image(context, &params, &images, &count);
+            if (ok && count > 0 && images && images[0].data) {
+                Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height, images[0].channel, images[0].data);
+                Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+                free_sd_images(images, count);
+                return true;
             }
-            return Utils::Img2Img::RunImg2Img(modified, fullPath, context);
+            if (images) free_sd_images(images, count);
+            return false;
         }
 
         static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-            if (Utils::SDContextManager::IsContextLoading(metadata)) return false;
-            nlohmann::json modified = metadata;
-            if (modified.contains("components") && modified["components"].is_array()) {
-                for (auto& comp : modified["components"]) {
-                    if (comp.contains("Vae")) {
-                        comp["Vae"]["vae_decode_only"] = false;
-                    }
+            SDCPP::ResourceManager res;
+            sd_vid_gen_params_t params;
+            sd_vid_gen_params_init(&params);
+            if (!SDCPP::parseVideoGenParams(metadata, params, res)) return false;
+            if (params.seed < 0) params.seed = static_cast<int64_t>(GenerateSeed());
+            sd_image_t* frames = nullptr;
+            int frameCount = 0;
+            sd_audio_t* audio = nullptr;
+            bool ok = generate_video(context, &params, &frames, &frameCount, &audio);
+            if (ok && frameCount > 0 && frames) {
+                for (int i = 0; i < frameCount; ++i) {
+                    std::string framePath = fullPath + "_frame_" + std::to_string(i) + ".png";
+                    Utils::ImageUtils::SaveImage(framePath, frames[i].width, frames[i].height, frames[i].channel, frames[i].data);
                 }
+                if (frameCount > 0) {
+                    std::string firstFrame = fullPath + "_frame_0.png";
+                    Utils::PngMetadata::WriteMetadataToPNG(firstFrame, metadata);
+                }
+                if (audio) free_sd_audio(audio);
+                free(frames);
+                return true;
             }
-            return Utils::Img2Vid::RunImg2Vid(modified, fullPath, context);
+            if (frames) free(frames);
+            if (audio) free_sd_audio(audio);
+            return false;
         }
 
         static bool RunEdit(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-            if (Utils::SDContextManager::IsContextLoading(metadata)) return false;
-            nlohmann::json modified = metadata;
-            if (modified.contains("components") && modified["components"].is_array()) {
-                for (auto& comp : modified["components"]) {
-                    if (comp.contains("Vae")) {
-                        comp["Vae"]["vae_decode_only"] = false;
+            return RunImg2Img(metadata, fullPath, context);
+        }
+
+        static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, upscaler_ctx_t* upscaler) {
+            SDCPP::ResourceManager res;
+            sd_ctx_params_t ctxParams;
+            sd_ctx_params_init(&ctxParams);
+            if (!SDCPP::parseContextParams(metadata, ctxParams, res)) return false;
+            std::string esrganPath = ctxParams.control_net_path ? ctxParams.control_net_path : "";
+            if (esrganPath.empty()) return false;
+            int n_threads = ctxParams.n_threads > 0 ? ctxParams.n_threads : 4;
+            int tile_size = 64;
+            bool direct = false;
+            const char* backend = ctxParams.backend;
+            const char* paramsBackend = ctxParams.params_backend;
+            upscaler_ctx_t* ctx = new_upscaler_ctx(esrganPath.c_str(), direct, n_threads, tile_size, backend, paramsBackend);
+            if (!ctx) return false;
+            sd_image_t input = { 0,0,0,nullptr };
+            if (metadata.contains("components") && metadata["components"].is_array()) {
+                for (const auto& comp : metadata["components"]) {
+                    if (comp.contains("InputImage") && comp["InputImage"].contains("filePath")) {
+                        std::string path = comp["InputImage"]["filePath"].get<std::string>();
+                        int w, h, c;
+                        unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, 0);
+                        if (data) { input.width = w; input.height = h; input.channel = c; input.data = data; }
+                        break;
                     }
                 }
             }
-            return Utils::Edit::RunEdit(modified, fullPath, context);
+            if (!input.data) { free_upscaler_ctx(ctx); return false; }
+            uint32_t factor = 2;
+            if (metadata.contains("components")) {
+                for (const auto& comp : metadata["components"]) {
+                    if (comp.contains("Esrgan") && comp["Esrgan"].contains("upscaleFactor")) {
+                        factor = comp["Esrgan"]["upscaleFactor"].get<uint32_t>();
+                        break;
+                    }
+                }
+            }
+            sd_image_t* out = nullptr;
+            int count = 0;
+            bool ok = upscale(ctx, input, factor, &out, &count);
+            if (ok && count > 0 && out && out[0].data) {
+                Utils::ImageUtils::SaveImage(fullPath, out[0].width, out[0].height, out[0].channel, out[0].data);
+                Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+                free_sd_images(out, count);
+                stbi_image_free(input.data);
+                free_upscaler_ctx(ctx);
+                return true;
+            }
+            if (out) free_sd_images(out, count);
+            stbi_image_free(input.data);
+            free_upscaler_ctx(ctx);
+            return false;
         }
 
-        static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath) {
-            return Utils::Upscaling::RunUpscaling(metadata, fullPath);
+        static bool RunConversion(const nlohmann::json& metadata) {
+            SDCPP::ResourceManager res;
+            sd_ctx_params_t ctxParams;
+            sd_ctx_params_init(&ctxParams);
+            if (!SDCPP::parseContextParams(metadata, ctxParams, res)) return false;
+            std::string input = ctxParams.model_path ? ctxParams.model_path : "";
+            std::string vae = ctxParams.vae_path ? ctxParams.vae_path : "";
+            std::string output = input;
+            if (!output.empty()) {
+                output = std::filesystem::path(output).stem().string() + "_converted.gguf";
+            }
+            enum sd_type_t type = ctxParams.wtype;
+            const char* rules = ctxParams.tensor_type_rules;
+            bool convertName = true;
+            if (metadata.contains("components")) {
+                for (const auto& comp : metadata["components"]) {
+                    if (comp.contains("Conversion") && comp["Conversion"].contains("convertName")) {
+                        convertName = comp["Conversion"]["convertName"].get<bool>();
+                    }
+                }
+            }
+            return convert(input.c_str(), vae.c_str(), output.c_str(), type, rules, convertName);
         }
 
         bool IsVideoTask(TaskType taskType) const {
@@ -582,30 +524,19 @@ namespace ECS {
             std::lock_guard<std::mutex> lock(queueMutex);
             if (pauseWorker || shuttingDown) return;
             if (taskQueue.empty() || hasActiveTask) return;
-            if (!m_threadPool) return;
+            if (!m_threadPool || !m_cacheSystem) return;
 
             auto& diffusionPool = m_threadPool->getDiffusionPool();
 
-            for (auto& task : taskQueue) {
+            for (auto it = taskQueue.begin(); it != taskQueue.end(); ++it) {
+                auto& task = *it;
                 if (task.processing) continue;
-                if (task.contextType == TaskData::NoContext)
-                    task.contextType = GetRequiredContextType(task.taskType);
 
-                if (!IsTaskReadyForProcessing(task)) {
-                    if (!task.contextAcquired && !task.modelLoading) {
-                        bool acquired = AcquireContextForTask(task);
-                        if (!acquired) break;
-                    }
-                    else if (task.modelLoading) {
-                        break;
-                    }
-                    else {
-                        task.CleanupContext();
-                        entitiesNeedingCleanup.push_back(task.entityID);
-                        auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
-                            [&task](const TaskData& t) { return t.entityID == task.entityID; });
-                        if (it != taskQueue.end()) taskQueue.erase(it);
-                        break;
+                if (!task.sdContext) {
+                    if (task.taskType == TaskType::Inference || task.taskType == TaskType::Img2Img ||
+                        task.taskType == TaskType::Img2Vid || task.taskType == TaskType::Edit) {
+                        task.sdContext = m_cacheSystem->getOrCreateContext(task.metadata);
+                        if (!task.sdContext) break;
                     }
                 }
 
@@ -620,57 +551,92 @@ namespace ECS {
                     if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension())
                         outputDir = std::filesystem::path(outputDir).parent_path().string();
                     if (outputDir.empty()) {
-                        std::string defaultProject = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
-                        if (!defaultProject.empty()) outputDir = defaultProject;
+                        if (m_filePathSystem) {
+                            outputDir = m_filePathSystem->GetPath("DefaultProject");
+                        }
+                        if (outputDir.empty()) {
+                            outputDir = std::filesystem::current_path().string();
+                        }
                     }
                     task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
                 }
 
                 try {
                     switch (task.taskType) {
-                    case TaskType::Inference:
+                    case TaskType::Inference: {
+                        nlohmann::json metadata = task.metadata;
+                        std::string fullPath = task.fullPath;
+                        sd_ctx_t* sdContext = task.sdContext;
                         task.result = diffusionPool.submit(
-                            CreateTaskWrapper(task.entityID, RunInference, task.metadata, task.fullPath, task.sdContext)
+                            [metadata, fullPath, sdContext]() -> bool {
+                                return RunInference(metadata, fullPath, sdContext);
+                            }
                         );
                         break;
-                    case TaskType::Conversion:
+                    }
+                    case TaskType::Conversion: {
+                        nlohmann::json metadata = task.metadata;
                         task.result = diffusionPool.submit(
-                            CreateTaskWrapper(task.entityID, RunConversion, task.metadata)
+                            [metadata]() -> bool {
+                                return RunConversion(metadata);
+                            }
                         );
                         break;
-                    case TaskType::Img2Img:
+                    }
+                    case TaskType::Img2Img: {
+                        nlohmann::json metadata = task.metadata;
+                        std::string fullPath = task.fullPath;
+                        sd_ctx_t* sdContext = task.sdContext;
                         task.result = diffusionPool.submit(
-                            CreateTaskWrapper(task.entityID, RunImg2Img, task.metadata, task.fullPath, task.sdContext)
+                            [metadata, fullPath, sdContext]() -> bool {
+                                return RunImg2Img(metadata, fullPath, sdContext);
+                            }
                         );
                         break;
-                    case TaskType::Img2Vid:
+                    }
+                    case TaskType::Img2Vid: {
+                        nlohmann::json metadata = task.metadata;
+                        std::string fullPath = task.fullPath;
+                        sd_ctx_t* sdContext = task.sdContext;
                         task.result = diffusionPool.submit(
-                            CreateTaskWrapper(task.entityID, RunImg2Vid, task.metadata, task.fullPath, task.sdContext)
+                            [metadata, fullPath, sdContext]() -> bool {
+                                return RunImg2Vid(metadata, fullPath, sdContext);
+                            }
                         );
                         break;
-                    case TaskType::Edit:
+                    }
+                    case TaskType::Edit: {
+                        nlohmann::json metadata = task.metadata;
+                        std::string fullPath = task.fullPath;
+                        sd_ctx_t* sdContext = task.sdContext;
                         task.result = diffusionPool.submit(
-                            CreateTaskWrapper(task.entityID, RunEdit, task.metadata, task.fullPath, task.sdContext)
+                            [metadata, fullPath, sdContext]() -> bool {
+                                return RunEdit(metadata, fullPath, sdContext);
+                            }
                         );
                         break;
-                    case TaskType::Upscaling:
+                    }
+                    case TaskType::Upscaling: {
+                        nlohmann::json metadata = task.metadata;
+                        std::string fullPath = task.fullPath;
+                        upscaler_ctx_t* sdContext = reinterpret_cast<upscaler_ctx_t*>(task.sdContext);
                         task.result = diffusionPool.submit(
-                            CreateTaskWrapper(task.entityID, RunUpscaling, task.metadata, task.fullPath)
+                            [metadata, fullPath, sdContext]() -> bool {
+                                return RunUpscaling(metadata, fullPath, sdContext);
+                            }
                         );
                         break;
+                    }
                     default:
-                        task.CleanupContext();
                         continue;
                     }
                     task.processing = true;
+                    hasActiveTask = true;
+                    activeThreadId = std::this_thread::get_id();
                     break;
                 }
                 catch (...) {
-                    task.CleanupContext();
-                    entitiesNeedingCleanup.push_back(task.entityID);
-                    auto it = std::find_if(taskQueue.begin(), taskQueue.end(),
-                        [&task](const TaskData& t) { return t.entityID == task.entityID; });
-                    if (it != taskQueue.end()) taskQueue.erase(it);
+                    it = taskQueue.erase(it);
                     break;
                 }
             }
@@ -682,26 +648,48 @@ namespace ECS {
             {
                 std::unique_lock<std::mutex> lock(queueMutex);
                 for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-                    if (it->processing && it->result.valid()) {
-                        auto status = it->result.wait_for(std::chrono::milliseconds(0));
-                        if (status == std::future_status::ready) {
-                            EntityID entityID = it->entityID;
-                            std::string fullPath = it->fullPath;
-                            TaskType taskType = it->taskType;
-                            bool success = false;
-                            try {
-                                success = it->result.get();
-                            }
-                            catch (...) {}
-                            it->CleanupContext();
-                            if (!shuttingDown && success) {
-                                completedTasks.emplace_back(fullPath, taskType, entityID);
+                    if (it->processing) {
+                        if (it->cancelled) {
+                            if (it->result.valid()) {
+                                auto status = it->result.wait_for(std::chrono::milliseconds(0));
+                                if (status == std::future_status::ready) {
+                                    try { it->result.get(); }
+                                    catch (...) {}
+                                    it = taskQueue.erase(it);
+                                    continue;
+                                }
                             }
                             else {
-                                if (std::filesystem::exists(fullPath))
-                                    std::filesystem::remove(fullPath);
+                                it = taskQueue.erase(it);
+                                continue;
                             }
-                            it = taskQueue.erase(it);
+                            ++it;
+                            continue;
+                        }
+                        if (it->result.valid()) {
+                            auto status = it->result.wait_for(std::chrono::milliseconds(0));
+                            if (status == std::future_status::ready) {
+                                EntityID entityID = it->entityID;
+                                std::string fullPath = it->fullPath;
+                                TaskType taskType = it->taskType;
+                                bool success = false;
+                                try {
+                                    success = it->result.get();
+                                }
+                                catch (...) {}
+                                if (!shuttingDown && success && std::filesystem::exists(fullPath)) {
+                                    completedTasks.emplace_back(fullPath, taskType, entityID);
+                                }
+                                else {
+                                    if (std::filesystem::exists(fullPath))
+                                        std::filesystem::remove(fullPath);
+                                }
+                                it = taskQueue.erase(it);
+                                hasActiveTask = false;
+                            }
+                            else {
+                                ++it;
+                            }
                         }
                         else {
                             ++it;
@@ -710,6 +698,9 @@ namespace ECS {
                     else {
                         ++it;
                     }
+                }
+                if (taskQueue.empty() && !hasActiveTask) {
+                    activeThreadId = std::thread::id{};
                 }
             }
             if (!shuttingDown) {
@@ -743,4 +734,5 @@ namespace ECS {
             }
         }
     };
-}
+
+} // namespace ECS

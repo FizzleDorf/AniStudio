@@ -148,6 +148,7 @@ namespace ECS {
     inline void ThreadPoolSystem::Pool::terminate() {
         {
             std::unique_lock<std::mutex> lock(m_mutex);
+            if (m_terminate) return;
             m_terminate = true;
             m_stop = true;
             while (!m_tasks.empty()) m_tasks.pop();
@@ -189,7 +190,7 @@ namespace ECS {
                     {
                         std::unique_lock<std::mutex> lock(m_mutex);
                         m_condition.wait(lock, [this] {
-                            return m_terminate || m_stop || !m_tasks.empty();
+                            return m_terminate || (!m_tasks.empty() && !m_stop);
                             });
                         if (m_terminate) return;
                         if (m_stop && m_tasks.empty()) return;

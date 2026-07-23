@@ -26,12 +26,13 @@ namespace ECS {
         bool HasAnyUnsavedChanges() const;
 
         void SetImGuiContext(ImGuiContext* context);
+        EntityID GetSettingsEntity() const { return settingsEntity; }
 
     private:
         template<typename T>
         ComponentTypeID RegisterAndAddSettingsComponent();
 
-        EntityID settingsEntity = 0;
+        EntityID settingsEntity;
         std::vector<ComponentTypeID> settingsComponentTypes;
         FilePathSystem* filePathSystem = nullptr;
     };

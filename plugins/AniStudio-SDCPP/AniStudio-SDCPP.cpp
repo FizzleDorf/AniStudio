@@ -13,6 +13,8 @@
 #include <chrono>
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"
+#include "ModelCacheSystem.hpp"
+#include "ADetailerComponent.hpp"
 
 #include "DiffusionView.hpp"
 #include "ConvertView.hpp"
@@ -23,12 +25,6 @@
 #include <iostream>
 #include <filesystem>
 #include "MissingPathsPopup.hpp"
-
-#if defined(_WIN32) || defined(_WIN64)
-#define PLUGIN_EXPORT __declspec(dllexport)
-#else
-#define PLUGIN_EXPORT __attribute__((visibility("default")))
-#endif
 
 namespace Utils {
     ECS::FilePathSystem* g_FilePathSystem = nullptr;
@@ -66,11 +62,9 @@ public:
         Utils::g_FilePathSystem = fs.get();
         LogInfo("FilePathSystem obtained.");
 
-        // Register ModelRoot key if missing (empty)
         if (!fs->HasPath("ModelRoot")) {
             fs->SetPath("ModelRoot", "");
         }
-        // Compute default path for ModelRoot (for the "Use Default" button)
         std::string dataPath = fs->GetPath("DataPath");
         std::string defaultModelRoot;
         if (!dataPath.empty()) {
@@ -81,7 +75,6 @@ public:
         }
         Utils::SetDefaultPath("ModelRoot", defaultModelRoot);
 
-        // Ensure subdirectory keys exist as empty, register defaults
         const std::vector<std::pair<std::string, std::string>> modelKeys = {
             {"Checkpoint", "checkpoints"},
             {"Unet", "unet"},
@@ -97,57 +90,98 @@ public:
             if (!fs->HasPath(key)) {
                 fs->SetPath(key, "");
             }
-            // Register default path using ModelRoot default
             std::string defaultPath = (std::filesystem::path(defaultModelRoot) / subdir).string();
             Utils::SetDefaultPath(key, defaultPath);
         }
 
-        // Load existing filepaths if any
         if (!dataPath.empty()) {
             std::string filePath = (std::filesystem::path(dataPath) / "filepaths.json").string();
             if (std::filesystem::exists(filePath))
                 fs->LoadFromFile(filePath);
         }
 
-        // Check for missing paths and trigger popup if any
         Utils::CheckMissingPaths(fs);
 
-        // Register components and system
+        // Sampling & Inference
         entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
         entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
         entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
         entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
+
+        // Model components
         entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
+        entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
+        entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
+        entityMgr.RegisterComponent<ECS::UncondDiffusionModelComponent>("UncondDiffusionModel");
+        entityMgr.RegisterComponent<ECS::AudioVAEComponent>("AudioVAE");
+        entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");          // connectors
+        entityMgr.RegisterComponent<ECS::MotionModuleComponent>("MotionModule");
+
+        // Encoders
         entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
         entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
         entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
-        entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
         entityMgr.RegisterComponent<ECS::LlmEncoderComponent>("LlmEncoder");
+
+        // Vision encoders
+        entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
         entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision");
-        entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
+
+        // VAE / TAESD
         entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
         entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
 
-        entityMgr.RegisterComponent<ECS::ClipSkipComponent>("ClipSkip");
-        entityMgr.RegisterComponent<ECS::SLGComponent>("SLG");
-        entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
-        entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
-        entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
-        entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
+        // Upscaling
+        entityMgr.RegisterComponent<ECS::HiresComponent>("Hires");
+        entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
 
+        // Other models
+        entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
+        entityMgr.RegisterComponent<ECS::PulidWeightsComponent>("PulidWeights");
         entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
         entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
-        entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
-        entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
-        entityMgr.RegisterComponent<ECS::LatentTransformComponent>("LatentTransform");
-        entityMgr.RegisterComponent<ECS::LayerSkipComponent>("LayerSkip");
+
+        // Video
+        entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
+        entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
+
+        // Advanced / extra
+        entityMgr.RegisterComponent<ECS::ADetailerComponent>("ADetailer");
         entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
-        entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
+        entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
+        entityMgr.RegisterComponent<ECS::EasyCacheComponent>("EasyCache");
+
+        // Conversion
         entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
 
+        // Embeddings (textual inversion)
+        entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings");
+
+        // Image components (input/output)
+        entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage");
+        entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage");
+        entityMgr.RegisterComponent<ECS::RefImagesComponent>("RefImages");
+        entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames");
+
+        // Global settings
+        entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPPSettings");
+
+        entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
         entityMgr.RegisterSystem<ECS::SDCPPSystem>();
 
         m_entityMgr = &entityMgr;
+
+        auto settingsSys = entityMgr.GetSystem<ECS::SettingsSystem>();
+        if (settingsSys) {
+            EntityID settingsEntity = settingsSys->GetSettingsEntity();
+            if (entityMgr.IsEntityValid(settingsEntity) && !entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+                entityMgr.AddComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+                LogInfo("Added SDCPPSettingsComponent to global settings entity");
+            }
+        }
+        else {
+            LogError("SettingsSystem not found, SDCPP global settings will not be available");
+        }
 
         RegisterEventHandlers();
 
@@ -223,8 +257,9 @@ public:
         }
 
         if (m_viewMgr) {
+            // Close all views but do NOT unregister them to avoid deadlock
             const char* viewNames[] = {
-                "DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
+                "DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView", "ModelCacheView"
             };
 
             for (const char* viewName : viewNames) {
@@ -258,23 +293,6 @@ public:
                 }
                 catch (const std::exception& e) {
                     LogError("Error destroying entity " + std::to_string(*it) + ": " + std::string(e.what()));
-                }
-            }
-        }
-
-        if (m_viewMgr) {
-            const char* viewNames[] = {
-                "DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView"
-            };
-
-            for (const char* viewName : viewNames) {
-                try {
-                    m_viewMgr->UnregisterView(viewName);
-                    LogInfo("Unregistered view: " + std::string(viewName));
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                }
-                catch (const std::exception& e) {
-                    LogError("Error unregistering view " + std::string(viewName) + ": " + std::string(e.what()));
                 }
             }
         }
@@ -315,7 +333,9 @@ private:
             "RemoveFromDiffusionQueue",
             "MoveInDiffusionQueue",
             "StopCurrentDiffusionTask",
+            "CancelCurrentDiffusionTask",
             "ClearDiffusionQueue",
+            "ClearAllDiffusionTasks",
             "PauseDiffusionWorker",
             "ResumeDiffusionWorker"
         };
@@ -340,9 +360,19 @@ private:
                 this->OnStopCurrentDiffusionTask();
             });
 
+        events.RegisterEvent("CancelCurrentDiffusionTask",
+            [this]() {
+                this->OnCancelCurrentDiffusionTask();
+            });
+
         events.RegisterEvent("ClearDiffusionQueue",
             [this]() {
                 this->OnClearDiffusionQueue();
+            });
+
+        events.RegisterEvent("ClearAllDiffusionTasks",
+            [this]() {
+                this->OnClearAllDiffusionTasks();
             });
 
         events.RegisterEvent("PauseDiffusionWorker",
@@ -443,14 +473,36 @@ private:
         }
     }
 
+    void OnCancelCurrentDiffusionTask() {
+        auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+        if (system) {
+            system->CancelCurrentTask();
+            LogInfo("Cancelled current diffusion task");
+        }
+        else {
+            LogError("SDCPPSystem not found when cancelling task");
+        }
+    }
+
     void OnClearDiffusionQueue() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
         if (system) {
-            system->ClearQueue();
-            LogInfo("Cleared diffusion queue");
+            system->ClearQueuedTasks();
+            LogInfo("Cleared queued diffusion tasks");
         }
         else {
             LogError("SDCPPSystem not found when clearing queue");
+        }
+    }
+
+    void OnClearAllDiffusionTasks() {
+        auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+        if (system) {
+            system->ClearAllTasks();
+            LogInfo("Cleared all diffusion tasks");
+        }
+        else {
+            LogError("SDCPPSystem not found when clearing all tasks");
         }
     }
 
