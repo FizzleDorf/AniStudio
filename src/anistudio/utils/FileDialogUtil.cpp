@@ -5,6 +5,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <filesystem>
 
 namespace FileDialog {
 
@@ -31,7 +32,7 @@ namespace FileDialog {
 
         nfdu8char_t* outPtr = nullptr;
         nfdresult_t result = NFD::OpenDialog(outPtr,
-            filterList,
+            (filterCount > 0) ? filterList : nullptr,
             filterCount,
             defaultPath.empty() ? nullptr : defaultPath.c_str(),
             {},
@@ -41,7 +42,13 @@ namespace FileDialog {
             NFD::FreePath(outPtr);
             return true;
         }
-        return false;
+        else if (result == NFD_CANCEL) {
+            return false;
+        }
+        else {
+            std::cerr << "NFD::OpenDialog failed: " << NFD::GetError() << std::endl;
+            return false;
+        }
     }
 
     bool OpenFiles(const std::string& title, FilterType type, std::vector<std::string>& outPaths, const std::string& defaultPath) {
@@ -52,7 +59,7 @@ namespace FileDialog {
 
         const nfdpathset_t* outPathsSet = nullptr;
         nfdresult_t result = NFD::OpenDialogMultiple(outPathsSet,
-            filterList,
+            (filterCount > 0) ? filterList : nullptr,
             filterCount,
             defaultPath.empty() ? nullptr : defaultPath.c_str(),
             {},
@@ -71,7 +78,13 @@ namespace FileDialog {
             NFD::PathSet::Free(outPathsSet);
             return true;
         }
-        return false;
+        else if (result == NFD_CANCEL) {
+            return false;
+        }
+        else {
+            std::cerr << "NFD::OpenDialogMultiple failed: " << NFD::GetError() << std::endl;
+            return false;
+        }
     }
 
     bool SaveFile(const std::string& title, FilterType type, const std::string& defaultName, std::string& outPath, const std::string& defaultPath) {
@@ -82,7 +95,7 @@ namespace FileDialog {
 
         nfdu8char_t* outPtr = nullptr;
         nfdresult_t result = NFD::SaveDialog(outPtr,
-            filterList,
+            (filterCount > 0) ? filterList : nullptr,
             filterCount,
             defaultPath.empty() ? nullptr : defaultPath.c_str(),
             defaultName.empty() ? nullptr : defaultName.c_str(),
@@ -93,7 +106,13 @@ namespace FileDialog {
             NFD::FreePath(outPtr);
             return true;
         }
-        return false;
+        else if (result == NFD_CANCEL) {
+            return false;
+        }
+        else {
+            std::cerr << "NFD::SaveDialog failed: " << NFD::GetError() << std::endl;
+            return false;
+        }
     }
 
     bool SelectFolder(const std::string& title, std::string& outPath, const std::string& defaultPath) {
@@ -108,7 +127,13 @@ namespace FileDialog {
             NFD::FreePath(outPtr);
             return true;
         }
-        return false;
+        else if (result == NFD_CANCEL) {
+            return false;
+        }
+        else {
+            std::cerr << "NFD::PickFolder failed: " << NFD::GetError() << std::endl;
+            return false;
+        }
     }
 
     bool OpenFile(const std::string& title, const std::string& /*filter*/, std::string& outPath, const std::string& defaultPath) {

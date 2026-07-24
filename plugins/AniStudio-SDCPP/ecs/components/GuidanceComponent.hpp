@@ -17,14 +17,10 @@ namespace ECS {
         float slg_layer_start = 0.0f;
         float slg_layer_end = 1.0f;
         std::string slg_layers = "";
-        int scheduler = 0;
-        int sample_method = 0;
-        int sample_steps = 20;
         float eta = 0.0f;
         int shifted_timestep = -1;
         std::string custom_sigmas = "";
         float flow_shift = 0.0f;
-        std::string extra_sample_args = "";
 
         GuidanceComponent() {
             compName = "Guidance";
@@ -35,9 +31,8 @@ namespace ECS {
                 {"type", "object"},
                 {"propertyOrder", {
                     "txt_cfg", "img_cfg", "distilled_guidance",
-                    "enable_slg", "slg_scale", "slg_layer_start", "slg_layer_end", "slg_layers",
-                    "scheduler", "sample_method", "sample_steps", "eta", "shifted_timestep",
-                    "custom_sigmas", "flow_shift", "extra_sample_args"
+                    "enable_slg", "slg_scale", "slg_layer_start", "slg_layer_end", "slg_layers", 
+                    "eta", "shifted_timestep", "custom_sigmas", "flow_shift"
                 }},
                 {"properties", {
                     {"txt_cfg", {
@@ -94,31 +89,6 @@ namespace ECS {
                         {"description", "Comma-separated list of specific layer indices to apply SLG"},
                         {"ui:widget", "textarea"}
                     }},
-                    {"scheduler", {
-                        {"type", "integer"},
-                        {"title", "Scheduler"},
-                        {"description", "Noise schedule for sampling"},
-                        {"ui:widget", "combo"},
-                        {"items", scheduler_method_items},
-                        {"itemCount", scheduler_method_item_count},
-                        {"default", 0}
-                    }},
-                    {"sample_method", {
-                        {"type", "integer"},
-                        {"title", "Sample Method"},
-                        {"description", "Numerical integration method for diffusion sampling"},
-                        {"ui:widget", "combo"},
-                        {"items", sample_method_items},
-                        {"itemCount", sample_method_item_count},
-                        {"default", 0}
-                    }},
-                    {"sample_steps", {
-                        {"type", "integer"},
-                        {"title", "Sample Steps"},
-                        {"description", "Number of sampling steps"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 1}, {"max", 1000}}}
-                    }},
                     {"eta", {
                         {"type", "number"},
                         {"title", "Eta"},
@@ -145,12 +115,6 @@ namespace ECS {
                         {"description", "Flow matching shift parameter"},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 10.0f}}}
-                    }},
-                    {"extra_sample_args", {
-                        {"type", "string"},
-                        {"title", "Extra Sample Args"},
-                        {"description", "Additional sampler arguments as key=value pairs"},
-                        {"ui:widget", "textarea"}
                     }}
                 }}
             };
@@ -166,14 +130,10 @@ namespace ECS {
                 {"slg_layer_start", &slg_layer_start},
                 {"slg_layer_end", &slg_layer_end},
                 {"slg_layers", &slg_layers},
-                {"scheduler", &scheduler},
-                {"sample_method", &sample_method},
-                {"sample_steps", &sample_steps},
                 {"eta", &eta},
                 {"shifted_timestep", &shifted_timestep},
                 {"custom_sigmas", &custom_sigmas},
                 {"flow_shift", &flow_shift},
-                {"extra_sample_args", &extra_sample_args}
             };
         }
 
@@ -187,14 +147,10 @@ namespace ECS {
                 slg_layer_start = other.slg_layer_start;
                 slg_layer_end = other.slg_layer_end;
                 slg_layers = other.slg_layers;
-                scheduler = other.scheduler;
-                sample_method = other.sample_method;
-                sample_steps = other.sample_steps;
                 eta = other.eta;
                 shifted_timestep = other.shifted_timestep;
                 custom_sigmas = other.custom_sigmas;
                 flow_shift = other.flow_shift;
-                extra_sample_args = other.extra_sample_args;
             }
             return *this;
         }
@@ -209,14 +165,10 @@ namespace ECS {
                 {"slg_layer_start", slg_layer_start},
                 {"slg_layer_end", slg_layer_end},
                 {"slg_layers", slg_layers},
-                {"scheduler", scheduler},
-                {"sample_method", sample_method},
-                {"sample_steps", sample_steps},
                 {"eta", eta},
                 {"shifted_timestep", shifted_timestep},
                 {"custom_sigmas", custom_sigmas},
                 {"flow_shift", flow_shift},
-                {"extra_sample_args", extra_sample_args}
             }} };
         }
 
@@ -246,14 +198,10 @@ namespace ECS {
             if (componentData.contains("slg_layer_start")) slg_layer_start = componentData["slg_layer_start"];
             if (componentData.contains("slg_layer_end")) slg_layer_end = componentData["slg_layer_end"];
             if (componentData.contains("slg_layers")) slg_layers = componentData["slg_layers"];
-            if (componentData.contains("scheduler")) scheduler = componentData["scheduler"];
-            if (componentData.contains("sample_method")) sample_method = componentData["sample_method"];
-            if (componentData.contains("sample_steps")) sample_steps = componentData["sample_steps"];
             if (componentData.contains("eta")) eta = componentData["eta"];
             if (componentData.contains("shifted_timestep")) shifted_timestep = componentData["shifted_timestep"];
             if (componentData.contains("custom_sigmas")) custom_sigmas = componentData["custom_sigmas"];
             if (componentData.contains("flow_shift")) flow_shift = componentData["flow_shift"];
-            if (componentData.contains("extra_sample_args")) extra_sample_args = componentData["extra_sample_args"];
         }
     };
 

@@ -48,7 +48,7 @@ namespace UISchema {
                 return pathOrKey;
             }
 
-            std::string result = fallbackPath.empty() ? "." : fallbackPath;
+            std::string result = fallbackPath.empty() ? std::filesystem::current_path().string() : fallbackPath;
             return result;
         }
 
@@ -148,6 +148,9 @@ namespace UISchema {
             FileDialogCallback callback = nullptr
         ) {
             std::string actualPath = ResolveDialogPath(pathOrKey);
+            if (actualPath.empty()) {
+                actualPath = std::filesystem::current_path().string();
+            }
 
             FileDialog::FilterType filterType = FileDialog::FilterType::ALL_FILES;
             if (!filters.empty()) {
@@ -299,7 +302,7 @@ namespace UISchema {
             }
 
             if (actualDialogPath.empty() || !std::filesystem::exists(actualDialogPath)) {
-                actualDialogPath = ".";
+                actualDialogPath = std::filesystem::current_path().string();
             }
 
             std::string browseButtonId = context.GenerateWidgetId(propertyName, "browse");
