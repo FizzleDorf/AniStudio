@@ -19,7 +19,7 @@ namespace ECS {
         std::string slg_layers = "";
         float eta = 0.0f;
         int shifted_timestep = -1;
-        std::string custom_sigmas = "";
+        std::vector<float> custom_sigmas;
         float flow_shift = 0.0f;
 
         GuidanceComponent() {
@@ -31,88 +31,89 @@ namespace ECS {
                 {"type", "object"},
                 {"propertyOrder", {
                     "txt_cfg", "img_cfg", "distilled_guidance",
-                    "enable_slg", "slg_scale", "slg_layer_start", "slg_layer_end", "slg_layers", 
+                    "enable_slg", "slg_scale", "slg_layer_start", "slg_layer_end", "slg_layers",
                     "eta", "shifted_timestep", "custom_sigmas", "flow_shift"
                 }},
                 {"properties", {
                     {"txt_cfg", {
                         {"type", "number"},
                         {"title", "Text CFG"},
-                        {"description", "Classifier-free guidance scale for text conditioning"},
+                        {"description", "Classifier-Free Guidance scale for text prompt. Higher = more adherence."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.05f}, {"min", 0.0f}, {"max", 30.0f}}}
                     }},
                     {"img_cfg", {
                         {"type", "number"},
                         {"title", "Image CFG"},
-                        {"description", "Classifier-free guidance scale for image conditioning"},
+                        {"description", "Guidance scale for image conditioning (img2img)."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.05f}, {"min", 0.0f}, {"max", 30.0f}}}
                     }},
                     {"distilled_guidance", {
                         {"type", "number"},
                         {"title", "Distilled Guidance"},
-                        {"description", "Guidance scale for distilled/consistency models"},
+                        {"description", "Guidance scale for distilled models (e.g., LCM)."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.05f}, {"min", 0.0f}, {"max", 30.0f}}}
                     }},
                     {"enable_slg", {
                         {"type", "boolean"},
                         {"title", "Enable SLG"},
-                        {"description", "Enable skip-layer guidance"},
+                        {"description", "Enable Skip Layer Guidance for improved quality."},
                         {"default", false}
                     }},
                     {"slg_scale", {
                         {"type", "number"},
                         {"title", "SLG Scale"},
-                        {"description", "Strength of skip-layer guidance"},
+                        {"description", "Strength of Skip Layer Guidance."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.05f}, {"min", 0.0f}, {"max", 10.0f}}}
                     }},
                     {"slg_layer_start", {
                         {"type", "number"},
                         {"title", "SLG Layer Start"},
-                        {"description", "First layer fraction for SLG (0.0-1.0)"},
+                        {"description", "Layer index to start applying SLG (0.0-1.0)."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
                     }},
                     {"slg_layer_end", {
                         {"type", "number"},
                         {"title", "SLG Layer End"},
-                        {"description", "Last layer fraction for SLG (0.0-1.0)"},
+                        {"description", "Layer index to stop applying SLG (0.0-1.0)."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
                     }},
                     {"slg_layers", {
                         {"type", "string"},
                         {"title", "SLG Layers"},
-                        {"description", "Comma-separated list of specific layer indices to apply SLG"},
+                        {"description", "Comma-separated list of layer indices for SLG."},
                         {"ui:widget", "textarea"}
                     }},
                     {"eta", {
                         {"type", "number"},
                         {"title", "Eta"},
-                        {"description", "Stochasticity parameter (0 = deterministic, 1 = full random)"},
+                        {"description", "Noise multiplier for DDIM sampler (0.0 = deterministic)."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
                     }},
                     {"shifted_timestep", {
                         {"type", "integer"},
                         {"title", "Shifted Timestep"},
-                        {"description", "Offset timestep value for diffusion process"},
+                        {"description", "Shift timesteps for sampling (advanced)."},
                         {"ui:widget", "input_int"},
                         {"ui:options", {{"min", -1}, {"max", 1000}}}
                     }},
                     {"custom_sigmas", {
-                        {"type", "string"},
+                        {"type", "array"},
                         {"title", "Custom Sigmas"},
-                        {"description", "User-defined sigma schedule (comma-separated values)"},
-                        {"ui:widget", "textarea"}
+                        {"description", "Custom sigma schedule (advanced)."},
+                        {"items", {"type", "number"}},
+                        {"ui:widget", "array_input"}
                     }},
                     {"flow_shift", {
                         {"type", "number"},
                         {"title", "Flow Shift"},
-                        {"description", "Flow matching shift parameter"},
+                        {"description", "Shift factor for flow-matching models."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 10.0f}}}
                     }}
@@ -200,7 +201,8 @@ namespace ECS {
             if (componentData.contains("slg_layers")) slg_layers = componentData["slg_layers"];
             if (componentData.contains("eta")) eta = componentData["eta"];
             if (componentData.contains("shifted_timestep")) shifted_timestep = componentData["shifted_timestep"];
-            if (componentData.contains("custom_sigmas")) custom_sigmas = componentData["custom_sigmas"];
+            if (componentData.contains("custom_sigmas") && componentData["custom_sigmas"].is_array())
+                custom_sigmas = componentData["custom_sigmas"].get<std::vector<float>>();
             if (componentData.contains("flow_shift")) flow_shift = componentData["flow_shift"];
         }
     };

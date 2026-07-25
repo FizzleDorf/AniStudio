@@ -1,4 +1,3 @@
-// SDCPPUtils.hpp
 #pragma once
 
 #include "stable-diffusion.h"
@@ -52,20 +51,30 @@ namespace SDCPP {
 
     inline bool parseSampleParams(const nlohmann::json& comp, sd_sample_params_t& params, ResourceManager& res) {
         try {
-            if (comp.contains("sample_steps")) params.sample_steps = comp["sample_steps"].get<int>();
+            if (comp.contains("steps")) params.sample_steps = comp["steps"].get<int>();
+            if (comp.contains("current_sample_method")) {
+                params.sample_method = static_cast<enum sample_method_t>(comp["current_sample_method"].get<int>());
+            }
+            if (comp.contains("current_scheduler_method")) {
+                params.scheduler = static_cast<enum scheduler_t>(comp["current_scheduler_method"].get<int>());
+            }
+            if (comp.contains("extra_sample_args") && !comp["extra_sample_args"].is_null()) {
+                std::string s = comp["extra_sample_args"].get<std::string>();
+                if (!s.empty()) params.extra_sample_args = res.storeString(s);
+            }
+            return true;
+        }
+        catch (...) { return false; }
+    }
+
+    inline bool parseGuidanceParams(const nlohmann::json& comp, sd_sample_params_t& params, ResourceManager& res) {
+        try {
+            if (comp.contains("txt_cfg")) params.guidance.txt_cfg = comp["txt_cfg"].get<float>();
+            if (comp.contains("img_cfg")) params.guidance.img_cfg = comp["img_cfg"].get<float>();
+            if (comp.contains("distilled_guidance")) params.guidance.distilled_guidance = comp["distilled_guidance"].get<float>();
             if (comp.contains("eta")) params.eta = comp["eta"].get<float>();
             if (comp.contains("shifted_timestep")) params.shifted_timestep = comp["shifted_timestep"].get<int>();
             if (comp.contains("flow_shift")) params.flow_shift = comp["flow_shift"].get<float>();
-            if (comp.contains("extra_sample_args") && !comp["extra_sample_args"].is_null()) {
-                std::string s = comp["extra_sample_args"].get<std::string>();
-                params.extra_sample_args = res.storeString(s);
-            }
-            if (comp.contains("sample_method")) {
-                params.sample_method = static_cast<enum sample_method_t>(comp["sample_method"].get<int>());
-            }
-            if (comp.contains("scheduler")) {
-                params.scheduler = static_cast<enum scheduler_t>(comp["scheduler"].get<int>());
-            }
             if (comp.contains("custom_sigmas") && comp["custom_sigmas"].is_array()) {
                 auto sigmas = comp["custom_sigmas"].get<std::vector<float>>();
                 params.custom_sigmas = res.storeFloats(sigmas);
@@ -76,25 +85,29 @@ namespace SDCPP {
         catch (...) { return false; }
     }
 
-    inline bool parseGuidanceParams(const nlohmann::json& comp, sd_guidance_params_t& params) {
-        try {
-            if (comp.contains("txt_cfg")) params.txt_cfg = comp["txt_cfg"].get<float>();
-            if (comp.contains("img_cfg")) params.img_cfg = comp["img_cfg"].get<float>();
-            if (comp.contains("distilled_guidance")) params.distilled_guidance = comp["distilled_guidance"].get<float>();
-            return true;
-        }
-        catch (...) { return false; }
-    }
-
     inline bool parseSLGParams(const nlohmann::json& comp, sd_slg_params_t& slg, ResourceManager& res) {
         try {
-            if (comp.contains("layer_start")) slg.layer_start = comp["layer_start"].get<float>();
-            if (comp.contains("layer_end")) slg.layer_end = comp["layer_end"].get<float>();
-            if (comp.contains("scale")) slg.scale = comp["scale"].get<float>();
-            if (comp.contains("layers") && comp["layers"].is_array()) {
-                auto layers = comp["layers"].get<std::vector<int>>();
-                slg.layers = res.storeInts(layers);
-                slg.layer_count = layers.size();
+            if (comp.contains("slg_scale")) slg.scale = comp["slg_scale"].get<float>();
+            if (comp.contains("slg_layer_start")) slg.layer_start = comp["slg_layer_start"].get<float>();
+            if (comp.contains("slg_layer_end")) slg.layer_end = comp["slg_layer_end"].get<float>();
+            if (comp.contains("slg_layers") && !comp["slg_layers"].is_null()) {
+                std::string layersStr = comp["slg_layers"].get<std::string>();
+                std::vector<int> layers;
+                size_t pos = 0;
+                while (pos < layersStr.size()) {
+                    size_t next = layersStr.find(',', pos);
+                    std::string token = layersStr.substr(pos, next - pos);
+                    if (!token.empty()) {
+                        try { layers.push_back(std::stoi(token)); }
+                        catch (...) {}
+                    }
+                    if (next == std::string::npos) break;
+                    pos = next + 1;
+                }
+                if (!layers.empty()) {
+                    slg.layers = res.storeInts(layers);
+                    slg.layer_count = layers.size();
+                }
             }
             return true;
         }
@@ -133,7 +146,7 @@ namespace SDCPP {
 
     inline bool parseTilingParams(const nlohmann::json& comp, sd_tiling_params_t& tiling) {
         try {
-            if (comp.contains("enabled")) tiling.enabled = comp["enabled"].get<bool>();
+            if (comp.contains("isTiled")) tiling.enabled = comp["isTiled"].get<bool>();
             if (comp.contains("temporal_tiling")) tiling.temporal_tiling = comp["temporal_tiling"].get<bool>();
             if (comp.contains("tile_size_x")) tiling.tile_size_x = comp["tile_size_x"].get<int>();
             if (comp.contains("tile_size_y")) tiling.tile_size_y = comp["tile_size_y"].get<int>();
@@ -150,7 +163,8 @@ namespace SDCPP {
             if (comp.contains("enabled")) hires.enabled = comp["enabled"].get<bool>();
             if (comp.contains("upscaler")) hires.upscaler = static_cast<enum sd_hires_upscaler_t>(comp["upscaler"].get<int>());
             if (comp.contains("model_path") && !comp["model_path"].is_null()) {
-                hires.model_path = res.storeString(comp["model_path"].get<std::string>());
+                std::string val = comp["model_path"].get<std::string>();
+                if (!val.empty()) hires.model_path = res.storeString(val);
             }
             if (comp.contains("scale")) hires.scale = comp["scale"].get<float>();
             if (comp.contains("target_width")) hires.target_width = comp["target_width"].get<int>();
@@ -170,10 +184,11 @@ namespace SDCPP {
 
     inline bool parsePMParams(const nlohmann::json& comp, sd_pm_params_t& pm, ResourceManager& res) {
         try {
-            if (comp.contains("id_embed_path") && !comp["id_embed_path"].is_null()) {
-                pm.id_embed_path = res.storeString(comp["id_embed_path"].get<std::string>());
+            if (comp.contains("modelPath") && !comp["modelPath"].is_null()) {
+                std::string val = comp["modelPath"].get<std::string>();
+                if (!val.empty()) pm.id_embed_path = res.storeString(val);
             }
-            if (comp.contains("style_strength")) pm.style_strength = comp["style_strength"].get<float>();
+            if (comp.contains("styleStrength")) pm.style_strength = comp["styleStrength"].get<float>();
             return true;
         }
         catch (...) { return false; }
@@ -181,8 +196,9 @@ namespace SDCPP {
 
     inline bool parsePulidParams(const nlohmann::json& comp, sd_pulid_params_t& pulid, ResourceManager& res) {
         try {
-            if (comp.contains("id_embedding_path") && !comp["id_embedding_path"].is_null()) {
-                pulid.id_embedding_path = res.storeString(comp["id_embedding_path"].get<std::string>());
+            if (comp.contains("modelPath") && !comp["modelPath"].is_null()) {
+                std::string val = comp["modelPath"].get<std::string>();
+                if (!val.empty()) pulid.id_embedding_path = res.storeString(val);
             }
             if (comp.contains("id_weight")) pulid.id_weight = comp["id_weight"].get<float>();
             return true;
@@ -192,7 +208,6 @@ namespace SDCPP {
 
     inline bool parseLoras(const nlohmann::json& comp, std::vector<sd_lora_t>& loras, ResourceManager& res) {
         try {
-            // support both array and object with "loras" array
             nlohmann::json loraArray;
             if (comp.is_array()) {
                 loraArray = comp;
@@ -206,7 +221,8 @@ namespace SDCPP {
             for (const auto& item : loraArray) {
                 sd_lora_t lora{};
                 if (item.contains("path") && !item["path"].is_null()) {
-                    lora.path = res.storeString(item["path"].get<std::string>());
+                    std::string val = item["path"].get<std::string>();
+                    if (!val.empty()) lora.path = res.storeString(val);
                 }
                 if (item.contains("multiplier")) lora.multiplier = item["multiplier"].get<float>();
                 if (item.contains("is_high_noise")) lora.is_high_noise = item["is_high_noise"].get<bool>();
@@ -262,10 +278,12 @@ namespace SDCPP {
             if (comp.contains("Prompt")) {
                 const auto& p = comp["Prompt"];
                 if (p.contains("posPrompt") && !p["posPrompt"].is_null()) {
-                    params.prompt = res.storeString(p["posPrompt"].get<std::string>());
+                    std::string val = p["posPrompt"].get<std::string>();
+                    if (!val.empty()) params.prompt = res.storeString(val);
                 }
                 if (p.contains("negPrompt") && !p["negPrompt"].is_null()) {
-                    params.negative_prompt = res.storeString(p["negPrompt"].get<std::string>());
+                    std::string val = p["negPrompt"].get<std::string>();
+                    if (!val.empty()) params.negative_prompt = res.storeString(val);
                 }
             }
             if (comp.contains("ClipSkip")) {
@@ -283,15 +301,15 @@ namespace SDCPP {
                 parseTilingParams(comp["Vae"], params.vae_tiling_params);
             }
             if (comp.contains("Guidance")) {
-                parseGuidanceParams(comp["Guidance"], params.sample_params.guidance);
-            }
-            if (comp.contains("SLG")) {
-                parseSLGParams(comp["SLG"], params.sample_params.guidance.slg, res);
+                parseGuidanceParams(comp["Guidance"], params.sample_params, res);
+                if (comp["Guidance"].contains("enable_slg") && comp["Guidance"]["enable_slg"].get<bool>()) {
+                    parseSLGParams(comp["Guidance"], params.sample_params.guidance.slg, res);
+                }
             }
             if (comp.contains("Sampler")) {
                 const auto& samp = comp["Sampler"];
                 if (samp.contains("seed")) params.seed = static_cast<int64_t>(samp["seed"].get<int>());
-                if (samp.contains("strength")) params.strength = samp["strength"].get<float>();
+                if (samp.contains("denoise")) params.strength = samp["denoise"].get<float>();
                 if (samp.contains("batchCount")) params.batch_count = samp["batchCount"].get<int>();
                 parseSampleParams(samp, params.sample_params, res);
             }
@@ -304,8 +322,8 @@ namespace SDCPP {
             if (comp.contains("PhotoMaker")) {
                 parsePMParams(comp["PhotoMaker"], params.pm_params, res);
             }
-            if (comp.contains("Pulid")) {
-                parsePulidParams(comp["Pulid"], params.pulid_params, res);
+            if (comp.contains("PulidWeights")) {
+                parsePulidParams(comp["PulidWeights"], params.pulid_params, res);
             }
             if (comp.contains("Lora")) {
                 parseLoras(comp["Lora"], loras, res);
@@ -350,7 +368,6 @@ namespace SDCPP {
             }
             if (comp.contains("RefImages")) {
                 const auto& refs = comp["RefImages"];
-                // handle both old and new format
                 nlohmann::json paths;
                 if (refs.is_array()) {
                     paths = refs;
@@ -359,7 +376,6 @@ namespace SDCPP {
                     paths = refs["filePaths"];
                 }
                 else if (refs.contains("filePath")) {
-                    // single image as object
                     paths = nlohmann::json::array({ refs });
                 }
                 if (paths.is_array()) {
@@ -414,96 +430,138 @@ namespace SDCPP {
         for (const auto& comp : metadata["components"]) {
             if (comp.contains("Checkpoint")) {
                 const auto& m = comp["Checkpoint"];
-                if (m.contains("modelPath") && !m["modelPath"].is_null())
-                    ctx.model_path = res.storeString(m["modelPath"].get<std::string>());
+                if (m.contains("modelPath") && !m["modelPath"].is_null()) {
+                    std::string val = m["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.model_path = res.storeString(val);
+                }
             }
             if (comp.contains("Vae")) {
                 const auto& v = comp["Vae"];
-                if (v.contains("modelPath") && !v["modelPath"].is_null())
-                    ctx.vae_path = res.storeString(v["modelPath"].get<std::string>());
+                if (v.contains("modelPath") && !v["modelPath"].is_null()) {
+                    std::string val = v["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.vae_path = res.storeString(val);
+                }
                 if (v.contains("vae_format")) {
-                    ctx.vae_format = static_cast<enum sd_vae_format_t>(v["vae_format"].get<int>());
+                    int idx = v["vae_format"].get<int>();
+                    if (idx == 0) {
+                        ctx.vae_format = SD_VAE_FORMAT_AUTO;
+                    }
+                    else {
+                        ctx.vae_format = static_cast<enum sd_vae_format_t>(idx - 1);
+                    }
                 }
             }
             if (comp.contains("ClipL")) {
                 const auto& c = comp["ClipL"];
-                if (c.contains("modelPath") && !c["modelPath"].is_null())
-                    ctx.clip_l_path = res.storeString(c["modelPath"].get<std::string>());
+                if (c.contains("modelPath") && !c["modelPath"].is_null()) {
+                    std::string val = c["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.clip_l_path = res.storeString(val);
+                }
             }
             if (comp.contains("ClipG")) {
                 const auto& c = comp["ClipG"];
-                if (c.contains("modelPath") && !c["modelPath"].is_null())
-                    ctx.clip_g_path = res.storeString(c["modelPath"].get<std::string>());
+                if (c.contains("modelPath") && !c["modelPath"].is_null()) {
+                    std::string val = c["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.clip_g_path = res.storeString(val);
+                }
             }
             if (comp.contains("ClipVision")) {
                 const auto& c = comp["ClipVision"];
-                if (c.contains("modelPath") && !c["modelPath"].is_null())
-                    ctx.clip_vision_path = res.storeString(c["modelPath"].get<std::string>());
+                if (c.contains("modelPath") && !c["modelPath"].is_null()) {
+                    std::string val = c["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.clip_vision_path = res.storeString(val);
+                }
             }
             if (comp.contains("T5XXL")) {
                 const auto& t = comp["T5XXL"];
-                if (t.contains("modelPath") && !t["modelPath"].is_null())
-                    ctx.t5xxl_path = res.storeString(t["modelPath"].get<std::string>());
+                if (t.contains("modelPath") && !t["modelPath"].is_null()) {
+                    std::string val = t["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.t5xxl_path = res.storeString(val);
+                }
             }
             if (comp.contains("LlmEncoder")) {
                 const auto& l = comp["LlmEncoder"];
-                if (l.contains("modelPath") && !l["modelPath"].is_null())
-                    ctx.llm_path = res.storeString(l["modelPath"].get<std::string>());
+                if (l.contains("modelPath") && !l["modelPath"].is_null()) {
+                    std::string val = l["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.llm_path = res.storeString(val);
+                }
             }
             if (comp.contains("LlmVision")) {
                 const auto& l = comp["LlmVision"];
-                if (l.contains("modelPath") && !l["modelPath"].is_null())
-                    ctx.llm_vision_path = res.storeString(l["modelPath"].get<std::string>());
+                if (l.contains("modelPath") && !l["modelPath"].is_null()) {
+                    std::string val = l["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.llm_vision_path = res.storeString(val);
+                }
             }
             if (comp.contains("DiffusionModel")) {
                 const auto& d = comp["DiffusionModel"];
-                if (d.contains("modelPath") && !d["modelPath"].is_null())
-                    ctx.diffusion_model_path = res.storeString(d["modelPath"].get<std::string>());
+                if (d.contains("modelPath") && !d["modelPath"].is_null()) {
+                    std::string val = d["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.diffusion_model_path = res.storeString(val);
+                }
             }
             if (comp.contains("HighNoiseDiffusionModel")) {
                 const auto& h = comp["HighNoiseDiffusionModel"];
-                if (h.contains("modelPath") && !h["modelPath"].is_null())
-                    ctx.high_noise_diffusion_model_path = res.storeString(h["modelPath"].get<std::string>());
+                if (h.contains("modelPath") && !h["modelPath"].is_null()) {
+                    std::string val = h["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.high_noise_diffusion_model_path = res.storeString(val);
+                }
             }
             if (comp.contains("UncondDiffusionModel")) {
                 const auto& u = comp["UncondDiffusionModel"];
-                if (u.contains("modelPath") && !u["modelPath"].is_null())
-                    ctx.uncond_diffusion_model_path = res.storeString(u["modelPath"].get<std::string>());
+                if (u.contains("modelPath") && !u["modelPath"].is_null()) {
+                    std::string val = u["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.uncond_diffusion_model_path = res.storeString(val);
+                }
             }
             if (comp.contains("Embedding")) {
                 const auto& e = comp["Embedding"];
-                if (e.contains("modelPath") && !e["modelPath"].is_null())
-                    ctx.embeddings_connectors_path = res.storeString(e["modelPath"].get<std::string>());
+                if (e.contains("modelPath") && !e["modelPath"].is_null()) {
+                    std::string val = e["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.embeddings_connectors_path = res.storeString(val);
+                }
             }
             if (comp.contains("AudioVAE")) {
                 const auto& a = comp["AudioVAE"];
-                if (a.contains("modelPath") && !a["modelPath"].is_null())
-                    ctx.audio_vae_path = res.storeString(a["modelPath"].get<std::string>());
+                if (a.contains("modelPath") && !a["modelPath"].is_null()) {
+                    std::string val = a["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.audio_vae_path = res.storeString(val);
+                }
             }
             if (comp.contains("Taesd")) {
                 const auto& t = comp["Taesd"];
-                if (t.contains("modelPath") && !t["modelPath"].is_null())
-                    ctx.taesd_path = res.storeString(t["modelPath"].get<std::string>());
+                if (t.contains("modelPath") && !t["modelPath"].is_null()) {
+                    std::string val = t["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.taesd_path = res.storeString(val);
+                }
             }
             if (comp.contains("ControlNet")) {
                 const auto& c = comp["ControlNet"];
-                if (c.contains("modelPath") && !c["modelPath"].is_null())
-                    ctx.control_net_path = res.storeString(c["modelPath"].get<std::string>());
+                if (c.contains("modelPath") && !c["modelPath"].is_null()) {
+                    std::string val = c["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.control_net_path = res.storeString(val);
+                }
             }
             if (comp.contains("MotionModule")) {
                 const auto& m = comp["MotionModule"];
-                if (m.contains("modelPath") && !m["modelPath"].is_null())
-                    ctx.motion_module_path = res.storeString(m["modelPath"].get<std::string>());
+                if (m.contains("modelPath") && !m["modelPath"].is_null()) {
+                    std::string val = m["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.motion_module_path = res.storeString(val);
+                }
             }
             if (comp.contains("PhotoMaker")) {
                 const auto& p = comp["PhotoMaker"];
-                if (p.contains("modelPath") && !p["modelPath"].is_null())
-                    ctx.photo_maker_path = res.storeString(p["modelPath"].get<std::string>());
+                if (p.contains("modelPath") && !p["modelPath"].is_null()) {
+                    std::string val = p["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.photo_maker_path = res.storeString(val);
+                }
             }
             if (comp.contains("PulidWeights")) {
                 const auto& p = comp["PulidWeights"];
-                if (p.contains("modelPath") && !p["modelPath"].is_null())
-                    ctx.pulid_weights_path = res.storeString(p["modelPath"].get<std::string>());
+                if (p.contains("modelPath") && !p["modelPath"].is_null()) {
+                    std::string val = p["modelPath"].get<std::string>();
+                    if (!val.empty()) ctx.pulid_weights_path = res.storeString(val);
+                }
             }
             if (comp.contains("Sampler")) {
                 const auto& s = comp["Sampler"];
@@ -520,24 +578,46 @@ namespace SDCPP {
                 if (s.contains("diffusion_conv_direct")) ctx.diffusion_conv_direct = s["diffusion_conv_direct"].get<bool>();
                 if (s.contains("vae_conv_direct")) ctx.vae_conv_direct = s["vae_conv_direct"].get<bool>();
                 if (s.contains("force_sdxl_vae_conv_scale")) ctx.force_sdxl_vae_conv_scale = s["force_sdxl_vae_conv_scale"].get<bool>();
-                if (s.contains("max_vram") && !s["max_vram"].is_null()) ctx.max_vram = res.storeString(s["max_vram"].get<std::string>());
+                if (s.contains("max_vram") && !s["max_vram"].is_null()) {
+                    std::string val = s["max_vram"].get<std::string>();
+                    if (!val.empty()) ctx.max_vram = res.storeString(val);
+                }
                 if (s.contains("stream_layers")) ctx.stream_layers = s["stream_layers"].get<bool>();
                 if (s.contains("eager_load")) ctx.eager_load = s["eager_load"].get<bool>();
-                if (s.contains("backend") && !s["backend"].is_null()) ctx.backend = res.storeString(s["backend"].get<std::string>());
-                if (s.contains("params_backend") && !s["params_backend"].is_null()) ctx.params_backend = res.storeString(s["params_backend"].get<std::string>());
-                if (s.contains("split_mode") && !s["split_mode"].is_null()) ctx.split_mode = res.storeString(s["split_mode"].get<std::string>());
+                if (s.contains("backend") && !s["backend"].is_null()) {
+                    std::string val = s["backend"].get<std::string>();
+                    if (!val.empty()) ctx.backend = res.storeString(val);
+                }
+                if (s.contains("params_backend") && !s["params_backend"].is_null()) {
+                    std::string val = s["params_backend"].get<std::string>();
+                    if (!val.empty()) ctx.params_backend = res.storeString(val);
+                }
+                if (s.contains("split_mode") && !s["split_mode"].is_null()) {
+                    std::string val = s["split_mode"].get<std::string>();
+                    if (!val.empty()) ctx.split_mode = res.storeString(val);
+                }
                 if (s.contains("auto_fit")) ctx.auto_fit = s["auto_fit"].get<bool>();
-                if (s.contains("rpc_servers") && !s["rpc_servers"].is_null()) ctx.rpc_servers = res.storeString(s["rpc_servers"].get<std::string>());
-                if (s.contains("model_args") && !s["model_args"].is_null()) ctx.model_args = res.storeString(s["model_args"].get<std::string>());
+                if (s.contains("rpc_servers") && !s["rpc_servers"].is_null()) {
+                    std::string val = s["rpc_servers"].get<std::string>();
+                    if (!val.empty()) ctx.rpc_servers = res.storeString(val);
+                }
+                if (s.contains("model_args") && !s["model_args"].is_null()) {
+                    std::string val = s["model_args"].get<std::string>();
+                    if (!val.empty()) ctx.model_args = res.storeString(val);
+                }
             }
             if (comp.contains("Embeddings") && comp["Embeddings"].is_array()) {
                 const auto& embeds = comp["Embeddings"];
                 for (const auto& e : embeds) {
                     if (e.contains("name") && e.contains("path")) {
                         sd_embedding_t emb;
-                        emb.name = res.storeString(e["name"].get<std::string>());
-                        emb.path = res.storeString(e["path"].get<std::string>());
-                        res.embeddingStorage.push_back(emb);
+                        std::string name = e["name"].get<std::string>();
+                        std::string path = e["path"].get<std::string>();
+                        if (!name.empty() && !path.empty()) {
+                            emb.name = res.storeString(name);
+                            emb.path = res.storeString(path);
+                            res.embeddingStorage.push_back(emb);
+                        }
                     }
                 }
                 if (!res.embeddingStorage.empty()) {
@@ -547,8 +627,10 @@ namespace SDCPP {
             }
             if (comp.contains("Conversion")) {
                 const auto& conv = comp["Conversion"];
-                if (conv.contains("tensorTypeRules") && !conv["tensorTypeRules"].is_null())
-                    ctx.tensor_type_rules = res.storeString(conv["tensorTypeRules"].get<std::string>());
+                if (conv.contains("tensorTypeRules") && !conv["tensorTypeRules"].is_null()) {
+                    std::string val = conv["tensorTypeRules"].get<std::string>();
+                    if (!val.empty()) ctx.tensor_type_rules = res.storeString(val);
+                }
             }
         }
 
@@ -574,10 +656,14 @@ namespace SDCPP {
             }
             if (comp.contains("Prompt")) {
                 const auto& p = comp["Prompt"];
-                if (p.contains("posPrompt") && !p["posPrompt"].is_null())
-                    params.prompt = res.storeString(p["posPrompt"].get<std::string>());
-                if (p.contains("negPrompt") && !p["negPrompt"].is_null())
-                    params.negative_prompt = res.storeString(p["negPrompt"].get<std::string>());
+                if (p.contains("posPrompt") && !p["posPrompt"].is_null()) {
+                    std::string val = p["posPrompt"].get<std::string>();
+                    if (!val.empty()) params.prompt = res.storeString(val);
+                }
+                if (p.contains("negPrompt") && !p["negPrompt"].is_null()) {
+                    std::string val = p["negPrompt"].get<std::string>();
+                    if (!val.empty()) params.negative_prompt = res.storeString(val);
+                }
             }
             if (comp.contains("ClipSkip")) {
                 const auto& cs = comp["ClipSkip"];
@@ -593,15 +679,15 @@ namespace SDCPP {
                 parseTilingParams(comp["Vae"], params.vae_tiling_params);
             }
             if (comp.contains("Guidance")) {
-                parseGuidanceParams(comp["Guidance"], params.sample_params.guidance);
-            }
-            if (comp.contains("SLG")) {
-                parseSLGParams(comp["SLG"], params.sample_params.guidance.slg, res);
+                parseGuidanceParams(comp["Guidance"], params.sample_params, res);
+                if (comp["Guidance"].contains("enable_slg") && comp["Guidance"]["enable_slg"].get<bool>()) {
+                    parseSLGParams(comp["Guidance"], params.sample_params.guidance.slg, res);
+                }
             }
             if (comp.contains("Sampler")) {
                 const auto& samp = comp["Sampler"];
                 if (samp.contains("seed")) params.seed = static_cast<int64_t>(samp["seed"].get<int>());
-                if (samp.contains("strength")) params.strength = samp["strength"].get<float>();
+                if (samp.contains("denoise")) params.strength = samp["denoise"].get<float>();
                 parseSampleParams(samp, params.sample_params, res);
             }
             if (comp.contains("HighNoiseSampler")) {
@@ -633,7 +719,6 @@ namespace SDCPP {
             }
             if (comp.contains("ControlFrames")) {
                 const auto& cf = comp["ControlFrames"];
-                // handle both array and object with "filePaths" array
                 nlohmann::json paths;
                 if (cf.is_array()) {
                     paths = cf;

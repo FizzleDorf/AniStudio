@@ -1,30 +1,20 @@
 #include "SettingsView.hpp"
-
 #include "EntityManager.hpp"
 #include "SettingsSystem.hpp"
-#include "BaseSettingsComponent.hpp"
-#include "FilePathSystem.hpp"
-
+#include "BaseSettingsTab.hpp"
 #include <imgui.h>
-#include <imgui_internal.h>
 #include <iostream>
 #include <algorithm>
-#include <map>
-
-#include "FileDialogUtil.hpp"
 
 namespace GUI {
 
     SettingsView::SettingsView() {
         filterBuffer[0] = '\0';
-        pathFilterBuffer[0] = '\0';
     }
 
     void SettingsView::SetEntityManager(ECS::EntityManager& mgr) {
         m_entityManager = &mgr;
         m_settingsSystem = mgr.GetSystem<ECS::SettingsSystem>().get();
-        m_filePathSystem = mgr.GetSystem<ECS::FilePathSystem>().get();
-
         if (m_settingsSystem) {
             if (imguiContext) {
                 m_settingsSystem->SetImGuiContext(imguiContext);
@@ -33,9 +23,9 @@ namespace GUI {
                 m_settingsSystem->LoadAllSettings();
                 settingsLoaded = true;
             }
-            auto comps = m_settingsSystem->GetAllSettingsComponents();
-            if (!comps.empty()) {
-                currentActiveTab = comps[0]->GetTabName();
+            auto& tabs = m_settingsSystem->GetTabs();
+            if (!tabs.empty()) {
+                currentActiveTab = tabs[0]->GetTabName();
             }
         }
     }
@@ -77,6 +67,7 @@ namespace GUI {
     void SettingsView::HandlePopupClose() {
         if (m_settingsSystem && m_settingsSystem->HasAnyUnsavedChanges()) {
             showUnsavedChangesDialog = true;
+            showPopup = false;
             pendingClose = true;
         }
         else {
@@ -96,6 +87,11 @@ namespace GUI {
         ImGui::SameLine();
         ImGui::InputText("##SettingsFilter", filterBuffer, sizeof(filterBuffer));
 
+        std::string filterStr = filterBuffer;
+        for (auto& tab : m_settingsSystem->GetTabs()) {
+            tab->SetFilter(filterStr);
+        }
+
         if (showSaveNotification) {
             ImGui::SameLine();
             ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Settings saved.");
@@ -103,9 +99,7 @@ namespace GUI {
         }
 
         ImGui::Separator();
-
         RenderTabsAndContent();
-
         ImGui::EndChild();
 
         ImGui::Separator();
@@ -113,163 +107,27 @@ namespace GUI {
     }
 
     void SettingsView::RenderTabsAndContent() {
-        auto comps = m_settingsSystem->GetAllSettingsComponents();
+        auto& tabs = m_settingsSystem->GetTabs();
+        if (tabs.empty()) {
+            ImGui::TextDisabled("No settings tabs available.");
+            return;
+        }
 
         if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
-            for (auto* comp : comps) {
-                if (!comp) continue;
-                std::string tabTitle = comp->GetTabName() + " Settings";
-                std::string tabName = comp->GetTabName();
-
-                if (ImGui::BeginTabItem(tabTitle.c_str())) {
-                    if (currentActiveTab != tabName) {
-                        currentActiveTab = tabName;
+            for (auto& tab : tabs) {
+                std::string title = tab->GetTabName() + " Settings";
+                if (ImGui::BeginTabItem(title.c_str())) {
+                    if (currentActiveTab != tab->GetTabName()) {
+                        currentActiveTab = tab->GetTabName();
                     }
                     ImGui::BeginChild("TabContent", ImVec2(0, 0), false,
                         ImGuiWindowFlags_AlwaysVerticalScrollbar);
-                    comp->RenderFilteredUI(std::string(filterBuffer));
+                    tab->Render();
                     ImGui::EndChild();
                     ImGui::EndTabItem();
                 }
             }
-
-            if (m_filePathSystem) {
-                if (ImGui::BeginTabItem("Paths Settings")) {
-                    if (currentActiveTab != "Paths") {
-                        currentActiveTab = "Paths";
-                    }
-                    ImGui::BeginChild("PathsTabContent", ImVec2(0, 0), false,
-                        ImGuiWindowFlags_AlwaysVerticalScrollbar);
-                    RenderPathsTab();
-                    ImGui::EndChild();
-                    ImGui::EndTabItem();
-                }
-            }
-
             ImGui::EndTabBar();
-        }
-    }
-
-    void SettingsView::RenderPathsTab() {
-        if (!m_filePathSystem) {
-            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "FilePathSystem not available.");
-            return;
-        }
-
-        ImGui::Text("Filter paths");
-        ImGui::SameLine();
-        ImGui::InputText("##PathFilter", pathFilterBuffer, sizeof(pathFilterBuffer));
-        ImGui::Separator();
-
-        std::vector<std::string> allKeys = m_filePathSystem->GetAllKeys();
-        if (allKeys.empty()) {
-            ImGui::TextDisabled("No paths registered.");
-            return;
-        }
-
-        std::string filterStr = pathFilterBuffer;
-        std::transform(filterStr.begin(), filterStr.end(), filterStr.begin(), ::tolower);
-
-        if (ImGui::BeginTable("PathsTable", 4,
-            ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-            ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollY)) {
-
-            ImGui::TableSetupColumn("Key", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-            ImGui::TableSetupColumn("Browse", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-            ImGui::TableSetupColumn("Clear", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-            ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableHeadersRow();
-
-            for (const auto& key : allKeys) {
-                if (!filterStr.empty()) {
-                    std::string lowerKey = key;
-                    std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), ::tolower);
-                    if (lowerKey.find(filterStr) == std::string::npos) continue;
-                }
-
-                std::string currentPath = m_filePathSystem->GetPath(key);
-                bool isFileSelector = (key == "ClipL" || key == "ClipG" || key == "T5XXL");
-
-                ImGui::TableNextRow();
-                ImGui::PushID(key.c_str());
-
-                ImGui::TableNextColumn();
-                ImGui::TextUnformatted(key.c_str());
-
-                ImGui::TableNextColumn();
-                if (ImGui::Button("...", ImVec2(30, 0))) {
-                    std::string defaultPath = currentPath.empty() ? "." : currentPath;
-                    std::string newPath;
-                    if (isFileSelector) {
-                        std::string filter = "All Files{.*},SafeTensors{.safetensors},Checkpoint{.ckpt},PyTorch{.pth}";
-                        if (FileDialog::OpenFile("Select File", filter, newPath, defaultPath)) {
-                            if (!newPath.empty() && newPath != currentPath) {
-                                m_filePathSystem->SetPath(key, newPath);
-                            }
-                        }
-                    }
-                    else {
-                        if (FileDialog::SelectFolder("Select Directory", newPath, defaultPath)) {
-                            if (!newPath.empty() && newPath != currentPath) {
-                                m_filePathSystem->SetPath(key, newPath);
-                            }
-                        }
-                    }
-                }
-
-                ImGui::TableNextColumn();
-                if (ImGui::Button("X", ImVec2(30, 0))) {
-                    m_filePathSystem->SetPath(key, "");
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("Clear this path");
-                }
-
-                ImGui::TableNextColumn();
-                if (currentPath.empty()) {
-                    ImGui::TextDisabled("(not set)");
-                }
-                else {
-                    std::string displayPath = currentPath;
-                    if (displayPath.length() > 60) {
-                        displayPath = "..." + displayPath.substr(displayPath.length() - 57);
-                    }
-                    ImGui::Text("%s", displayPath.c_str());
-                    if (ImGui::IsItemHovered() && currentPath.length() > 60) {
-                        ImGui::SetTooltip("%s", currentPath.c_str());
-                    }
-                }
-
-                ImGui::PopID();
-            }
-
-            ImGui::EndTable();
-        }
-
-        ImGui::Separator();
-        std::string modelRoot = m_filePathSystem->GetPath("ModelRoot");
-        if (!modelRoot.empty()) {
-            if (ImGui::Button("Reset Model Subdirectories to Root")) {
-                std::map<std::string, std::string> subdirs = {
-                    {"Checkpoint", "/checkpoints"},
-                    {"Encoder", "/clip"},
-                    {"Vae", "/vae"},
-                    {"Unet", "/unet"},
-                    {"Lora", "/loras"},
-                    {"ControlNet", "/controlnet"},
-                    {"Upscale", "/upscale_models"},
-                    {"Embed", "/embeddings"}
-                };
-                for (const auto& [key, subdir] : subdirs) {
-                    m_filePathSystem->SetPath(key, modelRoot + subdir);
-                }
-                std::string clipDir = modelRoot + "/clip";
-                m_filePathSystem->SetPath("ClipL", clipDir + "/clip_l.safetensors");
-                m_filePathSystem->SetPath("ClipG", clipDir + "/clip_g.safetensors");
-                m_filePathSystem->SetPath("T5XXL", clipDir + "/t5xxl.safetensors");
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("(Updates all model-related paths)");
         }
     }
 
@@ -283,9 +141,6 @@ namespace GUI {
 
         if (ImGui::Button("Apply")) {
             if (m_settingsSystem->SaveAllSettings()) {
-                if (m_filePathSystem) {
-                    m_filePathSystem->SaveToFile("../data/settings/paths.json");
-                }
                 showSaveNotification = true;
             }
         }
@@ -293,9 +148,6 @@ namespace GUI {
 
         if (ImGui::Button("Save and Close")) {
             if (m_settingsSystem->SaveAllSettings()) {
-                if (m_filePathSystem) {
-                    m_filePathSystem->SaveToFile("../data/settings/paths.json");
-                }
                 showPopup = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -330,11 +182,7 @@ namespace GUI {
 
             if (ImGui::Button("Apply and Close", ImVec2(120, 0))) {
                 if (m_settingsSystem && m_settingsSystem->SaveAllSettings()) {
-                    if (m_filePathSystem) {
-                        m_filePathSystem->SaveToFile("../data/settings/paths.json");
-                    }
                     showUnsavedChangesDialog = false;
-                    showPopup = false;
                     pendingClose = false;
                     ImGui::CloseCurrentPopup();
                 }
@@ -346,7 +194,6 @@ namespace GUI {
                     m_settingsSystem->RestoreAllFromBackups();
                 }
                 showUnsavedChangesDialog = false;
-                showPopup = false;
                 pendingClose = false;
                 ImGui::CloseCurrentPopup();
             }
@@ -355,6 +202,7 @@ namespace GUI {
             if (ImGui::Button("Cancel", ImVec2(120, 0))) {
                 showUnsavedChangesDialog = false;
                 pendingClose = false;
+                showPopup = true;
                 ImGui::CloseCurrentPopup();
             }
 
@@ -362,4 +210,4 @@ namespace GUI {
         }
     }
 
-} // namespace GUI
+}

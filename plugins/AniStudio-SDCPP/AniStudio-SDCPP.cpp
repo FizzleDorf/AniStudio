@@ -15,12 +15,12 @@
 #include "SDcppSystem.hpp"
 #include "ModelCacheSystem.hpp"
 #include "ADetailerComponent.hpp"
-
 #include "DiffusionView.hpp"
 #include "ConvertView.hpp"
 #include "UpscaleView.hpp"
 #include "VideoDiffusionView.hpp"
 #include "ModelCacheView.hpp"
+#include "SDCPPSettingsTab.hpp"
 
 #include <iostream>
 #include <filesystem>
@@ -114,7 +114,7 @@ public:
         entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
         entityMgr.RegisterComponent<ECS::UncondDiffusionModelComponent>("UncondDiffusionModel");
         entityMgr.RegisterComponent<ECS::AudioVAEComponent>("AudioVAE");
-        entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");          // connectors
+        entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
         entityMgr.RegisterComponent<ECS::MotionModuleComponent>("MotionModule");
 
         // Encoders
@@ -204,6 +204,20 @@ public:
         std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
 
         m_viewMgr = &viewMgr;
+
+        auto settingsSys = entityMgr.GetSystem<ECS::SettingsSystem>();
+        if (settingsSys) {
+            EntityID settingsEntity = settingsSys->GetSettingsEntity();
+            if (entityMgr.IsEntityValid(settingsEntity) && entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+                auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+                auto sdcppTab = std::make_unique<ECS::SDCPPSettingsTab>(sdcppComp);
+                settingsSys->RegisterTab(std::move(sdcppTab));
+                LogInfo("Registered SDCPP settings tab");
+            }
+            else {
+                LogError("SDCPPSettingsComponent not found on settings entity");
+            }
+        }
 
         viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "Diffusion");
         viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");

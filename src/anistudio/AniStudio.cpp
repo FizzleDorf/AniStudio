@@ -18,6 +18,10 @@
 #include "GuiStyleHelpers.hpp"
 #include "FileDialogUtil.hpp"
 #include "MissingPathsPopup.hpp"
+#include "GeneralSettingsTab.hpp"
+#include "ImGuiStyleSettingsTab.hpp"
+#include "ImGuiRenderSettingsTab.hpp"
+#include "FontSettingsTab.hpp"
 
 namespace ANI {
 
@@ -340,7 +344,6 @@ namespace ANI {
 
             studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             studioContext->entityManager->RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
-            studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             studioContext->entityManager->RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
 
             studioContext->entityManager->RegisterSystem<TextureSystem>();
@@ -351,6 +354,31 @@ namespace ANI {
                 settingsSystem->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
                 settingsSystem->LoadAllSettings();
                 std::cout << "[StudioCore] SettingsSystem initialized with ImGui context and settings loaded." << std::endl;
+            }
+
+            if (settingsSystem) {
+                EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+                auto& entityMgr = *studioContext->entityManager;
+
+                if (entityMgr.IsEntityValid(settingsEntity)) {
+                    auto& generalComp = entityMgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
+                    auto generalTab = std::make_unique<ECS::GeneralSettingsTab>(generalComp);
+                    settingsSystem->RegisterTab(std::move(generalTab));
+
+                    auto& styleComp = entityMgr.GetComponent<ECS::ImGuiStyleSettingsComponent>(settingsEntity);
+                    auto styleTab = std::make_unique<ECS::ImGuiStyleSettingsTab>(styleComp);
+                    settingsSystem->RegisterTab(std::move(styleTab));
+
+                    auto& renderComp = entityMgr.GetComponent<ECS::ImGuiRenderSettingsComponent>(settingsEntity);
+                    auto renderTab = std::make_unique<ECS::ImGuiRenderSettingsTab>(renderComp);
+                    settingsSystem->RegisterTab(std::move(renderTab));
+
+                    auto& fontComp = entityMgr.GetComponent<ECS::FontSettingsComponent>(settingsEntity);
+                    auto fontTab = std::make_unique<ECS::FontSettingsTab>(fontComp);
+                    settingsSystem->RegisterTab(std::move(fontTab));
+
+                    std::cout << "[StudioCore] Registered all core settings tabs." << std::endl;
+                }
             }
 
             auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();

@@ -2,7 +2,6 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
-#include <algorithm>
 
 namespace ECS {
 
@@ -10,83 +9,6 @@ namespace ECS {
         compName = "GeneralSettingsComponent";
         LoadSettings();
         CreateBackup();
-    }
-
-    bool GeneralSettingsComponent::FilterPass(const std::string& sectionName, const std::string& filter) const {
-        if (filter.empty()) return true;
-        std::string lower = sectionName;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        std::string f = filter;
-        std::transform(f.begin(), f.end(), f.begin(), ::tolower);
-        return lower.find(f) != std::string::npos;
-    }
-
-    void GeneralSettingsComponent::RenderUI() {
-        RenderFilteredUI("");
-    }
-
-    void GeneralSettingsComponent::RenderFilteredUI(const std::string& filter) {
-        if (ImGui::BeginChild("GeneralSettings", ImVec2(0, 0), false)) {
-            if (FilterPass("Startup", filter)) RenderStartupSettings();
-            if (FilterPass("Auto-Save", filter)) RenderAutoSaveSettings();
-            if (FilterPass("Confirmation", filter)) RenderConfirmationSettings();
-            if (FilterPass("Performance", filter)) RenderPerformanceSettings();
-            if (FilterPass("Logging", filter)) RenderLoggingSettings();
-            RenderActionButtons();
-        }
-        ImGui::EndChild();
-    }
-
-    void GeneralSettingsComponent::RenderStartupSettings() {
-        if (ImGui::Checkbox("Show Startup Screen", &showStartupScreen)) hasChanges = true;
-        if (ImGui::Checkbox("Load Last Project on Startup", &loadLastProject)) hasChanges = true;
-        ImGui::Separator();
-    }
-
-    void GeneralSettingsComponent::RenderAutoSaveSettings() {
-        if (ImGui::Checkbox("Auto-Save Projects", &autoSaveProjects)) hasChanges = true;
-        if (autoSaveProjects) {
-            if (ImGui::SliderInt("Auto-Save Interval (minutes)", &autoSaveIntervalMinutes, 1, 60)) hasChanges = true;
-        }
-        ImGui::Separator();
-    }
-
-    void GeneralSettingsComponent::RenderConfirmationSettings() {
-        if (ImGui::Checkbox("Confirm Before Exit", &confirmBeforeExit)) hasChanges = true;
-        if (ImGui::Checkbox("Confirm Before Delete Assets", &confirmBeforeDeleteAssets)) hasChanges = true;
-        if (ImGui::Checkbox("Confirm Before Overwrite Files", &confirmBeforeOverwriteFiles)) hasChanges = true;
-        ImGui::Separator();
-    }
-
-    void GeneralSettingsComponent::RenderPerformanceSettings() {
-        if (ImGui::SliderInt("Max Recent Projects", &maxRecentProjects, 5, 50)) hasChanges = true;
-        if (ImGui::SliderInt("Max Undo Levels", &maxUndoLevels, 10, 1000)) hasChanges = true;
-        if (ImGui::Checkbox("Enable Hardware Acceleration", &enableHardwareAcceleration)) hasChanges = true;
-        ImGui::Separator();
-    }
-
-    void GeneralSettingsComponent::RenderLoggingSettings() {
-        if (ImGui::Checkbox("Enable Logging", &enableLogging)) hasChanges = true;
-        if (enableLogging) {
-            const char* logLevels[] = { "Error", "Warning", "Info", "Debug" };
-            if (ImGui::Combo("Log Level", &logLevel, logLevels, 4)) hasChanges = true;
-            if (ImGui::Checkbox("Log to File", &logToFile)) hasChanges = true;
-            if (logToFile) {
-                if (ImGui::SliderInt("Max Log File Size (MB)", &maxLogFileSize, 1, 100)) hasChanges = true;
-            }
-        }
-        ImGui::Separator();
-    }
-
-    void GeneralSettingsComponent::RenderActionButtons() {
-        if (ImGui::Button("Save Settings")) SaveSettings();
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
-        ImGui::SameLine();
-        if (ImGui::Button("Revert Changes")) RestoreFromBackup();
-        if (hasChanges) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-        }
     }
 
     bool GeneralSettingsComponent::SaveSettings() {
@@ -216,4 +138,4 @@ namespace ECS {
         hasChanges = false;
     }
 
-} // namespace ECS
+}

@@ -141,13 +141,10 @@ namespace ECS {
                     auto& taskSettings = mgr.GetComponent<SDCPPSettingsComponent>(entityID);
                     taskSettings.lora_apply_mode = globalSettings.lora_apply_mode;
                     taskSettings.enable_mmap = globalSettings.enable_mmap;
-                    taskSettings.flash_attn = globalSettings.flash_attn;
                     taskSettings.diffusion_flash_attn = globalSettings.diffusion_flash_attn;
-                    taskSettings.tae_preview_only = globalSettings.tae_preview_only;
                     taskSettings.diffusion_conv_direct = globalSettings.diffusion_conv_direct;
                     taskSettings.vae_conv_direct = globalSettings.vae_conv_direct;
                     taskSettings.force_sdxl_vae_conv_scale = globalSettings.force_sdxl_vae_conv_scale;
-                    taskSettings.vae_format = globalSettings.vae_format;
                     taskSettings.max_vram = globalSettings.max_vram;
                     taskSettings.stream_layers = globalSettings.stream_layers;
                     taskSettings.eager_load = globalSettings.eager_load;

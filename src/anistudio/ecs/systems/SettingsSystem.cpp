@@ -1,24 +1,22 @@
 #include "SettingsSystem.hpp"
 #include "EntityManager.hpp"
+#include "FilePathSystem.hpp"
 #include "GeneralSettingsComponent.hpp"
 #include "ImGuiStyleSettingsComponent.hpp"
 #include "ImGuiRenderSettingsComponent.hpp"
 #include "FontSettingsComponent.hpp"
-#include "FilePathSystem.hpp"
+#include "BaseSettingsTab.hpp"
+#include "FilePathTab.hpp"
 #include <iostream>
 
 namespace ECS {
 
-    SettingsSystem::SettingsSystem(EntityManager& mgr) : BaseSystem(mgr), settingsEntity(mgr.AddNewEntity()) {
+    SettingsSystem::SettingsSystem(EntityManager& mgr) : BaseSystem(mgr), settingsEntity(0) {
         sysName = "SettingsSystem";
     }
 
     void SettingsSystem::Start() {
         filePathSystem = mgr.GetSystem<FilePathSystem>().get();
-        if (!filePathSystem) {
-            std::cerr << "[SettingsSystem] WARNING: FilePathSystem not found." << std::endl;
-        }
-
         settingsEntity = mgr.AddNewEntity();
 
         RegisterAndAddSettingsComponent<GeneralSettingsComponent>();
@@ -26,10 +24,13 @@ namespace ECS {
         RegisterAndAddSettingsComponent<ImGuiRenderSettingsComponent>();
         RegisterAndAddSettingsComponent<FontSettingsComponent>();
 
-        LoadAllSettings();
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp) comp->CreateBackup();
+        if (filePathSystem) {
+            auto fileTab = std::make_unique<FilePathTab>(*filePathSystem);
+            RegisterTab(std::move(fileTab));
         }
+
+        LoadAllSettings();
+        for (auto& tab : m_tabs) tab->CreateBackup();
     }
 
     void SettingsSystem::Destroy() {
@@ -38,6 +39,7 @@ namespace ECS {
             settingsEntity = 0;
         }
         settingsComponentTypes.clear();
+        m_tabs.clear();
         filePathSystem = nullptr;
     }
 
@@ -48,21 +50,6 @@ namespace ECS {
         }
     }
 
-    std::vector<BaseSettingsComponent*> SettingsSystem::GetAllSettingsComponents() const {
-        std::vector<BaseSettingsComponent*> comps;
-        for (ComponentTypeID typeId : settingsComponentTypes) {
-            auto* comp = GetSettingsComponent(typeId);
-            if (comp) comps.push_back(comp);
-        }
-        return comps;
-    }
-
-    BaseSettingsComponent* SettingsSystem::GetSettingsComponent(ComponentTypeID typeId) const {
-        if (!mgr.IsEntityValid(settingsEntity)) return nullptr;
-        auto* base = mgr.GetComponentById(settingsEntity, typeId);
-        return dynamic_cast<BaseSettingsComponent*>(base);
-    }
-
     template<typename T>
     ComponentTypeID SettingsSystem::RegisterAndAddSettingsComponent() {
         ComponentTypeID typeId = mgr.RegisterComponent<T>(typeid(T).name());
@@ -71,49 +58,51 @@ namespace ECS {
         return typeId;
     }
 
+    void SettingsSystem::RegisterTab(std::unique_ptr<BaseSettingsTab> tab) {
+        if (imguiContext) tab->SetImGuiContext(imguiContext);
+        m_tabs.push_back(std::move(tab));
+    }
+
+    void SettingsSystem::SetImGuiContext(ImGuiContext* context) {
+        imguiContext = context;
+        for (auto& tab : m_tabs) {
+            tab->SetImGuiContext(context);
+        }
+    }
+
     bool SettingsSystem::SaveAllSettings() {
         bool success = true;
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp && !comp->SaveSettings()) {
-                success = false;
-            }
+        for (auto& tab : m_tabs) {
+            if (!tab->SaveSettings()) success = false;
         }
         return success;
     }
 
     bool SettingsSystem::LoadAllSettings() {
         bool success = true;
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp && !comp->LoadSettings()) {
-                success = false;
-            }
+        for (auto& tab : m_tabs) {
+            if (!tab->LoadSettings()) success = false;
         }
         return success;
     }
 
     void SettingsSystem::ResetAllToDefaults() {
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp) comp->ResetToDefaults();
+        for (auto& tab : m_tabs) {
+            tab->ResetToDefaults();
         }
     }
 
     void SettingsSystem::RestoreAllFromBackups() {
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp) comp->RestoreFromBackup();
+        for (auto& tab : m_tabs) {
+            tab->RestoreFromBackup();
         }
     }
 
     bool SettingsSystem::HasAnyUnsavedChanges() const {
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp && comp->HasUnsavedChanges()) return true;
+        for (const auto& tab : m_tabs) {
+            if (tab->HasUnsavedChanges()) return true;
         }
         return false;
-    }
-
-    void SettingsSystem::SetImGuiContext(ImGuiContext* context) {
-        for (auto* comp : GetAllSettingsComponents()) {
-            if (comp) comp->SetImGuiContext(context);
-        }
     }
 
 }

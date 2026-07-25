@@ -11,38 +11,28 @@ namespace ECS {
     public:
         ImGuiStyleSettingsComponent();
 
-        std::string GetTabName() const override { return "ImGui Style"; }
-        std::string GetTabCategory() const override { return "Interface"; }
-        void RenderUI() override;
-        void RenderFilteredUI(const std::string& filter) override;
         bool SaveSettings() override;
         bool LoadSettings() override;
         void ResetToDefaults() override;
         void CreateBackup() override;
         void RestoreFromBackup() override;
         bool HasUnsavedChanges() const override { return hasChanges; }
-        void SetImGuiContext(ImGuiContext* context) override { imguiContext = context; }
+        void SetImGuiContext(ImGuiContext* context) { imguiContext = context; }
 
         void SetFilePathSystem(FilePathSystem* system) { m_filePathSystem = system; }
-
-    private:
-        struct StyleFileEntry {
-            std::string name;
-            std::string path;
-        };
 
         ImGuiStyle currentStyle;
         ImGuiStyle backupStyle;
         bool hasChanges = false;
-        bool isInitialized = false;
         ImGuiContext* imguiContext = nullptr;
 
-        FilePathSystem* m_filePathSystem = nullptr;
-
+        struct StyleFileEntry {
+            std::string name;
+            std::string path;
+        };
         std::vector<StyleFileEntry> availableStyles;
-        std::vector<std::string> displayNames; // built-in + file names
+        std::vector<std::string> displayNames;
         int selectedStyleIndex = 0;
-        std::string currentStyleFile;
         char saveAsFilename[256] = "my_style.json";
 
         void EnsureInitialized();
@@ -53,9 +43,12 @@ namespace ECS {
         void SaveStyleToFile(const ImGuiStyle& style, const std::string& filename);
         bool LoadStyleFromFile(ImGuiStyle& style, const std::string& filename);
         void SetCustomDarkTheme();
-
-        void RenderActionButtons();
-        bool FilterPass(const std::string& section, const std::string& filter) const;
         std::string GetStylesDirectory() const;
+
+    private:
+        bool isInitialized = false;
+        FilePathSystem* m_filePathSystem = nullptr;
+        std::string currentStyleFile;
     };
+
 }

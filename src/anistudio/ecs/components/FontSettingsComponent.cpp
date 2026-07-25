@@ -1,4 +1,3 @@
-// FontSettingsComponent.cpp
 #include "FontSettingsComponent.hpp"
 #include <imgui_impl_opengl3.h>
 #include <nlohmann/json.hpp>
@@ -47,98 +46,6 @@ namespace ECS {
         catch (...) {
         }
         fontsScanned = true;
-    }
-
-    bool FontSettingsComponent::FilterPass(const std::string& section, const std::string& filter) const {
-        if (filter.empty()) return true;
-        std::string lowerSection = section;
-        std::transform(lowerSection.begin(), lowerSection.end(), lowerSection.begin(), ::tolower);
-        std::string lowerFilter = filter;
-        std::transform(lowerFilter.begin(), lowerFilter.end(), lowerFilter.begin(), ::tolower);
-        return lowerSection.find(lowerFilter) != std::string::npos;
-    }
-
-    void FontSettingsComponent::RenderActionButtons() {
-        if (ImGui::Button("Apply Font")) {
-            ApplyFont();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh Font List")) {
-            RefreshFontList();
-        }
-    }
-
-    void FontSettingsComponent::RenderUI() {
-        EnsureInitialized();
-        ImGui::TextUnformatted("Font Family");
-        if (ImGui::BeginCombo("##FontFamily", selectedFontName.c_str())) {
-            for (const auto& entry : availableFonts) {
-                bool isSelected = (entry.name == selectedFontName);
-                if (ImGui::Selectable(entry.name.c_str(), isSelected)) {
-                    if (selectedFontName != entry.name) {
-                        selectedFontName = entry.name;
-                        hasChanges = true;
-                        ApplyFont();
-                    }
-                }
-                if (isSelected) {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
-        ImGui::TextUnformatted("Global Font Scale");
-        float scaleValue = m_globalFontScale;
-        if (ImGui::SliderFloat("##GlobalFontScale", &scaleValue, 0.5f, 2.5f, "%.2fx")) {
-            m_globalFontScale = scaleValue;
-            hasChanges = true;
-            if (imguiContext) {
-                ImGui::SetCurrentContext(imguiContext);
-                ImGui::GetIO().FontGlobalScale = m_globalFontScale;
-            }
-        }
-        ImGui::Spacing();
-        RenderActionButtons();
-    }
-
-    void FontSettingsComponent::RenderFilteredUI(const std::string& filter) {
-        EnsureInitialized();
-        bool showAll = filter.empty();
-        if (showAll || FilterPass("Font Family", filter)) {
-            ImGui::TextUnformatted("Font Family");
-            if (ImGui::BeginCombo("##FontFamilyFiltered", selectedFontName.c_str())) {
-                for (const auto& entry : availableFonts) {
-                    bool isSelected = (entry.name == selectedFontName);
-                    if (ImGui::Selectable(entry.name.c_str(), isSelected)) {
-                        if (selectedFontName != entry.name) {
-                            selectedFontName = entry.name;
-                            hasChanges = true;
-                            ApplyFont();
-                        }
-                    }
-                    if (isSelected) {
-                        ImGui::SetItemDefaultFocus();
-                    }
-                }
-                ImGui::EndCombo();
-            }
-        }
-        if (showAll || FilterPass("Global Scale", filter)) {
-            ImGui::TextUnformatted("Global Scale");
-            float scaleValue = m_globalFontScale;
-            if (ImGui::SliderFloat("##GlobalFontScaleFiltered", &scaleValue, 0.5f, 2.5f, "%.2fx")) {
-                m_globalFontScale = scaleValue;
-                hasChanges = true;
-                if (imguiContext) {
-                    ImGui::SetCurrentContext(imguiContext);
-                    ImGui::GetIO().FontGlobalScale = m_globalFontScale;
-                }
-            }
-        }
-        if (showAll) {
-            ImGui::Spacing();
-            RenderActionButtons();
-        }
     }
 
     void FontSettingsComponent::ApplyFont() {

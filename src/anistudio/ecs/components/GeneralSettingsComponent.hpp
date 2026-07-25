@@ -8,10 +8,6 @@ namespace ECS {
     public:
         GeneralSettingsComponent();
 
-        std::string GetTabName() const override { return "General"; }
-        std::string GetTabCategory() const override { return "Application"; }
-        void RenderUI() override;
-        void RenderFilteredUI(const std::string& filter) override;
         bool SaveSettings() override;
         bool LoadSettings() override;
         void ResetToDefaults() override;
@@ -19,7 +15,6 @@ namespace ECS {
         void RestoreFromBackup() override;
         bool HasUnsavedChanges() const override { return hasChanges; }
 
-    private:
         bool showStartupScreen = true;
         bool loadLastProject = true;
         bool autoSaveProjects = true;
@@ -35,6 +30,7 @@ namespace ECS {
         bool logToFile = true;
         int maxLogFileSize = 10;
 
+    private:
         bool backupShowStartupScreen = true;
         bool backupLoadLastProject = true;
         bool backupAutoSaveProjects = true;
@@ -51,14 +47,6 @@ namespace ECS {
         int backupMaxLogFileSize = 10;
 
         bool hasChanges = false;
-
-        void RenderStartupSettings();
-        void RenderAutoSaveSettings();
-        void RenderConfirmationSettings();
-        void RenderPerformanceSettings();
-        void RenderLoggingSettings();
-        void RenderActionButtons();
-        bool FilterPass(const std::string& sectionName, const std::string& filter) const;
     };
 
-} // namespace ECS
+}

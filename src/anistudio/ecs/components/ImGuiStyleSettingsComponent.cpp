@@ -15,8 +15,7 @@ namespace ECS {
         if (m_filePathSystem) {
             std::string dir = m_filePathSystem->GetPath("styles");
             if (!dir.empty()) {
-                if (dir.back() != '/' && dir.back() != '\\')
-                    dir += '/';
+                if (dir.back() != '/' && dir.back() != '\\') dir += '/';
                 return dir;
             }
         }
@@ -91,220 +90,6 @@ namespace ECS {
             currentStyleFile = path;
             hasChanges = true;
         }
-    }
-
-    bool ImGuiStyleSettingsComponent::FilterPass(const std::string& section, const std::string& filter) const {
-        if (filter.empty()) return true;
-        std::string lower = section;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        std::string f = filter;
-        std::transform(f.begin(), f.end(), f.begin(), ::tolower);
-        return lower.find(f) != std::string::npos;
-    }
-
-    void ImGuiStyleSettingsComponent::RenderUI() {
-        RenderFilteredUI("");
-    }
-
-    void ImGuiStyleSettingsComponent::RenderFilteredUI(const std::string& filter) {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        ImGui::SetCurrentContext(imguiContext);
-
-        if (ImGui::BeginChild("ImGuiStyleSettings", ImVec2(0, 0), false)) {
-            ImGuiStyle& style = currentStyle;
-
-            if (FilterPass("Style Presets", filter)) {
-                const char* preview = displayNames[selectedStyleIndex].c_str();
-                if (ImGui::BeginCombo("Theme", preview)) {
-                    for (int i = 0; i < (int)displayNames.size(); ++i) {
-                        bool isSelected = (i == selectedStyleIndex);
-                        if (ImGui::Selectable(displayNames[i].c_str(), isSelected)) {
-                            selectedStyleIndex = i;
-                            if (i < 4) {
-                                ApplyBuiltInStyle(i);
-                            }
-                            else {
-                                int fileIdx = i - 4;
-                                if (fileIdx < (int)availableStyles.size()) {
-                                    ApplyFileStyle(availableStyles[fileIdx].path);
-                                }
-                            }
-                        }
-                        if (isSelected) {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-
-                ImGui::SameLine();
-                if (ImGui::Button("Refresh List")) {
-                    ScanStylesDirectory();
-                    RebuildDisplayList();
-                    if (selectedStyleIndex >= (int)displayNames.size())
-                        selectedStyleIndex = 0;
-                }
-
-                ImGui::Separator();
-                ImGui::Text("Save current style as:");
-                ImGui::InputText("Filename", saveAsFilename, IM_ARRAYSIZE(saveAsFilename));
-                ImGui::SameLine();
-                if (ImGui::Button("Save As")) {
-                    std::string filename(saveAsFilename);
-                    if (filename.size() < 5 || filename.substr(filename.size() - 5) != ".json")
-                        filename += ".json";
-                    std::string fullPath = GetStylesDirectory() + filename;
-                    std::filesystem::create_directories(std::filesystem::path(fullPath).parent_path());
-                    SaveStyleToFile(currentStyle, fullPath);
-                    ScanStylesDirectory();
-                    RebuildDisplayList();
-                    for (int i = 0; i < (int)availableStyles.size(); ++i) {
-                        if (availableStyles[i].name == filename) {
-                            selectedStyleIndex = 4 + i;
-                            break;
-                        }
-                    }
-                }
-                ImGui::Separator();
-            }
-
-            if (FilterPass("Size Settings", filter)) {
-                if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat2("Item Inner Spacing", (float*)&style.ItemInnerSpacing, 0.0f, 20.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Indent Spacing", &style.IndentSpacing, 0.0f, 30.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.1f")) hasChanges = true;
-            }
-
-            if (FilterPass("Border Settings", filter)) {
-                if (ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Popup Border Size", &style.PopupBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Frame Border Size", &style.FrameBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 1.0f, "%.1f")) hasChanges = true;
-            }
-
-            if (FilterPass("Rounding Settings", filter)) {
-                if (ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Popup Rounding", &style.PopupRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-                if (ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.1f")) hasChanges = true;
-            }
-
-            if (FilterPass("Color Settings", filter)) {
-                static ImGuiTextFilter colorFilter;
-                colorFilter.Draw("Filter Colors", ImGui::GetFontSize() * 16);
-                static ImGuiColorEditFlags alphaFlags = ImGuiColorEditFlags_AlphaPreview;
-                if (ImGui::RadioButton("Opaque", alphaFlags == ImGuiColorEditFlags_None)) alphaFlags = ImGuiColorEditFlags_None;
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Alpha", alphaFlags == ImGuiColorEditFlags_AlphaPreview)) alphaFlags = ImGuiColorEditFlags_AlphaPreview;
-                ImGui::SameLine();
-                if (ImGui::RadioButton("Both", alphaFlags == ImGuiColorEditFlags_AlphaPreviewHalf)) alphaFlags = ImGuiColorEditFlags_AlphaPreviewHalf;
-                if (ImGui::BeginChild("colors", ImVec2(0, 300), true)) {
-                    ImGui::PushItemWidth(-160);
-                    for (int i = 0; i < ImGuiCol_COUNT; i++) {
-                        const char* name = ImGui::GetStyleColorName(i);
-                        if (!colorFilter.PassFilter(name)) continue;
-                        ImGui::PushID(i);
-                        if (ImGui::ColorEdit4("##color", (float*)&style.Colors[i], ImGuiColorEditFlags_AlphaBar | alphaFlags)) {
-                            hasChanges = true;
-                        }
-                        if (memcmp(&style.Colors[i], &backupStyle.Colors[i], sizeof(ImVec4)) != 0) {
-                            ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-                            if (ImGui::Button("Revert")) {
-                                style.Colors[i] = backupStyle.Colors[i];
-                                hasChanges = true;
-                            }
-                        }
-                        ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-                        ImGui::TextUnformatted(name);
-                        ImGui::PopID();
-                    }
-                    ImGui::PopItemWidth();
-                }
-                ImGui::EndChild();
-            }
-
-            RenderActionButtons();
-        }
-        ImGui::EndChild();
-    }
-
-    void ImGuiStyleSettingsComponent::RenderActionButtons() {
-        if (ImGui::Button("Save Settings")) SaveSettings();
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
-        ImGui::SameLine();
-        if (ImGui::Button("Revert Changes")) RestoreFromBackup();
-        if (hasChanges) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-        }
-    }
-
-    bool ImGuiStyleSettingsComponent::SaveSettings() {
-        if (!imguiContext) return false;
-        EnsureInitialized();
-        ImGui::SetCurrentContext(imguiContext);
-        std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
-        SaveStyleToFile(currentStyle, filePath);
-        ImGui::GetStyle() = currentStyle;
-        hasChanges = false;
-        CreateBackup();
-        return true;
-    }
-
-    bool ImGuiStyleSettingsComponent::LoadSettings() {
-        if (!imguiContext) return false;
-        EnsureInitialized();
-        ImGui::SetCurrentContext(imguiContext);
-        std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
-        bool loaded = false;
-        if (std::filesystem::exists(filePath)) {
-            loaded = LoadStyleFromFile(currentStyle, filePath);
-        }
-        if (!loaded) {
-            SetCustomDarkTheme();
-            currentStyle = ImGui::GetStyle();
-        }
-        ImGui::GetStyle() = currentStyle;
-        hasChanges = false;
-        CreateBackup();
-        currentStyleFile.clear();
-        selectedStyleIndex = 0;
-        RebuildDisplayList();
-        return true;
-    }
-
-    void ImGuiStyleSettingsComponent::ResetToDefaults() {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        SetCustomDarkTheme();
-        currentStyle = ImGui::GetStyle();
-        currentStyleFile.clear();
-        selectedStyleIndex = 3;
-        hasChanges = true;
-    }
-
-    void ImGuiStyleSettingsComponent::CreateBackup() {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        backupStyle = currentStyle;
-    }
-
-    void ImGuiStyleSettingsComponent::RestoreFromBackup() {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        currentStyle = backupStyle;
-        ImGui::GetStyle() = currentStyle;
-        currentStyleFile.clear();
-        selectedStyleIndex = 0;
-        hasChanges = false;
     }
 
     void ImGuiStyleSettingsComponent::SaveStyleToFile(const ImGuiStyle& style, const std::string& filename) {
@@ -385,6 +170,66 @@ namespace ECS {
         style.WindowBorderSize = 0.0f;
         style.FrameBorderSize = 0.0f;
         style.PopupBorderSize = 0.0f;
+    }
+
+    bool ImGuiStyleSettingsComponent::SaveSettings() {
+        if (!imguiContext) return false;
+        EnsureInitialized();
+        ImGui::SetCurrentContext(imguiContext);
+        std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
+        SaveStyleToFile(currentStyle, filePath);
+        ImGui::GetStyle() = currentStyle;
+        hasChanges = false;
+        CreateBackup();
+        return true;
+    }
+
+    bool ImGuiStyleSettingsComponent::LoadSettings() {
+        if (!imguiContext) return false;
+        EnsureInitialized();
+        ImGui::SetCurrentContext(imguiContext);
+        std::string filePath = GetSettingsDirectory() + "/imgui_style.json";
+        bool loaded = false;
+        if (std::filesystem::exists(filePath)) {
+            loaded = LoadStyleFromFile(currentStyle, filePath);
+        }
+        if (!loaded) {
+            SetCustomDarkTheme();
+            currentStyle = ImGui::GetStyle();
+        }
+        ImGui::GetStyle() = currentStyle;
+        hasChanges = false;
+        CreateBackup();
+        currentStyleFile.clear();
+        selectedStyleIndex = 0;
+        RebuildDisplayList();
+        return true;
+    }
+
+    void ImGuiStyleSettingsComponent::ResetToDefaults() {
+        if (!imguiContext) return;
+        EnsureInitialized();
+        SetCustomDarkTheme();
+        currentStyle = ImGui::GetStyle();
+        currentStyleFile.clear();
+        selectedStyleIndex = 3;
+        hasChanges = true;
+    }
+
+    void ImGuiStyleSettingsComponent::CreateBackup() {
+        if (!imguiContext) return;
+        EnsureInitialized();
+        backupStyle = currentStyle;
+    }
+
+    void ImGuiStyleSettingsComponent::RestoreFromBackup() {
+        if (!imguiContext) return;
+        EnsureInitialized();
+        currentStyle = backupStyle;
+        ImGui::GetStyle() = currentStyle;
+        currentStyleFile.clear();
+        selectedStyleIndex = 0;
+        hasChanges = false;
     }
 
 }

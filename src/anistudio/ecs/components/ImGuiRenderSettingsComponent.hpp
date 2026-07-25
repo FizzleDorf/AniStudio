@@ -8,19 +8,14 @@ namespace ECS {
     public:
         ImGuiRenderSettingsComponent();
 
-        std::string GetTabName() const override { return "ImGui Render"; }
-        std::string GetTabCategory() const override { return "Interface"; }
-        void RenderUI() override;
-        void RenderFilteredUI(const std::string& filter) override;
         bool SaveSettings() override;
         bool LoadSettings() override;
         void ResetToDefaults() override;
         void CreateBackup() override;
         void RestoreFromBackup() override;
         bool HasUnsavedChanges() const override { return hasChanges; }
-        void SetImGuiContext(ImGuiContext* context) override { imguiContext = context; }
+        void SetImGuiContext(ImGuiContext* context) { imguiContext = context; }
 
-    private:
         bool configWindowsResizeFromEdges = true;
         bool configWindowsMoveFromTitleBarOnly = false;
         bool configDragClickToInputText = false;
@@ -44,23 +39,24 @@ namespace ECS {
         bool configInputTextCursorBlink = true;
         bool configInputTextEnterKeepActive = false;
 
-        ImGuiConfigFlags backupConfigFlags = ImGuiConfigFlags_None;
         bool hasChanges = false;
-        bool isInitialized = false;
         ImGuiContext* imguiContext = nullptr;
 
         void EnsureInitialized();
         void LoadCurrentImGuiSettings();
-        void LoadDefaults();
-        void SerializeSettings(nlohmann::json& j) const;
-        void DeserializeSettings(const nlohmann::json& j);
         void ApplyAllSettingsToImGui();
         void ApplyWindowBehaviorToImGui();
         void ApplyNavigationToImGui();
         void ApplyDockingToImGui();
         void ApplyViewportsToImGui();
-        void RenderActionButtons();
-        bool FilterPass(const std::string& section, const std::string& filter) const;
+
+    private:
+        ImGuiConfigFlags backupConfigFlags = ImGuiConfigFlags_None;
+        bool isInitialized = false;
+
+        void LoadDefaults();
+        void SerializeSettings(nlohmann::json& j) const;
+        void DeserializeSettings(const nlohmann::json& j);
     };
 
-} // namespace ECS
+}
