@@ -10,3 +10,7 @@
 [submodule "plugins/AniStudio-SDCPP/external/stable-diffusion.cpp"]
 	path = plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
 	url = https://github.com/leejet/stable-diffusion.cpp
+[submodule "external/ImGuiColorTextEdit"]
+	path = external/ImGuiColorTextEdit
+	url = https://github.com/goossens/ImGuiColorTextEdit.git
+	branch = future
