@@ -10,8 +10,8 @@ namespace ECS {
     public:
         using FontRebuildCallback = void(*)();
 
-        FontSettingsComponent();
-        ~FontSettingsComponent() { if (s_instance == this) s_instance = nullptr; }
+        FontSettingsComponent() = default;
+        ~FontSettingsComponent() = default;
 
         bool SaveSettings() override;
         bool LoadSettings() override;
@@ -26,7 +26,6 @@ namespace ECS {
         void CheckAndRebuildFonts();
 
         static void SetFontRebuildCallback(FontRebuildCallback callback);
-        static FontSettingsComponent* GetInstance() { return s_instance; }
 
         struct FontEntry {
             std::string name;
@@ -50,7 +49,6 @@ namespace ECS {
         std::string pendingFontPath;
 
         static FontRebuildCallback s_fontRebuildCallback;
-        static FontSettingsComponent* s_instance;
 
         void RebuildFonts();
     };

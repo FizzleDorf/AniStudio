@@ -9,11 +9,6 @@
 namespace ECS {
 
     FontSettingsComponent::FontRebuildCallback FontSettingsComponent::s_fontRebuildCallback = nullptr;
-    FontSettingsComponent* FontSettingsComponent::s_instance = nullptr;
-
-    FontSettingsComponent::FontSettingsComponent() {
-        s_instance = this;
-    }
 
     void FontSettingsComponent::EnsureInitialized() {
         if (isInitialized) return;

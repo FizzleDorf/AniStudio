@@ -62,11 +62,11 @@ namespace ANI {
 		}
 
 		auto& entityManager = *pImpl->context->entityManager;
-
+		
+		entityManager.RegisterSystem<FilePathSystem>();
 		entityManager.RegisterSystem<ImageSystem>();
 		entityManager.RegisterSystem<VideoSystem>();
 		entityManager.RegisterSystem<PythonSystem>();
-		entityManager.RegisterSystem<FilePathSystem>();
 		entityManager.RegisterSystem<ThreadPoolSystem>();
 
 		std::cout << "[EngineCore] Core systems registered" << std::endl;

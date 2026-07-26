@@ -19,17 +19,17 @@ namespace ECS {
 					{"posPrompt", {
 						{"type", "string"},
 						{"title", "Positive"},
-						{"ui:widget", "text_area"},
+						{"ui:widget", "text_editor"},   // changed to use ImGuiColorTextEdit
 						{"ui:window_name", "Positive Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},
-							{"showMenuBar", true}
+							{"showMenuBar", true}      // note: ImGuiColorTextEdit doesn't have menu bar, but we keep for compatibility
 						}}
 					}},
 					{"negPrompt", {
 						{"type", "string"},
 						{"title", "Negative"},
-						{"ui:widget", "text_area"},
+						{"ui:widget", "text_editor"},   // changed to use ImGuiColorTextEdit
 						{"ui:window_name", "Negative Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},

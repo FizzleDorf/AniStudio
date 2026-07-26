@@ -5,6 +5,7 @@
 #include "ImGuiStyleSettingsComponent.hpp"
 #include "ImGuiRenderSettingsComponent.hpp"
 #include "FontSettingsComponent.hpp"
+#include "TextEditorSettingsComponent.hpp"
 #include "BaseSettingsTab.hpp"
 #include "FilePathTab.hpp"
 #include <iostream>
@@ -23,6 +24,7 @@ namespace ECS {
         RegisterAndAddSettingsComponent<ImGuiStyleSettingsComponent>();
         RegisterAndAddSettingsComponent<ImGuiRenderSettingsComponent>();
         RegisterAndAddSettingsComponent<FontSettingsComponent>();
+        RegisterAndAddSettingsComponent<TextEditorSettingsComponent>();
 
         if (filePathSystem) {
             auto fileTab = std::make_unique<FilePathTab>(*filePathSystem);

@@ -10,6 +10,7 @@ namespace GUI {
 
     SettingsView::SettingsView() {
         filterBuffer[0] = '\0';
+        isPopupOpen = false;
     }
 
     void SettingsView::SetEntityManager(ECS::EntityManager& mgr) {
@@ -37,12 +38,28 @@ namespace GUI {
         }
     }
 
+    void SettingsView::Show() {
+        if (!showPopup && !isPopupOpen) {
+            showPopup = true;
+        }
+    }
+
+    void SettingsView::Hide() {
+        showPopup = false;
+        isPopupOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+
     void SettingsView::Render() {
         if (!showPopup) return;
         if (!imguiContext) return;
 
         ImGui::SetCurrentContext(imguiContext);
-        ImGui::OpenPopup("Settings##SettingsPopup");
+
+        if (!isPopupOpen) {
+            ImGui::OpenPopup("Settings##SettingsPopup");
+            isPopupOpen = true;
+        }
 
         const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -57,11 +74,14 @@ namespace GUI {
             ImGui::EndPopup();
         }
 
-        if (!isOpen || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        if (!isOpen) {
+            isPopupOpen = false;
             HandlePopupClose();
         }
 
-        RenderUnsavedChangesDialog();
+        if (showUnsavedChangesDialog) {
+            RenderUnsavedChangesDialog();
+        }
     }
 
     void SettingsView::HandlePopupClose() {
@@ -72,6 +92,9 @@ namespace GUI {
         }
         else {
             showPopup = false;
+            isPopupOpen = false;
+            pendingClose = false;
+            ImGui::CloseCurrentPopup();
         }
     }
 
@@ -149,6 +172,7 @@ namespace GUI {
         if (ImGui::Button("Save and Close")) {
             if (m_settingsSystem->SaveAllSettings()) {
                 showPopup = false;
+                isPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
         }
@@ -171,10 +195,9 @@ namespace GUI {
     }
 
     void SettingsView::RenderUnsavedChangesDialog() {
-        if (showUnsavedChangesDialog) {
-            ImGui::OpenPopup("Unsaved Changes");
-        }
+        if (!showUnsavedChangesDialog) return;
 
+        ImGui::OpenPopup("Unsaved Changes");
         if (ImGui::BeginPopupModal("Unsaved Changes", nullptr,
             ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::Text("You have unsaved changes. What would you like to do?");
@@ -184,6 +207,8 @@ namespace GUI {
                 if (m_settingsSystem && m_settingsSystem->SaveAllSettings()) {
                     showUnsavedChangesDialog = false;
                     pendingClose = false;
+                    showPopup = false;
+                    isPopupOpen = false;
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -195,6 +220,8 @@ namespace GUI {
                 }
                 showUnsavedChangesDialog = false;
                 pendingClose = false;
+                showPopup = false;
+                isPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
@@ -203,6 +230,7 @@ namespace GUI {
                 showUnsavedChangesDialog = false;
                 pendingClose = false;
                 showPopup = true;
+                isPopupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
 

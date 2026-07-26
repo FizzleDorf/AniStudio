@@ -1,19 +1,19 @@
-// ZepView.hpp
 #pragma once
 
 #include "GUI.h"
 #include "EntityManager.hpp"
-#include "ZepUtils.hpp"
 #include "PythonComponent.hpp"
 #include "PythonSystem.hpp"
 #include "FileDialogUtil.hpp"
+#include <TextEditor.h>
 #include <memory>
 #include <string>
 #include <filesystem>
 #include <fstream>
 
 namespace GUI {
-    class ZepView : public BaseView {
+
+    class TextEditorView : public BaseView {
     public:
         static constexpr const char* GetMetadataJSON() {
             return R"({
@@ -23,14 +23,14 @@ namespace GUI {
         })";
         }
 
-        ZepView(ECS::EntityManager& mgr, ViewManager& vm)
+        TextEditorView(ECS::EntityManager& mgr, ViewManager& vm)
             : BaseView(mgr, vm), pythonEntity(0), showVirtualEnvSettings(false) {
-            viewName = "ZepView";
-            textEditor = std::make_unique<Utils::ZepTextEditor>();
+            viewName = "TextEditor";
+            textEditor = std::make_unique<TextEditor>();
             venvPathBuffer[0] = '\0';
         }
-        ~ZepView() = default;
-        
+        ~TextEditorView() = default;
+
         void Init() override;
         void Update(const float deltaT) override;
         void Render() override;
@@ -40,8 +40,10 @@ namespace GUI {
         bool LoadFile(const std::string& filePath);
         bool SaveFile(const std::string& filePath);
 
+        std::string GetWindowTitle() const override;
+
     private:
-        std::unique_ptr<Utils::ZepTextEditor> textEditor;
+        std::unique_ptr<TextEditor> textEditor;
         ECS::EntityID pythonEntity;
         std::string lastDisplayedOutput;
         std::string lastDisplayedError;
@@ -54,8 +56,11 @@ namespace GUI {
         void InitializePythonEntity();
         void RenderFileMenu();
         void RenderEditMenu();
+        void RenderViewMenu();
+        void RenderLanguageMenu();
         void RenderPythonMenu();
         void RenderVirtualEnvDialog();
+        void RenderStatusBar();
         void LoadDefaultPythonScript();
         void CreateDefaultPythonScript(const std::string& filePath);
         void SetDefaultPythonContent();
@@ -65,5 +70,7 @@ namespace GUI {
         void OpenFileDialog();
         void SaveAsFileDialog();
         void SaveFileDialog();
+        size_t ExtractErrorLine(const std::string& error) const;
     };
-}
+
+} // namespace GUI

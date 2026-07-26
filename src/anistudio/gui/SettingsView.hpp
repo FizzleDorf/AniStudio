@@ -19,9 +19,9 @@ namespace GUI {
         void SetImGuiContext(ImGuiContext* context);
         void SetEntityManager(ECS::EntityManager& mgr);
 
-        void Show() { showPopup = true; }
-        void Hide() { showPopup = false; }
-        bool IsVisible() const { return showPopup; }
+        void Show();
+        void Hide();
+        bool IsVisible() const { return showPopup || showUnsavedChangesDialog; }
 
         void Render();
 
@@ -31,13 +31,13 @@ namespace GUI {
         ImGuiContext* imguiContext = nullptr;
 
         bool showPopup = false;
+        bool isPopupOpen = false;
         bool showUnsavedChangesDialog = false;
         bool pendingClose = false;
         bool settingsLoaded = false;
         bool showSaveNotification = false;
 
         std::string currentActiveTab;
-
         char filterBuffer[256] = "";
 
         void HandlePopupClose();

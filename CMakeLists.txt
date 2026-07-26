@@ -169,21 +169,8 @@ if(UNIX AND NOT APPLE)
     endif()
 endif()
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/external/zep/CMakeLists.txt")
-    set(ZEP_AVAILABLE TRUE)
-    set(BUILD_DEMOS OFF CACHE BOOL "Build Zep demos" FORCE)
-    set(BUILD_IMGUI OFF CACHE BOOL "Build ImGui Demo" FORCE)
-    set(BUILD_QT OFF CACHE BOOL "Build Qt Demo" FORCE)
-    set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
-    message(STATUS "Zep text editor source found")
-else()
-    message(WARNING "Zep not found at external/zep - text editor features will be limited")
-    set(ZEP_AVAILABLE FALSE)
-endif()
-
 set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniEngine shared" FORCE)
 set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniStudio shared" FORCE)
-set(ANISTUDIO_ENABLE_ZEP ${ZEP_AVAILABLE} CACHE BOOL "AniStudio Zep" FORCE)
 
 add_library(AniEngineDeps INTERFACE)
 
@@ -240,11 +227,6 @@ target_compile_definitions(AniStudioDeps INTERFACE
     NODE_EDITOR_AVAILABLE
     IMSEQUENCER_AVAILABLE
 )
-
-if(ZEP_AVAILABLE)
-    target_link_libraries(AniStudioDeps INTERFACE Zep)
-    target_compile_definitions(AniStudioDeps INTERFACE ZEP_AVAILABLE)
-endif()
 
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)

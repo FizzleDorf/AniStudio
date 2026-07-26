@@ -262,7 +262,6 @@ if(WIN32)
     message(STATUS "Restored original PATH after stable-diffusion.cpp")
 endif()
 
-# Fix MSVC section limit (C1128) for the stable-diffusion library
 if(MSVC)
     if(TARGET stable-diffusion)
         target_compile_options(stable-diffusion PRIVATE /bigobj)
@@ -332,6 +331,7 @@ target_include_directories(${TARGET_NAME} PUBLIC
     "${EXTERNAL_DIR}/imgui_markdown"
     "${EXTERNAL_DIR}/zep/include"
     "${EXTERNAL_DIR}/nativefiledialog-extended/include"
+    "${EXTERNAL_DIR}/ImGuiColorTextEdit"
 )
 
 target_link_libraries(${TARGET_NAME} PRIVATE

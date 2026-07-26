@@ -31,17 +31,6 @@ if(NOT TARGET ImGuizmo)
     add_subdirectory("${EXTERNAL_DIR}/ImGuizmo" "${CMAKE_BINARY_DIR}/_external/ImGuizmo")
 endif()
 
-set(ZEP_AVAILABLE FALSE)
-if(EXISTS "${EXTERNAL_DIR}/zep/CMakeLists.txt" AND NOT TARGET Zep)
-    set(BUILD_IMGUI OFF CACHE BOOL "" FORCE)
-    set(BUILD_QT OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${EXTERNAL_DIR}/zep" "${CMAKE_BINARY_DIR}/_external/zep")
-    set(ZEP_AVAILABLE TRUE)
-elseif(TARGET Zep)
-    set(ZEP_AVAILABLE TRUE)
-endif()
-
 set(NFD_AVAILABLE FALSE)
 if(EXISTS "${EXTERNAL_DIR}/nativefiledialog-extended/CMakeLists.txt" AND NOT TARGET nfd)
     add_subdirectory("${EXTERNAL_DIR}/nativefiledialog-extended" "${CMAKE_BINARY_DIR}/_external/nativefiledialog-extended")
@@ -101,7 +90,6 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/ImNodeFlow/include"
     "${EXTERNAL_DIR}/ImGuizmo"
     "${EXTERNAL_DIR}/imgui_markdown"
-    "${EXTERNAL_DIR}/zep/include"
     "${EXTERNAL_DIR}/stb"
     # NFD headers
     $<BUILD_INTERFACE:${EXTERNAL_DIR}/nfd/src/include>
@@ -129,9 +117,15 @@ endif()
 
 target_sources(AniStudioCore PRIVATE "${EXTERNAL_DIR}/stb_image/stb_image.cpp")
 
-if(ZEP_AVAILABLE AND TARGET Zep)
-    target_link_libraries(AniStudioCore PRIVATE Zep)
-    target_compile_definitions(AniStudioCore PUBLIC ZEP_AVAILABLE)
+set(IMGUI_COLOR_TEXT_EDIT_AVAILABLE FALSE)
+if(EXISTS "${EXTERNAL_DIR}/ImGuiColorTextEdit/TextEditor.h")
+    set(IMGUI_COLOR_TEXT_EDIT_AVAILABLE TRUE)
+    target_include_directories(AniStudioCore PUBLIC "${EXTERNAL_DIR}/ImGuiColorTextEdit")
+    target_sources(AniStudioCore PRIVATE "${EXTERNAL_DIR}/ImGuiColorTextEdit/TextEditor.cpp")
+    target_compile_definitions(AniStudioCore PUBLIC IMGUI_COLOR_TEXT_EDIT_AVAILABLE)
+    message(STATUS "ImGuiColorTextEdit found and added")
+else()
+    message(WARNING "ImGuiColorTextEdit not found at ${EXTERNAL_DIR}/ImGuiColorTextEdit - text editor features will be limited")
 endif()
 
 target_compile_definitions(AniStudioCore PUBLIC

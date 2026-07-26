@@ -22,6 +22,10 @@
 #include "ImGuiStyleSettingsTab.hpp"
 #include "ImGuiRenderSettingsTab.hpp"
 #include "FontSettingsTab.hpp"
+#include "TextEditorSettingsTab.hpp"
+#include "StringWidgets.hpp"
+#include "TextEditorUtil.hpp"
+#include "TextEditorFontUtil.hpp"
 
 namespace ANI {
 
@@ -91,7 +95,7 @@ namespace ANI {
         viewManager.RegisterView<GUI::ImageView>("ImageView");
         viewManager.RegisterView<GUI::VideoView>("VideoView");
         viewManager.RegisterView<GUI::HelpView>("HelpView");
-        viewManager.RegisterView<GUI::ZepView>("ZepView");
+        viewManager.RegisterView<GUI::TextEditorView>("TextEditor");
 
         if (studioContext->studioPluginManager) {
             viewManager.RegisterViewWithFactory("PluginView", "Tools",
@@ -345,41 +349,10 @@ namespace ANI {
             studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             studioContext->entityManager->RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
             studioContext->entityManager->RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
+            studioContext->entityManager->RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
 
             studioContext->entityManager->RegisterSystem<TextureSystem>();
             studioContext->entityManager->RegisterSystem<ECS::SettingsSystem>();
-
-            auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
-            if (settingsSystem && imguiContext) {
-                settingsSystem->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
-                settingsSystem->LoadAllSettings();
-                std::cout << "[StudioCore] SettingsSystem initialized with ImGui context and settings loaded." << std::endl;
-            }
-
-            if (settingsSystem) {
-                EntityID settingsEntity = settingsSystem->GetSettingsEntity();
-                auto& entityMgr = *studioContext->entityManager;
-
-                if (entityMgr.IsEntityValid(settingsEntity)) {
-                    auto& generalComp = entityMgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
-                    auto generalTab = std::make_unique<ECS::GeneralSettingsTab>(generalComp);
-                    settingsSystem->RegisterTab(std::move(generalTab));
-
-                    auto& styleComp = entityMgr.GetComponent<ECS::ImGuiStyleSettingsComponent>(settingsEntity);
-                    auto styleTab = std::make_unique<ECS::ImGuiStyleSettingsTab>(styleComp);
-                    settingsSystem->RegisterTab(std::move(styleTab));
-
-                    auto& renderComp = entityMgr.GetComponent<ECS::ImGuiRenderSettingsComponent>(settingsEntity);
-                    auto renderTab = std::make_unique<ECS::ImGuiRenderSettingsTab>(renderComp);
-                    settingsSystem->RegisterTab(std::move(renderTab));
-
-                    auto& fontComp = entityMgr.GetComponent<ECS::FontSettingsComponent>(settingsEntity);
-                    auto fontTab = std::make_unique<ECS::FontSettingsTab>(fontComp);
-                    settingsSystem->RegisterTab(std::move(fontTab));
-
-                    std::cout << "[StudioCore] Registered all core settings tabs." << std::endl;
-                }
-            }
 
             auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
             std::string defaultProjectPath;
@@ -574,6 +547,49 @@ namespace ANI {
 
         RegisterCoreViews();
         std::cout << "[StudioCore] Core views registered" << std::endl;
+
+        // Register settings tabs now that the settings system and components exist
+        auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
+        if (settingsSystem) {
+            EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+            auto& entityMgr = *studioContext->entityManager;
+            if (entityMgr.IsEntityValid(settingsEntity)) {
+                auto& generalComp = entityMgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
+                auto& styleComp = entityMgr.GetComponent<ECS::ImGuiStyleSettingsComponent>(settingsEntity);
+                auto& renderComp = entityMgr.GetComponent<ECS::ImGuiRenderSettingsComponent>(settingsEntity);
+                auto& fontComp = entityMgr.GetComponent<ECS::FontSettingsComponent>(settingsEntity);
+                auto& textEditorComp = entityMgr.GetComponent<ECS::TextEditorSettingsComponent>(settingsEntity);
+
+                auto generalTab = std::make_unique<ECS::GeneralSettingsTab>(generalComp);
+                settingsSystem->RegisterTab(std::move(generalTab));
+
+                auto styleTab = std::make_unique<ECS::ImGuiStyleSettingsTab>(styleComp);
+                settingsSystem->RegisterTab(std::move(styleTab));
+
+                auto renderTab = std::make_unique<ECS::ImGuiRenderSettingsTab>(renderComp);
+                settingsSystem->RegisterTab(std::move(renderTab));
+
+                auto fontTab = std::make_unique<ECS::FontSettingsTab>(fontComp);
+                settingsSystem->RegisterTab(std::move(fontTab));
+
+                auto textEditorTab = std::make_unique<ECS::TextEditorSettingsTab>(textEditorComp, fontComp);
+                settingsSystem->RegisterTab(std::move(textEditorTab));
+
+                UISchema::StringWidgets::SetSettingsComponent(&textEditorComp);
+                TextEditorUtil::SetSettingsComponent(&textEditorComp);
+                TextEditorUtil::SetFontComponent(&fontComp);
+
+                std::cout << "[StudioCore] Registered all core settings tabs." << std::endl;
+
+                for (auto& tab : settingsSystem->GetTabs()) {
+                    tab->LoadSettings();
+                    tab->CreateBackup();
+                }
+            }
+            else {
+                std::cerr << "[StudioCore] Settings entity not valid yet, cannot register tabs." << std::endl;
+            }
+        }
 
         m_projectManagerView->Init();
         std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;

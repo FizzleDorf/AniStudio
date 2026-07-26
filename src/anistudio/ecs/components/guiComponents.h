@@ -5,3 +5,4 @@
 #include "ImGuiStyleSettingsComponent.hpp"
 #include "TextureComponent.hpp"
 #include "FontSettingsComponent.hpp"
+#include "TextEditorSettingsComponent.hpp"
