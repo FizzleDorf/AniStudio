@@ -103,16 +103,11 @@ namespace TextEditorUtil {
 
         palette[static_cast<size_t>(TextEditor::Color::text)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_Text]);
         palette[static_cast<size_t>(TextEditor::Color::background)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_ChildBg]);
-        palette[static_cast<size_t>(TextEditor::Color::selection)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_Header]);
+        palette[static_cast<size_t>(TextEditor::Color::selection)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_TextSelectedBg]);
         palette[static_cast<size_t>(TextEditor::Color::lineNumber)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_TextDisabled]);
         palette[static_cast<size_t>(TextEditor::Color::currentLineNumber)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_Text]);
         palette[static_cast<size_t>(TextEditor::Color::whitespace)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_TextDisabled]);
-
-        ImVec4 text = style.Colors[ImGuiCol_Text];
-        float luminance = 0.299f * text.x + 0.587f * text.y + 0.114f * text.z;
-        ImVec4 cursorColor = (luminance > 0.5f) ? ImVec4(0, 0, 0, 1) : ImVec4(1, 1, 1, 1);
-        palette[static_cast<size_t>(TextEditor::Color::cursor)] = ImGui::ColorConvertFloat4ToU32(cursorColor);
-
+        palette[static_cast<size_t>(TextEditor::Color::cursor)] = ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_CheckMark]);
         palette[static_cast<size_t>(TextEditor::Color::keyword)] = defaultPalette[static_cast<size_t>(TextEditor::Color::keyword)];
         palette[static_cast<size_t>(TextEditor::Color::declaration)] = defaultPalette[static_cast<size_t>(TextEditor::Color::declaration)];
         palette[static_cast<size_t>(TextEditor::Color::number)] = defaultPalette[static_cast<size_t>(TextEditor::Color::number)];
