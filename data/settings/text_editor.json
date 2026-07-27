@@ -2,11 +2,11 @@
     "autoIndent": true,
     "autocompleteFile": "python_keywords.txt",
     "defaultLanguage": "Plain Text",
-    "editorFontName": "",
+    "editorFontName": "Cousine-Regular",
     "lineFolding": false,
-    "showLineNumbers": false,
-    "showWhitespace": false,
+    "showLineNumbers": true,
+    "showWhitespace": true,
     "tabSize": 4,
-    "useCustomFont": false,
+    "useCustomFont": true,
     "wordWrap": true
 }

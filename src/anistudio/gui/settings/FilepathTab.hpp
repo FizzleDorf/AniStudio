@@ -34,7 +34,6 @@ namespace ECS {
 
         bool FilterPass(const std::string& key) const;
         void RenderPathsTable();
-        void RenderResetButton();
     };
 
 }

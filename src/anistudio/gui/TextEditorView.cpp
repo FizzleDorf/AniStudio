@@ -21,7 +21,7 @@ namespace GUI {
             auto settingsEntity = settingsSystem->GetSettingsEntity();
             if (m_entityManager.IsEntityValid(settingsEntity)) {
                 auto& settingsComp = m_entityManager.GetComponent<ECS::TextEditorSettingsComponent>(settingsEntity);
-                textEditor->SetShowLineNumbersEnabled(settingsComp.showLineNumbers);
+                textEditor->SetShowLineNumbersEnabled(true);
                 textEditor->SetWordWrapEnabled(settingsComp.wordWrap);
                 textEditor->SetShowWhitespacesEnabled(settingsComp.showWhitespace);
                 textEditor->SetAutoIndentEnabled(settingsComp.autoIndent);

@@ -2,7 +2,7 @@
     "auto_fit": false,
     "backend": "",
     "diffusion_conv_direct": false,
-    "diffusion_flash_attn": false,
+    "diffusion_flash_attn": true,
     "eager_load": false,
     "enable_mmap": true,
     "force_sdxl_vae_conv_scale": false,

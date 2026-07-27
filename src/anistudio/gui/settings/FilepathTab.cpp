@@ -27,8 +27,6 @@ namespace ECS {
             m_filter = m_pathFilter;
             ImGui::Separator();
             RenderPathsTable();
-            ImGui::Separator();
-            RenderResetButton();
         }
         ImGui::EndChild();
     }
@@ -111,34 +109,6 @@ namespace ECS {
                 ImGui::PopID();
             }
             ImGui::EndTable();
-        }
-    }
-
-    void FilePathTab::RenderResetButton() {
-        std::string modelRoot = m_fs.GetPath("ModelRoot");
-        if (!modelRoot.empty()) {
-            if (ImGui::Button("Reset Model Subdirectories to Root")) {
-                std::map<std::string, std::string> subdirs = {
-                    {"Checkpoint", "/checkpoints"},
-                    {"Encoder", "/clip"},
-                    {"Vae", "/vae"},
-                    {"Unet", "/unet"},
-                    {"Lora", "/loras"},
-                    {"ControlNet", "/controlnet"},
-                    {"Upscale", "/upscale_models"},
-                    {"Embed", "/embeddings"}
-                };
-                for (const auto& [key, subdir] : subdirs) {
-                    m_fs.SetPath(key, modelRoot + subdir);
-                }
-                std::string clipDir = modelRoot + "/clip";
-                m_fs.SetPath("ClipL", clipDir + "/clip_l.safetensors");
-                m_fs.SetPath("ClipG", clipDir + "/clip_g.safetensors");
-                m_fs.SetPath("T5XXL", clipDir + "/t5xxl.safetensors");
-                m_hasChanges = true;
-            }
-            ImGui::SameLine();
-            ImGui::TextDisabled("(Updates all model-related paths)");
         }
     }
 

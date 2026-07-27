@@ -81,6 +81,7 @@ namespace Utils {
             }
 
             ImGui::Separator();
+
             if (ImGui::Button("Save")) {
                 for (const auto& pair : s_tempPaths) {
                     if (!pair.second.empty()) {
@@ -97,13 +98,29 @@ namespace Utils {
                 s_missingKeys.clear();
                 ImGui::CloseCurrentPopup();
             }
+
             ImGui::SameLine();
-            if (ImGui::Button("Cancel")) {
+
+            if (ImGui::Button("Set All to Default")) {
+                // Fill all missing paths with their default values
+                for (const auto& key : s_missingKeys) {
+                    std::string defaultPath = GetDefaultPathForKey(key);
+                    if (!defaultPath.empty()) {
+                        s_fileSys->SetPath(key, defaultPath);
+                        s_tempPaths[key] = defaultPath; // update the displayed temp value too
+                    }
+                }
+                std::string dataPath = s_fileSys->GetPath("DataPath");
+                if (!dataPath.empty()) {
+                    std::string filepathsFile = dataPath + "/filepaths.json";
+                    s_fileSys->SaveToFile(filepathsFile);
+                }
                 s_popupOpen = false;
                 s_tempPaths.clear();
                 s_missingKeys.clear();
                 ImGui::CloseCurrentPopup();
             }
+
             ImGui::EndPopup();
         }
         else {

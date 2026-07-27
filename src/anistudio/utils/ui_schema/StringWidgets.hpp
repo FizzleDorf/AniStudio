@@ -241,56 +241,20 @@ namespace UISchema {
 
             std::string childId = "##editor_child_" + uniqueKey;
             ImVec2 childSize(contentSize.x, data.height);
-            // Use bool border (true) instead of ImGuiChildFlags_Border for compatibility
-            if (ImGui::BeginChild(childId.c_str(), childSize, true)) {
+
+            // Use native ResizeY flag (no border)
+            if (ImGui::BeginChild(childId.c_str(), childSize, ImGuiChildFlags_ResizeY)) {
                 TextEditorUtil::pushEditorFont();
                 editor->Render(label.c_str(), ImGui::GetContentRegionAvail());
                 TextEditorUtil::popEditorFont();
             }
             ImGui::EndChild();
 
-            ImVec2 childMin = ImGui::GetItemRectMin();
-            ImVec2 childMax = ImGui::GetItemRectMax();
-            float childWidth = childMax.x - childMin.x;
-            float childCurrentHeight = childMax.y - childMin.y;
-
-            if (childCurrentHeight > 10.0f) {
-                data.height = childCurrentHeight;
+            // Update height after child resize
+            ImVec2 newSize = ImGui::GetItemRectSize();
+            if (newSize.y > 10.0f) {
+                data.height = newSize.y;
             }
-
-            // ---- Custom resize handle (invisible button) ----
-            float handleHeight = 8.0f;
-            ImGui::SetCursorScreenPos(ImVec2(childMin.x, childMax.y - handleHeight));
-            ImGui::PushID("##custom_resize_handle");
-            ImGui::InvisibleButton("handle", ImVec2(childWidth, handleHeight));
-            bool isHovered = ImGui::IsItemHovered();
-            bool isActive = ImGui::IsItemActive();
-            ImGui::PopID();
-
-            if (isHovered || isActive) {
-                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-            }
-
-            if (isActive) {
-                float delta = ImGui::GetIO().MouseDelta.y;
-                data.height += delta;
-                if (data.height < 50.0f) data.height = 50.0f;
-                ImGui::SetWindowSize(childId.c_str(), ImVec2(childWidth, data.height));
-            }
-
-            // ---- Draw a triangle resize grip at bottom-right corner ----
-            ImDrawList* draw = ImGui::GetWindowDrawList();
-            ImVec2 gripPos = ImVec2(childMax.x - 14.0f, childMax.y - 6.0f);
-            // Draw a filled triangle (resize grip)
-            ImVec2 p1 = ImVec2(gripPos.x - 8.0f, gripPos.y);
-            ImVec2 p2 = ImVec2(gripPos.x, gripPos.y + 8.0f);
-            ImVec2 p3 = ImVec2(gripPos.x, gripPos.y);
-            draw->AddTriangleFilled(p1, p2, p3, IM_COL32(200, 200, 200, 180));
-            // Optionally, add a second smaller triangle inside for a 'stacked' look
-            ImVec2 p1b = ImVec2(gripPos.x - 4.0f, gripPos.y + 2.0f);
-            ImVec2 p2b = ImVec2(gripPos.x - 1.0f, gripPos.y + 5.0f);
-            ImVec2 p3b = ImVec2(gripPos.x - 1.0f, gripPos.y + 2.0f);
-            draw->AddTriangleFilled(p1b, p2b, p3b, IM_COL32(255, 255, 255, 120));
 
             ImGui::PopID();
 
