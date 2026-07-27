@@ -19,6 +19,7 @@ namespace ECS {
     }
 
     void ImGuiStyleSettingsTab::Render() {
+        m_comp.EnsureInitialized();
         ImGuiStyle& style = m_comp.currentStyle;
 
         if (ImGui::BeginChild("ImGuiStyleSettings", ImVec2(0, 0), false)) {
@@ -85,33 +86,33 @@ namespace ECS {
 
     void ImGuiStyleSettingsTab::RenderSizeSettings() {
         ImGuiStyle& style = m_comp.currentStyle;
-        if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) {}
-        if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) {}
-        if (ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.1f")) {}
-        if (ImGui::SliderFloat2("Item Inner Spacing", (float*)&style.ItemInnerSpacing, 0.0f, 20.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Indent Spacing", &style.IndentSpacing, 0.0f, 30.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.1f")) {}
+        if (ImGui::SliderFloat2("Window Padding", (float*)&style.WindowPadding, 0.0f, 20.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat2("Frame Padding", (float*)&style.FramePadding, 0.0f, 20.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat2("Item Spacing", (float*)&style.ItemSpacing, 0.0f, 20.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat2("Item Inner Spacing", (float*)&style.ItemInnerSpacing, 0.0f, 20.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Indent Spacing", &style.IndentSpacing, 0.0f, 30.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Scrollbar Size", &style.ScrollbarSize, 1.0f, 20.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Grab Min Size", &style.GrabMinSize, 1.0f, 20.0f, "%.1f")) m_comp.hasChanges = true;
     }
 
     void ImGuiStyleSettingsTab::RenderBorderSettings() {
         ImGuiStyle& style = m_comp.currentStyle;
-        if (ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 1.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 1.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Popup Border Size", &style.PopupBorderSize, 0.0f, 1.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Frame Border Size", &style.FrameBorderSize, 0.0f, 1.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 1.0f, "%.1f")) {}
+        if (ImGui::SliderFloat("Window Border Size", &style.WindowBorderSize, 0.0f, 1.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Child Border Size", &style.ChildBorderSize, 0.0f, 1.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Popup Border Size", &style.PopupBorderSize, 0.0f, 1.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Frame Border Size", &style.FrameBorderSize, 0.0f, 1.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Tab Border Size", &style.TabBorderSize, 0.0f, 1.0f, "%.1f")) m_comp.hasChanges = true;
     }
 
     void ImGuiStyleSettingsTab::RenderRoundingSettings() {
         ImGuiStyle& style = m_comp.currentStyle;
-        if (ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.0f, 12.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Popup Rounding", &style.PopupRounding, 0.0f, 12.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.0f, 12.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.1f")) {}
-        if (ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.1f")) {}
+        if (ImGui::SliderFloat("Window Rounding", &style.WindowRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Child Rounding", &style.ChildRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Frame Rounding", &style.FrameRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Popup Rounding", &style.PopupRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Scrollbar Rounding", &style.ScrollbarRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Grab Rounding", &style.GrabRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
+        if (ImGui::SliderFloat("Tab Rounding", &style.TabRounding, 0.0f, 12.0f, "%.1f")) m_comp.hasChanges = true;
     }
 
     void ImGuiStyleSettingsTab::RenderColorSettings() {
@@ -131,11 +132,13 @@ namespace ECS {
                 if (!colorFilter.PassFilter(name)) continue;
                 ImGui::PushID(i);
                 if (ImGui::ColorEdit4("##color", (float*)&style.Colors[i], ImGuiColorEditFlags_AlphaBar | alphaFlags)) {
+                    m_comp.hasChanges = true;
                 }
                 if (memcmp(&style.Colors[i], &m_comp.backupStyle.Colors[i], sizeof(ImVec4)) != 0) {
                     ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
                     if (ImGui::Button("Revert")) {
                         style.Colors[i] = m_comp.backupStyle.Colors[i];
+                        m_comp.hasChanges = true;
                     }
                 }
                 ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);

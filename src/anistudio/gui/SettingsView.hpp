@@ -21,7 +21,7 @@ namespace GUI {
 
         void Show();
         void Hide();
-        bool IsVisible() const { return showPopup || showUnsavedChangesDialog; }
+        bool IsVisible() const { return popupOpen; }
 
         void Render();
 
@@ -30,21 +30,16 @@ namespace GUI {
         ECS::SettingsSystem* m_settingsSystem = nullptr;
         ImGuiContext* imguiContext = nullptr;
 
-        bool showPopup = false;
-        bool isPopupOpen = false;
-        bool showUnsavedChangesDialog = false;
-        bool pendingClose = false;
+        bool popupOpen = false;
         bool settingsLoaded = false;
         bool showSaveNotification = false;
 
         std::string currentActiveTab;
         char filterBuffer[256] = "";
 
-        void HandlePopupClose();
         void RenderMainContent();
         void RenderTabsAndContent();
         void RenderActionButtons();
-        void RenderUnsavedChangesDialog();
     };
 
 }

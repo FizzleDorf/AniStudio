@@ -12,4 +12,6 @@ namespace TextEditorUtil {
     void pushEditorFont();
     void popEditorFont();
 
+    void clearEditorFontCache();
+
 } // namespace TextEditorUtil

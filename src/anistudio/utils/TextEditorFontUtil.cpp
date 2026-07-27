@@ -18,6 +18,10 @@ namespace TextEditorUtil {
 
     static std::unordered_map<std::string, ImFont*> s_editorFontCache;
 
+    void clearEditorFontCache() {
+        s_editorFontCache.clear();
+    }
+
     static ImFont* loadEditorFont(const std::string& fontName) {
         if (fontName.empty()) return nullptr;
         auto it = s_editorFontCache.find(fontName);

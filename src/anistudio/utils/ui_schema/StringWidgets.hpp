@@ -9,6 +9,7 @@
 #include <memory>
 #include <iostream>
 #include <filesystem>
+#include <sstream>
 #include "UISchemaUtils.hpp"
 #include "UISchemaContext.hpp"
 #include <TextEditor.h>
@@ -179,128 +180,117 @@ namespace UISchema {
 
             ImGui::PushID(uniqueKey.c_str());
 
-            if (ImGui::CollapsingHeader("Editor Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-                if (ImGui::Button("Undo")) {
-                    if (editor->CanUndo()) editor->Undo();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Redo")) {
-                    if (editor->CanRedo()) editor->Redo();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Find")) {
-                    editor->OpenFindReplaceWindow();
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Load...")) {
-                    std::string outPath;
-                    std::string filter = "Text Files{.txt},All Files{.*}";
-                    if (FileDialog::OpenFile("Open Text File", filter, outPath, ".")) {
-                        std::ifstream file(outPath);
-                        if (file.is_open()) {
-                            std::stringstream buffer;
-                            buffer << file.rdbuf();
-                            editor->SetText(buffer.str());
-                            data.filePath = outPath;
-                            lastKnownValues[uniqueKey] = editor->GetText();
-                        }
-                    }
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Save...")) {
-                    std::string outPath;
-                    std::string defaultName = data.filePath.empty() ? "untitled.txt" : std::filesystem::path(data.filePath).filename().string();
-                    std::string filter = "Text Files{.txt},All Files{.*}";
-                    if (FileDialog::SaveFile("Save Text File", filter, defaultName, outPath, ".")) {
-                        std::ofstream file(outPath);
-                        if (file.is_open()) {
-                            file << editor->GetText();
-                            data.filePath = outPath;
-                        }
-                    }
-                }
-
-                ImGui::Separator();
-
-                bool lineNumbers = editor->IsShowLineNumbersEnabled();
-                if (ImGui::Checkbox("Line Numbers", &lineNumbers)) {
-                    editor->SetShowLineNumbersEnabled(lineNumbers);
-                    data.config.showLineNumbers = lineNumbers;
-                }
-                ImGui::SameLine();
-                bool wordWrap = editor->IsWordWrapEnabled();
-                if (ImGui::Checkbox("Word Wrap", &wordWrap)) {
-                    editor->SetWordWrapEnabled(wordWrap);
-                    data.config.wordWrap = wordWrap;
-                }
-
-                ImGui::Separator();
-
-                const char* langNames[] = { "Plain Text", "Python", "C++", "C", "C#", "GLSL", "HLSL", "JSON", "Markdown", "SQL", "Lua", "AngelScript" };
-                const TextEditor::Language* langList[] = {
-                    nullptr,
-                    TextEditor::Language::Python(),
-                    TextEditor::Language::Cpp(),
-                    TextEditor::Language::C(),
-                    TextEditor::Language::Cs(),
-                    TextEditor::Language::Glsl(),
-                    TextEditor::Language::Hlsl(),
-                    TextEditor::Language::Json(),
-                    TextEditor::Language::Markdown(),
-                    TextEditor::Language::Sql(),
-                    TextEditor::Language::Lua(),
-                    TextEditor::Language::AngelScript()
-                };
-                int currentLangIndex = 0;
-                for (int i = 0; i < IM_ARRAYSIZE(langList); ++i) {
-                    if (langList[i] == editor->GetLanguage()) {
-                        currentLangIndex = i;
-                        break;
-                    }
-                }
-                if (ImGui::Combo("Language", &currentLangIndex, langNames, IM_ARRAYSIZE(langNames))) {
-                    auto newLang = langList[currentLangIndex];
-                    editor->SetLanguage(newLang);
-                    data.language = newLang;
-                    if (newLang == nullptr) {
-                        TextEditorUtil::clearAutocomplete(editor.get());
-                    }
-                    else {
-                        TextEditorUtil::setupAutocomplete(editor.get(), "python_keywords.txt");
-                    }
-                }
-
-                ImGui::Separator();
-                if (ImGui::Button("Load Autocomplete...")) {
-                    std::string outPath;
-                    std::string filter = "Keyword Files{.txt},All Files{.*}";
-                    if (FileDialog::OpenFile("Load Autocomplete Keywords", filter, outPath, ".")) {
-                        TextEditorUtil::setupAutocomplete(editor.get(), outPath);
-                    }
-                }
-            }
-
-            ImGui::Separator();
-
             ImVec2 contentSize = ImGui::GetContentRegionAvail();
             if (contentSize.x < 100) contentSize.x = 100;
             if (contentSize.y < 100) contentSize.y = 100;
 
             if (data.height < 50.0f) data.height = 150.0f;
 
+            if (ImGui::Button("Undo")) {
+                if (editor->CanUndo()) editor->Undo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Redo")) {
+                if (editor->CanRedo()) editor->Redo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Find")) {
+                editor->OpenFindReplaceWindow();
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Load")) {
+                std::string outPath;
+                if (FileDialog::OpenFile("Open Text File", FileDialog::FilterType::TEXT_FILE, outPath, std::filesystem::current_path().string())) {
+                    std::ifstream file(outPath);
+                    if (file.is_open()) {
+                        std::stringstream buffer;
+                        buffer << file.rdbuf();
+                        editor->SetText(buffer.str());
+                        data.filePath = outPath;
+                        lastKnownValues[uniqueKey] = editor->GetText();
+                    }
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Save")) {
+                std::string outPath;
+                std::string defaultName = data.filePath.empty() ? "untitled.txt" : std::filesystem::path(data.filePath).filename().string();
+                if (FileDialog::SaveFile("Save Text File", FileDialog::FilterType::TEXT_FILE, defaultName, outPath, std::filesystem::current_path().string())) {
+                    std::ofstream file(outPath);
+                    if (file.is_open()) {
+                        file << editor->GetText();
+                        data.filePath = outPath;
+                    }
+                }
+            }
+
+            ImGui::Separator();
+
+            bool lineNumbers = editor->IsShowLineNumbersEnabled();
+            if (ImGui::Checkbox("Line Numbers", &lineNumbers)) {
+                editor->SetShowLineNumbersEnabled(lineNumbers);
+                data.config.showLineNumbers = lineNumbers;
+            }
+            ImGui::SameLine();
+            bool wordWrap = editor->IsWordWrapEnabled();
+            if (ImGui::Checkbox("Word Wrap", &wordWrap)) {
+                editor->SetWordWrapEnabled(wordWrap);
+                data.config.wordWrap = wordWrap;
+            }
+
             std::string childId = "##editor_child_" + uniqueKey;
             ImVec2 childSize(contentSize.x, data.height);
-            if (ImGui::BeginChild(childId.c_str(), childSize, ImGuiChildFlags_ResizeY)) {
+            // Use bool border (true) instead of ImGuiChildFlags_Border for compatibility
+            if (ImGui::BeginChild(childId.c_str(), childSize, true)) {
                 TextEditorUtil::pushEditorFont();
                 editor->Render(label.c_str(), ImGui::GetContentRegionAvail());
                 TextEditorUtil::popEditorFont();
             }
             ImGui::EndChild();
 
-            ImVec2 newSize = ImGui::GetItemRectSize();
-            if (newSize.y > 10.0f) {
-                data.height = newSize.y;
+            ImVec2 childMin = ImGui::GetItemRectMin();
+            ImVec2 childMax = ImGui::GetItemRectMax();
+            float childWidth = childMax.x - childMin.x;
+            float childCurrentHeight = childMax.y - childMin.y;
+
+            if (childCurrentHeight > 10.0f) {
+                data.height = childCurrentHeight;
             }
+
+            // ---- Custom resize handle (invisible button) ----
+            float handleHeight = 8.0f;
+            ImGui::SetCursorScreenPos(ImVec2(childMin.x, childMax.y - handleHeight));
+            ImGui::PushID("##custom_resize_handle");
+            ImGui::InvisibleButton("handle", ImVec2(childWidth, handleHeight));
+            bool isHovered = ImGui::IsItemHovered();
+            bool isActive = ImGui::IsItemActive();
+            ImGui::PopID();
+
+            if (isHovered || isActive) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+            }
+
+            if (isActive) {
+                float delta = ImGui::GetIO().MouseDelta.y;
+                data.height += delta;
+                if (data.height < 50.0f) data.height = 50.0f;
+                ImGui::SetWindowSize(childId.c_str(), ImVec2(childWidth, data.height));
+            }
+
+            // ---- Draw a triangle resize grip at bottom-right corner ----
+            ImDrawList* draw = ImGui::GetWindowDrawList();
+            ImVec2 gripPos = ImVec2(childMax.x - 14.0f, childMax.y - 6.0f);
+            // Draw a filled triangle (resize grip)
+            ImVec2 p1 = ImVec2(gripPos.x - 8.0f, gripPos.y);
+            ImVec2 p2 = ImVec2(gripPos.x, gripPos.y + 8.0f);
+            ImVec2 p3 = ImVec2(gripPos.x, gripPos.y);
+            draw->AddTriangleFilled(p1, p2, p3, IM_COL32(200, 200, 200, 180));
+            // Optionally, add a second smaller triangle inside for a 'stacked' look
+            ImVec2 p1b = ImVec2(gripPos.x - 4.0f, gripPos.y + 2.0f);
+            ImVec2 p2b = ImVec2(gripPos.x - 1.0f, gripPos.y + 5.0f);
+            ImVec2 p3b = ImVec2(gripPos.x - 1.0f, gripPos.y + 2.0f);
+            draw->AddTriangleFilled(p1b, p2b, p3b, IM_COL32(255, 255, 255, 120));
 
             ImGui::PopID();
 
@@ -312,16 +302,6 @@ namespace UISchema {
             }
 
             return modified;
-        }
-
-        static bool RenderZepEditor(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
-            return RenderTextEditor(label, value, options, schema);
-        }
-        static bool RenderZepEditorVim(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
-            return RenderTextEditor(label, value, options, schema);
-        }
-        static bool RenderZepEditorStandard(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
-            return RenderTextEditor(label, value, options, schema);
         }
 
         static ImGuiInputTextFlags GetInputTextFlags(const nlohmann::json& schema) {

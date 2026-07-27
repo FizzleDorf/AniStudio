@@ -10,7 +10,6 @@ namespace GUI {
 
     SettingsView::SettingsView() {
         filterBuffer[0] = '\0';
-        isPopupOpen = false;
     }
 
     void SettingsView::SetEntityManager(ECS::EntityManager& mgr) {
@@ -39,26 +38,22 @@ namespace GUI {
     }
 
     void SettingsView::Show() {
-        if (!showPopup && !isPopupOpen) {
-            showPopup = true;
-        }
+        popupOpen = true;
     }
 
     void SettingsView::Hide() {
-        showPopup = false;
-        isPopupOpen = false;
+        popupOpen = false;
         ImGui::CloseCurrentPopup();
     }
 
     void SettingsView::Render() {
-        if (!showPopup) return;
+        if (!popupOpen) return;
         if (!imguiContext) return;
 
         ImGui::SetCurrentContext(imguiContext);
 
-        if (!isPopupOpen) {
+        if (!ImGui::IsPopupOpen("Settings##SettingsPopup")) {
             ImGui::OpenPopup("Settings##SettingsPopup");
-            isPopupOpen = true;
         }
 
         const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -75,25 +70,10 @@ namespace GUI {
         }
 
         if (!isOpen) {
-            isPopupOpen = false;
-            HandlePopupClose();
-        }
-
-        if (showUnsavedChangesDialog) {
-            RenderUnsavedChangesDialog();
-        }
-    }
-
-    void SettingsView::HandlePopupClose() {
-        if (m_settingsSystem && m_settingsSystem->HasAnyUnsavedChanges()) {
-            showUnsavedChangesDialog = true;
-            showPopup = false;
-            pendingClose = true;
-        }
-        else {
-            showPopup = false;
-            isPopupOpen = false;
-            pendingClose = false;
+            if (m_settingsSystem) {
+                m_settingsSystem->RestoreAllFromBackups();
+            }
+            popupOpen = false;
             ImGui::CloseCurrentPopup();
         }
     }
@@ -171,8 +151,7 @@ namespace GUI {
 
         if (ImGui::Button("Save and Close")) {
             if (m_settingsSystem->SaveAllSettings()) {
-                showPopup = false;
-                isPopupOpen = false;
+                popupOpen = false;
                 ImGui::CloseCurrentPopup();
             }
         }
@@ -190,51 +169,11 @@ namespace GUI {
 
         ImGui::SameLine();
         if (ImGui::Button("Close")) {
-            HandlePopupClose();
-        }
-    }
-
-    void SettingsView::RenderUnsavedChangesDialog() {
-        if (!showUnsavedChangesDialog) return;
-
-        ImGui::OpenPopup("Unsaved Changes");
-        if (ImGui::BeginPopupModal("Unsaved Changes", nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::Text("You have unsaved changes. What would you like to do?");
-            ImGui::Separator();
-
-            if (ImGui::Button("Apply and Close", ImVec2(120, 0))) {
-                if (m_settingsSystem && m_settingsSystem->SaveAllSettings()) {
-                    showUnsavedChangesDialog = false;
-                    pendingClose = false;
-                    showPopup = false;
-                    isPopupOpen = false;
-                    ImGui::CloseCurrentPopup();
-                }
+            if (m_settingsSystem) {
+                m_settingsSystem->RestoreAllFromBackups();
             }
-            ImGui::SameLine();
-
-            if (ImGui::Button("Discard Changes", ImVec2(120, 0))) {
-                if (m_settingsSystem) {
-                    m_settingsSystem->RestoreAllFromBackups();
-                }
-                showUnsavedChangesDialog = false;
-                pendingClose = false;
-                showPopup = false;
-                isPopupOpen = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-
-            if (ImGui::Button("Cancel", ImVec2(120, 0))) {
-                showUnsavedChangesDialog = false;
-                pendingClose = false;
-                showPopup = true;
-                isPopupOpen = false;
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::EndPopup();
+            popupOpen = false;
+            ImGui::CloseCurrentPopup();
         }
     }
 

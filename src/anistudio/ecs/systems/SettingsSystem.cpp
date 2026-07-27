@@ -27,6 +27,8 @@ namespace ECS {
         RegisterAndAddSettingsComponent<TextEditorSettingsComponent>();
 
         if (filePathSystem) {
+            auto& styleComp = mgr.GetComponent<ImGuiStyleSettingsComponent>(settingsEntity);
+            styleComp.SetFilePathSystem(filePathSystem);
             auto fileTab = std::make_unique<FilePathTab>(*filePathSystem);
             RegisterTab(std::move(fileTab));
         }

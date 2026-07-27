@@ -70,6 +70,7 @@ namespace ECS {
                         if (FileDialog::OpenFile("Select File", filter, newPath, defaultPath)) {
                             if (!newPath.empty() && newPath != currentPath) {
                                 m_fs.SetPath(key, newPath);
+                                m_hasChanges = true;
                             }
                         }
                     }
@@ -77,6 +78,7 @@ namespace ECS {
                         if (FileDialog::SelectFolder("Select Directory", newPath, defaultPath)) {
                             if (!newPath.empty() && newPath != currentPath) {
                                 m_fs.SetPath(key, newPath);
+                                m_hasChanges = true;
                             }
                         }
                     }
@@ -85,6 +87,7 @@ namespace ECS {
                 ImGui::TableNextColumn();
                 if (ImGui::Button("X", ImVec2(30, 0))) {
                     m_fs.SetPath(key, "");
+                    m_hasChanges = true;
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("Clear this path");
@@ -132,10 +135,61 @@ namespace ECS {
                 m_fs.SetPath("ClipL", clipDir + "/clip_l.safetensors");
                 m_fs.SetPath("ClipG", clipDir + "/clip_g.safetensors");
                 m_fs.SetPath("T5XXL", clipDir + "/t5xxl.safetensors");
+                m_hasChanges = true;
             }
             ImGui::SameLine();
             ImGui::TextDisabled("(Updates all model-related paths)");
         }
+    }
+
+    void FilePathTab::CreateBackup() {
+        m_backupPaths.clear();
+        auto keys = m_fs.GetAllKeys();
+        for (const auto& key : keys) {
+            m_backupPaths[key] = m_fs.GetPath(key);
+        }
+    }
+
+    void FilePathTab::RestoreFromBackup() {
+        for (const auto& [key, path] : m_backupPaths) {
+            m_fs.SetPath(key, path);
+        }
+        m_hasChanges = false;
+    }
+
+    void FilePathTab::ResetToDefaults() {
+        std::map<std::string, std::string> defaults = {
+            {"ModelRoot", "./models"},
+            {"Checkpoint", "./models/checkpoints"},
+            {"Encoder", "./models/clip"},
+            {"Vae", "./models/vae"},
+            {"Unet", "./models/unet"},
+            {"Lora", "./models/loras"},
+            {"ControlNet", "./models/controlnet"},
+            {"Upscale", "./models/upscale_models"},
+            {"Embed", "./models/embeddings"},
+            {"ClipL", "./models/clip/clip_l.safetensors"},
+            {"ClipG", "./models/clip/clip_g.safetensors"},
+            {"T5XXL", "./models/clip/t5xxl.safetensors"}
+        };
+        for (const auto& [key, value] : defaults) {
+            m_fs.SetPath(key, value);
+        }
+        m_hasChanges = true;
+    }
+
+    bool FilePathTab::SaveSettings() {
+        m_fs.SaveToFile(m_settingsFilePath);
+        m_hasChanges = false;
+        CreateBackup();
+        return true;
+    }
+
+    bool FilePathTab::LoadSettings() {
+        m_fs.LoadFromFile(m_settingsFilePath);
+        m_hasChanges = false;
+        CreateBackup();
+        return true;
     }
 
 }

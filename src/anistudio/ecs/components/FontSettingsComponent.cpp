@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include "TextEditorFontUtil.hpp"
 
 namespace ECS {
 
@@ -82,9 +83,12 @@ namespace ECS {
         }
 
         ImGui::SetCurrentContext(imguiContext);
-        ImGuiIO& io = ImGui::GetIO();
+
+        TextEditorUtil::clearEditorFontCache();
 
         ImGui_ImplOpenGL3_DestroyDeviceObjects();
+
+        ImGuiIO& io = ImGui::GetIO();
 
         io.Fonts->Clear();
 

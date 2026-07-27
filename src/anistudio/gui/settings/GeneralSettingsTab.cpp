@@ -28,41 +28,41 @@ namespace ECS {
     }
 
     void GeneralSettingsTab::RenderStartupSettings() {
-        if (ImGui::Checkbox("Show Startup Screen", &m_comp.showStartupScreen)) {}
-        if (ImGui::Checkbox("Load Last Project on Startup", &m_comp.loadLastProject)) {}
+        if (ImGui::Checkbox("Show Startup Screen", &m_comp.showStartupScreen)) m_comp.hasChanges = true;
+        if (ImGui::Checkbox("Load Last Project on Startup", &m_comp.loadLastProject)) m_comp.hasChanges = true;
         ImGui::Separator();
     }
 
     void GeneralSettingsTab::RenderAutoSaveSettings() {
-        if (ImGui::Checkbox("Auto-Save Projects", &m_comp.autoSaveProjects)) {}
+        if (ImGui::Checkbox("Auto-Save Projects", &m_comp.autoSaveProjects)) m_comp.hasChanges = true;
         if (m_comp.autoSaveProjects) {
-            if (ImGui::SliderInt("Auto-Save Interval (minutes)", &m_comp.autoSaveIntervalMinutes, 1, 60)) {}
+            if (ImGui::SliderInt("Auto-Save Interval (minutes)", &m_comp.autoSaveIntervalMinutes, 1, 60)) m_comp.hasChanges = true;
         }
         ImGui::Separator();
     }
 
     void GeneralSettingsTab::RenderConfirmationSettings() {
-        if (ImGui::Checkbox("Confirm Before Exit", &m_comp.confirmBeforeExit)) {}
-        if (ImGui::Checkbox("Confirm Before Delete Assets", &m_comp.confirmBeforeDeleteAssets)) {}
-        if (ImGui::Checkbox("Confirm Before Overwrite Files", &m_comp.confirmBeforeOverwriteFiles)) {}
+        if (ImGui::Checkbox("Confirm Before Exit", &m_comp.confirmBeforeExit)) m_comp.hasChanges = true;
+        if (ImGui::Checkbox("Confirm Before Delete Assets", &m_comp.confirmBeforeDeleteAssets)) m_comp.hasChanges = true;
+        if (ImGui::Checkbox("Confirm Before Overwrite Files", &m_comp.confirmBeforeOverwriteFiles)) m_comp.hasChanges = true;
         ImGui::Separator();
     }
 
     void GeneralSettingsTab::RenderPerformanceSettings() {
-        if (ImGui::SliderInt("Max Recent Projects", &m_comp.maxRecentProjects, 5, 50)) {}
-        if (ImGui::SliderInt("Max Undo Levels", &m_comp.maxUndoLevels, 10, 1000)) {}
-        if (ImGui::Checkbox("Enable Hardware Acceleration", &m_comp.enableHardwareAcceleration)) {}
+        if (ImGui::SliderInt("Max Recent Projects", &m_comp.maxRecentProjects, 5, 50)) m_comp.hasChanges = true;
+        if (ImGui::SliderInt("Max Undo Levels", &m_comp.maxUndoLevels, 10, 1000)) m_comp.hasChanges = true;
+        if (ImGui::Checkbox("Enable Hardware Acceleration", &m_comp.enableHardwareAcceleration)) m_comp.hasChanges = true;
         ImGui::Separator();
     }
 
     void GeneralSettingsTab::RenderLoggingSettings() {
-        if (ImGui::Checkbox("Enable Logging", &m_comp.enableLogging)) {}
+        if (ImGui::Checkbox("Enable Logging", &m_comp.enableLogging)) m_comp.hasChanges = true;
         if (m_comp.enableLogging) {
             const char* logLevels[] = { "Error", "Warning", "Info", "Debug" };
-            if (ImGui::Combo("Log Level", &m_comp.logLevel, logLevels, 4)) {}
-            if (ImGui::Checkbox("Log to File", &m_comp.logToFile)) {}
+            if (ImGui::Combo("Log Level", &m_comp.logLevel, logLevels, 4)) m_comp.hasChanges = true;
+            if (ImGui::Checkbox("Log to File", &m_comp.logToFile)) m_comp.hasChanges = true;
             if (m_comp.logToFile) {
-                if (ImGui::SliderInt("Max Log File Size (MB)", &m_comp.maxLogFileSize, 1, 100)) {}
+                if (ImGui::SliderInt("Max Log File Size (MB)", &m_comp.maxLogFileSize, 1, 100)) m_comp.hasChanges = true;
             }
         }
         ImGui::Separator();

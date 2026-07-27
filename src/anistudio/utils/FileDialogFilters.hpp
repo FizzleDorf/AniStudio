@@ -11,6 +11,7 @@ namespace FileDialog {
         IMAGE_FILE,
         VIDEO_FILE,
         METADATA_FILE,
+        TEXT_FILE,
         ALL_FILES
     };
 
@@ -47,6 +48,11 @@ namespace FileDialog {
         { "JPEG with Metadata", "jpg,jpeg" }
     };
 
+    static const nfdu8filteritem_t TextFilters[] = {
+        { "Text Files", "txt" },
+        { "All Files", "*" }
+    };
+
     static const nfdu8filteritem_t AllFilesFilter[] = {
         { "All Files", "*" }
     };
@@ -68,6 +74,10 @@ namespace FileDialog {
         case FilterType::METADATA_FILE:
             items = MetadataFilters;
             count = sizeof(MetadataFilters) / sizeof(MetadataFilters[0]);
+            break;
+        case FilterType::TEXT_FILE:
+            items = TextFilters;
+            count = sizeof(TextFilters) / sizeof(TextFilters[0]);
             break;
         case FilterType::ALL_FILES:
         default:

@@ -29,7 +29,7 @@ namespace ECS {
         int logLevel = 2;
         bool logToFile = true;
         int maxLogFileSize = 10;
-
+        bool hasChanges = false;
     private:
         bool backupShowStartupScreen = true;
         bool backupLoadLastProject = true;
@@ -45,8 +45,6 @@ namespace ECS {
         int backupLogLevel = 2;
         bool backupLogToFile = true;
         int backupMaxLogFileSize = 10;
-
-        bool hasChanges = false;
     };
 
 }
