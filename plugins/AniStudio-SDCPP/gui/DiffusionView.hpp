@@ -36,6 +36,9 @@ namespace GUI {
 			if (editEntity != 0) m_entityManager.DestroyEntity(editEntity);
 		}
 
+		ECS::EntityID GetCurrentEntity() const;
+		int GetCurrentMode() const { return currentMode; }
+
 		void Init() override;
 		void Render() override;
 
@@ -82,9 +85,7 @@ namespace GUI {
 		void HandleT2IEvent();
 		void HandleI2IEvent();
 		void HandleEditEvent();
-
-		// Utility methods
-		ECS::EntityID GetCurrentEntity() const;
+		
 		std::vector<std::string> GetCategoryRenderOrder() const;
 
 		// Component management

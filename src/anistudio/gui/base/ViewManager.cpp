@@ -370,6 +370,16 @@ namespace GUI {
         return removed;
     }
 
+    std::vector<BaseView*> ViewManager::GetAllViews() const {
+        std::vector<BaseView*> views;
+        for (const auto& ws : workspaces) {
+            for (const auto& viewPair : ws.second) {
+                views.push_back(viewPair.second.get());
+            }
+        }
+        return views;
+    }
+
     void ViewManager::CloseAllViewsOfType(const std::string& viewName) {
         ViewTypeID viewTypeID;
         try {

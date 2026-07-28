@@ -42,6 +42,7 @@ namespace GUI {
 				m_entityManager.DestroyEntity(upscaleEntity);
 			}
 		}
+		ECS::EntityID GetUpscaleEntity() const { return upscaleEntity; }
 
 		void Init() override;
 		nlohmann::json Serialize() const override;

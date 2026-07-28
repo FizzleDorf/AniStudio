@@ -32,7 +32,7 @@ namespace GUI {
 
 		void Init() override;
 		void Render() override;
-
+		ECS::EntityID GetConvertEntity() const { return convertEntity; }
 	private:
 		// Entity for conversion
 		ECS::EntityID convertEntity = 0;

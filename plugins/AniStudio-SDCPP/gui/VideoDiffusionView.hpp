@@ -35,7 +35,7 @@ namespace GUI {
 		void Init() override;
 		void Update(float deltaT) override;
 		void Render() override;
-
+		ECS::EntityID GetImg2VidEntity() const { return img2vidEntity; }
 		// Serialization
 		nlohmann::json Serialize() const override;
 		void Deserialize(const nlohmann::json& j) override;

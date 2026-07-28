@@ -104,7 +104,7 @@ namespace GUI {
 
 		json SerializeViewLists() const;
 		void DeserializeViewLists(const json &viewListsJson);
-
+		std::vector<BaseView*> GetAllViews() const;
 	private:
 		template <typename T>
 		void AddWorkspace();

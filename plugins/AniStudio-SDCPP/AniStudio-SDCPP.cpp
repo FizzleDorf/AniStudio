@@ -19,6 +19,7 @@
 #include "ConvertView.hpp"
 #include "UpscaleView.hpp"
 #include "VideoDiffusionView.hpp"
+#include "QueueView.hpp"
 #include "ModelCacheView.hpp"
 #include "SDCPPSettingsTab.hpp"
 
@@ -224,6 +225,7 @@ public:
         viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
         viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
         viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "Diffusion");
+        viewMgr.RegisterView<GUI::QueueView>("QueueView", "Diffusion");
 
         LogInfo("Views registered via direct ViewManager");
         return true;
