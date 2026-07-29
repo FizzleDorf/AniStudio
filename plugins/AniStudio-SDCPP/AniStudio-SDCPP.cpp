@@ -1,3 +1,4 @@
+// AniStudio-SDCPP.cpp
 #include "BasePlugin.hpp"
 #include "EntityManager.hpp"
 #include "ViewManager.hpp"
@@ -103,13 +104,11 @@ public:
 
         Utils::CheckMissingPaths(fs);
 
-        // Sampling & Inference
         entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
         entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
         entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
         entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
 
-        // Model components
         entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
         entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
         entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
@@ -118,53 +117,42 @@ public:
         entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
         entityMgr.RegisterComponent<ECS::MotionModuleComponent>("MotionModule");
 
-        // Encoders
         entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
         entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
         entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
         entityMgr.RegisterComponent<ECS::LlmEncoderComponent>("LlmEncoder");
 
-        // Vision encoders
         entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
         entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision");
 
-        // VAE / TAESD
         entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
         entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
 
-        // Upscaling
         entityMgr.RegisterComponent<ECS::HiresComponent>("Hires");
         entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
 
-        // Other models
         entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
         entityMgr.RegisterComponent<ECS::PulidWeightsComponent>("PulidWeights");
         entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
         entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
 
-        // Video
         entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
         entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
 
-        // Advanced / extra
         entityMgr.RegisterComponent<ECS::ADetailerComponent>("ADetailer");
         entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
         entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
         entityMgr.RegisterComponent<ECS::EasyCacheComponent>("EasyCache");
 
-        // Conversion
         entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
 
-        // Embeddings (textual inversion)
         entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings");
 
-        // Image components (input/output)
         entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage");
         entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage");
         entityMgr.RegisterComponent<ECS::RefImagesComponent>("RefImages");
         entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames");
 
-        // Global settings
         entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPPSettings");
 
         entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
@@ -220,12 +208,12 @@ public:
             }
         }
 
-        viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "Diffusion");
-        viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "Diffusion");
-        viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "Diffusion");
-        viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "Diffusion");
-        viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "Diffusion");
-        viewMgr.RegisterView<GUI::QueueView>("QueueView", "Diffusion");
+        viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::QueueView>("QueueView", "DiffusionAddon");
 
         LogInfo("Views registered via direct ViewManager");
         return true;
@@ -254,64 +242,10 @@ public:
 
         UnregisterEventHandlers();
 
-        if (m_entityMgr) {
-            auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-            if (system) {
-                system->TerminateImmediately();
-                LogInfo("SDCPPSystem terminated");
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
-
-                try {
-                    m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-                    LogInfo("Unregistered SDCPPSystem");
-                }
-                catch (const std::exception& e) {
-                    LogError("Error unregistering SDCPPSystem: " + std::string(e.what()));
-                }
-            }
-        }
-
-        if (m_viewMgr) {
-            // Close all views but do NOT unregister them to avoid deadlock
-            const char* viewNames[] = {
-                "DiffusionView", "ConvertView", "UpscaleView", "VideoDiffusionView", "ModelCacheView"
-            };
-
-            for (const char* viewName : viewNames) {
-                try {
-                    m_viewMgr->CloseAllViewsOfType(viewName);
-                    LogInfo("Closed all views of type: " + std::string(viewName));
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                }
-                catch (...) {
-                }
-            }
-        }
-
-        if (m_entityMgr) {
-            auto allEntities = m_entityMgr->GetAllEntities();
-            std::vector<EntityID> entitiesToDestroy;
-
-            for (EntityID entity : allEntities) {
-                if (CheckEntityForDiffusionComponents(entity)) {
-                    entitiesToDestroy.push_back(entity);
-                }
-            }
-
-            LogInfo("Found " + std::to_string(entitiesToDestroy.size()) +
-                " entities to destroy out of " + std::to_string(allEntities.size()));
-
-            for (auto it = entitiesToDestroy.rbegin(); it != entitiesToDestroy.rend(); ++it) {
-                try {
-                    m_entityMgr->DestroyEntity(*it);
-                    LogInfo("Destroyed entity: " + std::to_string(*it));
-                }
-                catch (const std::exception& e) {
-                    LogError("Error destroying entity " + std::to_string(*it) + ": " + std::string(e.what()));
-                }
-            }
-        }
+        m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
+        LogInfo("Unregistered SDCPPSystem");
+        m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>();
+        LogInfo("Unregistered ModelCacheSystem");
 
         Utils::g_FilePathSystem = nullptr;
         m_entityMgr = nullptr;
@@ -319,21 +253,6 @@ public:
         m_imguiContext = nullptr;
 
         LogInfo("DiffusionAddon shutdown complete");
-    }
-
-    bool CheckEntityForDiffusionComponents(EntityID entity) {
-        if (!m_entityMgr) return false;
-
-        try {
-            if (m_entityMgr->HasComponent<ECS::PromptComponent>(entity)) return true;
-            if (m_entityMgr->HasComponent<ECS::CheckpointComponent>(entity)) return true;
-            if (m_entityMgr->HasComponent<ECS::DiffusionModelComponent>(entity)) return true;
-            if (m_entityMgr->HasComponent<ECS::LatentComponent>(entity)) return true;
-            return false;
-        }
-        catch (...) {
-            return false;
-        }
     }
 
     void OnUpdate(float deltaTime) override {}

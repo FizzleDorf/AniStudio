@@ -1,3 +1,4 @@
+// QueueView.cpp
 #include "QueueView.hpp"
 #include "Events.hpp"
 #include "DiffusionCallbackUtils.hpp"
@@ -80,11 +81,25 @@ namespace GUI {
 
     void QueueView::Init() {
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-        if (sys) {
+        bool hasQuickload = false;
+
+        auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        if (filePathSys) {
+            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
+            if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
+            if (!dataPath.empty()) {
+                std::string filename = viewName + ".json";
+                std::string filepath = (std::filesystem::path(dataPath) / filename).string();
+                hasQuickload = std::filesystem::exists(filepath);
+            }
+        }
+
+        if (hasQuickload && sys) {
             sys->PauseWorker();
             isPaused = true;
-        }
-        QuickLoad();
+            std::cout << "[QueueView] Quick?load file found, worker paused.\n";
+            QuickLoad();
+        }  
     }
 
     void QueueView::RefreshViewList() {
@@ -198,7 +213,6 @@ namespace GUI {
         float contentWidth = ImGui::GetContentRegionAvail().x;
         float spacing = ImGui::GetStyle().ItemSpacing.x;
 
-        // Row 1: Queue, Cancel (2 buttons)
         int numButtons1 = 2;
         float buttonWidth1 = (contentWidth - spacing * (numButtons1 - 1)) / numButtons1;
         if (buttonWidth1 < 0) buttonWidth1 = 0;
@@ -214,7 +228,6 @@ namespace GUI {
 
         ImGui::Separator();
 
-        // Row 2: Pause/Resume, Stop, Clear Queue, Clear All (4 buttons)
         int numButtons2 = 4;
         float buttonWidth2 = (contentWidth - spacing * (numButtons2 - 1)) / numButtons2;
         if (buttonWidth2 < 0) buttonWidth2 = 0;
@@ -246,7 +259,6 @@ namespace GUI {
 
         ImGui::Separator();
 
-        // Queue table
         if (ImGui::BeginTable("QueueItems", 4,
             ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
             ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 75.0f);
@@ -451,7 +463,7 @@ namespace GUI {
             if (dataPath.empty()) return;
 
             std::filesystem::create_directories(dataPath);
-            std::string filename = viewName + "_" + std::to_string(GetID()) + ".json";
+            std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
 
             auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
@@ -486,7 +498,7 @@ namespace GUI {
                 dataPath = filePathSys->GetPath("DefaultProject");
             if (dataPath.empty()) return;
 
-            std::string filename = viewName + "_" + std::to_string(GetID()) + ".json";
+            std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
             if (!std::filesystem::exists(filepath)) return;
 

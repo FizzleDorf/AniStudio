@@ -196,7 +196,6 @@ namespace GUI {
             else
                 m_entityManager.AddComponent<ConversionComponent>(entity);
         }
-        // Additional components can be added here as needed.
     }
 
     bool DiffusionView::IsComponentPresent(EntityID entity, const std::string& name) const {
@@ -719,12 +718,17 @@ namespace GUI {
 
     void DiffusionView::Deserialize(const nlohmann::json& j) {
         try {
+            if (txt2imgEntity != 0) m_entityManager.DestroyEntity(txt2imgEntity);
+            if (img2imgEntity != 0) m_entityManager.DestroyEntity(img2imgEntity);
+            if (editEntity != 0) m_entityManager.DestroyEntity(editEntity);
+
             if (j.contains("txt2imgEntity"))
-                m_entityManager.DeserializeEntity(j["txt2imgEntity"], txt2imgEntity);
+                txt2imgEntity = m_entityManager.DeserializeEntity(j["txt2imgEntity"]);
             if (j.contains("img2imgEntity"))
-                m_entityManager.DeserializeEntity(j["img2imgEntity"], img2imgEntity);
+                img2imgEntity = m_entityManager.DeserializeEntity(j["img2imgEntity"]);
             if (j.contains("editEntity"))
-                m_entityManager.DeserializeEntity(j["editEntity"], editEntity);
+                editEntity = m_entityManager.DeserializeEntity(j["editEntity"]);
+
             if (j.contains("componentVisibility"))
                 componentVisibility = j["componentVisibility"];
             if (j.contains("currentMode"))
@@ -812,12 +816,16 @@ namespace GUI {
 
     void DiffusionView::QuickSave() {
         try {
-            std::string dataPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("ProjectDataPath") : "";
+            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            if (!filePathSys) return;
+
+            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
             if (dataPath.empty())
-                dataPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
+                dataPath = filePathSys->GetPath("DefaultProject");
             if (dataPath.empty()) return;
+
             std::filesystem::create_directories(dataPath);
-            std::string filename = viewName + "_" + std::to_string(GetID()) + ".json";
+            std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
             SaveMetadataToJson(filepath);
         }
@@ -826,11 +834,15 @@ namespace GUI {
 
     void DiffusionView::QuickLoad() {
         try {
-            std::string dataPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("ProjectDataPath") : "";
+            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            if (!filePathSys) return;
+
+            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
             if (dataPath.empty())
-                dataPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
+                dataPath = filePathSys->GetPath("DefaultProject");
             if (dataPath.empty()) return;
-            std::string filename = viewName + "_" + std::to_string(GetID()) + ".json";
+
+            std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
             if (!std::filesystem::exists(filepath)) return;
             LoadMetadataFromJson(filepath);

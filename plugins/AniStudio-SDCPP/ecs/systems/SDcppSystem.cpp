@@ -53,9 +53,14 @@ namespace ECS {
             pauseWorker = true;
         }
         StopCurrentTask();
-        ClearAllTasks();
         if (workerThread.joinable()) workerThread.join();
-        if (m_threadPool) m_threadPool->terminateAll();
+        if (m_threadPool) {
+            m_threadPool->terminateAll();
+            m_threadPool.reset();
+        }
+        for (auto& task : taskQueue) {
+            task.sdContext = nullptr;
+        }
     }
 
     void SDCPPSystem::TerminateImmediately() {
@@ -503,7 +508,21 @@ namespace ECS {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (pauseWorker || shuttingDown) return;
         if (taskQueue.empty() || hasActiveTask) return;
-        if (!m_threadPool || !m_cacheSystem) return;
+        if (!m_threadPool) {
+            m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
+            if (!m_threadPool) {
+                std::cerr << "[SDCPPSystem] ThreadPoolSystem not available!\n";
+                return;
+            }
+        }
+
+        if (!m_cacheSystem) {
+            m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
+            if (!m_cacheSystem) {
+                std::cerr << "[SDCPPSystem] ModelCacheSystem not available!\n";
+                return;
+            }
+        }
 
         auto& diffusionPool = m_threadPool->getDiffusionPool();
 
@@ -515,7 +534,11 @@ namespace ECS {
                 if (task.taskType == TaskType::Inference || task.taskType == TaskType::Img2Img ||
                     task.taskType == TaskType::Img2Vid || task.taskType == TaskType::Edit) {
                     task.sdContext = m_cacheSystem->getOrCreateContext(task.metadata);
-                    if (!task.sdContext) break;
+                    if (!task.sdContext) {
+                        std::cerr << "[SDCPPSystem] Failed to create context for task, removing it\n";
+                        it = taskQueue.erase(it);
+                        continue;
+                    }
                 }
             }
 

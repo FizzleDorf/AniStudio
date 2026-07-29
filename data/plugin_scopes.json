@@ -1,5 +1,6 @@
 {
     "pluginScopes": {
+        "AniStudio-SDCPP_CPU": false,
         "AniStudio-SDCPP_CUDA": false
     },
     "version": "1.0"

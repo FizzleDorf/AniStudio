@@ -10,33 +10,33 @@
 #include <regex>
 #include <fstream>
 #include <imgui.h>
+#include "OpenGLWrapper.hpp"
+#include <stb_image.h>
 
 namespace GUI {
 
+    PluginView::~PluginView() {
+        for (auto& plugin : m_availablePlugins) {
+            if (plugin.logoTexture != 0) {
+                glDeleteTextures(1, &plugin.logoTexture);
+                plugin.logoTexture = 0;
+            }
+        }
+    }
+
     void PluginView::Init() {
         std::filesystem::path buildPath = std::filesystem::current_path();
-
         std::filesystem::path pluginsPath = buildPath / "plugins";
-        m_searchDirectories.push_back(PluginDirectoryInfo(pluginsPath, true));
-
-        std::filesystem::path addonsPath = buildPath / "addons";
-        m_searchDirectories.push_back(PluginDirectoryInfo(addonsPath, true));
-
         std::filesystem::create_directories(pluginsPath);
-        std::filesystem::create_directories(addonsPath);
 
         m_pluginManager.setStagingDirectory(pluginsPath.string());
 
         RefreshAvailablePlugins();
         LoadPluginScopeConfig();
-        SelectAllDirectories();
 
         m_pluginManager.enableHotReload(m_hotReloadEnabled);
 
-        std::cout << "[PluginView] Initialized with " << m_searchDirectories.size() << " search directories" << std::endl;
-        std::cout << "[PluginView] Current path: " << buildPath << std::endl;
-        std::cout << "[PluginView] Plugin search path: " << pluginsPath << std::endl;
-        std::cout << "[PluginView] Addon search path: " << addonsPath << std::endl;
+        std::cout << "[PluginView] Initialized" << std::endl;
     }
 
     void PluginView::Update(float deltaT) {
@@ -46,52 +46,73 @@ namespace GUI {
                 m_statusMessage.clear();
             }
         }
+
+        m_pluginManager.updatePlugins(deltaT);
     }
 
     void PluginView::Render() {
         if (!m_hotReloadWasEnabled && m_hotReloadEnabled) {
             m_pluginManager.enableHotReload(true);
             m_hotReloadWasEnabled = true;
-            std::cout << "[PluginView] Hot reload re-enabled because PluginView opened" << std::endl;
         }
 
         ImGui::SetNextWindowSize(ImVec2(1400, 800), ImGuiCond_FirstUseEver);
 
-        bool windowShouldClose = false;
-        if (ImGui::Begin(GetWindowTitle().c_str(), &windowShouldClose)) {
-            if (windowShouldClose) {
-                if (m_hotReloadWasEnabled) {
-                    m_pluginManager.enableHotReload(false);
-                    m_hotReloadWasEnabled = false;
-                    std::cout << "[PluginView] Hot reload disabled because PluginView was closed" << std::endl;
-                }
-
-                std::unordered_map<std::string, std::any> eventData;
-                eventData["workspaceID"] = GetID();
-                eventData["viewTypeName"] = viewName;
-                ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
-            }
-
+        if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
             RenderMainContent();
         }
         ImGui::End();
 
-        windowOpen = !windowShouldClose;
+        if (!windowOpen) {
+            if (m_hotReloadWasEnabled) {
+                m_pluginManager.enableHotReload(false);
+                m_hotReloadWasEnabled = false;
+            }
+            std::unordered_map<std::string, std::any> eventData;
+            eventData["workspaceID"] = GetID();
+            eventData["viewTypeName"] = viewName;
+            ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+        }
     }
 
     void PluginView::RenderMainContent() {
-        ImGui::BeginChild("PluginSplit", ImVec2(0, -30), false);
-
-        ImGui::BeginChild("FilterList", ImVec2(m_filterListWidth, 0), true);
-        RenderFilterList();
+        ImGui::BeginChild("Toolbar", ImVec2(0, 30), false);
+        {
+            ImGui::Checkbox("Hot Reload", &m_hotReloadEnabled);
+            ImGui::SameLine();
+            if (ImGui::Button("Refresh Plugins")) {
+                RefreshAvailablePlugins();
+                LoadPluginScopeConfig();
+                m_selectedPluginForDetails.clear();
+            }
+            ImGui::SameLine();
+            ImGui::Text("| Available: %zu", m_availablePlugins.size());
+            int activeCount = std::count_if(m_availablePlugins.begin(), m_availablePlugins.end(),
+                [](const AvailablePluginInfo& p) { return p.isLoaded && p.isEnabled; });
+            ImGui::SameLine();
+            ImGui::Text("Active: %d", activeCount);
+        }
         ImGui::EndChild();
 
-        ImGui::SameLine();
+        ImGui::Separator();
 
-        ImGui::BeginChild("ContentArea", ImVec2(0, 0), true);
-        RenderPluginLists();
-        ImGui::EndChild();
+        ImGui::BeginChild("MainSplit");
+        {
+            float leftWidth = ImGui::GetContentRegionAvail().x * 0.55f;
+            ImGui::BeginChild("LeftPanel", ImVec2(leftWidth, 0), true);
+            {
+                RenderPluginLists();
+            }
+            ImGui::EndChild();
 
+            ImGui::SameLine();
+
+            ImGui::BeginChild("RightPanel", ImVec2(0, 0), true);
+            {
+                RenderSelectedPluginDetails();
+            }
+            ImGui::EndChild();
+        }
         ImGui::EndChild();
 
         ImGui::Separator();
@@ -99,399 +120,189 @@ namespace GUI {
     }
 
     void PluginView::RenderPluginLists() {
-        float availableHeight = ImGui::GetContentRegionAvail().y;
-        float listsHeight = availableHeight * 0.5f;
-
-        ImGui::BeginChild("PluginListsArea", ImVec2(0, listsHeight), true);
-        {
-            if (ImGui::BeginTable("PluginListsTable", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_Borders)) {
-                ImGui::TableSetupColumn("Available Plugins", ImGuiTableColumnFlags_WidthFixed, 400.0f);
-                ImGui::TableSetupColumn("Active Plugins", ImGuiTableColumnFlags_WidthStretch);
-                ImGui::TableHeadersRow();
-
-                ImGui::TableNextRow();
-
-                ImGui::TableSetColumnIndex(0);
-                ImGui::BeginChild("AvailablePluginsColumn", ImVec2(0, 0), false);
-                RenderAvailablePluginsList();
-                ImGui::EndChild();
-
-                ImGui::TableSetColumnIndex(1);
-                ImGui::BeginChild("ActivePluginsColumn", ImVec2(0, 0), false);
-                RenderActivePluginsList();
-                ImGui::EndChild();
-
-                ImGui::EndTable();
-            }
-        }
-        ImGui::EndChild();
-
-        ImGui::Separator();
-
-        ImGui::BeginChild("PluginDetailsArea", ImVec2(0, 0), true);
-        RenderPluginDetails();
-        ImGui::EndChild();
-    }
-
-    void PluginView::RenderFilterList() {
-        ImGui::Text("Plugin Search Directories");
-        ImGui::Separator();
-
-        if (ImGui::Button("Add Directory", ImVec2(-1, 0))) {
-            std::string selectedPath;
-            if (FileDialog::SelectFolder("Select Plugin Directory", selectedPath)) {
-                if (!selectedPath.empty()) {
-                    AddSearchDirectory(std::filesystem::path(selectedPath));
-                    RefreshAvailablePlugins();
-                }
-            }
+        std::vector<AvailablePluginInfo*> inactive, preloaded, active;
+        for (auto& p : m_availablePlugins) {
+            if (p.isLoaded && p.isEnabled)
+                active.push_back(&p);
+            else if (p.isLoaded && !p.isEnabled)
+                preloaded.push_back(&p);
+            else
+                inactive.push_back(&p);
         }
 
-        if (ImGui::Button("Refresh All", ImVec2(-1, 0))) {
-            RefreshAvailablePlugins();
-            ShowStatus("Refreshed plugin directories", 2.0f);
-        }
-
-        ImGui::Separator();
-
-        if (ImGui::Button("Show All", ImVec2(-1, 0))) {
-            SelectAllDirectories();
-        }
-        if (ImGui::Button("Deselect All", ImVec2(-1, 0))) {
-            DeselectAllDirectories();
-        }
-
-        ImGui::Separator();
-
-        for (const auto& dirInfo : m_searchDirectories) {
-            std::string displayName = dirInfo.displayName;
-            if (dirInfo.isDefault) {
-                displayName += " [Default]";
-            }
-
-            bool isSelected = m_selectedDirectories.find(dirInfo.displayName) != m_selectedDirectories.end();
-
-            ImGui::PushStyleColor(ImGuiCol_Text, isSelected ?
-                ImVec4(0.4f, 0.8f, 1.0f, 1.0f) : ImVec4(0.8f, 0.8f, 0.8f, 1.0f));
-
-            bool clicked = ImGui::Selectable(
-                displayName.c_str(),
-                isSelected,
-                ImGuiSelectableFlags_AllowDoubleClick
-            );
-
+        auto renderSection = [this](const char* label, const std::vector<AvailablePluginInfo*>& plugins, const ImVec4& color) {
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            bool expanded = ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen);
             ImGui::PopStyleColor();
-
-            if (clicked) {
-                HandleDirectorySelection(dirInfo.displayName,
-                    ImGui::GetIO().KeyCtrl, ImGui::GetIO().KeyShift);
-            }
-
-            if (ImGui::IsItemHovered()) {
-                ImGui::BeginTooltip();
-                ImGui::Text("Path: %s", dirInfo.path.string().c_str());
-                ImGui::Text("Type: %s", dirInfo.isDefault ? "Default" : "Custom");
-                ImGui::EndTooltip();
-            }
-
-            if (!dirInfo.isDefault && ImGui::BeginPopupContextItem()) {
-                if (ImGui::MenuItem("Remove Directory")) {
-                    RemoveSearchDirectory(dirInfo.path);
-                    RefreshAvailablePlugins();
-                }
-                ImGui::EndPopup();
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Selected: %zu/%zu", m_selectedDirectories.size(), m_searchDirectories.size());
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ctrl+Click: Multi-select");
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Right-Click: Options");
-    }
-
-    void PluginView::RenderAvailablePluginsList() {
-        ImGui::BeginChild("AvailablePluginsList", ImVec2(0, 0), false);
-        ImGui::Text("Available Plugins in Selected Directories");
-        ImGui::Separator();
-
-        std::vector<AvailablePluginInfo*> filteredPlugins;
-        for (auto& plugin : m_availablePlugins) {
-            if (IsPluginInSelectedDirectories(plugin)) {
-                filteredPlugins.push_back(&plugin);
-            }
-        }
-
-        if (filteredPlugins.empty()) {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No plugins found in selected directories");
-        }
-        else {
-            for (auto* plugin : filteredPlugins) {
-                ImVec4 color;
-                if (plugin->isLoaded && plugin->isEnabled) {
-                    color = ImVec4(0.5f, 1.0f, 0.5f, 1.0f);
-                }
-                else if (plugin->isLoaded) {
-                    color = ImVec4(1.0f, 1.0f, 0.5f, 1.0f);
+            if (expanded) {
+                if (plugins.empty()) {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), " (none)");
                 }
                 else {
-                    color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f);
-                }
-
-                ImGui::PushStyleColor(ImGuiCol_Text, color);
-                bool isSelected = (m_selectedPluginForDetails == plugin->name);
-
-                if (ImGui::Selectable(plugin->name.c_str(), isSelected)) {
-                    m_selectedPluginForDetails = plugin->name;
-                }
-
-                ImGui::PopStyleColor();
-
-                if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("Name: %s", plugin->name.c_str());
-                    ImGui::Text("Directory: %s", plugin->directory.string().c_str());
-                    ImGui::Text("Source: %s", plugin->sourceDirectory.c_str());
-                    ImGui::Text("Status: %s", plugin->isLoaded ? (plugin->isEnabled ? "Active" : "Loaded") : "Not Loaded");
-                    ImGui::EndTooltip();
-                }
-
-                if (ImGui::BeginPopupContextItem()) {
-                    if (!plugin->isLoaded) {
-                        if (ImGui::MenuItem("Load Plugin")) {
-                            LoadPlugin(plugin->name);
+                    for (auto* plugin : plugins) {
+                        bool isSelected = (m_selectedPluginForDetails == plugin->name);
+                        if (ImGui::Selectable(plugin->name.c_str(), isSelected)) {
+                            m_selectedPluginForDetails = plugin->name;
+                            LoadVersionList(plugin->name);
+                        }
+                        if (ImGui::BeginPopupContextItem()) {
+                            if (!plugin->isLoaded) {
+                                if (ImGui::MenuItem("Load")) {
+                                    LoadPlugin(plugin->name);
+                                }
+                            }
+                            else if (!plugin->isEnabled) {
+                                if (ImGui::MenuItem("Enable")) {
+                                    EnablePlugin(plugin->name);
+                                }
+                                if (ImGui::MenuItem("Reload")) {
+                                    ReloadPlugin(plugin->name);
+                                }
+                                if (ImGui::MenuItem("Unload")) {
+                                    UnloadPlugin(plugin->name);
+                                }
+                            }
+                            else {
+                                if (ImGui::MenuItem("Disable")) {
+                                    DisablePlugin(plugin->name);
+                                }
+                                if (ImGui::MenuItem("Reload")) {
+                                    ReloadPlugin(plugin->name);
+                                }
+                                if (ImGui::MenuItem("Unload")) {
+                                    UnloadPlugin(plugin->name);
+                                }
+                            }
+                            ImGui::EndPopup();
+                        }
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::BeginTooltip();
+                            ImGui::Text("Name: %s", plugin->name.c_str());
+                            ImGui::Text("Directory: %s", plugin->directory.string().c_str());
+                            ImGui::Text("State: %s", plugin->isLoaded ? (plugin->isEnabled ? "Active" : "Preloaded") : "Inactive");
+                            ImGui::EndTooltip();
                         }
                     }
-                    else {
-                        if (!plugin->isEnabled) {
-                            if (ImGui::MenuItem("Enable Plugin")) {
-                                EnablePlugin(plugin->name);
-                            }
-                        }
-                        else {
-                            if (ImGui::MenuItem("Disable Plugin")) {
-                                DisablePlugin(plugin->name);
-                            }
-                        }
-                        if (ImGui::MenuItem("Reload Plugin")) {
-                            ReloadPlugin(plugin->name);
-                        }
-                        if (ImGui::MenuItem("Unload Plugin")) {
-                            UnloadPlugin(plugin->name);
-                        }
-                    }
-                    ImGui::EndPopup();
                 }
             }
-        }
+            };
 
-        ImGui::EndChild();
-        ImGui::Text("Plugins: %zu", filteredPlugins.size());
+        renderSection("Inactive Plugins", inactive, ImVec4(0.7f, 0.7f, 0.7f, 1.0f));
+        renderSection("Preloaded Plugins (loaded, not active)", preloaded, ImVec4(1.0f, 1.0f, 0.5f, 1.0f));
+        renderSection("Active Plugins", active, ImVec4(0.5f, 1.0f, 0.5f, 1.0f));
     }
 
-    void PluginView::RenderActivePluginsList() {
-        ImGui::BeginChild("ActivePluginsList", ImVec2(0, 0), false);
-        ImGui::Text("Active Plugins");
-        ImGui::Separator();
-
-        auto loadedPlugins = m_pluginManager.getLoadedPlugins();
-
-        std::vector<const Plugins::PluginInfo*> activePlugins;
-        for (const auto& plugin : loadedPlugins) {
-            if (plugin.enabled) {
-                activePlugins.push_back(&plugin);
-            }
-        }
-
-        if (activePlugins.empty()) {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No active plugins");
-        }
-        else {
-            for (const auto* plugin : activePlugins) {
-                ImVec4 stateColor = GetPluginStateColor(*plugin);
-                std::string displayName = plugin->name;
-
-                if (plugin->hotReloadPending) {
-                    displayName += " [HOT RELOAD PENDING v" + std::to_string(plugin->nextVersion) + "]";
-                    stateColor = ImVec4(1.0f, 1.0f, 0.5f, 1.0f);
-                }
-                else if (plugin->currentVersion > 0) {
-                    displayName += " [v" + std::to_string(plugin->currentVersion) + "]";
-                }
-
-                ImGui::PushStyleColor(ImGuiCol_Text, stateColor);
-                bool isSelected = (m_selectedPluginForDetails == plugin->name);
-
-                if (ImGui::Selectable(displayName.c_str(), isSelected)) {
-                    m_selectedPluginForDetails = plugin->name;
-                }
-                ImGui::PopStyleColor();
-
-                if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("Name: %s", plugin->name.c_str());
-                    ImGui::Text("Version: %s", plugin->version.c_str());
-                    ImGui::Text("DLL Version: v%u", plugin->currentVersion);
-                    ImGui::Text("Path: %s", plugin->path.c_str());
-                    if (plugin->hotReloadPending) {
-                        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f), "Hot reload pending!");
-                    }
-                    ImGui::EndTooltip();
-                }
-
-                if (ImGui::BeginPopupContextItem()) {
-                    if (ImGui::MenuItem("Disable Plugin")) {
-                        DisablePlugin(plugin->name);
-                    }
-                    if (ImGui::MenuItem("Reload Plugin")) {
-                        ReloadPlugin(plugin->name);
-                    }
-                    if (ImGui::MenuItem("Unload Plugin")) {
-                        UnloadPlugin(plugin->name);
-                    }
-                    ImGui::EndPopup();
-                }
-            }
-        }
-
-        ImGui::EndChild();
-        ImGui::Text("Active: %zu", activePlugins.size());
-    }
-
-    void PluginView::RenderPluginDetails() {
+    void PluginView::RenderSelectedPluginDetails() {
         if (m_selectedPluginForDetails.empty()) {
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Select a plugin to view details");
+            return;
         }
-        else {
-            auto loadedPlugins = m_pluginManager.getLoadedPlugins();
-            auto pluginIt = std::find_if(loadedPlugins.begin(), loadedPlugins.end(),
-                [this](const Plugins::PluginInfo& p) { return p.name == m_selectedPluginForDetails; });
 
-            if (pluginIt != loadedPlugins.end()) {
-                const auto& plugin = *pluginIt;
-                auto* availPlugin = FindAvailablePlugin(m_selectedPluginForDetails);
+        auto* availPlugin = FindAvailablePlugin(m_selectedPluginForDetails);
+        if (!availPlugin) {
+            ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Plugin not found");
+            return;
+        }
 
-                ImGui::Text("Plugin Details");
-                ImGui::Separator();
+        if (availPlugin->logoTexture == 0) {
+            availPlugin->logoTexture = LoadLogoTexture(availPlugin->directory.string());
+        }
+        if (availPlugin->logoTexture != 0) {
+            ImGui::Image((ImTextureID)(intptr_t)availPlugin->logoTexture, ImVec2(128, 128));
+            ImGui::Separator();
+        }
 
-                ImGui::Text("Name: %s", plugin.name.c_str());
-                ImGui::Text("Version: %s", plugin.version.c_str());
-                ImGui::Text("Path: %s", plugin.path.c_str());
+        ImGui::Text("Name: %s", availPlugin->name.c_str());
+        ImGui::Text("Directory: %s", availPlugin->directory.string().c_str());
+        ImGui::Text("Source: %s", availPlugin->sourceDirectory.c_str());
 
-                ImVec4 stateColor = GetPluginStateColor(plugin);
-                ImGui::TextColored(stateColor, "State: %s", GetPluginStateText(plugin));
-
-                ImGui::Separator();
-
-                ImGui::Text("Load Scope:");
-                ImGui::SameLine();
-                if (availPlugin) {
-                    bool isProject = availPlugin->isProjectScope;
-                    if (ImGui::RadioButton("Global", !isProject)) {
-                        SetPluginScope(plugin.name, false);
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::RadioButton("Project", isProject)) {
-                        SetPluginScope(plugin.name, true);
-                    }
-                    ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-                        isProject ? "(saved per-project)" : "(saved globally)");
-                }
-
-                ImGui::Separator();
-
-                ImGui::Text("Versioned Hot Reload Information:");
-                ImGui::Text("Current DLL Version: v%u", plugin.currentVersion);
-                ImGui::Text("Next DLL Version: v%u", plugin.nextVersion);
-                if (!plugin.activeDllPath.empty()) {
-                    ImGui::Text("Active DLL: %s", plugin.activeDllPath.c_str());
-                }
-                if (!plugin.stagingPath.empty()) {
-                    ImGui::Text("Staging Dir: %s", plugin.stagingPath.c_str());
-                }
-
-                if (plugin.hotReloadPending) {
-                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f),
-                        "Versioned hot reload pending! Will create v%u", plugin.nextVersion);
-                    ImGui::Text("Next update cycle will reload this plugin with new version");
-                }
-
-                ImGui::Separator();
-
-                if (plugin.loaded) {
-                    if (plugin.enabled) {
-                        if (ImGui::Button("Disable", ImVec2(100, 0))) {
-                            DisablePlugin(plugin.name);
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Button("Reload", ImVec2(100, 0))) {
-                            ReloadPlugin(plugin.name);
-                        }
-                    }
-                    else {
-                        if (ImGui::Button("Enable", ImVec2(100, 0))) {
-                            EnablePlugin(plugin.name);
-                        }
-                    }
-
-                    ImGui::SameLine();
-                    if (ImGui::Button("Unload", ImVec2(100, 0))) {
-                        UnloadPlugin(plugin.name);
-                    }
-                }
-                else {
-                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Plugin not loaded");
-                }
-
-                ImGui::Separator();
-
-                if (plugin.instance) {
-                    ImGui::Text("Plugin Instance: Available");
-                    ImGui::Text("Initialized: %s", plugin.instance->IsInitialized() ? "Yes" : "No");
-                }
-                else {
-                    ImGui::Text("Plugin Instance: None");
-                }
+        const char* stateText = "Inactive";
+        ImVec4 stateColor = ImVec4(0.6f, 0.6f, 0.6f, 1.0f);
+        if (availPlugin->isLoaded) {
+            if (availPlugin->isEnabled) {
+                stateText = "Active";
+                stateColor = ImVec4(0.5f, 1.0f, 0.5f, 1.0f);
             }
             else {
-                auto* availablePlugin = FindAvailablePlugin(m_selectedPluginForDetails);
-                if (availablePlugin) {
-                    ImGui::Text("Available Plugin Details");
-                    ImGui::Separator();
+                stateText = "Preloaded";
+                stateColor = ImVec4(1.0f, 1.0f, 0.5f, 1.0f);
+            }
+        }
+        ImGui::TextColored(stateColor, "State: %s", stateText);
 
-                    ImGui::Text("Name: %s", availablePlugin->name.c_str());
-                    ImGui::Text("Directory: %s", availablePlugin->directory.string().c_str());
-                    ImGui::Text("Source Directory: %s", availablePlugin->sourceDirectory.c_str());
-                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Status: Not Loaded");
+        auto loadedPlugins = m_pluginManager.getLoadedPlugins();
+        auto it = std::find_if(loadedPlugins.begin(), loadedPlugins.end(),
+            [this](const Plugins::PluginInfo& p) { return p.name == m_selectedPluginForDetails; });
+        if (it != loadedPlugins.end()) {
+            const auto& plugin = *it;
+            ImGui::Text("Version: %s", plugin.version.c_str());
+            ImGui::Text("DLL Version: v%u", plugin.currentVersion);
+            if (plugin.hotReloadPending) {
+                ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.5f, 1.0f), "Hot reload pending to v%u", plugin.nextVersion);
+            }
+        }
 
-                    ImGui::Separator();
+        ImGui::Separator();
 
-                    ImGui::Text("Load Scope:");
-                    ImGui::SameLine();
-                    bool isProject = availablePlugin->isProjectScope;
-                    if (ImGui::RadioButton("Global", !isProject)) {
-                        availablePlugin->isProjectScope = false;
-                        SavePluginScopeConfig();
-                    }
-                    ImGui::SameLine();
-                    if (ImGui::RadioButton("Project", isProject)) {
-                        availablePlugin->isProjectScope = true;
-                        SavePluginScopeConfig();
-                    }
-                    ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f),
-                        isProject ? "(will save per-project)" : "(will save globally)");
+        bool isProject = availPlugin->isProjectScope;
+        if (ImGui::RadioButton("Global", !isProject)) {
+            SetPluginScope(availPlugin->name, false);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Project", isProject)) {
+            SetPluginScope(availPlugin->name, true);
+        }
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), isProject ? "(per-project)" : "(global)");
 
-                    ImGui::Separator();
+        ImGui::Separator();
 
-                    if (ImGui::Button("Load Plugin", ImVec2(150, 0))) {
-                        LoadPlugin(availablePlugin->name);
-                    }
+        if (!availPlugin->isLoaded) {
+            if (ImGui::Button("Load", ImVec2(100, 0))) {
+                LoadPlugin(availPlugin->name);
+            }
+        }
+        else {
+            if (availPlugin->isEnabled) {
+                if (ImGui::Button("Disable", ImVec2(100, 0))) {
+                    DisablePlugin(availPlugin->name);
+                }
+                ImGui::SameLine();
+            }
+            else {
+                if (ImGui::Button("Enable", ImVec2(100, 0))) {
+                    EnablePlugin(availPlugin->name);
+                }
+                ImGui::SameLine();
+            }
+            if (ImGui::Button("Reload", ImVec2(100, 0))) {
+                ReloadPlugin(availPlugin->name);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Unload", ImVec2(100, 0))) {
+                UnloadPlugin(availPlugin->name);
+            }
+        }
+
+        ImGui::Separator();
+
+        ImGui::Text("Available Versions:");
+        auto versionsIt = m_pluginVersions.find(availPlugin->name);
+        if (versionsIt != m_pluginVersions.end() && !versionsIt->second.empty()) {
+            for (uint32_t ver : versionsIt->second) {
+                bool isActive = (it != loadedPlugins.end() && ver == it->currentVersion);
+                if (isActive) {
+                    ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "  v%u (active)", ver);
                 }
                 else {
-                    ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f), "Selected plugin not found");
+                    if (ImGui::Selectable(("v" + std::to_string(ver)).c_str(), false)) {
+                        SwitchToVersion(availPlugin->name, ver);
+                    }
                 }
             }
+        }
+        else {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No version files found");
         }
     }
 
@@ -504,21 +315,23 @@ namespace GUI {
         }
         else {
             bool actualHotReloadState = m_pluginManager.isHotReloadEnabled();
-            ImGui::Text("Ready - Hot reload: %s | Available: %zu | Active: %zu",
+            int activeCount = std::count_if(m_availablePlugins.begin(), m_availablePlugins.end(),
+                [](const AvailablePluginInfo& p) { return p.isLoaded && p.isEnabled; });
+            ImGui::Text("Ready - Hot reload: %s | Available: %zu | Active: %d",
                 actualHotReloadState ? "ENABLED" : "DISABLED",
                 m_availablePlugins.size(),
-                std::count_if(m_availablePlugins.begin(), m_availablePlugins.end(),
-                    [](const AvailablePluginInfo& p) { return p.isEnabled; }));
+                activeCount);
         }
     }
 
     void PluginView::RefreshAvailablePlugins() {
         m_availablePlugins.clear();
 
-        for (const auto& dirInfo : m_searchDirectories) {
-            if (std::filesystem::exists(dirInfo.path)) {
-                DiscoverPluginsInDirectory(dirInfo.path);
-            }
+        std::filesystem::path buildPath = std::filesystem::current_path();
+        std::filesystem::path pluginsPath = buildPath / "plugins";
+
+        if (std::filesystem::exists(pluginsPath)) {
+            DiscoverPluginsInDirectory(pluginsPath);
         }
 
         auto loadedPlugins = m_pluginManager.getLoadedPlugins();
@@ -539,22 +352,13 @@ namespace GUI {
     void PluginView::DiscoverPluginsInDirectory(const std::filesystem::path& searchDir) {
         try {
             if (!std::filesystem::exists(searchDir)) {
-                std::cout << "[PluginView] Search directory does not exist: " << searchDir << std::endl;
                 return;
             }
-
-            std::cout << "[PluginView] Scanning directory: " << searchDir << std::endl;
 
             for (const auto& entry : std::filesystem::directory_iterator(searchDir)) {
                 if (entry.is_directory()) {
                     std::string dirName = entry.path().filename().string();
-
-                    std::cout << "[PluginView] Found subdirectory: " << dirName << std::endl;
-
-                    if (dirName == "staging") {
-                        std::cout << "[PluginView] Skipping staging directory" << std::endl;
-                        continue;
-                    }
+                    if (dirName == "staging") continue;
 
                     auto it = std::find_if(m_availablePlugins.begin(), m_availablePlugins.end(),
                         [&](const AvailablePluginInfo& p) { return p.name == dirName; });
@@ -563,10 +367,6 @@ namespace GUI {
                         m_availablePlugins.push_back(
                             AvailablePluginInfo(dirName, entry.path(), searchDir.filename().string())
                         );
-                        std::cout << "[PluginView] Added plugin: " << dirName << " from " << searchDir.filename().string() << std::endl;
-                    }
-                    else {
-                        std::cout << "[PluginView] Plugin already exists: " << dirName << std::endl;
                     }
                 }
             }
@@ -576,31 +376,27 @@ namespace GUI {
         }
     }
 
-    void PluginView::AddSearchDirectory(const std::filesystem::path& newDir) {
-        auto it = std::find_if(m_searchDirectories.begin(), m_searchDirectories.end(),
-            [&](const PluginDirectoryInfo& info) { return info.path == newDir; });
-
-        if (it == m_searchDirectories.end()) {
-            m_searchDirectories.push_back(PluginDirectoryInfo(newDir, false));
-            ShowStatus("Added search directory: " + newDir.filename().string(), 3.0f);
-            std::cout << "[PluginView] Added search directory: " << newDir << std::endl;
+    GLuint PluginView::LoadLogoTexture(const std::string& pluginDir) {
+        std::string logoPath = (std::filesystem::path(pluginDir) / "logo.jpg").string();
+        if (!std::filesystem::exists(logoPath)) {
+            return 0;
         }
-        else {
-            ShowStatus("Directory already in search list", 3.0f);
-        }
-    }
 
-    void PluginView::RemoveSearchDirectory(const std::filesystem::path& dir) {
-        auto it = std::find_if(m_searchDirectories.begin(), m_searchDirectories.end(),
-            [&](const PluginDirectoryInfo& info) { return info.path == dir; });
-
-        if (it != m_searchDirectories.end() && !it->isDefault) {
-            std::string dirName = it->displayName;
-            m_searchDirectories.erase(it);
-            m_selectedDirectories.erase(dirName);
-            ShowStatus("Removed search directory: " + dirName, 3.0f);
-            std::cout << "[PluginView] Removed search directory: " << dir << std::endl;
+        int width, height, channels;
+        unsigned char* data = stbi_load(logoPath.c_str(), &width, &height, &channels, 4);
+        if (!data) {
+            return 0;
         }
+
+        GLuint texId;
+        glGenTextures(1, &texId);
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        stbi_image_free(data);
+
+        return texId;
     }
 
     void PluginView::LoadPlugin(const std::string& pluginName) {
@@ -610,25 +406,19 @@ namespace GUI {
             return;
         }
 
-        std::cout << "[PluginView] Loading plugin: " << pluginName << " from " << availPlugin->directory << std::endl;
-
         if (m_pluginManager.loadPlugin(availPlugin->directory.string())) {
             availPlugin->isLoaded = true;
             ShowStatus("Loaded plugin: " + pluginName, 3.0f);
-            std::cout << "[PluginView] Successfully loaded plugin: " << pluginName << std::endl;
 
             if (availPlugin->isProjectScope) {
                 m_pluginManager.SaveProjectPluginState();
-                std::cout << "[PluginView] Auto-saved project plugin state for: " << pluginName << std::endl;
             }
             else {
                 m_pluginManager.SaveGlobalPluginState();
-                std::cout << "[PluginView] Auto-saved global plugin state for: " << pluginName << std::endl;
             }
         }
         else {
             ShowStatus("Failed to load plugin: " + pluginName, 5.0f);
-            std::cerr << "[PluginView] Failed to load plugin: " << pluginName << std::endl;
         }
     }
 
@@ -640,11 +430,9 @@ namespace GUI {
 
                 if (availPlugin->isProjectScope) {
                     m_pluginManager.SaveProjectPluginState();
-                    std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
                 }
                 else {
                     m_pluginManager.SaveGlobalPluginState();
-                    std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
                 }
             }
             ShowStatus("Enabled plugin: " + pluginName, 3.0f);
@@ -662,11 +450,9 @@ namespace GUI {
 
                 if (availPlugin->isProjectScope) {
                     m_pluginManager.SaveProjectPluginState();
-                    std::cout << "[PluginView] Auto-saved project plugin state" << std::endl;
                 }
                 else {
                     m_pluginManager.SaveGlobalPluginState();
-                    std::cout << "[PluginView] Auto-saved global plugin state" << std::endl;
                 }
             }
             ShowStatus("Disabled plugin: " + pluginName, 3.0f);
@@ -707,8 +493,33 @@ namespace GUI {
             availPlugin->isProjectScope = isProjectScope;
             SavePluginScopeConfig();
             ShowStatus(std::string("Set ") + pluginName + " to " + (isProjectScope ? "project" : "global") + " scope", 3.0f);
-            std::cout << "[PluginView] " << pluginName << " scope changed to: " << (isProjectScope ? "project" : "global") << std::endl;
         }
+    }
+
+    void PluginView::SwitchToVersion(const std::string& pluginName, uint32_t version) {
+        ShowStatus("Switching to version v" + std::to_string(version) + " not fully implemented", 3.0f);
+    }
+
+    void PluginView::LoadVersionList(const std::string& pluginName) {
+        m_pluginVersions[pluginName].clear();
+
+        auto* availPlugin = FindAvailablePlugin(pluginName);
+        if (!availPlugin) return;
+
+        std::string pluginDir = availPlugin->directory.string();
+        std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so)");
+
+        for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
+            if (entry.is_regular_file()) {
+                std::string filename = entry.path().filename().string();
+                std::smatch matches;
+                if (std::regex_match(filename, matches, versionPattern)) {
+                    uint32_t ver = std::stoul(matches[1].str());
+                    m_pluginVersions[pluginName].push_back(ver);
+                }
+            }
+        }
+        std::sort(m_pluginVersions[pluginName].begin(), m_pluginVersions[pluginName].end());
     }
 
     void PluginView::SavePluginScopeConfig() {
@@ -728,7 +539,6 @@ namespace GUI {
             std::ofstream file(filepath);
             if (file.is_open()) {
                 file << j.dump(4);
-                std::cout << "[PluginView] Saved plugin scope configuration to: " << filepath << std::endl;
             }
         }
         catch (const std::exception& e) {
@@ -742,13 +552,11 @@ namespace GUI {
             std::string filepath = (dataPath / "plugin_scopes.json").string();
 
             if (!std::filesystem::exists(filepath)) {
-                std::cout << "[PluginView] No plugin scope configuration found" << std::endl;
                 return;
             }
 
             std::ifstream file(filepath);
             if (!file.is_open()) {
-                std::cerr << "[PluginView] Failed to open plugin scope config: " << filepath << std::endl;
                 return;
             }
 
@@ -759,70 +567,13 @@ namespace GUI {
                 for (auto& plugin : m_availablePlugins) {
                     if (j["pluginScopes"].contains(plugin.name)) {
                         plugin.isProjectScope = j["pluginScopes"][plugin.name];
-                        std::cout << "[PluginView] Loaded scope for " << plugin.name << ": "
-                            << (plugin.isProjectScope ? "project" : "global") << std::endl;
                     }
                 }
             }
-
-            std::cout << "[PluginView] Plugin scope configuration loaded from: " << filepath << std::endl;
         }
         catch (const std::exception& e) {
             std::cerr << "[PluginView] Failed to load plugin scope config: " << e.what() << std::endl;
         }
-    }
-
-    void PluginView::HandleDirectorySelection(const std::string& dirName, bool ctrlHeld, bool shiftHeld) {
-        if (!ctrlHeld && !shiftHeld) {
-            m_selectedDirectories.clear();
-            m_selectedDirectories.insert(dirName);
-            m_lastSelectedDirectory = dirName;
-        }
-        else if (ctrlHeld) {
-            if (m_selectedDirectories.count(dirName)) {
-                m_selectedDirectories.erase(dirName);
-            }
-            else {
-                m_selectedDirectories.insert(dirName);
-            }
-            m_lastSelectedDirectory = dirName;
-        }
-        else if (shiftHeld && !m_lastSelectedDirectory.empty()) {
-            std::vector<std::string> dirOrder;
-            for (const auto& dir : m_searchDirectories) {
-                dirOrder.push_back(dir.displayName);
-            }
-
-            auto startIt = std::find(dirOrder.begin(), dirOrder.end(), m_lastSelectedDirectory);
-            auto endIt = std::find(dirOrder.begin(), dirOrder.end(), dirName);
-
-            if (startIt != dirOrder.end() && endIt != dirOrder.end()) {
-                if (startIt > endIt) std::swap(startIt, endIt);
-
-                for (auto it = startIt; it <= endIt; ++it) {
-                    m_selectedDirectories.insert(*it);
-                }
-            }
-        }
-    }
-
-    void PluginView::SelectAllDirectories() {
-        m_selectedDirectories.clear();
-        for (const auto& dir : m_searchDirectories) {
-            m_selectedDirectories.insert(dir.displayName);
-        }
-    }
-
-    void PluginView::DeselectAllDirectories() {
-        m_selectedDirectories.clear();
-    }
-
-    bool PluginView::IsPluginInSelectedDirectories(const AvailablePluginInfo& plugin) const {
-        if (m_selectedDirectories.empty()) {
-            return true;
-        }
-
-        return m_selectedDirectories.find(plugin.sourceDirectory) != m_selectedDirectories.end();
     }
 
     AvailablePluginInfo* PluginView::FindAvailablePlugin(const std::string& pluginName) {
