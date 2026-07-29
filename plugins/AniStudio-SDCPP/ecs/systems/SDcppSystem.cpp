@@ -141,8 +141,10 @@ namespace ECS {
             HandleClearRequest();
             clearRequested = false;
         }
-        CheckTaskCompletion();
+        
         ProcessQueues();
+
+        CheckTaskCompletion();
     }
 
     void SDCPPSystem::RemoveFromQueue(size_t index) {
