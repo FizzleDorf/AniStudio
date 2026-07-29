@@ -141,8 +141,8 @@ namespace ECS {
             HandleClearRequest();
             clearRequested = false;
         }
-        ProcessQueues();
         CheckTaskCompletion();
+        ProcessQueues();
     }
 
     void SDCPPSystem::RemoveFromQueue(size_t index) {
@@ -194,6 +194,7 @@ namespace ECS {
                 break;
             }
         }
+        pauseWorker = false;
     }
 
     void SDCPPSystem::ClearQueuedTasks() {
@@ -350,6 +351,10 @@ namespace ECS {
     }
 
     bool SDCPPSystem::RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
+        if (context) {
+            sd_cancel_generation(context, SD_CANCEL_RESET);
+        }
+        
         SDCPP::ResourceManager res;
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
@@ -369,6 +374,10 @@ namespace ECS {
     }
 
     bool SDCPPSystem::RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
+        if (context) {
+            sd_cancel_generation(context, SD_CANCEL_RESET);
+        }
+        
         SDCPP::ResourceManager res;
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
@@ -388,6 +397,10 @@ namespace ECS {
     }
 
     bool SDCPPSystem::RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
+        if (context) {
+            sd_cancel_generation(context, SD_CANCEL_RESET);
+        }
+        
         SDCPP::ResourceManager res;
         sd_vid_gen_params_t params;
         sd_vid_gen_params_init(&params);
@@ -473,6 +486,7 @@ namespace ECS {
     }
 
     bool SDCPPSystem::RunConversion(const nlohmann::json& metadata) {
+        
         SDCPP::ResourceManager res;
         sd_ctx_params_t ctxParams;
         sd_ctx_params_init(&ctxParams);
@@ -658,11 +672,13 @@ namespace ECS {
                                 try { it->result.get(); }
                                 catch (...) {}
                                 it = taskQueue.erase(it);
+                                hasActiveTask = false;
                                 continue;
                             }
                         }
                         else {
                             it = taskQueue.erase(it);
+                            hasActiveTask = false;
                             continue;
                         }
                         ++it;
