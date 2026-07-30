@@ -2,6 +2,7 @@
 
 #include "stable-diffusion.h"
 #include <nlohmann/json.hpp>
+#include <stb_image.h>
 #include <string>
 #include <vector>
 #include <memory>

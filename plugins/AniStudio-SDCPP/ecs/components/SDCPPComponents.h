@@ -24,3 +24,4 @@
 #include "SDCPPSettingsComponent.hpp"
 #include "SDCPPImageComponents.hpp"
 #include "HiresComponent.hpp"
+#include "ADetailerComponent.hpp"

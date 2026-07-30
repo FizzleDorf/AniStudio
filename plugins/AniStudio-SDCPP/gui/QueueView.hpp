@@ -1,3 +1,4 @@
+// QueueView.hpp
 #pragma once
 #include "BaseView.hpp"
 #include "ViewManager.hpp"
@@ -12,7 +13,7 @@ namespace GUI {
         static constexpr const char* GetMetadataJSON() {
             return R"({
             "displayName": "Queue Manager",
-            "category": "Tools",
+            "category": "Diffusion",
             "description": "Manage and save/load the global task queue."
         })";
         }

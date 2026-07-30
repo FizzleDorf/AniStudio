@@ -15,18 +15,13 @@
 #include "SDCPPComponents.h"
 #include "SDcppSystem.hpp"
 #include "ModelCacheSystem.hpp"
-#include "ADetailerComponent.hpp"
-#include "DiffusionView.hpp"
-#include "ConvertView.hpp"
-#include "UpscaleView.hpp"
-#include "VideoDiffusionView.hpp"
-#include "QueueView.hpp"
-#include "ModelCacheView.hpp"
-#include "SDCPPSettingsTab.hpp"
+#include "SDCPPViews.h"
 
 #include <iostream>
 #include <filesystem>
 #include "MissingPathsPopup.hpp"
+
+using namespace ECS;   // Fixes EntityID and other ECS types
 
 namespace Utils {
     ECS::FilePathSystem* g_FilePathSystem = nullptr;
@@ -208,10 +203,12 @@ public:
             }
         }
 
-        viewMgr.RegisterView<GUI::DiffusionView>("DiffusionView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::Txt2ImgView>("Txt2ImgView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::Img2ImgView>("Img2ImgView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::EditView>("EditView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::ConvertView>("ConvertView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::UpscaleView>("UpscaleView", "DiffusionAddon");
-        viewMgr.RegisterView<GUI::VideoDiffusionView>("VideoDiffusionView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::Img2VidView>("Img2VidView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::QueueView>("QueueView", "DiffusionAddon");
 

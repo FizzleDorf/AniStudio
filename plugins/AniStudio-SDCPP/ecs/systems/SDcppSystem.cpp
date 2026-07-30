@@ -1,4 +1,5 @@
 #include "SDCPPSystem.hpp"
+#include "rng.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 
@@ -8,7 +9,7 @@ namespace ECS {
         : entityID(other.entityID), processing(other.processing), cancelled(other.cancelled),
         taskType(other.taskType), metadata(std::move(other.metadata)),
         fullPath(std::move(other.fullPath)), result(std::move(other.result)),
-        sdContext(other.sdContext) {
+        sdContext(other.sdContext), contextKey(std::move(other.contextKey)) {
         other.sdContext = nullptr;
     }
 
@@ -22,6 +23,7 @@ namespace ECS {
             fullPath = std::move(other.fullPath);
             result = std::move(other.result);
             sdContext = other.sdContext;
+            contextKey = std::move(other.contextKey);
             other.sdContext = nullptr;
         }
         return *this;
@@ -119,7 +121,7 @@ namespace ECS {
             if (mgr.HasComponent<SamplerComponent>(entityID)) {
                 auto& sampler = mgr.GetComponent<SamplerComponent>(entityID);
                 if (sampler.seed < 0) {
-                    sampler.seed = static_cast<int>(std::random_device{}());
+                    sampler.seed = static_cast<int>(STDDefaultRNG::generate_seed() & 0x7FFFFFFF);
                 }
             }
         }
@@ -141,7 +143,7 @@ namespace ECS {
             HandleClearRequest();
             clearRequested = false;
         }
-        
+
         ProcessQueues();
 
         CheckTaskCompletion();
@@ -346,23 +348,16 @@ namespace ECS {
         ClearQueuedTasks();
     }
 
-    uint64_t SDCPPSystem::GenerateSeed() {
-        static std::random_device rd;
-        static std::mt19937_64 gen(rd());
-        return gen();
-    }
-
     bool SDCPPSystem::RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
         if (context) {
             sd_cancel_generation(context, SD_CANCEL_RESET);
         }
-        
+
         SDCPP::ResourceManager res;
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
         if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(GenerateSeed());
-        sd_image_t* images = nullptr;
+        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());        sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
         if (ok && count > 0 && images && images[0].data) {
@@ -379,13 +374,12 @@ namespace ECS {
         if (context) {
             sd_cancel_generation(context, SD_CANCEL_RESET);
         }
-        
+
         SDCPP::ResourceManager res;
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
         if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(GenerateSeed());
-        sd_image_t* images = nullptr;
+        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());        sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
         if (ok && count > 0 && images && images[0].data) {
@@ -402,13 +396,12 @@ namespace ECS {
         if (context) {
             sd_cancel_generation(context, SD_CANCEL_RESET);
         }
-        
+
         SDCPP::ResourceManager res;
         sd_vid_gen_params_t params;
         sd_vid_gen_params_init(&params);
         if (!SDCPP::parseVideoGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(GenerateSeed());
-        sd_image_t* frames = nullptr;
+        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());        sd_image_t* frames = nullptr;
         int frameCount = 0;
         sd_audio_t* audio = nullptr;
         bool ok = generate_video(context, &params, &frames, &frameCount, &audio);
@@ -488,7 +481,7 @@ namespace ECS {
     }
 
     bool SDCPPSystem::RunConversion(const nlohmann::json& metadata) {
-        
+
         SDCPP::ResourceManager res;
         sd_ctx_params_t ctxParams;
         sd_ctx_params_init(&ctxParams);
@@ -546,18 +539,6 @@ namespace ECS {
             auto& task = *it;
             if (task.processing) continue;
 
-            if (!task.sdContext) {
-                if (task.taskType == TaskType::Inference || task.taskType == TaskType::Img2Img ||
-                    task.taskType == TaskType::Img2Vid || task.taskType == TaskType::Edit) {
-                    task.sdContext = m_cacheSystem->getOrCreateContext(task.metadata);
-                    if (!task.sdContext) {
-                        std::cerr << "[SDCPPSystem] Failed to create context for task, removing it\n";
-                        it = taskQueue.erase(it);
-                        continue;
-                    }
-                }
-            }
-
             if (task.fullPath.empty() && mgr.HasComponent<OutputImageComponent>(task.entityID)) {
                 auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
                 std::string baseName = output.fileName;
@@ -577,6 +558,38 @@ namespace ECS {
                     }
                 }
                 task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
+            }
+
+            if (task.taskType == TaskType::Inference || task.taskType == TaskType::Img2Img ||
+                task.taskType == TaskType::Img2Vid || task.taskType == TaskType::Edit) {
+
+                if (!task.sdContext) {
+                    std::string key = m_cacheSystem->computeKey(task.metadata);
+                    task.contextKey = key;
+                    sd_ctx_t* ctx = m_cacheSystem->acquireContext(key);
+                    if (!ctx) {
+                        ctx = m_cacheSystem->getOrCreateContext(task.metadata);
+                        if (ctx) {
+                            ctx = m_cacheSystem->acquireContext(key);
+                        }
+                    }
+                    if (!ctx) {
+                        std::cerr << "[SDCPPSystem] Failed to create context for task, removing it\n";
+                        it = taskQueue.erase(it);
+                        continue;
+                    }
+                    task.sdContext = ctx;
+                }
+            }
+            else if (task.taskType == TaskType::Upscaling) {
+                if (!task.sdContext) {
+                    task.sdContext = reinterpret_cast<sd_ctx_t*>(CreateUpscalerContext(task.metadata));
+                    if (!task.sdContext) {
+                        std::cerr << "[SDCPPSystem] Failed to create upscaler context, removing task\n";
+                        it = taskQueue.erase(it);
+                        continue;
+                    }
+                }
             }
 
             try {
@@ -654,6 +667,9 @@ namespace ECS {
                 break;
             }
             catch (...) {
+                if (!task.contextKey.empty() && m_cacheSystem) {
+                    m_cacheSystem->releaseContext(task.contextKey);
+                }
                 it = taskQueue.erase(it);
                 break;
             }
@@ -673,12 +689,18 @@ namespace ECS {
                             if (status == std::future_status::ready) {
                                 try { it->result.get(); }
                                 catch (...) {}
+                                if (!it->contextKey.empty() && m_cacheSystem) {
+                                    m_cacheSystem->releaseContext(it->contextKey);
+                                }
                                 it = taskQueue.erase(it);
                                 hasActiveTask = false;
                                 continue;
                             }
                         }
                         else {
+                            if (!it->contextKey.empty() && m_cacheSystem) {
+                                m_cacheSystem->releaseContext(it->contextKey);
+                            }
                             it = taskQueue.erase(it);
                             hasActiveTask = false;
                             continue;
@@ -703,6 +725,9 @@ namespace ECS {
                             else {
                                 if (std::filesystem::exists(fullPath))
                                     std::filesystem::remove(fullPath);
+                            }
+                            if (!it->contextKey.empty() && m_cacheSystem) {
+                                m_cacheSystem->releaseContext(it->contextKey);
                             }
                             it = taskQueue.erase(it);
                             hasActiveTask = false;

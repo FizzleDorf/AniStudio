@@ -59,6 +59,7 @@ namespace ECS {
             std::string fullPath;
             std::future<bool> result;
             sd_ctx_t* sdContext = nullptr;
+            std::string contextKey;
 
             TaskData() = default;
             TaskData(TaskData&& other) noexcept;
@@ -123,8 +124,6 @@ namespace ECS {
         void LoadImageViaImageSystem(EntityID targetEntity, const std::string& filePath);
         void LoadVideoViaVideoSystem(const std::string& filePath);
         void HandleClearRequest();
-
-        static uint64_t GenerateSeed();
 
         static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context);
         static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context);

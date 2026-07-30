@@ -4,10 +4,7 @@
 #include "DiffusionCallbackUtils.hpp"
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
-#include "DiffusionView.hpp"
-#include "UpscaleView.hpp"
-#include "ConvertView.hpp"
-#include "VideoDiffusionView.hpp"
+#include "BaseDiffusionView.hpp"
 #include "ContextMenuUtils.hpp"
 #include "FilePathSystem.hpp"
 #include <fstream>
@@ -31,40 +28,12 @@ namespace GUI {
         ViewQueueInfo info;
         if (!view) return info;
 
-        if (auto* dv = dynamic_cast<DiffusionView*>(view)) {
-            info.entity = dv->GetCurrentEntity();
-            int mode = dv->GetCurrentMode();
-            switch (mode) {
-            case 0: info.taskType = "Inference"; break;
-            case 1: info.taskType = "Img2Img"; break;
-            case 2: info.taskType = "Edit"; break;
-            default: break;
-            }
+        if (auto* dv = dynamic_cast<BaseDiffusionView*>(view)) {
+            info.entity = dv->GetActiveEntity();
+            info.taskType = dv->GetTaskType();
             info.valid = (info.entity != 0 && !info.taskType.empty());
             return info;
         }
-
-        if (auto* uv = dynamic_cast<UpscaleView*>(view)) {
-            info.entity = uv->GetUpscaleEntity();
-            info.taskType = "Upscaling";
-            info.valid = (info.entity != 0);
-            return info;
-        }
-
-        if (auto* cv = dynamic_cast<ConvertView*>(view)) {
-            info.entity = cv->GetConvertEntity();
-            info.taskType = "Conversion";
-            info.valid = (info.entity != 0);
-            return info;
-        }
-
-        if (auto* vdv = dynamic_cast<VideoDiffusionView*>(view)) {
-            info.entity = vdv->GetImg2VidEntity();
-            info.taskType = "Img2Vid";
-            info.valid = (info.entity != 0);
-            return info;
-        }
-
         return info;
     }
 
@@ -97,9 +66,8 @@ namespace GUI {
         if (hasQuickload && sys) {
             sys->PauseWorker();
             isPaused = true;
-            std::cout << "[QueueView] Quick?load file found, worker paused.\n";
             QuickLoad();
-        }  
+        }
     }
 
     void QueueView::RefreshViewList() {
