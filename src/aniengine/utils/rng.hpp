@@ -3,6 +3,8 @@
 
 #include <random>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 class RNG {
 public:
@@ -16,7 +18,16 @@ private:
     std::uniform_int_distribution<uint64_t> dist;
 
 public:
-    STDDefaultRNG() : generator(std::random_device{}()) {}
+    STDDefaultRNG() {
+        std::random_device rd;
+        auto now = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+        auto tid = std::this_thread::get_id();
+        // Combine entropy sources to avoid deterministic seeds on Windows/MinGW
+        uint64_t seed = static_cast<uint64_t>(rd()) ^
+            static_cast<uint64_t>(now) ^
+            std::hash<std::thread::id>{}(tid);
+        generator.seed(seed);
+    }
 
     void manual_seed(uint64_t seed) override {
         generator.seed(seed);

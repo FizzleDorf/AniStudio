@@ -6,6 +6,7 @@
 #include "SDCPPComponents.h"
 #include "Components.h"
 #include "ContextMenuUtils.hpp"
+#include "ClipboardUtilities.hpp"
 #include <memory>
 #include <unordered_map>
 #include <string>
@@ -26,13 +27,8 @@ namespace GUI {
         ECS::EntityID GetActiveEntity() const { return activeEntity; }
         virtual std::string GetTaskType() const = 0;
 
-        void ToggleComponent(const std::string& name);
-        bool IsComponentActive(const std::string& name) const;
-        void SetComponentActive(const std::string& name, bool active);
-
         virtual bool UseStateActiveSeparation() const { return true; }
 
-        // Quick save/load
         void QuickSave();
         void QuickLoad();
         void SaveMetadataToJson(const std::string& filepath);
@@ -42,7 +38,6 @@ namespace GUI {
     protected:
         ECS::EntityID stateEntity = 0;
         ECS::EntityID activeEntity = 0;
-        std::unordered_map<std::string, bool> componentVisibility;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
         virtual std::vector<std::string> GetDefaultComponents() const = 0;
@@ -61,6 +56,9 @@ namespace GUI {
     private:
         std::unordered_map<std::string, std::function<void(ECS::EntityID)>> m_componentAdders;
         void RegisterAllComponentAdders();
+
+        std::vector<std::string> GetAllComponentNames() const;
+        void AddComponentByName(ECS::EntityID entity, const std::string& name);
     };
 
 } // namespace GUI

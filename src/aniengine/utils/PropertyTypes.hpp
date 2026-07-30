@@ -5,7 +5,6 @@
 #include <string>
 #include <unordered_map>
 
- // Forward declarations for ImGui types (to avoid including imgui.h in engine)
 struct ImVec2;
 struct ImVec4;
 

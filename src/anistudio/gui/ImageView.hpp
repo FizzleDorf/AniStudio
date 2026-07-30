@@ -5,7 +5,7 @@
 #include "GUI.h"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
-#include "ContextMenuUtils.hpp"
+#include "ClipboardUtilities.hpp"
 #include <pch.h>
 
 namespace GUI {
@@ -16,7 +16,7 @@ namespace GUI {
             return R"({
             "displayName": "Image View",
             "category": "Viewers",
-            "description": "A simple image viewer with copy/paste functionality"
+            "description": "A simple image viewer with copy functionality"
         })";
         }
 
@@ -29,8 +29,7 @@ namespace GUI {
             zoom(1.0f),
             offsetX(0.0f),
             offsetY(0.0f),
-            lastEntityCount(0),
-            contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(m_entityManager)) {
+            lastEntityCount(0) {
             viewName = "ImageView";
         }
         ~ImageView() = default;
@@ -52,8 +51,6 @@ namespace GUI {
 
         std::vector<ECS::EntityID> imageEntities;
 
-        std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
-
         std::shared_ptr<ECS::ImageSystem> imageSystem;
 
         void OnImageLoaded(ECS::EntityID entityID);
@@ -67,6 +64,7 @@ namespace GUI {
         void RenderHistory();
         void RenderSelectedImage();
         void DrawGrid(int imageWidth, int imageHeight);
+        void RenderImageContextMenu(ECS::EntityID entityID);
 
         void SetZoom(float newZoom);
         void LoadImages(const std::vector<std::string>& filePaths);

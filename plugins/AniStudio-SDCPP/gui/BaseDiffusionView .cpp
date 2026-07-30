@@ -74,47 +74,19 @@ namespace GUI {
 
         auto visible = GetDefaultVisibleComponents();
         for (const auto& name : visible) {
-            componentVisibility[name] = true;
+            CopyComponentToActive(name);
         }
-        auto compIds = m_entityManager.GetEntityComponents(stateEntity);
-        for (auto cid : compIds) {
-            std::string name = m_entityManager.GetComponentNameById(cid);
-            if (componentVisibility.find(name) == componentVisibility.end()) {
-                componentVisibility[name] = false;
-            }
-        }
-
-        for (const auto& [name, visibleFlag] : componentVisibility) {
-            if (visibleFlag) {
-                CopyComponentToActive(name);
-            }
-        }
-
-        std::cout << "[BaseDiffusionView] State entity " << stateEntity
-            << " has " << m_entityManager.GetEntityComponents(stateEntity).size() << " components.\n";
-        std::cout << "[BaseDiffusionView] Active entity " << activeEntity
-            << " has " << m_entityManager.GetEntityComponents(activeEntity).size() << " components.\n";
     }
 
     void BaseDiffusionView::CopyComponentToActive(const std::string& name) {
         auto it = m_componentAdders.find(name);
-        if (it == m_componentAdders.end()) {
-            std::cerr << "[CopyComponentToActive] No adder for " << name << std::endl;
-            return;
-        }
+        if (it == m_componentAdders.end()) return;
         auto compId = m_entityManager.GetComponentTypeIdByName(name);
-        if (compId == 0) {
-            std::cerr << "[CopyComponentToActive] No component ID for " << name << std::endl;
-            return;
-        }
+        if (compId == 0) return;
         auto* stateComp = m_entityManager.GetComponentById(stateEntity, compId);
-        if (!stateComp) {
-            std::cerr << "[CopyComponentToActive] State component " << name << " not found\n";
-            return;
-        }
+        if (!stateComp) return;
         nlohmann::json compData = stateComp->Serialize();
 
-        // Remove from active if exists, then add and deserialize
         if (m_entityManager.HasComponentById(activeEntity, compId)) {
             m_entityManager.RemoveComponentById(activeEntity, compId);
         }
@@ -148,27 +120,36 @@ namespace GUI {
         }
     }
 
-    void BaseDiffusionView::ToggleComponent(const std::string& name) {
-        bool current = IsComponentActive(name);
-        SetComponentActive(name, !current);
+    std::vector<std::string> BaseDiffusionView::GetAllComponentNames() const {
+        std::vector<std::string> names;
+        for (const auto& [name, _] : m_componentAdders) {
+            names.push_back(name);
+        }
+        return names;
     }
 
-    bool BaseDiffusionView::IsComponentActive(const std::string& name) const {
-        auto it = componentVisibility.find(name);
-        if (it == componentVisibility.end()) return false;
-        return it->second;
-    }
-
-    void BaseDiffusionView::SetComponentActive(const std::string& name, bool active) {
-        if (active) {
-            if (m_componentAdders.find(name) == m_componentAdders.end()) return;
-            componentVisibility[name] = true;
-            CopyComponentToActive(name);
+    void BaseDiffusionView::AddComponentByName(ECS::EntityID entity, const std::string& name) {
+        auto it = m_componentAdders.find(name);
+        if (it != m_componentAdders.end()) {
+            it->second(entity);
+            return;
         }
-        else {
-            componentVisibility[name] = false;
-            RemoveComponentFromActive(name);
+        std::string withoutSuffix = name;
+        if (withoutSuffix.size() > 9 && withoutSuffix.substr(withoutSuffix.size() - 9) == "Component") {
+            withoutSuffix = withoutSuffix.substr(0, withoutSuffix.size() - 9);
+            auto itShort = m_componentAdders.find(withoutSuffix);
+            if (itShort != m_componentAdders.end()) {
+                itShort->second(entity);
+                return;
+            }
         }
+        std::string withSuffix = name + "Component";
+        auto itWith = m_componentAdders.find(withSuffix);
+        if (itWith != m_componentAdders.end()) {
+            itWith->second(entity);
+            return;
+        }
+        std::cerr << "[BaseDiffusionView] No adder found for component: " << name << std::endl;
     }
 
     void BaseDiffusionView::RenderComponent(ECS::ComponentTypeID compId, const std::string& name) {
@@ -181,25 +162,117 @@ namespace GUI {
             ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1), "No schema for %s", name.c_str());
             return;
         }
-        try {
-            auto props = comp->GetPropertyMap();
-            UISchema::RenderSchema(comp->schema, props);
+
+        ImGui::PushID(name.c_str());
+
+        if (ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Indent();
+
+            if (ImGui::BeginPopupContextItem(("ComponentContext_" + name).c_str())) {
+                if (ImGui::MenuItem("Copy Entity")) {
+                    Clipboard::CopyEntity(m_entityManager, activeEntity);
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Copy Component")) {
+                    Clipboard::CopyComponent(m_entityManager, activeEntity, name);
+                }
+                if (Clipboard::HasComponent() && ImGui::MenuItem("Paste Component")) {
+                    Clipboard::PasteComponent(m_entityManager, activeEntity, name);
+                }
+
+                if (Clipboard::HasEntity()) {
+                    auto compNames = Clipboard::GetEntityComponentNames(m_entityManager);
+                    if (!compNames.empty()) {
+                        if (ImGui::BeginMenu("Paste Component from Copied Entity")) {
+                            for (const auto& srcCompName : compNames) {
+                                if (ImGui::MenuItem(srcCompName.c_str())) {
+                                    Clipboard::PasteComponentFromEntity(m_entityManager, activeEntity, srcCompName,
+                                        [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+                    }
+                }
+
+                ImGui::Separator();
+
+                auto props = comp->GetPropertyMap();
+                if (!props.empty()) {
+                    if (ImGui::BeginMenu("Copy Value")) {
+                        for (const auto& [propName, propVariant] : props) {
+                            if (ImGui::MenuItem(propName.c_str())) {
+                                Clipboard::CopyProperty(m_entityManager, activeEntity, name, propName);
+                            }
+                        }
+                        ImGui::EndMenu();
+                    }
+                }
+
+                if (Clipboard::HasEntity()) {
+                    auto propNames = Clipboard::GetComponentPropertyNames(m_entityManager, name);
+                    if (!propNames.empty()) {
+                        if (ImGui::BeginMenu("Paste Value from Copied Entity")) {
+                            for (const auto& propName : propNames) {
+                                if (Clipboard::EntityClipboardHasProperty(m_entityManager, name, propName)) {
+                                    if (ImGui::MenuItem(propName.c_str())) {
+                                        Clipboard::PastePropertyFromEntity(m_entityManager, activeEntity, name, propName);
+                                    }
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+                    }
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Remove Component")) {
+                    Clipboard::RemoveComponent(m_entityManager, activeEntity, name);
+                }
+                if (ImGui::MenuItem("Reset Component")) {
+                    Clipboard::ResetComponent(m_entityManager, activeEntity, name,
+                        [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
+                }
+                ImGui::EndPopup();
+            }
+
+            auto onPropRightClick = [this, name](const std::string& propName, const nlohmann::json& value) {
+                ImGui::OpenPopup(("PropContext_" + name + "_" + propName).c_str());
+                if (ImGui::BeginPopup(("PropContext_" + name + "_" + propName).c_str())) {
+                    if (ImGui::MenuItem("Copy Value")) {
+                        Clipboard::CopyProperty(m_entityManager, activeEntity, name, propName);
+                    }
+                    if (Clipboard::HasProperty() && ImGui::MenuItem("Paste Value")) {
+                        Clipboard::PasteProperty(m_entityManager, activeEntity, name, propName);
+                    }
+                    if (Clipboard::HasEntity() && Clipboard::EntityClipboardHasProperty(m_entityManager, name, propName)) {
+                        if (ImGui::MenuItem("Paste Value from Copied Entity")) {
+                            Clipboard::PastePropertyFromEntity(m_entityManager, activeEntity, name, propName);
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+                };
+
+            UISchema::RenderSchema(comp->schema, comp->GetPropertyMap(), onPropRightClick);
+
             if (UseStateActiveSeparation()) {
                 SyncComponentToState(compId);
             }
+
+            ImGui::Unindent();
         }
-        catch (const std::exception& e) {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Error rendering %s: %s", name.c_str(), e.what());
-        }
-        catch (...) {
-            ImGui::TextColored(ImVec4(1, 0, 0, 1), "Unknown error rendering %s", name.c_str());
-        }
+
+        ImGui::PopID();
     }
 
     void BaseDiffusionView::RenderComponentsUI() {
         auto compIds = m_entityManager.GetEntityComponents(activeEntity);
         if (compIds.empty()) {
-            ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "No active components. Try toggling some on.");
+            ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "No active components.");
             return;
         }
         std::vector<std::pair<ECS::ComponentTypeID, std::string>> comps;
@@ -210,11 +283,7 @@ namespace GUI {
         std::sort(comps.begin(), comps.end(), [](auto& a, auto& b) { return a.second < b.second; });
 
         for (auto [cid, name] : comps) {
-            if (ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
-                ImGui::Indent();
-                RenderComponent(cid, name);
-                ImGui::Unindent();
-            }
+            RenderComponent(cid, name);
         }
     }
 
@@ -250,19 +319,6 @@ namespace GUI {
                 ImGui::EndMenu();
             }
 
-            if (ImGui::BeginMenu("Components")) {
-                if (ImGui::MenuItem("Reset to Defaults"))
-                    Init();
-                ImGui::Separator();
-                auto compIds = m_entityManager.GetEntityComponents(stateEntity);
-                for (auto cid : compIds) {
-                    std::string name = m_entityManager.GetComponentNameById(cid);
-                    bool present = IsComponentActive(name);
-                    if (ImGui::MenuItem(name.c_str(), nullptr, present))
-                        ToggleComponent(name);
-                }
-                ImGui::EndMenu();
-            }
             ImGui::EndMenuBar();
         }
     }
@@ -275,18 +331,78 @@ namespace GUI {
         if (ImGui::BeginPopup("DiffusionMainContext")) {
             ImGui::Text("Diffusion View");
             ImGui::Separator();
-            if (ImGui::MenuItem("Copy Entity")) {
-                contextMenuUtils->CopyEntity(activeEntity);
-            }
-            ImGui::Separator();
-            if (contextMenuUtils->HasClipboardEntity()) {
-                ImGui::TextDisabled("Clipboard: %s", contextMenuUtils->GetClipboardPreview().c_str());
+
+            if (ImGui::BeginMenu("Copy")) {
+                if (ImGui::MenuItem("Copy Entity")) {
+                    Clipboard::CopyEntity(m_entityManager, activeEntity);
+                }
+
                 ImGui::Separator();
+
+                if (ImGui::BeginMenu("Copy Component")) {
+                    auto compIds = m_entityManager.GetEntityComponents(activeEntity);
+                    for (auto cid : compIds) {
+                        std::string name = m_entityManager.GetComponentNameById(cid);
+                        if (ImGui::MenuItem(name.c_str())) {
+                            Clipboard::CopyComponent(m_entityManager, activeEntity, name);
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+
+                if (ImGui::BeginMenu("Copy Value")) {
+                    auto compIds = m_entityManager.GetEntityComponents(activeEntity);
+                    for (auto cid : compIds) {
+                        std::string compName = m_entityManager.GetComponentNameById(cid);
+                        auto* comp = m_entityManager.GetComponentById(activeEntity, cid);
+                        if (!comp) continue;
+                        auto props = comp->GetPropertyMap();
+                        if (props.empty()) continue;
+                        if (ImGui::BeginMenu(compName.c_str())) {
+                            for (const auto& [propName, _] : props) {
+                                if (ImGui::MenuItem(propName.c_str())) {
+                                    Clipboard::CopyProperty(m_entityManager, activeEntity, compName, propName);
+                                }
+                            }
+                            ImGui::EndMenu();
+                        }
+                    }
+                    ImGui::EndMenu();
+                }
+
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("Paste")) {
                 contextMenuUtils->RenderPasteMenu(activeEntity);
+                ImGui::EndMenu();
             }
-            else {
-                ImGui::TextDisabled("Nothing to paste");
+
+            ImGui::Separator();
+
+            if (ImGui::BeginMenu("Add Component")) {
+                auto activeComps = m_entityManager.GetEntityComponents(activeEntity);
+                for (const auto& [name, _] : m_componentAdders) {
+                    bool exists = false;
+                    for (auto cid : activeComps) {
+                        if (m_entityManager.GetComponentNameById(cid) == name) { exists = true; break; }
+                    }
+                    if (!exists && ImGui::MenuItem(name.c_str())) {
+                        Clipboard::AddComponent(m_entityManager, activeEntity, name,
+                            [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
+                    }
+                }
+                ImGui::EndMenu();
             }
+
+            if (ImGui::MenuItem("Reset All Components")) {
+                auto comps = m_entityManager.GetEntityComponents(activeEntity);
+                std::vector<std::string> names;
+                for (auto cid : comps) names.push_back(m_entityManager.GetComponentNameById(cid));
+                Clipboard::ResetAllComponents(m_entityManager, activeEntity, names,
+                    [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
+            }
+
             ImGui::EndPopup();
         }
     }
@@ -317,7 +433,6 @@ namespace GUI {
         nlohmann::json j;
         j["stateEntity"] = m_entityManager.SerializeEntity(stateEntity);
         j["activeEntity"] = m_entityManager.SerializeEntity(activeEntity);
-        j["componentVisibility"] = componentVisibility;
         return j;
     }
 
@@ -327,9 +442,6 @@ namespace GUI {
             if (activeEntity != 0) m_entityManager.DestroyEntity(activeEntity);
             stateEntity = m_entityManager.DeserializeEntity(j["stateEntity"]);
             activeEntity = m_entityManager.DeserializeEntity(j["activeEntity"]);
-            if (j.contains("componentVisibility")) {
-                componentVisibility = j["componentVisibility"];
-            }
         }
         catch (...) {}
     }

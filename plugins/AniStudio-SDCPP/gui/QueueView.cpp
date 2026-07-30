@@ -5,7 +5,7 @@
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
 #include "BaseDiffusionView.hpp"
-#include "ContextMenuUtils.hpp"
+#include "ClipboardUtilities.hpp"
 #include "FilePathSystem.hpp"
 #include <fstream>
 #include <iomanip>
@@ -142,8 +142,7 @@ namespace GUI {
             ImGui::Separator();
 
             if (ImGui::MenuItem("Copy Entity Metadata")) {
-                Utils::ContextMenuUtils utils(m_entityManager);
-                utils.CopyEntity(item.entityID);
+                GUI::Clipboard::CopyEntity(m_entityManager, item.entityID);
             }
 
             ImGui::EndPopup();
@@ -241,15 +240,28 @@ namespace GUI {
                     const auto& item = items[i];
                     ImGui::TableNextRow();
 
+                    ImGui::PushID(static_cast<int>(i));
+
+                    std::string popupId = "QueueItemContextMenu##" + std::to_string(i);
+
+                    // Status
                     ImGui::TableNextColumn();
                     if (item.processing)
                         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
                     else
                         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                        ImGui::OpenPopup(popupId.c_str());
+                    }
 
+                    // Entity ID
                     ImGui::TableNextColumn();
-                    ImGui::Text("%d", static_cast<int>(item.entityID));
+                    ImGui::Text("%05d", static_cast<int>(item.entityID));
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                        ImGui::OpenPopup(popupId.c_str());
+                    }
 
+                    // Type
                     ImGui::TableNextColumn();
                     switch (item.taskType) {
                     case ECS::SDCPPSystem::TaskType::Inference: ImGui::Text("Txt2Img"); break;
@@ -260,14 +272,20 @@ namespace GUI {
                     case ECS::SDCPPSystem::TaskType::Img2Vid:   ImGui::Text("Img2Vid"); break;
                     default: ImGui::Text("Unknown");
                     }
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                        ImGui::OpenPopup(popupId.c_str());
+                    }
 
+                    // Controls
                     ImGui::TableNextColumn();
                     if (!item.processing) {
+                        bool controlHovered = false;
                         if (i > 0) {
                             if (ImGui::ArrowButton(("up##" + std::to_string(i)).c_str(), ImGuiDir_Up)) {
                                 auto moveData = std::make_pair(i, i - 1);
                                 ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
                             }
+                            if (ImGui::IsItemHovered()) controlHovered = true;
                             ImGui::SameLine();
                         }
                         if (i < items.size() - 1) {
@@ -275,6 +293,7 @@ namespace GUI {
                                 auto moveData = std::make_pair(i, i + 1);
                                 ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
                             }
+                            if (ImGui::IsItemHovered()) controlHovered = true;
                             ImGui::SameLine();
                         }
                         if (i > 0) {
@@ -283,6 +302,7 @@ namespace GUI {
                                 auto moveData = std::make_pair(i, target);
                                 ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
                             }
+                            if (ImGui::IsItemHovered()) controlHovered = true;
                             ImGui::SameLine();
                         }
                         if (i < items.size() - 1) {
@@ -290,19 +310,28 @@ namespace GUI {
                                 auto moveData = std::make_pair(i, items.size() - 1);
                                 ANI::Events::Ref().QueueEventWithData("MoveInDiffusionQueue", moveData);
                             }
+                            if (ImGui::IsItemHovered()) controlHovered = true;
                             ImGui::SameLine();
                         }
                         if (ImGui::Button(("X##" + std::to_string(i)).c_str()))
                             ANI::Events::Ref().QueueEventWithData("RemoveFromDiffusionQueue", i);
+                        if (ImGui::IsItemHovered()) controlHovered = true;
+
+                        if (controlHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                            ImGui::OpenPopup(popupId.c_str());
+                        }
                     }
                     else {
                         ImGui::TextDisabled("Processing");
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                            ImGui::OpenPopup(popupId.c_str());
+                        }
                     }
 
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-                        ImGui::OpenPopup(("QueueItemContextMenu##" + std::to_string(i)).c_str());
-                    }
+                    // Render the context menu popup
                     RenderQueueItemContextMenu(item, i);
+
+                    ImGui::PopID();
                 }
             }
             ImGui::EndTable();
