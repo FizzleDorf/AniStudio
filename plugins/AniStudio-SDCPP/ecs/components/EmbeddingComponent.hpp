@@ -26,7 +26,21 @@ namespace ECS {
                             {"type", "object"},
                             {"properties", {
                                 {"name", {"type", "string", "title", "Name", "description", "Embedding name used in prompts"}},
-                                {"path", {"type", "string", "title", "Path", "description", "File path to the embedding file", "ui:widget", "file_selector"}}
+                                {"path", {
+                                    {"type", "string"},
+                                    {"title", "Path"},
+                                    {"description", "File path to the embedding file"},
+                                    {"ui:widget", "file_selector"},
+                                    {"ui:options", {
+                                        {"mode", "file"},
+                                        {"filters", ".pt,.safetensors,.bin"},
+                                        {"filterName", "Embedding Files"},
+                                        {"dialogDefaultPath", "embeddings"},
+                                        {"buttonText", "Browse..."},
+                                        {"resetButtonText", "Clear"},
+                                        {"browseTooltip", "Select embedding file"}
+                                    }}
+                                }}
                             }}
                         }}
                     }}

@@ -23,7 +23,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "Checkpoint Models"},
-                            {"dialogDefaultPath", "Checkpoint"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
@@ -60,7 +60,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "UNet Models"},
-                            {"dialogDefaultPath", "Unet"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for UNet/Diffusion model files for FLUX or transformer models"}
@@ -97,7 +97,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "High Noise UNet Models"},
-                            {"dialogDefaultPath", "Unet"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for high noise UNet/Diffusion model files (for video generation)"}
@@ -133,7 +133,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "UNet Models"},
-                            {"dialogDefaultPath", "Unet"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for unconditional diffusion model files"}
@@ -170,7 +170,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt"},
                             {"filterName", "Audio VAE Models"},
-                            {"dialogDefaultPath", "Vae"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for audio VAE model files (for audio/video models)"}
@@ -190,7 +190,7 @@ namespace ECS {
         }
     };
 
-    // Embeddings Connectors Component (for models like flux with special connectors)
+    // Embeddings Connectors Component
     struct EmbeddingComponent : public BaseModelComponent {
         EmbeddingComponent() {
             compName = "Embedding";
@@ -207,7 +207,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "Connector Models"},
-                            {"dialogDefaultPath", "Encoder"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for embeddings connector model files"}
@@ -227,7 +227,7 @@ namespace ECS {
         }
     };
 
-    // Motion Module Component (for video generation)
+    // Motion Module Component
     struct MotionModuleComponent : public BaseModelComponent {
         MotionModuleComponent() {
             compName = "MotionModule";
@@ -244,7 +244,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "Motion Module Models"},
-                            {"dialogDefaultPath", "MotionModule"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for motion module files (for video generation)"}

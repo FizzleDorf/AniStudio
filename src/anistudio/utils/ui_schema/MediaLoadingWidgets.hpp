@@ -11,11 +11,9 @@
 #include "UISchemaUtils.hpp"
 #include "ImageUtils.hpp"
 #include "PropertyTypes.hpp"
+#include "UISchemaContext.hpp"
 #include <stb_image.h>
 #include <iostream>
-
-namespace ECS { class FilePathSystem; }
-namespace Utils { extern ECS::FilePathSystem* g_FilePathSystem; }
 
 namespace UISchema {
 
@@ -196,7 +194,8 @@ namespace UISchema {
         static bool RenderMediaLoader(
             const std::string& label,
             const nlohmann::json& options,
-            const PropertyMap& properties
+            const PropertyMap& properties,
+            const UIRenderContext& context
         ) {
             bool modified = false;
 
@@ -265,8 +264,11 @@ namespace UISchema {
             if (!currentFilePath.empty()) {
                 actualDialogPath = std::filesystem::path(currentFilePath).parent_path().string();
             }
-            if (actualDialogPath.empty() && Utils::g_FilePathSystem) {
-                actualDialogPath = Utils::g_FilePathSystem->GetPath("DefaultProject");
+            if (actualDialogPath.empty() && context.pathMap) {
+                auto it = context.pathMap->find("DefaultProject");
+                if (it != context.pathMap->end() && !it->second.empty()) {
+                    actualDialogPath = it->second;
+                }
             }
             if (actualDialogPath.empty()) {
                 actualDialogPath = ".";
@@ -305,14 +307,14 @@ namespace UISchema {
             return modified;
         }
 
-        static bool Render(const std::string& label, const std::string& widgetType, const nlohmann::json& schema, const PropertyMap& properties) {
+        static bool Render(const std::string& label, const std::string& widgetType, const nlohmann::json& schema, const PropertyMap& properties, const UIRenderContext& context) {
             nlohmann::json options = {};
             if (schema.contains("ui:options") && schema["ui:options"].is_object()) {
                 options = schema["ui:options"];
             }
 
             if (widgetType == "media_loader") {
-                return RenderMediaLoader(label, options, properties);
+                return RenderMediaLoader(label, options, properties, context);
             }
             else {
                 std::cerr << "Unknown media loading widget type '" << widgetType << "'" << std::endl;

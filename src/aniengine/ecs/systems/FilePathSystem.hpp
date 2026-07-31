@@ -27,6 +27,8 @@ namespace ECS {
         void SetMissingPathsCallback(std::function<void(const std::vector<std::string>&)> callback);
         void CheckAndPromptMissingPaths();
 
+        EntityID GetEntityID() const { return m_filePathEntity; }
+
     private:
         EntityID m_filePathEntity;
         ComponentTypeID m_componentTypeId;

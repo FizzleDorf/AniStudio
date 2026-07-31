@@ -7,6 +7,12 @@
 #include <iostream>
 #include <filesystem>
 
+#ifdef _WIN32
+#include <GLFW/glfw3.h>
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
+
 namespace FileDialog {
 
     static bool EnsureNFDInitialized() {
@@ -24,19 +30,56 @@ namespace FileDialog {
         return true;
     }
 
+    static std::string PrepareDefaultPath(const std::string& path) {
+        std::error_code ec;
+        std::filesystem::path p(path);
+        if (std::filesystem::is_regular_file(p, ec)) {
+            p = p.parent_path();
+        }
+        if (!std::filesystem::is_directory(p, ec)) {
+            p = std::filesystem::current_path();
+        }
+        return std::filesystem::absolute(p).string();
+    }
+
+    static GLFWwindow* g_window = nullptr;
+
+    void SetGlobalWindowHandle(GLFWwindow* window) {
+        g_window = window;
+    }
+
     bool OpenFile(const std::string& title, FilterType type, std::string& outPath, const std::string& defaultPath) {
         if (!EnsureNFDInitialized()) return false;
         const nfdu8filteritem_t* filterList;
         nfdfiltersize_t filterCount;
         GetFilterItems(type, filterList, filterCount);
 
+        std::string dirToUse = PrepareDefaultPath(defaultPath);
+
         nfdu8char_t* outPtr = nullptr;
-        nfdresult_t result = NFD::OpenDialog(outPtr,
+
+        nfdwindowhandle_t parentWindow = {};
+#ifdef _WIN32
+        if (g_window) {
+            HWND hwnd = glfwGetWin32Window(g_window);
+            if (hwnd) {
+                parentWindow.type = NFD_WINDOW_HANDLE_TYPE_WINDOWS;
+                parentWindow.handle = hwnd;
+            }
+        }
+#endif
+
+        nfdresult_t result = NFD::OpenDialog(
+            outPtr,
             (filterCount > 0) ? filterList : nullptr,
             filterCount,
-            defaultPath.empty() ? nullptr : defaultPath.c_str(),
-            {},
-            title.empty() ? nullptr : title.c_str());
+            dirToUse.c_str(),
+            parentWindow,
+            title.empty() ? nullptr : title.c_str(),
+            nullptr,
+            nullptr
+        );
+
         if (result == NFD_OKAY) {
             outPath = outPtr;
             NFD::FreePath(outPtr);
@@ -57,13 +100,32 @@ namespace FileDialog {
         nfdfiltersize_t filterCount;
         GetFilterItems(type, filterList, filterCount);
 
+        std::string dirToUse = PrepareDefaultPath(defaultPath);
+
         const nfdpathset_t* outPathsSet = nullptr;
-        nfdresult_t result = NFD::OpenDialogMultiple(outPathsSet,
+
+        nfdwindowhandle_t parentWindow = {};
+#ifdef _WIN32
+        if (g_window) {
+            HWND hwnd = glfwGetWin32Window(g_window);
+            if (hwnd) {
+                parentWindow.type = NFD_WINDOW_HANDLE_TYPE_WINDOWS;
+                parentWindow.handle = hwnd;
+            }
+        }
+#endif
+
+        nfdresult_t result = NFD::OpenDialogMultiple(
+            outPathsSet,
             (filterCount > 0) ? filterList : nullptr,
             filterCount,
-            defaultPath.empty() ? nullptr : defaultPath.c_str(),
-            {},
-            title.empty() ? nullptr : title.c_str());
+            dirToUse.c_str(),
+            parentWindow,
+            title.empty() ? nullptr : title.c_str(),
+            nullptr,
+            nullptr
+        );
+
         if (result == NFD_OKAY) {
             nfdpathsetsize_t count;
             if (NFD::PathSet::Count(outPathsSet, count) == NFD_OKAY) {
@@ -93,14 +155,33 @@ namespace FileDialog {
         nfdfiltersize_t filterCount;
         GetFilterItems(type, filterList, filterCount);
 
+        std::string dirToUse = PrepareDefaultPath(defaultPath);
+
         nfdu8char_t* outPtr = nullptr;
-        nfdresult_t result = NFD::SaveDialog(outPtr,
+
+        nfdwindowhandle_t parentWindow = {};
+#ifdef _WIN32
+        if (g_window) {
+            HWND hwnd = glfwGetWin32Window(g_window);
+            if (hwnd) {
+                parentWindow.type = NFD_WINDOW_HANDLE_TYPE_WINDOWS;
+                parentWindow.handle = hwnd;
+            }
+        }
+#endif
+
+        nfdresult_t result = NFD::SaveDialog(
+            outPtr,
             (filterCount > 0) ? filterList : nullptr,
             filterCount,
-            defaultPath.empty() ? nullptr : defaultPath.c_str(),
+            dirToUse.c_str(),
             defaultName.empty() ? nullptr : defaultName.c_str(),
-            {},
-            title.empty() ? nullptr : title.c_str());
+            parentWindow,
+            title.empty() ? nullptr : title.c_str(),
+            nullptr,
+            nullptr
+        );
+
         if (result == NFD_OKAY) {
             outPath = outPtr;
             NFD::FreePath(outPtr);
@@ -117,11 +198,31 @@ namespace FileDialog {
 
     bool SelectFolder(const std::string& title, std::string& outPath, const std::string& defaultPath) {
         if (!EnsureNFDInitialized()) return false;
+
+        std::string dirToUse = PrepareDefaultPath(defaultPath);
+
         nfdu8char_t* outPtr = nullptr;
-        nfdresult_t result = NFD::PickFolder(outPtr,
-            defaultPath.empty() ? nullptr : defaultPath.c_str(),
-            {},
-            title.empty() ? nullptr : title.c_str());
+
+        nfdwindowhandle_t parentWindow = {};
+#ifdef _WIN32
+        if (g_window) {
+            HWND hwnd = glfwGetWin32Window(g_window);
+            if (hwnd) {
+                parentWindow.type = NFD_WINDOW_HANDLE_TYPE_WINDOWS;
+                parentWindow.handle = hwnd;
+            }
+        }
+#endif
+
+        nfdresult_t result = NFD::PickFolder(
+            outPtr,
+            dirToUse.c_str(),
+            parentWindow,
+            title.empty() ? nullptr : title.c_str(),
+            nullptr,
+            nullptr
+        );
+
         if (result == NFD_OKAY) {
             outPath = outPtr;
             NFD::FreePath(outPtr);

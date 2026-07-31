@@ -25,7 +25,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt"},
                             {"filterName", "Photo Maker Models"},
-                            {"dialogDefaultPath", "PhotoMaker"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for Photo Maker identity embedding/face swapping models"}
@@ -62,7 +62,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt"},
                             {"filterName", "PulID Weights"},
-                            {"dialogDefaultPath", "Pulid"},
+                            {"dialogDefaultPath", "models"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for PulID weights files"}
@@ -100,7 +100,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt"},
                             {"filterName", "ControlNet Models"},
-                            {"dialogDefaultPath", "ControlNet"},
+                            {"dialogDefaultPath", "controlnets"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for ControlNet model files"}
@@ -243,7 +243,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".pth,.safetensors,.pt"},
                             {"filterName", "Upscale Models"},
-                            {"dialogDefaultPath", "Upscale"},
+                            {"dialogDefaultPath", "esrgan"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for ESRGAN upscale model files (.pth, .safetensors, .pt)"}
@@ -376,7 +376,20 @@ namespace ECS {
                         {"items", {
                             {"type", "object"},
                             {"properties", {
-                                {"path", {"type", "string", "title", "Path", "ui:widget", "file_selector"}},
+                                {"path", {
+                                    {"type", "string"},
+                                    {"title", "Path"},
+                                    {"ui:widget", "file_selector"},
+                                    {"ui:options", {
+                                        {"mode", "file"},
+                                        {"filters", ".safetensors,.ckpt,.pt"},
+                                        {"filterName", "LoRA Files"},
+                                        {"dialogDefaultPath", "loras"},
+                                        {"buttonText", "Browse..."},
+                                        {"resetButtonText", "Clear"},
+                                        {"browseTooltip", "Select LoRA file"}
+                                    }}
+                                }},
                                 {"multiplier", {"type", "number", "title", "Multiplier", "default", 1.0}},
                                 {"is_high_noise", {"type", "boolean", "title", "High Noise", "default", false}}
                             }}

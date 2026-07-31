@@ -49,7 +49,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt"},
                             {"filterName", "VAE Models"},
-                            {"dialogDefaultPath", "Vae"},
+                            {"dialogDefaultPath", "vae"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for VAE model files (.safetensors, .ckpt, .pt)"}
@@ -290,7 +290,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt"},
                             {"filterName", "TAESD Models"},
-                            {"dialogDefaultPath", "Vae"},
+                            {"dialogDefaultPath", "vae"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for TAESD fast VAE files"}

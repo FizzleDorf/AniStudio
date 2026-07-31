@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 
 using namespace ECS;
 using namespace ANI;
@@ -257,7 +258,22 @@ namespace GUI {
                 }
                 };
 
-            UISchema::RenderSchema(comp->schema, comp->GetPropertyMap(), onPropRightClick);
+            const std::unordered_map<std::string, std::string>* pathMap = nullptr;
+            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            if (filePathSys) {
+                auto compId = m_entityManager.GetComponentTypeIdByName("FilePathComponent");
+                if (compId != 0) {
+                    auto* base = m_entityManager.GetComponentById(filePathSys->GetEntityID(), compId);
+                    if (auto* fpComp = dynamic_cast<ECS::FilePathComponent*>(base)) {
+                        pathMap = &fpComp->GetPathMap();
+                    }
+                }
+            }
+            else {
+                std::cout << "RenderComponent: FilePathSystem is null!" << std::endl;
+            }
+
+            UISchema::RenderSchema(comp->schema, comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
 
             if (UseStateActiveSeparation()) {
                 SyncComponentToState(compId);
@@ -290,16 +306,32 @@ namespace GUI {
     void BaseDiffusionView::RenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
+                std::string defaultProjectPath;
+                auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+                if (filePathSys) {
+                    auto compId = m_entityManager.GetComponentTypeIdByName("FilePathComponent");
+                    if (compId != 0) {
+                        auto* base = m_entityManager.GetComponentById(filePathSys->GetEntityID(), compId);
+                        if (auto* fpComp = dynamic_cast<ECS::FilePathComponent*>(base)) {
+                            const auto& pathMap = fpComp->GetPathMap();
+                            auto it = pathMap.find("DefaultProject");
+                            if (it != pathMap.end()) {
+                                defaultProjectPath = it->second;
+                            }
+                        }
+                    }
+                }
+
                 if (ImGui::MenuItem("Save Metadata...")) {
-                    std::string defaultPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
-                    std::string defaultFilename = viewName + "_" + std::to_string(GetID()) + ".json";
+                    std::string defaultPath = defaultProjectPath;
+                    std::string defaultFilename = viewName + "_" + std::to_string(static_cast<int>(GetID())) + ".json";
                     std::string selectedFile;
                     if (FileDialog::SaveFile("Save Metadata", FileDialog::FilterType::METADATA_FILE, defaultFilename, selectedFile, defaultPath)) {
                         SaveMetadataToJson(selectedFile);
                     }
                 }
                 if (ImGui::MenuItem("Load Metadata...")) {
-                    std::string defaultPath = Utils::g_FilePathSystem ? Utils::g_FilePathSystem->GetPath("DefaultProject") : "";
+                    std::string defaultPath = defaultProjectPath;
                     std::string selectedFile;
                     if (FileDialog::OpenFile("Load Metadata", FileDialog::FilterType::METADATA_FILE, selectedFile, defaultPath)) {
                         std::string ext = std::filesystem::path(selectedFile).extension().string();

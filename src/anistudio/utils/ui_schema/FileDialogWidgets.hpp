@@ -11,11 +11,8 @@
 #include "ui_schema/UISchemaUtils.hpp"
 #include "ui_schema/UISchemaContext.hpp"
 #include <stb_image.h>
-#include "FilePathSystem.hpp"
 #include <iostream>
-
-namespace ECS { class FilePathSystem; }
-namespace Utils { extern ECS::FilePathSystem* g_FilePathSystem; }
+#include <unordered_map>
 
 namespace UISchema {
 
@@ -34,21 +31,68 @@ namespace UISchema {
         static inline std::unordered_map<std::string, std::pair<int, int>> imageDimensionsCache;
         static inline bool pendingModification = false;
 
-        static std::string ResolveDialogPath(const std::string& pathOrKey, const std::string& fallbackPath = "") {
-            if (Utils::g_FilePathSystem) {
-                if (!pathOrKey.empty() && Utils::g_FilePathSystem->HasPath(pathOrKey)) {
-                    std::string resolvedPath = Utils::g_FilePathSystem->GetPath(pathOrKey);
-                    if (!resolvedPath.empty() && std::filesystem::exists(resolvedPath)) {
-                        return resolvedPath;
+        static std::string ResolveDialogPath(
+            const std::string& pathOrKey,
+            const std::unordered_map<std::string, std::string>* pathMap,
+            const std::string& fallbackPath = ""
+        ) {
+            std::string result;
+
+            std::cout << "ResolveDialogPath: pathOrKey = " << pathOrKey << std::endl;
+            if (pathMap) {
+                std::cout << "pathMap has " << pathMap->size() << " entries." << std::endl;
+                auto it = pathMap->find(pathOrKey);
+                if (it != pathMap->end()) {
+                    std::cout << "Key found: value = " << it->second << std::endl;
+                    std::string resolvedPath = it->second;
+                    if (!resolvedPath.empty()) {
+                        std::error_code ec;
+                        std::filesystem::path p(resolvedPath);
+                        if (std::filesystem::is_regular_file(p, ec)) {
+                            p = p.parent_path();
+                            std::cout << "  -> It's a file, using parent: " << p << std::endl;
+                        }
+                        if (std::filesystem::is_directory(p, ec)) {
+                            result = std::filesystem::absolute(p).string();
+                            std::cout << "  -> Result: " << result << std::endl;
+                        }
+                        else {
+                            std::cout << "  -> Not a directory or doesn't exist." << std::endl;
+                        }
                     }
+                }
+                else {
+                    std::cout << "Key NOT found!" << std::endl;
+                }
+            }
+            else {
+                std::cout << "pathMap is nullptr!" << std::endl;
+            }
+
+            if (result.empty() && !pathOrKey.empty()) {
+                std::error_code ec;
+                std::filesystem::path p(pathOrKey);
+                if (std::filesystem::is_regular_file(p, ec)) {
+                    p = p.parent_path();
+                }
+                if (std::filesystem::is_directory(p, ec)) {
+                    result = std::filesystem::absolute(p).string();
                 }
             }
 
-            if (!pathOrKey.empty() && std::filesystem::exists(pathOrKey)) {
-                return pathOrKey;
+            if (result.empty()) {
+                std::string fallback = fallbackPath.empty()
+                    ? std::filesystem::current_path().string()
+                    : fallbackPath;
+                std::error_code ec;
+                std::filesystem::path p(fallback);
+                if (!std::filesystem::is_directory(p, ec)) {
+                    p = std::filesystem::current_path();
+                }
+                result = std::filesystem::absolute(p).string();
+                std::cout << "Falling back to: " << result << std::endl;
             }
 
-            std::string result = fallbackPath.empty() ? std::filesystem::current_path().string() : fallbackPath;
             return result;
         }
 
@@ -144,10 +188,11 @@ namespace UISchema {
             const std::string& title,
             const std::string& filters,
             const std::string& pathOrKey,
-            bool isDirectoryMode = false,
+            bool isDirectoryMode,
+            const std::unordered_map<std::string, std::string>* pathMap,
             FileDialogCallback callback = nullptr
         ) {
-            std::string actualPath = ResolveDialogPath(pathOrKey);
+            std::string actualPath = ResolveDialogPath(pathOrKey, pathMap);
             if (actualPath.empty()) {
                 actualPath = std::filesystem::current_path().string();
             }
@@ -275,52 +320,43 @@ namespace UISchema {
             }
             ImGui::Spacing();
 
-            std::string actualDialogPath;
-
-            if (!value->empty()) {
-                std::filesystem::path currentPath(*value);
-                if (std::filesystem::exists(currentPath.parent_path())) {
-                    actualDialogPath = currentPath.parent_path().string();
-                }
-            }
-
-            if (actualDialogPath.empty() && !dialogDefaultPath.empty()) {
-                actualDialogPath = ResolveDialogPath(dialogDefaultPath);
-            }
-
-            if (actualDialogPath.empty() && mode == "directory") {
-                if (propertyName == "modelPath") {
-                    if (label.find("LoRA") != std::string::npos) {
-                        if (Utils::g_FilePathSystem)
-                            actualDialogPath = Utils::g_FilePathSystem->GetPath("Lora");
-                    }
-                    else if (label.find("Embedding") != std::string::npos) {
-                        if (Utils::g_FilePathSystem)
-                            actualDialogPath = Utils::g_FilePathSystem->GetPath("Embed");
-                    }
-                }
-            }
-
-            if (actualDialogPath.empty() || !std::filesystem::exists(actualDialogPath)) {
-                actualDialogPath = std::filesystem::current_path().string();
-            }
-
             std::string browseButtonId = context.GenerateWidgetId(propertyName, "browse");
             std::string browseButtonLabel = buttonText + "##" + browseButtonId;
 
             if (ImGui::Button(browseButtonLabel.c_str())) {
+                std::string startDir;
+                if (!value->empty()) {
+                    std::error_code ec;
+                    std::filesystem::path p(*value);
+                    if (std::filesystem::exists(p, ec)) {
+                        if (std::filesystem::is_directory(p, ec)) {
+                            startDir = p.string();
+                        }
+                        else {
+                            startDir = p.parent_path().string();
+                        }
+                    }
+                }
+                if (startDir.empty() && !dialogDefaultPath.empty()) {
+                    startDir = ResolveDialogPath(dialogDefaultPath, context.pathMap);
+                }
+                if (startDir.empty() || !std::filesystem::is_directory(startDir)) {
+                    startDir = std::filesystem::current_path().string();
+                }
+
+                std::cout << "RenderFileSelector: startDir = " << startDir << std::endl;
+
                 std::string dialogKey = context.GenerateWidgetId(propertyName, "file_dialog");
                 std::string dialogTitle = mode == "directory" ? "Select Directory" : "Select File";
                 bool isDirectoryMode = (mode == "directory");
 
-                std::string formattedFilters = filters;
-
                 OpenFileDialog(
                     dialogKey,
                     dialogTitle,
-                    formattedFilters,
-                    actualDialogPath,
+                    filters,
+                    startDir,
                     isDirectoryMode,
+                    context.pathMap,
                     [value, isDirectoryMode](const FileDialogResult& result) {
                         if (result.wasOkPressed) {
                             if (isDirectoryMode) {
@@ -356,7 +392,7 @@ namespace UISchema {
 
             if (ImGui::Button(clearButtonLabel.c_str())) {
                 if (!defaultPath.empty()) {
-                    std::string resolvedDefault = ResolveDialogPath(defaultPath);
+                    std::string resolvedDefault = ResolveDialogPath(defaultPath, context.pathMap);
                     if (!resolvedDefault.empty() && std::filesystem::exists(resolvedDefault)) {
                         *value = resolvedDefault;
                     }

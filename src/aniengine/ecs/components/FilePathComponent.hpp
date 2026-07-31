@@ -29,6 +29,10 @@ namespace ECS {
             return keys;
         }
 
+        const std::unordered_map<std::string, std::string>& GetPathMap() const {
+            return m_paths;
+        }
+
         nlohmann::json Serialize() const override {
             nlohmann::json j;
             j["compName"] = compName;

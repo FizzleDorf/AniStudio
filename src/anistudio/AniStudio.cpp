@@ -2,6 +2,7 @@
 #include "AllViews.h"
 #include "StudioContext.hpp"
 #include "FilePathSystem.hpp"
+#include "FileDialogUtil.hpp"
 #include "ImGuiSettingsUtil.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "Events.hpp"
@@ -26,6 +27,11 @@
 #include "StringWidgets.hpp"
 #include "TextEditorUtil.hpp"
 #include "TextEditorFontUtil.hpp"
+
+#ifdef _WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 
 namespace ANI {
 
@@ -254,6 +260,12 @@ namespace ANI {
 
         if (window) {
             std::cout << "[StudioCore] Window handle set for WindowState utility" << std::endl;
+
+#ifdef _WIN32
+            HWND hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window));
+            FileDialog::SetGlobalWindowHandle(static_cast<GLFWwindow*>(window));
+            std::cout << "[StudioCore] Set parent window handle for file dialogs: " << hwnd << std::endl;
+#endif
 
             if (studioContext && studioContext->projectManager) {
                 studioContext->projectManager->SetWindowHandle(window);
