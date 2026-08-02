@@ -94,6 +94,7 @@ constexpr const char* prediction_type_items[] = {
     "V_PRED",
     "EDM_V_PRED",
     "FLOW_PRED",
+    "FLUX_FLOW_PRED",
     "SEFI_FLOW_PRED",
     "MINIT2I_FLOW_PRED"
 };
