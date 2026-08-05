@@ -9,3 +9,4 @@
 #include "QueueView.hpp"
 #include "SDCPPSettingsTab.hpp"
 #include "Txt2ImgView.hpp"
+#include "Txt2VidView.hpp"

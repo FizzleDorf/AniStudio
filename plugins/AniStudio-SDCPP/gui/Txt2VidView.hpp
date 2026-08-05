@@ -1,27 +1,27 @@
-// Txt2ImgView.hpp
+// Txt2VidView.hpp
 #pragma once
 
 #include "BaseDiffusionView.hpp"
 
 namespace GUI {
 
-    class Txt2ImgView : public BaseDiffusionView {
+    class Txt2VidView : public BaseDiffusionView {
     public:
         static constexpr const char* GetMetadataJSON() {
             return R"({
-            "displayName": "Txt2Img",
+            "displayName": "Txt2Vid",
             "category": "Diffusion",
-            "description": "Generate images from text prompts."
+            "description": "Generate video from text prompts."
         })";
         }
 
-        Txt2ImgView(ECS::EntityManager& mgr, ViewManager& vm)
+        Txt2VidView(ECS::EntityManager& mgr, ViewManager& vm)
             : BaseDiffusionView(mgr, vm) {
-            viewName = "Txt2ImgView";
+            viewName = "Txt2VidView";
             windowOpen = true;
         }
 
-        std::string GetTaskType() const override { return "Inference"; }
+        std::string GetTaskType() const override { return "Img2Vid"; }
 
     protected:
         std::vector<std::string> GetDefaultComponents() const override;
