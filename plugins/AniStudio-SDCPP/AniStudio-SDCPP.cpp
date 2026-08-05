@@ -21,7 +21,7 @@
 #include <filesystem>
 #include "MissingPathsPopup.hpp"
 
-using namespace ECS;   // Fixes EntityID and other ECS types
+using namespace ECS;
 
 namespace Utils {
     ECS::FilePathSystem* g_FilePathSystem = nullptr;
@@ -108,9 +108,13 @@ public:
         entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
         entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
         entityMgr.RegisterComponent<ECS::UncondDiffusionModelComponent>("UncondDiffusionModel");
-        entityMgr.RegisterComponent<ECS::AudioVAEComponent>("AudioVAE");
-        entityMgr.RegisterComponent<ECS::EmbeddingComponent>("Embedding");
+        entityMgr.RegisterComponent<ECS::AudioVaeComponent>("AudioVae");
+        entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings");
         entityMgr.RegisterComponent<ECS::MotionModuleComponent>("MotionModule");
+
+        entityMgr.RegisterComponent<ECS::RefVideoComponent>("RefVideo");
+        entityMgr.RegisterComponent<ECS::RefAudioComponent>("RefAudio");
+        entityMgr.RegisterComponent<ECS::RefImagesComponent>("RefImages");
 
         entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
         entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
@@ -145,7 +149,7 @@ public:
 
         entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage");
         entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage");
-        entityMgr.RegisterComponent<ECS::RefImagesComponent>("RefImages");
+        
         entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames");
 
         entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPPSettings");
@@ -211,6 +215,7 @@ public:
         viewMgr.RegisterView<GUI::Img2VidView>("Img2VidView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::QueueView>("QueueView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::Txt2VidView>("Txt2VidView", "DiffusionAddon");
 
         LogInfo("Views registered via direct ViewManager");
         return true;

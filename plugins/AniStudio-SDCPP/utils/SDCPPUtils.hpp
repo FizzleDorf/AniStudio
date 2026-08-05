@@ -7,6 +7,8 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
+#include <filesystem>
+#include <algorithm>
 
 namespace SDCPP {
 
@@ -19,6 +21,8 @@ namespace SDCPP {
         std::vector<std::string> strings;
         std::vector<sd_lora_t> loraStorage;
         std::vector<sd_embedding_t> embeddingStorage;
+        std::vector<sd_ref_video_t> refVideoStorage;
+        std::vector<sd_audio_t> refAudioStorage;
 
         const char* storeString(const std::string& s) {
             strings.push_back(s);
@@ -515,15 +519,15 @@ namespace SDCPP {
                     if (!val.empty()) ctx.uncond_diffusion_model_path = res.storeString(val);
                 }
             }
-            if (comp.contains("Embedding")) {
-                const auto& e = comp["Embedding"];
+            if (comp.contains("Embeddings")) {
+                const auto& e = comp["Embeddings"];
                 if (e.contains("modelPath") && !e["modelPath"].is_null()) {
                     std::string val = e["modelPath"].get<std::string>();
                     if (!val.empty()) ctx.embeddings_connectors_path = res.storeString(val);
                 }
             }
-            if (comp.contains("AudioVAE")) {
-                const auto& a = comp["AudioVAE"];
+            if (comp.contains("AudioVae")) {
+                const auto& a = comp["AudioVae"];
                 if (a.contains("modelPath") && !a["modelPath"].is_null()) {
                     std::string val = a["modelPath"].get<std::string>();
                     if (!val.empty()) ctx.audio_vae_path = res.storeString(val);
@@ -741,6 +745,66 @@ namespace SDCPP {
                     }
                 }
             }
+            if (comp.contains("RefVideo")) {
+                const auto& rv = comp["RefVideo"];
+                if (rv.contains("videoPaths") && rv["videoPaths"].is_array()) {
+                    std::vector<std::string> paths = rv["videoPaths"].get<std::vector<std::string>>();
+                    for (const auto& dirPath : paths) {
+                        if (!std::filesystem::is_directory(dirPath)) continue;
+                        std::vector<std::string> frameFiles;
+                        for (const auto& entry : std::filesystem::directory_iterator(dirPath)) {
+                            if (entry.is_regular_file()) frameFiles.push_back(entry.path().string());
+                        }
+                        std::sort(frameFiles.begin(), frameFiles.end());
+                        if (frameFiles.empty()) continue;
+                        sd_ref_video_t refVideo;
+                        refVideo.frame_count = static_cast<int>(frameFiles.size());
+                        refVideo.fps = 24;
+                        std::vector<sd_image_t> frames;
+                        frames.reserve(frameFiles.size());
+                        bool allOk = true;
+                        for (const auto& f : frameFiles) {
+                            sd_image_t img{ 0,0,0,nullptr };
+                            if (loadImageFromPath(f, img, res)) {
+                                frames.push_back(img);
+                            }
+                            else {
+                                allOk = false;
+                                break;
+                            }
+                        }
+                        if (!allOk || frames.empty()) continue;
+                        size_t startIdx = res.images.size();
+                        for (auto& img : frames) {
+                            res.storeImage(img);
+                        }
+                        refVideo.frames = &res.images[startIdx];
+                        res.refVideoStorage.push_back(refVideo);
+                    }
+                }
+            }
+            if (comp.contains("RefAudio")) {
+                const auto& ra = comp["RefAudio"];
+                if (ra.contains("audioPaths") && ra["audioPaths"].is_array()) {
+                    std::vector<std::string> paths = ra["audioPaths"].get<std::vector<std::string>>();
+                    for (const auto& wavPath : paths) {
+                        sd_audio_t audio{};
+                        res.refAudioStorage.push_back(audio);
+                    }
+                }
+            }
+            /*if (comp.contains("RefVideoAudio")) {
+                const auto& rva = comp["RefVideoAudio"];
+                if (rva.contains("audioPaths") && rva["audioPaths"].is_array()) {
+                    std::vector<std::string> audioPaths = rva["audioPaths"].get<std::vector<std::string>>();
+                    size_t count = std::min(audioPaths.size(), res.refVideoStorage.size());
+                    for (size_t i = 0; i < count; ++i) {
+                        if (i < res.refAudioStorage.size()) {
+                            res.refVideoStorage[i].audio = res.refAudioStorage[i];
+                        }
+                    }
+                }
+            }*/
         }
 
         if (!loras.empty()) {
@@ -755,6 +819,15 @@ namespace SDCPP {
             for (auto& img : controlFramesVec) {
                 res.storeControlFrame(img);
             }
+        }
+
+        if (!res.refVideoStorage.empty()) {
+            params.ref_videos = res.refVideoStorage.data();
+            params.ref_videos_count = static_cast<int>(res.refVideoStorage.size());
+        }
+        if (!res.refAudioStorage.empty()) {
+            params.ref_audios = res.refAudioStorage.data();
+            params.ref_audios_count = static_cast<int>(res.refAudioStorage.size());
         }
 
         if (params.width == 0) params.width = 512;

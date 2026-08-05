@@ -5,6 +5,8 @@
 #include "FilePathSystem.hpp"
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
+#include "VectorWidgets.hpp"
+#include "SDCPPComponents.h"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
@@ -44,6 +46,7 @@ namespace GUI {
         m_componentAdders["LlmVision"] = [this](EntityID e) { this->m_entityManager.AddComponent<LlmVisionComponent>(e); };
         m_componentAdders["Vae"] = [this](EntityID e) { this->m_entityManager.AddComponent<VaeComponent>(e); };
         m_componentAdders["Taesd"] = [this](EntityID e) { this->m_entityManager.AddComponent<TaesdComponent>(e); };
+        m_componentAdders["AudioVae"] = [this](EntityID e) { this->m_entityManager.AddComponent<AudioVaeComponent>(e); };
         m_componentAdders["Latent"] = [this](EntityID e) { this->m_entityManager.AddComponent<LatentComponent>(e); };
         m_componentAdders["Sampler"] = [this](EntityID e) { this->m_entityManager.AddComponent<SamplerComponent>(e); };
         m_componentAdders["Guidance"] = [this](EntityID e) { this->m_entityManager.AddComponent<GuidanceComponent>(e); };
@@ -52,7 +55,12 @@ namespace GUI {
         m_componentAdders["InputImage"] = [this](EntityID e) { this->m_entityManager.AddComponent<InputImageComponent>(e); };
         m_componentAdders["Lora"] = [this](EntityID e) { this->m_entityManager.AddComponent<LoraComponent>(e); };
         m_componentAdders["ControlNet"] = [this](EntityID e) { this->m_entityManager.AddComponent<ControlNetComponent>(e); };
-        m_componentAdders["Embedding"] = [this](EntityID e) { this->m_entityManager.AddComponent<EmbeddingComponent>(e); };
+        m_componentAdders["Embeddings"] = [this](EntityID e) { this->m_entityManager.AddComponent<EmbeddingsComponent>(e); };
+        m_componentAdders["RefImages"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefImagesComponent>(e); };
+        m_componentAdders["ControlFrames"] = [this](EntityID e) { this->m_entityManager.AddComponent<ControlFramesComponent>(e); };
+        m_componentAdders["RefVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefVideoComponent>(e); };
+        m_componentAdders["RefAudio"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefAudioComponent>(e); };
+        // m_componentAdders["RefVideoAudio"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefVideoAudioComponent>(e); };
         m_componentAdders["PhotoMaker"] = [this](EntityID e) { this->m_entityManager.AddComponent<PhotoMakerComponent>(e); };
         m_componentAdders["StackedIdEmbed"] = [this](EntityID e) { this->m_entityManager.AddComponent<StackedIdEmbedComponent>(e); };
         m_componentAdders["Conversion"] = [this](EntityID e) { this->m_entityManager.AddComponent<ConversionComponent>(e); };
@@ -159,10 +167,6 @@ namespace GUI {
             ImGui::TextColored(ImVec4(1, 1, 0, 1), "Component %s not on active entity", name.c_str());
             return;
         }
-        if (comp->schema.empty()) {
-            ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1), "No schema for %s", name.c_str());
-            return;
-        }
 
         ImGui::PushID(name.c_str());
 
@@ -240,40 +244,91 @@ namespace GUI {
                 ImGui::EndPopup();
             }
 
-            auto onPropRightClick = [this, name](const std::string& propName, const nlohmann::json& value) {
-                ImGui::OpenPopup(("PropContext_" + name + "_" + propName).c_str());
-                if (ImGui::BeginPopup(("PropContext_" + name + "_" + propName).c_str())) {
-                    if (ImGui::MenuItem("Copy Value")) {
-                        Clipboard::CopyProperty(m_entityManager, activeEntity, name, propName);
-                    }
-                    if (Clipboard::HasProperty() && ImGui::MenuItem("Paste Value")) {
-                        Clipboard::PasteProperty(m_entityManager, activeEntity, name, propName);
-                    }
-                    if (Clipboard::HasEntity() && Clipboard::EntityClipboardHasProperty(m_entityManager, name, propName)) {
-                        if (ImGui::MenuItem("Paste Value from Copied Entity")) {
-                            Clipboard::PastePropertyFromEntity(m_entityManager, activeEntity, name, propName);
-                        }
-                    }
-                    ImGui::EndPopup();
-                }
-                };
-
             const std::unordered_map<std::string, std::string>* pathMap = nullptr;
             auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
             if (filePathSys) {
-                auto compId = m_entityManager.GetComponentTypeIdByName("FilePathComponent");
-                if (compId != 0) {
-                    auto* base = m_entityManager.GetComponentById(filePathSys->GetEntityID(), compId);
+                auto fileCompId = m_entityManager.GetComponentTypeIdByName("FilePathComponent");
+                if (fileCompId != 0) {
+                    auto* base = m_entityManager.GetComponentById(filePathSys->GetEntityID(), fileCompId);
                     if (auto* fpComp = dynamic_cast<ECS::FilePathComponent*>(base)) {
                         pathMap = &fpComp->GetPathMap();
                     }
                 }
             }
-            else {
-                std::cout << "RenderComponent: FilePathSystem is null!" << std::endl;
-            }
 
-            UISchema::RenderSchema(comp->schema, comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
+            if (name == "Lora") {
+                auto* loraComp = dynamic_cast<LoraComponent*>(comp);
+                if (loraComp) {
+                    VectorWidgets::RenderLoraList(loraComp->loras);
+                }
+            }
+            else if (name == "Embeddings") {
+                auto* embsComp = dynamic_cast<EmbeddingsComponent*>(comp);
+                if (embsComp) {
+                    VectorWidgets::RenderEmbeddingsPairList(embsComp->embeddings);
+                }
+            }
+            else if (name == "RefImages") {
+                auto* refComp = dynamic_cast<RefImagesComponent*>(comp);
+                if (refComp) {
+                    VectorWidgets::RenderFilePathList(refComp->ref_image_paths);
+                }
+            }
+            else if (name == "ControlFrames") {
+                auto* cfComp = dynamic_cast<ControlFramesComponent*>(comp);
+                if (cfComp) {
+                    VectorWidgets::RenderFilePathList(cfComp->filePaths);
+                }
+            }
+            else if (name == "RefVideo") {
+                auto* rvComp = dynamic_cast<RefVideoComponent*>(comp);
+                if (rvComp) {
+                    VectorWidgets::RenderStringList(rvComp->videoPaths);
+                }
+            }
+            else if (name == "RefAudio") {
+                auto* raComp = dynamic_cast<RefAudioComponent*>(comp);
+                if (raComp) {
+                    VectorWidgets::RenderStringList(raComp->audioPaths);
+                }
+            }
+            else if (name == "RefVideoAudio") {
+                auto* rvaComp = dynamic_cast<RefVideoAudioComponent*>(comp);
+                if (rvaComp) {
+                    VectorWidgets::RenderStringList(rvaComp->audioPaths);
+                }
+            }
+            else if (name == "CustomSigmas") {
+                auto* csComp = dynamic_cast<CustomSigmasComponent*>(comp);
+                if (csComp) {
+                    VectorWidgets::RenderFloatList(csComp->custom_sigmas);
+                }
+            }
+            else {
+                if (comp->schema.empty()) {
+                    ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1), "No schema for %s", name.c_str());
+                }
+                else {
+                    auto onPropRightClick = [this, name](const std::string& propName, const nlohmann::json& value) {
+                        ImGui::OpenPopup(("PropContext_" + name + "_" + propName).c_str());
+                        if (ImGui::BeginPopup(("PropContext_" + name + "_" + propName).c_str())) {
+                            if (ImGui::MenuItem("Copy Value")) {
+                                Clipboard::CopyProperty(m_entityManager, activeEntity, name, propName);
+                            }
+                            if (Clipboard::HasProperty() && ImGui::MenuItem("Paste Value")) {
+                                Clipboard::PasteProperty(m_entityManager, activeEntity, name, propName);
+                            }
+                            if (Clipboard::HasEntity() && Clipboard::EntityClipboardHasProperty(m_entityManager, name, propName)) {
+                                if (ImGui::MenuItem("Paste Value from Copied Entity")) {
+                                    Clipboard::PastePropertyFromEntity(m_entityManager, activeEntity, name, propName);
+                                }
+                            }
+                            ImGui::EndPopup();
+                        }
+                        };
+                    UISchema::RenderSchema(comp->schema, comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
+                }
+            }
 
             if (UseStateActiveSeparation()) {
                 SyncComponentToState(compId);

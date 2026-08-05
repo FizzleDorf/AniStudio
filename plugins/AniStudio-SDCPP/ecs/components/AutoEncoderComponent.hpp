@@ -311,4 +311,40 @@ namespace ECS {
 
     };
 
+    struct AudioVaeComponent : public BaseModelComponent {
+        AudioVaeComponent() {
+            compName = "AudioVae";
+            schema = {
+                {"title", "Audio VAE"},
+                {"type", "object"},
+                {"propertyOrder", {"modelPath"}},
+                {"properties", {
+                    {"modelPath", {
+                        {"type", "string"},
+                        {"title", "Audio VAE Model"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "file"},
+                            {"filters", ".safetensors,.ckpt,.pt"},
+                            {"filterName", "Audio VAE Models"},
+                            {"dialogDefaultPath", "vae"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Clear"},
+                            {"browseTooltip", "Browse for Audio VAE model files"}
+                        }}
+                    }}
+                }}
+            };
+        }
+
+        AudioVaeComponent& operator=(const AudioVaeComponent& other) {
+            if (this != &other) {
+                modelPath = other.modelPath;
+                modelName = other.modelName;
+                isModelLoaded = other.isModelLoaded;
+            }
+            return *this;
+        }
+    };
+
 } // namespace ECS

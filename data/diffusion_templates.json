@@ -1,0 +1,955 @@
+{
+	"templates": [
+		{
+			"name": "sd1.5",
+			"displayName": "Stable Diffusion 1.5",
+			"components": [
+				{ "type": "Checkpoint" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 512,
+						"latentHeight": 512
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 20,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 7.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "sdxl",
+			"displayName": "SDXL",
+			"components": [
+				{ "type": "Checkpoint" },
+				{ "type": "Vae" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 5,
+						"current_scheduler_method": 1,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 7.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "sd3.5",
+			"displayName": "SD3.5 Large",
+			"components": [
+				{ "type": "Checkpoint" },
+				{ "type": "ClipL" },
+				{ "type": "ClipG" },
+				{ "type": "T5XXL" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 4.5 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux_dev",
+			"displayName": "Flux (dev)",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "ClipL" },
+				{ "type": "T5XXL" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 28,
+						"current_sample_method": 0,
+						"current_scheduler_method": 14,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": {
+						"txt_cfg": 1.0,
+						"flow_shift": 3.0
+					}
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux_schnell",
+			"displayName": "Flux Schnell",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "ClipL" },
+				{ "type": "T5XXL" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 4,
+						"current_sample_method": 0,
+						"current_scheduler_method": 14,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": {
+						"txt_cfg": 1.0,
+						"flow_shift": 3.0
+					}
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux2_dev",
+			"displayName": "Flux.2 dev",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Mistral-Small
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 20,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux2_klein_4B",
+			"displayName": "Flux.2 klein 4B",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3 4B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 4,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux2_klein_base_4B",
+			"displayName": "Flux.2 klein base 4B",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 20,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 4.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux2_klein_9B",
+			"displayName": "Flux.2 klein 9B",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3 8B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 4,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "flux2_klein_base_9B",
+			"displayName": "Flux.2 klein base 9B",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 20,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 4.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "kontext_dev",
+			"displayName": "Kontext (dev)",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "ClipL" },
+				{ "type": "T5XXL" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 28,
+						"current_sample_method": 0,
+						"current_scheduler_method": 14,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": {
+						"txt_cfg": 1.0,
+						"flow_shift": 3.0
+					}
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "chroma_v40",
+			"displayName": "Chroma v40",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "T5XXL" },
+				{ "type": "Chroma" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 28,
+						"current_sample_method": 0,
+						"current_scheduler_method": 14,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": {
+						"txt_cfg": 4.0,
+						"flow_shift": 3.0
+					}
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "qwen_image",
+			"displayName": "Qwen-Image",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen2.5-VL-7B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": {
+						"txt_cfg": 2.5,
+						"flow_shift": 3.0
+					}
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "z_image_turbo",
+			"displayName": "Z-Image-Turbo",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3-4B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 512
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 8,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "z_image_base",
+			"displayName": "Z-Image-Base",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 512
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 5.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "anima_preview",
+			"displayName": "Anima Preview",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3-0.6B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 6.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "boogu_image_base",
+			"displayName": "Boogu Image Base",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3-VL-8B
+				{ "type": "LlmVision" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "boogu_image_edit",
+			"displayName": "Boogu Image Edit",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{ "type": "LlmVision" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "ernie_image_turbo",
+			"displayName": "ERNIE-Image-Turbo",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // ministral-3b
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 8,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "ernie_image",
+			"displayName": "ERNIE-Image",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 5.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "hidream_o1_dev",
+			"displayName": "HiDream-O1-Image-Dev",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "ideogram4",
+			"displayName": "Ideogram4",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "UncondDiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3-VL-8B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "krea2_raw",
+			"displayName": "Krea2 Raw",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3-VL-4B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "lens",
+			"displayName": "Lens",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // GPT-OSS-20B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 5.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "lens_turbo",
+			"displayName": "Lens Turbo",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 4,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "longcat_image",
+			"displayName": "LongCat-Image",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen2.5-VL-7B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": {
+						"txt_cfg": 5.0,
+						"flow_shift": 3.0
+					}
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "mage_flow_turbo",
+			"displayName": "Mage-Flow Turbo",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Qwen3-VL-4B
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 4,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 1.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "mage_flow_edit",
+			"displayName": "Mage-Flow Edit",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" },
+				{ "type": "LlmVision" },
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 4.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "ovis_image",
+			"displayName": "Ovis-Image-7B",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "Vae" },
+				{ "type": "LlmEncoder" }, // Ovis 2.5
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 1024,
+						"latentHeight": 1024
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 30,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 5.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		},
+		{
+			"name": "minit2i",
+			"displayName": "MiniT2I",
+			"components": [
+				{ "type": "DiffusionModel" },
+				{ "type": "T5XXL" }, // flan-t5-large
+				{
+					"type": "Latent",
+					"properties": {
+						"latentWidth": 512,
+						"latentHeight": 512
+					}
+				},
+				{
+					"type": "Sampler",
+					"properties": {
+						"steps": 100,
+						"current_sample_method": 0,
+						"current_scheduler_method": 0,
+						"seed": -1
+					}
+				},
+				{
+					"type": "Guidance",
+					"properties": { "txt_cfg": 6.0 }
+				},
+				{ "type": "Prompt" },
+				{ "type": "OutputImage" }
+			]
+		}
+	]
+}

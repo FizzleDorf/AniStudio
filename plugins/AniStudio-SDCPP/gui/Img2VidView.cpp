@@ -15,6 +15,9 @@ namespace GUI {
             "DiffusionModelComponent",
             "HighNoiseDiffusionModelComponent",
             "VaeComponent",
+            "AudioVaeComponent",
+            "LlmEncoderComponent",
+            "LlmVisionComponent",
             "LoraComponent",
             "TaesdComponent",
             "LatentComponent",
@@ -28,7 +31,10 @@ namespace GUI {
             "EndImageComponent",
             "ControlNetComponent",
             "EmbeddingComponent",
-            "EsrganComponent"
+            "EsrganComponent",
+            "RefVideoComponent",
+            "RefAudioComponent",
+            "RefVideoAudioComponent"
         };
     }
 
@@ -42,6 +48,9 @@ namespace GUI {
             "DiffusionModelComponent",
             "HighNoiseDiffusionModelComponent",
             "VaeComponent",
+            "AudioVaeComponent",
+            "LlmEncoderComponent",
+            "LlmVisionComponent",
             "LatentComponent",
             "SamplerComponent",
             "HighNoiseSamplerComponent",
@@ -49,7 +58,9 @@ namespace GUI {
             "GuidanceComponent",
             "PromptComponent",
             "OutputImageComponent",
-            "InputImageComponent"
+            "InputImageComponent",
+            "RefVideoComponent",
+            "RefAudioComponent"
         };
     }
 

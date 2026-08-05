@@ -3,12 +3,13 @@
 #include "BaseModelComponent.hpp"
 #include "PropertyTypes.hpp"
 #include "DiffusionOptions.hpp"
+#include "stable-diffusion.h"
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 namespace ECS {
 
-    // Photo Maker Component (single model path)
     struct PhotoMakerComponent : public BaseModelComponent {
         PhotoMakerComponent() {
             compName = "PhotoMaker";
@@ -45,7 +46,6 @@ namespace ECS {
         }
     };
 
-    // Pulid Weights Component (single path)
     struct PulidWeightsComponent : public BaseModelComponent {
         PulidWeightsComponent() {
             compName = "PulidWeights";
@@ -82,7 +82,6 @@ namespace ECS {
         }
     };
 
-    // ControlNet Component (single model path, with strength and step range)
     struct ControlNetComponent : public ECS::BaseModelComponent {
         ControlNetComponent() {
             compName = "ControlNet";
@@ -225,7 +224,6 @@ namespace ECS {
         }
     };
 
-    // Upscale Model Component
     struct EsrganComponent : public BaseModelComponent {
         EsrganComponent() {
             compName = "Esrgan";
@@ -347,7 +345,6 @@ namespace ECS {
         }
     };
 
-    // Lora Component - supports multiple LoRAs
     struct LoraComponent : public ECS::BaseModelComponent {
         struct LoraEntry {
             std::string path;
@@ -405,7 +402,7 @@ namespace ECS {
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
                 {"lora_apply_mode", reinterpret_cast<int*>(&lora_apply_mode)},
-                {"loras", &loras}
+                {"loras", reinterpret_cast<void*>(&loras)}
             };
         }
 
