@@ -447,13 +447,8 @@ namespace SDCPP {
                     if (!val.empty()) ctx.vae_path = res.storeString(val);
                 }
                 if (v.contains("vae_format")) {
-                    int idx = v["vae_format"].get<int>();
-                    if (idx == 0) {
-                        ctx.vae_format = SD_VAE_FORMAT_AUTO;
-                    }
-                    else {
-                        ctx.vae_format = static_cast<enum sd_vae_format_t>(idx - 1);
-                    }
+                    int val = v["vae_format"].get<int>();
+                    ctx.vae_format = static_cast<enum sd_vae_format_t>(val);
                 }
             }
             if (comp.contains("ClipL")) {

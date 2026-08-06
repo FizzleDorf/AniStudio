@@ -219,6 +219,8 @@ namespace ECS {
                     key += comp["LlmVision"]["modelPath"].get<std::string>() + "|";
                 if (comp.contains("ControlNet") && comp["ControlNet"].contains("modelPath"))
                     key += comp["ControlNet"]["modelPath"].get<std::string>() + "|";
+                if (comp.contains("AudioVae") && comp["AudioVae"].contains("modelPath"))
+                    key += comp["AudioVae"]["modelPath"].get<std::string>() + "|";
             }
         }
         if (key.empty()) key = "default";

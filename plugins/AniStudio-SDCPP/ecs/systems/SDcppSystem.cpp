@@ -2,6 +2,7 @@
 #include "rng.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
+#include "VideoUtils.hpp"
 
 namespace ECS {
 
@@ -382,7 +383,7 @@ namespace ECS {
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
         if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed()); 
+        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());
         if (params.seed == 0) params.seed = 1;
         sd_image_t* images = nullptr;
         int count = 0;
@@ -412,18 +413,25 @@ namespace ECS {
         int frameCount = 0;
         sd_audio_t* audio = nullptr;
         bool ok = generate_video(context, &params, &frames, &frameCount, &audio);
+
         if (ok && frameCount > 0 && frames) {
+            std::vector<Utils::VideoFrame> videoFrames;
+            videoFrames.reserve(frameCount);
             for (int i = 0; i < frameCount; ++i) {
-                std::string framePath = fullPath + "_frame_" + std::to_string(i) + ".png";
-                Utils::ImageUtils::SaveImage(framePath, frames[i].width, frames[i].height, frames[i].channel, frames[i].data);
+                Utils::VideoFrame vf;
+                vf.width = frames[i].width;
+                vf.height = frames[i].height;
+                vf.channels = frames[i].channel;
+                vf.data = frames[i].data;
+                videoFrames.push_back(vf);
             }
-            if (frameCount > 0) {
-                std::string firstFrame = fullPath + "_frame_0.png";
-                Utils::PngMetadata::WriteMetadataToPNG(firstFrame, metadata);
+
+            bool encoded = Utils::VideoUtils::EncodeFramesToVideo(videoFrames, fullPath, params.fps, metadata);
+            if (encoded) {
+                if (audio) free_sd_audio(audio);
+                free(frames);
+                return true;
             }
-            if (audio) free_sd_audio(audio);
-            free(frames);
-            return true;
         }
         if (frames) free(frames);
         if (audio) free_sd_audio(audio);
@@ -546,25 +554,48 @@ namespace ECS {
             auto& task = *it;
             if (task.processing) continue;
 
-            if (task.fullPath.empty() && mgr.HasComponent<OutputImageComponent>(task.entityID)) {
-                auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
-                std::string baseName = output.fileName;
-                std::string extension = GetOutputExtension(task.taskType);
-                size_t lastDot = baseName.find_last_of('.');
-                if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
-                std::string fullFileName = baseName + extension;
-                std::string outputDir = output.filePath;
-                if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension())
-                    outputDir = std::filesystem::path(outputDir).parent_path().string();
-                if (outputDir.empty()) {
-                    if (m_filePathSystem) {
-                        outputDir = m_filePathSystem->GetPath("DefaultProject");
-                    }
+            if (task.fullPath.empty()) {
+                bool isVideo = IsVideoTask(task.taskType);
+                if (isVideo && mgr.HasComponent<OutputVideoComponent>(task.entityID)) {
+                    auto& output = mgr.GetComponent<OutputVideoComponent>(task.entityID);
+                    std::string baseName = output.fileName;
+                    std::string extension = GetOutputExtension(task.taskType);
+                    size_t lastDot = baseName.find_last_of('.');
+                    if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
+                    std::string fullFileName = baseName + extension;
+                    std::string outputDir = output.filePath;
+                    if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension())
+                        outputDir = std::filesystem::path(outputDir).parent_path().string();
                     if (outputDir.empty()) {
-                        outputDir = std::filesystem::current_path().string();
+                        if (m_filePathSystem) {
+                            outputDir = m_filePathSystem->GetPath("DefaultProject");
+                        }
+                        if (outputDir.empty()) {
+                            outputDir = std::filesystem::current_path().string();
+                        }
                     }
+                    task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
                 }
-                task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
+                else if (!isVideo && mgr.HasComponent<OutputImageComponent>(task.entityID)) {
+                    auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
+                    std::string baseName = output.fileName;
+                    std::string extension = GetOutputExtension(task.taskType);
+                    size_t lastDot = baseName.find_last_of('.');
+                    if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
+                    std::string fullFileName = baseName + extension;
+                    std::string outputDir = output.filePath;
+                    if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension())
+                        outputDir = std::filesystem::path(outputDir).parent_path().string();
+                    if (outputDir.empty()) {
+                        if (m_filePathSystem) {
+                            outputDir = m_filePathSystem->GetPath("DefaultProject");
+                        }
+                        if (outputDir.empty()) {
+                            outputDir = std::filesystem::current_path().string();
+                        }
+                    }
+                    task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
+                }
             }
 
             if (task.taskType == TaskType::Inference || task.taskType == TaskType::Img2Img ||

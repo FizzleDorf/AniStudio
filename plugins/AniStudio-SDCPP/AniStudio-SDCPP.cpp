@@ -149,7 +149,7 @@ public:
 
         entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage");
         entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage");
-        
+
         entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames");
 
         entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPPSettings");
@@ -166,10 +166,16 @@ public:
                 entityMgr.AddComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
                 LogInfo("Added SDCPPSettingsComponent to global settings entity");
             }
+            if (entityMgr.IsEntityValid(settingsEntity) && entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+                auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+                GUI::DiffusionCallbackUtils::SetLogLevel(sdcppComp.log_level);
+            }
         }
         else {
             LogError("SettingsSystem not found, SDCPP global settings will not be available");
         }
+
+        GUI::DiffusionCallbackUtils::InitializeCallbacks();
 
         RegisterEventHandlers();
 

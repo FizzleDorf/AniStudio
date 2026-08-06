@@ -1,40 +1,48 @@
 #pragma once
 
 constexpr const char* type_method_items[] = {
-    "SD_TYPE_F32",
-    "SD_TYPE_F16",
-    "SD_TYPE_Q4_0",
-    "SD_TYPE_Q4_1",
-    "SD_TYPE_Q5_0",
-    "SD_TYPE_Q5_1",
-    "SD_TYPE_Q8_0",
-    "SD_TYPE_Q8_1",
-    "SD_TYPE_Q2_K",
-    "SD_TYPE_Q3_K",
-    "SD_TYPE_Q4_K",
-    "SD_TYPE_Q5_K",
-    "SD_TYPE_Q6_K",
-    "SD_TYPE_Q8_K",
-    "SD_TYPE_IQ2_XXS",
-    "SD_TYPE_IQ2_XS",
-    "SD_TYPE_IQ3_XXS",
-    "SD_TYPE_IQ1_S",
-    "SD_TYPE_IQ4_NL",
-    "SD_TYPE_IQ3_S",
-    "SD_TYPE_IQ2_S",
-    "SD_TYPE_IQ4_XS",
-    "SD_TYPE_I8",
-    "SD_TYPE_I16",
-    "SD_TYPE_I32",
-    "SD_TYPE_I64",
-    "SD_TYPE_F64",
-    "SD_TYPE_IQ1_M",
-    "SD_TYPE_BF16",
-    "SD_TYPE_TQ1_0",
-    "SD_TYPE_TQ2_0",
-    "SD_TYPE_MXFP4",
-    "SD_TYPE_NVFP4",
-    "SD_TYPE_Q1_0"
+    "SD_TYPE_F32",          // 0
+    "SD_TYPE_F16",          // 1
+    "SD_TYPE_Q4_0",         // 2
+    "SD_TYPE_Q4_1",         // 3
+    "removed",                // 4 (removed)
+    "removed",                // 5 (removed)
+    "SD_TYPE_Q5_0",         // 6
+    "SD_TYPE_Q5_1",         // 7
+    "SD_TYPE_Q8_0",         // 8
+    "SD_TYPE_Q8_1",         // 9
+    "SD_TYPE_Q2_K",         // 10
+    "SD_TYPE_Q3_K",         // 11
+    "SD_TYPE_Q4_K",         // 12
+    "SD_TYPE_Q5_K",         // 13
+    "SD_TYPE_Q6_K",         // 14
+    "SD_TYPE_Q8_K",         // 15
+    "SD_TYPE_IQ2_XXS",      // 16
+    "SD_TYPE_IQ2_XS",       // 17
+    "SD_TYPE_IQ3_XXS",      // 18
+    "SD_TYPE_IQ1_S",        // 19
+    "SD_TYPE_IQ4_NL",       // 20
+    "SD_TYPE_IQ3_S",        // 21
+    "SD_TYPE_IQ2_S",        // 22
+    "SD_TYPE_IQ4_XS",       // 23
+    "SD_TYPE_I8",           // 24
+    "SD_TYPE_I16",          // 25
+    "SD_TYPE_I32",          // 26
+    "SD_TYPE_I64",          // 27
+    "SD_TYPE_F64",          // 28
+    "SD_TYPE_IQ1_M",        // 29
+    "SD_TYPE_BF16",         // 30
+    "removed",                // 31 (removed)
+    "removed",                // 32 (removed)
+    "removed",                // 33 (removed)
+    "SD_TYPE_TQ1_0",        // 34
+    "SD_TYPE_TQ2_0",        // 35
+    "removed",                // 36 (removed)
+    "removed",                // 37 (removed)
+    "removed",                // 38 (removed)
+    "SD_TYPE_MXFP4",        // 39
+    "SD_TYPE_NVFP4",        // 40
+    "SD_TYPE_Q1_0"          // 41
 };
 constexpr const int type_method_item_count = sizeof(type_method_items) / sizeof(type_method_items[0]);
 

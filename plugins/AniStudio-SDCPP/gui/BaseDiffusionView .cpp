@@ -53,6 +53,8 @@ namespace GUI {
         m_componentAdders["Prompt"] = [this](EntityID e) { this->m_entityManager.AddComponent<PromptComponent>(e); };
         m_componentAdders["OutputImage"] = [this](EntityID e) { this->m_entityManager.AddComponent<OutputImageComponent>(e); };
         m_componentAdders["InputImage"] = [this](EntityID e) { this->m_entityManager.AddComponent<InputImageComponent>(e); };
+        m_componentAdders["InputVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<InputVideoComponent>(e); };
+        m_componentAdders["OutputVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<OutputVideoComponent>(e); };
         m_componentAdders["Lora"] = [this](EntityID e) { this->m_entityManager.AddComponent<LoraComponent>(e); };
         m_componentAdders["ControlNet"] = [this](EntityID e) { this->m_entityManager.AddComponent<ControlNetComponent>(e); };
         m_componentAdders["Embeddings"] = [this](EntityID e) { this->m_entityManager.AddComponent<EmbeddingsComponent>(e); };
@@ -60,7 +62,6 @@ namespace GUI {
         m_componentAdders["ControlFrames"] = [this](EntityID e) { this->m_entityManager.AddComponent<ControlFramesComponent>(e); };
         m_componentAdders["RefVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefVideoComponent>(e); };
         m_componentAdders["RefAudio"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefAudioComponent>(e); };
-        // m_componentAdders["RefVideoAudio"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefVideoAudioComponent>(e); };
         m_componentAdders["PhotoMaker"] = [this](EntityID e) { this->m_entityManager.AddComponent<PhotoMakerComponent>(e); };
         m_componentAdders["StackedIdEmbed"] = [this](EntityID e) { this->m_entityManager.AddComponent<StackedIdEmbedComponent>(e); };
         m_componentAdders["Conversion"] = [this](EntityID e) { this->m_entityManager.AddComponent<ConversionComponent>(e); };

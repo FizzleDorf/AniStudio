@@ -23,6 +23,7 @@ namespace ECS {
         bool diffusion_conv_direct = false;
         bool vae_conv_direct = false;
         bool force_sdxl_vae_conv_scale = false;
+        int log_level = 1; // 0=DEBUG,1=INFO,2=WARN,3=ERROR
 
         SDCPPSettingsComponent() {
             compName = "SDCPP";
@@ -35,7 +36,8 @@ namespace ECS {
                     "enable_mmap", "max_vram", "stream_layers", "eager_load",
                     "backend", "params_backend", "split_mode", "auto_fit",
                     "rpc_servers", "lora_apply_mode", "diffusion_flash_attn",
-                    "diffusion_conv_direct", "vae_conv_direct", "force_sdxl_vae_conv_scale"
+                    "diffusion_conv_direct", "vae_conv_direct", "force_sdxl_vae_conv_scale",
+                    "log_level"
                 }},
                 {"properties", {
                     {"enable_mmap", {
@@ -123,6 +125,14 @@ namespace ECS {
                         {"title", "Force SDXL VAE Conv Scale"},
                         {"description", "Force SDXL VAE convolution scaling (fixes some compatibility issues)."},
                         {"ui:widget", "checkbox"}
+                    }},
+                    {"log_level", {
+                        {"type", "integer"},
+                        {"title", "Log Level"},
+                        {"description", "Minimum log level to display (0=DEBUG,1=INFO,2=WARN,3=ERROR)."},
+                        {"ui:widget", "combo"},
+                        {"items", {"DEBUG","INFO","WARN","ERROR"}},
+                        {"itemCount", 4}
                     }}
                 }}
             };
@@ -179,7 +189,8 @@ namespace ECS {
                 {"diffusion_flash_attn", diffusion_flash_attn},
                 {"diffusion_conv_direct", diffusion_conv_direct},
                 {"vae_conv_direct", vae_conv_direct},
-                {"force_sdxl_vae_conv_scale", force_sdxl_vae_conv_scale}
+                {"force_sdxl_vae_conv_scale", force_sdxl_vae_conv_scale},
+                {"log_level", log_level}
             };
         }
 
@@ -198,6 +209,7 @@ namespace ECS {
             if (j.contains("diffusion_conv_direct")) diffusion_conv_direct = j["diffusion_conv_direct"].get<bool>();
             if (j.contains("vae_conv_direct")) vae_conv_direct = j["vae_conv_direct"].get<bool>();
             if (j.contains("force_sdxl_vae_conv_scale")) force_sdxl_vae_conv_scale = j["force_sdxl_vae_conv_scale"].get<bool>();
+            if (j.contains("log_level")) log_level = j["log_level"].get<int>();
         }
 
     private:
