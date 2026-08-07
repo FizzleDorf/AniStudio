@@ -12,14 +12,106 @@
 #include <nlohmann/json.hpp>
 #include "MetadataUtils.hpp"
 #include <memory>
+#include <zlib.h>
+#include <stb_image.h>
 
 namespace Utils
 {
     class PngMetadata
     {
     public:
-        static bool WriteMetadataToPNG(const std::string& imagePath, const nlohmann::json& metadata,
-            const std::string& softwareTag = "AniStudio")
+        static bool WriteMetadataToPNG(const std::string& imagePath, const nlohmann::json& metadata, bool useStealth = false)
+        {
+            if (useStealth)
+                return WriteStealthPNG(imagePath, metadata);
+            else
+                return WriteStandardPNG(imagePath, metadata);
+        }
+
+        static nlohmann::json ReadMetadataFromPNG(const std::string& imagePath)
+        {
+            return MetadataUtils::LoadMetadataFromPNG(imagePath);
+        }
+
+        static std::string CreateUniqueFilename(const std::string& baseFilename, const std::string& directory)
+        {
+            if (directory.empty())
+            {
+                std::cerr << "[PngMetadata] Directory is empty, cannot create unique filename" << std::endl;
+                return baseFilename;
+            }
+
+            try
+            {
+                std::string validBaseName = baseFilename.empty() ? "AniStudio_output.png" : baseFilename;
+                std::filesystem::path directoryPath(directory);
+                if (!directoryPath.is_absolute())
+                    directoryPath = std::filesystem::current_path() / directoryPath;
+
+                std::error_code ec;
+                std::filesystem::create_directories(directoryPath, ec);
+                if (ec)
+                {
+                    std::cerr << "Failed to create directory: " << directoryPath.string() << " - " << ec.message() << std::endl;
+                    directoryPath = std::filesystem::current_path();
+                    std::filesystem::create_directories(directoryPath, ec);
+                    if (ec) throw std::runtime_error("Failed to create fallback directory: " + directoryPath.string());
+                }
+
+                std::filesystem::path originalFilePath(validBaseName);
+                std::string baseName = originalFilePath.stem().string();
+                std::string extension = originalFilePath.extension().string();
+                if (!extension.empty() && extension[0] != '.') extension = "." + extension;
+                if (extension.empty()) extension = ".png";
+
+                if (!std::filesystem::exists(directoryPath))
+                    throw std::runtime_error("Directory does not exist after creation: " + directoryPath.string());
+
+                int highestIndex = 0;
+                for (const auto& entry : std::filesystem::directory_iterator(directoryPath))
+                {
+                    if (entry.is_regular_file())
+                    {
+                        std::string entryName = entry.path().stem().string();
+                        std::string entryExt = entry.path().extension().string();
+                        if (entryExt == extension)
+                        {
+                            std::string prefix = baseName + "-";
+                            if (entryName.find(prefix) == 0)
+                            {
+                                std::string numberPart = entryName.substr(prefix.length());
+                                try
+                                {
+                                    int index = std::stoi(numberPart);
+                                    if (index > highestIndex) highestIndex = index;
+                                }
+                                catch (...) {}
+                            }
+                        }
+                    }
+                }
+
+                highestIndex++;
+                std::ostringstream formattedIndex;
+                formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
+                std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
+                return newFilePath.string();
+            }
+            catch (const std::exception& e)
+            {
+                std::cerr << "Error in CreateUniqueFilename: " << e.what() << std::endl;
+                return "AniStudio_fallback.png";
+            }
+        }
+
+        static nlohmann::json CreateGenerationMetadata(const nlohmann::json& entityData,
+            const nlohmann::json& additionalInfo = {})
+        {
+            return MetadataUtils::CreateGenerationMetadata(entityData, additionalInfo);
+        }
+
+    private:
+        static bool WriteStandardPNG(const std::string& imagePath, const nlohmann::json& metadata)
         {
             FILE* fp = fopen(imagePath.c_str(), "rb");
             if (!fp)
@@ -111,7 +203,6 @@ namespace Utils
             }
 
             png_init_io(pngWrite, out);
-
             png_set_IHDR(pngWrite, infoWrite, width, height, bit_depth, color_type, PNG_INTERLACE_NONE,
                 PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
@@ -131,8 +222,8 @@ namespace Utils
             png_text softwareText;
             softwareText.compression = PNG_TEXT_COMPRESSION_NONE;
             softwareText.key = const_cast<char*>("Software");
-            softwareText.text = const_cast<char*>(softwareTag.c_str());
-            softwareText.text_length = softwareTag.length();
+            softwareText.text = const_cast<char*>("AniStudio");
+            softwareText.text_length = 9;
             softwareText.itxt_length = 0;
             softwareText.lang = nullptr;
             softwareText.lang_key = nullptr;
@@ -149,7 +240,6 @@ namespace Utils
             }
 
             png_write_end(pngWrite, infoWrite);
-
             png_destroy_write_struct(&pngWrite, &infoWrite);
             png_destroy_read_struct(&png, &info, nullptr);
             fclose(out);
@@ -159,12 +249,7 @@ namespace Utils
             {
                 std::filesystem::path originalPath(imagePath);
                 std::filesystem::path tempPath(tempFile);
-
-                if (std::filesystem::exists(originalPath))
-                {
-                    std::filesystem::remove(originalPath);
-                }
-
+                if (std::filesystem::exists(originalPath)) std::filesystem::remove(originalPath);
                 std::filesystem::rename(tempPath, originalPath);
                 std::cout << "Successfully wrote metadata to PNG: " << imagePath << std::endl;
                 return true;
@@ -176,111 +261,250 @@ namespace Utils
             }
         }
 
-        static std::string CreateUniqueFilename(const std::string& baseFilename, const std::string& directory)
+        static bool WriteStealthPNG(const std::string& imagePath, const nlohmann::json& metadata)
         {
-            if (directory.empty())
-            {
-                std::cerr << "[PngMetadata] Directory is empty, cannot create unique filename" << std::endl;
-                return baseFilename;
+            int width, height, channels;
+            unsigned char* data = stbi_load(imagePath.c_str(), &width, &height, &channels, 0);
+            if (!data) {
+                std::cerr << "Failed to load image for stealth metadata: " << imagePath << std::endl;
+                return false;
             }
 
-            try
-            {
-                std::string validBaseName = baseFilename.empty() ? "AniStudio_output.png" : baseFilename;
-                std::filesystem::path directoryPath(directory);
-
-                if (!directoryPath.is_absolute())
-                {
-                    directoryPath = std::filesystem::current_path() / directoryPath;
+            bool needConversion = (channels != 4);
+            unsigned char* rgbaData = data;
+            if (needConversion) {
+                rgbaData = (unsigned char*)malloc(width * height * 4);
+                if (!rgbaData) {
+                    stbi_image_free(data);
+                    return false;
                 }
-
-                std::error_code ec;
-                std::filesystem::create_directories(directoryPath, ec);
-                if (ec)
-                {
-                    std::cerr << "Failed to create directory: " << directoryPath.string() << " - " << ec.message() << std::endl;
-                    directoryPath = std::filesystem::current_path();
-                    std::filesystem::create_directories(directoryPath, ec);
-                    if (ec)
-                    {
-                        throw std::runtime_error("Failed to create fallback directory: " + directoryPath.string());
-                    }
+                for (int i = 0; i < width * height; i++) {
+                    int idx = i * channels;
+                    int ridx = i * 4;
+                    rgbaData[ridx] = data[idx];
+                    rgbaData[ridx + 1] = (channels > 1) ? data[idx + 1] : data[idx];
+                    rgbaData[ridx + 2] = (channels > 2) ? data[idx + 2] : data[idx];
+                    rgbaData[ridx + 3] = (channels > 3) ? data[idx + 3] : 255;
                 }
+                stbi_image_free(data);
+            }
 
-                std::filesystem::path originalFilePath(validBaseName);
-                std::string baseName = originalFilePath.stem().string();
-                std::string extension = originalFilePath.extension().string();
+            std::string jsonStr = metadata.dump();
 
-                if (!extension.empty() && extension[0] != '.')
-                {
-                    extension = "." + extension;
+            // --- FIX 1: Use gzip compression ---
+            std::vector<unsigned char> compressed;
+            uLongf compressedLen = compressBound(jsonStr.size()) + 18; // Extra for gzip header/trailer
+            compressed.resize(compressedLen);
+
+            z_stream strm;
+            strm.zalloc = Z_NULL;
+            strm.zfree = Z_NULL;
+            strm.opaque = Z_NULL;
+            // windowBits = 16 + MAX_WBITS = 31 => gzip format
+            if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + 15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+                std::cerr << "Failed to initialize gzip compression" << std::endl;
+                if (needConversion) free(rgbaData);
+                return false;
+            }
+            strm.avail_in = jsonStr.size();
+            strm.next_in = (Bytef*)jsonStr.data();
+            strm.avail_out = compressedLen;
+            strm.next_out = compressed.data();
+            int ret = deflate(&strm, Z_FINISH);
+            if (ret != Z_STREAM_END) {
+                std::cerr << "Gzip compression failed: " << ret << std::endl;
+                deflateEnd(&strm);
+                if (needConversion) free(rgbaData);
+                return false;
+            }
+            compressedLen = strm.total_out;
+            deflateEnd(&strm);
+            compressed.resize(compressedLen);
+
+            const std::string signature = "stealth_pngcomp";
+
+            // --- FIX 2: Store length as number of BITS (not bytes) ---
+            // Convert compressed data to binary string (8 bits per byte)
+            std::string binaryParam;
+            binaryParam.reserve(compressed.size() * 8);
+            for (unsigned char byte : compressed) {
+                for (int bit = 7; bit >= 0; --bit) {
+                    binaryParam += ((byte >> bit) & 1) ? '1' : '0';
                 }
+            }
+            // Length of the binary parameter string in bits
+            const uint32_t payloadLenBits = binaryParam.size();
 
-                if (extension.empty())
-                {
-                    extension = ".png";
+            // Build full payload: signature + length (32 bits) + data
+            std::vector<unsigned char> fullPayload;
+            // Reserve enough space for signature bits + 32 bits + data bits
+            // Each bit will be stored as a byte (0 or 1) in the alpha channel
+            fullPayload.reserve(signature.size() * 8 + 32 + payloadLenBits);
+
+            // Add signature bits (each character as 0 or 1)
+            for (char c : signature) {
+                for (int bit = 7; bit >= 0; --bit) {
+                    fullPayload.push_back((c >> bit) & 1);
                 }
+            }
 
-                if (!std::filesystem::exists(directoryPath))
-                {
-                    throw std::runtime_error("Directory does not exist after creation: " + directoryPath.string());
-                }
+            // Add length bits (32 bits, big-endian)
+            for (int bit = 31; bit >= 0; --bit) {
+                fullPayload.push_back((payloadLenBits >> bit) & 1);
+            }
 
-                int highestIndex = 0;
-                for (const auto& entry : std::filesystem::directory_iterator(directoryPath))
-                {
-                    if (entry.is_regular_file())
-                    {
-                        std::string entryName = entry.path().stem().string();
-                        std::string entryExt = entry.path().extension().string();
+            // Add data bits
+            for (char c : binaryParam) {
+                fullPayload.push_back(c == '1' ? 1 : 0);
+            }
 
-                        if (entryExt == extension)
-                        {
-                            std::string prefix = baseName + "-";
-                            if (entryName.find(prefix) == 0)
-                            {
-                                std::string numberPart = entryName.substr(prefix.length());
-                                try
-                                {
-                                    int index = std::stoi(numberPart);
-                                    if (index > highestIndex)
-                                    {
-                                        highestIndex = index;
-                                    }
-                                }
-                                catch (const std::exception&)
-                                {
-                                    continue;
-                                }
-                            }
+            size_t totalBits = fullPayload.size();
+            size_t maxBits = width * height * 8;
+            if (totalBits > maxBits) {
+                std::cerr << "Metadata too large to embed stealthily" << std::endl;
+                if (needConversion) free(rgbaData);
+                return false;
+            }
+
+            // DEBUG: verify first 16 bytes of payload (as bytes)
+            std::cout << "[DEBUG] fullPayload first 16 bytes (hex): ";
+            for (size_t i = 0; i < 16 && i < fullPayload.size(); ++i) {
+                std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)fullPayload[i] << " ";
+            }
+            std::cout << std::dec << std::endl;
+
+            const int row_stride = width * 4;
+            size_t bitOffset = 0;
+
+            // --- FIX 3: Column-major order (x outer, y inner) ---
+            // This matches the Python implementation: for x in range(width): for y in range(height)
+            for (int x = 0; x < width; ++x) {
+                for (int y = 0; y < height; ++y) {
+                    unsigned char* pixelAlpha = rgbaData + y * row_stride + x * 4 + 3;
+                    // Write 8 bits per pixel (one per channel bit, but we only use alpha LSB)
+                    // Actually the Python code writes one bit per pixel, not 8.
+                    // So we write one bit per pixel.
+                    if (bitOffset < totalBits) {
+                        if (fullPayload[bitOffset]) {
+                            *pixelAlpha |= 1;
                         }
+                        else {
+                            *pixelAlpha &= ~1;
+                        }
+                        bitOffset++;
                     }
+                    if (bitOffset >= totalBits) break;
                 }
-
-                highestIndex++;
-                std::ostringstream formattedIndex;
-                formattedIndex << std::setw(5) << std::setfill('0') << highestIndex;
-
-                std::filesystem::path newFilePath = directoryPath / (baseName + "-" + formattedIndex.str() + extension);
-                return newFilePath.string();
+                if (bitOffset >= totalBits) break;
             }
-            catch (const std::exception& e)
-            {
-                std::cerr << "Error in CreateUniqueFilename: " << e.what() << std::endl;
-                return "AniStudio_fallback.png";
+
+            // DEBUG: read back first 16 bytes to confirm embedding
+            std::vector<unsigned char> readback(16, 0);
+            size_t bitPos = 0;
+            for (int x = 0; x < width && bitPos < 128; ++x) {
+                for (int y = 0; y < height && bitPos < 128; ++y) {
+                    unsigned char alpha = rgbaData[y * row_stride + x * 4 + 3];
+                    if (alpha & 1) {
+                        readback[bitPos / 8] |= (1 << (7 - (bitPos % 8)));
+                    }
+                    bitPos++;
+                }
             }
-        }
+            std::cout << "[DEBUG] First 16 bytes read from alpha after embedding: ";
+            for (int i = 0; i < 16; ++i) {
+                std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)readback[i] << " ";
+            }
+            std::cout << std::dec << std::endl;
 
-        static nlohmann::json ReadMetadataFromPNG(const std::string& imagePath)
-        {
-            return MetadataUtils::LoadMetadataFromPNG(imagePath);
-        }
+            // --- Write the PNG file (unchanged) ---
+            std::string tempFile = imagePath + ".tmp";
+            FILE* out = fopen(tempFile.c_str(), "wb");
+            if (!out) {
+                std::cerr << "Failed to create temporary file" << std::endl;
+                if (needConversion) free(rgbaData);
+                return false;
+            }
 
-        static nlohmann::json CreateGenerationMetadata(const nlohmann::json& entityData,
-            const nlohmann::json& additionalInfo = {})
-        {
-            return MetadataUtils::CreateGenerationMetadata(entityData, additionalInfo);
+            png_structp pngWrite = png_create_write_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+            if (!pngWrite) {
+                std::cerr << "Failed to create PNG write struct" << std::endl;
+                fclose(out);
+                if (needConversion) free(rgbaData);
+                return false;
+            }
+
+            png_infop infoWrite = png_create_info_struct(pngWrite);
+            if (!infoWrite) {
+                std::cerr << "Failed to create PNG info struct" << std::endl;
+                png_destroy_write_struct(&pngWrite, nullptr);
+                fclose(out);
+                if (needConversion) free(rgbaData);
+                return false;
+            }
+
+            if (setjmp(png_jmpbuf(pngWrite))) {
+                std::cerr << "Error during PNG write" << std::endl;
+                png_destroy_write_struct(&pngWrite, &infoWrite);
+                fclose(out);
+                if (needConversion) free(rgbaData);
+                return false;
+            }
+
+            png_init_io(pngWrite, out);
+            png_set_IHDR(pngWrite, infoWrite, width, height, 8, PNG_COLOR_TYPE_RGBA,
+                PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
+
+            // Add standard text chunks (for compatibility)
+            std::string metadataStr = metadata.dump();
+            std::vector<png_text> texts;
+
+            png_text paramText;
+            paramText.compression = PNG_TEXT_COMPRESSION_NONE;
+            paramText.key = const_cast<char*>("parameters");
+            paramText.text = const_cast<char*>(metadataStr.c_str());
+            paramText.text_length = metadataStr.length();
+            paramText.itxt_length = 0;
+            paramText.lang = nullptr;
+            paramText.lang_key = nullptr;
+            texts.push_back(paramText);
+
+            png_text softwareText;
+            softwareText.compression = PNG_TEXT_COMPRESSION_NONE;
+            softwareText.key = const_cast<char*>("Software");
+            softwareText.text = const_cast<char*>("AniStudio");
+            softwareText.text_length = 9;
+            softwareText.itxt_length = 0;
+            softwareText.lang = nullptr;
+            softwareText.lang_key = nullptr;
+            texts.push_back(softwareText);
+
+            png_set_text(pngWrite, infoWrite, texts.data(), static_cast<int>(texts.size()));
+            png_write_info(pngWrite, infoWrite);
+
+            std::vector<png_byte> row(width * 4);
+            for (png_uint_32 y = 0; y < height; y++) {
+                memcpy(row.data(), rgbaData + y * row_stride, width * 4);
+                png_write_row(pngWrite, row.data());
+            }
+
+            png_write_end(pngWrite, infoWrite);
+            png_destroy_write_struct(&pngWrite, &infoWrite);
+            fclose(out);
+
+            if (needConversion) free(rgbaData);
+
+            try {
+                std::filesystem::path originalPath(imagePath);
+                std::filesystem::path tempPath(tempFile);
+                if (std::filesystem::exists(originalPath)) std::filesystem::remove(originalPath);
+                std::filesystem::rename(tempPath, originalPath);
+                std::cout << "Successfully wrote stealth metadata (with signature) to PNG: " << imagePath << std::endl;
+                return true;
+            }
+            catch (const std::filesystem::filesystem_error& e) {
+                std::cerr << "Error replacing file: " << e.what() << std::endl;
+                return false;
+            }
         }
     };
-
 } // namespace Utils

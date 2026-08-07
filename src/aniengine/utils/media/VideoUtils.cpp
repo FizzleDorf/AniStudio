@@ -234,9 +234,12 @@ namespace Utils {
 
         const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
         if (!codec) {
-            std::cerr << "H.264 encoder not found" << std::endl;
-            avformat_free_context(fmtCtx);
-            return false;
+            codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
+            if (!codec) {
+                std::cerr << "No suitable video encoder found" << std::endl;
+                avformat_free_context(fmtCtx);
+                return false;
+            }
         }
 
         AVStream* stream = avformat_new_stream(fmtCtx, nullptr);
@@ -253,15 +256,12 @@ namespace Utils {
             return false;
         }
 
-        // Determine input pixel format
         int inputChannels = frames[0].channels;
         AVPixelFormat inputPixFmt;
-        if (inputChannels == 3) {
+        if (inputChannels == 3)
             inputPixFmt = AV_PIX_FMT_RGB24;
-        }
-        else if (inputChannels == 4) {
+        else if (inputChannels == 4)
             inputPixFmt = AV_PIX_FMT_RGBA;
-        }
         else {
             std::cerr << "Unsupported channel count: " << inputChannels << std::endl;
             avcodec_free_context(&codecCtx);
@@ -279,8 +279,6 @@ namespace Utils {
         codecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
         codecCtx->bit_rate = 4000000;
         codecCtx->gop_size = 10;
-        codecCtx->profile = FF_PROFILE_H264_HIGH;
-        codecCtx->level = 40; // Level 4.0
 
         if (fmtCtx->oformat->flags & AVFMT_GLOBALHEADER)
             codecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
@@ -296,17 +294,12 @@ namespace Utils {
         avcodec_parameters_from_context(stream->codecpar, codecCtx);
         stream->time_base = codecCtx->time_base;
 
-        // Embed metadata as a comment
         if (!metadata.is_null() && !metadata.empty()) {
             std::string jsonStr = metadata.dump();
-            AVDictionary* opts = nullptr;
-            av_dict_set(&opts, "comment", jsonStr.c_str(), 0);
-            ret = avio_open2(&fmtCtx->pb, outputPath.c_str(), AVIO_FLAG_WRITE, nullptr, &opts);
-            av_dict_free(&opts);
+            av_dict_set(&fmtCtx->metadata, "comment", jsonStr.c_str(), 0);
         }
-        else {
-            ret = avio_open(&fmtCtx->pb, outputPath.c_str(), AVIO_FLAG_WRITE);
-        }
+
+        ret = avio_open(&fmtCtx->pb, outputPath.c_str(), AVIO_FLAG_WRITE);
         if (ret < 0) {
             std::cerr << "Failed to open output file " << outputPath << std::endl;
             avcodec_free_context(&codecCtx);
@@ -368,7 +361,6 @@ namespace Utils {
                 std::cerr << "Frame size mismatch or invalid data" << std::endl;
                 continue;
             }
-            // Copy data into frame buffer
             size_t dataSize = width * height * inputChannels;
             memcpy(frame->data[0], vf.data, dataSize);
 

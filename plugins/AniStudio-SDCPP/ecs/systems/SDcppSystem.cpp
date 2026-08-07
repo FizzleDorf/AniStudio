@@ -366,7 +366,7 @@ namespace ECS {
         bool ok = generate_image(context, &params, &images, &count);
         if (ok && count > 0 && images && images[0].data) {
             Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height, images[0].channel, images[0].data);
-            Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadata, true, false);
             free_sd_images(images, count);
             return true;
         }
@@ -390,7 +390,7 @@ namespace ECS {
         bool ok = generate_image(context, &params, &images, &count);
         if (ok && count > 0 && images && images[0].data) {
             Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height, images[0].channel, images[0].data);
-            Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadata, true, false);
             free_sd_images(images, count);
             return true;
         }
@@ -483,7 +483,7 @@ namespace ECS {
         bool ok = upscale(ctx, input, factor, &out, &count);
         if (ok && count > 0 && out && out[0].data) {
             Utils::ImageUtils::SaveImage(fullPath, out[0].width, out[0].height, out[0].channel, out[0].data);
-            Utils::PngMetadata::WriteMetadataToPNG(fullPath, metadata);
+            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadata, true, false);
             free_sd_images(out, count);
             stbi_image_free(input.data);
             free_upscaler_ctx(ctx);

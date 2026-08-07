@@ -11,7 +11,7 @@ namespace Utils {
     struct VideoFrame {
         int width = 0;
         int height = 0;
-        int channels = 4;          // 3 for RGB, 4 for RGBA
+        int channels = 4;
         const unsigned char* data = nullptr;
     };
 
