@@ -1,6 +1,10 @@
+// SDCPPSettingsTab.cpp
 #include "SDCPPSettingsTab.hpp"
+#include "DiffusionOptions.hpp"
 #include <imgui.h>
 #include <algorithm>
+#include <vector>
+#include <string>
 
 namespace ECS {
 
@@ -13,10 +17,6 @@ namespace ECS {
         std::string f = m_filter;
         std::transform(f.begin(), f.end(), f.begin(), ::tolower);
         return lower.find(f) != std::string::npos;
-    }
-
-    static void RenderPropertyWithTooltip(const char* label, void* data_ptr, const nlohmann::json& prop_schema) {
-
     }
 
     static void ShowTooltip(const nlohmann::json& prop_schema) {
@@ -101,15 +101,36 @@ namespace ECS {
         }
         ShowTooltip(props["rpc_servers"]);
 
-        if (ImGui::Combo("LoRA Apply Mode", &m_comp.lora_apply_mode, lora_apply_mode_items, lora_apply_mode_item_count)) {
+        // LoRA Apply Mode combo - using new string-based names
+        const auto& lora_names = get_lora_apply_mode_names();
+        static std::vector<const char*> lora_cstr;
+        static bool initialized = false;
+        if (!initialized) {
+            lora_cstr.reserve(lora_names.size());
+            for (const auto& name : lora_names) {
+                lora_cstr.push_back(name.c_str());
+            }
+            initialized = true;
+        }
+
+        int current_idx = 0;
+        for (size_t i = 0; i < lora_names.size(); ++i) {
+            if (lora_names[i] == m_comp.lora_apply_mode) {
+                current_idx = static_cast<int>(i);
+                break;
+            }
+        }
+
+        if (ImGui::Combo("LoRA Apply Mode", &current_idx, lora_cstr.data(), static_cast<int>(lora_cstr.size()))) {
+            m_comp.lora_apply_mode = lora_names[current_idx];
         }
         ShowTooltip(props["lora_apply_mode"]);
     }
 
     void SDCPPSettingsTab::RenderAdvancedSettings() {
         auto& props = m_comp.schema["properties"];
-        
-        ImGui::Checkbox("Flash Attention", &m_comp.diffusion_flash_attn);
+
+        ImGui::Checkbox("Flash Attention", &m_comp.flash_attn);
         ShowTooltip(props["flash_attn"]);
 
         ImGui::Checkbox("Diffusion Flash Attention", &m_comp.diffusion_flash_attn);

@@ -1,3 +1,4 @@
+// OtherModelComponents.hpp
 #pragma once
 
 #include "BaseModelComponent.hpp"
@@ -360,12 +361,12 @@ namespace ECS {
                 {"propertyOrder", {"lora_apply_mode", "loras"}},
                 {"properties", {
                     {"lora_apply_mode", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "LoRA Apply Mode"},
                         {"description", "When to apply LoRAs (auto, immediately, at runtime)."},
                         {"ui:widget", "combo"},
-                        {"items", lora_apply_mode_items},
-                        {"itemCount", lora_apply_mode_item_count}
+                        {"items", get_lora_apply_mode_names()},
+                        {"itemCount", static_cast<int>(get_lora_apply_mode_names().size())}
                     }},
                     {"loras", {
                         {"type", "array"},
@@ -396,12 +397,12 @@ namespace ECS {
             };
         }
 
-        enum lora_apply_mode_t lora_apply_mode = LORA_APPLY_AUTO;
+        std::string lora_apply_mode = "LORA_APPLY_AUTO";
         std::vector<LoraEntry> loras;
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
-                {"lora_apply_mode", reinterpret_cast<int*>(&lora_apply_mode)},
+                {"lora_apply_mode", &lora_apply_mode},
                 {"loras", reinterpret_cast<void*>(&loras)}
             };
         }
@@ -424,7 +425,7 @@ namespace ECS {
                     });
             }
             return { {compName, {
-                {"lora_apply_mode", static_cast<int>(lora_apply_mode)},
+                {"lora_apply_mode", lora_apply_mode},
                 {"loras", arr}
             }} };
         }
@@ -434,7 +435,7 @@ namespace ECS {
             if (j.contains(compName)) {
                 auto comp = j[compName];
                 if (comp.contains("lora_apply_mode"))
-                    lora_apply_mode = static_cast<lora_apply_mode_t>(comp["lora_apply_mode"].get<int>());
+                    lora_apply_mode = comp["lora_apply_mode"].get<std::string>();
                 if (comp.contains("loras") && comp["loras"].is_array()) {
                     loras.clear();
                     for (const auto& item : comp["loras"]) {
@@ -446,6 +447,24 @@ namespace ECS {
                     }
                 }
             }
+        }
+
+        // Helper to convert to C API representation when needed
+        std::vector<sd_lora_t> to_sd_loras() const {
+            std::vector<sd_lora_t> result;
+            result.reserve(loras.size());
+            for (const auto& entry : loras) {
+                sd_lora_t lora{};
+                lora.path = entry.path.c_str();
+                lora.multiplier = entry.multiplier;
+                lora.is_high_noise = entry.is_high_noise;
+                result.push_back(lora);
+            }
+            return result;
+        }
+
+        enum lora_apply_mode_t get_lora_apply_mode_enum() const {
+            return static_cast<enum lora_apply_mode_t>(lora_apply_mode_from_name(lora_apply_mode));
         }
     };
 

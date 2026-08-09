@@ -1,3 +1,4 @@
+// SamplerComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -25,36 +26,20 @@ namespace ECS {
                 }},
                 {"properties", {
                     {"current_sample_method", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Sampler"},
                         {"description", "Sampling algorithm to use (Euler, DPM++, etc.)."},
                         {"ui:widget", "combo"},
-                        {"items", sample_method_items},
-                        {"itemCount", sample_method_item_count}
+                        {"items", get_sample_method_names()},
+                        {"itemCount", static_cast<int>(get_sample_method_names().size())}
                     }},
                     {"current_scheduler_method", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Scheduler"},
                         {"description", "Noise schedule (Karras, Exponential, etc.)."},
                         {"ui:widget", "combo"},
-                        {"items", scheduler_method_items},
-                        {"itemCount", scheduler_method_item_count}
-                    }},
-                    {"current_type_method", {
-                        {"type", "integer"},
-                        {"title", "Quant Type"},
-                        {"description", "Quantization type for model weights (FP16, Q4_K, etc.)."},
-                        {"ui:widget", "combo"},
-                        {"items", type_method_items},
-                        {"itemCount", type_method_item_count}
-                    }},
-                    {"current_prediction_type", {
-                        {"type", "integer"},
-                        {"title", "Prediction Type"},
-                        {"description", "Prediction type (EPS, V-Pred, Flow, etc.)."},
-                        {"ui:widget", "combo"},
-                        {"items", prediction_type_items},
-                        {"itemCount", prediction_type_item_count}
+                        {"items", get_scheduler_names()},
+                        {"itemCount", static_cast<int>(get_scheduler_names().size())}
                     }},
                     {"seed", {
                         {"type", "integer"},
@@ -126,10 +111,8 @@ namespace ECS {
         bool keep_clip_on_cpu = false;
         bool keep_control_net_on_cpu = false;
 
-        sample_method_t current_sample_method = EULER_SAMPLE_METHOD;
-        scheduler_t current_scheduler_method = DISCRETE_SCHEDULER;
-        sd_type_t current_type_method = SD_TYPE_F16;
-        prediction_t current_prediction_type = EPS_PRED;
+        std::string current_sample_method = "EULER";
+        std::string current_scheduler_method = "DISCRETE";
 
         std::string extra_sample_args;
 
@@ -143,10 +126,8 @@ namespace ECS {
                 {"offload_params_to_cpu", &offload_params_to_cpu},
                 {"keep_clip_on_cpu", &keep_clip_on_cpu},
                 {"keep_control_net_on_cpu", &keep_control_net_on_cpu},
-                {"current_sample_method", reinterpret_cast<int*>(&current_sample_method)},
-                {"current_scheduler_method", reinterpret_cast<int*>(&current_scheduler_method)},
-                {"current_type_method", reinterpret_cast<int*>(&current_type_method)},
-                {"current_prediction_type", reinterpret_cast<int*>(&current_prediction_type)},
+                {"current_sample_method", &current_sample_method},
+                {"current_scheduler_method", &current_scheduler_method},
                 {"extra_sample_args", &extra_sample_args}
             };
         }
@@ -163,8 +144,6 @@ namespace ECS {
                 keep_control_net_on_cpu = other.keep_control_net_on_cpu;
                 current_sample_method = other.current_sample_method;
                 current_scheduler_method = other.current_scheduler_method;
-                current_type_method = other.current_type_method;
-                current_prediction_type = other.current_prediction_type;
                 extra_sample_args = other.extra_sample_args;
             }
             return *this;
@@ -180,10 +159,8 @@ namespace ECS {
                 {"offload_params_to_cpu", offload_params_to_cpu},
                 {"keep_clip_on_cpu", keep_clip_on_cpu},
                 {"keep_control_net_on_cpu", keep_control_net_on_cpu},
-                {"current_sample_method", static_cast<int>(current_sample_method)},
-                {"current_scheduler_method", static_cast<int>(current_scheduler_method)},
-                {"current_type_method", static_cast<int>(current_type_method)},
-                {"current_prediction_type", static_cast<int>(current_prediction_type)},
+                {"current_sample_method", current_sample_method},
+                {"current_scheduler_method", current_scheduler_method},
                 {"extra_sample_args", extra_sample_args}
             }} };
         }
@@ -219,13 +196,9 @@ namespace ECS {
             if (componentData.contains("keep_control_net_on_cpu"))
                 keep_control_net_on_cpu = componentData["keep_control_net_on_cpu"].get<bool>();
             if (componentData.contains("current_sample_method"))
-                current_sample_method = static_cast<sample_method_t>(componentData["current_sample_method"].get<int>());
+                current_sample_method = componentData["current_sample_method"].get<std::string>();
             if (componentData.contains("current_scheduler_method"))
-                current_scheduler_method = static_cast<scheduler_t>(componentData["current_scheduler_method"].get<int>());
-            if (componentData.contains("current_type_method"))
-                current_type_method = static_cast<sd_type_t>(componentData["current_type_method"].get<int>());
-            if (componentData.contains("current_prediction_type"))
-                current_prediction_type = static_cast<prediction_t>(componentData["current_prediction_type"].get<int>());
+                current_scheduler_method = componentData["current_scheduler_method"].get<std::string>();
             if (componentData.contains("extra_sample_args"))
                 extra_sample_args = componentData["extra_sample_args"].get<std::string>();
         }

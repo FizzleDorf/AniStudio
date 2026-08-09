@@ -1,3 +1,4 @@
+// AutoEncoderComponent.hpp
 #pragma once
 
 #include "BaseModelComponent.hpp"
@@ -9,28 +10,6 @@
 #include "DiffusionOptions.hpp"
 
 namespace ECS {
-
-    inline sd_vae_format_t vae_format_index_to_enum(int index) {
-        switch (index) {
-        case 0: return SD_VAE_FORMAT_AUTO;
-        case 1: return SD_VAE_FORMAT_FLUX;
-        case 2: return SD_VAE_FORMAT_SD3;
-        case 3: return SD_VAE_FORMAT_FLUX2;
-        case 4: return SD_VAE_FORMAT_WAN;
-        default: return SD_VAE_FORMAT_AUTO;
-        }
-    }
-
-    inline int vae_format_enum_to_index(sd_vae_format_t fmt) {
-        switch (fmt) {
-        case SD_VAE_FORMAT_AUTO:  return 0;
-        case SD_VAE_FORMAT_FLUX:  return 1;
-        case SD_VAE_FORMAT_SD3:   return 2;
-        case SD_VAE_FORMAT_FLUX2: return 3;
-        case SD_VAE_FORMAT_WAN:   return 4;
-        default: return 0;
-        }
-    }
 
     struct VaeComponent : public BaseModelComponent {
         VaeComponent() {
@@ -146,18 +125,18 @@ namespace ECS {
                         {"ui:widget", "checkbox"}
                     }},
                     {"vae_format", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "VAE Format"},
                         {"description", "Format of the VAE model (auto, flux, sd3, flux2, wan)."},
                         {"ui:widget", "combo"},
-                        {"items", vae_format_items},
-                        {"itemCount", vae_format_item_count}
+                        {"items", get_vae_format_names()},
+                        {"itemCount", static_cast<int>(get_vae_format_names().size())}
                     }}
                 }}
             };
         }
 
-        int vae_format = 0;
+        std::string vae_format = "AUTO";
         int tile_size_x = 64, tile_size_y = 64;
         float target_overlap = 0;
         float rel_size_x = 64, rel_size_y = 64;
@@ -219,7 +198,7 @@ namespace ECS {
                 {"extra_tiling_args", extra_tiling_args},
                 {"keep_vae_on_cpu", keep_vae_on_cpu},
                 {"vae_decode_only", vae_decode_only},
-                {"vae_format", static_cast<int>(vae_format_index_to_enum(vae_format))}
+                {"vae_format", vae_format}
             }} };
         }
 
@@ -262,14 +241,12 @@ namespace ECS {
                 keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
             if (componentData.contains("vae_decode_only"))
                 vae_decode_only = componentData["vae_decode_only"].get<bool>();
-            if (componentData.contains("vae_format")) {
-                int enum_val = componentData["vae_format"].get<int>();
-                vae_format = vae_format_enum_to_index(static_cast<sd_vae_format_t>(enum_val));
-            }
+            if (componentData.contains("vae_format"))
+                vae_format = componentData["vae_format"].get<std::string>();
         }
 
         sd_vae_format_t get_vae_format_enum() const {
-            return vae_format_index_to_enum(vae_format);
+            return static_cast<sd_vae_format_t>(vae_format_from_name(vae_format));
         }
     };
 

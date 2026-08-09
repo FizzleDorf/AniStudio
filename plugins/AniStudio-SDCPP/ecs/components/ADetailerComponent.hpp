@@ -1,3 +1,4 @@
+// ADetailerComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -33,8 +34,8 @@ namespace ECS {
         float denoising_strength = -1.0f;
         int steps = 0;
         float cfg_scale = -1.0f;
-        int sample_method = 0;
-        int scheduler = 0;
+        std::string sample_method = "EULER";
+        std::string scheduler = "DISCRETE";
         std::string sort_by = "none";
         std::string extra_ad_args_override;
 
@@ -200,18 +201,18 @@ namespace ECS {
                         {"ui:options", {{"step", 0.1f}, {"min", -1.0f}, {"max", 30.0f}}}
                     }},
                     {"sample_method", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Sampler"},
                         {"ui:widget", "combo"},
-                        {"items", sample_method_items},
-                        {"itemCount", sample_method_item_count}
+                        {"items", get_sample_method_names()},
+                        {"itemCount", static_cast<int>(get_sample_method_names().size())}
                     }},
                     {"scheduler", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Scheduler"},
                         {"ui:widget", "combo"},
-                        {"items", scheduler_method_items},
-                        {"itemCount", scheduler_method_item_count}
+                        {"items", get_scheduler_names()},
+                        {"itemCount", static_cast<int>(get_scheduler_names().size())}
                     }},
                     {"sort_by", {
                         {"type", "string"},
@@ -366,8 +367,8 @@ namespace ECS {
             if (componentData.contains("denoising_strength")) denoising_strength = componentData["denoising_strength"];
             if (componentData.contains("steps")) steps = componentData["steps"];
             if (componentData.contains("cfg_scale")) cfg_scale = componentData["cfg_scale"];
-            if (componentData.contains("sample_method")) sample_method = componentData["sample_method"];
-            if (componentData.contains("scheduler")) scheduler = componentData["scheduler"];
+            if (componentData.contains("sample_method")) sample_method = componentData["sample_method"].get<std::string>();
+            if (componentData.contains("scheduler")) scheduler = componentData["scheduler"].get<std::string>();
             if (componentData.contains("sort_by")) sort_by = componentData["sort_by"].get<std::string>();
             if (componentData.contains("extra_ad_args_override")) extra_ad_args_override = componentData["extra_ad_args_override"].get<std::string>();
         }
@@ -397,11 +398,11 @@ namespace ECS {
             if (denoising_strength >= 0.0f) args += ",denoising_strength=" + std::to_string(denoising_strength);
             if (steps > 0) args += ",steps=" + std::to_string(steps);
             if (cfg_scale >= 0.0f) args += ",cfg_scale=" + std::to_string(cfg_scale);
-            if (sample_method >= 0 && sample_method < sample_method_item_count) {
-                args += ",sample_method=" + std::string(sample_method_items[sample_method]);
+            if (!sample_method.empty() && sample_method != "EULER") {
+                args += ",sample_method=" + sample_method;
             }
-            if (scheduler >= 0 && scheduler < scheduler_method_item_count) {
-                args += ",scheduler=" + std::string(scheduler_method_items[scheduler]);
+            if (!scheduler.empty() && scheduler != "DISCRETE") {
+                args += ",scheduler=" + scheduler;
             }
             if (!sort_by.empty() && sort_by != "none") args += ",sort_by=" + sort_by;
             return args;

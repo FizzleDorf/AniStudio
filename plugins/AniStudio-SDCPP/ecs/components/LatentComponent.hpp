@@ -1,3 +1,4 @@
+// LatentComponent.hpp
 #pragma once
 
 #include "stable-diffusion.h"
@@ -12,8 +13,8 @@ namespace ECS {
     struct LatentComponent : public ECS::BaseComponent {
         int latentWidth = 512;
         int latentHeight = 512;
-        enum rng_type_t current_rng_type = STD_DEFAULT_RNG;
-        enum rng_type_t sampler_rng_type = STD_DEFAULT_RNG;
+        std::string current_rng_type = "STD_DEFAULT_RNG";
+        std::string sampler_rng_type = "STD_DEFAULT_RNG";
         bool circular_x = false;
         bool circular_y = false;
 
@@ -51,20 +52,20 @@ namespace ECS {
                         }}
                     }},
                     {"current_rng_type", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "RNG Type (initial noise)"},
                         {"description", "Random number generator for initial latent noise."},
                         {"ui:widget", "combo"},
-                        {"items", type_rng_items},
-                        {"itemCount", type_rng_item_count}
+                        {"items", get_rng_type_names()},
+                        {"itemCount", static_cast<int>(get_rng_type_names().size())}
                     }},
                     {"sampler_rng_type", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Sampler RNG Type"},
                         {"description", "Random number generator used during sampling."},
                         {"ui:widget", "combo"},
-                        {"items", type_rng_items},
-                        {"itemCount", type_rng_item_count}
+                        {"items", get_rng_type_names()},
+                        {"itemCount", static_cast<int>(get_rng_type_names().size())}
                     }},
                     {"circular_x", {
                         {"type", "boolean"},
@@ -86,8 +87,8 @@ namespace ECS {
             return {
                 {"latentWidth", &latentWidth},
                 {"latentHeight", &latentHeight},
-                {"current_rng_type", reinterpret_cast<int*>(&current_rng_type)},
-                {"sampler_rng_type", reinterpret_cast<int*>(&sampler_rng_type)},
+                {"current_rng_type", &current_rng_type},
+                {"sampler_rng_type", &sampler_rng_type},
                 {"circular_x", &circular_x},
                 {"circular_y", &circular_y}
             };
@@ -109,8 +110,8 @@ namespace ECS {
             return { {compName, {
                 {"latentWidth", latentWidth},
                 {"latentHeight", latentHeight},
-                {"current_rng_type", static_cast<int>(current_rng_type)},
-                {"sampler_rng_type", static_cast<int>(sampler_rng_type)},
+                {"current_rng_type", current_rng_type},
+                {"sampler_rng_type", sampler_rng_type},
                 {"circular_x", circular_x},
                 {"circular_y", circular_y}
             }} };
@@ -135,9 +136,9 @@ namespace ECS {
             if (componentData.contains("latentHeight"))
                 latentHeight = componentData["latentHeight"];
             if (componentData.contains("current_rng_type"))
-                current_rng_type = static_cast<rng_type_t>(componentData["current_rng_type"].get<int>());
+                current_rng_type = componentData["current_rng_type"].get<std::string>();
             if (componentData.contains("sampler_rng_type"))
-                sampler_rng_type = static_cast<rng_type_t>(componentData["sampler_rng_type"].get<int>());
+                sampler_rng_type = componentData["sampler_rng_type"].get<std::string>();
             if (componentData.contains("circular_x"))
                 circular_x = componentData["circular_x"];
             if (componentData.contains("circular_y"))

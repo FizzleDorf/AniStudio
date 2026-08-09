@@ -1,3 +1,4 @@
+// SDCacheComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -8,7 +9,7 @@
 namespace ECS {
 
     struct EasyCacheComponent : public BaseComponent {
-        sd_cache_mode_t mode = SD_CACHE_DISABLED;
+        std::string mode = "DISABLED";
         float reuse_threshold = 1.0f;
         float start_percent = 0.15f;
         float end_percent = 0.95f;
@@ -43,12 +44,12 @@ namespace ECS {
                 {"description", "Cache management for faster generation (set mode to EASYCACHE to enable)."},
                 {"properties", {
                     {"mode", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Cache Mode"},
                         {"description", "Cache mode selection. EasyCache for DiT models, UCache/Spectrum for UNet models."},
                         {"ui:widget", "combo"},
-                        {"items", cache_mode_items},
-                        {"itemCount", cache_mode_item_count}
+                        {"items", get_cache_mode_names()},
+                        {"itemCount", static_cast<int>(get_cache_mode_names().size())}
                     }},
                     {"reuse_threshold", {
                         {"type", "number"},
@@ -217,7 +218,7 @@ namespace ECS {
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
-                {"mode", reinterpret_cast<int*>(&mode)},
+                {"mode", &mode},
                 {"reuse_threshold", &reuse_threshold},
                 {"start_percent", &start_percent},
                 {"end_percent", &end_percent}
@@ -226,7 +227,7 @@ namespace ECS {
 
         nlohmann::json Serialize() const override {
             return { {compName, {
-                {"mode", static_cast<int>(mode)},
+                {"mode", mode},
                 {"reuse_threshold", reuse_threshold},
                 {"start_percent", start_percent},
                 {"end_percent", end_percent},
@@ -265,7 +266,7 @@ namespace ECS {
             }
 
             if (componentData.contains("mode"))
-                mode = static_cast<sd_cache_mode_t>(componentData["mode"].get<int>());
+                mode = componentData["mode"].get<std::string>();
             if (componentData.contains("reuse_threshold"))
                 reuse_threshold = componentData["reuse_threshold"].get<float>();
             if (componentData.contains("start_percent"))

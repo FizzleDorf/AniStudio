@@ -566,10 +566,8 @@ namespace SDCPP {
             if (comp.contains("Sampler")) {
                 const auto& s = comp["Sampler"];
                 if (s.contains("n_threads")) ctx.n_threads = s["n_threads"].get<int>();
-                if (s.contains("current_type_method")) ctx.wtype = static_cast<enum sd_type_t>(s["current_type_method"].get<int>());
                 if (s.contains("current_rng_type")) ctx.rng_type = static_cast<enum rng_type_t>(s["current_rng_type"].get<int>());
                 if (s.contains("sampler_rng_type")) ctx.sampler_rng_type = static_cast<enum rng_type_t>(s["sampler_rng_type"].get<int>());
-                if (s.contains("current_prediction_type")) ctx.prediction = static_cast<enum prediction_t>(s["current_prediction_type"].get<int>());
                 if (s.contains("tae_preview_only")) ctx.tae_preview_only = s["tae_preview_only"].get<bool>();
                 if (s.contains("model_args") && !s["model_args"].is_null()) {
                     std::string val = s["model_args"].get<std::string>();

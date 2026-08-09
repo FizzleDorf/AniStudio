@@ -14,22 +14,28 @@ namespace ECS {
 			schema = {
 				{"title", "Prompt Settings"},
 				{"type", "object"},
-				{"propertyOrder", {"posPrompt", "negPrompt", "normalize_input"}},
+				{"propertyOrder", {"normalize_input", "posPrompt", "negPrompt"}},
 				{"properties", {
+					 {"normalize_input", {
+						{"type", "boolean"},
+						{"title", "Normalize Tokens"},
+						{"description", "Normalization of token attention across chunks"},
+						{"ui:widget", "checkbox"}
+					}},
 					{"posPrompt", {
 						{"type", "string"},
 						{"title", "Positive"},
-						{"ui:widget", "text_editor"},   // changed to use ImGuiColorTextEdit
+						{"ui:widget", "text_editor"},
 						{"ui:window_name", "Positive Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},
-							{"showMenuBar", true}      // note: ImGuiColorTextEdit doesn't have menu bar, but we keep for compatibility
+							{"showMenuBar", true}
 						}}
 					}},
 					{"negPrompt", {
 						{"type", "string"},
 						{"title", "Negative"},
-						{"ui:widget", "text_editor"},   // changed to use ImGuiColorTextEdit
+						{"ui:widget", "text_editor"},
 						{"ui:window_name", "Negative Prompt"},
 						{"ui:options", {
 							{"maxLength", 8192},

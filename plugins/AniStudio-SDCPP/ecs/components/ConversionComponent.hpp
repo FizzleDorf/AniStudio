@@ -1,3 +1,4 @@
+// ConversionComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -40,8 +41,8 @@ namespace ECS {
                         {"title", "Output Type"},
                         {"description", "Quantization type for the converted model"},
                         {"ui:widget", "combo"},
-                        {"items", type_method_items},
-                        {"itemCount", type_method_item_count},
+                        {"items", get_type_method_names()},
+                        {"itemCount", static_cast<int>(get_type_method_names().size())},
                         {"default", "F16"}
                     }},
                     {"nThreads", {
@@ -93,7 +94,7 @@ namespace ECS {
         }
 
         enum sd_type_t get_output_type_enum() const {
-            return str_to_sd_type(outputType.c_str());
+            return static_cast<enum sd_type_t>(type_method_from_name(outputType));
         }
     };
 
