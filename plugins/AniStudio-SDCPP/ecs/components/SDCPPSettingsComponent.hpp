@@ -10,6 +10,7 @@ namespace ECS {
     class SDCPPSettingsComponent : public BaseSettingsComponent {
     public:
         bool enable_mmap = true;
+        bool flash_attn = true;
         std::string max_vram = "-1";
         bool stream_layers = false;
         bool eager_load = false;
@@ -102,6 +103,12 @@ namespace ECS {
                         {"items", lora_apply_mode_items},
                         {"itemCount", lora_apply_mode_item_count}
                     }},
+                    {"flash_attn", {
+                        {"type", "boolean"},
+                        {"title", "Flash Attention"},
+                        {"description", "Enable Flash Attention for text encoders and VAE (faster, lower memory)."},
+                        {"ui:widget", "checkbox"}
+                    }},
                     {"diffusion_flash_attn", {
                         {"type", "boolean"},
                         {"title", "Diffusion Flash Attention"},
@@ -178,6 +185,7 @@ namespace ECS {
             return {
                 {"enable_mmap", enable_mmap},
                 {"max_vram", max_vram},
+                {"flash_attn", flash_attn},
                 {"stream_layers", stream_layers},
                 {"eager_load", eager_load},
                 {"backend", backend},
@@ -197,6 +205,7 @@ namespace ECS {
         void Deserialize(const nlohmann::json& j) override {
             if (j.contains("enable_mmap")) enable_mmap = j["enable_mmap"].get<bool>();
             if (j.contains("max_vram")) max_vram = j["max_vram"].get<std::string>();
+            if (j.contains("flash_attn")) flash_attn = j["flash_attn"].get<bool>();
             if (j.contains("stream_layers")) stream_layers = j["stream_layers"].get<bool>();
             if (j.contains("eager_load")) eager_load = j["eager_load"].get<bool>();
             if (j.contains("backend")) backend = j["backend"].get<std::string>();

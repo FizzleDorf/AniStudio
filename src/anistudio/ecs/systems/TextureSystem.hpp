@@ -114,7 +114,6 @@ namespace ECS {
                     if (!request.targetTexture) {
                         continue;
                     }
-                    // --- FIX: delete old texture before creating new one ---
                     if (*request.targetTexture != 0) {
                         glDeleteTextures(1, request.targetTexture);
                         *request.targetTexture = 0;

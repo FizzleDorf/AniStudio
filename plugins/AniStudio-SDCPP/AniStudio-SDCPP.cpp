@@ -152,7 +152,7 @@ public:
 
         entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames");
 
-        entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPPSettings");
+        entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPP");
 
         entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
         entityMgr.RegisterSystem<ECS::SDCPPSystem>();

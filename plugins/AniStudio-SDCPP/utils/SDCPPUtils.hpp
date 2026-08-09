@@ -570,14 +570,16 @@ namespace SDCPP {
                 if (s.contains("current_rng_type")) ctx.rng_type = static_cast<enum rng_type_t>(s["current_rng_type"].get<int>());
                 if (s.contains("sampler_rng_type")) ctx.sampler_rng_type = static_cast<enum rng_type_t>(s["sampler_rng_type"].get<int>());
                 if (s.contains("current_prediction_type")) ctx.prediction = static_cast<enum prediction_t>(s["current_prediction_type"].get<int>());
-                if (s.contains("lora_apply_mode")) ctx.lora_apply_mode = static_cast<enum lora_apply_mode_t>(s["lora_apply_mode"].get<int>());
+                if (s.contains("tae_preview_only")) ctx.tae_preview_only = s["tae_preview_only"].get<bool>();
+                if (s.contains("model_args") && !s["model_args"].is_null()) {
+                    std::string val = s["model_args"].get<std::string>();
+                    if (!val.empty()) ctx.model_args = res.storeString(val);
+                }
+            }
+            if (comp.contains("SDCPP")) {
+                const auto& s = comp["SDCPP"];
                 if (s.contains("enable_mmap")) ctx.enable_mmap = s["enable_mmap"].get<bool>();
                 if (s.contains("flash_attn")) ctx.flash_attn = s["flash_attn"].get<bool>();
-                if (s.contains("diffusion_flash_attn")) ctx.diffusion_flash_attn = s["diffusion_flash_attn"].get<bool>();
-                if (s.contains("tae_preview_only")) ctx.tae_preview_only = s["tae_preview_only"].get<bool>();
-                if (s.contains("diffusion_conv_direct")) ctx.diffusion_conv_direct = s["diffusion_conv_direct"].get<bool>();
-                if (s.contains("vae_conv_direct")) ctx.vae_conv_direct = s["vae_conv_direct"].get<bool>();
-                if (s.contains("force_sdxl_vae_conv_scale")) ctx.force_sdxl_vae_conv_scale = s["force_sdxl_vae_conv_scale"].get<bool>();
                 if (s.contains("max_vram") && !s["max_vram"].is_null()) {
                     std::string val = s["max_vram"].get<std::string>();
                     if (!val.empty()) ctx.max_vram = res.storeString(val);
@@ -601,9 +603,14 @@ namespace SDCPP {
                     std::string val = s["rpc_servers"].get<std::string>();
                     if (!val.empty()) ctx.rpc_servers = res.storeString(val);
                 }
-                if (s.contains("model_args") && !s["model_args"].is_null()) {
-                    std::string val = s["model_args"].get<std::string>();
-                    if (!val.empty()) ctx.model_args = res.storeString(val);
+                if (s.contains("lora_apply_mode")) {
+                    ctx.lora_apply_mode = static_cast<enum lora_apply_mode_t>(s["lora_apply_mode"].get<int>());
+                }
+                if (s.contains("diffusion_flash_attn")) ctx.diffusion_flash_attn = s["diffusion_flash_attn"].get<bool>();
+                if (s.contains("diffusion_conv_direct")) ctx.diffusion_conv_direct = s["diffusion_conv_direct"].get<bool>();
+                if (s.contains("vae_conv_direct")) ctx.vae_conv_direct = s["vae_conv_direct"].get<bool>();
+                if (s.contains("force_sdxl_vae_conv_scale")) {
+                    ctx.force_sdxl_vae_conv_scale = s["force_sdxl_vae_conv_scale"].get<bool>();
                 }
             }
             if (comp.contains("Embeddings") && comp["Embeddings"].is_array()) {
@@ -639,7 +646,6 @@ namespace SDCPP {
 
         return true;
     }
-
     inline bool parseVideoGenParams(const nlohmann::json& metadata, sd_vid_gen_params_t& params, ResourceManager& res) {
         sd_vid_gen_params_init(&params);
 

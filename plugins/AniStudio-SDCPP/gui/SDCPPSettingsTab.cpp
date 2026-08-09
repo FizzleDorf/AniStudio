@@ -108,6 +108,9 @@ namespace ECS {
 
     void SDCPPSettingsTab::RenderAdvancedSettings() {
         auto& props = m_comp.schema["properties"];
+        
+        ImGui::Checkbox("Flash Attention", &m_comp.diffusion_flash_attn);
+        ShowTooltip(props["flash_attn"]);
 
         ImGui::Checkbox("Diffusion Flash Attention", &m_comp.diffusion_flash_attn);
         ShowTooltip(props["diffusion_flash_attn"]);
