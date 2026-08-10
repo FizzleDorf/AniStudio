@@ -1,6 +1,7 @@
 #pragma once
 
 #include "stable-diffusion.h"
+#include "DiffusionOptions.hpp"
 #include <nlohmann/json.hpp>
 #include <stb_image.h>
 #include <string>
@@ -58,10 +59,22 @@ namespace SDCPP {
         try {
             if (comp.contains("steps")) params.sample_steps = comp["steps"].get<int>();
             if (comp.contains("current_sample_method")) {
-                params.sample_method = static_cast<enum sample_method_t>(comp["current_sample_method"].get<int>());
+                const auto& val = comp["current_sample_method"];
+                if (val.is_string()) {
+                    params.sample_method = static_cast<enum sample_method_t>(sample_method_from_name(val.get<std::string>()));
+                }
+                else if (val.is_number()) {
+                    params.sample_method = static_cast<enum sample_method_t>(val.get<int>());
+                }
             }
             if (comp.contains("current_scheduler_method")) {
-                params.scheduler = static_cast<enum scheduler_t>(comp["current_scheduler_method"].get<int>());
+                const auto& val = comp["current_scheduler_method"];
+                if (val.is_string()) {
+                    params.scheduler = static_cast<enum scheduler_t>(scheduler_from_name(val.get<std::string>()));
+                }
+                else if (val.is_number()) {
+                    params.scheduler = static_cast<enum scheduler_t>(val.get<int>());
+                }
             }
             if (comp.contains("extra_sample_args") && !comp["extra_sample_args"].is_null()) {
                 std::string s = comp["extra_sample_args"].get<std::string>();
@@ -121,7 +134,15 @@ namespace SDCPP {
 
     inline bool parseCacheParams(const nlohmann::json& comp, sd_cache_params_t& cache) {
         try {
-            if (comp.contains("mode")) cache.mode = static_cast<enum sd_cache_mode_t>(comp["mode"].get<int>());
+            if (comp.contains("mode")) {
+                const auto& val = comp["mode"];
+                if (val.is_string()) {
+                    cache.mode = static_cast<enum sd_cache_mode_t>(cache_mode_from_name(val.get<std::string>()));
+                }
+                else if (val.is_number()) {
+                    cache.mode = static_cast<enum sd_cache_mode_t>(val.get<int>());
+                }
+            }
             if (comp.contains("reuse_threshold")) cache.reuse_threshold = comp["reuse_threshold"].get<float>();
             if (comp.contains("start_percent")) cache.start_percent = comp["start_percent"].get<float>();
             if (comp.contains("end_percent")) cache.end_percent = comp["end_percent"].get<float>();
@@ -149,7 +170,7 @@ namespace SDCPP {
         catch (...) { return false; }
     }
 
-    inline bool parseTilingParams(const nlohmann::json& comp, sd_tiling_params_t& tiling) {
+    inline bool parseTilingParams(const nlohmann::json& comp, sd_tiling_params_t& tiling, ResourceManager& res) {
         try {
             if (comp.contains("isTiled")) tiling.enabled = comp["isTiled"].get<bool>();
             if (comp.contains("temporal_tiling")) tiling.temporal_tiling = comp["temporal_tiling"].get<bool>();
@@ -158,6 +179,10 @@ namespace SDCPP {
             if (comp.contains("target_overlap")) tiling.target_overlap = comp["target_overlap"].get<float>();
             if (comp.contains("rel_size_x")) tiling.rel_size_x = comp["rel_size_x"].get<float>();
             if (comp.contains("rel_size_y")) tiling.rel_size_y = comp["rel_size_y"].get<float>();
+            if (comp.contains("extra_tiling_args") && !comp["extra_tiling_args"].is_null()) {
+                std::string val = comp["extra_tiling_args"].get<std::string>();
+                if (!val.empty()) tiling.extra_tiling_args = res.storeString(val);
+            }
             return true;
         }
         catch (...) { return false; }
@@ -267,7 +292,7 @@ namespace SDCPP {
         params.pm_params.style_strength = 0.0f;
         params.pulid_params.id_embedding_path = nullptr;
         params.pulid_params.id_weight = 0.0f;
-        params.vae_tiling_params = { false, false, 64, 64, 0.0f, 64.0f, 64.0f, nullptr };
+        params.vae_tiling_params = { false, false, 64, 64, 0.75f, 64.0f, 64.0f, nullptr };
         sd_cache_params_init(&params.cache);
         sd_hires_params_init(&params.hires);
 
@@ -303,7 +328,7 @@ namespace SDCPP {
                 if (lat.contains("seed")) params.seed = static_cast<int64_t>(lat["seed"].get<int>());
             }
             if (comp.contains("Vae")) {
-                parseTilingParams(comp["Vae"], params.vae_tiling_params);
+                parseTilingParams(comp["Vae"], params.vae_tiling_params, res);
             }
             if (comp.contains("Guidance")) {
                 parseGuidanceParams(comp["Guidance"], params.sample_params, res);
@@ -447,8 +472,21 @@ namespace SDCPP {
                     if (!val.empty()) ctx.vae_path = res.storeString(val);
                 }
                 if (v.contains("vae_format")) {
-                    int val = v["vae_format"].get<int>();
-                    ctx.vae_format = static_cast<enum sd_vae_format_t>(val);
+                    const auto& val = v["vae_format"];
+                    if (val.is_string()) {
+                        ctx.vae_format = static_cast<enum sd_vae_format_t>(vae_format_from_name(val.get<std::string>()));
+                    }
+                    else if (val.is_number()) {
+                        ctx.vae_format = static_cast<enum sd_vae_format_t>(val.get<int>());
+                    }
+                }
+                if (v.contains("keep_vae_on_cpu")) {
+                    bool keepOnCpu = v["keep_vae_on_cpu"].get<bool>();
+                    (void)keepOnCpu;
+                }
+                if (v.contains("vae_decode_only")) {
+                    bool decodeOnly = v["vae_decode_only"].get<bool>();
+                    (void)decodeOnly;
                 }
             }
             if (comp.contains("ClipL")) {
@@ -566,8 +604,24 @@ namespace SDCPP {
             if (comp.contains("Sampler")) {
                 const auto& s = comp["Sampler"];
                 if (s.contains("n_threads")) ctx.n_threads = s["n_threads"].get<int>();
-                if (s.contains("current_rng_type")) ctx.rng_type = static_cast<enum rng_type_t>(s["current_rng_type"].get<int>());
-                if (s.contains("sampler_rng_type")) ctx.sampler_rng_type = static_cast<enum rng_type_t>(s["sampler_rng_type"].get<int>());
+                if (s.contains("current_rng_type")) {
+                    const auto& val = s["current_rng_type"];
+                    if (val.is_string()) {
+                        ctx.rng_type = static_cast<enum rng_type_t>(rng_type_from_name(val.get<std::string>()));
+                    }
+                    else if (val.is_number()) {
+                        ctx.rng_type = static_cast<enum rng_type_t>(val.get<int>());
+                    }
+                }
+                if (s.contains("sampler_rng_type")) {
+                    const auto& val = s["sampler_rng_type"];
+                    if (val.is_string()) {
+                        ctx.sampler_rng_type = static_cast<enum rng_type_t>(rng_type_from_name(val.get<std::string>()));
+                    }
+                    else if (val.is_number()) {
+                        ctx.sampler_rng_type = static_cast<enum rng_type_t>(val.get<int>());
+                    }
+                }
                 if (s.contains("tae_preview_only")) ctx.tae_preview_only = s["tae_preview_only"].get<bool>();
                 if (s.contains("model_args") && !s["model_args"].is_null()) {
                     std::string val = s["model_args"].get<std::string>();
@@ -602,7 +656,13 @@ namespace SDCPP {
                     if (!val.empty()) ctx.rpc_servers = res.storeString(val);
                 }
                 if (s.contains("lora_apply_mode")) {
-                    ctx.lora_apply_mode = static_cast<enum lora_apply_mode_t>(s["lora_apply_mode"].get<int>());
+                    const auto& val = s["lora_apply_mode"];
+                    if (val.is_string()) {
+                        ctx.lora_apply_mode = static_cast<enum lora_apply_mode_t>(lora_apply_mode_from_name(val.get<std::string>()));
+                    }
+                    else if (val.is_number()) {
+                        ctx.lora_apply_mode = static_cast<enum lora_apply_mode_t>(val.get<int>());
+                    }
                 }
                 if (s.contains("diffusion_flash_attn")) ctx.diffusion_flash_attn = s["diffusion_flash_attn"].get<bool>();
                 if (s.contains("diffusion_conv_direct")) ctx.diffusion_conv_direct = s["diffusion_conv_direct"].get<bool>();
@@ -680,7 +740,7 @@ namespace SDCPP {
                 if (lat.contains("seed")) params.seed = static_cast<int64_t>(lat["seed"].get<int>());
             }
             if (comp.contains("Vae")) {
-                parseTilingParams(comp["Vae"], params.vae_tiling_params);
+                parseTilingParams(comp["Vae"], params.vae_tiling_params, res);
             }
             if (comp.contains("Guidance")) {
                 parseGuidanceParams(comp["Guidance"], params.sample_params, res);
@@ -792,18 +852,6 @@ namespace SDCPP {
                     }
                 }
             }
-            /*if (comp.contains("RefVideoAudio")) {
-                const auto& rva = comp["RefVideoAudio"];
-                if (rva.contains("audioPaths") && rva["audioPaths"].is_array()) {
-                    std::vector<std::string> audioPaths = rva["audioPaths"].get<std::vector<std::string>>();
-                    size_t count = std::min(audioPaths.size(), res.refVideoStorage.size());
-                    for (size_t i = 0; i < count; ++i) {
-                        if (i < res.refAudioStorage.size()) {
-                            res.refVideoStorage[i].audio = res.refAudioStorage[i];
-                        }
-                    }
-                }
-            }*/
         }
 
         if (!loras.empty()) {

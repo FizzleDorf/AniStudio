@@ -145,6 +145,47 @@ namespace UISchema {
             return label;
         }
 
+        static bool RenderCombo(const std::string& label, std::string* value, const nlohmann::json& schema) {
+            if (!schema.contains("items") || !schema["items"].is_array()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Combo missing items array");
+                return false;
+            }
+
+            std::vector<std::string> items;
+            for (const auto& item : schema["items"]) {
+                if (item.is_string()) {
+                    items.push_back(item.get<std::string>());
+                }
+            }
+
+            if (items.empty()) {
+                return false;
+            }
+
+            std::vector<const char*> c_items;
+            c_items.reserve(items.size());
+            for (const auto& item : items) {
+                c_items.push_back(item.c_str());
+            }
+
+            int selectedIndex = 0;
+            for (size_t i = 0; i < items.size(); ++i) {
+                if (items[i] == *value) {
+                    selectedIndex = static_cast<int>(i);
+                    break;
+                }
+            }
+
+            int originalIndex = selectedIndex;
+            if (ImGui::Combo(label.c_str(), &selectedIndex, c_items.data(), static_cast<int>(c_items.size()))) {
+                if (selectedIndex != originalIndex && selectedIndex >= 0 && selectedIndex < static_cast<int>(items.size())) {
+                    *value = items[selectedIndex];
+                    return true;
+                }
+            }
+            return false;
+        }
+
         static bool RenderTextEditor(const std::string& label, std::string* value, const nlohmann::json& options, const nlohmann::json& schema) {
             auto editor = GetOrCreateEditor(value, label);
             if (!editor) {
@@ -242,7 +283,6 @@ namespace UISchema {
             std::string childId = "##editor_child_" + uniqueKey;
             ImVec2 childSize(contentSize.x, data.height);
 
-            // Use native ResizeY flag (no border)
             if (ImGui::BeginChild(childId.c_str(), childSize, ImGuiChildFlags_ResizeY)) {
                 TextEditorUtil::pushEditorFont();
                 editor->Render(label.c_str(), ImGui::GetContentRegionAvail());
@@ -250,7 +290,6 @@ namespace UISchema {
             }
             ImGui::EndChild();
 
-            // Update height after child resize
             ImVec2 newSize = ImGui::GetItemRectSize();
             if (newSize.y > 10.0f) {
                 data.height = newSize.y;
@@ -354,6 +393,9 @@ namespace UISchema {
 
             if (widgetType == "input_text") {
                 return RenderInputText(label, value, options, schema);
+            }
+            else if (widgetType == "combo") {
+                return RenderCombo(label, value, schema);
             }
             else if (widgetType == "text_editor" || widgetType == "text_editor_vim" || widgetType == "text_editor_standard") {
                 return RenderTextEditor(label, value, options, schema);

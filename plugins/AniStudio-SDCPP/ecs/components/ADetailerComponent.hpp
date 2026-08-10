@@ -367,8 +367,17 @@ namespace ECS {
             if (componentData.contains("denoising_strength")) denoising_strength = componentData["denoising_strength"];
             if (componentData.contains("steps")) steps = componentData["steps"];
             if (componentData.contains("cfg_scale")) cfg_scale = componentData["cfg_scale"];
-            if (componentData.contains("sample_method")) sample_method = componentData["sample_method"].get<std::string>();
-            if (componentData.contains("scheduler")) scheduler = componentData["scheduler"].get<std::string>();
+
+            // Type checks for fields that may be numbers
+            if (componentData.contains("sample_method")) {
+                const auto& val = componentData["sample_method"];
+                if (val.is_string()) sample_method = val.get<std::string>();
+            }
+            if (componentData.contains("scheduler")) {
+                const auto& val = componentData["scheduler"];
+                if (val.is_string()) scheduler = val.get<std::string>();
+            }
+
             if (componentData.contains("sort_by")) sort_by = componentData["sort_by"].get<std::string>();
             if (componentData.contains("extra_ad_args_override")) extra_ad_args_override = componentData["extra_ad_args_override"].get<std::string>();
         }

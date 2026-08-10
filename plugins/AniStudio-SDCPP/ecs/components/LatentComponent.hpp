@@ -131,18 +131,20 @@ namespace ECS {
                 componentData = j;
             }
 
-            if (componentData.contains("latentWidth"))
-                latentWidth = componentData["latentWidth"];
-            if (componentData.contains("latentHeight"))
-                latentHeight = componentData["latentHeight"];
-            if (componentData.contains("current_rng_type"))
-                current_rng_type = componentData["current_rng_type"].get<std::string>();
-            if (componentData.contains("sampler_rng_type"))
-                sampler_rng_type = componentData["sampler_rng_type"].get<std::string>();
-            if (componentData.contains("circular_x"))
-                circular_x = componentData["circular_x"];
-            if (componentData.contains("circular_y"))
-                circular_y = componentData["circular_y"];
+            if (componentData.contains("latentWidth")) latentWidth = componentData["latentWidth"];
+            if (componentData.contains("latentHeight")) latentHeight = componentData["latentHeight"];
+
+            if (componentData.contains("current_rng_type")) {
+                const auto& val = componentData["current_rng_type"];
+                if (val.is_string()) current_rng_type = val.get<std::string>();
+            }
+            if (componentData.contains("sampler_rng_type")) {
+                const auto& val = componentData["sampler_rng_type"];
+                if (val.is_string()) sampler_rng_type = val.get<std::string>();
+            }
+
+            if (componentData.contains("circular_x")) circular_x = componentData["circular_x"];
+            if (componentData.contains("circular_y")) circular_y = componentData["circular_y"];
         }
     };
 }

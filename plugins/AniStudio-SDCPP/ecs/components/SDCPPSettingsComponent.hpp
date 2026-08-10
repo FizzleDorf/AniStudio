@@ -214,7 +214,12 @@ namespace ECS {
             if (j.contains("split_mode")) split_mode = j["split_mode"].get<std::string>();
             if (j.contains("auto_fit")) auto_fit = j["auto_fit"].get<bool>();
             if (j.contains("rpc_servers")) rpc_servers = j["rpc_servers"].get<std::string>();
-            if (j.contains("lora_apply_mode")) lora_apply_mode = j["lora_apply_mode"].get<std::string>();
+
+            if (j.contains("lora_apply_mode")) {
+                const auto& val = j["lora_apply_mode"];
+                if (val.is_string()) lora_apply_mode = val.get<std::string>();
+            }
+
             if (j.contains("diffusion_flash_attn")) diffusion_flash_attn = j["diffusion_flash_attn"].get<bool>();
             if (j.contains("diffusion_conv_direct")) diffusion_conv_direct = j["diffusion_conv_direct"].get<bool>();
             if (j.contains("vae_conv_direct")) vae_conv_direct = j["vae_conv_direct"].get<bool>();

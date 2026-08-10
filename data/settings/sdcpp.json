@@ -8,7 +8,7 @@
     "flash_attn": true,
     "force_sdxl_vae_conv_scale": false,
     "log_level": 1,
-    "lora_apply_mode": 0,
+    "lora_apply_mode": "LORA_APPLY_AUTO",
     "max_vram": "16",
     "params_backend": "",
     "rpc_servers": "",

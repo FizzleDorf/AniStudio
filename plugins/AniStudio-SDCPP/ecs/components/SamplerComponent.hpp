@@ -195,10 +195,19 @@ namespace ECS {
                 keep_clip_on_cpu = componentData["keep_clip_on_cpu"].get<bool>();
             if (componentData.contains("keep_control_net_on_cpu"))
                 keep_control_net_on_cpu = componentData["keep_control_net_on_cpu"].get<bool>();
-            if (componentData.contains("current_sample_method"))
-                current_sample_method = componentData["current_sample_method"].get<std::string>();
-            if (componentData.contains("current_scheduler_method"))
-                current_scheduler_method = componentData["current_scheduler_method"].get<std::string>();
+            if (componentData.contains("current_sample_method")) {
+                const auto& val = componentData["current_sample_method"];
+                if (val.is_string()) {
+                    current_sample_method = val.get<std::string>();
+                }
+            }
+
+            if (componentData.contains("current_scheduler_method")) {
+                const auto& val = componentData["current_scheduler_method"];
+                if (val.is_string()) {
+                    current_scheduler_method = val.get<std::string>();
+                }
+            }
             if (componentData.contains("extra_sample_args"))
                 extra_sample_args = componentData["extra_sample_args"].get<std::string>();
         }

@@ -124,7 +124,7 @@ namespace ECS {
                         {"description", "Only use VAE for decoding (not encoding). Useful for txt2img workflows to save memory."},
                         {"ui:widget", "checkbox"}
                     }},
-                    {"vae_format", {
+                    { "vae_format", {
                         {"type", "string"},
                         {"title", "VAE Format"},
                         {"description", "Format of the VAE model (auto, flux, sd3, flux2, wan)."},
@@ -138,8 +138,8 @@ namespace ECS {
 
         std::string vae_format = "AUTO";
         int tile_size_x = 64, tile_size_y = 64;
-        float target_overlap = 0;
-        float rel_size_x = 64, rel_size_y = 64;
+        float target_overlap = 0.75f;
+        float rel_size_x = 64.0f, rel_size_y = 64.0f;
         bool keep_vae_on_cpu = false;
         bool vae_decode_only = false;
         bool isTiled = false;
@@ -221,28 +221,23 @@ namespace ECS {
                 }
             }
 
-            if (componentData.contains("isTiled"))
-                isTiled = componentData["isTiled"].get<bool>();
-            if (componentData.contains("temporal_tiling"))
-                temporal_tiling = componentData["temporal_tiling"].get<bool>();
-            if (componentData.contains("tile_size_x"))
-                tile_size_x = componentData["tile_size_x"].get<int>();
-            if (componentData.contains("tile_size_y"))
-                tile_size_y = componentData["tile_size_y"].get<int>();
-            if (componentData.contains("target_overlap"))
-                target_overlap = componentData["target_overlap"].get<float>();
-            if (componentData.contains("rel_size_x"))
-                rel_size_x = componentData["rel_size_x"].get<float>();
-            if (componentData.contains("rel_size_y"))
-                rel_size_y = componentData["rel_size_y"].get<float>();
-            if (componentData.contains("extra_tiling_args"))
-                extra_tiling_args = componentData["extra_tiling_args"].get<std::string>();
-            if (componentData.contains("keep_vae_on_cpu"))
-                keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
-            if (componentData.contains("vae_decode_only"))
-                vae_decode_only = componentData["vae_decode_only"].get<bool>();
-            if (componentData.contains("vae_format"))
-                vae_format = componentData["vae_format"].get<std::string>();
+            if (componentData.contains("isTiled")) isTiled = componentData["isTiled"].get<bool>();
+            if (componentData.contains("temporal_tiling")) temporal_tiling = componentData["temporal_tiling"].get<bool>();
+            if (componentData.contains("tile_size_x")) tile_size_x = componentData["tile_size_x"].get<int>();
+            if (componentData.contains("tile_size_y")) tile_size_y = componentData["tile_size_y"].get<int>();
+            if (componentData.contains("target_overlap")) target_overlap = componentData["target_overlap"].get<float>();
+            if (componentData.contains("rel_size_x")) rel_size_x = componentData["rel_size_x"].get<float>();
+            if (componentData.contains("rel_size_y")) rel_size_y = componentData["rel_size_y"].get<float>();
+            if (componentData.contains("extra_tiling_args")) extra_tiling_args = componentData["extra_tiling_args"].get<std::string>();
+            if (componentData.contains("keep_vae_on_cpu")) keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
+            if (componentData.contains("vae_decode_only")) vae_decode_only = componentData["vae_decode_only"].get<bool>();
+
+            if (componentData.contains("vae_format")) {
+                const auto& val = componentData["vae_format"];
+                if (val.is_string()) {
+                    vae_format = val.get<std::string>();
+                }
+            }
         }
 
         sd_vae_format_t get_vae_format_enum() const {

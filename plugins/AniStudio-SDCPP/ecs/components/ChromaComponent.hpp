@@ -49,7 +49,8 @@ namespace ECS {
                         {"type", "string"},
                         {"title", "Chroma Model Type"},
                         {"description", "Type of Chroma model being used"},
-                        {"enum", {"standard", "flux_schnell", "experimental"}},
+                        {"ui:widget", "combo"},
+                        {"items", {"standard", "flux_schnell", "experimental"}},
                         {"default", "standard"}
                     }}
                 }}
