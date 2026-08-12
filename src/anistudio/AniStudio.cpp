@@ -359,18 +359,39 @@ namespace ANI {
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
 
             auto& entityMgr = GetEntityManager();
-            auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
-            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, this);
 
+            // Register components FIRST
             entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
             entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
             entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
 
+            // Register systems
             entityMgr.RegisterSystem<TextureSystem>();
             entityMgr.RegisterSystem<ECS::SettingsSystem>();
             entityMgr.RegisterSystem<ProjectSystem>();
 
+            // Get ProjectSystem and configure it BEFORE CompleteInitialization
+            auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
+            if (projectSystem) {
+                projectSystem->SetWindowHandle(windowHandle);
+                if (studioContext && studioContext->viewManager) {
+                    projectSystem->SetViewManager(studioContext->viewManager.get());
+                }
+
+                auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
+                if (fileSys) {
+                    std::string defaultPath = fileSys->GetPath("DefaultProject");
+                    if (!defaultPath.empty()) {
+                        projectSystem->SetDefaultProjectPath(defaultPath);
+                    }
+                }
+            }
+
+            // Create ProjectManagerView AFTER ProjectSystem is configured
+            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, this);
+
+            // Setup file paths
             auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
             std::string defaultProjectPath;
             if (fileSys) {
@@ -393,22 +414,7 @@ namespace ANI {
                 std::filesystem::create_directories(defaultProjectPath);
             }
 
-            if (projectSystem) {
-                projectSystem->SetWindowHandle(windowHandle);
-
-                if (studioContext && studioContext->viewManager) {
-                    projectSystem->SetViewManager(studioContext->viewManager.get());
-                }
-
-                auto fileSys2 = entityMgr.GetSystem<ECS::FilePathSystem>();
-                if (fileSys2) {
-                    std::string defaultPath = fileSys2->GetPath("DefaultProject");
-                    if (!defaultPath.empty()) {
-                        projectSystem->SetDefaultProjectPath(defaultPath);
-                    }
-                }
-            }
-
+            // Setup callbacks
             SetupProjectCallbacks();
             SetCoreCallbacks();
             SetCoreEvents();
@@ -443,7 +449,10 @@ namespace ANI {
 
         studioCore->studioContext->viewManager->SetEntityManager(*studioCore->studioContext->entityManager);
 
-        auto projectSystem = studioCore->GetEntityManager().GetSystem<ProjectSystem>();
+        auto& entityMgr = studioCore->GetEntityManager();
+        entityMgr.RegisterSystem<TextureSystem>();
+
+        auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
         studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, studioCore.get());
 
         auto fileSys = studioCore->studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
@@ -454,8 +463,6 @@ namespace ANI {
         if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
             std::filesystem::create_directories(defaultProjectPath);
         }
-
-        studioCore->studioContext->entityManager->RegisterSystem<TextureSystem>();
 
         studioCore->SetupProjectCallbacks();
         studioCore->SetCoreCallbacks();

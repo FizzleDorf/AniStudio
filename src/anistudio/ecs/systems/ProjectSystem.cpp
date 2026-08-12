@@ -5,6 +5,8 @@
 #include "FilePathSystem.hpp"
 #include "Events.hpp"
 #include "ProjectTemplate.hpp"
+#include "GeneralSettingsComponent.hpp"
+#include "SettingsSystem.hpp"
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <fstream>
@@ -81,7 +83,10 @@ namespace ANI {
 
     std::string ProjectSystem::GetDefaultProjectPath() const {
         auto fileSys = GetFilePathSystem();
-        return fileSys ? fileSys->GetPath("DefaultProject") : "";
+        if (fileSys) {
+            return fileSys->GetPath("DefaultProject");
+        }
+        return "";
     }
 
     void ProjectSystem::SetDefaultProjectPath(const std::string& path) {
@@ -124,7 +129,11 @@ namespace ANI {
         }
 
         auto fileSys = GetFilePathSystem();
-        std::string lastProjectPath = fileSys ? fileSys->GetPath("LastOpenProject") : "";
+        std::string lastProjectPath;
+        if (fileSys) {
+            lastProjectPath = fileSys->GetPath("LastOpenProject");
+        }
+
         if (!lastProjectPath.empty() && std::filesystem::exists(lastProjectPath)) {
             std::cout << "  - Has last opened project: " << lastProjectPath << std::endl;
             const_cast<ProjectSystem*>(this)->LoadProject(lastProjectPath);
@@ -518,6 +527,7 @@ namespace ANI {
     }
 
     bool ProjectSystem::SaveViewState() {
+        if (!m_viewManager) return false;
         try {
             std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
             std::cout << "[ProjectSystem] Saving ViewState with active workspace: " << m_viewState.GetLastActiveWorkspace() << std::endl;

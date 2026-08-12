@@ -6,11 +6,20 @@
     "confirmBeforeOverwriteFiles": true,
     "enableHardwareAcceleration": true,
     "enableLogging": true,
+    "lastOpenProject": "",
     "loadLastProject": true,
     "logLevel": 3,
     "logToFile": true,
     "maxLogFileSize": 10,
     "maxRecentProjects": 10,
     "maxUndoLevels": 100,
-    "showStartupScreen": true
+    "recentProjects": [],
+    "showStartupScreen": true,
+    "windowFullscreen": false,
+    "windowHeight": 720,
+    "windowMaximized": false,
+    "windowPosX": -1,
+    "windowPosY": -1,
+    "windowVsync": true,
+    "windowWidth": 1200
 }

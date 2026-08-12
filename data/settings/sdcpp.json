@@ -9,10 +9,10 @@
     "force_sdxl_vae_conv_scale": false,
     "log_level": 1,
     "lora_apply_mode": "LORA_APPLY_AUTO",
-    "max_vram": "16",
+    "max_vram": "20",
     "params_backend": "",
     "rpc_servers": "",
     "split_mode": "",
-    "stream_layers": false,
-    "vae_conv_direct": false
+    "stream_layers": true,
+    "vae_conv_direct": true
 }

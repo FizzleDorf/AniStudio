@@ -8,7 +8,6 @@
 #include "FilePathComponent.hpp"
 #include "EngineContext.hpp"
 #include "StudioContext.hpp"
-#include "ProjectManager.hpp"
 #include "WindowState.hpp"
 #include <thread>
 #include <chrono>
