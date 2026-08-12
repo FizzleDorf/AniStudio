@@ -26,7 +26,7 @@
 #include "StudioContext.hpp"
 #include "GUI.h"
 #include "ECS.h"
-#include "ProjectManager.hpp"
+#include "ProjectSystem.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"
 #include "guiSystems.h"
@@ -76,11 +76,12 @@ namespace ANI {
             return *studioContext->viewManager;
         }
 
-        ANI::ProjectManager& GetProjectManager() {
-            if (!studioContext || !studioContext->projectManager) {
-                throw std::runtime_error("StudioContext or ProjectManager not initialized");
+        ANI::ProjectSystem& GetProjectSystem() {
+            auto system = GetEntityManager().GetSystem<ProjectSystem>();
+            if (!system) {
+                throw std::runtime_error("ProjectSystem not registered with EntityManager");
             }
-            return *studioContext->projectManager;
+            return *system;
         }
 
         // Settings access

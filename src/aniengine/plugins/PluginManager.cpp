@@ -1,4 +1,4 @@
-// PluginManager.cpp (already contains the staging removal, unchanged)
+// PluginManager.cpp
 #include "PluginManager.hpp"
 #include "EntityManager.hpp"
 #include "PluginState.hpp"

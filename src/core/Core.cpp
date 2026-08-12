@@ -73,190 +73,191 @@ namespace ANI {
 		Events::Ref().RegisterEvent("Quit", [this]() {
 			std::cout << "[Core] Quit event triggered" << '\n';
 			this->Quit();
-		});
+			});
 
 		Events::Ref().RegisterEventWithData("CreateWorkspace",
 			[this](const std::any& data) {
-			try {
-				auto eventData = std::any_cast<std::unordered_map<std::string, std::string>>(data);
-				std::string workspaceName = eventData.at("workspaceName");
+				try {
+					auto eventData = std::any_cast<std::unordered_map<std::string, std::string>>(data);
+					std::string workspaceName = eventData.at("workspaceName");
 
-				std::cout << "[Core] CreateWorkspace event: " << workspaceName << '\n';
-				GUI::WorkspaceID id = m_studioCore.GetViewManager().CreateView();
-				m_studioCore.GetViewManager().SetWorkspaceName(id, workspaceName);
-				m_studioCore.SetActiveWorkspace(id);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in CreateWorkspace: " << e.what() << '\n';
-			}
-		});
+					std::cout << "[Core] CreateWorkspace event: " << workspaceName << '\n';
+					GUI::WorkspaceID id = m_studioCore.GetViewManager().CreateView();
+					m_studioCore.GetViewManager().SetWorkspaceName(id, workspaceName);
+					m_studioCore.SetActiveWorkspace(id);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in CreateWorkspace: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("DeleteWorkspace",
 			[this](const std::any& data) {
-			try {
-				auto workspaceID = std::any_cast<GUI::WorkspaceID>(data);
-				std::cout << "[Core] DeleteWorkspace event: " << workspaceID << '\n';
+				try {
+					auto workspaceID = std::any_cast<GUI::WorkspaceID>(data);
+					std::cout << "[Core] DeleteWorkspace event: " << workspaceID << '\n';
 
-				auto allWorkspaces = m_studioCore.GetViewManager().GetAllWorkspaces();
-				if (allWorkspaces.size() <= 1) {
-					std::cout << "[Core] Cannot delete last workspace" << '\n';
-					return;
-				}
-
-				for (auto id : allWorkspaces) {
-					if (id != workspaceID) {
-						m_studioCore.SetActiveWorkspace(id);
-						break;
+					auto allWorkspaces = m_studioCore.GetViewManager().GetAllWorkspaces();
+					if (allWorkspaces.size() <= 1) {
+						std::cout << "[Core] Cannot delete last workspace" << '\n';
+						return;
 					}
-				}
 
-				m_studioCore.GetViewManager().DestroyView(workspaceID);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in DeleteWorkspace: " << e.what() << '\n';
-			}
-		});
+					for (auto id : allWorkspaces) {
+						if (id != workspaceID) {
+							m_studioCore.SetActiveWorkspace(id);
+							break;
+						}
+					}
+
+					m_studioCore.GetViewManager().DestroyView(workspaceID);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in DeleteWorkspace: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("SetActiveWorkspace",
 			[this](const std::any& data) {
-			try {
-				auto workspaceID = std::any_cast<GUI::WorkspaceID>(data);
-				std::cout << "[Core] SetActiveWorkspace event: " << workspaceID << '\n';
-				m_studioCore.SetActiveWorkspace(workspaceID);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in SetActiveWorkspace: " << e.what() << '\n';
-			}
-		});
+				try {
+					auto workspaceID = std::any_cast<GUI::WorkspaceID>(data);
+					std::cout << "[Core] SetActiveWorkspace event: " << workspaceID << '\n';
+					m_studioCore.SetActiveWorkspace(workspaceID);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in SetActiveWorkspace: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("AddView",
 			[this](const std::any& data) {
-			try {
-				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
-				auto workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
-				auto viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
+				try {
+					auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+					auto workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
+					auto viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
 
-				std::cout << "[Core] AddView event: " << viewTypeName
-					<< " to workspace: " << workspaceID << '\n';
+					std::cout << "[Core] AddView event: " << viewTypeName
+						<< " to workspace: " << workspaceID << '\n';
 
-				GUI::ViewTypeID viewType = m_studioCore.GetViewManager().GetViewType(viewTypeName);
-				m_studioCore.GetViewManager().AddViewByType(workspaceID, viewType);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in AddView: " << e.what() << '\n';
-			}
-		});
+					GUI::ViewTypeID viewType = m_studioCore.GetViewManager().GetViewType(viewTypeName);
+					m_studioCore.GetViewManager().AddViewByType(workspaceID, viewType);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in AddView: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("RemoveView",
 			[this](const std::any& data) {
-			try {
-				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
-				auto workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
-				auto viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
+				try {
+					auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+					auto workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
+					auto viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
 
-				std::cout << "[Core] RemoveView event: " << viewTypeName
-					<< " from workspace: " << workspaceID << '\n';
+					std::cout << "[Core] RemoveView event: " << viewTypeName
+						<< " from workspace: " << workspaceID << '\n';
 
-				GUI::ViewTypeID viewType = m_studioCore.GetViewManager().GetViewType(viewTypeName);
-				m_studioCore.GetViewManager().RemoveViewByType(workspaceID, viewType);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in RemoveView: " << e.what() << '\n';
-			}
-		});
+					GUI::ViewTypeID viewType = m_studioCore.GetViewManager().GetViewType(viewTypeName);
+					m_studioCore.GetViewManager().RemoveViewByType(workspaceID, viewType);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in RemoveView: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEvent("CreateEntity",
 			[this]() {
-			std::cout << "[Core] CreateEntity event" << '\n';
-			ECS::EntityID newEntity = m_studioCore.GetEntityManager().AddNewEntity();
-			std::cout << "[Core] Created entity: " << newEntity << '\n';
-		});
+				std::cout << "[Core] CreateEntity event" << '\n';
+				ECS::EntityID newEntity = m_studioCore.GetEntityManager().AddNewEntity();
+				std::cout << "[Core] Created entity: " << newEntity << '\n';
+			});
 
 		Events::Ref().RegisterEventWithData("DestroyEntity",
 			[this](const std::any& data) {
-			try {
-				auto entityID = std::any_cast<ECS::EntityID>(data);
-				std::cout << "[Core] DestroyEntity event: " << entityID << '\n';
-				m_studioCore.GetEntityManager().DestroyEntity(entityID);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in DestroyEntity: " << e.what() << '\n';
-			}
-		});
+				try {
+					auto entityID = std::any_cast<ECS::EntityID>(data);
+					std::cout << "[Core] DestroyEntity event: " << entityID << '\n';
+					m_studioCore.GetEntityManager().DestroyEntity(entityID);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in DestroyEntity: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("CloneEntity",
 			[this](const std::any& data) {
-			try {
-				auto entityID = std::any_cast<ECS::EntityID>(data);
-				std::cout << "[Core] CloneEntity event: " << entityID << '\n';
-				ECS::EntityID newEntity = m_studioCore.GetEntityManager().CloneEntity(entityID);
-				std::cout << "[Core] Cloned entity " << entityID << " to " << newEntity << '\n';
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in CloneEntity: " << e.what() << '\n';
-			}
-		});
+				try {
+					auto entityID = std::any_cast<ECS::EntityID>(data);
+					std::cout << "[Core] CloneEntity event: " << entityID << '\n';
+					ECS::EntityID newEntity = m_studioCore.GetEntityManager().CloneEntity(entityID);
+					std::cout << "[Core] Cloned entity " << entityID << " to " << newEntity << '\n';
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in CloneEntity: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("AddComponent",
 			[this](const std::any& data) {
-			try {
-				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
-				auto entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
-				auto componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
+				try {
+					auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+					auto entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
+					auto componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
 
-				std::cout << "[Core] AddComponent event: component " << componentTypeID
-					<< " to entity " << entityID << '\n';
+					std::cout << "[Core] AddComponent event: component " << componentTypeID
+						<< " to entity " << entityID << '\n';
 
-				auto& mgr = m_studioCore.GetEntityManager();
-				if (mgr.IsPluginComponent(componentTypeID)) {
-					mgr.AddPluginComponent(entityID, componentTypeID);
+					auto& mgr = m_studioCore.GetEntityManager();
+					if (mgr.IsPluginComponent(componentTypeID)) {
+						mgr.AddPluginComponent(entityID, componentTypeID);
+					}
 				}
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in AddComponent: " << e.what() << '\n';
-			}
-		});
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in AddComponent: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEventWithData("RemoveComponent",
 			[this](const std::any& data) {
-			try {
-				auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
-				auto entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
-				auto componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
+				try {
+					auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+					auto entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
+					auto componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
 
-				std::cout << "[Core] RemoveComponent event: component " << componentTypeID
-					<< " from entity " << entityID << '\n';
+					std::cout << "[Core] RemoveComponent event: component " << componentTypeID
+						<< " from entity " << entityID << '\n';
 
-				m_studioCore.GetEntityManager().RemoveComponentById(entityID, componentTypeID);
-			}
-			catch (const std::exception& e) {
-				std::cerr << "[Core] Error in RemoveComponent: " << e.what() << '\n';
-			}
-		});
+					m_studioCore.GetEntityManager().RemoveComponentById(entityID, componentTypeID);
+				}
+				catch (const std::exception& e) {
+					std::cerr << "[Core] Error in RemoveComponent: " << e.what() << '\n';
+				}
+			});
 
 		Events::Ref().RegisterEvent("SaveProject",
 			[this]() {
-			std::cout << "[Core] SaveProject event" << '\n';
+				std::cout << "[Core] SaveProject event" << '\n';
 
-			if (m_studioCore.GetProjectManager().IsProjectOpen()) {
-				if (!m_studioCore.GetProjectManager().SaveProject()) {
-					std::cerr << "[Core] Failed to save project: "
-						<< m_studioCore.GetProjectManager().GetLastError() << '\n';
+				auto& projectSystem = m_studioCore.GetProjectSystem();
+				if (projectSystem.IsProjectOpen()) {
+					if (!projectSystem.SaveProject()) {
+						std::cerr << "[Core] Failed to save project: "
+							<< projectSystem.GetLastError() << '\n';
+					}
+					else {
+						std::cout << "[Core] Project saved successfully" << '\n';
+					}
 				}
 				else {
-					std::cout << "[Core] Project saved successfully" << '\n';
+					std::cout << "[Core] No project open to save" << '\n';
 				}
-			}
-			else {
-				std::cout << "[Core] No project open to save" << '\n';
-			}
-		});
+			});
 
 		Events::Ref().RegisterEvent("CloseProject",
 			[this]() {
-			std::cout << "[Core] CloseProject event" << '\n';
-			m_studioCore.GetProjectManager().CloseProject();
-		});
+				std::cout << "[Core] CloseProject event" << '\n';
+				m_studioCore.GetProjectSystem().CloseProject();
+			});
 
 		std::cout << "[Core] All event handlers registered successfully" << '\n';
 	}
@@ -355,7 +356,7 @@ namespace ANI {
 			std::cout << "[Core] Default font added" << '\n';
 		}
 		std::cout << "[Core] Font count: " << io.Fonts->Fonts.Size << '\n';
-		
+
 		const char* iconPath = "assets/favicom.jpg";
 		if (std::filesystem::exists(iconPath)) {
 			int width, height, channels;

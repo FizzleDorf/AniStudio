@@ -1,5 +1,5 @@
 #include "MenuBar.hpp"
-#include "ProjectManager.hpp"
+#include "ProjectSystem.hpp"
 #include "ViewManager.hpp"
 #include "Events.hpp"
 #include "SettingsView.hpp"
@@ -10,12 +10,12 @@
 
 namespace GUI {
 
-    MenuBar::MenuBar(ANI::ProjectManager& projectMgr, ViewManager& viewMgr, ANI::StudioCore& m_studioCore)
-        : projectManager(projectMgr), viewManager(viewMgr), m_studioCore(m_studioCore) {
+    MenuBar::MenuBar(ANI::ProjectSystem& projectSys, ViewManager& viewMgr, ANI::StudioCore& m_studioCore)
+        : projectSystem(projectSys), viewManager(viewMgr), m_studioCore(m_studioCore) {
 
-        popupState.InitializeBuffers(projectMgr);
-        popupState.LoadTemplates(projectMgr);      // now takes projectMgr
-        popupState.RefreshRecentProjects(projectMgr);
+        popupState.InitializeBuffers(projectSys);
+        popupState.LoadTemplates(projectSys);
+        popupState.RefreshRecentProjects(projectSys);
 
         std::cout << "[MenuBar] Constructor - Settings will be accessed via StudioCore" << std::endl;
     }
@@ -25,8 +25,8 @@ namespace GUI {
     }
 
     void MenuBar::Render() {
-        ProjectPopups::RenderNewProjectPopup(popupState, projectManager);
-        ProjectPopups::RenderLoadProjectPopup(popupState, projectManager);
+        ProjectPopups::RenderNewProjectPopup(popupState, projectSystem);
+        ProjectPopups::RenderLoadProjectPopup(popupState, projectSystem);
 
         if (ImGui::BeginMenuBar()) {
             ShowFileMenu();
@@ -48,12 +48,12 @@ namespace GUI {
 
             if (ImGui::MenuItem("Open Project...", "Ctrl+O")) {
                 popupState.showLoadProjectPopup = true;
-                popupState.RefreshRecentProjects(projectManager);
+                popupState.RefreshRecentProjects(projectSystem);
             }
 
             ImGui::Separator();
 
-            bool projectOpen = projectManager.IsProjectOpen();
+            bool projectOpen = projectSystem.IsProjectOpen();
             if (ImGui::MenuItem("Save Project", "Ctrl+S", false, projectOpen)) {
                 ANI::Events::Ref().QueueEvent("SaveProject");
             }
@@ -85,7 +85,7 @@ namespace GUI {
 
     void MenuBar::ShowEditMenu() {
         if (ImGui::BeginMenu("Edit")) {
-            if (projectManager.IsProjectOpen()) {
+            if (projectSystem.IsProjectOpen()) {
                 RenderViewsForCategory("Edit");
             }
 
@@ -95,11 +95,11 @@ namespace GUI {
     }
 
     void MenuBar::ShowWorkspaceMenu() {
-        if (!projectManager.IsProjectOpen()) return;
+        if (!projectSystem.IsProjectOpen()) return;
 
         if (ImGui::BeginMenu("Workspace")) {
             auto allWorkspaces = viewManager.GetAllWorkspaces();
-            GUI::WorkspaceID currentActiveWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+            GUI::WorkspaceID currentActiveWorkspace = projectSystem.GetViewState().GetLastActiveWorkspace();
 
             std::string activeName = viewManager.GetWorkspaceName(currentActiveWorkspace);
             ImGui::Text("Active: %s", activeName.c_str());
@@ -143,7 +143,7 @@ namespace GUI {
     }
 
     void MenuBar::ShowCustomCategoryMenus() {
-        if (!projectManager.IsProjectOpen()) return;
+        if (!projectSystem.IsProjectOpen()) return;
 
         auto customCategories = GetCustomTopLevelCategories();
 
@@ -157,7 +157,7 @@ namespace GUI {
 
     void MenuBar::ShowHelpMenu() {
         if (ImGui::BeginMenu("Help")) {
-            if (projectManager.IsProjectOpen()) {
+            if (projectSystem.IsProjectOpen()) {
                 RenderViewsForCategory("Help");
             }
 
@@ -288,7 +288,7 @@ namespace GUI {
             ImGui::InputText("##rename_workspace", renameWorkspaceBuffer, sizeof(renameWorkspaceBuffer));
 
             std::string proposedName(renameWorkspaceBuffer);
-            GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+            GUI::WorkspaceID currentWorkspace = projectSystem.GetViewState().GetLastActiveWorkspace();
             bool nameTaken = viewManager.IsWorkspaceNameTaken(proposedName, currentWorkspace);
             if (nameTaken && !proposedName.empty()) {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.4f, 0.4f, 1.0f));
@@ -383,7 +383,7 @@ namespace GUI {
             return;
         }
 
-        GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+        GUI::WorkspaceID currentWorkspace = projectSystem.GetViewState().GetLastActiveWorkspace();
         ANI::Events::Ref().QueueEventWithData("DeleteWorkspace", currentWorkspace);
 
         std::cout << "[MenuBar] Queued DeleteWorkspace event for workspace: " << currentWorkspace << std::endl;
@@ -393,7 +393,7 @@ namespace GUI {
         try {
             GUI::ViewTypeID viewTypeID = viewManager.GetViewType(viewTypeName);
             const auto& workspaceSignatures = viewManager.GetWorkspaceSignatures();
-            GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+            GUI::WorkspaceID currentWorkspace = projectSystem.GetViewState().GetLastActiveWorkspace();
 
             auto it = workspaceSignatures.find(currentWorkspace);
             if (it != workspaceSignatures.end()) {
@@ -408,7 +408,7 @@ namespace GUI {
 
     void MenuBar::ToggleViewInCurrentWorkspace(const std::string& viewTypeName) {
         try {
-            GUI::WorkspaceID currentWorkspace = projectManager.GetViewState().GetLastActiveWorkspace();
+            GUI::WorkspaceID currentWorkspace = projectSystem.GetViewState().GetLastActiveWorkspace();
 
             std::unordered_map<std::string, std::any> eventData;
             eventData["workspaceID"] = currentWorkspace;

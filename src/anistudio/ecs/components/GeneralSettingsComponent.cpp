@@ -28,6 +28,15 @@ namespace ECS {
             j["logLevel"] = logLevel;
             j["logToFile"] = logToFile;
             j["maxLogFileSize"] = maxLogFileSize;
+            j["windowWidth"] = windowWidth;
+            j["windowHeight"] = windowHeight;
+            j["windowPosX"] = windowPosX;
+            j["windowPosY"] = windowPosY;
+            j["windowMaximized"] = windowMaximized;
+            j["windowFullscreen"] = windowFullscreen;
+            j["windowVsync"] = windowVsync;
+            j["lastOpenProject"] = lastOpenProject;
+            j["recentProjects"] = recentProjects;
 
             std::string filePath = GetSettingsDirectory() + "/general_settings.json";
             std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
@@ -74,6 +83,15 @@ namespace ECS {
             if (j.contains("logLevel")) logLevel = j["logLevel"];
             if (j.contains("logToFile")) logToFile = j["logToFile"];
             if (j.contains("maxLogFileSize")) maxLogFileSize = j["maxLogFileSize"];
+            if (j.contains("windowWidth")) windowWidth = j["windowWidth"];
+            if (j.contains("windowHeight")) windowHeight = j["windowHeight"];
+            if (j.contains("windowPosX")) windowPosX = j["windowPosX"];
+            if (j.contains("windowPosY")) windowPosY = j["windowPosY"];
+            if (j.contains("windowMaximized")) windowMaximized = j["windowMaximized"];
+            if (j.contains("windowFullscreen")) windowFullscreen = j["windowFullscreen"];
+            if (j.contains("windowVsync")) windowVsync = j["windowVsync"];
+            if (j.contains("lastOpenProject")) lastOpenProject = j["lastOpenProject"];
+            if (j.contains("recentProjects")) recentProjects = j["recentProjects"];
 
             hasChanges = false;
             CreateBackup();
@@ -100,6 +118,15 @@ namespace ECS {
         logLevel = 2;
         logToFile = true;
         maxLogFileSize = 10;
+        windowWidth = 1200;
+        windowHeight = 720;
+        windowPosX = -1;
+        windowPosY = -1;
+        windowMaximized = false;
+        windowFullscreen = false;
+        windowVsync = true;
+        lastOpenProject.clear();
+        recentProjects.clear();
         hasChanges = true;
     }
 
@@ -118,6 +145,15 @@ namespace ECS {
         backupLogLevel = logLevel;
         backupLogToFile = logToFile;
         backupMaxLogFileSize = maxLogFileSize;
+        backupWindowWidth = windowWidth;
+        backupWindowHeight = windowHeight;
+        backupWindowPosX = windowPosX;
+        backupWindowPosY = windowPosY;
+        backupWindowMaximized = windowMaximized;
+        backupWindowFullscreen = windowFullscreen;
+        backupWindowVsync = windowVsync;
+        backupLastOpenProject = lastOpenProject;
+        backupRecentProjects = recentProjects;
     }
 
     void GeneralSettingsComponent::RestoreFromBackup() {
@@ -135,6 +171,15 @@ namespace ECS {
         logLevel = backupLogLevel;
         logToFile = backupLogToFile;
         maxLogFileSize = backupMaxLogFileSize;
+        windowWidth = backupWindowWidth;
+        windowHeight = backupWindowHeight;
+        windowPosX = backupWindowPosX;
+        windowPosY = backupWindowPosY;
+        windowMaximized = backupWindowMaximized;
+        windowFullscreen = backupWindowFullscreen;
+        windowVsync = backupWindowVsync;
+        lastOpenProject = backupLastOpenProject;
+        recentProjects = backupRecentProjects;
         hasChanges = false;
     }
 

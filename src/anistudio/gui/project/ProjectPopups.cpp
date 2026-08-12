@@ -1,5 +1,5 @@
 #include "ProjectPopups.hpp"
-#include "ProjectManager.hpp"
+#include "ProjectSystem.hpp"
 #include "Events.hpp"
 #include "FilePathSystem.hpp"
 #include "FileDialogUtil.hpp"
@@ -12,8 +12,8 @@
 
 namespace GUI {
 
-    void ProjectPopupState::InitializeBuffers(ANI::ProjectManager& projectMgr) {
-        std::string defaultProjectName = GenerateDefaultProjectName(projectMgr);
+    void ProjectPopupState::InitializeBuffers(ANI::ProjectSystem& projectSystem) {
+        std::string defaultProjectName = GenerateDefaultProjectName(projectSystem);
 
         memset(projectNameBuffer, 0, sizeof(projectNameBuffer));
         memset(projectPathBuffer, 0, sizeof(projectPathBuffer));
@@ -21,16 +21,16 @@ namespace GUI {
         strncpy(projectNameBuffer, defaultProjectName.c_str(), sizeof(projectNameBuffer) - 1);
         projectNameBuffer[sizeof(projectNameBuffer) - 1] = '\0';
 
-        std::string defaultPath = projectMgr.GetDefaultProjectPath();
+        std::string defaultPath = projectSystem.GetDefaultProjectPath();
         if (!defaultPath.empty()) {
             strncpy(projectPathBuffer, defaultPath.c_str(), sizeof(projectPathBuffer) - 1);
             projectPathBuffer[sizeof(projectPathBuffer) - 1] = '\0';
         }
     }
 
-    std::string ProjectPopupState::GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const {
+    std::string ProjectPopupState::GenerateDefaultProjectName(ANI::ProjectSystem& projectSystem) const {
         std::string baseName = "AniProject";
-        std::string defaultPath = projectMgr.GetDefaultProjectPath();
+        std::string defaultPath = projectSystem.GetDefaultProjectPath();
 
         if (defaultPath.empty()) {
             return baseName + "1";
@@ -46,15 +46,15 @@ namespace GUI {
                 candidateName = baseName + "_" + std::to_string(time(nullptr));
                 break;
             }
-        } while (projectMgr.IsProjectNameTaken(candidateName));
+        } while (projectSystem.IsProjectNameTaken(candidateName));
 
         return candidateName;
     }
 
-    void ProjectPopupState::LoadTemplates(ANI::ProjectManager& projectMgr) {
+    void ProjectPopupState::LoadTemplates(ANI::ProjectSystem& projectSystem) {
         templates.clear();
 
-        auto fileSys = projectMgr.GetFilePathSystem();
+        auto fileSys = projectSystem.GetFilePathSystem();
         if (!fileSys) {
             std::cerr << "[ProjectPopups] FilePathSystem not available, cannot load templates" << std::endl;
             return;
@@ -116,13 +116,13 @@ namespace GUI {
         }
     }
 
-    void ProjectPopupState::RefreshRecentProjects(ANI::ProjectManager& projectMgr) {
-        recentProjects = projectMgr.GetRecentProjects();
+    void ProjectPopupState::RefreshRecentProjects(ANI::ProjectSystem& projectSystem) {
+        recentProjects = projectSystem.GetRecentProjects();
     }
 
     namespace ProjectPopups {
 
-        void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr) {
+        void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
             if (state.showNewProjectPopup) {
                 ImGui::OpenPopup("Create New Project##NewProjectPopup");
             }
@@ -165,7 +165,7 @@ namespace GUI {
 
                 ImGui::SetCursorPosX(startX);
                 if (ImGui::Button("Create Project", ImVec2(buttonWidth, 30))) {
-                    CreateProject(state, projectMgr);
+                    CreateProject(state, projectSystem);
                     state.showNewProjectPopup = false;
                     ImGui::CloseCurrentPopup();
                 }
@@ -184,7 +184,7 @@ namespace GUI {
             }
         }
 
-        void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr) {
+        void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
             if (state.showLoadProjectPopup) {
                 ImGui::OpenPopup("Load Project##LoadProjectPopup");
             }
@@ -202,7 +202,7 @@ namespace GUI {
                 ImGui::Text("Load Project");
                 ImGui::Separator();
 
-                ShowRecentProjects(state, projectMgr);
+                ShowRecentProjects(state, projectSystem);
 
                 ImGui::Separator();
 
@@ -215,20 +215,20 @@ namespace GUI {
                 if (ImGui::Button("Browse for Project...", ImVec2(buttonWidth, 30))) {
                     std::string selectedPath;
                     if (FileDialog::SelectFolder("Select Project Folder", selectedPath)) {
-                        if (projectMgr.LoadProject(selectedPath)) {
+                        if (projectSystem.LoadProject(selectedPath)) {
                             std::cout << "[ProjectPopups] Loaded project: " << selectedPath << std::endl;
                             state.showLoadProjectPopup = false;
                             ImGui::CloseCurrentPopup();
                         }
                         else {
-                            std::cerr << "[ProjectPopups] Failed to load project: " << projectMgr.GetLastError() << std::endl;
+                            std::cerr << "[ProjectPopups] Failed to load project: " << projectSystem.GetLastError() << std::endl;
                         }
                     }
                 }
 
                 ImGui::SameLine(0, spacing);
                 if (ImGui::Button("Refresh", ImVec2(buttonWidth, 30))) {
-                    state.RefreshRecentProjects(projectMgr);
+                    state.RefreshRecentProjects(projectSystem);
                 }
 
                 ImGui::Separator();
@@ -293,7 +293,7 @@ namespace GUI {
             ImGui::EndChild();
         }
 
-        void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectManager& projectMgr) {
+        void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
             ImGui::Text("Recent Projects:");
 
             if (state.recentProjects.empty()) {
@@ -307,13 +307,13 @@ namespace GUI {
                     std::string displayName = path.filename().string();
 
                     if (ImGui::Selectable(displayName.c_str())) {
-                        if (projectMgr.LoadProject(projectPath)) {
+                        if (projectSystem.LoadProject(projectPath)) {
                             std::cout << "[ProjectPopups] Loaded project: " << projectPath << std::endl;
                             state.showLoadProjectPopup = false;
                             ImGui::CloseCurrentPopup();
                         }
                         else {
-                            std::cerr << "[ProjectPopups] Failed to load project: " << projectMgr.GetLastError() << std::endl;
+                            std::cerr << "[ProjectPopups] Failed to load project: " << projectSystem.GetLastError() << std::endl;
                         }
                     }
 
@@ -325,7 +325,7 @@ namespace GUI {
             ImGui::EndChild();
         }
 
-        void CreateProject(ProjectPopupState& state, ANI::ProjectManager& projectMgr) {
+        void CreateProject(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
             std::string projectName = std::string(state.projectNameBuffer);
             std::string projectPath = std::string(state.projectPathBuffer);
 
@@ -336,7 +336,7 @@ namespace GUI {
 
             std::string fullPath = projectPath + "/" + projectName;
 
-            if (projectMgr.CreateNewProject(fullPath, projectName)) {
+            if (projectSystem.CreateNewProject(fullPath, projectName)) {
                 std::cout << "[ProjectPopups] Project created successfully: " << projectName << std::endl;
 
                 if (state.selectedTemplate >= 0 && state.selectedTemplate < (int)state.templates.size()) {
@@ -344,8 +344,8 @@ namespace GUI {
 
                     std::cout << "[ProjectPopups] Applying template: " << template_.name << std::endl;
 
-                    if (!projectMgr.ApplyProjectTemplate(template_)) {
-                        std::cerr << "[ProjectPopups] Failed to apply template: " << projectMgr.GetLastError() << std::endl;
+                    if (!projectSystem.ApplyProjectTemplate(template_)) {
+                        std::cerr << "[ProjectPopups] Failed to apply template: " << projectSystem.GetLastError() << std::endl;
                     }
                     else {
                         std::cout << "[ProjectPopups] Template applied successfully" << std::endl;
@@ -356,7 +356,7 @@ namespace GUI {
                 }
             }
             else {
-                std::cerr << "[ProjectPopups] Failed to create project: " << projectMgr.GetLastError() << std::endl;
+                std::cerr << "[ProjectPopups] Failed to create project: " << projectSystem.GetLastError() << std::endl;
             }
         }
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AniStudio.hpp"
-#include "ProjectManager.hpp"
+#include "ProjectSystem.hpp"
 #include "ProjectPopups.hpp"
 #include "AutoLoadPopup.hpp"
 
@@ -9,13 +9,13 @@ namespace GUI {
 
     class ProjectManagerView {
     private:
-        ANI::ProjectManager& m_projectManager;
+        ANI::ProjectSystem& m_projectSystem;
         ANI::StudioCore* m_studioCore;
         ProjectPopupState popupState;
         AutoLoadPopupState autoLoadState;
 
     public:
-        ProjectManagerView(ANI::ProjectManager& projectMgr, ANI::StudioCore* studioCore);
+        ProjectManagerView(ANI::ProjectSystem& projectSystem, ANI::StudioCore* studioCore);
 
         void Init();
         void Update(const float deltaT);

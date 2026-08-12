@@ -1,5 +1,5 @@
 #include "ProjectManagerView.hpp"
-#include "ProjectManager.hpp"
+#include "ProjectSystem.hpp"
 #include "SettingsView.hpp"
 #include <imgui.h>
 #include <filesystem>
@@ -7,17 +7,17 @@
 
 namespace GUI {
 
-    ProjectManagerView::ProjectManagerView(ANI::ProjectManager& projectMgr, ANI::StudioCore* studioCore)
-        : m_projectManager(projectMgr), m_studioCore(studioCore) {
+    ProjectManagerView::ProjectManagerView(ANI::ProjectSystem& projectSystem, ANI::StudioCore* studioCore)
+        : m_projectSystem(projectSystem), m_studioCore(studioCore) {
         std::cout << "[ProjectManagerView] Constructor - StudioCore: " << m_studioCore << std::endl;
     }
 
     void ProjectManagerView::Init() {
         std::cout << "[ProjectManagerView] Startup view initialized" << std::endl;
 
-        popupState.InitializeBuffers(m_projectManager);
-        popupState.LoadTemplates(m_projectManager);
-        popupState.RefreshRecentProjects(m_projectManager);
+        popupState.InitializeBuffers(m_projectSystem);
+        popupState.LoadTemplates(m_projectSystem);
+        popupState.RefreshRecentProjects(m_projectSystem);
 
         autoLoadState.showPopup = false;
         autoLoadState.userChoiceMade = false;
@@ -25,7 +25,7 @@ namespace GUI {
     }
 
     void ProjectManagerView::Update(const float deltaT) {
-        if (m_projectManager.IsProjectOpen()) {
+        if (m_projectSystem.IsProjectOpen()) {
             popupState.showNewProjectPopup = false;
             popupState.showLoadProjectPopup = false;
             autoLoadState.showPopup = false;
@@ -33,7 +33,7 @@ namespace GUI {
     }
 
     void ProjectManagerView::Render() {
-        if (m_projectManager.IsProjectOpen()) {
+        if (m_projectSystem.IsProjectOpen()) {
             return;
         }
 
@@ -44,8 +44,8 @@ namespace GUI {
             }
         }
 
-        ProjectPopups::RenderNewProjectPopup(popupState, m_projectManager);
-        ProjectPopups::RenderLoadProjectPopup(popupState, m_projectManager);
+        ProjectPopups::RenderNewProjectPopup(popupState, m_projectSystem);
+        ProjectPopups::RenderLoadProjectPopup(popupState, m_projectSystem);
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
@@ -62,7 +62,7 @@ namespace GUI {
             ImGui::Separator();
 
             ImGui::Text("Recent Projects:");
-            auto recentProjects = m_projectManager.GetRecentProjects();
+            auto recentProjects = m_projectSystem.GetRecentProjects();
 
             if (ImGui::BeginChild("RecentProjectsList", ImVec2(0, 180), true)) {
                 if (recentProjects.empty()) {
@@ -79,11 +79,11 @@ namespace GUI {
 
                         if (ImGui::Selectable(displayName.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
                             if (ImGui::IsMouseDoubleClicked(0)) {
-                                if (m_projectManager.LoadProject(fullPath)) {
+                                if (m_projectSystem.LoadProject(fullPath)) {
                                     std::cout << "[ProjectManagerView] Loaded project: " << fullPath << std::endl;
                                 }
                                 else {
-                                    std::cerr << "[ProjectManagerView] Failed to load project: " << m_projectManager.GetLastError() << std::endl;
+                                    std::cerr << "[ProjectManagerView] Failed to load project: " << m_projectSystem.GetLastError() << std::endl;
                                 }
                             }
                         }
@@ -111,7 +111,7 @@ namespace GUI {
 
             if (ImGui::Button("Open Project", ImVec2(-FLT_MIN, buttonHeight))) {
                 popupState.showLoadProjectPopup = true;
-                popupState.RefreshRecentProjects(m_projectManager);
+                popupState.RefreshRecentProjects(m_projectSystem);
                 std::cout << "[ProjectManagerView] Opening Load Project dialog" << std::endl;
             }
 
@@ -141,12 +141,12 @@ namespace GUI {
                 std::cout << "[ProjectManagerView] User chose to auto-load project: "
                     << autoLoadState.lastProjectPath << std::endl;
 
-                if (m_projectManager.LoadProject(autoLoadState.lastProjectPath)) {
+                if (m_projectSystem.LoadProject(autoLoadState.lastProjectPath)) {
                     std::cout << "[ProjectManagerView] Auto-load successful" << std::endl;
                 }
                 else {
                     std::cerr << "[ProjectManagerView] Auto-load failed: "
-                        << m_projectManager.GetLastError() << std::endl;
+                        << m_projectSystem.GetLastError() << std::endl;
                 }
             }
             else {
@@ -175,7 +175,7 @@ namespace GUI {
 
     void ProjectManagerView::ShowLoadProjectDialog() {
         popupState.showLoadProjectPopup = true;
-        popupState.RefreshRecentProjects(m_projectManager);
+        popupState.RefreshRecentProjects(m_projectSystem);
         std::cout << "[ProjectManagerView] ShowLoadProjectDialog called" << std::endl;
     }
 

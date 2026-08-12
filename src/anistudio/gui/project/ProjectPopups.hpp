@@ -5,7 +5,7 @@
 #include <string>
 #include <imgui.h>
 
-namespace ANI { class ProjectManager; }
+namespace ANI { class ProjectSystem; }
 
 namespace GUI {
 
@@ -21,19 +21,19 @@ namespace GUI {
 
         ProjectPopupState() = default;
 
-        void InitializeBuffers(ANI::ProjectManager& projectMgr);
-        void LoadTemplates(ANI::ProjectManager& projectMgr);
-        void RefreshRecentProjects(ANI::ProjectManager& projectMgr);
+        void InitializeBuffers(ANI::ProjectSystem& projectSystem);
+        void LoadTemplates(ANI::ProjectSystem& projectSystem);
+        void RefreshRecentProjects(ANI::ProjectSystem& projectSystem);
 
-        std::string GenerateDefaultProjectName(ANI::ProjectManager& projectMgr) const;
+        std::string GenerateDefaultProjectName(ANI::ProjectSystem& projectSystem) const;
     };
 
     namespace ProjectPopups {
-        void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
-        void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
+        void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectSystem& projectSystem);
+        void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectSystem& projectSystem);
         void ShowTemplateSelector(ProjectPopupState& state);
-        void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
-        void CreateProject(ProjectPopupState& state, ANI::ProjectManager& projectMgr);
+        void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectSystem& projectSystem);
+        void CreateProject(ProjectPopupState& state, ANI::ProjectSystem& projectSystem);
     }
 
 } // namespace GUI

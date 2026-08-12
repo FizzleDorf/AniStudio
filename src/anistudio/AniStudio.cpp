@@ -204,30 +204,31 @@ namespace ANI {
     }
 
     void StudioCore::SetupProjectCallbacks() {
-        if (!studioContext || !studioContext->projectManager) {
-            std::cerr << "[StudioCore] Context or ProjectManager not initialized!" << std::endl;
+        auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+        if (!projectSystem) {
+            std::cerr << "[StudioCore] ProjectSystem not initialized!" << std::endl;
             return;
         }
 
-        auto& projectManager = *studioContext->projectManager;
-
-        projectManager.SetProjectLoadedCallback([this](const std::string& projectPath) {
+        projectSystem->SetProjectLoadedCallback([this](const std::string& projectPath) {
             OnProjectLoaded(projectPath);
             });
 
-        projectManager.SetProjectCreatedCallback([this](const std::string& projectPath) {
+        projectSystem->SetProjectCreatedCallback([this](const std::string& projectPath) {
             OnProjectCreated(projectPath);
             });
 
-        projectManager.SetProjectClosedCallback([this]() {
+        projectSystem->SetProjectClosedCallback([this]() {
             if (!m_isShuttingDown) {
                 OnProjectClosed();
             }
             });
 
-        projectManager.SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
+        projectSystem->SetViewStateLoadedCallback([this](GUI::WorkspaceID activeWorkspaceID) {
             std::cout << "[StudioCore] Syncing ViewManager with loaded active workspace: " << activeWorkspaceID << std::endl;
-            studioContext->viewManager->SetActiveWorkspace(activeWorkspaceID);
+            if (studioContext && studioContext->viewManager) {
+                studioContext->viewManager->SetActiveWorkspace(activeWorkspaceID);
+            }
             });
     }
 
@@ -267,8 +268,9 @@ namespace ANI {
             std::cout << "[StudioCore] Set parent window handle for file dialogs: " << hwnd << std::endl;
 #endif
 
-            if (studioContext && studioContext->projectManager) {
-                studioContext->projectManager->SetWindowHandle(window);
+            auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+            if (projectSystem) {
+                projectSystem->SetWindowHandle(window);
             }
 
             if (studioContext) {
@@ -356,21 +358,25 @@ namespace ANI {
 
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
 
-            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioContext->projectManager, this);
+            auto& entityMgr = GetEntityManager();
+            auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
+            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, this);
 
-            studioContext->entityManager->RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
-            studioContext->entityManager->RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
-            studioContext->entityManager->RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
-            studioContext->entityManager->RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
+            entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
+            entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
+            entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
+            entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
 
-            studioContext->entityManager->RegisterSystem<TextureSystem>();
-            studioContext->entityManager->RegisterSystem<ECS::SettingsSystem>();
+            entityMgr.RegisterSystem<TextureSystem>();
+            entityMgr.RegisterSystem<ECS::SettingsSystem>();
+            entityMgr.RegisterSystem<ProjectSystem>();
 
-            auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
+            auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
             std::string defaultProjectPath;
             if (fileSys) {
                 defaultProjectPath = fileSys->GetPath("DefaultProject");
             }
+
             if (defaultProjectPath.empty()) {
                 std::string exeDir = ".";
                 if (!exeDir.empty()) {
@@ -387,7 +393,21 @@ namespace ANI {
                 std::filesystem::create_directories(defaultProjectPath);
             }
 
-            studioContext->projectManager->SetDefaultProjectPath(defaultProjectPath);
+            if (projectSystem) {
+                projectSystem->SetWindowHandle(windowHandle);
+
+                if (studioContext && studioContext->viewManager) {
+                    projectSystem->SetViewManager(studioContext->viewManager.get());
+                }
+
+                auto fileSys2 = entityMgr.GetSystem<ECS::FilePathSystem>();
+                if (fileSys2) {
+                    std::string defaultPath = fileSys2->GetPath("DefaultProject");
+                    if (!defaultPath.empty()) {
+                        projectSystem->SetDefaultProjectPath(defaultPath);
+                    }
+                }
+            }
 
             SetupProjectCallbacks();
             SetCoreCallbacks();
@@ -423,7 +443,8 @@ namespace ANI {
 
         studioCore->studioContext->viewManager->SetEntityManager(*studioCore->studioContext->entityManager);
 
-        studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*studioCore->studioContext->projectManager, studioCore.get());
+        auto projectSystem = studioCore->GetEntityManager().GetSystem<ProjectSystem>();
+        studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, studioCore.get());
 
         auto fileSys = studioCore->studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
         std::string defaultProjectPath;
@@ -560,7 +581,6 @@ namespace ANI {
         RegisterCoreViews();
         std::cout << "[StudioCore] Core views registered" << std::endl;
 
-        // Register settings tabs now that the settings system and components exist
         auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
         if (settingsSystem) {
             EntityID settingsEntity = settingsSystem->GetSettingsEntity();
@@ -606,16 +626,17 @@ namespace ANI {
         m_projectManagerView->Init();
         std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;
 
-        m_menuBar = std::make_unique<GUI::MenuBar>(*studioContext->projectManager, *studioContext->viewManager, *this);
+        auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+        m_menuBar = std::make_unique<GUI::MenuBar>(*projectSystem, *studioContext->viewManager, *this);
         std::cout << "[StudioCore] MenuBar created" << std::endl;
 
-        if (studioContext && studioContext->projectManager) {
-            m_showProjectManagerView = studioContext->projectManager->ShouldShowStartup();
+        if (projectSystem) {
+            m_showProjectManagerView = projectSystem->ShouldShowStartup();
             std::cout << "[StudioCore] Should show startup view: " << (m_showProjectManagerView ? "YES" : "NO") << std::endl;
         }
         else {
             m_showProjectManagerView = true;
-            std::cout << "[StudioCore] No ProjectManager, showing startup view" << std::endl;
+            std::cout << "[StudioCore] No ProjectSystem, showing startup view" << std::endl;
         }
 
         completedInitialization = true;
@@ -717,15 +738,16 @@ namespace ANI {
         m_isShuttingDown = true;
 
         try {
-            if (studioContext && studioContext->projectManager && studioContext->projectManager->IsProjectOpen()) {
+            auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+            if (projectSystem && projectSystem->IsProjectOpen()) {
                 std::cout << "[StudioCore] Saving open project BEFORE shutdown: "
-                    << studioContext->projectManager->GetCurrentProjectName() << std::endl;
+                    << projectSystem->GetCurrentProjectName() << std::endl;
 
-                if (studioContext->studioPluginManager) {
+                if (studioContext && studioContext->studioPluginManager) {
                     studioContext->studioPluginManager->SaveProjectPluginState();
                 }
 
-                studioContext->projectManager->SaveProject();
+                projectSystem->SaveProject();
             }
             else {
                 SyncWindowStateFromGLFW();
@@ -804,13 +826,14 @@ namespace ANI {
         try {
             CompleteInitialization();
 
-            bool IsProjectOpen = studioContext->projectManager->IsProjectOpen();
+            auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+            bool isProjectOpen = projectSystem ? projectSystem->IsProjectOpen() : false;
 
-            if (!IsProjectOpen && m_showProjectManagerView && m_projectManagerView) {
+            if (!isProjectOpen && m_showProjectManagerView && m_projectManagerView) {
                 m_projectManagerView->Render();
             }
 
-            if (IsProjectOpen) {
+            if (isProjectOpen) {
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
                 ImGui::SetNextWindowPos(viewport->WorkPos);
                 ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -950,9 +973,9 @@ namespace ANI {
         if (studioContext && studioContext->viewManager) {
             studioContext->viewManager->SetActiveWorkspace(workspaceID);
 
-            if (studioContext->projectManager && studioContext->projectManager->IsProjectOpen()) {
-                studioContext->projectManager->SetLastActiveWorkspace(workspaceID);
-                studioContext->projectManager->SetLastActiveWorkspace(workspaceID);
+            auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+            if (projectSystem && projectSystem->IsProjectOpen()) {
+                projectSystem->SetLastActiveWorkspace(workspaceID);
             }
         }
     }

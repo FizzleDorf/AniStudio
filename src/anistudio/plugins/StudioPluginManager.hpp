@@ -1,6 +1,5 @@
 #pragma once
 #include "PluginManager.hpp"
-#include "ProjectManager.hpp"
 #include "WindowState.hpp"
 #include <unordered_map>
 #include <vector>

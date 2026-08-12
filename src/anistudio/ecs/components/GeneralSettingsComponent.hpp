@@ -1,6 +1,8 @@
 #pragma once
 #include "BaseSettingsComponent.hpp"
 #include <nlohmann/json.hpp>
+#include <vector>
+#include <string>
 
 namespace ECS {
 
@@ -30,6 +32,17 @@ namespace ECS {
         bool logToFile = true;
         int maxLogFileSize = 10;
         bool hasChanges = false;
+
+        int windowWidth = 1200;
+        int windowHeight = 720;
+        int windowPosX = -1;
+        int windowPosY = -1;
+        bool windowMaximized = false;
+        bool windowFullscreen = false;
+        bool windowVsync = true;
+        std::string lastOpenProject;
+        std::vector<std::string> recentProjects;
+
     private:
         bool backupShowStartupScreen = true;
         bool backupLoadLastProject = true;
@@ -45,6 +58,16 @@ namespace ECS {
         int backupLogLevel = 2;
         bool backupLogToFile = true;
         int backupMaxLogFileSize = 10;
+
+        int backupWindowWidth = 1200;
+        int backupWindowHeight = 720;
+        int backupWindowPosX = -1;
+        int backupWindowPosY = -1;
+        bool backupWindowMaximized = false;
+        bool backupWindowFullscreen = false;
+        bool backupWindowVsync = true;
+        std::string backupLastOpenProject;
+        std::vector<std::string> backupRecentProjects;
     };
 
 }
