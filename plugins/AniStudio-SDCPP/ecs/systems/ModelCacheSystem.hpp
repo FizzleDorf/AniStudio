@@ -11,6 +11,7 @@
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
+#include <chrono>
 
 namespace ECS {
 
@@ -25,7 +26,13 @@ namespace ECS {
 
     class ModelCacheSystem : public BaseSystem {
     public:
-        ModelCacheSystem(EntityManager& mgr) : BaseSystem(mgr) { sysName = "ModelCacheSystem"; }
+        ModelCacheSystem(EntityManager& mgr) : BaseSystem(mgr) {
+            sysName = "ModelCacheSystem";
+        }
+
+        ~ModelCacheSystem() {
+            std::cout << "[ModelCacheSystem] DESTRUCTOR CALLED - Cache size: " << m_cache.size() << std::endl;
+        }
 
         sd_ctx_t* getOrCreateContext(const nlohmann::json& metadata);
         bool loadModelFromMetadata(const nlohmann::json& metadata);
@@ -46,6 +53,11 @@ namespace ECS {
 
         void Destroy() override;
 
+        size_t GetCacheSize() const {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            return m_cache.size();
+        }
+
     private:
         struct ContextInfo {
             sd_ctx_t* ctx;
@@ -54,6 +66,7 @@ namespace ECS {
             int activeCount;
             std::string modelType;
             bool isInUse;
+            std::chrono::steady_clock::time_point lastUsed;
         };
 
         std::unordered_map<std::string, ContextInfo> m_cache;
@@ -67,4 +80,4 @@ namespace ECS {
         std::string detectModelType(const nlohmann::json& metadata) const;
     };
 
-} // namespace ECS
+}

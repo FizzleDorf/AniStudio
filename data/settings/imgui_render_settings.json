@@ -13,7 +13,7 @@
     "configNavEnableGamepad": false,
     "configNavEnableKeyboard": true,
     "configNavEscapeClearFocusItem": true,
-    "configNavMoveSetMousePos": true,
+    "configNavMoveSetMousePos": false,
     "configViewportsEnable": false,
     "configViewportsNoAutoMerge": false,
     "configViewportsNoDecoration": false,

@@ -1,3 +1,4 @@
+// SDcppSystem.cpp
 #include "SDCPPSystem.hpp"
 #include "rng.hpp"
 #include <stb_image.h>
@@ -10,7 +11,8 @@ namespace ECS {
         : entityID(other.entityID), processing(other.processing), cancelled(other.cancelled),
         taskType(other.taskType), metadata(std::move(other.metadata)),
         fullPath(std::move(other.fullPath)), result(std::move(other.result)),
-        sdContext(other.sdContext), contextKey(std::move(other.contextKey)) {
+        sdContext(other.sdContext), contextKey(std::move(other.contextKey)),
+        enqueueTime(other.enqueueTime), startTime(other.startTime) {
         other.sdContext = nullptr;
     }
 
@@ -25,6 +27,8 @@ namespace ECS {
             result = std::move(other.result);
             sdContext = other.sdContext;
             contextKey = std::move(other.contextKey);
+            enqueueTime = other.enqueueTime;
+            startTime = other.startTime;
             other.sdContext = nullptr;
         }
         return *this;
@@ -91,20 +95,8 @@ namespace ECS {
                     mgr.AddComponent<SDCPPSettingsComponent>(entityID);
                 }
                 auto& taskSettings = mgr.GetComponent<SDCPPSettingsComponent>(entityID);
-                taskSettings.lora_apply_mode = globalSettings.lora_apply_mode;
-                taskSettings.enable_mmap = globalSettings.enable_mmap;
-                taskSettings.diffusion_flash_attn = globalSettings.diffusion_flash_attn;
-                taskSettings.diffusion_conv_direct = globalSettings.diffusion_conv_direct;
-                taskSettings.vae_conv_direct = globalSettings.vae_conv_direct;
-                taskSettings.force_sdxl_vae_conv_scale = globalSettings.force_sdxl_vae_conv_scale;
-                taskSettings.max_vram = globalSettings.max_vram;
-                taskSettings.stream_layers = globalSettings.stream_layers;
-                taskSettings.eager_load = globalSettings.eager_load;
-                taskSettings.backend = globalSettings.backend;
-                taskSettings.params_backend = globalSettings.params_backend;
-                taskSettings.split_mode = globalSettings.split_mode;
-                taskSettings.auto_fit = globalSettings.auto_fit;
-                taskSettings.rpc_servers = globalSettings.rpc_servers;
+                nlohmann::json globalData = globalSettings.Serialize();
+                taskSettings.Deserialize(globalData);
             }
         }
 
@@ -116,6 +108,7 @@ namespace ECS {
         taskData.processing = false;
         taskData.cancelled = false;
         taskData.taskType = taskType;
+        taskData.enqueueTime = std::chrono::steady_clock::now();
 
         if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
             taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
@@ -528,6 +521,16 @@ namespace ECS {
         return (taskType == TaskType::Img2Vid || taskType == TaskType::Edit) ? ".mp4" : ".png";
     }
 
+    int SDCPPSystem::CountPendingTasksForContext(const std::string& contextKey) {
+        int count = 0;
+        for (const auto& task : taskQueue) {
+            if (task.contextKey == contextKey && !task.processing) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     void SDCPPSystem::ProcessQueues() {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (pauseWorker || shuttingDown) return;
@@ -604,6 +607,9 @@ namespace ECS {
                 if (!task.sdContext) {
                     std::string key = m_cacheSystem->computeKey(task.metadata);
                     task.contextKey = key;
+
+                    int pendingCount = CountPendingTasksForContext(key);
+
                     sd_ctx_t* ctx = m_cacheSystem->acquireContext(key);
                     if (!ctx) {
                         ctx = m_cacheSystem->getOrCreateContext(task.metadata);
@@ -700,6 +706,7 @@ namespace ECS {
                     continue;
                 }
                 task.processing = true;
+                task.startTime = std::chrono::steady_clock::now();
                 hasActiveTask = true;
                 activeThreadId = std::this_thread::get_id();
                 break;
@@ -817,4 +824,4 @@ namespace ECS {
         }
     }
 
-} // namespace ECS
+}

@@ -1,3 +1,4 @@
+// SDCPPUtils.hpp
 #pragma once
 
 #include "stable-diffusion.h"
@@ -132,7 +133,7 @@ namespace SDCPP {
         catch (...) { return false; }
     }
 
-    inline bool parseCacheParams(const nlohmann::json& comp, sd_cache_params_t& cache) {
+    inline bool parseCacheParams(const nlohmann::json& comp, sd_cache_params_t& cache, ResourceManager& res) {
         try {
             if (comp.contains("mode")) {
                 const auto& val = comp["mode"];
@@ -157,6 +158,10 @@ namespace SDCPP {
             if (comp.contains("max_continuous_cached_steps")) cache.max_continuous_cached_steps = comp["max_continuous_cached_steps"].get<int>();
             if (comp.contains("taylorseer_n_derivatives")) cache.taylorseer_n_derivatives = comp["taylorseer_n_derivatives"].get<int>();
             if (comp.contains("taylorseer_skip_interval")) cache.taylorseer_skip_interval = comp["taylorseer_skip_interval"].get<int>();
+            if (comp.contains("scm_mask") && !comp["scm_mask"].is_null()) {
+                std::string val = comp["scm_mask"].get<std::string>();
+                if (!val.empty()) cache.scm_mask = res.storeString(val);
+            }
             if (comp.contains("scm_policy_dynamic")) cache.scm_policy_dynamic = comp["scm_policy_dynamic"].get<bool>();
             if (comp.contains("spectrum_w")) cache.spectrum_w = comp["spectrum_w"].get<float>();
             if (comp.contains("spectrum_m")) cache.spectrum_m = comp["spectrum_m"].get<int>();
@@ -344,7 +349,7 @@ namespace SDCPP {
                 parseSampleParams(samp, params.sample_params, res);
             }
             if (comp.contains("EasyCache")) {
-                parseCacheParams(comp["EasyCache"], params.cache);
+                parseCacheParams(comp["EasyCache"], params.cache, res);
             }
             if (comp.contains("Hires")) {
                 parseHiresParams(comp["Hires"], params.hires, res);
@@ -670,6 +675,10 @@ namespace SDCPP {
                 if (s.contains("force_sdxl_vae_conv_scale")) {
                     ctx.force_sdxl_vae_conv_scale = s["force_sdxl_vae_conv_scale"].get<bool>();
                 }
+                if (s.contains("model_args") && !s["model_args"].is_null()) {
+                    std::string val = s["model_args"].get<std::string>();
+                    if (!val.empty()) ctx.model_args = res.storeString(val);
+                }
             }
             if (comp.contains("Embeddings") && comp["Embeddings"].is_array()) {
                 const auto& embeds = comp["Embeddings"];
@@ -704,6 +713,7 @@ namespace SDCPP {
 
         return true;
     }
+
     inline bool parseVideoGenParams(const nlohmann::json& metadata, sd_vid_gen_params_t& params, ResourceManager& res) {
         sd_vid_gen_params_init(&params);
 
@@ -759,7 +769,7 @@ namespace SDCPP {
                 parseSampleParams(hn, params.high_noise_sample_params, res);
             }
             if (comp.contains("EasyCache")) {
-                parseCacheParams(comp["EasyCache"], params.cache);
+                parseCacheParams(comp["EasyCache"], params.cache, res);
             }
             if (comp.contains("Hires")) {
                 parseHiresParams(comp["Hires"], params.hires, res);

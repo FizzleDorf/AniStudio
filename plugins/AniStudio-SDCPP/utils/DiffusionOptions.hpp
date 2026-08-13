@@ -257,6 +257,24 @@ inline int cache_mode_from_name(const std::string& name) {
     return (it != get_cache_mode_map().end()) ? it->second : SD_CACHE_DISABLED;
 }
 
+inline const std::unordered_map<int, std::string>& get_cache_mode_reverse_map() {
+    static const std::unordered_map<int, std::string> map = {
+        {SD_CACHE_DISABLED, "DISABLED"},
+        {SD_CACHE_EASYCACHE, "EASYCACHE"},
+        {SD_CACHE_UCACHE, "UCACHE"},
+        {SD_CACHE_DBCACHE, "DBCACHE"},
+        {SD_CACHE_TAYLORSEER, "TAYLORSEER"},
+        {SD_CACHE_CACHE_DIT, "CACHE_DIT"},
+        {SD_CACHE_SPECTRUM, "SPECTRUM"}
+    };
+    return map;
+}
+
+inline std::string cache_mode_to_name(int mode) {
+    auto it = get_cache_mode_reverse_map().find(mode);
+    return (it != get_cache_mode_reverse_map().end()) ? it->second : "DISABLED";
+}
+
 inline const std::unordered_map<std::string, int>& get_vae_format_map() {
     static const std::unordered_map<std::string, int> map = {
         {"AUTO", SD_VAE_FORMAT_AUTO},

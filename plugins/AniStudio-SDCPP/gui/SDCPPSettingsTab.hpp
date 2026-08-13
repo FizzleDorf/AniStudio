@@ -1,3 +1,4 @@
+// SDCPPSettingsTab.hpp
 #pragma once
 #include "BaseSettingsTab.hpp"
 #include "SDCPPSettingsComponent.hpp"
@@ -26,10 +27,6 @@ namespace ECS {
         SDCPPSettingsComponent& m_comp;
         std::string m_filter;
 
-        bool FilterPass(const std::string& section) const;
-        void RenderGeneralSettings();
-        void RenderModelSettings();
-        void RenderAdvancedSettings();
         void RenderActionButtons();
     };
 

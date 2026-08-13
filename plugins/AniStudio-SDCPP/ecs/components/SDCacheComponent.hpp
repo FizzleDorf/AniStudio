@@ -44,7 +44,7 @@ namespace ECS {
                 {"description", "Cache management for faster generation (set mode to EASYCACHE to enable)."},
                 {"properties", {
                     {"mode", {
-                        {"type", "integer"},
+                        {"type", "string"},
                         {"title", "Cache Mode"},
                         {"description", "Cache mode selection. EasyCache for DiT models, UCache/Spectrum for UNet models."},
                         {"ui:widget", "combo"},
@@ -89,6 +89,189 @@ namespace ECS {
                             {"min", 0.0f},
                             {"max", 1.0f}
                         }}
+                    }},
+                    {"error_decay_rate", {
+                        {"type", "number"},
+                        {"title", "Error Decay Rate"},
+                        {"description", "Rate at which errors decay over time."},
+                        {"default", 1.0f},
+                        {"ui:widget", "input_float"},
+                        {"ui:options", {
+                            {"step", 0.05f},
+                            {"min", 0.0f},
+                            {"max", 2.0f}
+                        }}
+                    }},
+                    {"use_relative_threshold", {
+                        {"type", "boolean"},
+                        {"title", "Use Relative Threshold"},
+                        {"description", "Use relative threshold for cache decisions."},
+                        {"default", true}
+                    }},
+                    {"reset_error_on_compute", {
+                        {"type", "boolean"},
+                        {"title", "Reset Error on Compute"},
+                        {"description", "Reset error tracking when computing new values."},
+                        {"default", true}
+                    }},
+                    {"Fn_compute_blocks", {
+                        {"type", "integer"},
+                        {"title", "Fn Compute Blocks"},
+                        {"description", "Number of forward compute blocks."},
+                        {"default", 8},
+                        {"ui:options", {
+                            {"min", 0},
+                            {"max", 32}
+                        }}
+                    }},
+                    {"Bn_compute_blocks", {
+                        {"type", "integer"},
+                        {"title", "Bn Compute Blocks"},
+                        {"description", "Number of backward compute blocks."},
+                        {"default", 0},
+                        {"ui:options", {
+                            {"min", 0},
+                            {"max", 32}
+                        }}
+                    }},
+                    {"residual_diff_threshold", {
+                        {"type", "number"},
+                        {"title", "Residual Diff Threshold"},
+                        {"description", "Threshold for residual difference."},
+                        {"default", 0.08f},
+                        {"ui:options", {
+                            {"step", 0.01f},
+                            {"min", 0.0f},
+                            {"max", 1.0f}
+                        }}
+                    }},
+                    {"max_warmup_steps", {
+                        {"type", "integer"},
+                        {"title", "Max Warmup Steps"},
+                        {"description", "Maximum number of warmup steps before caching."},
+                        {"default", 8},
+                        {"ui:options", {
+                            {"min", 0},
+                            {"max", 64}
+                        }}
+                    }},
+                    {"max_cached_steps", {
+                        {"type", "integer"},
+                        {"title", "Max Cached Steps"},
+                        {"description", "Maximum number of steps to cache (-1 for unlimited)."},
+                        {"default", -1}
+                    }},
+                    {"max_continuous_cached_steps", {
+                        {"type", "integer"},
+                        {"title", "Max Continuous Cached Steps"},
+                        {"description", "Maximum number of continuous cached steps (-1 for unlimited)."},
+                        {"default", -1}
+                    }},
+                    {"taylorseer_n_derivatives", {
+                        {"type", "integer"},
+                        {"title", "TaylorSeer N Derivatives"},
+                        {"description", "Number of derivatives for TaylorSeer."},
+                        {"default", 1},
+                        {"ui:options", {
+                            {"min", 1},
+                            {"max", 4}
+                        }}
+                    }},
+                    {"taylorseer_skip_interval", {
+                        {"type", "integer"},
+                        {"title", "TaylorSeer Skip Interval"},
+                        {"description", "Skip interval for TaylorSeer."},
+                        {"default", 1},
+                        {"ui:options", {
+                            {"min", 1},
+                            {"max", 10}
+                        }}
+                    }},
+                    {"scm_mask", {
+                        {"type", "string"},
+                        {"title", "SCM Mask"},
+                        {"description", "Mask for SCM policy (comma-separated layer indices or 'all')."},
+                        {"default", ""}
+                    }},
+                    {"scm_policy_dynamic", {
+                        {"type", "boolean"},
+                        {"title", "SCM Policy Dynamic"},
+                        {"description", "Use dynamic SCM policy."},
+                        {"default", true}
+                    }},
+                    {"spectrum_w", {
+                        {"type", "number"},
+                        {"title", "Spectrum W"},
+                        {"description", "Spectrum weight parameter."},
+                        {"default", 0.40f},
+                        {"ui:options", {
+                            {"step", 0.01f},
+                            {"min", 0.0f},
+                            {"max", 1.0f}
+                        }}
+                    }},
+                    {"spectrum_m", {
+                        {"type", "integer"},
+                        {"title", "Spectrum M"},
+                        {"description", "Spectrum M parameter."},
+                        {"default", 3},
+                        {"ui:options", {
+                            {"min", 1},
+                            {"max", 10}
+                        }}
+                    }},
+                    {"spectrum_lam", {
+                        {"type", "number"},
+                        {"title", "Spectrum Lam"},
+                        {"description", "Spectrum lambda parameter."},
+                        {"default", 1.0f},
+                        {"ui:options", {
+                            {"step", 0.1f},
+                            {"min", 0.0f},
+                            {"max", 10.0f}
+                        }}
+                    }},
+                    {"spectrum_window_size", {
+                        {"type", "integer"},
+                        {"title", "Spectrum Window Size"},
+                        {"description", "Spectrum window size."},
+                        {"default", 2},
+                        {"ui:options", {
+                            {"min", 1},
+                            {"max", 10}
+                        }}
+                    }},
+                    {"spectrum_flex_window", {
+                        {"type", "number"},
+                        {"title", "Spectrum Flex Window"},
+                        {"description", "Spectrum flexible window parameter."},
+                        {"default", 0.50f},
+                        {"ui:options", {
+                            {"step", 0.05f},
+                            {"min", 0.0f},
+                            {"max", 1.0f}
+                        }}
+                    }},
+                    {"spectrum_warmup_steps", {
+                        {"type", "integer"},
+                        {"title", "Spectrum Warmup Steps"},
+                        {"description", "Number of warmup steps for Spectrum."},
+                        {"default", 4},
+                        {"ui:options", {
+                            {"min", 0},
+                            {"max", 32}
+                        }}
+                    }},
+                    {"spectrum_stop_percent", {
+                        {"type", "number"},
+                        {"title", "Spectrum Stop Percent"},
+                        {"description", "Stop percentage for Spectrum."},
+                        {"default", 0.9f},
+                        {"ui:options", {
+                            {"step", 0.05f},
+                            {"min", 0.0f},
+                            {"max", 1.0f}
+                        }}
                     }}
                 }}
             };
@@ -99,7 +282,27 @@ namespace ECS {
                 {"mode", &mode},
                 {"reuse_threshold", &reuse_threshold},
                 {"start_percent", &start_percent},
-                {"end_percent", &end_percent}
+                {"end_percent", &end_percent},
+                {"error_decay_rate", &error_decay_rate},
+                {"use_relative_threshold", &use_relative_threshold},
+                {"reset_error_on_compute", &reset_error_on_compute},
+                {"Fn_compute_blocks", &Fn_compute_blocks},
+                {"Bn_compute_blocks", &Bn_compute_blocks},
+                {"residual_diff_threshold", &residual_diff_threshold},
+                {"max_warmup_steps", &max_warmup_steps},
+                {"max_cached_steps", &max_cached_steps},
+                {"max_continuous_cached_steps", &max_continuous_cached_steps},
+                {"taylorseer_n_derivatives", &taylorseer_n_derivatives},
+                {"taylorseer_skip_interval", &taylorseer_skip_interval},
+                {"scm_mask", &scm_mask},
+                {"scm_policy_dynamic", &scm_policy_dynamic},
+                {"spectrum_w", &spectrum_w},
+                {"spectrum_m", &spectrum_m},
+                {"spectrum_lam", &spectrum_lam},
+                {"spectrum_window_size", &spectrum_window_size},
+                {"spectrum_flex_window", &spectrum_flex_window},
+                {"spectrum_warmup_steps", &spectrum_warmup_steps},
+                {"spectrum_stop_percent", &spectrum_stop_percent}
             };
         }
 
@@ -145,7 +348,13 @@ namespace ECS {
 
             if (componentData.contains("mode")) {
                 const auto& val = componentData["mode"];
-                if (val.is_string()) mode = val.get<std::string>();
+                if (val.is_string()) {
+                    mode = val.get<std::string>();
+                }
+                else if (val.is_number()) {
+                    int modeVal = val.get<int>();
+                    mode = cache_mode_to_name(modeVal);
+                }
             }
             if (componentData.contains("reuse_threshold")) reuse_threshold = componentData["reuse_threshold"].get<float>();
             if (componentData.contains("start_percent")) start_percent = componentData["start_percent"].get<float>();

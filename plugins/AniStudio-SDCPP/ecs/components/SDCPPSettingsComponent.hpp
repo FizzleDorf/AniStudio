@@ -2,6 +2,7 @@
 #pragma once
 #include "BaseSettingsComponent.hpp"
 #include "DiffusionOptions.hpp"
+#include "UISchema.hpp"
 #include <string>
 #include <fstream>
 #include <filesystem>
@@ -25,7 +26,8 @@ namespace ECS {
         bool diffusion_conv_direct = false;
         bool vae_conv_direct = false;
         bool force_sdxl_vae_conv_scale = false;
-        int log_level = 1; // 0=DEBUG,1=INFO,2=WARN,3=ERROR
+        int log_level = 1;
+        std::string model_args;
 
         SDCPPSettingsComponent() {
             compName = "SDCPP";
@@ -39,7 +41,7 @@ namespace ECS {
                     "backend", "params_backend", "split_mode", "auto_fit",
                     "rpc_servers", "lora_apply_mode", "diffusion_flash_attn",
                     "diffusion_conv_direct", "vae_conv_direct", "force_sdxl_vae_conv_scale",
-                    "log_level"
+                    "log_level", "model_args"
                 }},
                 {"properties", {
                     {"enable_mmap", {
@@ -141,6 +143,12 @@ namespace ECS {
                         {"ui:widget", "combo"},
                         {"items", {"DEBUG","INFO","WARN","ERROR"}},
                         {"itemCount", 4}
+                    }},
+                    {"model_args", {
+                        {"type", "string"},
+                        {"title", "Model Args"},
+                        {"description", "Additional command-line style arguments for the model backend (e.g., --disable-async-offload --disable-pinned-memory)."},
+                        {"ui:widget", "text"}
                     }}
                 }}
             };
@@ -199,7 +207,8 @@ namespace ECS {
                 {"diffusion_conv_direct", diffusion_conv_direct},
                 {"vae_conv_direct", vae_conv_direct},
                 {"force_sdxl_vae_conv_scale", force_sdxl_vae_conv_scale},
-                {"log_level", log_level}
+                {"log_level", log_level},
+                {"model_args", model_args}
             };
         }
 
@@ -225,6 +234,29 @@ namespace ECS {
             if (j.contains("vae_conv_direct")) vae_conv_direct = j["vae_conv_direct"].get<bool>();
             if (j.contains("force_sdxl_vae_conv_scale")) force_sdxl_vae_conv_scale = j["force_sdxl_vae_conv_scale"].get<bool>();
             if (j.contains("log_level")) log_level = j["log_level"].get<int>();
+            if (j.contains("model_args")) model_args = j["model_args"].get<std::string>();
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"enable_mmap", &enable_mmap},
+                {"max_vram", &max_vram},
+                {"flash_attn", &flash_attn},
+                {"stream_layers", &stream_layers},
+                {"eager_load", &eager_load},
+                {"backend", &backend},
+                {"params_backend", &params_backend},
+                {"split_mode", &split_mode},
+                {"auto_fit", &auto_fit},
+                {"rpc_servers", &rpc_servers},
+                {"lora_apply_mode", &lora_apply_mode},
+                {"diffusion_flash_attn", &diffusion_flash_attn},
+                {"diffusion_conv_direct", &diffusion_conv_direct},
+                {"vae_conv_direct", &vae_conv_direct},
+                {"force_sdxl_vae_conv_scale", &force_sdxl_vae_conv_scale},
+                {"log_level", &log_level},
+                {"model_args", &model_args}
+            };
         }
 
     private:

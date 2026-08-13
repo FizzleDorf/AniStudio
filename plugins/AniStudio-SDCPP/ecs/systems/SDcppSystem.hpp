@@ -1,3 +1,4 @@
+// SDcppSystem.hpp
 #pragma once
 
 #include "DiffusionOptions.hpp"
@@ -60,6 +61,8 @@ namespace ECS {
             std::future<bool> result;
             sd_ctx_t* sdContext = nullptr;
             std::string contextKey;
+            std::chrono::steady_clock::time_point enqueueTime;
+            std::chrono::steady_clock::time_point startTime;
 
             TaskData() = default;
             TaskData(TaskData&& other) noexcept;
@@ -139,6 +142,7 @@ namespace ECS {
         void CheckTaskCompletion();
         void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID entityID);
         void WorkerThread();
+        int CountPendingTasksForContext(const std::string& contextKey);
     };
 
-} // namespace ECS
+}

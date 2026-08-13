@@ -153,8 +153,22 @@ public:
 
         entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPP");
 
-        entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
-        entityMgr.RegisterSystem<ECS::SDCPPSystem>();
+        // Only register systems if they don't already exist
+        if (!entityMgr.GetSystem<ECS::ModelCacheSystem>()) {
+            entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
+            LogInfo("Registered ModelCacheSystem");
+        }
+        else {
+            LogInfo("ModelCacheSystem already registered, reusing existing instance");
+        }
+
+        if (!entityMgr.GetSystem<ECS::SDCPPSystem>()) {
+            entityMgr.RegisterSystem<ECS::SDCPPSystem>();
+            LogInfo("Registered SDCPPSystem");
+        }
+        else {
+            LogInfo("SDCPPSystem already registered, reusing existing instance");
+        }
 
         m_entityMgr = &entityMgr;
 
@@ -178,7 +192,6 @@ public:
 
         RegisterEventHandlers();
 
-        LogInfo("SDCPPSystem registered");
         LogInfo("Stable Diffusion Addon initialized");
         return true;
     }
@@ -249,10 +262,9 @@ public:
 
         UnregisterEventHandlers();
 
-        m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-        LogInfo("Unregistered SDCPPSystem");
-        m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>();
-        LogInfo("Unregistered ModelCacheSystem");
+        // Don't unregister systems here - let the EntityManager handle it
+        // m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
+        // m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>();
 
         Utils::g_FilePathSystem = nullptr;
         m_entityMgr = nullptr;
