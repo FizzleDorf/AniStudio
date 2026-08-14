@@ -2,7 +2,7 @@
 #include "PropertyTypes.hpp"
 #include "ECS.h"
 #include "BaseComponent.hpp"
-#include "PngMetadataUtils.hpp"
+#include "ImageUtils.hpp"
 #include <iostream>
 #include <imgui.h>
 
@@ -120,23 +120,18 @@ namespace GUI {
             auto props = comp->GetPropertyMap();
             auto it = props.find(propName);
             if (it == props.end()) return;
+
+            nlohmann::json valueJson = PropertyVariantToJson(it->second);
             nlohmann::json propData;
-            propData["value"] = PropertyVariantToJson(it->second);
-            nlohmann::json wrappedData;
-            wrappedData["dataType"] = "property";
-            wrappedData["componentName"] = compName;
-            wrappedData["propertyName"] = propName;
-            wrappedData["propertyData"] = propData;
-            wrappedData["source"] = "entity";
-            SetWrappedClipboardData(wrappedData);
+            propData["value"] = valueJson;
+
+            SetWrappedClipboardData(propData);
             s_type = Type::Property;
             s_data = propData;
-            s_data["__componentName"] = compName;
-            s_data["__propertyName"] = propName;
         }
 
         static nlohmann::json LoadMetadataFromImage(const std::string& imagePath) {
-            return Utils::PngMetadata::ReadMetadataFromPNG(imagePath);
+            return Utils::ImageUtils::ReadMetadataFromImage(imagePath);
         }
 
         void CopyImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath) {
@@ -478,5 +473,5 @@ namespace GUI {
             for (const auto& name : compNames) ResetComponent(mgr, target, name, addComponent);
         }
 
-    } // namespace Clipboard
-} // namespace GUI
+    }
+}

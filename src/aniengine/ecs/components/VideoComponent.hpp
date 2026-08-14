@@ -2,6 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include "OpenGLWrapper.hpp"
+#include "FileFormats.hpp"
 #include <string>
 #include <vector>
 #include <cstdint>
@@ -329,8 +330,6 @@ namespace ECS {
 
     struct OutputVideoComponent : public VideoComponent {
         std::string fileExtension = ".mp4";
-        std::vector<std::string> supportedExtensions = { ".mp4", ".webm" };
-        int selectedExtensionIndex = 0;
 
         OutputVideoComponent() {
             compName = "OutputVideo";
@@ -342,7 +341,7 @@ namespace ECS {
             std::unordered_map<std::string, UISchema::PropertyVariant> properties;
             properties["fileName"] = &fileName;
             properties["filePath"] = &filePath;
-            properties["selectedExtensionIndex"] = &selectedExtensionIndex;
+            properties["fileExtension"] = &fileExtension;
             return properties;
         }
 
@@ -352,8 +351,7 @@ namespace ECS {
             j[compName] = {
                 {"fileName", fileName},
                 {"filePath", filePath},
-                {"fileExtension", fileExtension},
-                {"selectedExtensionIndex", selectedExtensionIndex}
+                {"fileExtension", fileExtension}
             };
             return j;
         }
@@ -369,7 +367,6 @@ namespace ECS {
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
-            if (componentData.contains("selectedExtensionIndex")) selectedExtensionIndex = componentData["selectedExtensionIndex"];
         }
 
         OutputVideoComponent& operator=(const OutputVideoComponent& other) {
@@ -377,8 +374,6 @@ namespace ECS {
                 VideoComponent::operator=(other);
                 compName = "OutputVideo";
                 fileExtension = other.fileExtension;
-                selectedExtensionIndex = other.selectedExtensionIndex;
-                supportedExtensions = other.supportedExtensions;
                 setupOutputSchema();
             }
             return *this;
@@ -387,13 +382,12 @@ namespace ECS {
         OutputVideoComponent(const OutputVideoComponent& other) : VideoComponent(other) {
             compName = "OutputVideo";
             fileExtension = other.fileExtension;
-            selectedExtensionIndex = other.selectedExtensionIndex;
-            supportedExtensions = other.supportedExtensions;
             setupOutputSchema();
         }
 
     private:
         void setupOutputSchema() {
+            auto items = FileFormats::GetComboItemsJson(FileFormats::GetVideoExtensions());
             schema = {
                 {"title", "Output Video"},
                 {"type", "object"},
@@ -420,22 +414,17 @@ namespace ECS {
                             {"resetButtonText", "Reset to Default"}
                         }}
                     }},
-                    {"selectedExtensionIndex", {
-                        {"type", "integer"},
+                    {"fileExtension", {
+                        {"type", "string"},
                         {"title", "File Format"},
                         {"ui:widget", "combo"},
-                        {"minimum", 0},
-                        {"maximum", 1},
-                        {"items", {
-                            {{"label", "MP4 (.mp4)"}},
-                            {{"label", "WebM (.webm)"}}
-                        }},
+                        {"items", items},
                         {"ui:options", {
                             {"resetButtonText", "Reset to MP4"}
                         }}
                     }}
                 }},
-                {"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}
+                {"propertyOrder", {"filePath", "fileName", "fileExtension"}}
             };
         }
     };

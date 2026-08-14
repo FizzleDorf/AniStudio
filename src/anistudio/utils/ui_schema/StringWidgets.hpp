@@ -146,40 +146,66 @@ namespace UISchema {
         }
 
         static bool RenderCombo(const std::string& label, std::string* value, const nlohmann::json& schema) {
-            if (!schema.contains("items") || !schema["items"].is_array()) {
-                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Combo missing items array");
-                return false;
-            }
+            std::vector<std::string> displayItems;
+            std::vector<std::string> valueItems;
 
-            std::vector<std::string> items;
-            for (const auto& item : schema["items"]) {
-                if (item.is_string()) {
-                    items.push_back(item.get<std::string>());
+            // Check for enum/enumNames first
+            if (schema.contains("enum") && schema["enum"].is_array()) {
+                auto enumValues = schema["enum"];
+                for (const auto& item : enumValues) {
+                    if (item.is_string()) {
+                        valueItems.push_back(item.get<std::string>());
+                    }
+                }
+                if (schema.contains("enumNames") && schema["enumNames"].is_array()) {
+                    auto enumNames = schema["enumNames"];
+                    for (const auto& item : enumNames) {
+                        if (item.is_string()) {
+                            displayItems.push_back(item.get<std::string>());
+                        }
+                    }
+                }
+                else {
+                    displayItems = valueItems;
+                }
+            }
+            else if (schema.contains("items") && schema["items"].is_array()) {
+                auto items = schema["items"];
+                for (const auto& item : items) {
+                    if (item.is_string()) {
+                        displayItems.push_back(item.get<std::string>());
+                        valueItems.push_back(item.get<std::string>());
+                    }
+                    else if (item.is_object() && item.contains("label") && item.contains("value")) {
+                        displayItems.push_back(item["label"].get<std::string>());
+                        valueItems.push_back(item["value"].get<std::string>());
+                    }
                 }
             }
 
-            if (items.empty()) {
+            if (displayItems.empty()) {
+                ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Combo missing items");
                 return false;
             }
 
-            std::vector<const char*> c_items;
-            c_items.reserve(items.size());
-            for (const auto& item : items) {
-                c_items.push_back(item.c_str());
+            std::vector<const char*> c_displayItems;
+            c_displayItems.reserve(displayItems.size());
+            for (const auto& item : displayItems) {
+                c_displayItems.push_back(item.c_str());
             }
 
             int selectedIndex = 0;
-            for (size_t i = 0; i < items.size(); ++i) {
-                if (items[i] == *value) {
+            for (size_t i = 0; i < valueItems.size(); ++i) {
+                if (valueItems[i] == *value) {
                     selectedIndex = static_cast<int>(i);
                     break;
                 }
             }
 
             int originalIndex = selectedIndex;
-            if (ImGui::Combo(label.c_str(), &selectedIndex, c_items.data(), static_cast<int>(c_items.size()))) {
-                if (selectedIndex != originalIndex && selectedIndex >= 0 && selectedIndex < static_cast<int>(items.size())) {
-                    *value = items[selectedIndex];
+            if (ImGui::Combo(label.c_str(), &selectedIndex, c_displayItems.data(), static_cast<int>(c_displayItems.size()))) {
+                if (selectedIndex != originalIndex && selectedIndex >= 0 && selectedIndex < static_cast<int>(valueItems.size())) {
+                    *value = valueItems[selectedIndex];
                     return true;
                 }
             }

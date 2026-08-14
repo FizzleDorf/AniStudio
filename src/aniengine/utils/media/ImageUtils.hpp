@@ -13,7 +13,14 @@
 #include <nlohmann/json.hpp>
 #include "PngMetadataUtils.hpp"
 #include "JpegMetadataUtils.hpp"
+#include "WebPMetadataUtils.hpp"
+#include "VideoMetadataUtils.hpp"
 #include "MetadataUtils.hpp"
+
+#ifdef USE_WEBP
+#include <webp/encode.h>
+#include <webp/decode.h>
+#endif
 
 namespace Utils {
 
@@ -21,11 +28,73 @@ namespace Utils {
     public:
         static unsigned char* LoadImageData(const std::string& filePath, int& width, int& height, int& channels) {
             unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 0);
-            if (!data) {
-                std::cerr << "Failed to load image: " << filePath << " - " << stbi_failure_reason() << std::endl;
+            if (data) {
+                return data;
+            }
+
+#ifdef USE_WEBP
+            std::cerr << "stb_image failed to load " << filePath << ", trying libwebp..." << std::endl;
+            FILE* f = fopen(filePath.c_str(), "rb");
+            if (!f) {
+                std::cerr << "Cannot open file for libwebp: " << filePath << std::endl;
                 return nullptr;
             }
-            return data;
+            fseek(f, 0, SEEK_END);
+            long size = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (size <= 0) {
+                fclose(f);
+                return nullptr;
+            }
+            uint8_t* webpData = (uint8_t*)malloc(size);
+            if (!webpData) {
+                fclose(f);
+                return nullptr;
+            }
+            size_t readSize = fread(webpData, 1, size, f);
+            fclose(f);
+            if (readSize != (size_t)size) {
+                free(webpData);
+                return nullptr;
+            }
+
+            WebPBitstreamFeatures features;
+            if (WebPGetFeatures(webpData, size, &features) != VP8_STATUS_OK) {
+                free(webpData);
+                std::cerr << "libwebp: invalid WebP file" << std::endl;
+                return nullptr;
+            }
+
+            int w = features.width;
+            int h = features.height;
+            int has_alpha = features.has_alpha;
+            uint8_t* decoded = nullptr;
+            if (has_alpha) {
+                decoded = WebPDecodeRGBA(webpData, size, &w, &h);
+                if (decoded) channels = 4;
+            }
+            else {
+                decoded = WebPDecodeRGB(webpData, size, &w, &h);
+                if (decoded) channels = 3;
+            }
+            free(webpData);
+            if (!decoded) {
+                std::cerr << "libwebp: decoding failed" << std::endl;
+                return nullptr;
+            }
+
+            width = w;
+            height = h;
+            unsigned char* result = (unsigned char*)malloc(width * height * channels);
+            if (result) {
+                memcpy(result, decoded, width * height * channels);
+            }
+            free(decoded);
+            return result;
+#else
+            std::cerr << "Failed to load image: " << filePath << " - " << stbi_failure_reason() << std::endl;
+            return nullptr;
+#endif
         }
 
         static void FreeImageData(unsigned char* data) {
@@ -41,6 +110,11 @@ namespace Utils {
         }
 
         static bool SaveImage(const std::string& filePath, int width, int height, int channels, const unsigned char* data) {
+            std::string actualPath = filePath;
+            return SaveImage(actualPath, width, height, channels, data);
+        }
+
+        static bool SaveImage(std::string& filePath, int width, int height, int channels, const unsigned char* data) {
             std::filesystem::path path(filePath);
             std::filesystem::create_directories(path.parent_path());
 
@@ -56,15 +130,58 @@ namespace Utils {
                 result = stbi_write_bmp(filePath.c_str(), width, height, channels, data);
             else if (ext == ".tga")
                 result = stbi_write_tga(filePath.c_str(), width, height, channels, data);
+            else if (ext == ".webp") {
+#ifdef USE_WEBP
+                uint8_t* output = nullptr;
+                size_t size = 0;
+                if (channels == 4) {
+                    size = WebPEncodeRGBA(data, width, height, width * channels, 90, &output);
+                }
+                else if (channels == 3) {
+                    size = WebPEncodeRGB(data, width, height, width * channels, 90, &output);
+                }
+                else {
+                    std::cerr << "Unsupported channel count for WebP: " << channels << std::endl;
+                    std::string newPath = path.stem().string() + ".png";
+                    std::cout << "Saving as PNG instead: " << newPath << std::endl;
+                    result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                    if (result) filePath = newPath;
+                    return result != 0;
+                }
+                if (size) {
+                    FILE* f = fopen(filePath.c_str(), "wb");
+                    if (f) {
+                        fwrite(output, 1, size, f);
+                        fclose(f);
+                        result = 1;
+                    }
+                    WebPFree(output);
+                }
+                else {
+                    std::cerr << "WebP encoding failed, falling back to PNG" << std::endl;
+                    std::string newPath = path.stem().string() + ".png";
+                    std::cout << "Saving as PNG: " << newPath << std::endl;
+                    result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                    if (result) filePath = newPath;
+                }
+#else
+                std::string newPath = path.stem().string() + ".png";
+                std::cout << "WebP not supported, saving as PNG: " << newPath << std::endl;
+                result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                if (result) filePath = newPath;
+#endif
+            }
             else if (ext == ".hdr" || ext == ".pic" || ext == ".pnm") {
                 std::string newPath = path.stem().string() + ".png";
                 std::cout << "Format " << ext << " not supported for writing, saving as PNG: " << newPath << std::endl;
                 result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                if (result) filePath = newPath;
             }
             else {
                 std::string newPath = path.stem().string() + ".png";
                 std::cout << "Unknown format, saving as PNG: " << newPath << std::endl;
                 result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                if (result) filePath = newPath;
             }
             return result != 0;
         }
@@ -85,6 +202,12 @@ namespace Utils {
             else if (ext == ".jpg" || ext == ".jpeg") {
                 return JpegMetadata::WriteMetadataToJPEG(imagePath, metadata);
             }
+            else if (ext == ".webp") {
+                return WebPMetadata::WriteMetadataToWebP(imagePath, metadata);
+            }
+            else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv") {
+                return VideoMetadataUtils::WriteMetadataToVideo(imagePath, metadata, forceSidecar);
+            }
             else {
                 std::string jsonPath = imagePath + ".json";
                 return MetadataUtils::SaveMetadataToJson(jsonPath, metadata);
@@ -95,16 +218,35 @@ namespace Utils {
             std::string ext = std::filesystem::path(imagePath).extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
+            nlohmann::json result;
+            bool triedReader = false;
+
             if (ext == ".png") {
-                return PngMetadata::ReadMetadataFromPNG(imagePath);
+                result = PngMetadata::ReadMetadataFromPNG(imagePath);
+                triedReader = true;
             }
             else if (ext == ".jpg" || ext == ".jpeg") {
-                return JpegMetadata::ReadMetadataFromJPEG(imagePath);
+                result = JpegMetadata::ReadMetadataFromJPEG(imagePath);
+                triedReader = true;
             }
-            else {
+            else if (ext == ".webp") {
+                result = WebPMetadata::ReadMetadataFromWebP(imagePath);
+                triedReader = true;
+            }
+            else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv") {
+                result = VideoMetadataUtils::ReadMetadataFromVideo(imagePath);
+                triedReader = true;
+            }
+
+            if (!triedReader || result.empty()) {
                 std::string jsonPath = imagePath + ".json";
-                return MetadataUtils::LoadMetadataFromJson(jsonPath);
+                nlohmann::json sidecar = MetadataUtils::LoadMetadataFromJson(jsonPath);
+                if (!sidecar.empty()) {
+                    result = sidecar;
+                }
             }
+
+            return result;
         }
 
         static std::string CreateUniqueFilenameIncremental(const std::string& baseName, const std::string& directory, const std::string& extension) {

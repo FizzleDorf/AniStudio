@@ -1,7 +1,11 @@
 #include "VideoUtils.hpp"
 #include <iostream>
 #include <filesystem>
-#include "stb_image_write.h"
+#include "ImageUtils.hpp"
+
+#ifdef USE_WEBP
+#include <webp/encode.h>
+#endif
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -197,22 +201,7 @@ namespace Utils {
         if (!frameData)
             return false;
 
-        std::filesystem::path outputDir = std::filesystem::path(imagePath).parent_path();
-        if (!outputDir.empty() && !std::filesystem::exists(outputDir))
-            std::filesystem::create_directories(outputDir);
-
-        bool success = false;
-        std::string ext = std::filesystem::path(imagePath).extension().string();
-        if (ext == ".png")
-            success = stbi_write_png(imagePath.c_str(), width, height, channels, frameData, width * channels) != 0;
-        else if (ext == ".jpg" || ext == ".jpeg")
-            success = stbi_write_jpg(imagePath.c_str(), width, height, channels, frameData, 90) != 0;
-        else if (ext == ".bmp")
-            success = stbi_write_bmp(imagePath.c_str(), width, height, channels, frameData) != 0;
-        else if (ext == ".tga")
-            success = stbi_write_tga(imagePath.c_str(), width, height, channels, frameData) != 0;
-        else
-            success = stbi_write_png(imagePath.c_str(), width, height, channels, frameData, width * channels) != 0;
+        bool success = Utils::ImageUtils::SaveImage(imagePath, width, height, channels, frameData);
 
         FreeVideoFrameData(frameData);
         return success;
@@ -232,14 +221,30 @@ namespace Utils {
             return false;
         }
 
-        const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+        std::string ext = std::filesystem::path(outputPath).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        AVCodecID codecId = AV_CODEC_ID_H264;
+        if (ext == ".webm") {
+            codecId = AV_CODEC_ID_VP9;
+        }
+        else if (ext == ".webp") {
+            codecId = AV_CODEC_ID_VP8;
+        }
+        else if (ext == ".mp4" || ext == ".mov") {
+            codecId = AV_CODEC_ID_H264;
+        }
+        else if (ext == ".avi") {
+            codecId = AV_CODEC_ID_MPEG4;
+        }
+        else if (ext == ".mkv") {
+            codecId = AV_CODEC_ID_H264;
+        }
+
+        const AVCodec* codec = avcodec_find_encoder(codecId);
         if (!codec) {
-            codec = avcodec_find_encoder(AV_CODEC_ID_MPEG4);
-            if (!codec) {
-                std::cerr << "No suitable video encoder found" << std::endl;
-                avformat_free_context(fmtCtx);
-                return false;
-            }
+            std::cerr << "No encoder found for codec ID " << codecId << std::endl;
+            avformat_free_context(fmtCtx);
+            return false;
         }
 
         AVStream* stream = avformat_new_stream(fmtCtx, nullptr);

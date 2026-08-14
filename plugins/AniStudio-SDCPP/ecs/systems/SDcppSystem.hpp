@@ -1,4 +1,4 @@
-// SDcppSystem.hpp
+// SDCPPSystem.hpp
 #pragma once
 
 #include "DiffusionOptions.hpp"
@@ -136,7 +136,7 @@ namespace ECS {
         static bool RunConversion(const nlohmann::json& metadata);
 
         bool IsVideoTask(TaskType taskType) const;
-        std::string GetOutputExtension(TaskType taskType) const;
+        std::string GetOutputExtension(TaskType taskType, EntityID entityID) const;
 
         void ProcessQueues();
         void CheckTaskCompletion();

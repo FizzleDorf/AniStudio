@@ -348,6 +348,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     stable-diffusion
     pybind11::embed
     nfd
+    libwebp::libwebp
 )
 
 if(SD_USE_SYSTEM_GGML)
@@ -418,6 +419,8 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
     $<$<CONFIG:Debug>:DEBUG>
     $<$<CONFIG:Release>:NDEBUG>
     NFD_AVAILABLE
+    USE_WEBP
+    USE_EXIV2
 )
 
 set(ADDON_STAGING_DIR "${ANISTUDIO_ROOT}/build/plugins/${TARGET_NAME}/staging")

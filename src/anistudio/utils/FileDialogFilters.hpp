@@ -16,36 +16,47 @@ namespace FileDialog {
     };
 
     static const nfdu8filteritem_t ImageFilters[] = {
-        { "All Image Files", "png,jpg,jpeg,bmp,tga,webp,tiff,gif" },
+        { "All Image Files", "png,jpg,jpeg,bmp,tga,webp,tiff,gif,ico,psd,exr,hdr,pic,pnm" },
         { "PNG", "png" },
         { "JPEG", "jpg,jpeg" },
         { "Bitmap", "bmp" },
         { "Targa", "tga" },
         { "WebP", "webp" },
         { "TIFF", "tiff" },
-        { "GIF", "gif" }
+        { "GIF", "gif" },
+        { "HDR", "hdr,pic,pnm" }
     };
 
     static const nfdu8filteritem_t VideoFilters[] = {
-        { "All Video Files", "mp4,webm" },
+        { "All Video Files", "mp4,webm,mkv,avi,mov,flv,wmv,mpg,mpeg,3gp,ogv,ogg,ts,m4v" },
         { "MP4", "mp4" },
-        { "WebM", "webm" }
+        { "WebM", "webm" },
+        { "Matroska", "mkv" },
+        { "AVI", "avi" },
+        { "QuickTime", "mov" },
+        { "FLV", "flv" },
+        { "WMV", "wmv" },
+        { "MPEG", "mpg,mpeg" }
     };
 
     static const nfdu8filteritem_t ModelFilters[] = {
-        { "All Model Files", "safetensors,ckpt,pt,gguf,bin,pth" },
+        { "All Model Files", "safetensors,ckpt,pt,gguf,bin,pth,onnx,tflite" },
         { "SafeTensors", "safetensors" },
         { "Checkpoint", "ckpt" },
         { "PyTorch", "pt,pth" },
         { "GGUF", "gguf" },
-        { "Binary", "bin" }
+        { "Binary", "bin" },
+        { "ONNX", "onnx" },
+        { "TensorFlow Lite", "tflite" }
     };
 
     static const nfdu8filteritem_t MetadataFilters[] = {
-        { "All Metadata Files", "json,png,jpg,jpeg" },
+        { "All Metadata Files", "json,png,jpg,jpeg,webp,webm,mp4,mkv,avi,mov" },
         { "JSON", "json" },
         { "PNG with Metadata", "png" },
-        { "JPEG with Metadata", "jpg,jpeg" }
+        { "JPEG with Metadata", "jpg,jpeg" },
+        { "WebP with Metadata", "webp" },
+        { "Video with Metadata", "webm,mp4,mkv,avi,mov" }
     };
 
     static const nfdu8filteritem_t TextFilters[] = {

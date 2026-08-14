@@ -251,6 +251,14 @@ public:
     void OnShutdown() override {
         LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
+        // Stop all SD tasks before any systems are destroyed
+        auto sdcppSystem = m_entityMgr ? m_entityMgr->GetSystem<ECS::SDCPPSystem>() : nullptr;
+        if (sdcppSystem) {
+            LogInfo("Stopping SDCPPSystem worker and waiting for tasks to finish...");
+            sdcppSystem->Shutdown();   // This must block until all tasks are done and contexts released
+            LogInfo("SDCPPSystem shutdown complete");
+        }
+
         auto fs = m_entityMgr ? m_entityMgr->GetSystem<ECS::FilePathSystem>() : nullptr;
         if (fs) {
             std::string configPath = fs->GetPath("DataPath");
@@ -261,10 +269,6 @@ public:
         }
 
         UnregisterEventHandlers();
-
-        // Don't unregister systems here - let the EntityManager handle it
-        // m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-        // m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>();
 
         Utils::g_FilePathSystem = nullptr;
         m_entityMgr = nullptr;

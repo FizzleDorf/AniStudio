@@ -70,9 +70,10 @@ target_link_libraries(AniEngineCore PUBLIC
     GLEW::GLEW
     glfw
     pybind11::embed
+    libwebp::libwebp
+    exiv2::exiv2
 )
 
-# ADD THESE MISSING DEPENDENCIES FOR LINUX
 if(UNIX AND NOT APPLE)
     target_link_libraries(AniEngineCore PUBLIC
         pthread
@@ -83,6 +84,8 @@ endif()
 
 target_compile_definitions(AniEngineCore PUBLIC
     GLEW_STATIC
+    USE_WEBP
+    USE_EXIV2
     $<$<CONFIG:Debug>:DEBUG>
     $<$<CONFIG:Release>:NDEBUG>
 )

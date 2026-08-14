@@ -1,4 +1,4 @@
-// SDcppSystem.cpp
+// SDCPPSystem.cpp
 #include "SDCPPSystem.hpp"
 #include "rng.hpp"
 #include <stb_image.h>
@@ -517,8 +517,29 @@ namespace ECS {
         return taskType == TaskType::Img2Vid || taskType == TaskType::Edit;
     }
 
-    std::string SDCPPSystem::GetOutputExtension(TaskType taskType) const {
-        return (taskType == TaskType::Img2Vid || taskType == TaskType::Edit) ? ".mp4" : ".png";
+    std::string SDCPPSystem::GetOutputExtension(TaskType taskType, EntityID entityID) const {
+        if (IsVideoTask(taskType)) {
+            if (mgr.IsEntityValid(entityID) && mgr.HasComponent<OutputVideoComponent>(entityID)) {
+                auto& outComp = mgr.GetComponent<OutputVideoComponent>(entityID);
+                if (!outComp.fileExtension.empty()) {
+                    std::string ext = outComp.fileExtension;
+                    if (ext[0] != '.') ext = "." + ext;
+                    return ext;
+                }
+            }
+            return ".mp4";
+        }
+        else {
+            if (mgr.IsEntityValid(entityID) && mgr.HasComponent<OutputImageComponent>(entityID)) {
+                auto& outComp = mgr.GetComponent<OutputImageComponent>(entityID);
+                if (!outComp.fileExtension.empty()) {
+                    std::string ext = outComp.fileExtension;
+                    if (ext[0] != '.') ext = "." + ext;
+                    return ext;
+                }
+            }
+            return ".png";
+        }
     }
 
     int SDCPPSystem::CountPendingTasksForContext(const std::string& contextKey) {
@@ -562,7 +583,7 @@ namespace ECS {
                 if (isVideo && mgr.HasComponent<OutputVideoComponent>(task.entityID)) {
                     auto& output = mgr.GetComponent<OutputVideoComponent>(task.entityID);
                     std::string baseName = output.fileName;
-                    std::string extension = GetOutputExtension(task.taskType);
+                    std::string extension = GetOutputExtension(task.taskType, task.entityID);
                     size_t lastDot = baseName.find_last_of('.');
                     if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
                     std::string fullFileName = baseName + extension;
@@ -582,7 +603,7 @@ namespace ECS {
                 else if (!isVideo && mgr.HasComponent<OutputImageComponent>(task.entityID)) {
                     auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
                     std::string baseName = output.fileName;
-                    std::string extension = GetOutputExtension(task.taskType);
+                    std::string extension = GetOutputExtension(task.taskType, task.entityID);
                     size_t lastDot = baseName.find_last_of('.');
                     if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
                     std::string fullFileName = baseName + extension;

@@ -2,6 +2,7 @@
 
 #include "BaseComponent.hpp"
 #include "OpenGLWrapper.hpp"
+#include "FileFormats.hpp"
 #include <string>
 #include <stb_image.h>
 #include <memory>
@@ -299,13 +300,10 @@ namespace ECS {
 
     struct OutputImageComponent : public ImageComponent {
         std::string fileExtension = ".png";
-        std::vector<std::string> supportedExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga" };
-        int selectedExtensionIndex = 0;
 
         OutputImageComponent() {
             compName = "OutputImage";
             compCategory = "Image";
-            fileName = "AniStudio";
             setupOutputSchema();
         }
 
@@ -313,15 +311,13 @@ namespace ECS {
             std::unordered_map<std::string, UISchema::PropertyVariant> properties;
             properties["fileName"] = &fileName;
             properties["filePath"] = &filePath;
-            properties["selectedExtensionIndex"] = &selectedExtensionIndex;
-            properties["supportedExtensions"] = &supportedExtensions;
+            properties["fileExtension"] = &fileExtension;
             return properties;
         }
 
         virtual nlohmann::json Serialize() const override {
             auto j = ImageComponent::Serialize();
             j[compName]["fileExtension"] = fileExtension;
-            j[compName]["selectedExtensionIndex"] = selectedExtensionIndex;
             return j;
         }
 
@@ -335,8 +331,6 @@ namespace ECS {
 
             if (componentData.contains("fileExtension"))
                 fileExtension = componentData["fileExtension"];
-            if (componentData.contains("selectedExtensionIndex"))
-                selectedExtensionIndex = componentData["selectedExtensionIndex"];
         }
 
         OutputImageComponent& operator=(const OutputImageComponent& other) {
@@ -344,8 +338,6 @@ namespace ECS {
                 ImageComponent::operator=(other);
                 compName = "OutputImage";
                 fileExtension = other.fileExtension;
-                selectedExtensionIndex = other.selectedExtensionIndex;
-                supportedExtensions = other.supportedExtensions;
                 setupOutputSchema();
             }
             return *this;
@@ -354,13 +346,12 @@ namespace ECS {
         OutputImageComponent(const OutputImageComponent& other) : ImageComponent(other) {
             compName = "OutputImage";
             fileExtension = other.fileExtension;
-            selectedExtensionIndex = other.selectedExtensionIndex;
-            supportedExtensions = other.supportedExtensions;
             setupOutputSchema();
         }
 
     private:
         void setupOutputSchema() {
+            auto items = FileFormats::GetComboItemsJson(FileFormats::GetImageExtensions());
             schema = {
                 {"title", "Output Image"},
                 {"type", "object"},
@@ -387,25 +378,17 @@ namespace ECS {
                             {"resetButtonText", "Reset to Default"}
                         }}
                     }},
-                    {"selectedExtensionIndex", {
-                        {"type", "integer"},
+                    {"fileExtension", {
+                        {"type", "string"},
                         {"title", "File Format"},
                         {"ui:widget", "combo"},
-                        {"minimum", 0},
-                        {"maximum", 4},
-                        {"items", {
-                            {{"label", "PNG (.png)"}},
-                            {{"label", "JPEG (.jpg)"}},
-                            {{"label", "JPEG (.jpeg)"}},
-                            {{"label", "Bitmap (.bmp)"}},
-                            {{"label", "Targa (.tga)"}}
-                        }},
+                        {"items", items},
                         {"ui:options", {
                             {"resetButtonText", "Reset to PNG"}
                         }}
                     }}
                 }},
-                {"propertyOrder", {"filePath", "fileName", "selectedExtensionIndex"}}
+                {"propertyOrder", {"filePath", "fileName", "fileExtension"}}
             };
         }
     };
