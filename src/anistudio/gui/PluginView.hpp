@@ -20,11 +20,10 @@ namespace GUI {
         bool isEnabled;
         uint32_t currentVersion;
         std::string sourceDirectory;
-        bool isProjectScope;
         GLuint logoTexture;
 
         AvailablePluginInfo(const std::string& n, const std::filesystem::path& dir, const std::string& src)
-            : name(n), directory(dir), isLoaded(false), isEnabled(false), currentVersion(0), sourceDirectory(src), isProjectScope(false), logoTexture(0) {
+            : name(n), directory(dir), isLoaded(false), isEnabled(false), currentVersion(0), sourceDirectory(src), logoTexture(0) {
         }
 
         ~AvailablePluginInfo() {

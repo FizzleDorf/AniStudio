@@ -22,6 +22,7 @@ namespace ECS {
             if (FilterPass("Confirmation")) RenderConfirmationSettings();
             if (FilterPass("Performance")) RenderPerformanceSettings();
             if (FilterPass("Logging")) RenderLoggingSettings();
+            if (FilterPass("Plugins")) RenderPluginSettings();
             RenderActionButtons();
         }
         ImGui::EndChild();
@@ -64,6 +65,17 @@ namespace ECS {
             if (m_comp.logToFile) {
                 if (ImGui::SliderInt("Max Log File Size (MB)", &m_comp.maxLogFileSize, 1, 100)) m_comp.hasChanges = true;
             }
+        }
+        ImGui::Separator();
+    }
+
+    void GeneralSettingsTab::RenderPluginSettings() {
+        if (ImGui::Checkbox("Use Newest Plugin Versions from Staging", &m_comp.useNewestPluginVersions)) {
+            m_comp.hasChanges = true;
+        }
+        ImGui::TextDisabled("(?)");
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("When enabled, the project will load the newest plugin binaries from the staging directory, overriding the versions saved in the project state.");
         }
         ImGui::Separator();
     }

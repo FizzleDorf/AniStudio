@@ -1,280 +1,213 @@
 #include "PluginState.hpp"
+#include "FilePathSystem.hpp"
+#include "EntityManager.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
 namespace Plugins {
 
-	nlohmann::json PluginLoadState::Serialize() const {
-		return {
-			{"loaded", loaded},
-			{"enabled", enabled},
-			{"path", path},
-			{"version", version}
-		};
-	}
+    nlohmann::json PluginLoadState::Serialize() const {
+        return {
+            {"loaded", loaded},
+            {"enabled", enabled},
+            {"path", path},
+            {"version", version}
+        };
+    }
 
-	void PluginLoadState::Deserialize(const nlohmann::json& j) {
-		if (j.contains("loaded")) loaded = j["loaded"];
-		if (j.contains("enabled")) enabled = j["enabled"];
-		if (j.contains("path")) path = j["path"];
-		if (j.contains("version")) version = j["version"];
-	}
+    void PluginLoadState::Deserialize(const nlohmann::json& j) {
+        if (j.contains("loaded")) loaded = j["loaded"];
+        if (j.contains("enabled")) enabled = j["enabled"];
+        if (j.contains("path")) path = j["path"];
+        if (j.contains("version")) version = j["version"];
+    }
 
-	PluginState::PluginState() {
-		activeState = &globalPluginState;
-	}
+    PluginState::PluginState() {
+        std::cout << "[PluginState] Created" << std::endl;
+    }
 
-	void PluginState::SetGlobalDataPath(const std::string& dataPath) {
-		globalDataPath = dataPath;
-		std::cout << "[PluginState] Global data path set to: " << dataPath << std::endl;
-	}
+    void PluginState::SetEntityManager(ECS::EntityManager* mgr) {
+        m_entityManager = mgr;
+    }
 
-	void PluginState::SetCurrentProjectPath(const std::string& projectPath) {
-		currentProjectPath = projectPath;
-		std::cout << "[PluginState] Current project path set to: " << projectPath << std::endl;
-	}
+    void PluginState::SetCurrentProjectPath(const std::string& projectPath) {
+        m_currentProjectPath = projectPath;
+        std::cout << "[PluginState] Current project path set to: " << projectPath << std::endl;
+    }
 
-	std::string PluginState::GetGlobalPluginStatePath() const {
-		return globalDataPath + "/plugin_state.json";
-	}
+    std::string PluginState::GetProjectPluginStatePath() const {
+        if (m_currentProjectPath.empty()) {
+            std::cerr << "[PluginState] No project path set" << std::endl;
+            return "";
+        }
 
-	std::string PluginState::GetProjectPluginStatePath() const {
-		if (currentProjectPath.empty()) return "";
-		return currentProjectPath + "/plugin_state.json";
-	}
+        auto fs = m_entityManager ? m_entityManager->GetSystem<ECS::FilePathSystem>() : nullptr;
+        std::string dataPath;
+        if (fs) {
+            dataPath = fs->GetPath("ProjectData");
+        }
+        if (dataPath.empty()) {
+            dataPath = m_currentProjectPath + "/data";
+        }
 
-	void PluginState::UpdateActiveStateReference() {
-		if (usingProjectState) {
-			activeState = &projectPluginState;
-		}
-		else {
-			activeState = &globalPluginState;
-		}
-	}
+        return dataPath + "/plugin_state.json";
+    }
 
-	void PluginState::UseGlobalState() {
-		usingProjectState = false;
-		UpdateActiveStateReference();
-		std::cout << "[PluginState] Switched to global plugin state" << std::endl;
-	}
+    bool PluginState::LoadProjectPluginState() {
+        std::string filePath = GetProjectPluginStatePath();
 
-	void PluginState::UseProjectState() {
-		usingProjectState = true;
-		UpdateActiveStateReference();
-		std::cout << "[PluginState] Switched to project plugin state" << std::endl;
-	}
+        if (filePath.empty() || !std::filesystem::exists(filePath)) {
+            std::cout << "[PluginState] No project plugin state file found, starting fresh" << std::endl;
+            m_projectPluginState.clear();
+            return true;
+        }
 
-	bool PluginState::LoadGlobalPluginState() {
-		std::string filePath = GetGlobalPluginStatePath();
+        bool success = LoadStateFromFile(filePath, m_projectPluginState);
+        if (success) {
+            std::cout << "[PluginState] Project plugin state loaded: " << m_projectPluginState.size() << " plugins" << std::endl;
+        }
+        return success;
+    }
 
-		if (!std::filesystem::exists(filePath)) {
-			std::cout << "[PluginState] No global plugin state file found, starting fresh" << std::endl;
-			return true; // Not an error, just no saved state
-		}
+    bool PluginState::SaveProjectPluginState() {
+        std::string filePath = GetProjectPluginStatePath();
 
-		bool success = LoadStateFromFile(filePath, globalPluginState);
-		if (success) {
-			std::cout << "[PluginState] Global plugin state loaded: " << globalPluginState.size() << " plugins" << std::endl;
-		}
-		return success;
-	}
+        if (filePath.empty()) {
+            std::cerr << "[PluginState] Cannot save project state - no project path set" << std::endl;
+            return false;
+        }
 
-	bool PluginState::SaveGlobalPluginState() {
-		std::string filePath = GetGlobalPluginStatePath();
+        std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
 
-		// Ensure directory exists
-		std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
+        bool success = SaveStateToFile(filePath, m_projectPluginState);
+        if (success) {
+            std::cout << "[PluginState] Project plugin state saved: " << m_projectPluginState.size() << " plugins" << std::endl;
+        }
+        return success;
+    }
 
-		bool success = SaveStateToFile(filePath, globalPluginState);
-		if (success) {
-			std::cout << "[PluginState] Global plugin state saved: " << globalPluginState.size() << " plugins" << std::endl;
-		}
-		return success;
-	}
+    bool PluginState::SaveStateToFile(const std::string& filepath, const std::unordered_map<std::string, PluginLoadState>& state) {
+        try {
+            nlohmann::json j;
+            j["version"] = "1.0";
+            j["plugins"] = nlohmann::json::object();
 
-	bool PluginState::LoadProjectPluginState() {
-		std::string filePath = GetProjectPluginStatePath();
+            for (const auto& [pluginName, pluginState] : state) {
+                j["plugins"][pluginName] = pluginState.Serialize();
+            }
 
-		if (filePath.empty() || !std::filesystem::exists(filePath)) {
-			std::cout << "[PluginState] No project plugin state file found" << std::endl;
-			projectPluginState.clear(); // Start with empty project state
-			return true;
-		}
+            std::ofstream file(filepath);
+            if (!file.is_open()) {
+                std::cerr << "[PluginState] Failed to open file for writing: " << filepath << std::endl;
+                return false;
+            }
 
-		bool success = LoadStateFromFile(filePath, projectPluginState);
-		if (success) {
-			std::cout << "[PluginState] Project plugin state loaded: " << projectPluginState.size() << " plugins" << std::endl;
-		}
-		return success;
-	}
+            file << j.dump(4);
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[PluginState] Failed to save plugin state: " << e.what() << std::endl;
+            return false;
+        }
+    }
 
-	bool PluginState::SaveProjectPluginState() {
-		std::string filePath = GetProjectPluginStatePath();
+    bool PluginState::LoadStateFromFile(const std::string& filepath, std::unordered_map<std::string, PluginLoadState>& state) {
+        try {
+            std::ifstream file(filepath);
+            if (!file.is_open()) {
+                std::cerr << "[PluginState] Failed to open file for reading: " << filepath << std::endl;
+                return false;
+            }
 
-		if (filePath.empty()) {
-			std::cerr << "[PluginState] Cannot save project state - no project path set" << std::endl;
-			return false;
-		}
+            nlohmann::json j;
+            file >> j;
 
-		// Ensure directory exists
-		std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
+            state.clear();
 
-		bool success = SaveStateToFile(filePath, projectPluginState);
-		if (success) {
-			std::cout << "[PluginState] Project plugin state saved: " << projectPluginState.size() << " plugins" << std::endl;
-		}
-		return success;
-	}
+            if (j.contains("plugins") && j["plugins"].is_object()) {
+                for (const auto& [pluginName, pluginData] : j["plugins"].items()) {
+                    PluginLoadState pluginState;
+                    pluginState.Deserialize(pluginData);
+                    state[pluginName] = pluginState;
+                }
+            }
 
-	bool PluginState::SaveStateToFile(const std::string& filepath, const std::unordered_map<std::string, PluginLoadState>& state) {
-		try {
-			nlohmann::json j;
-			j["version"] = "1.0";
-			j["plugins"] = nlohmann::json::object();
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[PluginState] Failed to load plugin state: " << e.what() << std::endl;
+            return false;
+        }
+    }
 
-			for (const auto&[pluginName, pluginState] : state) {
-				j["plugins"][pluginName] = pluginState.Serialize();
-			}
+    bool PluginState::ShouldLoadPlugin(const std::string& pluginName) const {
+        auto it = m_projectPluginState.find(pluginName);
+        if (it == m_projectPluginState.end()) return false;
+        return it->second.loaded;
+    }
 
-			std::ofstream file(filepath);
-			if (!file.is_open()) {
-				std::cerr << "[PluginState] Failed to open file for writing: " << filepath << std::endl;
-				return false;
-			}
+    bool PluginState::ShouldEnablePlugin(const std::string& pluginName) const {
+        auto it = m_projectPluginState.find(pluginName);
+        if (it == m_projectPluginState.end()) return false;
+        return it->second.loaded && it->second.enabled;
+    }
 
-			file << j.dump(4);
-			return true;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[PluginState] Failed to save plugin state: " << e.what() << std::endl;
-			return false;
-		}
-	}
+    std::unordered_set<std::string> PluginState::GetPluginsToLoad() const {
+        std::unordered_set<std::string> result;
+        for (const auto& [pluginName, state] : m_projectPluginState) {
+            if (state.loaded) {
+                result.insert(pluginName);
+            }
+        }
+        return result;
+    }
 
-	bool PluginState::LoadStateFromFile(const std::string& filepath, std::unordered_map<std::string, PluginLoadState>& state) {
-		try {
-			std::ifstream file(filepath);
-			if (!file.is_open()) {
-				std::cerr << "[PluginState] Failed to open file for reading: " << filepath << std::endl;
-				return false;
-			}
+    std::unordered_set<std::string> PluginState::GetPluginsToEnable() const {
+        std::unordered_set<std::string> result;
+        for (const auto& [pluginName, state] : m_projectPluginState) {
+            if (state.loaded && state.enabled) {
+                result.insert(pluginName);
+            }
+        }
+        return result;
+    }
 
-			nlohmann::json j;
-			file >> j;
+    std::string PluginState::GetPluginPath(const std::string& pluginName) const {
+        auto it = m_projectPluginState.find(pluginName);
+        if (it == m_projectPluginState.end()) return "";
+        return it->second.path;
+    }
 
-			state.clear();
+    std::unordered_map<std::string, PluginLoadState> PluginState::GetAllPluginStates() const {
+        return m_projectPluginState;
+    }
 
-			if (j.contains("plugins") && j["plugins"].is_object()) {
-				for (const auto&[pluginName, pluginData] : j["plugins"].items()) {
-					PluginLoadState pluginState;
-					pluginState.Deserialize(pluginData);
-					state[pluginName] = pluginState;
-				}
-			}
+    void PluginState::SetPluginState(const std::string& pluginName, bool loaded, bool enabled, const std::string& path, uint32_t version) {
+        PluginLoadState& state = m_projectPluginState[pluginName];
+        state.loaded = loaded;
+        state.enabled = enabled;
+        if (!path.empty()) state.path = path;
+        if (version > 0) state.version = version;
 
-			return true;
-		}
-		catch (const std::exception& e) {
-			std::cerr << "[PluginState] Failed to load plugin state: " << e.what() << std::endl;
-			return false;
-		}
-	}
+        std::cout << "[PluginState] Updated state for " << pluginName
+            << " - loaded: " << loaded << ", enabled: " << enabled << ", path: " << path << std::endl;
+    }
 
-	bool PluginState::ShouldLoadPlugin(const std::string& pluginName) const {
-		if (!activeState) return false;
+    void PluginState::RemovePluginState(const std::string& pluginName) {
+        m_projectPluginState.erase(pluginName);
+        std::cout << "[PluginState] Removed state for " << pluginName << std::endl;
+    }
 
-		auto it = activeState->find(pluginName);
-		if (it == activeState->end()) return false;
-
-		return it->second.loaded;
-	}
-
-	bool PluginState::ShouldEnablePlugin(const std::string& pluginName) const {
-		if (!activeState) return false;
-
-		auto it = activeState->find(pluginName);
-		if (it == activeState->end()) return false;
-
-		return it->second.loaded && it->second.enabled;
-	}
-
-	std::unordered_set<std::string> PluginState::GetPluginsToLoad() const {
-		std::unordered_set<std::string> result;
-
-		if (activeState) {
-			for (const auto&[pluginName, state] : *activeState) {
-				if (state.loaded) {
-					result.insert(pluginName);
-				}
-			}
-		}
-
-		return result;
-	}
-
-	std::unordered_set<std::string> PluginState::GetPluginsToEnable() const {
-		std::unordered_set<std::string> result;
-
-		if (activeState) {
-			for (const auto&[pluginName, state] : *activeState) {
-				if (state.loaded && state.enabled) {
-					result.insert(pluginName);
-				}
-			}
-		}
-
-		return result;
-	}
-
-	// FIXED: New method to get plugin path
-	std::string PluginState::GetPluginPath(const std::string& pluginName) const {
-		if (!activeState) return "";
-
-		auto it = activeState->find(pluginName);
-		if (it == activeState->end()) return "";
-
-		return it->second.path;
-	}
-
-	// FIXED: New method to get all plugin states
-	std::unordered_map<std::string, PluginLoadState> PluginState::GetAllPluginStates() const {
-		if (!activeState) return {};
-		return *activeState;
-	}
-
-	void PluginState::SetPluginState(const std::string& pluginName, bool loaded, bool enabled, const std::string& path, uint32_t version) {
-		if (!activeState) return;
-
-		PluginLoadState& state = (*activeState)[pluginName];
-		state.loaded = loaded;
-		state.enabled = enabled;
-		if (!path.empty()) state.path = path;
-		if (version > 0) state.version = version;
-
-		std::cout << "[PluginState] Updated state for " << pluginName
-			<< " - loaded: " << loaded << ", enabled: " << enabled << ", path: " << path << std::endl;
-	}
-
-	void PluginState::RemovePluginState(const std::string& pluginName) {
-		if (!activeState) return;
-
-		activeState->erase(pluginName);
-		std::cout << "[PluginState] Removed state for " << pluginName << std::endl;
-	}
-
-	void PluginState::DebugPrintState() const {
-		std::cout << "[PluginState] Current state (using " << (usingProjectState ? "project" : "global") << "):" << std::endl;
-
-		if (activeState) {
-			for (const auto&[pluginName, state] : *activeState) {
-				std::cout << "  " << pluginName
-					<< " - loaded: " << state.loaded
-					<< ", enabled: " << state.enabled
-					<< ", path: " << state.path
-					<< ", version: " << state.version << std::endl;
-			}
-		}
-	}
+    void PluginState::DebugPrintState() const {
+        std::cout << "[PluginState] Current project plugin state:" << std::endl;
+        for (const auto& [pluginName, state] : m_projectPluginState) {
+            std::cout << "  " << pluginName
+                << " - loaded: " << state.loaded
+                << ", enabled: " << state.enabled
+                << ", path: " << state.path
+                << ", version: " << state.version << std::endl;
+        }
+    }
 
 } // namespace Plugins

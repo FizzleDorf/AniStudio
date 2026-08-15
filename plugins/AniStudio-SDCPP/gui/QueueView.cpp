@@ -7,6 +7,7 @@
 #include "BaseDiffusionView.hpp"
 #include "ClipboardUtilities.hpp"
 #include "FilePathSystem.hpp"
+#include "ProjectSystem.hpp"
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -41,33 +42,13 @@ namespace GUI {
         : BaseView(mgr, vm) {
         viewName = "QueueView";
         windowOpen = true;
-        Init();
+        m_queueLoaded = false;
     }
 
     QueueView::~QueueView() {
-        QuickSave();
     }
 
     void QueueView::Init() {
-        auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-        bool hasQuickload = false;
-
-        auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        if (filePathSys) {
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
-            if (!dataPath.empty()) {
-                std::string filename = viewName + ".json";
-                std::string filepath = (std::filesystem::path(dataPath) / filename).string();
-                hasQuickload = std::filesystem::exists(filepath);
-            }
-        }
-
-        if (hasQuickload && sys) {
-            sys->PauseWorker();
-            isPaused = true;
-            QuickLoad();
-        }
     }
 
     void QueueView::RefreshViewList() {
@@ -403,6 +384,12 @@ namespace GUI {
     }
 
     void QueueView::LoadQueue() {
+        auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
+        if (!sys) {
+            std::cerr << "[QueueView] SDCPPSystem not available.\n";
+            return;
+        }
+
         std::string defaultPath = std::filesystem::current_path().string() + "/data/saved_queues/";
         std::string selected;
         if (!FileDialog::OpenFile("Load Queue File", FileDialog::FilterType::ALL_FILES, selected, defaultPath)) {
@@ -428,11 +415,7 @@ namespace GUI {
             return;
         }
 
-        auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-        if (!sys) {
-            std::cerr << "[QueueView] SDCPPSystem not available.\n";
-            return;
-        }
+        sys->ClearAllTasks();
 
         int loadedCount = 0;
         for (const auto& entry : j) {
@@ -447,28 +430,37 @@ namespace GUI {
             loadedCount++;
         }
         std::cout << "[QueueView] Loaded " << loadedCount << " tasks from " << selected << "\n";
+        m_queueLoaded = true;
     }
 
     void QueueView::QuickSave() {
+        if (!m_queueLoaded) return;
         try {
             auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
             if (!filePathSys) return;
 
             std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty())
+            if (dataPath.empty()) {
                 dataPath = filePathSys->GetPath("DefaultProject");
-            if (dataPath.empty()) return;
+            }
+            if (dataPath.empty()) {
+                std::cout << "[QueueView] No data path found, cannot quick save.\n";
+                return;
+            }
+
+            auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
+            if (!sys) return;
+
+            auto tasks = sys->GetQueueTasksWithMetadata();
+            if (tasks.empty()) {
+                std::cout << "[QueueView] Queue is empty, nothing to quick save.\n";
+                return;
+            }
 
             std::filesystem::create_directories(dataPath);
             std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
 
-            auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-            if (!sys) return;
-            auto tasks = sys->GetQueueTasksWithMetadata();
-            if (tasks.empty()) {
-                return;
-            }
             nlohmann::json j = nlohmann::json::array();
             for (const auto& [taskType, entityData] : tasks) {
                 nlohmann::json entry;
@@ -476,13 +468,19 @@ namespace GUI {
                 entry["entityData"] = entityData;
                 j.push_back(entry);
             }
+
             std::ofstream file(filepath);
             if (file.is_open()) {
                 file << j.dump(4);
                 std::cout << "[QueueView] Quick saved queue to " << filepath << "\n";
             }
+            else {
+                std::cerr << "[QueueView] Failed to quick save queue to " << filepath << "\n";
+            }
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            std::cerr << "[QueueView] Exception during QuickSave: " << e.what() << "\n";
+        }
     }
 
     void QueueView::QuickLoad() {
@@ -491,34 +489,111 @@ namespace GUI {
             if (!filePathSys) return;
 
             std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty())
+            if (dataPath.empty()) {
                 dataPath = filePathSys->GetPath("DefaultProject");
-            if (dataPath.empty()) return;
+            }
+            if (dataPath.empty()) {
+                std::cout << "[QueueView] No data path found, cannot quick load.\n";
+                return;
+            }
 
             std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
-            if (!std::filesystem::exists(filepath)) return;
 
-            std::ifstream file(filepath);
-            if (!file.is_open()) return;
-            nlohmann::json j;
-            try { file >> j; }
-            catch (...) { return; }
-            if (!j.is_array()) return;
+            if (!std::filesystem::exists(filepath)) {
+                std::cout << "[QueueView] No quick save file found at: " << filepath << "\n";
+                return;
+            }
 
             auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
-            if (!sys) return;
+            if (!sys) {
+                std::cerr << "[QueueView] SDCPPSystem not available.\n";
+                return;
+            }
 
+            std::ifstream file(filepath);
+            if (!file.is_open()) {
+                std::cerr << "[QueueView] Failed to open file: " << filepath << "\n";
+                return;
+            }
+
+            nlohmann::json j;
+            try { file >> j; }
+            catch (const std::exception& e) {
+                std::cerr << "[QueueView] Error parsing JSON: " << e.what() << "\n";
+                return;
+            }
+
+            if (!j.is_array()) {
+                std::cerr << "[QueueView] Invalid format: expected array.\n";
+                return;
+            }
+
+            sys->ClearAllTasks();
+
+            int loadedCount = 0;
             for (const auto& entry : j) {
-                if (!entry.contains("taskType") || !entry.contains("entityData")) continue;
+                if (!entry.contains("taskType") || !entry.contains("entityData")) {
+                    std::cerr << "[QueueView] Skipping invalid entry.\n";
+                    continue;
+                }
                 int taskInt = entry["taskType"];
                 auto taskType = static_cast<ECS::SDCPPSystem::TaskType>(taskInt);
                 const auto& entityData = entry["entityData"];
                 sys->QueueTaskFromSerialized(entityData, taskType);
+                loadedCount++;
             }
-            std::cout << "[QueueView] Quick loaded queue from " << filepath << "\n";
+
+            std::cout << "[QueueView] Quick loaded " << loadedCount << " tasks from " << filepath << "\n";
+            m_queueLoaded = true;
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            std::cerr << "[QueueView] Exception during QuickLoad: " << e.what() << "\n";
+        }
+    }
+
+    nlohmann::json QueueView::Serialize() const {
+        nlohmann::json j;
+        auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
+        if (sys) {
+            auto tasks = sys->GetQueueTasksWithMetadata();
+            nlohmann::json queueData = nlohmann::json::array();
+            for (const auto& [taskType, entityData] : tasks) {
+                nlohmann::json entry;
+                entry["taskType"] = static_cast<int>(taskType);
+                entry["entityData"] = entityData;
+                queueData.push_back(entry);
+            }
+            j["queueData"] = queueData;
+        }
+        return j;
+    }
+
+    void QueueView::Deserialize(const nlohmann::json& j) {
+        if (j.contains("queueData") && j["queueData"].is_array()) {
+            auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
+            if (!sys) {
+                std::cerr << "[QueueView] SDCPPSystem not available for deserialization.\n";
+                return;
+            }
+
+            sys->ClearAllTasks();
+
+            int loadedCount = 0;
+            for (const auto& entry : j["queueData"]) {
+                if (!entry.contains("taskType") || !entry.contains("entityData")) {
+                    std::cerr << "[QueueView] Skipping invalid queue entry.\n";
+                    continue;
+                }
+                int taskInt = entry["taskType"];
+                auto taskType = static_cast<ECS::SDCPPSystem::TaskType>(taskInt);
+                const auto& entityData = entry["entityData"];
+                sys->QueueTaskFromSerialized(entityData, taskType);
+                loadedCount++;
+            }
+            std::cout << "[QueueView] Deserialized " << loadedCount << " tasks from viewstate.\n";
+            m_queueLoaded = true;
+        }
     }
 
     void QueueView::Render() {

@@ -1,9 +1,16 @@
+// StudioPluginManager.cpp
 #include "StudioPluginManager.hpp"
 #include "ViewManager.hpp"
 #include "StudioContext.hpp"
+#include "FilePathSystem.hpp"
+#include "FilePathComponent.hpp"
+#include "ProjectSystem.hpp"
 #include <imgui.h>
 #include <iostream>
 #include <thread>
+#include <filesystem>
+#include <regex>
+#include <fstream>
 
 namespace Plugins {
 
@@ -11,9 +18,24 @@ namespace Plugins {
         ECS::EntityManager& entityMgr,
         GUI::ViewManager& viewMgr,
         ImGuiContext* mainContext
-    ) : PluginManager(entityMgr), viewManager(viewMgr), mainImGuiContext(mainContext) {
+    ) : PluginManager(entityMgr), viewManager(viewMgr), mainImGuiContext(mainContext), m_viewStateSaved(false) {
         std::cout << "[StudioPluginManager] Constructor - studio manager created with ImGui context: "
             << mainImGuiContext << std::endl;
+
+        auto fs = entityMgr.GetSystem<ECS::FilePathSystem>();
+        if (fs) {
+            m_pluginDirectory = fs->GetPath("Plugins");
+            if (m_pluginDirectory.empty()) {
+                m_pluginDirectory = (std::filesystem::current_path() / "plugins").string();
+                fs->SetPath("Plugins", m_pluginDirectory);
+            }
+            std::cout << "[StudioPluginManager] Plugin directory: " << m_pluginDirectory << std::endl;
+        }
+        else {
+            m_pluginDirectory = (std::filesystem::current_path() / "plugins").string();
+        }
+
+        setStagingDirectory(m_pluginDirectory);
     }
 
     bool StudioPluginManager::enablePlugin(const std::string& pluginName) {
@@ -104,6 +126,12 @@ namespace Plugins {
                 pluginState->SetPluginState(pluginName, true, true, plugin.path, plugin.currentVersion);
             }
 
+            if (m_viewStateSaved) {
+                LoadViewState();
+                m_viewStateSaved = false;
+                std::cout << "[StudioPluginManager] Reloaded viewstate after plugin re-enable." << std::endl;
+            }
+
             std::cout << "[StudioPluginManager] Plugin enabled with studio support: "
                 << pluginName << std::endl;
 
@@ -136,6 +164,10 @@ namespace Plugins {
         }
 
         try {
+            SaveViewState();
+            m_viewStateSaved = true;
+            std::cout << "[StudioPluginManager] Saved viewstate before plugin shutdown." << std::endl;
+
             if (plugin.instance) {
                 plugin.instance->OnShutdown();
                 plugin.instance->SetInitialized(false);
@@ -156,12 +188,162 @@ namespace Plugins {
             }
 
             plugin.enabled = false;
+
             std::cout << "[StudioPluginManager] Plugin disabled: " << pluginName << std::endl;
             return true;
         }
         catch (const std::exception& e) {
             std::cerr << "[StudioPluginManager] Exception during disable: " << e.what() << std::endl;
             return false;
+        }
+    }
+
+    void StudioPluginManager::OnPluginEnabled(const std::string& pluginName) {
+        std::cout << "[StudioPluginManager] Plugin enabled callback: " << pluginName << std::endl;
+    }
+
+    void StudioPluginManager::OnPluginDisabled(const std::string& pluginName) {
+        std::cout << "[StudioPluginManager] Plugin disabled callback: " << pluginName << std::endl;
+    }
+
+    void StudioPluginManager::SetProjectContext(const std::string& projectPath) {
+        PluginManager::SetProjectContext(projectPath);
+        m_viewStateSaved = false;
+        std::cout << "[StudioPluginManager] Loaded project plugin state from: " << projectPath << std::endl;
+    }
+
+    void StudioPluginManager::SetPluginDirectory(const std::string& dir) {
+        m_pluginDirectory = dir;
+        auto fs = entityManager.GetSystem<ECS::FilePathSystem>();
+        if (fs) {
+            fs->SetPath("Plugins", dir);
+        }
+        setStagingDirectory(dir);
+        std::cout << "[StudioPluginManager] Plugin directory set: " << dir << std::endl;
+    }
+
+    void StudioPluginManager::SaveViewState() {
+        auto projSys = entityManager.GetSystem<ANI::ProjectSystem>();
+        if (projSys && projSys->IsProjectOpen()) {
+            projSys->SaveViewState();
+            std::cout << "[StudioPluginManager] Saved viewstate before plugin disable." << std::endl;
+        }
+    }
+
+    void StudioPluginManager::LoadViewState() {
+        auto projSys = entityManager.GetSystem<ANI::ProjectSystem>();
+        if (projSys && projSys->IsProjectOpen()) {
+            projSys->LoadViewState();
+            std::cout << "[StudioPluginManager] Reloaded viewstate after plugin enable." << std::endl;
+        }
+    }
+
+    void StudioPluginManager::LoadStagingPlugins(bool overrideExisting) {
+        if (m_pluginDirectory.empty()) {
+            std::cerr << "[StudioPluginManager] Plugin directory not set, cannot load staging plugins." << std::endl;
+            return;
+        }
+
+        try {
+            for (const auto& pluginEntry : std::filesystem::directory_iterator(m_pluginDirectory)) {
+                if (!pluginEntry.is_directory()) continue;
+
+                std::string pluginName = pluginEntry.path().filename().string();
+                if (pluginName == "staging") continue;
+
+                std::filesystem::path pluginStagingDir = pluginEntry.path() / "staging";
+                if (!std::filesystem::exists(pluginStagingDir)) {
+                    continue;
+                }
+
+                std::cout << "[StudioPluginManager] Checking staging for plugin: " << pluginName
+                    << " at " << pluginStagingDir << std::endl;
+
+                std::string pluginDllPath = (pluginStagingDir / (pluginName + ".dll")).string();
+                if (!std::filesystem::exists(pluginDllPath)) {
+                    bool found = false;
+                    for (const auto& ext : { ".so", ".dylib" }) {
+                        std::string altPath = (pluginStagingDir / (pluginName + ext)).string();
+                        if (std::filesystem::exists(altPath)) {
+                            pluginDllPath = altPath;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        std::cout << "[StudioPluginManager] No DLL found in staging for: " << pluginName << std::endl;
+                        continue;
+                    }
+                }
+
+                std::cout << "[StudioPluginManager] Found staging plugin: " << pluginName << " at " << pluginDllPath << std::endl;
+
+                auto it = plugins.find(pluginName);
+                if (it != plugins.end() && it->second.loaded) {
+                    std::cout << "[StudioPluginManager] Plugin already loaded, unloading first: " << pluginName << std::endl;
+                    unloadPlugin(pluginName);
+                    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                }
+
+                int highestVersion = 0;
+                std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so|dylib)$");
+                for (const auto& file : std::filesystem::directory_iterator(pluginEntry.path())) {
+                    if (file.is_regular_file()) {
+                        std::string filename = file.path().filename().string();
+                        std::smatch matches;
+                        if (std::regex_match(filename, matches, versionPattern)) {
+                            int ver = std::stoi(matches[1].str());
+                            if (ver > highestVersion) highestVersion = ver;
+                        }
+                    }
+                }
+
+                int newVersion = highestVersion + 1;
+                std::string versionedDllName = pluginName + ".v" + std::to_string(newVersion) + ".dll";
+                std::string destDllPath = (pluginEntry.path() / versionedDllName).string();
+
+                std::cout << "[StudioPluginManager] Creating versioned DLL v" << newVersion << ": " << destDllPath << std::endl;
+
+                try {
+                    std::filesystem::rename(pluginDllPath, destDllPath);
+                    std::cout << "[StudioPluginManager] Successfully moved staging DLL to versioned file: " << destDllPath << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioPluginManager] Failed to move DLL: " << e.what() << std::endl;
+                    continue;
+                }
+
+                for (const auto& file : std::filesystem::directory_iterator(pluginStagingDir)) {
+                    if (file.is_regular_file() && file.path().extension() != ".dll" &&
+                        file.path().extension() != ".so" && file.path().extension() != ".dylib") {
+                        std::string destFile = (pluginEntry.path() / file.path().filename()).string();
+                        try {
+                            std::filesystem::copy_file(file.path(), destFile);
+                            std::cout << "[StudioPluginManager] Copied extra file: " << file.path().filename() << std::endl;
+                        }
+                        catch (...) {}
+                    }
+                }
+
+                try {
+                    if (std::filesystem::is_empty(pluginStagingDir)) {
+                        std::filesystem::remove(pluginStagingDir);
+                        std::cout << "[StudioPluginManager] Removed empty staging directory: " << pluginStagingDir << std::endl;
+                    }
+                }
+                catch (...) {}
+
+                if (!loadPlugin(pluginEntry.path().string())) {
+                    std::cerr << "[StudioPluginManager] Failed to load plugin from: " << pluginEntry.path() << std::endl;
+                }
+                else {
+                    std::cout << "[StudioPluginManager] Successfully loaded plugin " << pluginName
+                        << " version v" << newVersion << std::endl;
+                }
+            }
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[StudioPluginManager] Exception loading staging plugins: " << e.what() << std::endl;
         }
     }
 

@@ -14,6 +14,10 @@ namespace GUI {
 }
 namespace ECS { class FilePathSystem; }
 
+namespace Plugins {
+    class StudioPluginManager;
+}
+
 namespace ANI {
 
     class ProjectSystem : public ECS::BaseSystem {
@@ -27,6 +31,7 @@ namespace ANI {
 
         void SetWindowHandle(void* windowHandle);
         void SetViewManager(GUI::ViewManager* viewManager);
+        void SetPluginManager(Plugins::StudioPluginManager* pluginManager);
 
         bool ShouldShowStartup() const;
         bool CreateNewProject(const std::string& projectPath, const std::string& projectName);
@@ -65,10 +70,14 @@ namespace ANI {
         std::string GetDefaultProjectPath() const;
         void SetDefaultProjectPath(const std::string& path);
 
+        bool SaveViewState();
+        bool LoadViewState();
+
     private:
         ECS::EntityID m_projectEntity;
         ECS::ComponentTypeID m_componentTypeId;
         GUI::ViewManager* m_viewManager;
+        Plugins::StudioPluginManager* m_pluginManager;
         void* m_windowHandle;
         std::string m_lastError;
         GUI::ViewState m_viewState;
@@ -78,8 +87,6 @@ namespace ANI {
         std::function<void()> m_onProjectClosedCallback;
         std::function<void(GUI::WorkspaceID)> m_onViewStateLoadedCallback;
 
-        bool SaveViewState();
-        bool LoadViewState();
         bool SaveImGuiLayout();
         bool LoadImGuiLayout();
         bool SaveProjectWindowState();

@@ -8,6 +8,8 @@
 #include "FileDialogFilters.hpp"
 #include "VectorWidgets.hpp"
 #include "SDCPPComponents.h"
+#include "ProjectSystem.hpp"
+#include "ImageUtils.hpp"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
@@ -23,12 +25,17 @@ namespace GUI {
         : BaseView(mgr, vm) {
         contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
         RegisterAllComponentAdders();
+        m_quickLoaded = false;
     }
 
     BaseDiffusionView::~BaseDiffusionView() {
-        QuickSave();
-        if (stateEntity != 0) m_entityManager.DestroyEntity(stateEntity);
-        if (activeEntity != 0) m_entityManager.DestroyEntity(activeEntity);
+        auto projSys = m_entityManager.GetSystem<ProjectSystem>();
+        if (projSys && !projSys->IsProjectOpen()) {
+            auto sdcpp = m_entityManager.GetSystem<ECS::SDCPPSystem>();
+            if (sdcpp) {
+                sdcpp->Shutdown();
+            }
+        }
     }
 
     void BaseDiffusionView::Init() {
@@ -395,8 +402,8 @@ namespace GUI {
                         std::string ext = std::filesystem::path(selectedFile).extension().string();
                         if (ext == ".json")
                             LoadMetadataFromJson(selectedFile);
-                        else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
-                            LoadMetadataFromPNG(selectedFile);
+                        else
+                            LoadMetadataFromMedia(selectedFile);
                     }
                 }
                 if (ImGui::MenuItem("Quick Save"))
@@ -521,22 +528,20 @@ namespace GUI {
 
     nlohmann::json BaseDiffusionView::Serialize() const {
         nlohmann::json j;
-        j["stateEntity"] = m_entityManager.SerializeEntity(stateEntity);
         j["activeEntity"] = m_entityManager.SerializeEntity(activeEntity);
         return j;
     }
 
     void BaseDiffusionView::Deserialize(const nlohmann::json& j) {
         try {
-            if (stateEntity != 0) m_entityManager.DestroyEntity(stateEntity);
-            if (activeEntity != 0) m_entityManager.DestroyEntity(activeEntity);
-            stateEntity = m_entityManager.DeserializeEntity(j["stateEntity"]);
             activeEntity = m_entityManager.DeserializeEntity(j["activeEntity"]);
+            m_quickLoaded = true;
         }
         catch (...) {}
     }
 
     void BaseDiffusionView::QuickSave() {
+        if (!m_quickLoaded) return;
         try {
             auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
             if (!filePathSys) return;
@@ -552,6 +557,7 @@ namespace GUI {
     }
 
     void BaseDiffusionView::QuickLoad() {
+        if (m_quickLoaded) return;
         try {
             auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
             if (!filePathSys) return;
@@ -562,6 +568,7 @@ namespace GUI {
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
             if (!std::filesystem::exists(filepath)) return;
             LoadMetadataFromJson(filepath);
+            m_quickLoaded = true;
         }
         catch (...) {}
     }
@@ -582,13 +589,73 @@ namespace GUI {
                 nlohmann::json meta;
                 file >> meta;
                 Deserialize(meta);
+                m_quickLoaded = true;
             }
         }
         catch (...) {}
     }
 
-    void BaseDiffusionView::LoadMetadataFromPNG(const std::string& pngPath) {
-        std::cout << "[BaseDiffusionView] LoadMetadataFromPNG: " << pngPath << std::endl;
+    void BaseDiffusionView::LoadMetadataFromMedia(const std::string& filePath) {
+        std::cout << "[BaseDiffusionView] LoadMetadataFromMedia: " << filePath << std::endl;
+        try {
+            nlohmann::json metadata = Utils::ImageUtils::ReadMetadataFromImage(filePath);
+            if (!metadata.is_null() && !metadata.empty()) {
+                std::cout << "[BaseDiffusionView] Found metadata in media file: " << filePath << std::endl;
+
+                nlohmann::json entityData = metadata;
+
+                if (!metadata.contains("components")) {
+                    nlohmann::json wrapped;
+                    wrapped["components"] = nlohmann::json::array();
+                    for (auto it = metadata.begin(); it != metadata.end(); ++it) {
+                        if (it.value().is_object()) {
+                            nlohmann::json comp;
+                            comp[it.key()] = it.value();
+                            wrapped["components"].push_back(comp);
+                        }
+                    }
+                    entityData = wrapped;
+                    std::cout << "[BaseDiffusionView] Wrapped metadata into entity format" << std::endl;
+                }
+
+                if (entityData.contains("components") && entityData["components"].is_array()) {
+                    bool validComponents = false;
+                    for (const auto& comp : entityData["components"]) {
+                        if (comp.is_object() && !comp.empty()) {
+                            validComponents = true;
+                            break;
+                        }
+                    }
+
+                    if (!validComponents) {
+                        std::cout << "[BaseDiffusionView] Media metadata contains no valid components, skipping" << std::endl;
+                        return;
+                    }
+
+                    std::cout << "[BaseDiffusionView] Loading metadata from media file" << std::endl;
+
+                    if (activeEntity != 0) {
+                        m_entityManager.DestroyEntity(activeEntity);
+                    }
+                    activeEntity = m_entityManager.DeserializeEntity(entityData);
+                    m_quickLoaded = true;
+
+                    std::cout << "[BaseDiffusionView] Successfully loaded metadata from media file: " << filePath << std::endl;
+                }
+                else {
+                    std::cout << "[BaseDiffusionView] Media metadata missing 'components' array after wrapping" << std::endl;
+                }
+            }
+            else {
+                std::cout << "[BaseDiffusionView] No metadata found in media file: " << filePath << std::endl;
+            }
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[BaseDiffusionView] Failed to load metadata from media file: " << e.what() << std::endl;
+        }
+        catch (...) {
+            std::cerr << "[BaseDiffusionView] Unknown error loading metadata from media file" << std::endl;
+        }
     }
 
     std::vector<std::string> BaseDiffusionView::GetDefaultVisibleComponents() const {

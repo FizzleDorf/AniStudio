@@ -3,6 +3,7 @@
 #include "EntityManager.hpp"
 #include "PluginState.hpp"
 #include "EngineContext.hpp"
+#include "FilePathSystem.hpp"
 #include <iostream>
 #include <filesystem>
 #include <vector>
@@ -48,30 +49,24 @@ namespace Plugins {
 
     void PluginManager::InitializePluginStateManager() {
         pluginState = std::make_unique<PluginState>();
+        pluginState->SetEntityManager(&entityManager);
         std::cout << "[PluginManager] Plugin state manager created" << std::endl;
     }
 
     void PluginManager::SetGlobalDataPath(const std::string& dataPath) {
-        if (pluginState) {
-            pluginState->SetGlobalDataPath(dataPath);
-        }
+        std::cout << "[PluginManager] SetGlobalDataPath called (ignored - using project state only)" << std::endl;
     }
 
     void PluginManager::LoadGlobalPluginState() {
-        if (!pluginState) return;
-        std::cout << "[PluginManager] Loading global plugin state..." << std::endl;
-        pluginState->UseGlobalState();
-        pluginState->LoadGlobalPluginState();
-        LoadPluginsFromState();
-        std::cout << "[PluginManager] Global plugin state loaded and applied" << std::endl;
+        std::cout << "[PluginManager] LoadGlobalPluginState called (ignored - using project state only)" << std::endl;
     }
 
     void PluginManager::SaveGlobalPluginState() {
-        if (!pluginState) return;
-        std::cout << "[PluginManager] Saving global plugin state..." << std::endl;
-        SaveCurrentPluginState();
-        pluginState->SaveGlobalPluginState();
-        std::cout << "[PluginManager] Global plugin state saved" << std::endl;
+        std::cout << "[PluginManager] SaveGlobalPluginState called (ignored - using project state only)" << std::endl;
+    }
+
+    void PluginManager::UseGlobalPluginState() {
+        std::cout << "[PluginManager] UseGlobalPluginState called (ignored - using project state only)" << std::endl;
     }
 
     void PluginManager::SetProjectContext(const std::string& projectPath) {
@@ -79,7 +74,6 @@ namespace Plugins {
         std::cout << "[PluginManager] Setting project context: " << projectPath << std::endl;
         SaveCurrentPluginState();
         pluginState->SetCurrentProjectPath(projectPath);
-        pluginState->UseProjectState();
         pluginState->LoadProjectPluginState();
         LoadPluginsFromState();
         std::cout << "[PluginManager] Project plugin context applied" << std::endl;
@@ -91,15 +85,6 @@ namespace Plugins {
         SaveCurrentPluginState();
         pluginState->SaveProjectPluginState();
         std::cout << "[PluginManager] Project plugin state saved" << std::endl;
-    }
-
-    void PluginManager::UseGlobalPluginState() {
-        if (!pluginState) return;
-        std::cout << "[PluginManager] Switching to global plugin state..." << std::endl;
-        SaveCurrentPluginState();
-        pluginState->UseGlobalState();
-        LoadPluginsFromState();
-        std::cout << "[PluginManager] Switched to global plugin state" << std::endl;
     }
 
     void PluginManager::LoadPluginsFromState() {
@@ -785,6 +770,9 @@ namespace Plugins {
 
         info.instance->SetInitialized(true);
         info.enabled = true;
+
+        OnPluginEnabled(pluginName);
+
         std::cout << "[PluginManager] Plugin enabled: " << pluginName << std::endl;
 
         return true;
@@ -807,12 +795,14 @@ namespace Plugins {
         std::cout << "[PluginManager] Disabling plugin: " << pluginName << std::endl;
 
         if (info.instance) {
-            std::cout << "[PluginManager] Calling OnShutdown for plugin cleanup..." << std::endl;
             info.instance->OnShutdown();
             info.instance->SetInitialized(false);
         }
 
         info.enabled = false;
+
+        OnPluginDisabled(pluginName);
+
         std::cout << "[PluginManager] Plugin disabled: " << pluginName << std::endl;
 
         return true;

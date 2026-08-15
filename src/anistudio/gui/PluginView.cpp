@@ -3,6 +3,7 @@
 #include "BasePlugin.hpp"
 #include "Events.hpp"
 #include "FileDialogUtil.hpp"
+#include "FilePathSystem.hpp"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <filesystem>
@@ -25,11 +26,23 @@ namespace GUI {
     }
 
     void PluginView::Init() {
-        std::filesystem::path buildPath = std::filesystem::current_path();
-        std::filesystem::path pluginsPath = buildPath / "plugins";
-        std::filesystem::create_directories(pluginsPath);
+        auto fs = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        if (fs) {
+            std::string pluginPath = fs->GetPath("Plugins");
+            if (pluginPath.empty()) {
+                pluginPath = (std::filesystem::current_path() / "plugins").string();
+                fs->SetPath("Plugins", pluginPath);
+            }
+            std::filesystem::create_directories(pluginPath);
+            m_pluginManager.SetPluginDirectory(pluginPath);
+        }
+        else {
+            std::string pluginPath = (std::filesystem::current_path() / "plugins").string();
+            std::filesystem::create_directories(pluginPath);
+            m_pluginManager.SetPluginDirectory(pluginPath);
+        }
 
-        m_pluginManager.setStagingDirectory(pluginsPath.string());
+        m_pluginManager.LoadStagingPlugins(true);
 
         RefreshAvailablePlugins();
         LoadPluginScopeConfig();
@@ -81,6 +94,7 @@ namespace GUI {
             ImGui::Checkbox("Hot Reload", &m_hotReloadEnabled);
             ImGui::SameLine();
             if (ImGui::Button("Refresh Plugins")) {
+                m_pluginManager.LoadStagingPlugins(true);
                 RefreshAvailablePlugins();
                 LoadPluginScopeConfig();
                 m_selectedPluginForDetails.clear();
@@ -244,16 +258,8 @@ namespace GUI {
 
         ImGui::Separator();
 
-        bool isProject = availPlugin->isProjectScope;
-        if (ImGui::RadioButton("Global", !isProject)) {
-            SetPluginScope(availPlugin->name, false);
-        }
-        ImGui::SameLine();
-        if (ImGui::RadioButton("Project", isProject)) {
-            SetPluginScope(availPlugin->name, true);
-        }
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), isProject ? "(per-project)" : "(global)");
+        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f), "Scope: Project (per-project)");
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "This plugin is enabled only for this project");
 
         ImGui::Separator();
 
@@ -327,11 +333,17 @@ namespace GUI {
     void PluginView::RefreshAvailablePlugins() {
         m_availablePlugins.clear();
 
-        std::filesystem::path buildPath = std::filesystem::current_path();
-        std::filesystem::path pluginsPath = buildPath / "plugins";
+        auto fs = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        std::string pluginPath;
+        if (fs) {
+            pluginPath = fs->GetPath("Plugins");
+        }
+        if (pluginPath.empty()) {
+            pluginPath = (std::filesystem::current_path() / "plugins").string();
+        }
 
-        if (std::filesystem::exists(pluginsPath)) {
-            DiscoverPluginsInDirectory(pluginsPath);
+        if (std::filesystem::exists(pluginPath)) {
+            DiscoverPluginsInDirectory(pluginPath);
         }
 
         auto loadedPlugins = m_pluginManager.getLoadedPlugins();
@@ -355,20 +367,52 @@ namespace GUI {
                 return;
             }
 
+            std::unordered_map<std::string, std::vector<std::pair<int, std::filesystem::path>>> pluginMap;
+            std::regex versionPattern("(.+)\\.v(\\d+)\\.(dll|so)$");
+
             for (const auto& entry : std::filesystem::directory_iterator(searchDir)) {
-                if (entry.is_directory()) {
-                    std::string dirName = entry.path().filename().string();
-                    if (dirName == "staging") continue;
+                if (!entry.is_directory()) continue;
+                std::string dirName = entry.path().filename().string();
+                if (dirName == "staging") continue;
 
-                    auto it = std::find_if(m_availablePlugins.begin(), m_availablePlugins.end(),
-                        [&](const AvailablePluginInfo& p) { return p.name == dirName; });
+                bool hasPluginDll = false;
+                int highestVersion = 0;
 
-                    if (it == m_availablePlugins.end()) {
-                        m_availablePlugins.push_back(
-                            AvailablePluginInfo(dirName, entry.path(), searchDir.filename().string())
-                        );
+                for (const auto& file : std::filesystem::directory_iterator(entry.path())) {
+                    if (!file.is_regular_file()) continue;
+                    std::string filename = file.path().filename().string();
+                    std::smatch matches;
+
+                    if (std::regex_match(filename, matches, versionPattern)) {
+                        std::string baseName = matches[1].str();
+                        int version = std::stoi(matches[2].str());
+
+                        if (baseName == dirName) {
+                            hasPluginDll = true;
+                            if (version > highestVersion) highestVersion = version;
+                        }
                     }
                 }
+
+                if (!hasPluginDll) {
+                    std::string dllPath = (entry.path() / (dirName + ".dll")).string();
+                    if (std::filesystem::exists(dllPath)) {
+                        hasPluginDll = true;
+                        highestVersion = 0;
+                    }
+                }
+
+                if (hasPluginDll) {
+                    pluginMap[dirName].push_back({ highestVersion, entry.path() });
+                }
+            }
+
+            for (auto& [baseName, versions] : pluginMap) {
+                auto it = std::max_element(versions.begin(), versions.end(),
+                    [](const auto& a, const auto& b) { return a.first < b.first; });
+                m_availablePlugins.push_back(
+                    AvailablePluginInfo(baseName, it->second, searchDir.filename().string())
+                );
             }
         }
         catch (const std::exception& e) {
@@ -410,12 +454,7 @@ namespace GUI {
             availPlugin->isLoaded = true;
             ShowStatus("Loaded plugin: " + pluginName, 3.0f);
 
-            if (availPlugin->isProjectScope) {
-                m_pluginManager.SaveProjectPluginState();
-            }
-            else {
-                m_pluginManager.SaveGlobalPluginState();
-            }
+            m_pluginManager.SaveProjectPluginState();
         }
         else {
             ShowStatus("Failed to load plugin: " + pluginName, 5.0f);
@@ -427,13 +466,7 @@ namespace GUI {
             auto* availPlugin = FindAvailablePlugin(pluginName);
             if (availPlugin) {
                 availPlugin->isEnabled = true;
-
-                if (availPlugin->isProjectScope) {
-                    m_pluginManager.SaveProjectPluginState();
-                }
-                else {
-                    m_pluginManager.SaveGlobalPluginState();
-                }
+                m_pluginManager.SaveProjectPluginState();
             }
             ShowStatus("Enabled plugin: " + pluginName, 3.0f);
         }
@@ -447,13 +480,7 @@ namespace GUI {
             auto* availPlugin = FindAvailablePlugin(pluginName);
             if (availPlugin) {
                 availPlugin->isEnabled = false;
-
-                if (availPlugin->isProjectScope) {
-                    m_pluginManager.SaveProjectPluginState();
-                }
-                else {
-                    m_pluginManager.SaveGlobalPluginState();
-                }
+                m_pluginManager.SaveProjectPluginState();
             }
             ShowStatus("Disabled plugin: " + pluginName, 3.0f);
         }
@@ -488,12 +515,7 @@ namespace GUI {
     }
 
     void PluginView::SetPluginScope(const std::string& pluginName, bool isProjectScope) {
-        auto* availPlugin = FindAvailablePlugin(pluginName);
-        if (availPlugin) {
-            availPlugin->isProjectScope = isProjectScope;
-            SavePluginScopeConfig();
-            ShowStatus(std::string("Set ") + pluginName + " to " + (isProjectScope ? "project" : "global") + " scope", 3.0f);
-        }
+        // No longer used - plugins are always project-scoped
     }
 
     void PluginView::SwitchToVersion(const std::string& pluginName, uint32_t version) {
@@ -506,8 +528,8 @@ namespace GUI {
         auto* availPlugin = FindAvailablePlugin(pluginName);
         if (!availPlugin) return;
 
-        std::string pluginDir = availPlugin->directory.string();
-        std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so)");
+        std::filesystem::path pluginDir = availPlugin->directory;
+        std::regex versionPattern(pluginName + "\\.v(\\d+)\\.(dll|so)$");
 
         for (const auto& entry : std::filesystem::directory_iterator(pluginDir)) {
             if (entry.is_regular_file()) {
@@ -523,57 +545,11 @@ namespace GUI {
     }
 
     void PluginView::SavePluginScopeConfig() {
-        try {
-            nlohmann::json j;
-            j["version"] = "1.0";
-            j["pluginScopes"] = nlohmann::json::object();
-
-            for (const auto& plugin : m_availablePlugins) {
-                j["pluginScopes"][plugin.name] = plugin.isProjectScope;
-            }
-
-            std::filesystem::path dataPath = std::filesystem::current_path().parent_path() / "data";
-            std::filesystem::create_directories(dataPath);
-            std::string filepath = (dataPath / "plugin_scopes.json").string();
-
-            std::ofstream file(filepath);
-            if (file.is_open()) {
-                file << j.dump(4);
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[PluginView] Failed to save plugin scope config: " << e.what() << std::endl;
-        }
+        // No longer used - plugins are always project-scoped
     }
 
     void PluginView::LoadPluginScopeConfig() {
-        try {
-            std::filesystem::path dataPath = std::filesystem::current_path().parent_path() / "data";
-            std::string filepath = (dataPath / "plugin_scopes.json").string();
-
-            if (!std::filesystem::exists(filepath)) {
-                return;
-            }
-
-            std::ifstream file(filepath);
-            if (!file.is_open()) {
-                return;
-            }
-
-            nlohmann::json j;
-            file >> j;
-
-            if (j.contains("pluginScopes") && j["pluginScopes"].is_object()) {
-                for (auto& plugin : m_availablePlugins) {
-                    if (j["pluginScopes"].contains(plugin.name)) {
-                        plugin.isProjectScope = j["pluginScopes"][plugin.name];
-                    }
-                }
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[PluginView] Failed to load plugin scope config: " << e.what() << std::endl;
-        }
+        // No longer used - plugins are always project-scoped
     }
 
     AvailablePluginInfo* PluginView::FindAvailablePlugin(const std::string& pluginName) {

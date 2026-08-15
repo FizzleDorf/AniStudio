@@ -98,6 +98,9 @@ namespace Plugins {
 
         std::weak_ptr<ANI::EngineContext> engineContext;
 
+        virtual void OnPluginEnabled(const std::string& pluginName) {}
+        virtual void OnPluginDisabled(const std::string& pluginName) {}
+
     private:
         void setupPluginDirectories(const std::string& pluginName);
         std::string findPluginDll(const std::string& pluginDir, const std::string& pluginName);

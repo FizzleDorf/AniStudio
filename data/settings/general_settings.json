@@ -15,6 +15,7 @@
     "maxUndoLevels": 100,
     "recentProjects": [],
     "showStartupScreen": true,
+    "useNewestPluginVersions": true,
     "windowFullscreen": false,
     "windowHeight": 720,
     "windowMaximized": false,

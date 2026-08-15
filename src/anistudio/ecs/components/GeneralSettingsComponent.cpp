@@ -37,6 +37,7 @@ namespace ECS {
             j["windowVsync"] = windowVsync;
             j["lastOpenProject"] = lastOpenProject;
             j["recentProjects"] = recentProjects;
+            j["useNewestPluginVersions"] = useNewestPluginVersions;
 
             std::string filePath = GetSettingsDirectory() + "/general_settings.json";
             std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
@@ -92,6 +93,7 @@ namespace ECS {
             if (j.contains("windowVsync")) windowVsync = j["windowVsync"];
             if (j.contains("lastOpenProject")) lastOpenProject = j["lastOpenProject"];
             if (j.contains("recentProjects")) recentProjects = j["recentProjects"];
+            if (j.contains("useNewestPluginVersions")) useNewestPluginVersions = j["useNewestPluginVersions"];
 
             hasChanges = false;
             CreateBackup();
@@ -127,6 +129,7 @@ namespace ECS {
         windowVsync = true;
         lastOpenProject.clear();
         recentProjects.clear();
+        useNewestPluginVersions = false;
         hasChanges = true;
     }
 
@@ -154,6 +157,7 @@ namespace ECS {
         backupWindowVsync = windowVsync;
         backupLastOpenProject = lastOpenProject;
         backupRecentProjects = recentProjects;
+        backupUseNewestPluginVersions = useNewestPluginVersions;
     }
 
     void GeneralSettingsComponent::RestoreFromBackup() {
@@ -180,6 +184,7 @@ namespace ECS {
         windowVsync = backupWindowVsync;
         lastOpenProject = backupLastOpenProject;
         recentProjects = backupRecentProjects;
+        useNewestPluginVersions = backupUseNewestPluginVersions;
         hasChanges = false;
     }
 

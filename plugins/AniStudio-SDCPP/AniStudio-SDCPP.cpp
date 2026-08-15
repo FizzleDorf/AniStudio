@@ -15,6 +15,7 @@
 #include "SDcppSystem.hpp"
 #include "ModelCacheSystem.hpp"
 #include "SDCPPViews.h"
+#include "ProjectSystem.hpp"
 
 #include <iostream>
 #include <filesystem>
@@ -28,7 +29,7 @@ namespace Utils {
 
 class DiffusionAddon : public Plugins::BasePlugin {
 public:
-    DiffusionAddon() : BasePlugin("DiffusionAddon", "1.0.0"), m_imguiContext(nullptr) {}
+    DiffusionAddon() : BasePlugin("DiffusionAddon", "1.0.0"), m_imguiContext(nullptr), m_wasProjectOpen(false) {}
 
     bool OnEngineInit(ECS::EntityManager& entityMgr) override {
         LogInfo("Initializing Stable Diffusion Addon...");
@@ -98,77 +99,67 @@ public:
 
         Utils::CheckMissingPaths(fs);
 
-        entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt");
-        entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler");
-        entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance");
-        entityMgr.RegisterComponent<ECS::LatentComponent>("Latent");
+        m_componentIds.clear();
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::SamplerComponent>("Sampler"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::GuidanceComponent>("Guidance"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::LatentComponent>("Latent"));
 
-        entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint");
-        entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel");
-        entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel");
-        entityMgr.RegisterComponent<ECS::UncondDiffusionModelComponent>("UncondDiffusionModel");
-        entityMgr.RegisterComponent<ECS::AudioVaeComponent>("AudioVae");
-        entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings");
-        entityMgr.RegisterComponent<ECS::MotionModuleComponent>("MotionModule");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::CheckpointComponent>("Checkpoint"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::DiffusionModelComponent>("DiffusionModel"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::HighNoiseDiffusionModelComponent>("HighNoiseDiffusionModel"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::UncondDiffusionModelComponent>("UncondDiffusionModel"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::AudioVaeComponent>("AudioVae"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::MotionModuleComponent>("MotionModule"));
 
-        entityMgr.RegisterComponent<ECS::RefVideoComponent>("RefVideo");
-        entityMgr.RegisterComponent<ECS::RefAudioComponent>("RefAudio");
-        entityMgr.RegisterComponent<ECS::RefImagesComponent>("RefImages");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::RefVideoComponent>("RefVideo"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::RefAudioComponent>("RefAudio"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::RefImagesComponent>("RefImages"));
 
-        entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL");
-        entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG");
-        entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL");
-        entityMgr.RegisterComponent<ECS::LlmEncoderComponent>("LlmEncoder");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ClipLComponent>("ClipL"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ClipGComponent>("ClipG"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::T5XXLComponent>("T5XXL"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::LlmEncoderComponent>("LlmEncoder"));
 
-        entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision");
-        entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ClipVisionComponent>("ClipVision"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision"));
 
-        entityMgr.RegisterComponent<ECS::VaeComponent>("Vae");
-        entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::VaeComponent>("Vae"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd"));
 
-        entityMgr.RegisterComponent<ECS::HiresComponent>("Hires");
-        entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::HiresComponent>("Hires"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::EsrganComponent>("Esrgan"));
 
-        entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker");
-        entityMgr.RegisterComponent<ECS::PulidWeightsComponent>("PulidWeights");
-        entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet");
-        entityMgr.RegisterComponent<ECS::LoraComponent>("Lora");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PhotoMakerComponent>("PhotoMaker"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PulidWeightsComponent>("PulidWeights"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::LoraComponent>("Lora"));
 
-        entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams");
-        entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler"));
 
-        entityMgr.RegisterComponent<ECS::ADetailerComponent>("ADetailer");
-        entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma");
-        entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed");
-        entityMgr.RegisterComponent<ECS::EasyCacheComponent>("EasyCache");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ADetailerComponent>("ADetailer"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ChromaComponent>("Chroma"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::StackedIdEmbedComponent>("StackedIdEmbed"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::EasyCacheComponent>("EasyCache"));
 
-        entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion"));
 
-        entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings"));
 
-        entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage");
-        entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage"));
 
-        entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ControlFramesComponent>("ControlFrames"));
 
-        entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPP");
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::SDCPPSettingsComponent>("SDCPP"));
 
-        // Only register systems if they don't already exist
-        if (!entityMgr.GetSystem<ECS::ModelCacheSystem>()) {
-            entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
-            LogInfo("Registered ModelCacheSystem");
-        }
-        else {
-            LogInfo("ModelCacheSystem already registered, reusing existing instance");
-        }
+        entityMgr.RegisterSystem<ECS::ModelCacheSystem>();
+        LogInfo("Registered ModelCacheSystem");
 
-        if (!entityMgr.GetSystem<ECS::SDCPPSystem>()) {
-            entityMgr.RegisterSystem<ECS::SDCPPSystem>();
-            LogInfo("Registered SDCPPSystem");
-        }
-        else {
-            LogInfo("SDCPPSystem already registered, reusing existing instance");
-        }
+        entityMgr.RegisterSystem<ECS::SDCPPSystem>();
+        LogInfo("Registered SDCPPSystem");
 
         m_entityMgr = &entityMgr;
 
@@ -225,6 +216,17 @@ public:
             }
         }
 
+        m_viewTypeNames.clear();
+        m_viewTypeNames.push_back("Txt2ImgView");
+        m_viewTypeNames.push_back("Img2ImgView");
+        m_viewTypeNames.push_back("EditView");
+        m_viewTypeNames.push_back("ConvertView");
+        m_viewTypeNames.push_back("UpscaleView");
+        m_viewTypeNames.push_back("Img2VidView");
+        m_viewTypeNames.push_back("ModelCacheView");
+        m_viewTypeNames.push_back("QueueView");
+        m_viewTypeNames.push_back("Txt2VidView");
+
         viewMgr.RegisterView<GUI::Txt2ImgView>("Txt2ImgView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::Img2ImgView>("Img2ImgView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::EditView>("EditView", "DiffusionAddon");
@@ -234,6 +236,9 @@ public:
         viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::QueueView>("QueueView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::Txt2VidView>("Txt2VidView", "DiffusionAddon");
+
+        // DO NOT load viewstate here - it's already loaded by the project system
+        // The viewstate is only saved on plugin disable via StudioPluginManager
 
         LogInfo("Views registered via direct ViewManager");
         return true;
@@ -251,11 +256,10 @@ public:
     void OnShutdown() override {
         LogInfo("SHUTTING DOWN DIFFUSION ADDON");
 
-        // Stop all SD tasks before any systems are destroyed
         auto sdcppSystem = m_entityMgr ? m_entityMgr->GetSystem<ECS::SDCPPSystem>() : nullptr;
         if (sdcppSystem) {
             LogInfo("Stopping SDCPPSystem worker and waiting for tasks to finish...");
-            sdcppSystem->Shutdown();   // This must block until all tasks are done and contexts released
+            sdcppSystem->Shutdown();
             LogInfo("SDCPPSystem shutdown complete");
         }
 
@@ -268,6 +272,50 @@ public:
             }
         }
 
+        // Save viewstate is handled by StudioPluginManager::disablePlugin()
+        // Do NOT call SaveViewState here
+
+        if (m_viewMgr) {
+            for (const auto& viewName : m_viewTypeNames) {
+                try {
+                    m_viewMgr->UnregisterViewType(viewName);
+                    LogInfo("Unregistered view type: " + viewName);
+                }
+                catch (const std::exception& e) {
+                    LogError("Failed to unregister view type " + viewName + ": " + e.what());
+                }
+            }
+            m_viewTypeNames.clear();
+        }
+
+        if (m_entityMgr) {
+            try {
+                m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>();
+                LogInfo("Unregistered ModelCacheSystem");
+            }
+            catch (const std::exception& e) {
+                LogError("Failed to unregister ModelCacheSystem: " + std::string(e.what()));
+            }
+            try {
+                m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
+                LogInfo("Unregistered SDCPPSystem");
+            }
+            catch (const std::exception& e) {
+                LogError("Failed to unregister SDCPPSystem: " + std::string(e.what()));
+            }
+
+            for (ComponentTypeID cid : m_componentIds) {
+                try {
+                    m_entityMgr->UnregisterComponentById(cid);
+                    LogInfo("Unregistered component ID: " + std::to_string(cid));
+                }
+                catch (const std::exception& e) {
+                    LogError("Failed to unregister component: " + std::string(e.what()));
+                }
+            }
+            m_componentIds.clear();
+        }
+
         UnregisterEventHandlers();
 
         Utils::g_FilePathSystem = nullptr;
@@ -278,10 +326,35 @@ public:
         LogInfo("DiffusionAddon shutdown complete");
     }
 
-    void OnUpdate(float deltaTime) override {}
+    void OnUpdate(float deltaTime) override {
+        if (!m_entityMgr) return;
+
+        auto projSys = m_entityMgr->GetSystem<ANI::ProjectSystem>();
+        if (!projSys) return;
+
+        bool isOpen = projSys->IsProjectOpen();
+
+        if (m_wasProjectOpen && !isOpen) {
+            LogInfo("Project closing detected - stopping SDCPPSystem worker...");
+            auto sdcpp = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
+            if (sdcpp) {
+                sdcpp->Shutdown();
+                LogInfo("SDCPPSystem worker stopped due to project close.");
+            }
+            auto cache = m_entityMgr->GetSystem<ECS::ModelCacheSystem>();
+            if (cache) {
+                cache->UnloadAllModels();
+                LogInfo("Model cache cleared.");
+            }
+        }
+
+        m_wasProjectOpen = isOpen;
+    }
 
 private:
     std::vector<std::string> m_registeredEvents;
+    std::vector<ComponentTypeID> m_componentIds;
+    std::vector<std::string> m_viewTypeNames;
 
     void RegisterEventHandlers() {
         auto& events = ANI::Events::Ref();
@@ -491,6 +564,7 @@ private:
     ECS::EntityManager* m_entityMgr = nullptr;
     GUI::ViewManager* m_viewMgr = nullptr;
     ImGuiContext* m_imguiContext = nullptr;
+    bool m_wasProjectOpen;
 };
 
 extern "C" {

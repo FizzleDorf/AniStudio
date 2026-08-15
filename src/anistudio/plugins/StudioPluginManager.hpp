@@ -40,10 +40,24 @@ namespace Plugins {
         ECS::EntityManager& GetEntityManager() { return entityManager; }
         ImGuiContext* GetImGuiContext() { return mainImGuiContext; }
 
+        void SetProjectContext(const std::string& projectPath);
+        void SetPluginDirectory(const std::string& dir);
+
+        void LoadStagingPlugins(bool overrideExisting);
+
+    protected:
+        void OnPluginEnabled(const std::string& pluginName) override;
+        void OnPluginDisabled(const std::string& pluginName) override;
+
     private:
         GUI::ViewManager& viewManager;
         ImGuiContext* mainImGuiContext = nullptr;
         std::shared_ptr<ANI::StudioContext> studioContext;
+        std::string m_pluginDirectory;
+        bool m_viewStateSaved;
+
+        void SaveViewState();
+        void LoadViewState();
 
         std::unordered_map<std::string, std::vector<std::string>> pluginViewNames;
     };

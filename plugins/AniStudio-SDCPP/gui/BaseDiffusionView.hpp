@@ -33,12 +33,13 @@ namespace GUI {
         void QuickLoad();
         void SaveMetadataToJson(const std::string& filepath);
         void LoadMetadataFromJson(const std::string& filepath);
-        void LoadMetadataFromPNG(const std::string& pngPath);
+        void LoadMetadataFromMedia(const std::string& filePath);
 
     protected:
         ECS::EntityID stateEntity = 0;
         ECS::EntityID activeEntity = 0;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
+        bool m_quickLoaded = false;
 
         virtual std::vector<std::string> GetDefaultComponents() const = 0;
         virtual std::vector<std::string> GetDefaultVisibleComponents() const;

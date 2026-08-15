@@ -1,3 +1,4 @@
+// ProjectSystem.cpp
 #include "ProjectSystem.hpp"
 #include "ViewManager.hpp"
 #include "WindowState.hpp"
@@ -7,6 +8,7 @@
 #include "ProjectTemplate.hpp"
 #include "GeneralSettingsComponent.hpp"
 #include "SettingsSystem.hpp"
+#include "StudioPluginManager.hpp"
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <fstream>
@@ -43,6 +45,7 @@ namespace ANI {
         , m_projectEntity(0)
         , m_componentTypeId(ECS::MAX_COMPONENT_COUNT)
         , m_viewManager(nullptr)
+        , m_pluginManager(nullptr)
         , m_windowHandle(nullptr) {
         sysName = "ProjectSystem";
     }
@@ -75,6 +78,11 @@ namespace ANI {
     void ProjectSystem::SetViewManager(GUI::ViewManager* viewManager) {
         m_viewManager = viewManager;
         std::cout << "[ProjectSystem] ViewManager set" << std::endl;
+    }
+
+    void ProjectSystem::SetPluginManager(Plugins::StudioPluginManager* pluginManager) {
+        m_pluginManager = pluginManager;
+        std::cout << "[ProjectSystem] PluginManager set" << std::endl;
     }
 
     std::shared_ptr<ECS::FilePathSystem> ProjectSystem::GetFilePathSystem() const {
@@ -132,6 +140,22 @@ namespace ANI {
         std::string lastProjectPath;
         if (fileSys) {
             lastProjectPath = fileSys->GetPath("LastOpenProject");
+        }
+
+        bool loadLastProject = true;
+        auto settingsSystem = mgr.GetSystem<ECS::SettingsSystem>();
+        if (settingsSystem) {
+            ECS::EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+            if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<ECS::GeneralSettingsComponent>(settingsEntity)) {
+                auto& generalComp = mgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
+                loadLastProject = generalComp.loadLastProject;
+                std::cout << "  - loadLastProject setting: " << (loadLastProject ? "YES" : "NO") << std::endl;
+            }
+        }
+
+        if (!loadLastProject) {
+            std::cout << "  - loadLastProject is disabled, showing startup" << std::endl;
+            return true;
         }
 
         if (!lastProjectPath.empty() && std::filesystem::exists(lastProjectPath)) {
@@ -300,6 +324,11 @@ namespace ANI {
 
             AddToRecentProjects(projectPath);
 
+            if (m_pluginManager) {
+                m_pluginManager->LoadStagingPlugins(true);
+                std::cout << "[ProjectSystem] Processed staging plugins for loaded project" << std::endl;
+            }
+
             std::cout << "[ProjectSystem] Created new project: " << projectName << " at " << projectPath << std::endl;
             if (m_onProjectCreatedCallback) {
                 m_onProjectCreatedCallback(projectPath);
@@ -393,6 +422,13 @@ namespace ANI {
 
             LoadImGuiLayout();
             LoadAndApplyProjectWindowState();
+
+            UpdateProjectSpecificPaths();
+
+            if (m_pluginManager) {
+                m_pluginManager->LoadStagingPlugins(true);
+                std::cout << "[ProjectSystem] Processed staging plugins for loaded project" << std::endl;
+            }
 
             return true;
         }

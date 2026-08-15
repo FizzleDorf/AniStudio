@@ -1,3 +1,4 @@
+// Full AniStudio.cpp (including all modifications)
 #include "AniStudio.hpp"
 #include "AllViews.h"
 #include "StudioContext.hpp"
@@ -27,6 +28,8 @@
 #include "StringWidgets.hpp"
 #include "TextEditorUtil.hpp"
 #include "TextEditorFontUtil.hpp"
+#include "GeneralSettingsComponent.hpp"
+#include "SettingsSystem.hpp"
 
 #ifdef _WIN32
 #define GLFW_EXPOSE_NATIVE_WIN32
@@ -182,25 +185,10 @@ namespace ANI {
             std::cout << "[StudioCore] Created plugin directory: " << pluginDirectory << std::endl;
         }
 
-        std::string dataPath;
-        if (fileSys) {
-            dataPath = fileSys->GetPath("DataPath");
-        }
-        if (!dataPath.empty()) {
-            std::cout << "[StudioCore] Setting global data path: " << dataPath << std::endl;
-            studioContext->studioPluginManager->SetGlobalDataPath(dataPath);
-        }
-        else {
-            std::cerr << "[StudioCore] ERROR: Data path not available from FilePathSystem!" << std::endl;
-        }
-
         studioContext->studioPluginManager->scanPluginDirectory(pluginDirectory);
-        studioContext->studioPluginManager->enableHotReload(false);
+        studioContext->studioPluginManager->enableHotReload(true);
 
-        std::cout << "[StudioCore] Loading global plugin state..." << std::endl;
-        studioContext->studioPluginManager->LoadGlobalPluginState();
-
-        std::cout << "[StudioCore] Studio plugin system initialized with selective loading" << std::endl;
+        std::cout << "[StudioCore] Studio plugin system initialized with hot reload enabled" << std::endl;
     }
 
     void StudioCore::SetupProjectCallbacks() {
@@ -208,6 +196,10 @@ namespace ANI {
         if (!projectSystem) {
             std::cerr << "[StudioCore] ProjectSystem not initialized!" << std::endl;
             return;
+        }
+
+        if (studioContext && studioContext->studioPluginManager) {
+            projectSystem->SetPluginManager(studioContext->studioPluginManager.get());
         }
 
         projectSystem->SetProjectLoadedCallback([this](const std::string& projectPath) {
@@ -666,6 +658,20 @@ namespace ANI {
 
         if (studioContext && studioContext->studioPluginManager) {
             std::cout << "[StudioCore] Setting plugin manager project context: " << projectPath << std::endl;
+
+            bool useNewest = false;
+            auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
+            if (settingsSystem) {
+                EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+                if (settingsEntity && studioContext->entityManager->IsEntityValid(settingsEntity)) {
+                    if (studioContext->entityManager->HasComponent<ECS::GeneralSettingsComponent>(settingsEntity)) {
+                        auto& generalComp = studioContext->entityManager->GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
+                        useNewest = generalComp.useNewestPluginVersions;
+                        std::cout << "[StudioCore] useNewestPluginVersions = " << useNewest << std::endl;
+                    }
+                }
+            }
+
             studioContext->studioPluginManager->SetProjectContext(projectPath);
         }
 
@@ -708,9 +714,8 @@ namespace ANI {
         }
 
         if (studioContext && studioContext->studioPluginManager) {
-            std::cout << "[StudioCore] Saving project plugin state and reverting to global..." << std::endl;
+            std::cout << "[StudioCore] Saving project plugin state..." << std::endl;
             studioContext->studioPluginManager->SaveProjectPluginState();
-            studioContext->studioPluginManager->UseGlobalPluginState();
         }
 
         m_showProjectManagerView = true;

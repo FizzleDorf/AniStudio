@@ -43,6 +43,8 @@ namespace ECS {
         std::string lastOpenProject;
         std::vector<std::string> recentProjects;
 
+        bool useNewestPluginVersions = false;
+
     private:
         bool backupShowStartupScreen = true;
         bool backupLoadLastProject = true;
@@ -68,6 +70,8 @@ namespace ECS {
         bool backupWindowVsync = true;
         std::string backupLastOpenProject;
         std::vector<std::string> backupRecentProjects;
+
+        bool backupUseNewestPluginVersions = false;
     };
 
 }

@@ -32,6 +32,7 @@ namespace ECS {
         void RenderConfirmationSettings();
         void RenderPerformanceSettings();
         void RenderLoggingSettings();
+        void RenderPluginSettings();
         void RenderActionButtons();
     };
 

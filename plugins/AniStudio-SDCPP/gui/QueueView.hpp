@@ -23,12 +23,15 @@ namespace GUI {
 
         void Init() override;
         void Render() override;
+        nlohmann::json Serialize() const override;
+        void Deserialize(const nlohmann::json& j) override;
 
     private:
         int m_selectedViewIndex = 0;
         std::vector<BaseView*> m_availableViews;
         int numQueues = 1;
         bool isPaused = false;
+        bool m_queueLoaded = false;
 
         void RefreshViewList();
         void RenderViewSelector();
