@@ -18,7 +18,7 @@ namespace ECS {
             schema = {
                 {"title", "VAE Settings"},
                 {"type", "object"},
-                {"propertyOrder", {"modelPath", "isTiled", "temporal_tiling", "tile_size_x", "tile_size_y", "target_overlap", "rel_size_x", "rel_size_y", "extra_tiling_args", "keep_vae_on_cpu", "vae_decode_only", "vae_format"}},
+                {"propertyOrder", {"modelPath", "keep_vae_on_cpu", "vae_decode_only", "vae_format"}},
                 {"properties", {
                     {"modelPath", {
                         {"type", "string"},
@@ -34,6 +34,110 @@ namespace ECS {
                             {"browseTooltip", "Browse for VAE model files (.safetensors, .ckpt, .pt)"}
                         }}
                     }},
+                    {"keep_vae_on_cpu", {
+                        {"type", "boolean"},
+                        {"title", "Keep VAE on CPU"},
+                        {"description", "Keep VAE on CPU instead of GPU to save VRAM but significantly reduce performance."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"vae_decode_only", {
+                        {"type", "boolean"},
+                        {"title", "VAE Decode Only"},
+                        {"description", "Only use VAE for decoding (not encoding). Useful for txt2img workflows to save memory."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"vae_format", {
+                        {"type", "string"},
+                        {"title", "VAE Format"},
+                        {"description", "Format of the VAE model (auto, flux, sd3, flux2, wan)."},
+                        {"ui:widget", "combo"},
+                        {"items", get_vae_format_names()},
+                        {"itemCount", static_cast<int>(get_vae_format_names().size())}
+                    }}
+                }}
+            };
+        }
+
+        bool keep_vae_on_cpu = false;
+        bool vae_decode_only = false;
+        std::string vae_format = "AUTO";
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"modelPath", &modelPath},
+                {"modelName", &modelName},
+                {"keep_vae_on_cpu", &keep_vae_on_cpu},
+                {"vae_decode_only", &vae_decode_only},
+                {"vae_format", &vae_format}
+            };
+        }
+
+        VaeComponent& operator=(const VaeComponent& other) {
+            if (this != &other) {
+                modelPath = other.modelPath;
+                modelName = other.modelName;
+                isModelLoaded = other.isModelLoaded;
+                keep_vae_on_cpu = other.keep_vae_on_cpu;
+                vae_decode_only = other.vae_decode_only;
+                vae_format = other.vae_format;
+            }
+            return *this;
+        }
+
+        nlohmann::json Serialize() const override {
+            return { {compName, {
+                {"modelName", modelName},
+                {"modelPath", modelPath},
+                {"keep_vae_on_cpu", keep_vae_on_cpu},
+                {"vae_decode_only", vae_decode_only},
+                {"vae_format", vae_format}
+            }} };
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            BaseModelComponent::Deserialize(j);
+
+            nlohmann::json componentData;
+            if (j.contains(compName)) {
+                componentData = j.at(compName);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == compName) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("keep_vae_on_cpu")) keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
+            if (componentData.contains("vae_decode_only")) vae_decode_only = componentData["vae_decode_only"].get<bool>();
+            if (componentData.contains("vae_format")) {
+                const auto& val = componentData["vae_format"];
+                if (val.is_string()) {
+                    vae_format = val.get<std::string>();
+                }
+            }
+        }
+
+        sd_vae_format_t get_vae_format_enum() const {
+            return static_cast<sd_vae_format_t>(vae_format_from_name(vae_format));
+        }
+    };
+
+    struct VaeTilingComponent : public BaseComponent {
+        VaeTilingComponent() {
+            compName = "VaeTiling";
+
+            schema = {
+                {"title", "VAE Tiling Settings"},
+                {"type", "object"},
+                {"propertyOrder", {"isTiled", "temporal_tiling", "tile_size_x", "tile_size_y",
+                                   "target_overlap", "rel_size_x", "rel_size_y", "extra_tiling_args"}},
+                {"properties", {
                     {"isTiled", {
                         {"type", "boolean"},
                         {"title", "Tiled VAE"},
@@ -111,45 +215,22 @@ namespace ECS {
                         {"title", "Extra Tiling Args"},
                         {"description", "Additional tiling arguments as a string."},
                         {"ui:widget", "textarea"}
-                    }},
-                    {"keep_vae_on_cpu", {
-                        {"type", "boolean"},
-                        {"title", "Keep VAE on CPU"},
-                        {"description", "Keep VAE on CPU instead of GPU to save VRAM but significantly reduce performance."},
-                        {"ui:widget", "checkbox"}
-                    }},
-                    {"vae_decode_only", {
-                        {"type", "boolean"},
-                        {"title", "VAE Decode Only"},
-                        {"description", "Only use VAE for decoding (not encoding). Useful for txt2img workflows to save memory."},
-                        {"ui:widget", "checkbox"}
-                    }},
-                    { "vae_format", {
-                        {"type", "string"},
-                        {"title", "VAE Format"},
-                        {"description", "Format of the VAE model (auto, flux, sd3, flux2, wan)."},
-                        {"ui:widget", "combo"},
-                        {"items", get_vae_format_names()},
-                        {"itemCount", static_cast<int>(get_vae_format_names().size())}
                     }}
                 }}
             };
         }
 
-        std::string vae_format = "AUTO";
-        int tile_size_x = 64, tile_size_y = 64;
-        float target_overlap = 0.75f;
-        float rel_size_x = 64.0f, rel_size_y = 64.0f;
-        bool keep_vae_on_cpu = false;
-        bool vae_decode_only = false;
         bool isTiled = false;
         bool temporal_tiling = false;
+        int tile_size_x = 64;
+        int tile_size_y = 64;
+        float target_overlap = 0.75f;
+        float rel_size_x = 64.0f;
+        float rel_size_y = 64.0f;
         std::string extra_tiling_args;
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
-                {"modelPath", &modelPath},
-                {"modelName", &modelName},
                 {"isTiled", &isTiled},
                 {"temporal_tiling", &temporal_tiling},
                 {"tile_size_x", &tile_size_x},
@@ -157,37 +238,12 @@ namespace ECS {
                 {"target_overlap", &target_overlap},
                 {"rel_size_x", &rel_size_x},
                 {"rel_size_y", &rel_size_y},
-                {"extra_tiling_args", &extra_tiling_args},
-                {"keep_vae_on_cpu", &keep_vae_on_cpu},
-                {"vae_decode_only", &vae_decode_only},
-                {"vae_format", &vae_format}
+                {"extra_tiling_args", &extra_tiling_args}
             };
-        }
-
-        VaeComponent& operator=(const VaeComponent& other) {
-            if (this != &other) {
-                modelPath = other.modelPath;
-                modelName = other.modelName;
-                isModelLoaded = other.isModelLoaded;
-                isTiled = other.isTiled;
-                temporal_tiling = other.temporal_tiling;
-                tile_size_x = other.tile_size_x;
-                tile_size_y = other.tile_size_y;
-                target_overlap = other.target_overlap;
-                rel_size_x = other.rel_size_x;
-                rel_size_y = other.rel_size_y;
-                extra_tiling_args = other.extra_tiling_args;
-                keep_vae_on_cpu = other.keep_vae_on_cpu;
-                vae_decode_only = other.vae_decode_only;
-                vae_format = other.vae_format;
-            }
-            return *this;
         }
 
         nlohmann::json Serialize() const override {
             return { {compName, {
-                {"modelName", modelName},
-                {"modelPath", modelPath},
                 {"isTiled", isTiled},
                 {"temporal_tiling", temporal_tiling},
                 {"tile_size_x", tile_size_x},
@@ -195,53 +251,35 @@ namespace ECS {
                 {"target_overlap", target_overlap},
                 {"rel_size_x", rel_size_x},
                 {"rel_size_y", rel_size_y},
-                {"extra_tiling_args", extra_tiling_args},
-                {"keep_vae_on_cpu", keep_vae_on_cpu},
-                {"vae_decode_only", vae_decode_only},
-                {"vae_format", vae_format}
+                {"extra_tiling_args", extra_tiling_args}
             }} };
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseModelComponent::Deserialize(j);
-
-            nlohmann::json componentData;
+            nlohmann::json data;
             if (j.contains(compName)) {
-                componentData = j.at(compName);
+                data = j.at(compName);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
                     if (it.key() == compName) {
-                        componentData = it.value();
+                        data = it.value();
                         break;
                     }
                 }
-                if (componentData.empty()) {
-                    componentData = j;
+                if (data.empty()) {
+                    data = j;
                 }
             }
 
-            if (componentData.contains("isTiled")) isTiled = componentData["isTiled"].get<bool>();
-            if (componentData.contains("temporal_tiling")) temporal_tiling = componentData["temporal_tiling"].get<bool>();
-            if (componentData.contains("tile_size_x")) tile_size_x = componentData["tile_size_x"].get<int>();
-            if (componentData.contains("tile_size_y")) tile_size_y = componentData["tile_size_y"].get<int>();
-            if (componentData.contains("target_overlap")) target_overlap = componentData["target_overlap"].get<float>();
-            if (componentData.contains("rel_size_x")) rel_size_x = componentData["rel_size_x"].get<float>();
-            if (componentData.contains("rel_size_y")) rel_size_y = componentData["rel_size_y"].get<float>();
-            if (componentData.contains("extra_tiling_args")) extra_tiling_args = componentData["extra_tiling_args"].get<std::string>();
-            if (componentData.contains("keep_vae_on_cpu")) keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
-            if (componentData.contains("vae_decode_only")) vae_decode_only = componentData["vae_decode_only"].get<bool>();
-
-            if (componentData.contains("vae_format")) {
-                const auto& val = componentData["vae_format"];
-                if (val.is_string()) {
-                    vae_format = val.get<std::string>();
-                }
-            }
-        }
-
-        sd_vae_format_t get_vae_format_enum() const {
-            return static_cast<sd_vae_format_t>(vae_format_from_name(vae_format));
+            if (data.contains("isTiled")) isTiled = data["isTiled"].get<bool>();
+            if (data.contains("temporal_tiling")) temporal_tiling = data["temporal_tiling"].get<bool>();
+            if (data.contains("tile_size_x")) tile_size_x = data["tile_size_x"].get<int>();
+            if (data.contains("tile_size_y")) tile_size_y = data["tile_size_y"].get<int>();
+            if (data.contains("target_overlap")) target_overlap = data["target_overlap"].get<float>();
+            if (data.contains("rel_size_x")) rel_size_x = data["rel_size_x"].get<float>();
+            if (data.contains("rel_size_y")) rel_size_y = data["rel_size_y"].get<float>();
+            if (data.contains("extra_tiling_args")) extra_tiling_args = data["extra_tiling_args"].get<std::string>();
         }
     };
 
@@ -280,12 +318,12 @@ namespace ECS {
             }
             return *this;
         }
-
     };
 
     struct AudioVaeComponent : public BaseModelComponent {
         AudioVaeComponent() {
             compName = "AudioVae";
+
             schema = {
                 {"title", "Audio VAE"},
                 {"type", "object"},

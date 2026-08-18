@@ -332,7 +332,11 @@ namespace SDCPP {
                 if (lat.contains("batchSize")) params.batch_count = lat["batchSize"].get<int>();
                 if (lat.contains("seed")) params.seed = static_cast<int64_t>(lat["seed"].get<int>());
             }
-            if (comp.contains("Vae")) {
+            // Parse tiling parameters from VaeTiling component (preferred) or fallback to Vae
+            if (comp.contains("VaeTiling")) {
+                parseTilingParams(comp["VaeTiling"], params.vae_tiling_params, res);
+            }
+            else if (comp.contains("Vae")) {
                 parseTilingParams(comp["Vae"], params.vae_tiling_params, res);
             }
             if (comp.contains("Guidance")) {
@@ -749,7 +753,11 @@ namespace SDCPP {
                 if (lat.contains("latentHeight")) params.height = lat["latentHeight"].get<int>();
                 if (lat.contains("seed")) params.seed = static_cast<int64_t>(lat["seed"].get<int>());
             }
-            if (comp.contains("Vae")) {
+            // Parse tiling parameters from VaeTiling component (preferred) or fallback to Vae
+            if (comp.contains("VaeTiling")) {
+                parseTilingParams(comp["VaeTiling"], params.vae_tiling_params, res);
+            }
+            else if (comp.contains("Vae")) {
                 parseTilingParams(comp["Vae"], params.vae_tiling_params, res);
             }
             if (comp.contains("Guidance")) {

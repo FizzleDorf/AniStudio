@@ -1,74 +1,52 @@
 #pragma once
 
-#include "GUI.h"
+#include "BaseMediaView.hpp"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
-#include "FileDialogUtil.hpp"
-#include "../events/Events.hpp"
-#include <pch.h>
 
 namespace GUI {
 
-    class VideoView : public BaseView {
+    class VideoView : public BaseMediaView {
     public:
         static constexpr const char* GetMetadataJSON() {
             return R"({
             "displayName": "Video View",
             "category": "Viewers",
-            "description": "A simple video viewer."
+            "description": "A simple video viewer"
         })";
         }
 
-        VideoView(ECS::EntityManager& mgr, ViewManager& vm)
-            : BaseView(mgr, vm), 
-            selectedEntityID(0),
-            videoIndex(0),
-            showHistory(true),
-            zoom(1.0f),
-            offsetX(0.0f),
-            offsetY(0.0f),
-            isPlaying(false),
-            playbackSpeed(1.0f),
-            lastEntityCount(0),
-            lastGeneratedVideoID(0) {
-            viewName = "VideoView";
-        }
+        VideoView(ECS::EntityManager& mgr, ViewManager& vm);
         ~VideoView() = default;
 
         void Init() override;
         void Update(float deltaT) override;
         void Render() override;
 
-    private:
-        ECS::EntityID selectedEntityID;
-        int videoIndex;
-        bool showHistory;
-        size_t lastEntityCount;
+        void LoadMedia(const std::vector<std::string>& filePaths) override;
+        void SaveSelectedMedia() override;
+        void SaveSelectedMediaAs(const std::string& filePath) override;
+        void RemoveSelectedMedia() override;
+        void RefreshEntities() override;
 
+        void LoadVideo(const std::string& filePath);
+
+    protected:
         bool isPlaying;
         float playbackSpeed;
-
-        float zoom;
-        float offsetX;
-        float offsetY;
-
-        std::vector<ECS::EntityID> videoEntities;
-
         ECS::EntityID lastGeneratedVideoID;
 
-        void RefreshVideoEntities();
+        void OnMediaAdded(ECS::EntityID entity) override;
+        void OnMediaRemoved(ECS::EntityID entity) override;
+        std::string GetHistoryViewTypeName() const override;
+
+        void RenderMenuBar();
         void RenderVideoInfo();
         void RenderControls();
         void RenderSelector();
         void RenderPlaybackControls();
-        void RenderHistory();
-        void RenderSelectedVideo();
-        void DrawGrid(int videoWidth, int videoHeight);
-        void SetZoom(float newZoom);
-        void LoadVideos(const std::vector<std::string>& filePaths);
-        void RemoveSelectedVideo();
+        void RenderSelected();
         void PauseAllVideos();
-        std::string TruncateFilename(const std::string& filename, float maxTextWidth);
     };
 
 } // namespace GUI

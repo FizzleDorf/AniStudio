@@ -53,6 +53,7 @@ namespace GUI {
         m_componentAdders["LlmEncoder"] = [this](EntityID e) { this->m_entityManager.AddComponent<LlmEncoderComponent>(e); };
         m_componentAdders["LlmVision"] = [this](EntityID e) { this->m_entityManager.AddComponent<LlmVisionComponent>(e); };
         m_componentAdders["Vae"] = [this](EntityID e) { this->m_entityManager.AddComponent<VaeComponent>(e); };
+        m_componentAdders["VaeTiling"] = [this](EntityID e) { this->m_entityManager.AddComponent<VaeTilingComponent>(e); };
         m_componentAdders["Taesd"] = [this](EntityID e) { this->m_entityManager.AddComponent<TaesdComponent>(e); };
         m_componentAdders["AudioVae"] = [this](EntityID e) { this->m_entityManager.AddComponent<AudioVaeComponent>(e); };
         m_componentAdders["Latent"] = [this](EntityID e) { this->m_entityManager.AddComponent<LatentComponent>(e); };

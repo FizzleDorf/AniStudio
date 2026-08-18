@@ -126,6 +126,7 @@ public:
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::LlmVisionComponent>("LlmVision"));
 
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::VaeComponent>("Vae"));
+        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::VaeTilingComponent>("VaeTiled"));
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::TaesdComponent>("Taesd"));
 
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::HiresComponent>("Hires"));
