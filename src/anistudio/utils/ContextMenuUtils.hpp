@@ -10,64 +10,63 @@
 
 namespace Utils {
 
-	class ContextMenuUtils {
-	public:
-		ContextMenuUtils(ECS::EntityManager& entityMgr);
-		~ContextMenuUtils() = default;
+    class ContextMenuUtils {
+    public:
+        ContextMenuUtils(ECS::EntityManager& entityMgr);
+        ~ContextMenuUtils() = default;
 
-		// Main context menu rendering
-		void RenderImageContextMenu(ECS::EntityID entityId);
-		void RenderImageContextMenuWithPath(const std::string& imagePath);
-		void RenderComponentContextMenu(ECS::EntityID entityId, ECS::ComponentTypeID componentId);
-		void RenderComponentContextMenu(ECS::EntityID entityId, const std::string& componentName);
+        void RenderEntityContextMenu(ECS::EntityID entityId);
 
-		// Copy operations
-		void CopyEntity(ECS::EntityID entityId);
-		void CopyComponent(ECS::EntityID entityId, ECS::ComponentTypeID componentId);
-		void CopyComponent(ECS::EntityID entityId, const std::string& componentName);
+        void RenderImageContextMenu(ECS::EntityID entityId);
+        void RenderImageContextMenuWithPath(const std::string& imagePath);
 
-		// Paste operations
-		bool PasteEntity(ECS::EntityID targetEntityId);
-		bool PasteComponent(ECS::EntityID targetEntityId, const std::string& componentName);
-		bool PasteValue(ECS::EntityID targetEntityId, const std::string& componentName, const std::string& propertyName);
+        void RenderVideoContextMenu(ECS::EntityID entityId);
+        void RenderVideoContextMenuWithPath(const std::string& videoPath);
 
-		// Clipboard utilities
-		bool HasClipboardEntity() const;
-		std::string GetClipboardPreview() const;
-		void ClearClipboard();
+        void RenderComponentContextMenu(ECS::EntityID entityId, ECS::ComponentTypeID componentId);
+        void RenderComponentContextMenu(ECS::EntityID entityId, const std::string& componentName);
 
-		// Helper functions
-		std::vector<std::string> GetClipboardComponents() const;
-		std::vector<std::string> GetCommonProperties(ECS::EntityID targetEntityId, const std::string& componentName) const;
+        void CopyEntity(ECS::EntityID entityId);
+        void CopyComponent(ECS::EntityID entityId, ECS::ComponentTypeID componentId);
+        void CopyComponent(ECS::EntityID entityId, const std::string& componentName);
+        void CopyFilePath(ECS::EntityID entityId);
+        void CopyImageData(ECS::EntityID entityId);
+        void CopyVideoFrame(ECS::EntityID entityId);
 
-		// Public method to get clipboard data
-		nlohmann::json GetClipboardData() const;
-		void RenderPasteMenu(ECS::EntityID entityId); 
+        bool PasteEntity(ECS::EntityID targetEntityId);
+        bool PasteComponent(ECS::EntityID targetEntityId, const std::string& componentName);
+        bool PasteValue(ECS::EntityID targetEntityId, const std::string& componentName, const std::string& propertyName);
 
-	private:
-		ECS::EntityManager& entityManager;
+        bool HasClipboardEntity() const;
+        std::string GetClipboardPreview() const;
+        void ClearClipboard();
 
-		// Image metadata parsing
-		nlohmann::json ParseImageMetadata(const std::string& imagePath);
-		std::vector<std::string> ExtractComponentsFromMetadata(const nlohmann::json& metadata);
+        std::vector<std::string> GetClipboardComponents() const;
+        std::vector<std::string> GetCommonProperties(ECS::EntityID targetEntityId, const std::string& componentName) const;
 
-		// Context menu rendering helpers
-		void RenderMetadataComponentMenu(const nlohmann::json& metadata);
-		void RenderEntityComponentMenu(ECS::EntityID entityId);
-		// REMOVED: void RenderPasteMenu(ECS::EntityID entityId);  <-- REMOVE THIS FROM PRIVATE
-		void RenderValueCopyMenu(ECS::EntityID entityId, ECS::ComponentTypeID componentId, const std::string& componentName);
-		void RenderMetadataValueMenu(const nlohmann::json& metadata);
+        nlohmann::json GetClipboardData() const;
+        void RenderPasteMenu(ECS::EntityID entityId);
 
-		// Component operations from metadata
-		void CopyComponentFromMetadata(const nlohmann::json& metadata, const std::string& componentName);
-		void CopyEntityFromMetadata(const nlohmann::json& metadata);
+    private:
+        ECS::EntityManager& entityManager;
 
-		// Clipboard operations
-		void SetClipboardData(const nlohmann::json& data);
+        nlohmann::json ParseImageMetadata(const std::string& imagePath);
+        std::vector<std::string> ExtractComponentsFromMetadata(const nlohmann::json& metadata);
 
-		// Value extraction
-		std::string GetClipboardValue(const std::string& componentName, const std::string& propertyName) const;
-		nlohmann::json GetClipboardComponent(const std::string& componentName) const;
-	};
+        void RenderMetadataComponentMenu(const nlohmann::json& metadata);
+        void RenderEntityComponentMenu(ECS::EntityID entityId);
+        void RenderValueCopyMenu(ECS::EntityID entityId, ECS::ComponentTypeID componentId, const std::string& componentName);
+        void RenderMetadataValueMenu(const nlohmann::json& metadata);
 
-}
+        void CopyComponentFromMetadata(const nlohmann::json& metadata, const std::string& componentName);
+        void CopyEntityFromMetadata(const nlohmann::json& metadata);
+
+        void SetClipboardData(const nlohmann::json& data);
+
+        std::string GetClipboardValue(const std::string& componentName, const std::string& propertyName) const;
+        nlohmann::json GetClipboardComponent(const std::string& componentName) const;
+
+        bool SetClipboardDIB(unsigned char* data, int width, int height, int channels);
+    };
+
+} // namespace Utils

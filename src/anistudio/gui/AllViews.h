@@ -13,3 +13,6 @@
 #include "NodeView.hpp"
 #include "ModelView.hpp"
 #include "SequencerView.hpp"
+#include "AssetsView.hpp"
+#include "ImageHistoryView.hpp"
+#include "VideoHistoryView.hpp"

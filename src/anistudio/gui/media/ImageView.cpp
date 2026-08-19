@@ -7,6 +7,7 @@
 #include "FilePathSystem.hpp"
 #include "PngMetadataUtils.hpp"
 #include "ClipboardUtilities.hpp"
+#include "DragDropUtils.hpp"
 #include <algorithm>
 
 namespace GUI {
@@ -156,7 +157,7 @@ namespace GUI {
                 ImGui::Text("Channels: %d", imageComp.channels);
                 ImGui::SameLine();
                 ImGui::Text("Entity ID: %zu", selectedEntityID);
-                RenderImageContextMenu(selectedEntityID);
+                RenderMediaContextMenu(selectedEntityID);
                 ImGui::Separator();
             }
             catch (const std::exception& e) {
@@ -205,12 +206,16 @@ namespace GUI {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
             ImGui::Text("No image selected or entity invalid.");
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
             return;
         }
         try {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
             if (imageComp.textureID == 0 || imageComp.width <= 0 || imageComp.height <= 0) {
                 ImGui::Text("Image loading... (Texture ID: %u, Size: %dx%d)", imageComp.textureID, imageComp.width, imageComp.height);
+                HandleFileDropTarget();
+                HandleEntityDropTarget();
                 return;
             }
             if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
@@ -224,21 +229,46 @@ namespace GUI {
                 offsetY = (windowSize.y - imageSize.y) * 0.5f;
             }
             ImVec2 imagePos = ImVec2(offsetX + windowPadding.x, offsetY + windowPadding.y);
+
             DrawGrid(imageComp.width, imageComp.height);
             ImGui::SetCursorPos(imagePos);
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
+
             ImGui::Image((ImTextureID)(intptr_t)imageComp.textureID, imageSize);
-            RenderImageContextMenu(selectedEntityID);
-            if (zoom > 1.0f && ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+
+            // Internal drag-drop (within the app)
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    nlohmann::json payload;
+                    payload["entityID"] = selectedEntityID;
+                    ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
+                        payload.dump().c_str(), payload.dump().size() + 1);
+                    ImGui::Image((ImTextureID)(intptr_t)imageComp.textureID, ImVec2(64, 64));
+                    ImGui::Text("%s", imageComp.fileName.c_str());
+                    ImGui::EndDragDropSource();
+                }
+            }
+
+            RenderMediaContextMenu(selectedEntityID);
+
+            // Pan with Alt+LMB drag
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && IsAltKeyDown()) {
                 offsetX += ImGui::GetIO().MouseDelta.x;
                 offsetY += ImGui::GetIO().MouseDelta.y;
             }
+
             ImGui::SetCursorPos(ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y));
             ImGui::Dummy(ImVec2(0, 0));
+
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+
         }
         catch (const std::exception& e) {
             ImGui::Text("Error rendering image: %s", e.what());
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
         }
     }
 

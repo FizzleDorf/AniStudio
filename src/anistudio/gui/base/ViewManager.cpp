@@ -5,6 +5,8 @@
 
 namespace GUI {
 
+    void* ViewManager::m_windowHandle = nullptr;
+
     ViewManager::ViewManager() : workspaceCount(0), m_activeWorkspaceID(0), m_imguiContext(nullptr) {
         for (WorkspaceID view = 0u; view < MAX_VIEW_COUNT; view++) {
             availableWorkspaces.push(view);
@@ -670,6 +672,15 @@ namespace GUI {
 
     void* ViewManager::GetImGuiContext() const {
         return m_imguiContext;
+    }
+
+    void ViewManager::SetWindowHandle(void* handle) {
+        m_windowHandle = handle;
+        std::cout << "[ViewManager] Set window handle: " << m_windowHandle << std::endl;
+    }
+
+    void* ViewManager::GetWindowHandle() {
+        return m_windowHandle;
     }
 
     void ViewManager::SetWorkspaceName(WorkspaceID workspaceID, const std::string& name) {

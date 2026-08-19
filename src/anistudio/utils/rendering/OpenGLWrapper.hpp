@@ -1,4 +1,5 @@
 #pragma once
+
 #ifndef GLEW_STATIC
 #define GLEW_STATIC
 #endif
@@ -6,3 +7,7 @@
 #include <GLFW/glfw3.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_glfw.h>
+
+#ifdef WIN32
+#include <GLFW/glfw3native.h>
+#endif

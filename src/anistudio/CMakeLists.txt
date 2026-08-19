@@ -78,6 +78,7 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/base>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/project>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/settings>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/media>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/states>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/rendering>
@@ -93,7 +94,6 @@ target_include_directories(AniStudioCore PUBLIC
     "${EXTERNAL_DIR}/ImGuizmo"
     "${EXTERNAL_DIR}/imgui_markdown"
     "${EXTERNAL_DIR}/stb"
-    # NFD headers
     $<BUILD_INTERFACE:${EXTERNAL_DIR}/nfd/src/include>
 )
 
@@ -111,6 +111,14 @@ target_link_libraries(AniStudioCore PRIVATE
     ZLIB::ZLIB
     PNG::PNG
 )
+
+if(WIN32)
+    target_link_libraries(AniStudioCore PRIVATE ole32 shell32 uuid)
+endif()
+
+if(LINUX)
+    target_link_libraries(AniStudioCore PRIVATE gtk-3 gdk-3 X11)
+endif()
 
 if(NFD_AVAILABLE)
     target_link_libraries(AniStudioCore PRIVATE nfd)

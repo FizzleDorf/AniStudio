@@ -3,6 +3,7 @@
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
 #include "Events.hpp"
+#include "DragDropUtils.hpp"
 #include <algorithm>
 #include <iostream>
 
@@ -187,6 +188,7 @@ namespace GUI {
                 if (selectedEntityID == lastGeneratedVideoID) {
                     ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "✦ NEWLY GENERATED");
                 }
+                RenderMediaContextMenu(selectedEntityID);
                 ImGui::Separator();
             }
             catch (const std::exception& e) {
@@ -301,6 +303,8 @@ namespace GUI {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             ImGui::Text("No video selected or entity invalid.");
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
             return;
         }
         try {
@@ -308,6 +312,8 @@ namespace GUI {
             if (videoComp.currentTexture == 0 || videoComp.width <= 0 || videoComp.height <= 0) {
                 ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
                     videoComp.currentTexture, videoComp.width, videoComp.height);
+                HandleFileDropTarget();
+                HandleEntityDropTarget();
                 return;
             }
             if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
@@ -321,20 +327,45 @@ namespace GUI {
                 offsetY = (windowSize.y - imageSize.y) * 0.5f;
             }
             ImVec2 imagePos = ImVec2(offsetX + windowPadding.x, offsetY + windowPadding.y);
+
             DrawGrid(videoComp.width, videoComp.height);
             ImGui::SetCursorPos(imagePos);
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
+
             ImGui::Image((ImTextureID)(intptr_t)videoComp.currentTexture, imageSize, ImVec2(0, 0), ImVec2(1, 1));
-            if (zoom > 1.0f && ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+
+            // Internal drag-drop (within the app)
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    nlohmann::json payload;
+                    payload["entityID"] = selectedEntityID;
+                    ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
+                        payload.dump().c_str(), payload.dump().size() + 1);
+                    ImGui::Image((ImTextureID)(intptr_t)videoComp.currentTexture, ImVec2(64, 64));
+                    ImGui::Text("%s", videoComp.fileName.c_str());
+                    ImGui::EndDragDropSource();
+                }
+            }
+
+            RenderMediaContextMenu(selectedEntityID);
+
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && IsAltKeyDown()) {
                 offsetX += ImGui::GetIO().MouseDelta.x;
                 offsetY += ImGui::GetIO().MouseDelta.y;
             }
+
             ImGui::SetCursorPos(ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y));
             ImGui::Dummy(ImVec2(0, 0));
+
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+
         }
         catch (const std::exception& e) {
             ImGui::Text("Error rendering video: %s", e.what());
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
         }
     }
 

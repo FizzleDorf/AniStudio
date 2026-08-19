@@ -10,6 +10,7 @@ namespace FileDialog {
         DIFFUSION_MODEL,
         IMAGE_FILE,
         VIDEO_FILE,
+        AUDIO_FILE,
         METADATA_FILE,
         TEXT_FILE,
         ALL_FILES
@@ -37,6 +38,17 @@ namespace FileDialog {
         { "FLV", "flv" },
         { "WMV", "wmv" },
         { "MPEG", "mpg,mpeg" }
+    };
+
+    static const nfdu8filteritem_t AudioFilters[] = {
+        { "All Audio Files", "wav,mp3,flac,aac,ogg,m4a,opus" },
+        { "WAV", "wav" },
+        { "MP3", "mp3" },
+        { "FLAC", "flac" },
+        { "AAC", "aac" },
+        { "OGG", "ogg" },
+        { "M4A", "m4a" },
+        { "Opus", "opus" }
     };
 
     static const nfdu8filteritem_t ModelFilters[] = {
@@ -77,6 +89,10 @@ namespace FileDialog {
         case FilterType::VIDEO_FILE:
             items = VideoFilters;
             count = sizeof(VideoFilters) / sizeof(VideoFilters[0]);
+            break;
+        case FilterType::AUDIO_FILE:
+            items = AudioFilters;
+            count = sizeof(AudioFilters) / sizeof(AudioFilters[0]);
             break;
         case FilterType::DIFFUSION_MODEL:
             items = ModelFilters;

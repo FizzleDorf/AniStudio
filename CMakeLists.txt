@@ -4,6 +4,10 @@ cmake_policy(SET CMP0079 NEW)
 
 project(AniStudio VERSION 0.2.0)
 
+if(WIN32)
+    add_compile_definitions(GLFW_EXPOSE_NATIVE_WIN32)
+endif()
+
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 
 option(BUILD_ANIENGINE "Build AniEngine library" ON)
@@ -288,6 +292,28 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     endif()
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
+
+    if(WIN32)
+        set(ANISTUDIO_RUNTIME_DLL_PACKAGES glfw ffmpeg libaom-av1 dav1d)
+
+        foreach(PKG ${ANISTUDIO_RUNTIME_DLL_PACKAGES})
+            foreach(CFG_SUFFIX "_RELEASE" "_DEBUG" "_RELWITHDEBINFO" "_MINSIZEREL" "")
+                if(DEFINED ${PKG}_BIN_DIRS${CFG_SUFFIX})
+                    foreach(BIN_DIR ${${PKG}_BIN_DIRS${CFG_SUFFIX}})
+                        file(GLOB _pkg_dlls "${BIN_DIR}/*.dll")
+                        foreach(DLL_FILE ${_pkg_dlls})
+                            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                                    "${DLL_FILE}"
+                                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+                                COMMENT "Copying ${DLL_FILE} next to ${PROJECT_NAME}"
+                            )
+                        endforeach()
+                    endforeach()
+                endif()
+            endforeach()
+        endforeach()
+    endif()
 
     message(STATUS "Main application will be built")
     message(STATUS "  Links against: AniStudioCore (brings all engine and studio dependencies)")

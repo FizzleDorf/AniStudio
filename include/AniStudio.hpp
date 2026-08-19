@@ -22,6 +22,7 @@
 
 #define ANI_STUDIO_API
 
+#include "OpenGLWrapper.hpp"
 #include "AniEngine.hpp"
 #include "StudioContext.hpp"
 #include "GUI.h"

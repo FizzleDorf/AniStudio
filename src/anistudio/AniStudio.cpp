@@ -1,5 +1,5 @@
-// Full AniStudio.cpp (including all modifications)
 #include "AniStudio.hpp"
+#include "OpenGLWrapper.hpp"
 #include "AllViews.h"
 #include "StudioContext.hpp"
 #include "FilePathSystem.hpp"
@@ -12,6 +12,7 @@
 #include "SettingsView.hpp"
 #include "MenuBar.hpp"
 #include "ProjectManagerView.hpp"
+#include "DragDropUtils.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -32,7 +33,6 @@
 #include "SettingsSystem.hpp"
 
 #ifdef _WIN32
-#define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
 #endif
 
@@ -105,6 +105,9 @@ namespace ANI {
         viewManager.RegisterView<GUI::VideoView>("VideoView");
         viewManager.RegisterView<GUI::HelpView>("HelpView");
         viewManager.RegisterView<GUI::TextEditorView>("TextEditor");
+        viewManager.RegisterView<GUI::ImageHistoryView>("ImageHistoryView");
+        viewManager.RegisterView<GUI::VideoHistoryView>("VideoHistoryView");
+        viewManager.RegisterView<GUI::AssetsView>("AssetsView");
 
         if (studioContext->studioPluginManager) {
             viewManager.RegisterViewWithFactory("PluginView", "Tools",
@@ -253,11 +256,21 @@ namespace ANI {
 
         if (window) {
             std::cout << "[StudioCore] Window handle set for WindowState utility" << std::endl;
+            std::cout << "[StudioCore] Received GLFWwindow* pointer: " << window << std::endl;
 
 #ifdef _WIN32
-            HWND hwnd = glfwGetWin32Window(static_cast<GLFWwindow*>(window));
+            // Attempt to get the HWND
+            GLFWwindow* glfwWin = static_cast<GLFWwindow*>(window);
+            HWND hwnd = glfwGetWin32Window(glfwWin);
+            std::cout << "[StudioCore] glfwGetWin32Window returned HWND: " << hwnd << std::endl;
+
             FileDialog::SetGlobalWindowHandle(static_cast<GLFWwindow*>(window));
             std::cout << "[StudioCore] Set parent window handle for file dialogs: " << hwnd << std::endl;
+            GUI::ViewManager::SetWindowHandle(hwnd);
+            GUI::DragDrop::SetWindowHandle(hwnd);
+#else
+            GUI::ViewManager::SetWindowHandle(window);
+            GUI::DragDrop::SetWindowHandle(window);
 #endif
 
             auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
@@ -268,6 +281,8 @@ namespace ANI {
             if (studioContext) {
                 studioContext->windowHandle = window;
             }
+
+            GUI::DragDrop::InitializeFileDrop(static_cast<GLFWwindow*>(window));
 
             if (initialized) {
                 InitializeWindowState();
@@ -303,7 +318,10 @@ namespace ANI {
 
         GLFWwindow* glfwWindow = static_cast<GLFWwindow*>(windowHandle);
 
-        glfwSetWindowSize(glfwWindow, m_windowState.GetWidth(), m_windowState.GetHeight());
+        int width = std::max(m_windowState.GetWidth(), Utils::MIN_WINDOW_WIDTH);
+        int height = std::max(m_windowState.GetHeight(), Utils::MIN_WINDOW_HEIGHT);
+
+        glfwSetWindowSize(glfwWindow, width, height);
         glfwSetWindowPos(glfwWindow, m_windowState.GetPosX(), m_windowState.GetPosY());
 
         if (m_windowState.IsMaximized()) {
@@ -313,10 +331,13 @@ namespace ANI {
             glfwRestoreWindow(glfwWindow);
         }
 
+        glfwSetWindowAttrib(glfwWindow, GLFW_DECORATED, GLFW_TRUE);
+        glfwShowWindow(glfwWindow);
+
         glfwSwapInterval(1);
 
         std::cout << "[StudioCore] Applied WindowState to GLFW window: "
-            << m_windowState.GetWidth() << "x" << m_windowState.GetHeight()
+            << width << "x" << height
             << " at (" << m_windowState.GetPosX() << "," << m_windowState.GetPosY() << ")" << std::endl;
     }
 
@@ -352,18 +373,15 @@ namespace ANI {
 
             auto& entityMgr = GetEntityManager();
 
-            // Register components FIRST
             entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
             entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
             entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
 
-            // Register systems
             entityMgr.RegisterSystem<TextureSystem>();
             entityMgr.RegisterSystem<ECS::SettingsSystem>();
             entityMgr.RegisterSystem<ProjectSystem>();
 
-            // Get ProjectSystem and configure it BEFORE CompleteInitialization
             auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
             if (projectSystem) {
                 projectSystem->SetWindowHandle(windowHandle);
@@ -380,10 +398,8 @@ namespace ANI {
                 }
             }
 
-            // Create ProjectManagerView AFTER ProjectSystem is configured
             m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, this);
 
-            // Setup file paths
             auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
             std::string defaultProjectPath;
             if (fileSys) {
@@ -406,7 +422,6 @@ namespace ANI {
                 std::filesystem::create_directories(defaultProjectPath);
             }
 
-            // Setup callbacks
             SetupProjectCallbacks();
             SetCoreCallbacks();
             SetCoreEvents();

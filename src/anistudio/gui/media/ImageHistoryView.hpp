@@ -4,6 +4,7 @@
 #include "BaseView.hpp"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
+#include <filesystem>
 
 namespace GUI {
 
@@ -36,6 +37,10 @@ namespace GUI {
         void OnImageAdded(ECS::EntityID entity);
         void OnImageRemoved(ECS::EntityID entity);
         void SelectImage(ECS::EntityID entity);
+        void RenderImageThumbnail(ECS::EntityID entityID, size_t index);
+        bool HasMetadata(const std::string& filePath);
+        std::string GetFileDate(const std::string& filePath);
+        std::string FormatDate(const std::filesystem::file_time_type& ftime);
     };
 
 } // namespace GUI

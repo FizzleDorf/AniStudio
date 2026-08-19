@@ -2,6 +2,7 @@
 #include "ClipboardUtilities.hpp"
 #include "ImageHistoryView.hpp"
 #include "VideoHistoryView.hpp"
+#include "DragDropUtils.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <iostream>
@@ -10,12 +11,13 @@ namespace GUI {
 
     BaseMediaView::BaseMediaView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseView(mgr, vm), selectedEntityID(0), index(0), zoom(1.0f), offsetX(0.0f), offsetY(0.0f),
-        lastEntityCount(0), historyViewVisible(false), historyWorkspaceID(0) {
+        lastEntityCount(0), historyViewVisible(false), historyWorkspaceID(0),
+        contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(mgr)), isDragging(false) {
     }
 
     BaseMediaView::~BaseMediaView() {
         if (historyViewVisible && historyWorkspaceID != 0) {
-            viewManager.DestroyView(historyWorkspaceID);
+            GetViewManager().DestroyView(historyWorkspaceID);
         }
     }
 
@@ -91,10 +93,10 @@ namespace GUI {
         if (show && !historyViewVisible) {
             std::string viewType = GetHistoryViewTypeName();
             if (viewType.empty()) return;
-            historyWorkspaceID = viewManager.CreateViewByName(viewType, m_entityManager);
+            historyWorkspaceID = GetViewManager().CreateViewByName(viewType, m_entityManager);
             if (historyWorkspaceID != 0) {
                 historyViewVisible = true;
-                auto* historyView = viewManager.GetView<BaseView>(historyWorkspaceID);
+                BaseView* historyView = &GetViewManager().GetView<BaseView>(historyWorkspaceID);
                 if (historyView) {
                     if (auto* imgHist = dynamic_cast<ImageHistoryView*>(historyView)) {
                         imgHist->SetParentViewWorkspace(GetID());
@@ -106,7 +108,7 @@ namespace GUI {
             }
         }
         else if (!show && historyViewVisible && historyWorkspaceID != 0) {
-            viewManager.DestroyView(historyWorkspaceID);
+            GetViewManager().DestroyView(historyWorkspaceID);
             historyWorkspaceID = 0;
             historyViewVisible = false;
         }
@@ -116,23 +118,47 @@ namespace GUI {
         return historyViewVisible;
     }
 
-    void BaseMediaView::RenderImageContextMenu(ECS::EntityID entityID) {
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-            ImGui::OpenPopup(("ContextMenu_" + std::to_string(entityID)).c_str());
+    void BaseMediaView::RenderMediaContextMenu(ECS::EntityID entityID) {
+        if (entityID != 0 && m_entityManager.IsEntityValid(entityID)) {
+            contextMenuUtils->RenderEntityContextMenu(entityID);
         }
-        if (ImGui::BeginPopup(("ContextMenu_" + std::to_string(entityID)).c_str())) {
-            if (ImGui::MenuItem("Copy Entity")) {
-                GUI::Clipboard::CopyEntity(m_entityManager, entityID);
-            }
-            if (ImGui::MenuItem("Copy Component")) {
-                GUI::Clipboard::CopyComponent(m_entityManager, entityID, "ImageComponent");
-            }
-            if (ImGui::MenuItem("Copy Image Metadata")) {
-                const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
-                GUI::Clipboard::CopyImageMetadata(m_entityManager, imageComp.filePath);
-            }
-            ImGui::EndPopup();
+    }
+
+    void BaseMediaView::RenderMediaContextMenuForPath(const std::string& filePath) {
+        std::string ext = std::filesystem::path(filePath).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        if (GUI::DragDrop::IsImageFile(filePath)) {
+            contextMenuUtils->RenderImageContextMenuWithPath(filePath);
         }
+        else if (GUI::DragDrop::IsVideoFile(filePath)) {
+            contextMenuUtils->RenderVideoContextMenuWithPath(filePath);
+        }
+    }
+
+    void BaseMediaView::HandleFileDropTarget() {
+        std::vector<std::string> files;
+        if (GUI::DragDrop::AcceptFileDrop(files)) {
+            if (!files.empty()) {
+                LoadMedia(files);
+            }
+        }
+    }
+
+    void BaseMediaView::HandleEntityDropTarget() {
+        ECS::EntityID droppedEntity;
+        if (GUI::DragDrop::AcceptEntityDrop(droppedEntity)) {
+            if (m_entityManager.IsEntityValid(droppedEntity)) {
+                if (m_entityManager.HasComponent<ECS::ImageComponent>(droppedEntity) ||
+                    m_entityManager.HasComponent<ECS::VideoComponent>(droppedEntity)) {
+                    SetSelectedEntity(droppedEntity);
+                }
+            }
+        }
+    }
+
+    bool BaseMediaView::IsAltKeyDown() const {
+        ImGuiIO& io = ImGui::GetIO();
+        return io.KeyAlt;
     }
 
 } // namespace GUI

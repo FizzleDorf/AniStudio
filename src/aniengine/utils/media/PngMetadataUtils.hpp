@@ -291,9 +291,8 @@ namespace Utils
 
             std::string jsonStr = metadata.dump();
 
-            // --- FIX 1: Use gzip compression ---
             std::vector<unsigned char> compressed;
-            uLongf compressedLen = compressBound(jsonStr.size()) + 18; // Extra for gzip header/trailer
+            uLongf compressedLen = compressBound(static_cast<uLong>(jsonStr.size())) + 18; // Extra for gzip header/trailer
             compressed.resize(compressedLen);
 
             z_stream strm;
@@ -306,9 +305,9 @@ namespace Utils
                 if (needConversion) free(rgbaData);
                 return false;
             }
-            strm.avail_in = jsonStr.size();
+            strm.avail_in = static_cast<uInt>(jsonStr.size());
             strm.next_in = (Bytef*)jsonStr.data();
-            strm.avail_out = compressedLen;
+            strm.avail_out = static_cast<uInt>(compressedLen);
             strm.next_out = compressed.data();
             int ret = deflate(&strm, Z_FINISH);
             if (ret != Z_STREAM_END) {
@@ -323,7 +322,6 @@ namespace Utils
 
             const std::string signature = "stealth_pngcomp";
 
-            // --- FIX 2: Store length as number of BITS (not bytes) ---
             // Convert compressed data to binary string (8 bits per byte)
             std::string binaryParam;
             binaryParam.reserve(compressed.size() * 8);
@@ -333,7 +331,7 @@ namespace Utils
                 }
             }
             // Length of the binary parameter string in bits
-            const uint32_t payloadLenBits = binaryParam.size();
+            const uint32_t payloadLenBits = static_cast<uint32_t>(binaryParam.size());
 
             // Build full payload: signature + length (32 bits) + data
             std::vector<unsigned char> fullPayload;
@@ -376,14 +374,10 @@ namespace Utils
             const int row_stride = width * 4;
             size_t bitOffset = 0;
 
-            // --- FIX 3: Column-major order (x outer, y inner) ---
-            // This matches the Python implementation: for x in range(width): for y in range(height)
             for (int x = 0; x < width; ++x) {
                 for (int y = 0; y < height; ++y) {
                     unsigned char* pixelAlpha = rgbaData + y * row_stride + x * 4 + 3;
                     // Write 8 bits per pixel (one per channel bit, but we only use alpha LSB)
-                    // Actually the Python code writes one bit per pixel, not 8.
-                    // So we write one bit per pixel.
                     if (bitOffset < totalBits) {
                         if (fullPayload[bitOffset]) {
                             *pixelAlpha |= 1;
@@ -482,7 +476,7 @@ namespace Utils
             png_write_info(pngWrite, infoWrite);
 
             std::vector<png_byte> row(width * 4);
-            for (png_uint_32 y = 0; y < height; y++) {
+            for (int y = 0; y < height; y++) {
                 memcpy(row.data(), rgbaData + y * row_stride, width * 4);
                 png_write_row(pngWrite, row.data());
             }

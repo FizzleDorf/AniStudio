@@ -3,6 +3,7 @@
 
 #include "GUI.h"
 #include "BaseView.hpp"
+#include "ContextMenuUtils.hpp"
 #include <vector>
 #include <string>
 
@@ -33,6 +34,11 @@ namespace GUI {
         virtual void ToggleHistoryView(bool show);
         virtual bool IsHistoryVisible() const;
 
+        void HandleFileDropTarget();
+        void HandleEntityDropTarget();
+
+        bool IsAltKeyDown() const;
+
     protected:
         ECS::EntityID selectedEntityID;
         int index;
@@ -44,12 +50,19 @@ namespace GUI {
         bool historyViewVisible;
         WorkspaceID historyWorkspaceID;
 
+        std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
+
         virtual void OnMediaAdded(ECS::EntityID entity) = 0;
         virtual void OnMediaRemoved(ECS::EntityID entity) = 0;
         virtual void UpdateSelectionAfterRemoval(ECS::EntityID removedEntity);
 
-        void RenderImageContextMenu(ECS::EntityID entityID);
+        void RenderMediaContextMenu(ECS::EntityID entityID);
+        void RenderMediaContextMenuForPath(const std::string& filePath);
+
         virtual std::string GetHistoryViewTypeName() const = 0;
+
+        bool isDragging;
+        ImVec2 dragStartPos;
     };
 
 } // namespace GUI
