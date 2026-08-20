@@ -37,6 +37,9 @@ namespace Utils {
             const std::string& outputPath,
             int fps = 24,
             const nlohmann::json& metadata = nlohmann::json());
+
+        static bool HasExifMetadata(const std::string& filePath);
+        static bool HasLSBMetadata(const std::string& filePath);
     };
 
 } // namespace Utils

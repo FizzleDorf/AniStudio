@@ -50,7 +50,6 @@ namespace ANI {
         }
         std::cout << "[Core] StudioCore basic initialization complete" << '\n';
 
-        // Pass the GLFW window pointer to StudioCore
         m_studioCore.SetWindowHandle(m_window);
 
         m_studioCore.SetImGuiContext(GetImGuiContext());
@@ -90,7 +89,7 @@ namespace ANI {
         HWND testHwnd = glfwGetWin32Window(m_window);
         std::cout << "[Core] Immediate HWND check: " << testHwnd << '\n';
 #endif
-        
+
         if (!m_window) {
             std::cerr << "[Core] Failed to create GLFW window" << '\n';
             glfwTerminate();
@@ -247,16 +246,6 @@ namespace ANI {
                 return;
             }
 
-#ifdef _WIN32
-            {
-                auto& entityMgr = m_studioCore.GetEntityManager();
-                auto textureSystem = entityMgr.GetSystem<ECS::TextureSystem>();
-                if (textureSystem && textureSystem->HasPendingTextures()) {
-                    textureSystem->CreatePendingTextures();
-                }
-            }
-#endif
-
             glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT);
 
@@ -284,4 +273,4 @@ namespace ANI {
         glfwSwapBuffers(m_window);
     }
 
-} // namespace ANI
+}

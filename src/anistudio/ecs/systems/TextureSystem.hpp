@@ -5,6 +5,7 @@
 #include "ImageComponent.hpp"
 #include "ImageUtils.hpp"
 #include "OpenGLUtils.hpp"
+#include "DragDropUtils.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -88,7 +89,12 @@ namespace ECS {
 
             GLFWwindow* currentContext = glfwGetCurrentContext();
             if (!currentContext) {
-                return;
+                GLFWwindow* window = static_cast<GLFWwindow*>(GUI::DragDrop::GetWindowHandle());
+                if (window) {
+                    glfwMakeContextCurrent(window);
+                    currentContext = window;
+                }
+                if (!currentContext) return;
             }
 
             glGetError();
@@ -206,4 +212,4 @@ namespace ECS {
         }
     };
 
-} // namespace ECS
+}

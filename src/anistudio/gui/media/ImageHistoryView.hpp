@@ -4,6 +4,7 @@
 #include "BaseView.hpp"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"
+#include "ContextMenuUtils.hpp"
 #include <filesystem>
 
 namespace GUI {
@@ -32,12 +33,13 @@ namespace GUI {
         std::vector<ECS::EntityID> imageEntities;
         WorkspaceID parentWorkspaceID;
         ECS::EntityID selectedEntityID;
+        std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
         void RefreshEntities();
         void OnImageAdded(ECS::EntityID entity);
         void OnImageRemoved(ECS::EntityID entity);
         void SelectImage(ECS::EntityID entity);
-        void RenderImageThumbnail(ECS::EntityID entityID, size_t index);
+        void RenderImageThumbnail(ECS::EntityID entityID, size_t index, float thumbnailSize);
         bool HasMetadata(const std::string& filePath);
         std::string GetFileDate(const std::string& filePath);
         std::string FormatDate(const std::filesystem::file_time_type& ftime);

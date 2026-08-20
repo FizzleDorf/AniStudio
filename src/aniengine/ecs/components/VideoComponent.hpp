@@ -40,6 +40,9 @@ namespace ECS {
 
         float frameAccumulator = 0.0f;
 
+        bool hasExifData = false;
+        bool hasLSBData = false;
+
         VideoComponent() {
             compName = "Video";
             compCategory = "Video";

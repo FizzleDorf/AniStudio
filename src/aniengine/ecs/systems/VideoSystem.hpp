@@ -49,8 +49,7 @@ namespace ECS {
         }
 
         void Update(float deltaT) override {
-            // This is no longer used for playback (we drive it manually from VideoView)
-            // but we keep it for potential future use.
+            // Not used for playback
         }
 
         void SetVideo(EntityID entity, const std::string& filePath) {
@@ -116,7 +115,6 @@ namespace ECS {
             return false;
         }
 
-        // Public method to manually advance one frame (used by VideoView)
         bool AdvanceOneFrame(VideoComponent& videoComp) {
             if (!videoComp.fmtCtx || videoComp.videoStreamIndex < 0)
                 return false;
@@ -129,6 +127,28 @@ namespace ECS {
                 return true;
             }
             return false;
+        }
+
+        void UpdateMetadataFlags(EntityID entity) {
+            if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<VideoComponent>(entity))
+                return;
+            auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
+            if (videoComp.filePath.empty())
+                return;
+            try {
+                videoComp.hasExifData = Utils::VideoUtils::HasExifMetadata(videoComp.filePath);
+                videoComp.hasLSBData = Utils::VideoUtils::HasLSBMetadata(videoComp.filePath);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[VideoSystem] Failed to read metadata for " << videoComp.filePath << ": " << e.what() << std::endl;
+                videoComp.hasExifData = false;
+                videoComp.hasLSBData = false;
+            }
+            catch (...) {
+                std::cerr << "[VideoSystem] Unknown error reading metadata for " << videoComp.filePath << std::endl;
+                videoComp.hasExifData = false;
+                videoComp.hasLSBData = false;
+            }
         }
 
     private:

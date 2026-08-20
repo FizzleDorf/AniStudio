@@ -143,6 +143,7 @@ namespace GUI {
                 RenderSelected();
             }
             ImGui::EndChild();
+            HandleClipboardPaste();
         }
         catch (const std::exception& e) {
             std::cerr << "[VideoView] Exception in Render: " << e.what() << std::endl;
@@ -300,25 +301,31 @@ namespace GUI {
     }
 
     void VideoView::RenderSelected() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+        // Safety checks
+        if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             ImGui::Text("No video selected or entity invalid.");
             HandleFileDropTarget();
             HandleEntityDropTarget();
             return;
         }
+
         try {
             const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-            if (videoComp.currentTexture == 0 || videoComp.width <= 0 || videoComp.height <= 0) {
+
+            GLuint texID = videoComp.currentTexture;
+            if (texID == 0 || !glIsTexture(texID) || videoComp.width <= 0 || videoComp.height <= 0) {
                 ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
-                    videoComp.currentTexture, videoComp.width, videoComp.height);
+                    texID, videoComp.width, videoComp.height);
                 HandleFileDropTarget();
                 HandleEntityDropTarget();
                 return;
             }
+
             if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
                 SetZoom(zoom + ImGui::GetIO().MouseWheel * 0.1f);
             }
+
             ImVec2 imageSize = ImVec2(videoComp.width * zoom, videoComp.height * zoom);
             ImVec2 windowSize = ImGui::GetWindowSize();
             ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
@@ -333,7 +340,7 @@ namespace GUI {
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
 
-            ImGui::Image((ImTextureID)(intptr_t)videoComp.currentTexture, imageSize, ImVec2(0, 0), ImVec2(1, 1));
+            ImGui::Image((ImTextureID)(intptr_t)texID, imageSize, ImVec2(0, 0), ImVec2(1, 1));
 
             // Internal drag-drop (within the app)
             if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
@@ -342,7 +349,7 @@ namespace GUI {
                     payload["entityID"] = selectedEntityID;
                     ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
                         payload.dump().c_str(), payload.dump().size() + 1);
-                    ImGui::Image((ImTextureID)(intptr_t)videoComp.currentTexture, ImVec2(64, 64));
+                    ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(64, 64));
                     ImGui::Text("%s", videoComp.fileName.c_str());
                     ImGui::EndDragDropSource();
                 }
@@ -436,6 +443,10 @@ namespace GUI {
 
     void VideoView::OnMediaAdded(ECS::EntityID entity) {
         RefreshEntities();
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
+        if (videoSystem) {
+            videoSystem->UpdateMetadataFlags(entity);
+        }
     }
 
     void VideoView::OnMediaRemoved(ECS::EntityID entity) {

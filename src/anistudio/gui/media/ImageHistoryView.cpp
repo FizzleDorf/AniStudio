@@ -14,6 +14,7 @@ namespace GUI {
     ImageHistoryView::ImageHistoryView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseView(mgr, vm), imageSystem(nullptr), parentWorkspaceID(0), selectedEntityID(0) {
         viewName = "ImageHistoryView";
+        contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
     }
 
     void ImageHistoryView::Init() {
@@ -40,7 +41,7 @@ namespace GUI {
         }
 
         float availableWidth = ImGui::GetContentRegionAvail().x;
-        float thumbnailSize = 150.0f;
+        const float thumbnailSize = 150.0f;
         float spacing = 8.0f;
         float itemWidth = thumbnailSize + spacing;
         int columns = std::max(1, static_cast<int>(availableWidth / itemWidth));
@@ -48,7 +49,7 @@ namespace GUI {
         ImGui::Columns(columns, nullptr, false);
 
         for (size_t i = 0; i < imageEntities.size(); ++i) {
-            RenderImageThumbnail(imageEntities[i], i);
+            RenderImageThumbnail(imageEntities[i], i, thumbnailSize);
             ImGui::NextColumn();
         }
 
@@ -63,7 +64,7 @@ namespace GUI {
         }
     }
 
-    void ImageHistoryView::RenderImageThumbnail(ECS::EntityID entityID, size_t index) {
+    void ImageHistoryView::RenderImageThumbnail(ECS::EntityID entityID, size_t index, float thumbnailSize) {
         if (!m_entityManager.IsEntityValid(entityID) || !m_entityManager.HasComponent<ECS::ImageComponent>(entityID))
             return;
 
@@ -71,23 +72,34 @@ namespace GUI {
 
         ImGui::BeginGroup();
 
-        ImVec2 thumbSize(128.0f, 128.0f);
+        ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+        ImVec2 itemSize(thumbnailSize + 10, thumbnailSize + 50);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRect(cursorPos, cursorPos + itemSize, IM_COL32(60, 60, 60, 255), 2.0f);
+        if (entityID == selectedEntityID) {
+            drawList->AddRect(cursorPos + ImVec2(1, 1), cursorPos + itemSize - ImVec2(1, 1), IM_COL32(255, 255, 0, 180), 2.0f, 0, 2.0f);
+        }
+
+        ImVec2 thumbSize(thumbnailSize - 10, thumbnailSize - 10);
         if (imageComp.textureID != 0) {
             float aspect = (imageComp.height > 0) ? (float)imageComp.width / imageComp.height : 1.0f;
             ImVec2 size = thumbSize;
             if (aspect > 1.0f) size.y = thumbSize.x / aspect;
             else size.x = thumbSize.y * aspect;
+            ImVec2 imagePos = ImGui::GetCursorPos() + ImVec2((thumbSize.x - size.x) * 0.5f, 0);
+            ImGui::SetCursorPos(imagePos);
             if (ImGui::ImageButton(("##img" + std::to_string(index)).c_str(),
-                (ImTextureID)(intptr_t)imageComp.textureID, size)) {
+                (ImTextureID)(intptr_t)imageComp.textureID, size, ImVec2(0, 0), ImVec2(1, 1))) {
                 SelectImage(entityID);
             }
         }
         else {
-            ImGui::Button(("Select##" + std::to_string(index)).c_str(), thumbSize);
-            if (ImGui::IsItemClicked()) SelectImage(entityID);
+            if (ImGui::ImageButton(("##imgplaceholder" + std::to_string(index)).c_str(),
+                (ImTextureID)(intptr_t)0, thumbSize, ImVec2(0, 0), ImVec2(1, 1))) {
+                SelectImage(entityID);
+            }
         }
 
-        // Internal drag-drop (within the app)
         if (ImGui::BeginDragDropSource()) {
             nlohmann::json payload;
             payload["entityID"] = entityID;
@@ -100,14 +112,12 @@ namespace GUI {
             ImGui::EndDragDropSource();
         }
 
-        // Full context menu matching the base view
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
             ImGui::OpenPopup(("ImageContextMenu##" + std::to_string(entityID)).c_str());
         }
 
         if (ImGui::BeginPopup(("ImageContextMenu##" + std::to_string(entityID)).c_str())) {
-            Utils::ContextMenuUtils menuUtils(m_entityManager);
-            menuUtils.RenderEntityContextMenu(entityID);
+            contextMenuUtils->RenderEntityContextMenu(entityID);
             ImGui::EndPopup();
         }
 
@@ -121,15 +131,11 @@ namespace GUI {
         std::string date = GetFileDate(imageComp.filePath);
         if (!date.empty()) ImGui::Text("%s", date.c_str());
 
-        bool hasMeta = HasMetadata(imageComp.filePath);
-        ImGui::TextColored(hasMeta ? ImVec4(0, 1, 0, 1) : ImVec4(0.6f, 0.6f, 0.6f, 1),
-            hasMeta ? "Metadata: Yes" : "Metadata: No");
-
-        if (entityID == selectedEntityID) {
-            ImVec2 min = ImGui::GetItemRectMin();
-            ImVec2 max = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRect(min, max, IM_COL32(255, 255, 0, 128), 2.0f);
-        }
+        ImVec4 green = ImVec4(0, 1, 0, 1);
+        ImVec4 gray = ImVec4(0.5f, 0.5f, 0.5f, 1);
+        ImGui::TextColored(imageComp.hasExifData ? green : gray, "EXIF");
+        ImGui::SameLine();
+        ImGui::TextColored(imageComp.hasLSBData ? green : gray, "LSB");
 
         ImGui::EndGroup();
     }
@@ -157,7 +163,7 @@ namespace GUI {
         std::time_t tt = std::chrono::system_clock::to_time_t(sys_time);
         std::tm tm = *std::localtime(&tt);
         char buffer[32];
-        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M", &tm);
+        strftime(buffer, sizeof(buffer), "%Y/%m/%d/%H:%M", &tm);
         return std::string(buffer);
     }
 
@@ -171,6 +177,9 @@ namespace GUI {
 
     void ImageHistoryView::OnImageAdded(ECS::EntityID entity) {
         RefreshEntities();
+        if (imageSystem) {
+            imageSystem->UpdateMetadataFlags(entity);
+        }
     }
 
     void ImageHistoryView::OnImageRemoved(ECS::EntityID entity) {

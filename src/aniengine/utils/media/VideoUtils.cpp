@@ -2,6 +2,7 @@
 #include <iostream>
 #include <filesystem>
 #include "ImageUtils.hpp"
+#include "VideoMetadataUtils.hpp"
 
 #ifdef USE_WEBP
 #include <webp/encode.h>
@@ -421,6 +422,32 @@ namespace Utils {
         avformat_free_context(fmtCtx);
 
         return true;
+    }
+
+    bool VideoUtils::HasExifMetadata(const std::string& filePath) {
+        nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
+        if (meta.is_null() || meta.empty()) return false;
+        if (meta.contains("components") && meta["components"].is_array()) {
+            for (const auto& comp : meta["components"]) {
+                if (comp.is_object() && !comp.empty()) return true;
+            }
+        }
+        for (auto it = meta.begin(); it != meta.end(); ++it) {
+            if (it.value().is_object() && !it.value().empty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool VideoUtils::HasLSBMetadata(const std::string& filePath) {
+        nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
+        if (meta.is_null() || meta.empty()) return false;
+        if (meta.contains("LSB") || meta.contains("Stealth") || meta.contains("Hidden") ||
+            meta.contains("steganography") || meta.contains("lsb")) {
+            return true;
+        }
+        return false;
     }
 
 } // namespace Utils

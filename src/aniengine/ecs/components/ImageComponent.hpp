@@ -16,6 +16,8 @@ namespace ECS {
         int height = 0;
         int channels = 0;
         GLuint textureID = 0;
+        bool hasExifData = false;
+        bool hasLSBData = false;
 
         ImageComponent() {
             compName = "Image";

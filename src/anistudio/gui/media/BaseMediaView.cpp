@@ -156,6 +156,37 @@ namespace GUI {
         }
     }
 
+    void BaseMediaView::HandleClipboardPaste() {
+        if (!ImGui::IsWindowFocused()) return;
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_V)) {
+            std::vector<std::string> filePaths;
+            if (Clipboard::PasteMediaFromClipboard(filePaths)) {
+                if (!filePaths.empty()) {
+                    LoadMedia(filePaths);
+                    return;
+                }
+            }
+            if (Clipboard::HasEntity()) {
+                ECS::EntityID entity = Clipboard::GetCopiedEntity();
+                if (entity != 0 && m_entityManager.IsEntityValid(entity)) {
+                    if (m_entityManager.HasComponent<ECS::ImageComponent>(entity)) {
+                        auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(entity);
+                        if (!comp.filePath.empty()) {
+                            LoadMedia({ comp.filePath });
+                        }
+                    }
+                    else if (m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
+                        auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
+                        if (!comp.filePath.empty()) {
+                            LoadMedia({ comp.filePath });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     bool BaseMediaView::IsAltKeyDown() const {
         ImGuiIO& io = ImGui::GetIO();
         return io.KeyAlt;

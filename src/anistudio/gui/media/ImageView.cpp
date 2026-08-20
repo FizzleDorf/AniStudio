@@ -80,6 +80,7 @@ namespace GUI {
                 RenderSelected();
             }
             ImGui::EndChild();
+            HandleClipboardPaste();
         }
         ImGui::End();
         if (!windowOpen) {
@@ -203,24 +204,31 @@ namespace GUI {
     }
 
     void ImageView::RenderSelected() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+        // Safety checks
+        if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
             ImGui::Text("No image selected or entity invalid.");
             HandleFileDropTarget();
             HandleEntityDropTarget();
             return;
         }
+
         try {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
-            if (imageComp.textureID == 0 || imageComp.width <= 0 || imageComp.height <= 0) {
-                ImGui::Text("Image loading... (Texture ID: %u, Size: %dx%d)", imageComp.textureID, imageComp.width, imageComp.height);
+
+            // Check if texture is ready and valid
+            GLuint texID = imageComp.textureID;
+            if (texID == 0 || !glIsTexture(texID) || imageComp.width <= 0 || imageComp.height <= 0) {
+                ImGui::Text("Image loading... (Texture ID: %u, Size: %dx%d)", texID, imageComp.width, imageComp.height);
                 HandleFileDropTarget();
                 HandleEntityDropTarget();
                 return;
             }
+
             if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
                 SetZoom(zoom + ImGui::GetIO().MouseWheel * 0.1f);
             }
+
             ImVec2 imageSize = ImVec2(imageComp.width * zoom, imageComp.height * zoom);
             ImVec2 windowSize = ImGui::GetWindowSize();
             ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
@@ -235,7 +243,8 @@ namespace GUI {
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
 
-            ImGui::Image((ImTextureID)(intptr_t)imageComp.textureID, imageSize);
+            // Use the valid texture
+            ImGui::Image((ImTextureID)(intptr_t)texID, imageSize);
 
             // Internal drag-drop (within the app)
             if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
@@ -244,7 +253,7 @@ namespace GUI {
                     payload["entityID"] = selectedEntityID;
                     ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
                         payload.dump().c_str(), payload.dump().size() + 1);
-                    ImGui::Image((ImTextureID)(intptr_t)imageComp.textureID, ImVec2(64, 64));
+                    ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(64, 64));
                     ImGui::Text("%s", imageComp.fileName.c_str());
                     ImGui::EndDragDropSource();
                 }
@@ -351,6 +360,9 @@ namespace GUI {
 
     void ImageView::OnMediaAdded(ECS::EntityID entity) {
         RefreshEntities();
+        if (imageSystem) {
+            imageSystem->UpdateMetadataFlags(entity);
+        }
         if (!mediaEntities.empty() && autoSwitchOnLoad) {
             auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
             if (it != mediaEntities.end()) {

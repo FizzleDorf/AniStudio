@@ -221,21 +221,26 @@ namespace Utils {
             nlohmann::json result;
             bool triedReader = false;
 
-            if (ext == ".png") {
-                result = PngMetadata::ReadMetadataFromPNG(imagePath);
-                triedReader = true;
+            try {
+                if (ext == ".png") {
+                    result = PngMetadata::ReadMetadataFromPNG(imagePath);
+                    triedReader = true;
+                }
+                else if (ext == ".jpg" || ext == ".jpeg") {
+                    result = JpegMetadata::ReadMetadataFromJPEG(imagePath);
+                    triedReader = true;
+                }
+                else if (ext == ".webp") {
+                    result = WebPMetadata::ReadMetadataFromWebP(imagePath);
+                    triedReader = true;
+                }
+                else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv") {
+                    result = VideoMetadataUtils::ReadMetadataFromVideo(imagePath);
+                    triedReader = true;
+                }
             }
-            else if (ext == ".jpg" || ext == ".jpeg") {
-                result = JpegMetadata::ReadMetadataFromJPEG(imagePath);
-                triedReader = true;
-            }
-            else if (ext == ".webp") {
-                result = WebPMetadata::ReadMetadataFromWebP(imagePath);
-                triedReader = true;
-            }
-            else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv") {
-                result = VideoMetadataUtils::ReadMetadataFromVideo(imagePath);
-                triedReader = true;
+            catch (...) {
+                result = nlohmann::json();
             }
 
             if (!triedReader || result.empty()) {
@@ -247,6 +252,44 @@ namespace Utils {
             }
 
             return result;
+        }
+
+        static bool HasExifMetadata(const std::string& filePath) {
+            nlohmann::json meta;
+            try {
+                meta = ReadMetadataFromImage(filePath);
+            }
+            catch (...) {
+                return false;
+            }
+            if (meta.is_null() || meta.empty()) return false;
+            if (meta.contains("components") && meta["components"].is_array()) {
+                for (const auto& comp : meta["components"]) {
+                    if (comp.is_object() && !comp.empty()) return true;
+                }
+            }
+            for (auto it = meta.begin(); it != meta.end(); ++it) {
+                if (it.value().is_object() && !it.value().empty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static bool HasLSBMetadata(const std::string& filePath) {
+            nlohmann::json meta;
+            try {
+                meta = ReadMetadataFromImage(filePath);
+            }
+            catch (...) {
+                return false;
+            }
+            if (meta.is_null() || meta.empty()) return false;
+            if (meta.contains("LSB") || meta.contains("Stealth") || meta.contains("Hidden") ||
+                meta.contains("steganography") || meta.contains("lsb")) {
+                return true;
+            }
+            return false;
         }
 
         static std::string CreateUniqueFilenameIncremental(const std::string& baseName, const std::string& directory, const std::string& extension) {

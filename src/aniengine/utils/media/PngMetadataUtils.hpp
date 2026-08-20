@@ -264,45 +264,55 @@ namespace Utils
         static bool WriteStealthPNG(const std::string& imagePath, const nlohmann::json& metadata)
         {
             int width, height, channels;
-            unsigned char* data = stbi_load(imagePath.c_str(), &width, &height, &channels, 0);
-            if (!data) {
+            unsigned char* originalData = stbi_load(imagePath.c_str(), &width, &height, &channels, 0);
+            if (!originalData) {
                 std::cerr << "Failed to load image for stealth metadata: " << imagePath << std::endl;
                 return false;
             }
 
-            bool needConversion = (channels != 4);
-            unsigned char* rgbaData = data;
-            if (needConversion) {
-                rgbaData = (unsigned char*)malloc(width * height * 4);
-                if (!rgbaData) {
-                    stbi_image_free(data);
+            // Create a COPY of the original data so we don't corrupt it
+            size_t totalBytes = width * height * channels;
+            unsigned char* rgbaData = (unsigned char*)malloc(totalBytes);
+            if (!rgbaData) {
+                stbi_image_free(originalData);
+                return false;
+            }
+            memcpy(rgbaData, originalData, totalBytes);
+            stbi_image_free(originalData);
+
+            // If we need to convert to RGBA, do it on the copy
+            if (channels != 4) {
+                unsigned char* convertedData = (unsigned char*)malloc(width * height * 4);
+                if (!convertedData) {
+                    free(rgbaData);
                     return false;
                 }
                 for (int i = 0; i < width * height; i++) {
                     int idx = i * channels;
                     int ridx = i * 4;
-                    rgbaData[ridx] = data[idx];
-                    rgbaData[ridx + 1] = (channels > 1) ? data[idx + 1] : data[idx];
-                    rgbaData[ridx + 2] = (channels > 2) ? data[idx + 2] : data[idx];
-                    rgbaData[ridx + 3] = (channels > 3) ? data[idx + 3] : 255;
+                    convertedData[ridx] = rgbaData[idx];
+                    convertedData[ridx + 1] = (channels > 1) ? rgbaData[idx + 1] : rgbaData[idx];
+                    convertedData[ridx + 2] = (channels > 2) ? rgbaData[idx + 2] : rgbaData[idx];
+                    convertedData[ridx + 3] = (channels > 3) ? rgbaData[idx + 3] : 255;
                 }
-                stbi_image_free(data);
+                free(rgbaData);
+                rgbaData = convertedData;
+                channels = 4;
             }
 
             std::string jsonStr = metadata.dump();
 
             std::vector<unsigned char> compressed;
-            uLongf compressedLen = compressBound(static_cast<uLong>(jsonStr.size())) + 18; // Extra for gzip header/trailer
+            uLongf compressedLen = compressBound(static_cast<uLong>(jsonStr.size())) + 18;
             compressed.resize(compressedLen);
 
             z_stream strm;
             strm.zalloc = Z_NULL;
             strm.zfree = Z_NULL;
             strm.opaque = Z_NULL;
-            // windowBits = 16 + MAX_WBITS = 31 => gzip format
             if (deflateInit2(&strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 16 + 15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
                 std::cerr << "Failed to initialize gzip compression" << std::endl;
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
             strm.avail_in = static_cast<uInt>(jsonStr.size());
@@ -313,7 +323,7 @@ namespace Utils
             if (ret != Z_STREAM_END) {
                 std::cerr << "Gzip compression failed: " << ret << std::endl;
                 deflateEnd(&strm);
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
             compressedLen = strm.total_out;
@@ -322,7 +332,6 @@ namespace Utils
 
             const std::string signature = "stealth_pngcomp";
 
-            // Convert compressed data to binary string (8 bits per byte)
             std::string binaryParam;
             binaryParam.reserve(compressed.size() * 8);
             for (unsigned char byte : compressed) {
@@ -330,28 +339,21 @@ namespace Utils
                     binaryParam += ((byte >> bit) & 1) ? '1' : '0';
                 }
             }
-            // Length of the binary parameter string in bits
             const uint32_t payloadLenBits = static_cast<uint32_t>(binaryParam.size());
 
-            // Build full payload: signature + length (32 bits) + data
             std::vector<unsigned char> fullPayload;
-            // Reserve enough space for signature bits + 32 bits + data bits
-            // Each bit will be stored as a byte (0 or 1) in the alpha channel
             fullPayload.reserve(signature.size() * 8 + 32 + payloadLenBits);
 
-            // Add signature bits (each character as 0 or 1)
             for (char c : signature) {
                 for (int bit = 7; bit >= 0; --bit) {
                     fullPayload.push_back((c >> bit) & 1);
                 }
             }
 
-            // Add length bits (32 bits, big-endian)
             for (int bit = 31; bit >= 0; --bit) {
                 fullPayload.push_back((payloadLenBits >> bit) & 1);
             }
 
-            // Add data bits
             for (char c : binaryParam) {
                 fullPayload.push_back(c == '1' ? 1 : 0);
             }
@@ -360,16 +362,9 @@ namespace Utils
             size_t maxBits = width * height * 8;
             if (totalBits > maxBits) {
                 std::cerr << "Metadata too large to embed stealthily" << std::endl;
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
-
-            // DEBUG: verify first 16 bytes of payload (as bytes)
-            std::cout << "[DEBUG] fullPayload first 16 bytes (hex): ";
-            for (size_t i = 0; i < 16 && i < fullPayload.size(); ++i) {
-                std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)fullPayload[i] << " ";
-            }
-            std::cout << std::dec << std::endl;
 
             const int row_stride = width * 4;
             size_t bitOffset = 0;
@@ -377,7 +372,6 @@ namespace Utils
             for (int x = 0; x < width; ++x) {
                 for (int y = 0; y < height; ++y) {
                     unsigned char* pixelAlpha = rgbaData + y * row_stride + x * 4 + 3;
-                    // Write 8 bits per pixel (one per channel bit, but we only use alpha LSB)
                     if (bitOffset < totalBits) {
                         if (fullPayload[bitOffset]) {
                             *pixelAlpha |= 1;
@@ -392,30 +386,11 @@ namespace Utils
                 if (bitOffset >= totalBits) break;
             }
 
-            // DEBUG: read back first 16 bytes to confirm embedding
-            std::vector<unsigned char> readback(16, 0);
-            size_t bitPos = 0;
-            for (int x = 0; x < width && bitPos < 128; ++x) {
-                for (int y = 0; y < height && bitPos < 128; ++y) {
-                    unsigned char alpha = rgbaData[y * row_stride + x * 4 + 3];
-                    if (alpha & 1) {
-                        readback[bitPos / 8] |= (1 << (7 - (bitPos % 8)));
-                    }
-                    bitPos++;
-                }
-            }
-            std::cout << "[DEBUG] First 16 bytes read from alpha after embedding: ";
-            for (int i = 0; i < 16; ++i) {
-                std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)readback[i] << " ";
-            }
-            std::cout << std::dec << std::endl;
-
-            // --- Write the PNG file (unchanged) ---
             std::string tempFile = imagePath + ".tmp";
             FILE* out = fopen(tempFile.c_str(), "wb");
             if (!out) {
                 std::cerr << "Failed to create temporary file" << std::endl;
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
 
@@ -423,7 +398,7 @@ namespace Utils
             if (!pngWrite) {
                 std::cerr << "Failed to create PNG write struct" << std::endl;
                 fclose(out);
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
 
@@ -432,7 +407,7 @@ namespace Utils
                 std::cerr << "Failed to create PNG info struct" << std::endl;
                 png_destroy_write_struct(&pngWrite, nullptr);
                 fclose(out);
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
 
@@ -440,7 +415,7 @@ namespace Utils
                 std::cerr << "Error during PNG write" << std::endl;
                 png_destroy_write_struct(&pngWrite, &infoWrite);
                 fclose(out);
-                if (needConversion) free(rgbaData);
+                free(rgbaData);
                 return false;
             }
 
@@ -448,7 +423,6 @@ namespace Utils
             png_set_IHDR(pngWrite, infoWrite, width, height, 8, PNG_COLOR_TYPE_RGBA,
                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
 
-            // Add standard text chunks (for compatibility)
             std::string metadataStr = metadata.dump();
             std::vector<png_text> texts;
 
@@ -484,8 +458,7 @@ namespace Utils
             png_write_end(pngWrite, infoWrite);
             png_destroy_write_struct(&pngWrite, &infoWrite);
             fclose(out);
-
-            if (needConversion) free(rgbaData);
+            free(rgbaData);
 
             try {
                 std::filesystem::path originalPath(imagePath);

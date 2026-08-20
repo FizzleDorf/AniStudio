@@ -14,6 +14,7 @@ namespace GUI {
     VideoHistoryView::VideoHistoryView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseView(mgr, vm), videoSystem(nullptr), parentWorkspaceID(0), selectedEntityID(0) {
         viewName = "VideoHistoryView";
+        contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
     }
 
     void VideoHistoryView::Init() {
@@ -40,7 +41,7 @@ namespace GUI {
         }
 
         float availableWidth = ImGui::GetContentRegionAvail().x;
-        float thumbnailSize = 150.0f;
+        const float thumbnailSize = 150.0f;
         float spacing = 8.0f;
         float itemWidth = thumbnailSize + spacing;
         int columns = std::max(1, static_cast<int>(availableWidth / itemWidth));
@@ -48,7 +49,7 @@ namespace GUI {
         ImGui::Columns(columns, nullptr, false);
 
         for (size_t i = 0; i < videoEntities.size(); ++i) {
-            RenderVideoThumbnail(videoEntities[i], i);
+            RenderVideoThumbnail(videoEntities[i], i, thumbnailSize);
             ImGui::NextColumn();
         }
 
@@ -63,7 +64,7 @@ namespace GUI {
         }
     }
 
-    void VideoHistoryView::RenderVideoThumbnail(ECS::EntityID entityID, size_t index) {
+    void VideoHistoryView::RenderVideoThumbnail(ECS::EntityID entityID, size_t index, float thumbnailSize) {
         if (!m_entityManager.IsEntityValid(entityID) || !m_entityManager.HasComponent<ECS::VideoComponent>(entityID))
             return;
 
@@ -71,20 +72,32 @@ namespace GUI {
 
         ImGui::BeginGroup();
 
-        ImVec2 thumbSize(128.0f, 128.0f);
+        ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+        ImVec2 itemSize(thumbnailSize + 10, thumbnailSize + 50);
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
+        drawList->AddRect(cursorPos, cursorPos + itemSize, IM_COL32(60, 60, 60, 255), 2.0f);
+        if (entityID == selectedEntityID) {
+            drawList->AddRect(cursorPos + ImVec2(1, 1), cursorPos + itemSize - ImVec2(1, 1), IM_COL32(255, 255, 0, 180), 2.0f, 0, 2.0f);
+        }
+
+        ImVec2 thumbSize(thumbnailSize - 10, thumbnailSize - 10);
         if (videoComp.currentTexture != 0) {
             float aspect = (videoComp.height > 0) ? (float)videoComp.width / videoComp.height : 1.0f;
             ImVec2 size = thumbSize;
             if (aspect > 1.0f) size.y = thumbSize.x / aspect;
             else size.x = thumbSize.y * aspect;
+            ImVec2 imagePos = ImGui::GetCursorPos() + ImVec2((thumbSize.x - size.x) * 0.5f, 0);
+            ImGui::SetCursorPos(imagePos);
             if (ImGui::ImageButton(("##vid" + std::to_string(index)).c_str(),
-                (ImTextureID)(intptr_t)videoComp.currentTexture, size)) {
+                (ImTextureID)(intptr_t)videoComp.currentTexture, size, ImVec2(0, 0), ImVec2(1, 1))) {
                 SelectVideo(entityID);
             }
         }
         else {
-            ImGui::Button(("Select##" + std::to_string(index)).c_str(), thumbSize);
-            if (ImGui::IsItemClicked()) SelectVideo(entityID);
+            if (ImGui::ImageButton(("##vidplaceholder" + std::to_string(index)).c_str(),
+                (ImTextureID)(intptr_t)0, thumbSize, ImVec2(0, 0), ImVec2(1, 1))) {
+                SelectVideo(entityID);
+            }
         }
 
         if (ImGui::BeginDragDropSource()) {
@@ -104,8 +117,7 @@ namespace GUI {
         }
 
         if (ImGui::BeginPopup(("VideoContextMenu##" + std::to_string(entityID)).c_str())) {
-            Utils::ContextMenuUtils menuUtils(m_entityManager);
-            menuUtils.RenderEntityContextMenu(entityID);
+            contextMenuUtils->RenderEntityContextMenu(entityID);
             ImGui::EndPopup();
         }
 
@@ -119,12 +131,6 @@ namespace GUI {
 
         std::string date = GetFileDate(videoComp.filePath);
         if (!date.empty()) ImGui::Text("%s", date.c_str());
-
-        if (entityID == selectedEntityID) {
-            ImVec2 min = ImGui::GetItemRectMin();
-            ImVec2 max = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRect(min, max, IM_COL32(255, 255, 0, 128), 2.0f);
-        }
 
         ImGui::EndGroup();
     }
@@ -147,7 +153,7 @@ namespace GUI {
         std::time_t tt = std::chrono::system_clock::to_time_t(sys_time);
         std::tm tm = *std::localtime(&tt);
         char buffer[32];
-        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M", &tm);
+        strftime(buffer, sizeof(buffer), "%Y/%m/%d/%H:%M", &tm);
         return std::string(buffer);
     }
 
@@ -161,6 +167,9 @@ namespace GUI {
 
     void VideoHistoryView::OnVideoAdded(ECS::EntityID entity) {
         RefreshEntities();
+        if (videoSystem) {
+            videoSystem->UpdateMetadataFlags(entity);
+        }
     }
 
     void VideoHistoryView::OnVideoRemoved(ECS::EntityID entity) {

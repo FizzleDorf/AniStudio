@@ -36,13 +36,11 @@ namespace ECS {
             std::future<LoadResult> future;
 
             LoadingTask() = default;
-
             LoadingTask(LoadingTask&& other) noexcept
                 : entityID(other.entityID)
                 , filePath(std::move(other.filePath))
                 , future(std::move(other.future)) {
             }
-
             LoadingTask& operator=(LoadingTask&& other) noexcept {
                 if (this != &other) {
                     entityID = other.entityID;
@@ -51,7 +49,6 @@ namespace ECS {
                 }
                 return *this;
             }
-
             LoadingTask(const LoadingTask&) = delete;
             LoadingTask& operator=(const LoadingTask&) = delete;
         };
@@ -93,16 +90,14 @@ namespace ECS {
         void SetImage(const EntityID entity, const std::string& filePath) {
             if (mgr.HasComponent<ImageComponent>(entity)) {
                 auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-
                 if (mgr.HasComponent<InputImageComponent>(entity)) {
                     auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
                     inputComp.ClearImageData();
                 }
-
                 LoadImageAsync(entity, filePath);
             }
         }
-        
+
         void RemoveImage(const EntityID entity) {
             if (mgr.HasComponent<ImageComponent>(entity)) {
                 if (mgr.HasComponent<InputImageComponent>(entity)) {
@@ -116,7 +111,6 @@ namespace ECS {
                         imageComp.imageData = nullptr;
                     }
                 }
-
                 NotifyImageRemoved(entity);
                 mgr.DestroyEntity(entity);
             }
@@ -130,6 +124,28 @@ namespace ECS {
                 }
             }
             return result;
+        }
+
+        void UpdateMetadataFlags(EntityID entity) {
+            if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<ImageComponent>(entity))
+                return;
+            auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
+            if (imageComp.filePath.empty())
+                return;
+            try {
+                imageComp.hasExifData = Utils::ImageUtils::HasExifMetadata(imageComp.filePath);
+                imageComp.hasLSBData = Utils::ImageUtils::HasLSBMetadata(imageComp.filePath);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[ImageSystem] Failed to read metadata for " << imageComp.filePath << ": " << e.what() << std::endl;
+                imageComp.hasExifData = false;
+                imageComp.hasLSBData = false;
+            }
+            catch (...) {
+                std::cerr << "[ImageSystem] Unknown error reading metadata for " << imageComp.filePath << std::endl;
+                imageComp.hasExifData = false;
+                imageComp.hasLSBData = false;
+            }
         }
 
     private:
@@ -218,7 +234,6 @@ namespace ECS {
                                     inputComp.fileName = result.fileName;
                                     inputComp.filePath = result.filePath;
                                     inputComp.SetImageData(result.data, result.width, result.height, result.channels);
-
                                     std::cout << "[ImageSystem] Updated InputImageComponent for entity "
                                         << result.entityID << std::endl;
                                 }

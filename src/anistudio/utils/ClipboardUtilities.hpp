@@ -22,6 +22,7 @@ namespace GUI {
 		bool HasComponent();
 		bool HasProperty();
 		nlohmann::json GetData();
+		ECS::EntityID GetCopiedEntity();
 
 		bool PasteEntity(ECS::EntityManager& mgr, ECS::EntityID target, std::function<void(ECS::EntityID, const std::string&)> addComponent);
 		bool PasteComponent(ECS::EntityManager& mgr, ECS::EntityID target, const std::string& compName);
@@ -39,6 +40,8 @@ namespace GUI {
 		void RemoveComponent(ECS::EntityManager& mgr, ECS::EntityID target, const std::string& compName);
 		void ResetComponent(ECS::EntityManager& mgr, ECS::EntityID target, const std::string& compName, std::function<void(ECS::EntityID, const std::string&)> addComponent);
 		void ResetAllComponents(ECS::EntityManager& mgr, ECS::EntityID target, const std::vector<std::string>& compNames, std::function<void(ECS::EntityID, const std::string&)> addComponent);
+
+		bool PasteMediaFromClipboard(std::vector<std::string>& outFilePaths);
 
 	}
 }

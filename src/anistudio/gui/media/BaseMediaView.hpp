@@ -36,6 +36,7 @@ namespace GUI {
 
         void HandleFileDropTarget();
         void HandleEntityDropTarget();
+        void HandleClipboardPaste();
 
         bool IsAltKeyDown() const;
 

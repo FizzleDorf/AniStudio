@@ -3,6 +3,7 @@
 #include "BaseView.hpp"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
+#include "ContextMenuUtils.hpp"
 #include <filesystem>
 
 namespace GUI {
@@ -31,12 +32,13 @@ namespace GUI {
         std::vector<ECS::EntityID> videoEntities;
         WorkspaceID parentWorkspaceID;
         ECS::EntityID selectedEntityID;
+        std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
         void RefreshEntities();
         void OnVideoAdded(ECS::EntityID entity);
         void OnVideoRemoved(ECS::EntityID entity);
         void SelectVideo(ECS::EntityID entity);
-        void RenderVideoThumbnail(ECS::EntityID entityID, size_t index);
+        void RenderVideoThumbnail(ECS::EntityID entityID, size_t index, float thumbnailSize);
         std::string GetFileDate(const std::string& filePath);
         std::string FormatDate(const std::filesystem::file_time_type& ftime);
     };

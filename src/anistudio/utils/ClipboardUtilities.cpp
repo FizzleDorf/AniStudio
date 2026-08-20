@@ -3,14 +3,18 @@
 #include "ECS.h"
 #include "BaseComponent.hpp"
 #include "ImageUtils.hpp"
+#include "FileFormats.hpp"
 #include <iostream>
 #include <imgui.h>
+#include <filesystem>
+#include <algorithm>
 
 namespace GUI {
     namespace Clipboard {
 
         static Type s_type = Type::None;
         static nlohmann::json s_data;
+        static ECS::EntityID s_copiedEntity = 0; // store the copied entity ID
 
         static nlohmann::json PropertyVariantToJson(const Engine::PropertyVariant& var) {
             if (auto* p = std::get_if<bool*>(&var)) return **p;
@@ -93,6 +97,7 @@ namespace GUI {
             SetWrappedClipboardData(wrappedData);
             s_type = Type::Entity;
             s_data = entityData;
+            s_copiedEntity = entity; // store the entity ID
         }
 
         void CopyComponent(ECS::EntityManager& mgr, ECS::EntityID entity, const std::string& compName) {
@@ -110,6 +115,7 @@ namespace GUI {
             s_type = Type::Component;
             s_data = compData;
             s_data["__componentName"] = compName;
+            s_copiedEntity = 0; // not an entity copy
         }
 
         void CopyProperty(ECS::EntityManager& mgr, ECS::EntityID entity, const std::string& compName, const std::string& propName) {
@@ -128,6 +134,7 @@ namespace GUI {
             SetWrappedClipboardData(propData);
             s_type = Type::Property;
             s_data = propData;
+            s_copiedEntity = 0;
         }
 
         static nlohmann::json LoadMetadataFromImage(const std::string& imagePath) {
@@ -147,6 +154,7 @@ namespace GUI {
             SetWrappedClipboardData(wrappedData);
             s_type = Type::Entity;
             s_data = metadata;
+            s_copiedEntity = 0;
             std::cout << "[Clipboard] Copied image metadata from: " << imagePath << std::endl;
         }
 
@@ -184,6 +192,7 @@ namespace GUI {
             s_type = Type::Component;
             s_data = componentData;
             s_data["__componentName"] = compName;
+            s_copiedEntity = 0;
             std::cout << "[Clipboard] Copied component " << compName << " from image metadata." << std::endl;
         }
 
@@ -229,6 +238,7 @@ namespace GUI {
             s_data = propData;
             s_data["__componentName"] = compName;
             s_data["__propertyName"] = propName;
+            s_copiedEntity = 0;
             std::cout << "[Clipboard] Copied property " << propName << " from image metadata." << std::endl;
         }
 
@@ -242,6 +252,10 @@ namespace GUI {
 
         nlohmann::json GetData() {
             return s_data;
+        }
+
+        ECS::EntityID GetCopiedEntity() {
+            return s_copiedEntity;
         }
 
         bool PasteEntity(ECS::EntityManager& mgr, ECS::EntityID target, std::function<void(ECS::EntityID, const std::string&)> addComponent) {
@@ -471,6 +485,23 @@ namespace GUI {
 
         void ResetAllComponents(ECS::EntityManager& mgr, ECS::EntityID target, const std::vector<std::string>& compNames, std::function<void(ECS::EntityID, const std::string&)> addComponent) {
             for (const auto& name : compNames) ResetComponent(mgr, target, name, addComponent);
+        }
+
+        bool PasteMediaFromClipboard(std::vector<std::string>& outFilePaths) {
+            const char* clipboardText = ImGui::GetClipboardText();
+            if (!clipboardText) return false;
+            std::string path = clipboardText;
+            path.erase(0, path.find_first_not_of(" \t\n\r"));
+            path.erase(path.find_last_not_of(" \t\n\r") + 1);
+            if (path.empty()) return false;
+            if (!std::filesystem::exists(path)) return false;
+            std::string ext = std::filesystem::path(path).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            const auto& formats = FileFormats::GetAllFormats();
+            auto it = formats.find(ext);
+            if (it == formats.end() || (!it->second.isImage && !it->second.isVideo)) return false;
+            outFilePaths.push_back(path);
+            return true;
         }
 
     }

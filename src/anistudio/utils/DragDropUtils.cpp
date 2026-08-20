@@ -30,7 +30,7 @@ namespace GUI {
         static std::mutex g_dropMutex;
         static bool g_hasNewDrop = false;
         static void* g_windowHandle = nullptr;
-        static bool g_isExternalDragActive = false;
+        static std::atomic<bool> g_isExternalDragActive{ false };
         static std::vector<std::string> g_pendingDropFiles;
 
 #ifdef _WIN32
@@ -38,10 +38,9 @@ namespace GUI {
         class DropTarget : public IDropTarget {
         private:
             LONG m_refCount;
-            bool m_isDragging;
 
         public:
-            DropTarget() : m_refCount(1), m_isDragging(false) {}
+            DropTarget() : m_refCount(1) {}
 
             HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppvObject) override {
                 if (riid == IID_IUnknown || riid == IID_IDropTarget) {
@@ -72,7 +71,6 @@ namespace GUI {
                     return S_OK;
                 }
 
-                m_isDragging = true;
                 g_isExternalDragActive = true;
 
                 ImGuiIO& io = ImGui::GetIO();
@@ -92,8 +90,12 @@ namespace GUI {
             }
 
             HRESULT STDMETHODCALLTYPE DragLeave() override {
-                m_isDragging = false;
                 g_isExternalDragActive = false;
+
+                GLFWwindow* window = static_cast<GLFWwindow*>(g_windowHandle);
+                if (window) {
+                    glfwMakeContextCurrent(window);
+                }
 
                 ImGuiIO& io = ImGui::GetIO();
                 io.MouseDown[0] = false;
@@ -130,8 +132,12 @@ namespace GUI {
                     g_hasNewDrop = true;
                 }
 
-                m_isDragging = false;
                 g_isExternalDragActive = false;
+
+                GLFWwindow* window = static_cast<GLFWwindow*>(g_windowHandle);
+                if (window) {
+                    glfwMakeContextCurrent(window);
+                }
 
                 ImGuiIO& io = ImGui::GetIO();
                 io.MouseDown[0] = false;
@@ -361,26 +367,10 @@ namespace GUI {
 
             SetWindowHandle(window);
 
-#ifdef _WIN32
-            HWND hwnd = glfwGetWin32Window(window);
-            if (hwnd) {
-                InstallDropHandler(hwnd);
-                SetWindowHandle(hwnd);
-            }
-            else {
-                std::cerr << "[DragDrop] ERROR: Failed to get HWND from GLFW window!" << std::endl;
-                glfwSetDropCallback(window, GlfwDropCallback);
-            }
-#else
             glfwSetDropCallback(window, GlfwDropCallback);
-#endif
         }
 
         void ShutdownFileDrop(GLFWwindow* window) {
-#ifdef _WIN32
-            HWND hwnd = window ? glfwGetWin32Window(window) : nullptr;
-            UninstallDropHandler(hwnd);
-#endif
         }
 
         bool PollFileDrop(std::vector<std::string>& outFiles) {
@@ -395,7 +385,7 @@ namespace GUI {
         }
 
         bool IsExternalDragActive() {
-            return g_isExternalDragActive;
+            return g_isExternalDragActive.load();
         }
 
         const std::vector<std::string>& GetPendingDropFiles() {
@@ -453,21 +443,17 @@ namespace GUI {
             return false;
         }
 
-        // ===== FIXED AcceptFileDrop =====
         bool AcceptFileDrop(std::vector<std::string>& outFiles) {
-            // 1. Check for OS file drop (GLFW or OLE)
             if (PollFileDrop(outFiles)) {
                 return true;
             }
 
-            // 2. Internal drag-drop for multiple files
             std::vector<std::string> multiFiles;
             if (AcceptMultipleFileDrop(multiFiles)) {
                 outFiles = multiFiles;
                 return true;
             }
 
-            // 3. Internal drag-drop for single file
             std::string singleFile, fileType;
             if (AcceptFilePathDrop(singleFile, fileType)) {
                 outFiles.push_back(singleFile);
