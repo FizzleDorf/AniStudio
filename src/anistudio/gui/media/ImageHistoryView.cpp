@@ -177,9 +177,6 @@ namespace GUI {
 
     void ImageHistoryView::OnImageAdded(ECS::EntityID entity) {
         RefreshEntities();
-        if (imageSystem) {
-            imageSystem->UpdateMetadataFlags(entity);
-        }
     }
 
     void ImageHistoryView::OnImageRemoved(ECS::EntityID entity) {
@@ -203,4 +200,4 @@ namespace GUI {
         parentWorkspaceID = parentWorkspace;
     }
 
-} // namespace GUI
+}

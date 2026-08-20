@@ -32,7 +32,7 @@ namespace GUI {
         virtual void SetSelectedEntity(ECS::EntityID entity);
 
         virtual void ToggleHistoryView(bool show);
-        virtual bool IsHistoryVisible() const;
+        virtual bool IsHistoryVisible() const = 0;
 
         void HandleFileDropTarget();
         void HandleEntityDropTarget();
@@ -48,7 +48,6 @@ namespace GUI {
         float offsetY;
         size_t lastEntityCount;
         std::vector<ECS::EntityID> mediaEntities;
-        bool historyViewVisible;
         WorkspaceID historyWorkspaceID;
 
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
@@ -66,6 +65,5 @@ namespace GUI {
         ImVec2 dragStartPos;
     };
 
-} // namespace GUI
-
+}
 #endif

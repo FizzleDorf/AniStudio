@@ -8,6 +8,7 @@
 #include "PngMetadataUtils.hpp"
 #include "ClipboardUtilities.hpp"
 #include "DragDropUtils.hpp"
+#include "ImageHistoryView.hpp"
 #include <algorithm>
 
 namespace GUI {
@@ -129,8 +130,9 @@ namespace GUI {
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("View")) {
-                if (ImGui::MenuItem("Show History", nullptr, &historyViewVisible)) {
-                    ToggleHistoryView(historyViewVisible);
+                bool visible = IsHistoryVisible();
+                if (ImGui::MenuItem("Show History", nullptr, &visible)) {
+                    ToggleHistoryView(visible);
                 }
                 ImGui::Separator();
                 if (ImGui::MenuItem("First Image", nullptr, false, !mediaEntities.empty())) {
@@ -204,7 +206,6 @@ namespace GUI {
     }
 
     void ImageView::RenderSelected() {
-        // Safety checks
         if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
             ImGui::Text("No image selected or entity invalid.");
@@ -216,7 +217,6 @@ namespace GUI {
         try {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-            // Check if texture is ready and valid
             GLuint texID = imageComp.textureID;
             if (texID == 0 || !glIsTexture(texID) || imageComp.width <= 0 || imageComp.height <= 0) {
                 ImGui::Text("Image loading... (Texture ID: %u, Size: %dx%d)", texID, imageComp.width, imageComp.height);
@@ -243,10 +243,8 @@ namespace GUI {
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
 
-            // Use the valid texture
             ImGui::Image((ImTextureID)(intptr_t)texID, imageSize);
 
-            // Internal drag-drop (within the app)
             if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     nlohmann::json payload;
@@ -261,7 +259,6 @@ namespace GUI {
 
             RenderMediaContextMenu(selectedEntityID);
 
-            // Pan with Alt+LMB drag
             if (ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && IsAltKeyDown()) {
                 offsetX += ImGui::GetIO().MouseDelta.x;
                 offsetY += ImGui::GetIO().MouseDelta.y;
@@ -360,9 +357,6 @@ namespace GUI {
 
     void ImageView::OnMediaAdded(ECS::EntityID entity) {
         RefreshEntities();
-        if (imageSystem) {
-            imageSystem->UpdateMetadataFlags(entity);
-        }
         if (!mediaEntities.empty() && autoSwitchOnLoad) {
             auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
             if (it != mediaEntities.end()) {
@@ -389,8 +383,12 @@ namespace GUI {
             !m_entityManager.HasComponent<ECS::OutputImageComponent>(entityId);
     }
 
+    bool ImageView::IsHistoryVisible() const {
+        return GetViewManager().HasView<ImageHistoryView>(GetID());
+    }
+
     std::string ImageView::GetHistoryViewTypeName() const {
         return "ImageHistoryView";
     }
 
-} // namespace GUI
+}

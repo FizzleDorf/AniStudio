@@ -825,11 +825,6 @@ namespace ANI {
         try {
             engineCore.Update(deltaTime);
 
-            auto textureSystem = GetEntityManager().GetSystem<ECS::TextureSystem>();
-            if (textureSystem) {
-                textureSystem->CreatePendingTextures();
-            }
-
             if (studioContext->studioPluginManager) {
                 studioContext->studioPluginManager->updatePlugins(deltaTime);
             }

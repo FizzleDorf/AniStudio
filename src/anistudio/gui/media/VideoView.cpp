@@ -4,6 +4,7 @@
 #include "FileDialogFilters.hpp"
 #include "Events.hpp"
 #include "DragDropUtils.hpp"
+#include "VideoHistoryView.hpp"
 #include <algorithm>
 #include <iostream>
 
@@ -125,7 +126,6 @@ namespace GUI {
         }
         ImGui::SetNextWindowSize(ImVec2(1024, 768), ImGuiCond_FirstUseEver);
         std::string windowName = "Video Viewer##" + std::to_string(GetID());
-        bool windowOpen = true;
         if (!ImGui::Begin(windowName.c_str(), &windowOpen)) {
             ImGui::End();
             return;
@@ -136,8 +136,10 @@ namespace GUI {
             RenderControls();
             RenderPlaybackControls();
             ImGui::SameLine();
-            ImGui::Checkbox("Show History", &historyViewVisible);
-            if (ImGui::IsItemClicked()) ToggleHistoryView(historyViewVisible);
+            bool visible = IsHistoryVisible();
+            if (ImGui::Checkbox("Show History", &visible)) {
+                ToggleHistoryView(visible);
+            }
             ImGui::Separator();
             if (ImGui::BeginChild("VideoViewerChild", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) {
                 RenderSelected();
@@ -301,7 +303,6 @@ namespace GUI {
     }
 
     void VideoView::RenderSelected() {
-        // Safety checks
         if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             ImGui::Text("No video selected or entity invalid.");
@@ -342,7 +343,6 @@ namespace GUI {
 
             ImGui::Image((ImTextureID)(intptr_t)texID, imageSize, ImVec2(0, 0), ImVec2(1, 1));
 
-            // Internal drag-drop (within the app)
             if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
                     nlohmann::json payload;
@@ -443,10 +443,6 @@ namespace GUI {
 
     void VideoView::OnMediaAdded(ECS::EntityID entity) {
         RefreshEntities();
-        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-        if (videoSystem) {
-            videoSystem->UpdateMetadataFlags(entity);
-        }
     }
 
     void VideoView::OnMediaRemoved(ECS::EntityID entity) {
@@ -455,8 +451,12 @@ namespace GUI {
         UpdateSelectionAfterRemoval(entity);
     }
 
+    bool VideoView::IsHistoryVisible() const {
+        return GetViewManager().HasView<VideoHistoryView>(GetID());
+    }
+
     std::string VideoView::GetHistoryViewTypeName() const {
         return "VideoHistoryView";
     }
 
-} // namespace GUI
+}

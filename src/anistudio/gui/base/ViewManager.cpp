@@ -37,49 +37,40 @@ namespace GUI {
 
         auto signatureIt = workspaceSignatures.find(m_activeWorkspaceID);
         if (signatureIt == workspaceSignatures.end()) {
-            goto restore_context;
+            if (contextSwitched && previousContext) {
+                ImGui::SetCurrentContext(previousContext);
+            }
+            return;
         }
 
         {
             const auto& signature = *(signatureIt->second);
+            std::vector<GUI::ViewTypeID> viewsToRemove;
 
             for (const auto& viewTypeID : signature) {
-                bool viewRendered = false;
-
                 auto workspaceIt = workspaces.find(m_activeWorkspaceID);
                 if (workspaceIt != workspaces.end()) {
                     auto viewIt = workspaceIt->second.find(viewTypeID);
                     if (viewIt != workspaceIt->second.end() && viewIt->second) {
+                        if (!viewIt->second->windowOpen) {
+                            viewsToRemove.push_back(viewTypeID);
+                            continue;
+                        }
                         try {
                             viewIt->second->Render();
-                            viewRendered = true;
                         }
                         catch (const std::exception& e) {
                             std::cerr << "[ViewManager] Exception rendering view: " << e.what() << std::endl;
                         }
                     }
                 }
+            }
 
-                if (!viewRendered) {
-                    auto arrayIt = workspaceArrays.find(viewTypeID);
-                    if (arrayIt != workspaceArrays.end()) {
-                        auto workspace = arrayIt->second;
-                        auto workspaceData = std::static_pointer_cast<Workspace<BaseView>>(workspace);
-                        if (workspaceData && workspaceData->Contains(m_activeWorkspaceID)) {
-                            try {
-                                auto& view = workspaceData->Get(m_activeWorkspaceID);
-                                view.Render();
-                                viewRendered = true;
-                            }
-                            catch (...) {
-                            }
-                        }
-                    }
-                }
+            for (const auto& viewTypeID : viewsToRemove) {
+                RemoveViewByType(m_activeWorkspaceID, viewTypeID);
             }
         }
 
-    restore_context:
         if (contextSwitched && previousContext) {
             ImGui::SetCurrentContext(previousContext);
         }
@@ -483,13 +474,21 @@ namespace GUI {
         }
 
         for (auto& [workspaceID, viewsMap] : workspaces) {
+            std::vector<ViewTypeID> viewsToRemove;
             for (auto& [viewTypeID, view] : viewsMap) {
+                if (!view->windowOpen) {
+                    viewsToRemove.push_back(viewTypeID);
+                    continue;
+                }
                 try {
                     view->Update(deltaT);
                 }
                 catch (const std::exception& e) {
                     std::cerr << "[ViewManager] Exception updating view: " << e.what() << std::endl;
                 }
+            }
+            for (const auto& viewTypeID : viewsToRemove) {
+                RemoveViewByType(workspaceID, viewTypeID);
             }
         }
 
@@ -499,31 +498,7 @@ namespace GUI {
     }
 
     void ViewManager::RenderWorkspaces() {
-        ImGuiContext* previousContext = nullptr;
-        bool contextSwitched = false;
-
-        if (m_imguiContext) {
-            previousContext = ImGui::GetCurrentContext();
-            if (previousContext != m_imguiContext) {
-                ImGui::SetCurrentContext(static_cast<ImGuiContext*>(m_imguiContext));
-                contextSwitched = true;
-            }
-        }
-
-        for (auto& [workspaceID, viewsMap] : workspaces) {
-            for (auto& [viewTypeID, view] : viewsMap) {
-                try {
-                    view->Render();
-                }
-                catch (const std::exception& e) {
-                    std::cerr << "[ViewManager] Exception rendering view: " << e.what() << std::endl;
-                }
-            }
-        }
-
-        if (contextSwitched && previousContext) {
-            ImGui::SetCurrentContext(previousContext);
-        }
+        Render();
     }
 
     ViewTypeID ViewManager::GetViewType(const std::string& name) const {

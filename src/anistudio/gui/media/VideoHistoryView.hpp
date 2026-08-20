@@ -43,4 +43,4 @@ namespace GUI {
         std::string FormatDate(const std::filesystem::file_time_type& ftime);
     };
 
-} // namespace GUI
+}

@@ -167,9 +167,6 @@ namespace GUI {
 
     void VideoHistoryView::OnVideoAdded(ECS::EntityID entity) {
         RefreshEntities();
-        if (videoSystem) {
-            videoSystem->UpdateMetadataFlags(entity);
-        }
     }
 
     void VideoHistoryView::OnVideoRemoved(ECS::EntityID entity) {
@@ -193,4 +190,4 @@ namespace GUI {
         parentWorkspaceID = parentWorkspace;
     }
 
-} // namespace GUI
+}

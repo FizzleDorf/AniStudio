@@ -32,6 +32,8 @@ namespace GUI {
 
         void SetSelectedEntity(ECS::EntityID entity) override;
 
+        bool IsHistoryVisible() const override;
+
     protected:
         std::shared_ptr<ECS::ImageSystem> imageSystem;
         bool autoSwitchOnLoad;
@@ -49,6 +51,5 @@ namespace GUI {
         void RenderSelected();
     };
 
-} // namespace GUI
-
+}
 #endif

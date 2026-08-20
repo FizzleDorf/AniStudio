@@ -31,6 +31,8 @@ namespace GUI {
 
         void LoadVideo(const std::string& filePath);
 
+        bool IsHistoryVisible() const override;
+
     protected:
         bool isPlaying;
         float playbackSpeed;
@@ -49,4 +51,4 @@ namespace GUI {
         void PauseAllVideos();
     };
 
-} // namespace GUI
+}

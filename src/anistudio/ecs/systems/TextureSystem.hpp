@@ -47,8 +47,7 @@ namespace ECS {
         void Start() override {}
 
         void Update(const float deltaT) override {
-            std::lock_guard<std::mutex> lock(queueMutex);
-            m_needsTextureCreation = !textureQueue.empty();
+            CreatePendingTextures();
         }
 
         void QueueTextureCreation(EntityID entityID, unsigned char* imageData, int width, int height, int channels) {

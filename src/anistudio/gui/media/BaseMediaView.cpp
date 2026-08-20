@@ -11,12 +11,12 @@ namespace GUI {
 
     BaseMediaView::BaseMediaView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseView(mgr, vm), selectedEntityID(0), index(0), zoom(1.0f), offsetX(0.0f), offsetY(0.0f),
-        lastEntityCount(0), historyViewVisible(false), historyWorkspaceID(0),
+        lastEntityCount(0), historyWorkspaceID(0),
         contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(mgr)), isDragging(false) {
     }
 
     BaseMediaView::~BaseMediaView() {
-        if (historyViewVisible && historyWorkspaceID != 0) {
+        if (historyWorkspaceID != 0) {
             GetViewManager().DestroyView(historyWorkspaceID);
         }
     }
@@ -90,32 +90,28 @@ namespace GUI {
     }
 
     void BaseMediaView::ToggleHistoryView(bool show) {
-        if (show && !historyViewVisible) {
+        bool exists = IsHistoryVisible();
+        if (show && !exists) {
             std::string viewType = GetHistoryViewTypeName();
             if (viewType.empty()) return;
-            historyWorkspaceID = GetViewManager().CreateViewByName(viewType, m_entityManager);
-            if (historyWorkspaceID != 0) {
-                historyViewVisible = true;
-                BaseView* historyView = &GetViewManager().GetView<BaseView>(historyWorkspaceID);
-                if (historyView) {
-                    if (auto* imgHist = dynamic_cast<ImageHistoryView*>(historyView)) {
-                        imgHist->SetParentViewWorkspace(GetID());
-                    }
-                    else if (auto* vidHist = dynamic_cast<VideoHistoryView*>(historyView)) {
-                        vidHist->SetParentViewWorkspace(GetID());
-                    }
+            WorkspaceID newID = GetViewManager().CreateViewByName(viewType, m_entityManager);
+            if (newID != 0) {
+                historyWorkspaceID = newID;
+                BaseView* historyView = &GetViewManager().GetView<BaseView>(newID);
+                if (auto* imgHist = dynamic_cast<ImageHistoryView*>(historyView)) {
+                    imgHist->SetParentViewWorkspace(GetID());
+                }
+                else if (auto* vidHist = dynamic_cast<VideoHistoryView*>(historyView)) {
+                    vidHist->SetParentViewWorkspace(GetID());
                 }
             }
         }
-        else if (!show && historyViewVisible && historyWorkspaceID != 0) {
-            GetViewManager().DestroyView(historyWorkspaceID);
-            historyWorkspaceID = 0;
-            historyViewVisible = false;
+        else if (!show && exists) {
+            if (historyWorkspaceID != 0) {
+                GetViewManager().DestroyView(historyWorkspaceID);
+                historyWorkspaceID = 0;
+            }
         }
-    }
-
-    bool BaseMediaView::IsHistoryVisible() const {
-        return historyViewVisible;
     }
 
     void BaseMediaView::RenderMediaContextMenu(ECS::EntityID entityID) {
@@ -192,4 +188,4 @@ namespace GUI {
         return io.KeyAlt;
     }
 
-} // namespace GUI
+}

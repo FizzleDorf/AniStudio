@@ -11,9 +11,9 @@
     "lora_apply_mode": "LORA_APPLY_AUTO",
     "max_vram": "18",
     "model_args": "",
-    "params_backend": "",
+    "params_backend": "--backend cuda0 --params-backend cpu",
     "rpc_servers": "",
     "split_mode": "",
-    "stream_layers": false,
+    "stream_layers": true,
     "vae_conv_direct": false
 }
