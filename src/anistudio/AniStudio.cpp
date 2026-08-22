@@ -40,7 +40,7 @@ namespace ANI {
 
     StudioCore::StudioCore()
         : initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
-        m_isShuttingDown(false) {
+        m_isShuttingDown(false), m_showMissingPathsPopup(false) {
         std::cout << "[StudioCore] Constructor called" << std::endl;
     }
 
@@ -259,7 +259,6 @@ namespace ANI {
             std::cout << "[StudioCore] Received GLFWwindow* pointer: " << window << std::endl;
 
 #ifdef _WIN32
-            // Attempt to get the HWND
             GLFWwindow* glfwWin = static_cast<GLFWwindow*>(window);
             HWND hwnd = glfwGetWin32Window(glfwWin);
             std::cout << "[StudioCore] glfwGetWin32Window returned HWND: " << hwnd << std::endl;
@@ -692,6 +691,8 @@ namespace ANI {
 
         m_showProjectManagerView = false;
         Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
+
+        Events::Ref().QueueEventWithData("ProjectOpened", projectPath);
     }
 
     void StudioCore::OnProjectCreated(const std::string& projectPath) {
@@ -715,6 +716,8 @@ namespace ANI {
 
         m_showProjectManagerView = false;
         Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
+
+        Events::Ref().QueueEventWithData("ProjectCreated", projectPath);
     }
 
     void StudioCore::OnProjectClosed() {
@@ -742,6 +745,8 @@ namespace ANI {
         std::cout << "[StudioCore] Saved current window state as default" << std::endl;
 
         Utils::ImGuiStateUtils::OnProjectClosed();
+
+        Events::Ref().QueueEvent("ProjectClosed");
     }
 
     std::string StudioCore::GetDefaultWindowStatePath() const {
@@ -775,6 +780,7 @@ namespace ANI {
                 }
 
                 projectSystem->SaveProject();
+                Events::Ref().QueueEvent("ProjectSaved");
             }
             else {
                 SyncWindowStateFromGLFW();
@@ -952,39 +958,342 @@ namespace ANI {
 
         auto& entityMgr = GetEntityManager();
         auto imageSystem = entityMgr.GetSystem<ImageSystem>();
+        auto videoSystem = entityMgr.GetSystem<VideoSystem>();
+        auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
+        auto pluginManager = studioContext ? studioContext->studioPluginManager : nullptr;
 
-        if (!imageSystem) {
-            std::cerr << "[StudioCore] ERROR: ImageSystem not found for event registration" << std::endl;
-            return;
+        // Image events
+        if (imageSystem) {
+            Events::Ref().RegisterEventWithData("LoadImageRequest", [this, imageSystem](const std::any& data) {
+                try {
+                    auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                    std::string filePath = std::any_cast<std::string>(eventData.at("filePath"));
+                    std::cout << "[StudioCore] LoadImageRequest: " << filePath << std::endl;
+                    auto& entityMgr = GetEntityManager();
+                    ECS::EntityID entity = entityMgr.AddNewEntity();
+                    entityMgr.AddComponent<ImageComponent>(entity);
+                    imageSystem->SetImage(entity, filePath);
+                    std::cout << "[StudioCore] Created entity " << entity << " for image" << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] LoadImageRequest error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("RemoveImageRequest", [imageSystem](const std::any& data) {
+                try {
+                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                    std::cout << "[StudioCore] RemoveImageRequest: entity " << entityID << std::endl;
+                    imageSystem->RemoveImage(entityID);
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] RemoveImageRequest error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("ImageLoaded", [](const std::any& data) {
+                try {
+                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                    std::cout << "[StudioCore] ImageLoaded event: entity " << entityID << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] ImageLoaded event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("ImageRemoved", [](const std::any& data) {
+                try {
+                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                    std::cout << "[StudioCore] ImageRemoved event: entity " << entityID << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] ImageRemoved event error: " << e.what() << std::endl;
+                }
+                });
         }
 
-        Events::Ref().RegisterEventWithData("LoadImageRequest", [this, imageSystem](const std::any& data) {
+        // Video events
+        if (videoSystem) {
+            Events::Ref().RegisterEventWithData("LoadVideoRequest", [this, videoSystem](const std::any& data) {
+                try {
+                    auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                    std::string filePath = std::any_cast<std::string>(eventData.at("filePath"));
+                    std::cout << "[StudioCore] LoadVideoRequest: " << filePath << std::endl;
+                    auto& entityMgr = GetEntityManager();
+                    ECS::EntityID entity = entityMgr.AddNewEntity();
+                    entityMgr.AddComponent<VideoComponent>(entity);
+                    videoSystem->SetVideo(entity, filePath);
+                    std::cout << "[StudioCore] Created entity " << entity << " for video" << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] LoadVideoRequest error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("RemoveVideoRequest", [videoSystem](const std::any& data) {
+                try {
+                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                    std::cout << "[StudioCore] RemoveVideoRequest: entity " << entityID << std::endl;
+                    videoSystem->RemoveVideo(entityID);
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] RemoveVideoRequest error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("VideoLoaded", [](const std::any& data) {
+                try {
+                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                    std::cout << "[StudioCore] VideoLoaded event: entity " << entityID << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] VideoLoaded event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("VideoRemoved", [](const std::any& data) {
+                try {
+                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                    std::cout << "[StudioCore] VideoRemoved event: entity " << entityID << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] VideoRemoved event error: " << e.what() << std::endl;
+                }
+                });
+        }
+
+        // Project events
+        if (projectSystem) {
+            Events::Ref().RegisterEventWithData("ProjectOpened", [projectSystem](const std::any& data) {
+                try {
+                    std::string path = std::any_cast<std::string>(data);
+                    std::cout << "[StudioCore] ProjectOpened event: " << path << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] ProjectOpened event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("ProjectClosed", [projectSystem](const std::any& data) {
+                try {
+                    std::cout << "[StudioCore] ProjectClosed event" << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] ProjectClosed event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("ProjectCreated", [projectSystem](const std::any& data) {
+                try {
+                    std::string path = std::any_cast<std::string>(data);
+                    std::cout << "[StudioCore] ProjectCreated event: " << path << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] ProjectCreated event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("ProjectSaved", [projectSystem](const std::any& data) {
+                try {
+                    std::cout << "[StudioCore] ProjectSaved event" << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] ProjectSaved event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEvent("SaveProject", [projectSystem]() {
+                if (projectSystem->IsProjectOpen()) {
+                    projectSystem->SaveProject();
+                    Events::Ref().QueueEvent("ProjectSaved");
+                    std::cout << "[StudioCore] SaveProject event handled" << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEvent("CloseProject", [this, projectSystem]() {
+                if (projectSystem->IsProjectOpen()) {
+                    OnProjectClosed();
+                    std::cout << "[StudioCore] CloseProject event handled" << std::endl;
+                }
+                });
+        }
+
+        // Workspace and View events ? corrected method names
+        Events::Ref().RegisterEventWithData("SetActiveWorkspace", [this](const std::any& data) {
             try {
-                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
-                std::string filePath = std::any_cast<std::string>(eventData.at("filePath"));
-
-                std::cout << "[StudioCore] LoadImageRequest: " << filePath << std::endl;
-
-                auto& entityMgr = GetEntityManager();
-                ECS::EntityID entity = entityMgr.AddNewEntity();
-                entityMgr.AddComponent<ImageComponent>(entity);
-                imageSystem->SetImage(entity, filePath);
-
-                std::cout << "[StudioCore] Created entity " << entity << " for image" << std::endl;
+                GUI::WorkspaceID id = std::any_cast<GUI::WorkspaceID>(data);
+                if (studioContext && studioContext->viewManager) {
+                    studioContext->viewManager->SetActiveWorkspace(id);
+                    auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+                    if (projectSystem) {
+                        projectSystem->SetLastActiveWorkspace(id);
+                    }
+                    std::cout << "[StudioCore] SetActiveWorkspace event handled: " << id << std::endl;
+                }
             }
             catch (const std::exception& e) {
-                std::cerr << "[StudioCore] LoadImageRequest error: " << e.what() << std::endl;
+                std::cerr << "[StudioCore] SetActiveWorkspace error: " << e.what() << std::endl;
             }
             });
 
-        Events::Ref().RegisterEventWithData("RemoveImageRequest", [imageSystem](const std::any& data) {
+        Events::Ref().RegisterEventWithData("CreateWorkspace", [this](const std::any& data) {
             try {
-                ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
-                std::cout << "[StudioCore] RemoveImageRequest: entity " << entityID << std::endl;
-                imageSystem->RemoveImage(entityID);
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::string>>(data);
+                std::string name = eventData.at("workspaceName");
+                if (studioContext && studioContext->viewManager) {
+                    GUI::WorkspaceID newID = studioContext->viewManager->CreateView();
+                    studioContext->viewManager->SetWorkspaceName(newID, name);
+                    studioContext->viewManager->SetActiveWorkspace(newID);
+                    std::cout << "[StudioCore] CreateWorkspace event handled: " << name << " ID: " << newID << std::endl;
+                }
             }
             catch (const std::exception& e) {
-                std::cerr << "[StudioCore] RemoveImageRequest error: " << e.what() << std::endl;
+                std::cerr << "[StudioCore] CreateWorkspace error: " << e.what() << std::endl;
+            }
+            });
+
+        Events::Ref().RegisterEventWithData("DeleteWorkspace", [this](const std::any& data) {
+            try {
+                GUI::WorkspaceID id = std::any_cast<GUI::WorkspaceID>(data);
+                if (studioContext && studioContext->viewManager) {
+                    auto allWorkspaces = studioContext->viewManager->GetAllWorkspaces();
+                    if (allWorkspaces.size() <= 1) {
+                        std::cout << "[StudioCore] Cannot delete the last workspace" << std::endl;
+                        return;
+                    }
+                    for (auto ws : allWorkspaces) {
+                        if (ws != id) {
+                            studioContext->viewManager->SetActiveWorkspace(ws);
+                            break;
+                        }
+                    }
+                    studioContext->viewManager->DestroyView(id);
+                    std::cout << "[StudioCore] DeleteWorkspace event handled: " << id << std::endl;
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] DeleteWorkspace error: " << e.what() << std::endl;
+            }
+            });
+
+        Events::Ref().RegisterEventWithData("AddView", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                GUI::WorkspaceID workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
+                std::string viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
+                if (studioContext && studioContext->viewManager) {
+                    GUI::ViewTypeID typeID = studioContext->viewManager->GetViewType(viewTypeName);
+                    studioContext->viewManager->AddViewByType(workspaceID, typeID);
+                    std::cout << "[StudioCore] AddView event handled: " << viewTypeName << " to workspace " << workspaceID << std::endl;
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] AddView error: " << e.what() << std::endl;
+            }
+            });
+
+        Events::Ref().RegisterEventWithData("RemoveView", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                GUI::WorkspaceID workspaceID = std::any_cast<GUI::WorkspaceID>(eventData.at("workspaceID"));
+                std::string viewTypeName = std::any_cast<std::string>(eventData.at("viewTypeName"));
+                if (studioContext && studioContext->viewManager) {
+                    GUI::ViewTypeID typeID = studioContext->viewManager->GetViewType(viewTypeName);
+                    studioContext->viewManager->RemoveViewByType(workspaceID, typeID);
+                    std::cout << "[StudioCore] RemoveView event handled: " << viewTypeName << " from workspace " << workspaceID << std::endl;
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] RemoveView error: " << e.what() << std::endl;
+            }
+            });
+
+        // Entity events
+        Events::Ref().RegisterEvent("CreateEntity", [this]() {
+            ECS::EntityID newEntity = GetEntityManager().AddNewEntity();
+            std::cout << "[StudioCore] CreateEntity event: entity " << newEntity << std::endl;
+            });
+
+        Events::Ref().RegisterEventWithData("DestroyEntity", [this](const std::any& data) {
+            try {
+                ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                GetEntityManager().DestroyEntity(entityID);
+                std::cout << "[StudioCore] DestroyEntity event: entity " << entityID << std::endl;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] DestroyEntity error: " << e.what() << std::endl;
+            }
+            });
+
+        Events::Ref().RegisterEventWithData("CloneEntity", [this](const std::any& data) {
+            try {
+                ECS::EntityID entityID = std::any_cast<ECS::EntityID>(data);
+                ECS::EntityID newEntity = GetEntityManager().CloneEntity(entityID);
+                std::cout << "[StudioCore] CloneEntity event: cloned " << entityID << " to " << newEntity << std::endl;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] CloneEntity error: " << e.what() << std::endl;
+            }
+            });
+
+        Events::Ref().RegisterEventWithData("AddComponent", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                ECS::EntityID entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
+                ECS::ComponentTypeID componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
+                auto& mgr = GetEntityManager();
+                if (mgr.IsPluginComponent(componentTypeID)) {
+                    mgr.AddPluginComponent(entityID, componentTypeID);
+                }
+                std::cout << "[StudioCore] AddComponent event: component " << componentTypeID << " to entity " << entityID << std::endl;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] AddComponent error: " << e.what() << std::endl;
+            }
+            });
+
+        Events::Ref().RegisterEventWithData("RemoveComponent", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                ECS::EntityID entityID = std::any_cast<ECS::EntityID>(eventData.at("entityID"));
+                ECS::ComponentTypeID componentTypeID = std::any_cast<ECS::ComponentTypeID>(eventData.at("componentTypeID"));
+                GetEntityManager().RemoveComponentById(entityID, componentTypeID);
+                std::cout << "[StudioCore] RemoveComponent event: component " << componentTypeID << " from entity " << entityID << std::endl;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] RemoveComponent error: " << e.what() << std::endl;
+            }
+            });
+
+        // Plugin events
+        if (pluginManager) {
+            Events::Ref().RegisterEventWithData("PluginLoaded", [pluginManager](const std::any& data) {
+                try {
+                    std::string name = std::any_cast<std::string>(data);
+                    std::cout << "[StudioCore] PluginLoaded event: " << name << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] PluginLoaded event error: " << e.what() << std::endl;
+                }
+                });
+
+            Events::Ref().RegisterEventWithData("PluginUnloaded", [pluginManager](const std::any& data) {
+                try {
+                    std::string name = std::any_cast<std::string>(data);
+                    std::cout << "[StudioCore] PluginUnloaded event: " << name << std::endl;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[StudioCore] PluginUnloaded event error: " << e.what() << std::endl;
+                }
+                });
+        }
+
+        Events::Ref().RegisterEventWithData("SettingsChanged", [](const std::any& data) {
+            try {
+                std::cout << "[StudioCore] SettingsChanged event" << std::endl;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[StudioCore] SettingsChanged event error: " << e.what() << std::endl;
             }
             });
 

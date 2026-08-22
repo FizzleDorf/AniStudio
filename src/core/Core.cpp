@@ -1,8 +1,6 @@
-#include "OpenGLWrapper.hpp"
 #include "Core.hpp"
 #include "Events.hpp"
 #include "guiSystems.h"
-#include "DragDropUtils.hpp"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -51,7 +49,6 @@ namespace ANI {
         std::cout << "[Core] StudioCore basic initialization complete" << '\n';
 
         m_studioCore.SetWindowHandle(m_window);
-
         m_studioCore.SetImGuiContext(GetImGuiContext());
         std::cout << "[Core] Window handle and ImGui context set" << '\n';
 
@@ -67,7 +64,12 @@ namespace ANI {
     }
 
     void Core::RegisterEventHandlers() {
-        // ... (unchanged, as in previous versions)
+        Events::Ref().RegisterEvent("Quit", [this]() {
+            std::cout << "[Core] Quit event triggered" << '\n';
+            this->Quit();
+            });
+
+        std::cout << "[Core] All event handlers registered successfully" << '\n';
     }
 
     bool Core::InitializeWindow() {
