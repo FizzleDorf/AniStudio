@@ -16,3 +16,4 @@
 #include "AssetsView.hpp"
 #include "ImageHistoryView.hpp"
 #include "VideoHistoryView.hpp"
+#include "MetadataView.hpp"
