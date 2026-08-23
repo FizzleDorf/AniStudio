@@ -33,6 +33,8 @@ namespace GUI {
 
         bool IsHistoryVisible() const override;
 
+        std::string GetSelectedFilePath() const override;
+
     protected:
         bool isPlaying;
         float playbackSpeed;

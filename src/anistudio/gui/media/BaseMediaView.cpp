@@ -1,8 +1,9 @@
 #include "BaseMediaView.hpp"
 #include "ClipboardUtilities.hpp"
-#include "ImageHistoryView.hpp"
-#include "VideoHistoryView.hpp"
+#include "MediaHistoryView.hpp"
+#include "MetadataView.hpp"
 #include "DragDropUtils.hpp"
+#include "ViewManager.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <iostream>
@@ -90,25 +91,42 @@ namespace GUI {
     }
 
     void BaseMediaView::ToggleHistoryView(bool show) {
+        WorkspaceID currentWorkspace = GetID();
+        auto& vm = GetViewManager();
+        std::string viewType = GetHistoryViewTypeName();
+        if (viewType.empty()) return;
+
         bool exists = IsHistoryVisible();
+
         if (show && !exists) {
-            std::string viewType = GetHistoryViewTypeName();
-            if (viewType.empty()) return;
-            WorkspaceID newID = GetViewManager().CreateViewByName(viewType, m_entityManager);
-            if (newID != 0) {
-                historyWorkspaceID = newID;
-                BaseView* historyView = &GetViewManager().GetView<BaseView>(newID);
-                if (auto* imgHist = dynamic_cast<ImageHistoryView*>(historyView)) {
-                    imgHist->SetParentViewWorkspace(GetID());
+            try {
+                ViewTypeID histType = vm.GetViewType(viewType);
+                vm.AddViewByType(currentWorkspace, histType);
+
+                // Find the newly added view and set parent
+                auto& ws = vm.GetWorkspaces();
+                auto wsIt = ws.find(currentWorkspace);
+                if (wsIt != ws.end()) {
+                    for (auto& [typeID, viewPtr] : wsIt->second) {
+                        if (auto* mediaHist = dynamic_cast<MediaHistoryView*>(viewPtr.get())) {
+                            mediaHist->SetParentViewWorkspace(GetID());
+                            historyWorkspaceID = currentWorkspace;
+                            break;
+                        }
+                    }
                 }
-                else if (auto* vidHist = dynamic_cast<VideoHistoryView*>(historyView)) {
-                    vidHist->SetParentViewWorkspace(GetID());
-                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[BaseMediaView] Failed to add history view: " << e.what() << std::endl;
             }
         }
         else if (!show && exists) {
             if (historyWorkspaceID != 0) {
-                GetViewManager().DestroyView(historyWorkspaceID);
+                try {
+                    ViewTypeID histType = vm.GetViewType(viewType);
+                    vm.RemoveViewByType(historyWorkspaceID, histType);
+                }
+                catch (...) {}
                 historyWorkspaceID = 0;
             }
         }
@@ -186,6 +204,58 @@ namespace GUI {
     bool BaseMediaView::IsAltKeyDown() const {
         ImGuiIO& io = ImGui::GetIO();
         return io.KeyAlt;
+    }
+
+    void BaseMediaView::SendSelectedToMetadataView() {
+        std::string filePath = GetSelectedFilePath();
+        if (filePath.empty()) return;
+
+        auto& vm = GetViewManager();
+        WorkspaceID currentWorkspace = GetID();
+
+        // Check if MetadataView exists in this workspace
+        bool hasMetadataView = false;
+        const auto& signatures = vm.GetWorkspaceSignatures();
+        auto sigIt = signatures.find(currentWorkspace);
+        if (sigIt != signatures.end()) {
+            try {
+                ViewTypeID metaType = vm.GetViewType("MetadataView");
+                if (sigIt->second->count(metaType) > 0) {
+                    hasMetadataView = true;
+                }
+            }
+            catch (...) {}
+        }
+
+        if (!hasMetadataView) {
+            try {
+                ViewTypeID metaType = vm.GetViewType("MetadataView");
+                vm.AddViewByType(currentWorkspace, metaType);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[BaseMediaView] Failed to add MetadataView: " << e.what() << std::endl;
+                return;
+            }
+        }
+
+        // Now find the MetadataView instance and load the file
+        auto& ws = vm.GetWorkspaces();
+        auto wsIt = ws.find(currentWorkspace);
+        if (wsIt != ws.end()) {
+            for (auto& [typeID, viewPtr] : wsIt->second) {
+                if (auto* metaView = dynamic_cast<MetadataView*>(viewPtr.get())) {
+                    try {
+                        metaView->LoadFromFile(filePath);
+                        std::cout << "[BaseMediaView] Sent file to MetadataView: " << filePath << std::endl;
+                    }
+                    catch (const std::exception& e) {
+                        std::cerr << "[BaseMediaView] Failed to load metadata: " << e.what() << std::endl;
+                    }
+                    return;
+                }
+            }
+        }
+        std::cerr << "[BaseMediaView] MetadataView not found in workspace after adding." << std::endl;
     }
 
 }

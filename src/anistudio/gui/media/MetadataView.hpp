@@ -47,6 +47,7 @@ namespace GUI {
         std::string sourceDisplayName;
         std::string filterText;
         char filterBuffer[256];
+        std::string rawSourceText; // raw text from source (for JSON files, clipboard, etc.)
 
         void RenderMenuBar();
         void RenderFileMenu();

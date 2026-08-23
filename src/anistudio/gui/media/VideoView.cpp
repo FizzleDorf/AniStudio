@@ -4,7 +4,8 @@
 #include "FileDialogFilters.hpp"
 #include "Events.hpp"
 #include "DragDropUtils.hpp"
-#include "VideoHistoryView.hpp"
+#include "MediaHistoryView.hpp"
+#include "MetadataView.hpp"
 #include <algorithm>
 #include <iostream>
 
@@ -55,6 +56,29 @@ namespace GUI {
         }
         RefreshEntities();
         std::cout << "[VideoView] Initialization complete" << std::endl;
+
+        ANI::Events::Ref().RegisterEventWithData("SelectMediaEntity", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                auto it = eventData.find("workspaceID");
+                if (it != eventData.end()) {
+                    WorkspaceID wsID = std::any_cast<WorkspaceID>(it->second);
+                    if (wsID == GetID()) {
+                        auto entityIt = eventData.find("entityID");
+                        if (entityIt != eventData.end()) {
+                            ECS::EntityID entity = std::any_cast<ECS::EntityID>(entityIt->second);
+                            if (m_entityManager.IsEntityValid(entity) &&
+                                m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
+                                SetSelectedEntity(entity);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[VideoView] SelectMediaEntity event error: " << e.what() << std::endl;
+            }
+            });
     }
 
     void VideoView::Update(float deltaT) {
@@ -192,6 +216,9 @@ namespace GUI {
                     ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "✦ NEWLY GENERATED");
                 }
                 RenderMediaContextMenu(selectedEntityID);
+                if (ImGui::Button("Send to Metadata Viewer")) {
+                    SendSelectedToMetadataView();
+                }
                 ImGui::Separator();
             }
             catch (const std::exception& e) {
@@ -452,11 +479,19 @@ namespace GUI {
     }
 
     bool VideoView::IsHistoryVisible() const {
-        return GetViewManager().HasView<VideoHistoryView>(GetID());
+        return GetViewManager().HasView<MediaHistoryView>(GetID());
     }
 
     std::string VideoView::GetHistoryViewTypeName() const {
-        return "VideoHistoryView";
+        return "MediaHistoryView";
+    }
+
+    std::string VideoView::GetSelectedFilePath() const {
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            return m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).filePath;
+        }
+        return "";
     }
 
 }

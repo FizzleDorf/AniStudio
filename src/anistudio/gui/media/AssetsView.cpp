@@ -2,19 +2,19 @@
 #include "FilePathSystem.hpp"
 #include "FileDialogUtil.hpp"
 #include "Events.hpp"
-#include "ImageView.hpp"
-#include "VideoView.hpp"
 #include "FileFormats.hpp"
 #include "DragDropUtils.hpp"
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
 #include "TextureSystem.hpp"
-#include "ContextMenuUtils.hpp"
+#include "ImageUtils.hpp"
+#include "VideoMetadataUtils.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <iostream>
 #include <algorithm>
 #include <chrono>
+#include <fstream>
 
 namespace GUI {
 
@@ -36,6 +36,28 @@ namespace GUI {
             assetsPath = "./assets";
         }
         RefreshAssets();
+
+        ANI::Events::Ref().RegisterEventWithData("SelectMediaEntity", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                auto it = eventData.find("workspaceID");
+                if (it != eventData.end()) {
+                    WorkspaceID wsID = std::any_cast<WorkspaceID>(it->second);
+                    if (wsID == GetID()) {
+                        auto entityIt = eventData.find("entityID");
+                        if (entityIt != eventData.end()) {
+                            ECS::EntityID entity = std::any_cast<ECS::EntityID>(entityIt->second);
+                            if (m_entityManager.IsEntityValid(entity)) {
+                                selectedEntityID = entity;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[AssetsView] SelectMediaEntity event error: " << e.what() << std::endl;
+            }
+            });
     }
 
     void AssetsView::Update(float deltaT) {
@@ -46,9 +68,9 @@ namespace GUI {
     }
 
     void AssetsView::Render() {
-        ImGui::Begin("Assets", &windowOpen);
+        ImGui::Begin("Assets", &windowOpen, ImGuiWindowFlags_MenuBar);
 
-        RenderFilters();
+        RenderMenuBar();
 
         ImGui::Separator();
 
@@ -69,39 +91,41 @@ namespace GUI {
         }
     }
 
-    void AssetsView::RenderFilters() {
-        ImGui::Text("Path: %s", assetsPath.c_str());
-
-        if (ImGui::Button("Refresh")) {
-            RefreshAssets();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Clear Loaded")) {
-            ClearLoadedAssets();
-        }
-
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
-        const char* typeItems[] = { "All", "Image", "Video", "Audio" };
-        int typeIdx = static_cast<int>(currentTypeFilter);
-        if (ImGui::Combo("Type", &typeIdx, typeItems, IM_ARRAYSIZE(typeItems))) {
-            currentTypeFilter = static_cast<FileTypeFilter>(typeIdx);
-            ApplyFiltersAndSort();
-        }
-
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(120);
-        const char* sortItems[] = { "Name", "Size", "Date" };
-        int sortIdx = static_cast<int>(currentSort);
-        if (ImGui::Combo("Sort", &sortIdx, sortItems, IM_ARRAYSIZE(sortItems))) {
-            currentSort = static_cast<SortMode>(sortIdx);
-            ApplyFiltersAndSort();
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button(sortAscending ? "Å£" : "Å•")) {
-            sortAscending = !sortAscending;
-            ApplyFiltersAndSort();
+    void AssetsView::RenderMenuBar() {
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::BeginMenu("View")) {
+                const char* modeItems[] = { "Compact", "Detailed" };
+                int modeIdx = static_cast<int>(currentDisplayMode);
+                if (ImGui::Combo("Display Mode", &modeIdx, modeItems, IM_ARRAYSIZE(modeItems))) {
+                    currentDisplayMode = static_cast<Thumbnail::DisplayMode>(modeIdx);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Filters")) {
+                const char* typeItems[] = { "All", "Image", "Video", "Audio" };
+                int typeIdx = static_cast<int>(currentTypeFilter);
+                if (ImGui::Combo("Type", &typeIdx, typeItems, IM_ARRAYSIZE(typeItems))) {
+                    currentTypeFilter = static_cast<FileTypeFilter>(typeIdx);
+                }
+                const char* sortItems[] = { "Name", "Size", "Date" };
+                int sortIdx = static_cast<int>(currentSort);
+                if (ImGui::Combo("Sort By", &sortIdx, sortItems, IM_ARRAYSIZE(sortItems))) {
+                    currentSort = static_cast<SortMode>(sortIdx);
+                    ApplyFiltersAndSort();
+                }
+                if (ImGui::MenuItem(sortAscending ? "Ascending" : "Descending")) {
+                    sortAscending = !sortAscending;
+                    ApplyFiltersAndSort();
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Actions")) {
+                if (ImGui::MenuItem("Refresh")) {
+                    RefreshAssets();
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenuBar();
         }
     }
 
@@ -123,27 +147,23 @@ namespace GUI {
                 }
             }
             ApplyFiltersAndSort();
+            LoadNewAssets();
         }
         catch (const std::exception& e) {
             std::cerr << "[AssetsView] Error scanning assets: " << e.what() << std::endl;
         }
     }
 
-    void AssetsView::ApplyFiltersAndSort() {
-        auto it = std::remove_if(assetFiles.begin(), assetFiles.end(), [this](const std::filesystem::path& p) {
-            if (currentTypeFilter == FileTypeFilter::All) return false;
-            std::string ext = p.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-            const auto& formats = FileFormats::GetAllFormats();
-            auto fmtIt = formats.find(ext);
-            if (fmtIt == formats.end()) return true;
-            if (currentTypeFilter == FileTypeFilter::Image && !fmtIt->second.isImage) return true;
-            if (currentTypeFilter == FileTypeFilter::Video && !fmtIt->second.isVideo) return true;
-            if (currentTypeFilter == FileTypeFilter::Audio && !fmtIt->second.isAudio) return true;
-            return false;
-            });
-        assetFiles.erase(it, assetFiles.end());
+    void AssetsView::LoadNewAssets() {
+        for (const auto& path : assetFiles) {
+            std::string pathStr = path.string();
+            if (loadedPaths.find(pathStr) == loadedPaths.end()) {
+                LoadAsset(path);
+            }
+        }
+    }
 
+    void AssetsView::ApplyFiltersAndSort() {
         std::sort(assetFiles.begin(), assetFiles.end(), [this](const std::filesystem::path& a, const std::filesystem::path& b) {
             int cmp = 0;
             switch (currentSort) {
@@ -174,13 +194,49 @@ namespace GUI {
     void AssetsView::RenderAssetGrid() {
         float windowWidth = ImGui::GetContentRegionAvail().x;
         const float thumbnailSize = 150.0f;
-        float cellSize = thumbnailSize + ImGui::GetStyle().ItemSpacing.x + 10;
+        float cellSize;
+        if (currentDisplayMode == Thumbnail::DisplayMode::Detailed) {
+            cellSize = thumbnailSize + 170;
+        }
+        else {
+            cellSize = thumbnailSize + ImGui::GetStyle().ItemSpacing.x + 10;
+        }
         int columns = std::max(1, static_cast<int>(windowWidth / cellSize));
 
         ImGui::Columns(columns, nullptr, false);
 
         for (size_t i = 0; i < assetFiles.size(); ++i) {
-            RenderThumbnail(assetFiles[i], i, thumbnailSize);
+            const auto& path = assetFiles[i];
+            std::string ext = path.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            const auto& formats = FileFormats::GetAllFormats();
+            auto fmtIt = formats.find(ext);
+            if (fmtIt == formats.end()) continue;
+            bool filterMatch = true;
+            if (currentTypeFilter != FileTypeFilter::All) {
+                if (currentTypeFilter == FileTypeFilter::Image && !fmtIt->second.isImage) filterMatch = false;
+                else if (currentTypeFilter == FileTypeFilter::Video && !fmtIt->second.isVideo) filterMatch = false;
+                else if (currentTypeFilter == FileTypeFilter::Audio && !fmtIt->second.isAudio) filterMatch = false;
+            }
+            if (!filterMatch) continue;
+
+            ECS::EntityID entityID = 0;
+            auto it = pathToEntity.find(path.string());
+            if (it != pathToEntity.end() && m_entityManager.IsEntityValid(it->second)) {
+                entityID = it->second;
+            }
+
+            Thumbnail::ThumbnailData data = BuildThumbnailData(path, entityID);
+            data.activeEntityID = selectedEntityID;
+            Thumbnail::RenderThumbnail(
+                data,
+                i,
+                thumbnailSize,
+                currentDisplayMode,
+                [this](ECS::EntityID id) { SelectAssetEntity(id); },
+                contextMenuUtils.get(),
+                entityID != 0
+            );
             ImGui::NextColumn();
         }
 
@@ -189,164 +245,61 @@ namespace GUI {
         std::vector<std::string> droppedFiles;
         if (GUI::DragDrop::AcceptFileDrop(droppedFiles)) {
             for (const auto& f : droppedFiles) {
-                std::filesystem::path src(f);
-                std::filesystem::path dst = std::filesystem::path(assetsPath) / src.filename();
-                try {
-                    if (std::filesystem::exists(dst)) {
-                        std::cerr << "[AssetsView] File already exists in assets: " << dst << std::endl;
-                        continue;
-                    }
-                    std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);
-                    std::cout << "[AssetsView] Copied " << f << " to " << dst << std::endl;
-                }
-                catch (const std::exception& e) {
-                    std::cerr << "[AssetsView] Failed to copy file: " << e.what() << std::endl;
-                }
+                CopyFileToAssets(f);
             }
             needsRefresh = true;
         }
-    }
 
-    void AssetsView::RenderThumbnail(const std::filesystem::path& path, size_t index, float thumbnailSize) {
-        std::string ext = path.extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        const auto& formats = FileFormats::GetAllFormats();
-        auto fmtIt = formats.find(ext);
-        if (fmtIt == formats.end()) return;
-
-        ECS::EntityID entityID = 0;
-        for (auto e : loadedEntities) {
-            if (m_entityManager.IsEntityValid(e)) {
-                if (m_entityManager.HasComponent<ECS::ImageComponent>(e)) {
-                    auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(e);
-                    if (comp.filePath == path.string()) {
-                        entityID = e;
-                        break;
-                    }
+        ECS::EntityID droppedEntity;
+        if (GUI::DragDrop::AcceptEntityDrop(droppedEntity)) {
+            if (m_entityManager.IsEntityValid(droppedEntity)) {
+                std::string filePath;
+                if (m_entityManager.HasComponent<ECS::ImageComponent>(droppedEntity)) {
+                    filePath = m_entityManager.GetComponent<ECS::ImageComponent>(droppedEntity).filePath;
                 }
-                else if (m_entityManager.HasComponent<ECS::VideoComponent>(e)) {
-                    auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(e);
-                    if (comp.filePath == path.string()) {
-                        entityID = e;
-                        break;
+                else if (m_entityManager.HasComponent<ECS::VideoComponent>(droppedEntity)) {
+                    filePath = m_entityManager.GetComponent<ECS::VideoComponent>(droppedEntity).filePath;
+                }
+                if (!filePath.empty() && std::filesystem::exists(filePath)) {
+                    if (CopyFileToAssets(filePath)) {
+                        needsRefresh = true;
                     }
                 }
             }
         }
+    }
 
-        ImGui::BeginGroup();
+    Thumbnail::ThumbnailData AssetsView::BuildThumbnailData(const std::filesystem::path& path, ECS::EntityID entityID) {
+        Thumbnail::ThumbnailData data;
+        data.filePath = path.string();
+        data.fileName = path.filename().string();
+        data.entityID = entityID;
 
-        ImVec2 cursorPos = ImGui::GetCursorScreenPos();
-        ImVec2 itemSize(thumbnailSize + 10, thumbnailSize + 50);
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRect(cursorPos, cursorPos + itemSize, IM_COL32(60, 60, 60, 255), 2.0f);
-
-        ImVec2 thumbSize(thumbnailSize - 10, thumbnailSize - 10);
-
-        GLuint texID = 0;
-        int width = 0, height = 0;
         if (entityID != 0) {
             if (m_entityManager.HasComponent<ECS::ImageComponent>(entityID)) {
                 auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
-                texID = comp.textureID;
-                width = comp.width;
-                height = comp.height;
+                data.textureID = comp.textureID;
+                data.width = comp.width;
+                data.height = comp.height;
+                data.channels = comp.channels;
+                data.hasExif = comp.hasExifData;
+                data.hasLSB = comp.hasLSBData;
+                data.isVideo = false;
             }
             else if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
                 auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
-                texID = comp.currentTexture;
-                width = comp.width;
-                height = comp.height;
+                data.textureID = comp.currentTexture;
+                data.width = comp.width;
+                data.height = comp.height;
+                data.fps = comp.fps;
+                data.isVideo = true;
             }
         }
-
-        if (texID != 0 && width > 0 && height > 0) {
-            float aspect = (height > 0) ? (float)width / height : 1.0f;
-            ImVec2 size = thumbSize;
-            if (aspect > 1.0f) size.y = thumbSize.x / aspect;
-            else size.x = thumbSize.y * aspect;
-            ImVec2 imagePos = ImGui::GetCursorPos() + ImVec2((thumbSize.x - size.x) * 0.5f, 0);
-            ImGui::SetCursorPos(imagePos);
-            if (ImGui::ImageButton(("##asset" + std::to_string(index)).c_str(),
-                (ImTextureID)(intptr_t)texID, size, ImVec2(0, 0), ImVec2(1, 1))) {
-                if (entityID == 0) {
-                    LoadAsset(path);
-                }
-            }
-        }
-        else {
-            if (ImGui::ImageButton(("##assetplaceholder" + std::to_string(index)).c_str(),
-                (ImTextureID)(intptr_t)0, thumbSize, ImVec2(0, 0), ImVec2(1, 1))) {
-                LoadAsset(path);
-            }
-            ImVec2 textSize = ImGui::CalcTextSize(ext.c_str());
-            float textX = ImGui::GetItemRectMin().x + (thumbSize.x - textSize.x) * 0.5f;
-            float textY = ImGui::GetItemRectMin().y + (thumbSize.y - textSize.y) * 0.5f;
-            drawList->AddText(ImVec2(textX, textY), IM_COL32(200, 200, 200, 255), ext.c_str());
-        }
-
-        if (entityID != 0) {
-            if (ImGui::BeginDragDropSource()) {
-                nlohmann::json payload;
-                payload["entityID"] = entityID;
-                ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
-                    payload.dump().c_str(), payload.dump().size() + 1);
-                if (texID != 0) {
-                    ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(64, 64));
-                }
-                ImGui::Text("%s", path.filename().string().c_str());
-                ImGui::EndDragDropSource();
-            }
-        }
-        else {
-            if (ImGui::BeginDragDropSource()) {
-                nlohmann::json payload;
-                payload["filePath"] = path.string();
-                payload["fileType"] = GUI::DragDrop::GuessMediaType(path.string());
-                ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_FILE_PATH,
-                    payload.dump().c_str(), payload.dump().size() + 1);
-                ImGui::Text("%s", path.filename().string().c_str());
-                ImGui::EndDragDropSource();
-            }
-        }
-
-        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
-            ImGui::OpenPopup(("AssetContextMenu##" + std::to_string(index)).c_str());
-        }
-
-        if (ImGui::BeginPopup(("AssetContextMenu##" + std::to_string(index)).c_str())) {
-            if (entityID != 0) {
-                contextMenuUtils->RenderEntityContextMenu(entityID);
-            }
-            else {
-                if (ImGui::MenuItem("Load Asset")) {
-                    LoadAsset(path);
-                }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Copy File Path")) {
-                    ImGui::SetClipboardText(path.string().c_str());
-                }
-                if (ImGui::MenuItem("Open in Explorer")) {
-                    std::string cmd = "explorer /select,\"" + path.string() + "\"";
-                    system(cmd.c_str());
-                }
-            }
-            ImGui::EndPopup();
-        }
-
-        std::string filename = path.filename().string();
-        if (filename.length() > 20) {
-            filename = filename.substr(0, 18) + "...";
-        }
-        ImGui::Text("%s", filename.c_str());
 
         try {
-            auto size = std::filesystem::file_size(path);
-            std::string sizeStr = (size > 1024 * 1024) ? std::to_string(size / (1024 * 1024)) + " MB" :
-                (size > 1024) ? std::to_string(size / 1024) + " KB" : std::to_string(size) + " B";
-            ImGui::Text("%s", sizeStr.c_str());
+            data.fileSize = std::filesystem::file_size(path);
         }
-        catch (...) {}
+        catch (...) { data.fileSize = 0; }
 
         try {
             auto ftime = std::filesystem::last_write_time(path);
@@ -357,18 +310,23 @@ namespace GUI {
             std::tm tm = *std::localtime(&tt);
             char buffer[32];
             strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm);
-            ImGui::Text("%s", buffer);
+            data.fileDate = buffer;
+            strftime(buffer, sizeof(buffer), "%H:%M:%S", &tm);
+            data.fileTime = buffer;
         }
         catch (...) {}
 
-        ImGui::EndGroup();
+        return data;
     }
 
     void AssetsView::LoadAsset(const std::filesystem::path& path) {
+        std::string filePath = path.string();
+        if (loadedPaths.find(filePath) != loadedPaths.end()) {
+            return;
+        }
+
         std::string ext = path.extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        std::string filePath = path.string();
-
         const auto& formats = FileFormats::GetAllFormats();
         auto it = formats.find(ext);
         if (it == formats.end()) {
@@ -389,6 +347,8 @@ namespace GUI {
                     m_entityManager.AddComponent<ECS::ImageComponent>(entity);
                     imageSystem->SetImage(entity, filePath);
                     loadedEntities.push_back(entity);
+                    pathToEntity[filePath] = entity;
+                    loadedPaths.insert(filePath);
                     std::cout << "[AssetsView] Loaded image: " << filePath << " (Entity: " << entity << ")" << std::endl;
                 }
             }
@@ -414,6 +374,8 @@ namespace GUI {
                     m_entityManager.AddComponent<ECS::VideoComponent>(entity);
                     videoSystem->SetVideo(entity, filePath);
                     loadedEntities.push_back(entity);
+                    pathToEntity[filePath] = entity;
+                    loadedPaths.insert(filePath);
                     std::cout << "[AssetsView] Loaded video: " << filePath << " (Entity: " << entity << ")" << std::endl;
                 }
             }
@@ -427,7 +389,6 @@ namespace GUI {
         catch (const std::exception& e) {
             std::cerr << "[AssetsView] Error loading asset: " << e.what() << std::endl;
         }
-        needsRefresh = true;
     }
 
     void AssetsView::ClearLoadedAssets() {
@@ -451,8 +412,63 @@ namespace GUI {
             }
         }
         loadedEntities.clear();
+        pathToEntity.clear();
+        loadedPaths.clear();
         std::cout << "[AssetsView] Cleared all loaded assets" << std::endl;
         needsRefresh = true;
+    }
+
+    bool AssetsView::CopyFileToAssets(const std::string& sourcePath) {
+        std::filesystem::path src(sourcePath);
+        std::filesystem::path dst = std::filesystem::path(assetsPath) / src.filename();
+        if (std::filesystem::exists(dst)) {
+            std::cerr << "[AssetsView] File already exists in assets: " << dst << std::endl;
+            return false;
+        }
+        try {
+            std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);
+            std::cout << "[AssetsView] Copied " << sourcePath << " to " << dst << std::endl;
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[AssetsView] Failed to copy file: " << e.what() << std::endl;
+            return false;
+        }
+    }
+
+    void AssetsView::CopyMetadataFromFile(const std::string& filePath) {
+        nlohmann::json metadata;
+        std::string ext = std::filesystem::path(filePath).extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp") {
+            metadata = Utils::ImageUtils::ReadMetadataFromImage(filePath);
+        }
+        else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov") {
+            metadata = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
+        }
+
+        if (metadata.is_null() || metadata.empty()) {
+            std::cerr << "[AssetsView] No metadata found in " << filePath << std::endl;
+            return;
+        }
+
+        nlohmann::json wrapped;
+        wrapped["dataType"] = "entity";
+        wrapped["data"] = metadata;
+        wrapped["source"] = "metadata";
+        std::string jsonStr = wrapped.dump();
+        ImGui::SetClipboardText(jsonStr.c_str());
+        std::cout << "[AssetsView] Copied metadata from " << filePath << std::endl;
+    }
+
+    void AssetsView::SelectAssetEntity(ECS::EntityID entityID) {
+        if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) return;
+        selectedEntityID = entityID;
+        std::unordered_map<std::string, std::any> eventData;
+        eventData["workspaceID"] = GetID();
+        eventData["entityID"] = entityID;
+        ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
     }
 
 } // namespace GUI

@@ -105,8 +105,7 @@ namespace ANI {
         viewManager.RegisterView<GUI::VideoView>("VideoView");
         viewManager.RegisterView<GUI::HelpView>("HelpView");
         viewManager.RegisterView<GUI::TextEditorView>("TextEditor");
-        viewManager.RegisterView<GUI::ImageHistoryView>("ImageHistoryView");
-        viewManager.RegisterView<GUI::VideoHistoryView>("VideoHistoryView");
+        viewManager.RegisterView<GUI::MediaHistoryView>("MediaHistoryView");
         viewManager.RegisterView<GUI::AssetsView>("AssetsView");
         viewManager.RegisterView<GUI::MetadataView>("MetadataView");
 

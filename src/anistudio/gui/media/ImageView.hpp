@@ -34,6 +34,8 @@ namespace GUI {
 
         bool IsHistoryVisible() const override;
 
+        std::string GetSelectedFilePath() const override;
+
     protected:
         std::shared_ptr<ECS::ImageSystem> imageSystem;
         bool autoSwitchOnLoad;

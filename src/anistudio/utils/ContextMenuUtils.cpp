@@ -112,46 +112,51 @@ namespace Utils {
         }
 
         if (ImGui::BeginPopup(popupId.c_str())) {
-            ImGui::Text("Entity: %zu", entityId);
-            ImGui::Separator();
+            RenderEntityContextMenuItems(entityId);
+            ImGui::EndPopup();
+        }
+    }
 
-            if (entityManager.HasComponent<ECS::ImageComponent>(entityId)) {
-                const auto& imageComp = entityManager.GetComponent<ECS::ImageComponent>(entityId);
-                if (!imageComp.filePath.empty() && std::filesystem::exists(imageComp.filePath)) {
-                    if (ImGui::MenuItem("Copy File Path")) {
-                        CopyFilePath(entityId);
-                    }
-                    if (ImGui::MenuItem("Copy Image Data")) {
-                        CopyImageData(entityId);
-                    }
-                    nlohmann::json metadata = ParseImageMetadata(imageComp.filePath);
-                    if (!metadata.empty()) {
-                        RenderMetadataComponentMenu(metadata);
-                        RenderMetadataValueMenu(metadata);
-                        ImGui::Separator();
-                    }
+    void ContextMenuUtils::RenderEntityContextMenuItems(ECS::EntityID entityId) {
+        if (!entityManager.IsEntityValid(entityId)) return;
+
+        ImGui::Text("Entity: %zu", entityId);
+        ImGui::Separator();
+
+        if (entityManager.HasComponent<ECS::ImageComponent>(entityId)) {
+            const auto& imageComp = entityManager.GetComponent<ECS::ImageComponent>(entityId);
+            if (!imageComp.filePath.empty() && std::filesystem::exists(imageComp.filePath)) {
+                if (ImGui::MenuItem("Copy File Path")) {
+                    CopyFilePath(entityId);
                 }
-            }
-            else if (entityManager.HasComponent<ECS::VideoComponent>(entityId)) {
-                const auto& videoComp = entityManager.GetComponent<ECS::VideoComponent>(entityId);
-                if (!videoComp.filePath.empty() && std::filesystem::exists(videoComp.filePath)) {
-                    if (ImGui::MenuItem("Copy File Path")) {
-                        CopyFilePath(entityId);
-                    }
-                    if (ImGui::MenuItem("Copy Current Frame")) {
-                        CopyVideoFrame(entityId);
-                    }
-                    ImGui::Text("Video file: %s", videoComp.fileName.c_str());
+                if (ImGui::MenuItem("Copy Image Data")) {
+                    CopyImageData(entityId);
+                }
+                nlohmann::json metadata = ParseImageMetadata(imageComp.filePath);
+                if (!metadata.empty()) {
+                    RenderMetadataComponentMenu(metadata);
+                    RenderMetadataValueMenu(metadata);
                     ImGui::Separator();
                 }
             }
-
-            RenderEntityComponentMenu(entityId);
-            ImGui::Separator();
-            RenderPasteMenu(entityId);
-
-            ImGui::EndPopup();
         }
+        else if (entityManager.HasComponent<ECS::VideoComponent>(entityId)) {
+            const auto& videoComp = entityManager.GetComponent<ECS::VideoComponent>(entityId);
+            if (!videoComp.filePath.empty() && std::filesystem::exists(videoComp.filePath)) {
+                if (ImGui::MenuItem("Copy File Path")) {
+                    CopyFilePath(entityId);
+                }
+                if (ImGui::MenuItem("Copy Current Frame")) {
+                    CopyVideoFrame(entityId);
+                }
+                ImGui::Text("Video file: %s", videoComp.fileName.c_str());
+                ImGui::Separator();
+            }
+        }
+
+        RenderEntityComponentMenu(entityId);
+        ImGui::Separator();
+        RenderPasteMenu(entityId);
     }
 
     void ContextMenuUtils::CopyFilePath(ECS::EntityID entityId) {
@@ -898,4 +903,4 @@ namespace Utils {
         return result;
     }
 
-} // namespace Utils
+}

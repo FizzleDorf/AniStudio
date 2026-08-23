@@ -16,6 +16,7 @@ namespace Utils {
         ~ContextMenuUtils() = default;
 
         void RenderEntityContextMenu(ECS::EntityID entityId);
+        void RenderEntityContextMenuItems(ECS::EntityID entityId);
 
         void RenderImageContextMenu(ECS::EntityID entityId);
         void RenderImageContextMenuWithPath(const std::string& imagePath);
@@ -69,4 +70,4 @@ namespace Utils {
         bool SetClipboardDIB(unsigned char* data, int width, int height, int channels);
     };
 
-} // namespace Utils
+}

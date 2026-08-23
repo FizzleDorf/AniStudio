@@ -40,16 +40,20 @@ namespace ECS {
         }
 
         void Start() override {
-            for (auto entity : entities) {
+            auto allEntities = mgr.GetAllEntities();
+            for (auto entity : allEntities) {
                 if (mgr.HasComponent<VideoComponent>(entity)) {
+                    entities.insert(entity);
                     auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-                    LoadVideo(videoComp, entity);
+                    if (!videoComp.filePath.empty()) {
+                        LoadVideo(videoComp, entity);
+                        NotifyVideoAdded(entity);
+                    }
                 }
             }
         }
 
         void Update(float deltaT) override {
-            // Not used for playback
         }
 
         void SetVideo(EntityID entity, const std::string& filePath) {

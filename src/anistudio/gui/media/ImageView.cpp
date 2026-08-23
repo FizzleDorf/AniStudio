@@ -8,7 +8,8 @@
 #include "PngMetadataUtils.hpp"
 #include "ClipboardUtilities.hpp"
 #include "DragDropUtils.hpp"
-#include "ImageHistoryView.hpp"
+#include "MediaHistoryView.hpp"
+#include "MetadataView.hpp"
 #include <algorithm>
 
 namespace GUI {
@@ -33,6 +34,29 @@ namespace GUI {
                 });
         }
         RefreshEntities();
+
+        ANI::Events::Ref().RegisterEventWithData("SelectMediaEntity", [this](const std::any& data) {
+            try {
+                auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
+                auto it = eventData.find("workspaceID");
+                if (it != eventData.end()) {
+                    WorkspaceID wsID = std::any_cast<WorkspaceID>(it->second);
+                    if (wsID == GetID()) {
+                        auto entityIt = eventData.find("entityID");
+                        if (entityIt != eventData.end()) {
+                            ECS::EntityID entity = std::any_cast<ECS::EntityID>(entityIt->second);
+                            if (m_entityManager.IsEntityValid(entity) &&
+                                m_entityManager.HasComponent<ECS::ImageComponent>(entity)) {
+                                SetSelectedEntity(entity);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[ImageView] SelectMediaEntity event error: " << e.what() << std::endl;
+            }
+            });
     }
 
     void ImageView::Update(float deltaT) {
@@ -161,6 +185,9 @@ namespace GUI {
                 ImGui::SameLine();
                 ImGui::Text("Entity ID: %zu", selectedEntityID);
                 RenderMediaContextMenu(selectedEntityID);
+                if (ImGui::Button("Send to Metadata Viewer")) {
+                    SendSelectedToMetadataView();
+                }
                 ImGui::Separator();
             }
             catch (const std::exception& e) {
@@ -384,11 +411,19 @@ namespace GUI {
     }
 
     bool ImageView::IsHistoryVisible() const {
-        return GetViewManager().HasView<ImageHistoryView>(GetID());
+        return GetViewManager().HasView<MediaHistoryView>(GetID());
     }
 
     std::string ImageView::GetHistoryViewTypeName() const {
-        return "ImageHistoryView";
+        return "MediaHistoryView";
+    }
+
+    std::string ImageView::GetSelectedFilePath() const {
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
+            return m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID).filePath;
+        }
+        return "";
     }
 
 }

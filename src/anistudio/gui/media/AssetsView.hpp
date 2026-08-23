@@ -3,9 +3,12 @@
 
 #include "BaseView.hpp"
 #include "ContextMenuUtils.hpp"
+#include "ThumbnailUtils.hpp"
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <unordered_map>
+#include <set>
 
 namespace GUI {
 
@@ -31,21 +34,29 @@ namespace GUI {
         std::string assetsPath;
         bool needsRefresh;
         std::vector<ECS::EntityID> loadedEntities;
+        std::unordered_map<std::string, ECS::EntityID> pathToEntity;
+        std::set<std::string> loadedPaths;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
+        Thumbnail::DisplayMode currentDisplayMode = Thumbnail::DisplayMode::Detailed;
         enum class FileTypeFilter { All, Image, Video, Audio };
         FileTypeFilter currentTypeFilter = FileTypeFilter::All;
         enum class SortMode { Name, Size, Date };
         SortMode currentSort = SortMode::Name;
         bool sortAscending = true;
+        ECS::EntityID selectedEntityID = 0;
 
         void RefreshAssets();
+        void LoadNewAssets();
         void RenderAssetGrid();
         void LoadAsset(const std::filesystem::path& path);
         void ClearLoadedAssets();
         void ApplyFiltersAndSort();
-        void RenderFilters();
-        void RenderThumbnail(const std::filesystem::path& path, size_t index, float thumbnailSize);
+        void RenderMenuBar();
+        bool CopyFileToAssets(const std::string& sourcePath);
+        Thumbnail::ThumbnailData BuildThumbnailData(const std::filesystem::path& path, ECS::EntityID entityID);
+        void SelectAssetEntity(ECS::EntityID entityID);
+        void CopyMetadataFromFile(const std::string& filePath);
     };
 
 } // namespace GUI

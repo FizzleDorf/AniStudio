@@ -40,6 +40,8 @@ namespace GUI {
 
         bool IsAltKeyDown() const;
 
+        virtual std::string GetSelectedFilePath() const = 0;
+
     protected:
         ECS::EntityID selectedEntityID;
         int index;
@@ -63,6 +65,8 @@ namespace GUI {
 
         bool isDragging;
         ImVec2 dragStartPos;
+
+        void SendSelectedToMetadataView();
     };
 
 }

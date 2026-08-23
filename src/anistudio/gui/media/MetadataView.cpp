@@ -34,6 +34,8 @@ namespace GUI {
     void MetadataView::Render() {
         ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar);
 
+        HandleDropTarget();
+
         if (!metadata.is_null() && !metadata.empty()) {
             ImGui::Text("Source: %s", sourceDisplayName.c_str());
             ImGui::Separator();
@@ -44,7 +46,6 @@ namespace GUI {
 
         if (metadata.is_null() || metadata.empty()) {
             ImGui::Text("No metadata loaded. Use File menu to load or drag & drop a file/entity.");
-            HandleDropTarget();
             ImGui::End();
             return;
         }
@@ -56,7 +57,6 @@ namespace GUI {
             RenderRawJSONView();
         }
 
-        HandleDropTarget();
         ImGui::End();
 
         if (!windowOpen) {
@@ -390,7 +390,15 @@ namespace GUI {
 
     void MetadataView::CopyMetadataAsJSON() {
         if (metadata.is_null() || metadata.empty()) return;
-        std::string jsonStr = metadata.dump(4);
+        std::string jsonStr;
+        if (!rawSourceText.empty()) {
+            jsonStr = rawSourceText;
+            std::cout << "[MetadataView] Copying raw source text." << std::endl;
+        }
+        else {
+            jsonStr = metadata.dump(4);
+            std::cout << "[MetadataView] Copying re-serialized metadata." << std::endl;
+        }
         ImGui::SetClipboardText(jsonStr.c_str());
         std::cout << "[MetadataView] Copied metadata as JSON." << std::endl;
     }
@@ -631,7 +639,7 @@ namespace GUI {
 
                 if (keyMatches || childHasMatch) {
                     if (keyMatches) {
-                        result[it.key()] = it.value(); // include whole subtree
+                        result[it.key()] = it.value();
                     }
                     else {
                         result[it.key()] = filteredChild;
@@ -659,7 +667,7 @@ namespace GUI {
             return nlohmann::json();
         }
         else {
-            return node; // numbers, booleans, null are returned as is
+            return node;
         }
     }
 
@@ -692,7 +700,31 @@ namespace GUI {
         std::string ext = std::filesystem::path(filePath).extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
-        if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp") {
+        rawSourceText.clear();
+
+        // For JSON files, store raw text
+        if (ext == ".json") {
+            std::ifstream file(filePath);
+            if (file.is_open()) {
+                std::stringstream buffer;
+                buffer << file.rdbuf();
+                rawSourceText = buffer.str();
+                try {
+                    file.clear();
+                    file.seekg(0);
+                    file >> loaded;
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "[MetadataView] Failed to parse JSON: " << e.what() << std::endl;
+                    return false;
+                }
+            }
+            else {
+                std::cerr << "[MetadataView] Could not open JSON file: " << filePath << std::endl;
+                return false;
+            }
+        }
+        else if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".webp") {
             loaded = Utils::ImageUtils::ReadMetadataFromImage(filePath);
             if (loaded.is_null() || loaded.empty()) {
                 if (ext == ".png") {
@@ -704,6 +736,7 @@ namespace GUI {
                             nlohmann::json parsed = nlohmann::json::parse(value);
                             if (!parsed.is_null() && !parsed.empty()) {
                                 loaded = parsed;
+                                rawSourceText = value; // store the raw chunk text
                                 break;
                             }
                         }
@@ -712,6 +745,7 @@ namespace GUI {
                                 nlohmann::json parsed = ParseRawMetadata(value);
                                 if (!parsed.empty()) {
                                     loaded = parsed;
+                                    rawSourceText = value; // store raw chunk text
                                     break;
                                 }
                             }
@@ -726,35 +760,36 @@ namespace GUI {
                     }
                 }
             }
+            else {
+                // If we got metadata from ImageUtils, we might not have raw text; we could store the raw if we can read it, but we skip.
+                // For JPEG, we could read the raw EXIF, but not implemented.
+            }
         }
         else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov") {
             loaded = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
-        }
-        else if (ext == ".json") {
-            std::ifstream file(filePath);
-            if (file.is_open()) {
-                try {
-                    file >> loaded;
-                }
-                catch (const std::exception& e) {
-                    std::cerr << "[MetadataView] Failed to parse JSON: " << e.what() << std::endl;
-                    return false;
-                }
-            }
-            else {
-                std::cerr << "[MetadataView] Could not open JSON file: " << filePath << std::endl;
-                return false;
-            }
+            // No raw text for video
         }
         else {
             std::string jsonPath = filePath + ".json";
             if (std::filesystem::exists(jsonPath)) {
                 loaded = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
+                // Read raw text from sidecar
+                std::ifstream file(jsonPath);
+                if (file.is_open()) {
+                    std::stringstream buffer;
+                    buffer << file.rdbuf();
+                    rawSourceText = buffer.str();
+                }
             }
             else {
                 std::ifstream file(filePath);
                 if (file.is_open()) {
+                    std::stringstream buffer;
+                    buffer << file.rdbuf();
+                    rawSourceText = buffer.str(); // store raw text for unknown files
                     try {
+                        file.clear();
+                        file.seekg(0);
                         file >> loaded;
                     }
                     catch (...) {
@@ -799,6 +834,7 @@ namespace GUI {
         metadata = entityData;
         sourcePath = "";
         sourceDisplayName = "Entity " + std::to_string(entityID);
+        rawSourceText.clear(); // no raw text for entity
         filterText.clear();
         std::memset(filterBuffer, 0, sizeof(filterBuffer));
         UpdateDisplayMetadata();
@@ -814,6 +850,7 @@ namespace GUI {
         metadata = jsonData;
         sourcePath = "";
         sourceDisplayName = sourceName.empty() ? "Custom JSON" : sourceName;
+        rawSourceText.clear(); // no raw text for custom JSON
         filterText.clear();
         std::memset(filterBuffer, 0, sizeof(filterBuffer));
         UpdateDisplayMetadata();
@@ -827,6 +864,7 @@ namespace GUI {
         sourcePath.clear();
         sourceDisplayName.clear();
         filterText.clear();
+        rawSourceText.clear();
         std::memset(filterBuffer, 0, sizeof(filterBuffer));
         std::cout << "[MetadataView] Metadata cleared." << std::endl;
     }
@@ -840,6 +878,8 @@ namespace GUI {
         try {
             nlohmann::json parsed = nlohmann::json::parse(text);
             if (!parsed.is_null() && !parsed.empty()) {
+                // Store the raw text
+                rawSourceText = text;
                 LoadFromJSON(parsed, "Clipboard");
                 return true;
             }
@@ -875,6 +915,7 @@ namespace GUI {
         data["sourceDisplayName"] = sourceDisplayName;
         data["mode"] = static_cast<int>(currentMode);
         data["filterText"] = filterText;
+        data["rawSourceText"] = rawSourceText; // store raw text
         return data;
     }
 
@@ -897,6 +938,9 @@ namespace GUI {
             std::strncpy(filterBuffer, filterText.c_str(), sizeof(filterBuffer) - 1);
             filterBuffer[sizeof(filterBuffer) - 1] = '\0';
             UpdateDisplayMetadata();
+        }
+        if (data.contains("rawSourceText")) {
+            rawSourceText = data["rawSourceText"].get<std::string>();
         }
         std::cout << "[MetadataView] Deserialized metadata view." << std::endl;
     }
