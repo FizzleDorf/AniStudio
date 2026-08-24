@@ -50,7 +50,6 @@ namespace GUI {
         float offsetY;
         size_t lastEntityCount;
         std::vector<ECS::EntityID> mediaEntities;
-        WorkspaceID historyWorkspaceID;
 
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 

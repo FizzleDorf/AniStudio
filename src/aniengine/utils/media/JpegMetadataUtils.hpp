@@ -55,15 +55,40 @@ namespace Utils {
                 }
 
                 image->readMetadata();
+
                 Exiv2::ExifData& exifData = image->exifData();
-                auto it = exifData.findKey(Exiv2::ExifKey("Exif.Photo.UserComment"));
-                if (it != exifData.end()) {
+                for (const auto& exif : exifData) {
+                    std::string key = exif.key();
+                    std::string value = exif.toString();
                     try {
-                        result = nlohmann::json::parse(it->toString());
-                        std::cout << "Successfully loaded EXIF metadata from JPEG" << std::endl;
+                        nlohmann::json parsed = nlohmann::json::parse(value);
+                        if (parsed.is_object() || parsed.is_array()) {
+                            result[key] = parsed;
+                        }
+                        else {
+                            result[key] = value;
+                        }
                     }
-                    catch (const std::exception& e) {
-                        std::cerr << "Error parsing JSON from EXIF: " << e.what() << std::endl;
+                    catch (...) {
+                        result[key] = value;
+                    }
+                }
+
+                Exiv2::XmpData& xmpData = image->xmpData();
+                for (const auto& xmp : xmpData) {
+                    std::string key = xmp.key();
+                    std::string value = xmp.toString();
+                    try {
+                        nlohmann::json parsed = nlohmann::json::parse(value);
+                        if (parsed.is_object() || parsed.is_array()) {
+                            result[key] = parsed;
+                        }
+                        else {
+                            result[key] = value;
+                        }
+                    }
+                    catch (...) {
+                        result[key] = value;
                     }
                 }
             }
@@ -78,4 +103,4 @@ namespace Utils {
         }
     };
 
-} // namespace Utils
+}

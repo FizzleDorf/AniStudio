@@ -1,12 +1,161 @@
 #include "ThumbnailUtils.hpp"
 #include "DragDropUtils.hpp"
+#include "ImageUtils.hpp"
+#include "VideoUtils.hpp"
 #include <imgui.h>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <unordered_map>
+#include <filesystem>
 
 namespace GUI {
     namespace Thumbnail {
+
+        static std::unordered_map<std::string, nlohmann::json> s_metadataCache;
+
+        static std::string NormalizePath(const std::string& path) {
+            std::error_code ec;
+            std::filesystem::path absPath = std::filesystem::absolute(path, ec);
+            if (ec) return path;
+            return absPath.string();
+        }
+
+        static const nlohmann::json& GetCachedMetadata(const std::string& filePath, bool isVideo) {
+            std::string normalizedPath = NormalizePath(filePath);
+            auto it = s_metadataCache.find(normalizedPath);
+            if (it != s_metadataCache.end()) {
+                return it->second;
+            }
+
+            nlohmann::json meta;
+            if (isVideo) {
+                meta = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
+            }
+            else {
+                meta = Utils::ImageUtils::ReadMetadataFromImage(filePath);
+            }
+
+            auto result = s_metadataCache.emplace(normalizedPath, std::move(meta));
+            return result.first->second;
+        }
+
+        static bool HasValidComponents(const nlohmann::json& obj) {
+            if (!obj.is_object()) return false;
+            if (obj.contains("components") && obj["components"].is_array()) {
+                for (const auto& comp : obj["components"]) {
+                    if (comp.is_object() && !comp.empty()) {
+                        for (auto it = comp.begin(); it != comp.end(); ++it) {
+                            if (!it.value().is_null() && !it.value().empty()) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        static nlohmann::json ExtractAniStudioData(const nlohmann::json& meta) {
+            if (meta.is_null() || !meta.is_object()) return meta;
+
+            // Direct components at root
+            if (HasValidComponents(meta)) return meta;
+
+            // dataType == "entity" wrapper
+            if (meta.contains("dataType") && meta["dataType"] == "entity" && meta.contains("data")) {
+                const auto& data = meta["data"];
+                if (data.is_object()) {
+                    if (data.contains("parameters") && data["parameters"].is_object()) {
+                        const auto& params = data["parameters"];
+                        if (HasValidComponents(params)) return params;
+                    }
+                    if (HasValidComponents(data)) return data;
+                }
+            }
+
+            // Single-key wrapper (like {"parameters": {...}})
+            if (meta.is_object() && meta.size() == 1) {
+                auto it = meta.begin();
+                const auto& value = it.value();
+                if (value.is_object()) {
+                    if (HasValidComponents(value)) return value;
+                    if (value.contains("parameters") && value["parameters"].is_object()) {
+                        const auto& params = value["parameters"];
+                        if (HasValidComponents(params)) return params;
+                    }
+                }
+            }
+
+            return meta;
+        }
+
+        static bool IsAniStudioCompatible(const nlohmann::json& meta) {
+            nlohmann::json extracted = ExtractAniStudioData(meta);
+            return HasValidComponents(extracted);
+        }
+
+        static bool HasExifData(const nlohmann::json& obj) {
+            if (!obj.is_object()) return false;
+            if (HasValidComponents(obj)) return true;
+            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                if (it.key() != "components" && it.value().is_object() && !it.value().empty()) {
+                    return true;
+                }
+                if (it.value().is_string() && !it.value().get<std::string>().empty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static bool GetCachedExif(const std::string& filePath, bool isVideo) {
+            const auto& meta = GetCachedMetadata(filePath, isVideo);
+            if (meta.is_null() || meta.empty()) return false;
+
+            nlohmann::json extracted = ExtractAniStudioData(meta);
+            if (HasExifData(extracted)) return true;
+            if (HasExifData(meta)) return true;
+
+            return false;
+        }
+
+        static bool GetCachedLSB(const std::string& filePath, bool isVideo) {
+            const auto& meta = GetCachedMetadata(filePath, isVideo);
+            if (meta.is_null() || meta.empty()) return false;
+
+            std::vector<std::string> stealthKeys = { "LSB", "Stealth", "Hidden", "steganography", "lsb" };
+
+            auto hasLSB = [&](const nlohmann::json& obj) {
+                if (!obj.is_object()) return false;
+                for (const auto& key : stealthKeys) {
+                    if (obj.contains(key)) return true;
+                }
+                if (obj.contains("components") && obj["components"].is_array()) {
+                    for (const auto& comp : obj["components"]) {
+                        if (comp.is_object()) {
+                            for (const auto& key : stealthKeys) {
+                                if (comp.contains(key)) return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+                };
+
+            nlohmann::json extracted = ExtractAniStudioData(meta);
+            if (hasLSB(extracted)) return true;
+            if (hasLSB(meta)) return true;
+
+            return false;
+        }
+
+        static int GetCachedMetadataStatus(const std::string& filePath, bool isVideo) {
+            const auto& meta = GetCachedMetadata(filePath, isVideo);
+            if (meta.is_null() || meta.empty()) return 0;
+            if (IsAniStudioCompatible(meta)) return 1;
+            return 2;
+        }
 
         void RenderThumbnail(
             const ThumbnailData& data,
@@ -97,7 +246,7 @@ namespace GUI {
 
                 ImGui::EndGroup();
             }
-            else { // Detailed
+            else {
                 const float childWidth = thumbnailSize + 160;
                 const float childHeight = thumbnailSize + 60;
                 ImGui::BeginChild(("thumb_child_" + std::to_string(index)).c_str(), ImVec2(childWidth, childHeight), true);
@@ -201,13 +350,46 @@ namespace GUI {
                 if (!data.fileDate.empty()) ImGui::Text("%s", data.fileDate.c_str());
                 if (!data.fileTime.empty()) ImGui::Text("%s", data.fileTime.c_str());
                 if (data.isVideo && data.fps > 0) ImGui::Text("%.1f fps", data.fps);
-                if (data.hasExif) ImGui::TextColored(ImVec4(0, 1, 0, 1), "EXIF");
-                if (data.hasLSB) ImGui::TextColored(ImVec4(0, 1, 0, 1), "LSB");
+
+                bool isAniStudio = (GetCachedMetadataStatus(data.filePath, data.isVideo) == 1);
+                bool hasExif = GetCachedExif(data.filePath, data.isVideo);
+                bool hasLSB = GetCachedLSB(data.filePath, data.isVideo);
+
+                ImVec4 exifColor;
+                ImVec4 lsbColor;
+
+                if (isAniStudio) {
+                    exifColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+                    lsbColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+                }
+                else if (hasExif) {
+                    exifColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                }
+                else {
+                    exifColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                }
+
+                if (isAniStudio) {
+                    lsbColor = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+                }
+                else if (hasLSB) {
+                    lsbColor = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                }
+                else {
+                    lsbColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                }
+
+                ImGui::TextColored(exifColor, "EXIF");
+                ImGui::SameLine();
+                ImGui::Text("|");
+                ImGui::SameLine();
+                ImGui::TextColored(lsbColor, "LSB");
+
                 ImGui::EndGroup();
 
                 ImGui::EndChild();
             }
         }
 
-    } // namespace Thumbnail
-} // namespace GUI
+    }
+}

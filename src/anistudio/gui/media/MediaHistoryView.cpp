@@ -66,6 +66,13 @@ namespace GUI {
     void MediaHistoryView::Update(float deltaT) {}
 
     void MediaHistoryView::Render() {
+        static auto lastRefresh = std::chrono::steady_clock::now();
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRefresh).count() > 1000) {
+            RefreshEntities();
+            lastRefresh = now;
+        }
+
         ImGui::Begin("Media History", &windowOpen, ImGuiWindowFlags_MenuBar);
 
         RenderMenuBar();
@@ -163,7 +170,18 @@ namespace GUI {
         Thumbnail::ThumbnailData data;
         data.entityID = entityID;
 
-        if (m_entityManager.HasComponent<ECS::ImageComponent>(entityID)) {
+        if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
+            const auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
+            data.filePath = comp.filePath;
+            data.fileName = comp.fileName;
+            data.textureID = comp.currentTexture;
+            data.width = comp.width;
+            data.height = comp.height;
+            data.fps = static_cast<float>(comp.fps);
+            data.isVideo = true;
+            data.channels = 4;
+        }
+        else if (m_entityManager.HasComponent<ECS::ImageComponent>(entityID)) {
             const auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
             data.filePath = comp.filePath;
             data.fileName = comp.fileName;
@@ -174,16 +192,6 @@ namespace GUI {
             data.hasExif = comp.hasExifData;
             data.hasLSB = comp.hasLSBData;
             data.isVideo = false;
-        }
-        else if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
-            const auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
-            data.filePath = comp.filePath;
-            data.fileName = comp.fileName;
-            data.textureID = comp.currentTexture;
-            data.width = comp.width;
-            data.height = comp.height;
-            data.fps = comp.fps;
-            data.isVideo = true;
         }
 
         try {
@@ -211,20 +219,27 @@ namespace GUI {
 
     void MediaHistoryView::RefreshEntities() {
         mediaEntities.clear();
+
         if (imageSystem) {
             for (auto id : imageSystem->GetAllImageEntities()) {
                 if (m_entityManager.IsEntityValid(id)) {
-                    mediaEntities.push_back(id);
+                    if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
+                        mediaEntities.push_back(id);
+                    }
                 }
             }
         }
+
         if (videoSystem) {
             for (auto id : videoSystem->GetAllVideoEntities()) {
                 if (m_entityManager.IsEntityValid(id)) {
-                    mediaEntities.push_back(id);
+                    if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
+                        mediaEntities.push_back(id);
+                    }
                 }
             }
         }
+
         if (selectedEntityID != 0 && !m_entityManager.IsEntityValid(selectedEntityID)) {
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
         }
@@ -249,16 +264,10 @@ namespace GUI {
         if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) return;
         selectedEntityID = entityID;
 
-        if (parentWorkspaceID != 0) {
-            std::unordered_map<std::string, std::any> eventData;
-            eventData["workspaceID"] = parentWorkspaceID;
-            eventData["entityID"] = entityID;
-            ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
-        }
-    }
-
-    void MediaHistoryView::SetParentViewWorkspace(WorkspaceID parentWorkspace) {
-        parentWorkspaceID = parentWorkspace;
+        std::unordered_map<std::string, std::any> eventData;
+        eventData["workspaceID"] = GetID();
+        eventData["entityID"] = entityID;
+        ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
     }
 
 }

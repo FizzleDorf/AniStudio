@@ -65,6 +65,7 @@ namespace ECS {
                 videoComp.fileName = (lastSlash != std::string::npos) ?
                     filePath.substr(lastSlash + 1) : filePath;
                 LoadVideo(videoComp, entity);
+                entities.insert(entity);  // FIX: Ensure entity is tracked
                 NotifyVideoAdded(entity);
             }
         }
@@ -73,6 +74,7 @@ namespace ECS {
             if (mgr.HasComponent<VideoComponent>(entity)) {
                 auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
                 videoComp.UnloadVideo();
+                entities.erase(entity);  // FIX: Remove entity from tracking
                 NotifyVideoRemoved(entity);
                 mgr.DestroyEntity(entity);
             }
@@ -81,7 +83,7 @@ namespace ECS {
         std::vector<EntityID> GetAllVideoEntities() const {
             std::vector<EntityID> result;
             for (auto entity : entities) {
-                if (mgr.HasComponent<VideoComponent>(entity))
+                if (mgr.IsEntityValid(entity) && mgr.HasComponent<VideoComponent>(entity))
                     result.push_back(entity);
             }
             return result;

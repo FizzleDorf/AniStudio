@@ -16,6 +16,7 @@
 #include "WebPMetadataUtils.hpp"
 #include "VideoMetadataUtils.hpp"
 #include "MetadataUtils.hpp"
+#include "FileFormats.hpp"
 
 #ifdef USE_WEBP
 #include <webp/encode.h>
@@ -122,14 +123,18 @@ namespace Utils {
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
             int result = 0;
-            if (ext == ".png")
+            if (ext == ".png") {
                 result = stbi_write_png(filePath.c_str(), width, height, channels, data, width * channels);
-            else if (ext == ".jpg" || ext == ".jpeg")
+            }
+            else if (ext == ".jpg" || ext == ".jpeg") {
                 result = stbi_write_jpg(filePath.c_str(), width, height, channels, data, 90);
-            else if (ext == ".bmp")
+            }
+            else if (ext == ".bmp") {
                 result = stbi_write_bmp(filePath.c_str(), width, height, channels, data);
-            else if (ext == ".tga")
+            }
+            else if (ext == ".tga") {
                 result = stbi_write_tga(filePath.c_str(), width, height, channels, data);
+            }
             else if (ext == ".webp") {
 #ifdef USE_WEBP
                 uint8_t* output = nullptr;
@@ -177,6 +182,18 @@ namespace Utils {
                 result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
                 if (result) filePath = newPath;
             }
+            else if (ext == ".tiff") {
+                std::string newPath = path.stem().string() + ".png";
+                std::cout << "TIFF writing not supported, saving as PNG: " << newPath << std::endl;
+                result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                if (result) filePath = newPath;
+            }
+            else if (ext == ".gif") {
+                std::string newPath = path.stem().string() + ".png";
+                std::cout << "GIF writing not supported, saving as PNG: " << newPath << std::endl;
+                result = stbi_write_png(newPath.c_str(), width, height, channels, data, width * channels);
+                if (result) filePath = newPath;
+            }
             else {
                 std::string newPath = path.stem().string() + ".png";
                 std::cout << "Unknown format, saving as PNG: " << newPath << std::endl;
@@ -196,6 +213,16 @@ namespace Utils {
             std::string ext = std::filesystem::path(imagePath).extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
+            const auto& formats = FileFormats::GetAllFormats();
+            auto it = formats.find(ext);
+            bool supportsMetadata = (it != formats.end()) ? it->second.supportsMetadata : false;
+            bool supportsStealth = (it != formats.end()) ? it->second.supportsStealth : false;
+
+            if (!supportsMetadata || (useStealth && !supportsStealth)) {
+                std::string jsonPath = imagePath + ".json";
+                return MetadataUtils::SaveMetadataToJson(jsonPath, metadata);
+            }
+
             if (ext == ".png") {
                 return PngMetadata::WriteMetadataToPNG(imagePath, metadata, useStealth);
             }
@@ -205,8 +232,21 @@ namespace Utils {
             else if (ext == ".webp") {
                 return WebPMetadata::WriteMetadataToWebP(imagePath, metadata);
             }
-            else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv") {
+            else if (ext == ".tiff") {
+#ifdef USE_EXIV2
+                return MetadataUtils::WriteMetadataToTIFF(imagePath, metadata);
+#else
+                std::string jsonPath = imagePath + ".json";
+                return MetadataUtils::SaveMetadataToJson(jsonPath, metadata);
+#endif
+            }
+            else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv" ||
+                ext == ".m4v" || ext == ".3gp" || ext == ".ogv" || ext == ".ts" || ext == ".wmv" || ext == ".mpg" || ext == ".mpeg") {
                 return VideoMetadataUtils::WriteMetadataToVideo(imagePath, metadata, forceSidecar);
+            }
+            else if (ext == ".wav" || ext == ".mp3" || ext == ".flac" || ext == ".m4a") {
+                std::string jsonPath = imagePath + ".json";
+                return MetadataUtils::SaveMetadataToJson(jsonPath, metadata);
             }
             else {
                 std::string jsonPath = imagePath + ".json";
@@ -219,38 +259,44 @@ namespace Utils {
             std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
             nlohmann::json result;
-            bool triedReader = false;
 
             try {
                 if (ext == ".png") {
                     result = PngMetadata::ReadMetadataFromPNG(imagePath);
-                    triedReader = true;
                 }
                 else if (ext == ".jpg" || ext == ".jpeg") {
                     result = JpegMetadata::ReadMetadataFromJPEG(imagePath);
-                    triedReader = true;
                 }
                 else if (ext == ".webp") {
                     result = WebPMetadata::ReadMetadataFromWebP(imagePath);
-                    triedReader = true;
                 }
-                else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv") {
+                else if (ext == ".tiff") {
+#ifdef USE_EXIV2
+                    result = MetadataUtils::ReadMetadataFromTIFF(imagePath);
+#endif
+                }
+                else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" || ext == ".mov" || ext == ".flv" ||
+                    ext == ".m4v" || ext == ".3gp" || ext == ".ogv" || ext == ".ts" || ext == ".wmv" || ext == ".mpg" || ext == ".mpeg") {
                     result = VideoMetadataUtils::ReadMetadataFromVideo(imagePath);
-                    triedReader = true;
+                }
+                else if (ext == ".wav" || ext == ".mp3" || ext == ".flac" || ext == ".m4a") {
                 }
             }
             catch (...) {
                 result = nlohmann::json();
             }
 
-            if (!triedReader || result.empty()) {
-                std::string jsonPath = imagePath + ".json";
+            std::string jsonPath = imagePath + ".json";
+            if (std::filesystem::exists(jsonPath)) {
                 nlohmann::json sidecar = MetadataUtils::LoadMetadataFromJson(jsonPath);
                 if (!sidecar.empty()) {
-                    result = sidecar;
+                    for (auto it = sidecar.begin(); it != sidecar.end(); ++it) {
+                        result[it.key()] = it.value();
+                    }
                 }
             }
 
+            result = MetadataUtils::NormalizeAniStudioMetadata(result);
             return result;
         }
 
@@ -263,13 +309,24 @@ namespace Utils {
                 return false;
             }
             if (meta.is_null() || meta.empty()) return false;
+
             if (meta.contains("components") && meta["components"].is_array()) {
                 for (const auto& comp : meta["components"]) {
-                    if (comp.is_object() && !comp.empty()) return true;
+                    if (comp.is_object() && !comp.empty()) {
+                        for (auto it = comp.begin(); it != comp.end(); ++it) {
+                            if (!it.value().is_null() && !it.value().empty()) {
+                                return true;
+                            }
+                        }
+                    }
                 }
             }
+
             for (auto it = meta.begin(); it != meta.end(); ++it) {
-                if (it.value().is_object() && !it.value().empty()) {
+                if (it.key() != "components" && it.value().is_object() && !it.value().empty()) {
+                    return true;
+                }
+                if (it.value().is_string() && !it.value().get<std::string>().empty()) {
                     return true;
                 }
             }
@@ -285,11 +342,63 @@ namespace Utils {
                 return false;
             }
             if (meta.is_null() || meta.empty()) return false;
-            if (meta.contains("LSB") || meta.contains("Stealth") || meta.contains("Hidden") ||
-                meta.contains("steganography") || meta.contains("lsb")) {
-                return true;
+
+            std::vector<std::string> stealthKeys = { "LSB", "Stealth", "Hidden", "steganography", "lsb" };
+            for (const auto& key : stealthKeys) {
+                if (meta.contains(key)) {
+                    return true;
+                }
+            }
+
+            if (meta.contains("components") && meta["components"].is_array()) {
+                for (const auto& comp : meta["components"]) {
+                    if (comp.is_object()) {
+                        for (const auto& key : stealthKeys) {
+                            if (comp.contains(key)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
             }
             return false;
+        }
+
+        static int GetMetadataStatus(const std::string& filePath) {
+            nlohmann::json meta;
+            try {
+                meta = ReadMetadataFromImage(filePath);
+            }
+            catch (...) {
+                return 0;
+            }
+            if (meta.is_null() || meta.empty()) return 0;
+
+            if (meta.contains("components") && meta["components"].is_array()) {
+                for (const auto& comp : meta["components"]) {
+                    if (comp.is_object() && !comp.empty()) {
+                        for (auto it = comp.begin(); it != comp.end(); ++it) {
+                            if (!it.value().is_null() && !it.value().empty()) {
+                                return 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (meta.contains("dataType") && meta["dataType"] == "entity" && meta.contains("data")) {
+                return 1;
+            }
+
+            for (auto it = meta.begin(); it != meta.end(); ++it) {
+                if (it.value().is_object() && !it.value().empty()) {
+                    return 2;
+                }
+                if (it.value().is_string() && !it.value().get<std::string>().empty()) {
+                    return 2;
+                }
+            }
+            return 0;
         }
 
         static std::string CreateUniqueFilenameIncremental(const std::string& baseName, const std::string& directory, const std::string& extension) {
@@ -344,4 +453,4 @@ namespace Utils {
         }
     };
 
-} // namespace Utils
+}

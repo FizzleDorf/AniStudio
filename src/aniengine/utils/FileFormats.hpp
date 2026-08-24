@@ -21,17 +21,20 @@ namespace FileFormats {
 
     inline const std::unordered_map<std::string, FormatInfo>& GetAllFormats() {
         static const std::unordered_map<std::string, FormatInfo> formats = {
+            // Image formats
             { ".png",   { ".png",   "PNG Image", true, false, false, true, true, true, true } },
             { ".jpg",   { ".jpg",   "JPEG Image", true, false, false, true, false, true, true } },
             { ".jpeg",  { ".jpeg",  "JPEG Image", true, false, false, true, false, true, true } },
             { ".bmp",   { ".bmp",   "Bitmap Image", true, false, false, false, false, true, true } },
             { ".tga",   { ".tga",   "Targa Image", true, false, false, false, false, true, true } },
             { ".webp",  { ".webp",  "WebP Image", true, false, false, true, true, true, true } },
-            { ".tiff",  { ".tiff",  "TIFF Image", true, false, false, true, false, true, true } },
-            { ".gif",   { ".gif",   "GIF Image", true, false, false, false, false, true, true } },
-            { ".hdr",   { ".hdr",   "HDR Image", true, false, false, false, false, true, true } },
-            { ".pic",   { ".pic",   "PIC Image", true, false, false, false, false, true, true } },
-            { ".pnm",   { ".pnm",   "PNM Image", true, false, false, false, false, true, true } },
+            { ".tiff",  { ".tiff",  "TIFF Image", true, false, false, true, false, true, true } },  // EXIF supported via Exiv2
+            { ".gif",   { ".gif",   "GIF Image", true, false, false, false, false, true, true } },   // No metadata support
+            { ".hdr",   { ".hdr",   "HDR Image", true, false, false, false, false, false, true } },
+            { ".pic",   { ".pic",   "PIC Image", true, false, false, false, false, false, true } },
+            { ".pnm",   { ".pnm",   "PNM Image", true, false, false, false, false, false, true } },
+
+            // Video formats - all support metadata via FFmpeg
             { ".mp4",   { ".mp4",   "MP4 Video", false, true, false, true, false, true, true } },
             { ".webm",  { ".webm",  "WebM Video", false, true, false, true, false, true, true } },
             { ".mkv",   { ".mkv",   "Matroska Video", false, true, false, true, false, true, true } },
@@ -46,12 +49,14 @@ namespace FileFormats {
             { ".ogg",   { ".ogg",   "OGG Video", false, true, false, false, false, true, true } },
             { ".ts",    { ".ts",    "Transport Stream", false, true, false, false, false, true, true } },
             { ".m4v",   { ".m4v",   "M4V Video", false, true, false, true, false, true, true } },
-            { ".wav",   { ".wav",   "WAV Audio", false, false, true, false, false, true, true } },
-            { ".mp3",   { ".mp3",   "MP3 Audio", false, false, true, false, false, true, true } },
-            { ".flac",  { ".flac",  "FLAC Audio", false, false, true, false, false, true, true } },
+
+            // Audio formats
+            { ".wav",   { ".wav",   "WAV Audio", false, false, true, true, false, true, true } },
+            { ".mp3",   { ".mp3",   "MP3 Audio", false, false, true, true, false, true, true } },
+            { ".flac",  { ".flac",  "FLAC Audio", false, false, true, true, false, true, true } },
             { ".aac",   { ".aac",   "AAC Audio", false, false, true, false, false, true, true } },
             { ".ogg",   { ".ogg",   "OGG Audio", false, false, true, false, false, true, true } },
-            { ".m4a",   { ".m4a",   "M4A Audio", false, false, true, false, false, true, true } },
+            { ".m4a",   { ".m4a",   "M4A Audio", false, false, true, true, false, true, true } },
             { ".opus",  { ".opus",  "Opus Audio", false, false, true, false, false, true, true } }
         };
         return formats;
@@ -94,6 +99,18 @@ namespace FileFormats {
             }
         }
         return items;
+    }
+
+    inline bool SupportsMetadata(const std::string& extension) {
+        auto& formats = GetAllFormats();
+        auto it = formats.find(extension);
+        return (it != formats.end()) ? it->second.supportsMetadata : false;
+    }
+
+    inline bool SupportsStealth(const std::string& extension) {
+        auto& formats = GetAllFormats();
+        auto it = formats.find(extension);
+        return (it != formats.end()) ? it->second.supportsStealth : false;
     }
 
 } // namespace FileFormats

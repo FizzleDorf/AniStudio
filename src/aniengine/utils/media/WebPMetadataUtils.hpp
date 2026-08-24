@@ -11,4 +11,4 @@ namespace Utils {
         static nlohmann::json ReadMetadataFromWebP(const std::string& imagePath);
     };
 
-} // namespace Utils
+}

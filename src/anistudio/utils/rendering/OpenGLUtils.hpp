@@ -37,14 +37,6 @@ namespace Utils {
                 glGetIntegerv(GL_UNPACK_SKIP_ROWS, &oldSkipRows);
                 glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &oldImageHeight);
 
-                // Log state before
-                std::cout << "GenerateTexture BEFORE: ALIGN=" << oldAlignment
-                    << " ROW_LEN=" << oldRowLength
-                    << " SKIP_PIX=" << oldSkipPixels
-                    << " SKIP_ROW=" << oldSkipRows
-                    << " IMG_H=" << oldImageHeight
-                    << " (w=" << width << " h=" << height << " ch=" << channels << ")" << std::endl;
-
                 // Set to safe values for our upload
                 glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -85,12 +77,6 @@ namespace Utils {
                 glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &afterSkipPix);
                 glGetIntegerv(GL_UNPACK_SKIP_ROWS, &afterSkipRow);
                 glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &afterImgH);
-                std::cout << "GenerateTexture AFTER: ALIGN=" << afterAlign
-                    << " ROW_LEN=" << afterRowLen
-                    << " SKIP_PIX=" << afterSkipPix
-                    << " SKIP_ROW=" << afterSkipRow
-                    << " IMG_H=" << afterImgH
-                    << " (texID=" << textureID << ")" << std::endl;
 
                 GLenum texError = glGetError();
                 if (texError != GL_NO_ERROR) {
@@ -139,14 +125,6 @@ namespace Utils {
             glGetIntegerv(GL_UNPACK_SKIP_ROWS, &oldSkipRows);
             glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &oldImageHeight);
 
-            // Log state before
-            std::cout << "UpdateTexture BEFORE: ALIGN=" << oldAlignment
-                << " ROW_LEN=" << oldRowLength
-                << " SKIP_PIX=" << oldSkipPixels
-                << " SKIP_ROW=" << oldSkipRows
-                << " IMG_H=" << oldImageHeight
-                << " (texID=" << textureID << " w=" << width << " h=" << height << ")" << std::endl;
-
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
@@ -170,13 +148,7 @@ namespace Utils {
             glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &afterSkipPix);
             glGetIntegerv(GL_UNPACK_SKIP_ROWS, &afterSkipRow);
             glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &afterImgH);
-            std::cout << "UpdateTexture AFTER: ALIGN=" << afterAlign
-                << " ROW_LEN=" << afterRowLen
-                << " SKIP_PIX=" << afterSkipPix
-                << " SKIP_ROW=" << afterSkipRow
-                << " IMG_H=" << afterImgH
-                << " (texID=" << textureID << ")" << std::endl;
-
+            
             GLenum error = glGetError();
             if (error != GL_NO_ERROR) {
                 std::cerr << "UpdateTexture: glTexSubImage2D failed with error: " << error << std::endl;
@@ -209,14 +181,6 @@ namespace Utils {
             glGetIntegerv(GL_UNPACK_SKIP_ROWS, &oldSkipRows);
             glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &oldImageHeight);
 
-            // Log state before
-            std::cout << "CreateTextureWithParams BEFORE: ALIGN=" << oldAlignment
-                << " ROW_LEN=" << oldRowLength
-                << " SKIP_PIX=" << oldSkipPixels
-                << " SKIP_ROW=" << oldSkipRows
-                << " IMG_H=" << oldImageHeight
-                << " (w=" << width << " h=" << height << ")" << std::endl;
-
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
             glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
@@ -239,13 +203,7 @@ namespace Utils {
             glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &afterSkipPix);
             glGetIntegerv(GL_UNPACK_SKIP_ROWS, &afterSkipRow);
             glGetIntegerv(GL_UNPACK_IMAGE_HEIGHT, &afterImgH);
-            std::cout << "CreateTextureWithParams AFTER: ALIGN=" << afterAlign
-                << " ROW_LEN=" << afterRowLen
-                << " SKIP_PIX=" << afterSkipPix
-                << " SKIP_ROW=" << afterSkipRow
-                << " IMG_H=" << afterImgH
-                << " (texID=" << textureID << ")" << std::endl;
-
+            
             GLenum error = glGetError();
             if (error != GL_NO_ERROR) {
                 std::cerr << "CreateTextureWithParams: OpenGL error " << error << std::endl;

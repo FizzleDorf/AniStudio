@@ -12,14 +12,11 @@ namespace GUI {
 
     BaseMediaView::BaseMediaView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseView(mgr, vm), selectedEntityID(0), index(0), zoom(1.0f), offsetX(0.0f), offsetY(0.0f),
-        lastEntityCount(0), historyWorkspaceID(0),
-        contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(mgr)), isDragging(false) {
+        lastEntityCount(0), contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(mgr)),
+        isDragging(false) {
     }
 
     BaseMediaView::~BaseMediaView() {
-        if (historyWorkspaceID != 0) {
-            GetViewManager().DestroyView(historyWorkspaceID);
-        }
     }
 
     void BaseMediaView::SetZoom(float newZoom) {
@@ -91,7 +88,6 @@ namespace GUI {
     }
 
     void BaseMediaView::ToggleHistoryView(bool show) {
-        WorkspaceID currentWorkspace = GetID();
         auto& vm = GetViewManager();
         std::string viewType = GetHistoryViewTypeName();
         if (viewType.empty()) return;
@@ -101,33 +97,19 @@ namespace GUI {
         if (show && !exists) {
             try {
                 ViewTypeID histType = vm.GetViewType(viewType);
-                vm.AddViewByType(currentWorkspace, histType);
-
-                // Find the newly added view and set parent
-                auto& ws = vm.GetWorkspaces();
-                auto wsIt = ws.find(currentWorkspace);
-                if (wsIt != ws.end()) {
-                    for (auto& [typeID, viewPtr] : wsIt->second) {
-                        if (auto* mediaHist = dynamic_cast<MediaHistoryView*>(viewPtr.get())) {
-                            mediaHist->SetParentViewWorkspace(GetID());
-                            historyWorkspaceID = currentWorkspace;
-                            break;
-                        }
-                    }
-                }
+                vm.AddViewByType(GetID(), histType);
             }
             catch (const std::exception& e) {
                 std::cerr << "[BaseMediaView] Failed to add history view: " << e.what() << std::endl;
             }
         }
         else if (!show && exists) {
-            if (historyWorkspaceID != 0) {
-                try {
-                    ViewTypeID histType = vm.GetViewType(viewType);
-                    vm.RemoveViewByType(historyWorkspaceID, histType);
-                }
-                catch (...) {}
-                historyWorkspaceID = 0;
+            try {
+                ViewTypeID histType = vm.GetViewType(viewType);
+                vm.RemoveViewByType(GetID(), histType);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "[BaseMediaView] Failed to remove history view: " << e.what() << std::endl;
             }
         }
     }
@@ -213,7 +195,6 @@ namespace GUI {
         auto& vm = GetViewManager();
         WorkspaceID currentWorkspace = GetID();
 
-        // Check if MetadataView exists in this workspace
         bool hasMetadataView = false;
         const auto& signatures = vm.GetWorkspaceSignatures();
         auto sigIt = signatures.find(currentWorkspace);
@@ -238,7 +219,6 @@ namespace GUI {
             }
         }
 
-        // Now find the MetadataView instance and load the file
         auto& ws = vm.GetWorkspaces();
         auto wsIt = ws.find(currentWorkspace);
         if (wsIt != ws.end()) {

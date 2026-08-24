@@ -35,6 +35,11 @@ namespace GUI {
         }
         RefreshEntities();
 
+        if (!mediaEntities.empty() && selectedEntityID == 0) {
+            index = static_cast<int>(mediaEntities.size()) - 1;
+            selectedEntityID = mediaEntities[index];
+        }
+
         ANI::Events::Ref().RegisterEventWithData("SelectMediaEntity", [this](const std::any& data) {
             try {
                 auto eventData = std::any_cast<std::unordered_map<std::string, std::any>>(data);
@@ -71,9 +76,9 @@ namespace GUI {
                 selectedEntityID = 0;
                 index = 0;
             }
-            else if (selectedEntityID == 0) {
-                selectedEntityID = mediaEntities[0];
-                index = 0;
+            else if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+                index = static_cast<int>(mediaEntities.size()) - 1;
+                selectedEntityID = mediaEntities[index];
             }
             else {
                 auto it = std::find(mediaEntities.begin(), mediaEntities.end(), selectedEntityID);
@@ -82,8 +87,8 @@ namespace GUI {
                 }
                 else {
                     if (!mediaEntities.empty()) {
-                        selectedEntityID = mediaEntities[0];
-                        index = 0;
+                        index = static_cast<int>(mediaEntities.size()) - 1;
+                        selectedEntityID = mediaEntities[index];
                     }
                     else {
                         selectedEntityID = 0;
@@ -394,7 +399,6 @@ namespace GUI {
     }
 
     void ImageView::OnMediaRemoved(ECS::EntityID entity) {
-        int previousIndex = index;
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
     }

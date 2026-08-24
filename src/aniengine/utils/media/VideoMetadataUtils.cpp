@@ -129,18 +129,26 @@ namespace Utils {
 
         AVDictionaryEntry* tag = nullptr;
         while ((tag = av_dict_get(fmt_ctx->metadata, "", tag, AV_DICT_IGNORE_SUFFIX))) {
-            if (std::string(tag->key) == "comment") {
-                try {
-                    result = nlohmann::json::parse(tag->value);
-                    std::cout << "Metadata loaded from video comment" << std::endl;
-                    break;
+            std::string key = tag->key;
+            std::string value = tag->value;
+            try {
+                nlohmann::json parsed = nlohmann::json::parse(value);
+                if (parsed.is_object() || parsed.is_array()) {
+                    result[key] = parsed;
                 }
-                catch (...) {}
+                else {
+                    result[key] = value;
+                }
+            }
+            catch (...) {
+                result[key] = value;
             }
         }
 
         avformat_close_input(&fmt_ctx);
+
+        result = MetadataUtils::NormalizeAniStudioMetadata(result);
         return result;
     }
 
-} // namespace Utils
+}

@@ -1,11 +1,8 @@
 #pragma once
 
 #include "BaseView.hpp"
-#include "ContextMenuUtils.hpp"
 #include <nlohmann/json.hpp>
 #include <string>
-#include <vector>
-#include <memory>
 
 namespace GUI {
 
@@ -13,10 +10,10 @@ namespace GUI {
     public:
         static constexpr const char* GetMetadataJSON() {
             return R"({
-                "displayName": "Metadata Viewer",
-                "category": "Tools",
-                "description": "View and copy metadata from media, entities, and JSON files."
-            })";
+            "displayName": "Metadata Viewer",
+            "category": "Viewers",
+            "description": "View and inspect metadata from images and videos"
+        })";
         }
 
         MetadataView(ECS::EntityManager& mgr, ViewManager& vm);
@@ -26,57 +23,37 @@ namespace GUI {
         void Update(float deltaT) override;
         void Render() override;
 
-        bool LoadFromFile(const std::string& filePath);
-        bool LoadFromEntity(ECS::EntityID entityID);
-        bool LoadFromJSON(const nlohmann::json& jsonData, const std::string& sourceName = "");
+        void LoadFromFile(const std::string& filePath);
+        void LoadFromClipboard();
+        void SaveMetadataToFile();
         void ClearMetadata();
+        void PasteFromClipboard();
 
-        nlohmann::json Serialize() const override;
-        void Deserialize(const nlohmann::json& data) override;
+        void SetMetadata(const nlohmann::json& metadata, const std::string& source = "");
 
     private:
         enum class DisplayMode {
-            Simplified,
-            RawJSON
+            Tree,
+            Text
         };
-        DisplayMode currentMode = DisplayMode::Simplified;
 
         nlohmann::json metadata;
-        nlohmann::json displayMetadata;
-        std::string sourcePath;
-        std::string sourceDisplayName;
+        std::string currentFile;
+        DisplayMode displayMode = DisplayMode::Tree;
         std::string filterText;
-        char filterBuffer[256];
-        std::string rawSourceText; // raw text from source (for JSON files, clipboard, etc.)
 
         void RenderMenuBar();
-        void RenderFileMenu();
-        void RenderViewMenu();
-        void RenderEditMenu();
-        void RenderFilterBar();
-
-        void RenderSimplifiedView();
-        void RenderRawJSONView();
-
-        void RenderJSONNode(const nlohmann::json& value, const std::string& key, const std::string& path);
-        void RenderValue(const nlohmann::json& value, const std::string& key, const std::string& path);
-        void RenderNodeContextMenu(const std::string& path);
-
-        void CopyValue(const std::string& path);
-        void CopyPath(const std::string& path);
-        void CopyMetadataAsJSON();
-
-        std::string ReadRawTextChunkFromPNG(const std::string& filePath, const std::string& key);
-        std::vector<std::pair<std::string, std::string>> ReadAllTextChunksFromPNG(const std::string& filePath);
-        nlohmann::json ParseRawMetadata(const std::string& rawText);
-        nlohmann::json FlattenEntityMetadata(const nlohmann::json& input);
-        nlohmann::json FilterJSONNode(const nlohmann::json& node, const std::string& filterLower);
-
-        bool PasteFromClipboard();
-        void HandleDropTarget();
-        void UpdateDisplayMetadata();
-
-        std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
+        void RenderMetadataDisplay();
+        void RenderJsonTree(const nlohmann::json& j, int depth = 0);
+        void RenderJsonValue(const nlohmann::json& value, const std::string& key = "", int depth = 0);
+        void RenderCopyButton(const nlohmann::json& value, const std::string& label);
+        void RenderContextMenu();
+        bool HasMatchingChild(const nlohmann::json& j, const std::string& lowerFilter);
+        ImVec4 GetColorForType(const nlohmann::json& value);
+        bool MatchesFilter(const std::string& text);
+        void CopyValueToClipboard(const nlohmann::json& value);
+        nlohmann::json ReadMetadataFromFile(const std::string& filePath);
+        void CopyEntireEntityToClipboard();
     };
 
 }

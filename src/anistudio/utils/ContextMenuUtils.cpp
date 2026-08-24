@@ -1,5 +1,10 @@
 #include "ContextMenuUtils.hpp"
 #include "PngMetadataUtils.hpp"
+#include "JpegMetadataUtils.hpp"
+#include "WebPMetadataUtils.hpp"
+#include "MetadataUtils.hpp"
+#include "ImageUtils.hpp"
+#include "VideoMetadataUtils.hpp"
 #include "ImageComponent.hpp"
 #include "VideoComponent.hpp"
 #include "PropertyTypes.hpp"
@@ -12,6 +17,10 @@
 #include <windows.h>
 
 namespace Utils {
+
+    // Static cache for parsed metadata
+    static std::unordered_map<std::string, nlohmann::json> s_parsedMetadataCache;
+    static std::mutex s_cacheMutex;
 
     ContextMenuUtils::ContextMenuUtils(ECS::EntityManager& entityMgr)
         : entityManager(entityMgr) {
@@ -237,7 +246,14 @@ namespace Utils {
         if (ImGui::BeginPopup(popupId.c_str())) {
             ImGui::Text("Video: %s", std::filesystem::path(videoPath).filename().string().c_str());
             ImGui::Separator();
-            ImGui::TextDisabled("Video metadata not yet supported");
+            nlohmann::json metadata = ParseImageMetadata(videoPath);
+            if (!metadata.empty()) {
+                RenderMetadataComponentMenu(metadata);
+                RenderMetadataValueMenu(metadata);
+            }
+            else {
+                ImGui::TextDisabled("No metadata found");
+            }
             ImGui::EndPopup();
         }
     }
@@ -599,47 +615,16 @@ namespace Utils {
     }
 
     nlohmann::json ContextMenuUtils::ParseImageMetadata(const std::string& imagePath) {
-        nlohmann::json metadata;
+        std::string normalizedPath = std::filesystem::absolute(imagePath).string();
 
-        if (!std::filesystem::exists(imagePath)) return metadata;
-
-        std::string extension = std::filesystem::path(imagePath).extension().string();
-        std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
-
-        if (extension == ".png") {
-            FILE* fp = fopen(imagePath.c_str(), "rb");
-            if (!fp) return metadata;
-
-            png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
-            if (!png) { fclose(fp); return metadata; }
-
-            png_infop info = png_create_info_struct(png);
-            if (!info) { png_destroy_read_struct(&png, nullptr, nullptr); fclose(fp); return metadata; }
-
-            if (setjmp(png_jmpbuf(png))) {
-                png_destroy_read_struct(&png, &info, nullptr);
-                fclose(fp);
-                return metadata;
-            }
-
-            png_init_io(png, fp);
-            png_read_info(png, info);
-
-            png_textp text_ptr;
-            int num_text;
-            if (png_get_text(png, info, &text_ptr, &num_text) > 0) {
-                for (int i = 0; i < num_text; i++) {
-                    if (strcmp(text_ptr[i].key, "parameters") == 0) {
-                        try { metadata = nlohmann::json::parse(text_ptr[i].text); break; }
-                        catch (...) {}
-                    }
-                }
-            }
-
-            png_destroy_read_struct(&png, &info, nullptr);
-            fclose(fp);
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        auto it = s_parsedMetadataCache.find(normalizedPath);
+        if (it != s_parsedMetadataCache.end()) {
+            return it->second;
         }
 
+        nlohmann::json metadata = ImageUtils::ReadMetadataFromImage(imagePath);
+        s_parsedMetadataCache[normalizedPath] = metadata;
         return metadata;
     }
 
@@ -659,6 +644,13 @@ namespace Utils {
             else if (metadata["components"].is_object()) {
                 for (auto it = metadata["components"].begin(); it != metadata["components"].end(); ++it) {
                     if (it.key() != "Base_Component") components.push_back(it.key());
+                }
+            }
+        }
+        else {
+            for (auto it = metadata.begin(); it != metadata.end(); ++it) {
+                if (it.value().is_object() && !it.value().empty()) {
+                    components.push_back(it.key());
                 }
             }
         }
@@ -771,9 +763,8 @@ namespace Utils {
                 for (const std::string& componentName : components) {
                     if (ImGui::BeginMenu(componentName.c_str())) {
 
+                        nlohmann::json componentData;
                         if (metadata.contains("components")) {
-                            nlohmann::json componentData;
-
                             if (metadata["components"].is_array()) {
                                 for (const auto& component : metadata["components"]) {
                                     if (component.contains(componentName)) {
@@ -787,33 +778,36 @@ namespace Utils {
                                     componentData = metadata["components"][componentName];
                                 }
                             }
+                        }
+                        else if (metadata.contains(componentName)) {
+                            componentData = metadata[componentName];
+                        }
 
-                            if (!componentData.empty() && componentData.is_object()) {
-                                for (auto it = componentData.begin(); it != componentData.end(); ++it) {
-                                    std::string propName = it.key();
+                        if (!componentData.empty() && componentData.is_object()) {
+                            for (auto it = componentData.begin(); it != componentData.end(); ++it) {
+                                std::string propName = it.key();
 
-                                    if (propName == "compName" || propName == "entityID" || propName == "compCategory" || propName == "schema") continue;
+                                if (propName == "compName" || propName == "entityID" || propName == "compCategory" || propName == "schema") continue;
 
-                                    std::string label = propName + ": ";
-                                    if (it.value().is_string()) {
-                                        std::string value = it.value().get<std::string>();
-                                        if (value.length() > 30) value = value.substr(0, 27) + "...";
-                                        label += value;
-                                    }
+                                std::string label = propName + ": ";
+                                if (it.value().is_string()) {
+                                    std::string value = it.value().get<std::string>();
+                                    if (value.length() > 30) value = value.substr(0, 27) + "...";
+                                    label += value;
+                                }
 
-                                    if (ImGui::MenuItem(label.c_str())) {
-                                        nlohmann::json entityData;
-                                        entityData["dataType"] = "entity";
-                                        entityData["data"] = nlohmann::json::object();
-                                        entityData["data"]["components"] = nlohmann::json::array();
+                                if (ImGui::MenuItem(label.c_str())) {
+                                    nlohmann::json entityData;
+                                    entityData["dataType"] = "entity";
+                                    entityData["data"] = nlohmann::json::object();
+                                    entityData["data"]["components"] = nlohmann::json::array();
 
-                                        nlohmann::json componentJson;
-                                        componentJson[componentName] = nlohmann::json::object();
-                                        componentJson[componentName][propName] = it.value();
-                                        entityData["data"]["components"].push_back(componentJson);
+                                    nlohmann::json componentJson;
+                                    componentJson[componentName] = nlohmann::json::object();
+                                    componentJson[componentName][propName] = it.value();
+                                    entityData["data"]["components"].push_back(componentJson);
 
-                                        SetClipboardData(entityData);
-                                    }
+                                    SetClipboardData(entityData);
                                 }
                             }
                         }
@@ -844,6 +838,9 @@ namespace Utils {
                     componentData = metadata["components"][componentName];
                 }
             }
+        }
+        else if (metadata.contains(componentName)) {
+            componentData = metadata[componentName];
         }
 
         if (!componentData.empty()) {

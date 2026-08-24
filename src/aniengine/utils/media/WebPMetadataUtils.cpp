@@ -46,16 +46,42 @@ namespace Utils {
                 std::cerr << "Failed to open WebP with Exiv2: " << imagePath << std::endl;
                 return result;
             }
+
             image->readMetadata();
+
             Exiv2::XmpData& xmpData = image->xmpData();
-            auto it = xmpData.findKey(Exiv2::XmpKey("Xmp.aniStudio.params"));
-            if (it != xmpData.end()) {
+            for (const auto& xmp : xmpData) {
+                std::string key = xmp.key();
+                std::string value = xmp.toString();
                 try {
-                    result = nlohmann::json::parse(it->toString());
-                    std::cout << "WebP metadata loaded from XMP" << std::endl;
+                    nlohmann::json parsed = nlohmann::json::parse(value);
+                    if (parsed.is_object() || parsed.is_array()) {
+                        result[key] = parsed;
+                    }
+                    else {
+                        result[key] = value;
+                    }
                 }
-                catch (const std::exception& e) {
-                    std::cerr << "Error parsing JSON from XMP: " << e.what() << std::endl;
+                catch (...) {
+                    result[key] = value;
+                }
+            }
+
+            Exiv2::ExifData& exifData = image->exifData();
+            for (const auto& exif : exifData) {
+                std::string key = exif.key();
+                std::string value = exif.toString();
+                try {
+                    nlohmann::json parsed = nlohmann::json::parse(value);
+                    if (parsed.is_object() || parsed.is_array()) {
+                        result[key] = parsed;
+                    }
+                    else {
+                        result[key] = value;
+                    }
+                }
+                catch (...) {
+                    result[key] = value;
                 }
             }
         }
@@ -69,4 +95,4 @@ namespace Utils {
 #endif
     }
 
-} // namespace Utils
+}

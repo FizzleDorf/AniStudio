@@ -27,8 +27,6 @@ namespace GUI {
         void Update(float deltaT) override;
         void Render() override;
 
-        void SetParentViewWorkspace(WorkspaceID parentWorkspace);
-
     private:
         enum class MediaFilter { All, Images, Videos };
         MediaFilter currentFilter = MediaFilter::All;
@@ -37,7 +35,6 @@ namespace GUI {
         std::shared_ptr<ECS::ImageSystem> imageSystem;
         std::shared_ptr<ECS::VideoSystem> videoSystem;
         std::vector<ECS::EntityID> mediaEntities;
-        WorkspaceID parentWorkspaceID = 0;
         ECS::EntityID selectedEntityID = 0;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
