@@ -1,48 +1,55 @@
 #pragma once
 
 #include <string>
-#include <filesystem>
 #include <functional>
 #include <imgui.h>
 #include "Types.hpp"
 #include "ContextMenuUtils.hpp"
 #include "OpenGLWrapper.hpp"
+#include "ImageComponent.hpp"
+#include "VideoComponent.hpp"
+#include <variant>
 
 namespace GUI {
     namespace Thumbnail {
 
         enum class DisplayMode {
             Compact,
-            Detailed
+            Detailed,
+            List
         };
 
-        struct ThumbnailData {
-            std::string filePath;
-            std::string fileName;
-            ECS::EntityID entityID = 0;
-            ECS::EntityID activeEntityID = 0;
-            GLuint textureID = 0;
-            int width = 0;
-            int height = 0;
-            int channels = 0;
-            uint64_t fileSize = 0;
-            std::string fileDate;
-            std::string fileTime;
-            bool hasExif = false;
-            bool hasLSB = false;
-            float fps = 0.0f;
-            bool isVideo = false;
+        enum class ThumbnailSize {
+            Small,
+            Medium,
+            Large,
+            ExtraLarge
         };
+
+        float GetThumbnailSize(ThumbnailSize size);
 
         void RenderThumbnail(
-            const ThumbnailData& data,
+            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*>& component,
             size_t index,
             float thumbnailSize,
             DisplayMode mode,
             std::function<void(ECS::EntityID)> onSelect,
             Utils::ContextMenuUtils* contextMenuUtils,
-            bool isEntityLoaded
+            bool isEntityLoaded,
+            ECS::EntityID activeEntityID = 0
         );
 
-    } // namespace Thumbnail
-} // namespace GUI
+        void BeginListMode(float thumbnailSize);
+        void EndListMode();
+        void RenderListRow(
+            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*>& component,
+            size_t index,
+            float thumbnailSize,
+            std::function<void(ECS::EntityID)> onSelect,
+            Utils::ContextMenuUtils* contextMenuUtils,
+            bool isEntityLoaded,
+            ECS::EntityID activeEntityID = 0
+        );
+
+    }
+}

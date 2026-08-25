@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <chrono>
+#include <filesystem>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -42,6 +44,11 @@ namespace ECS {
 
         bool hasExifData = false;
         bool hasLSBData = false;
+        bool hasAniStudioMetadata = false;
+
+        uint64_t fileSize = 0;
+        std::string fileDate;
+        std::string fileTime;
 
         VideoComponent() {
             compName = "Video";
@@ -106,6 +113,9 @@ namespace ECS {
             properties["isPlaying"] = &isPlaying;
             properties["playbackSpeed"] = &playbackSpeed;
             properties["looping"] = &looping;
+            properties["fileSize"] = &fileSize;
+            properties["fileDate"] = &fileDate;
+            properties["fileTime"] = &fileTime;
             return properties;
         }
 
@@ -119,7 +129,13 @@ namespace ECS {
                 {"frameCount", frameCount},
                 {"fileName", fileName},
                 {"filePath", filePath},
-                {"looping", looping}
+                {"looping", looping},
+                {"fileSize", fileSize},
+                {"fileDate", fileDate},
+                {"fileTime", fileTime},
+                {"hasExifData", hasExifData},
+                {"hasLSBData", hasLSBData},
+                {"hasAniStudioMetadata", hasAniStudioMetadata}
             };
             return j;
         }
@@ -139,6 +155,12 @@ namespace ECS {
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("looping")) looping = componentData["looping"];
+            if (componentData.contains("fileSize")) fileSize = componentData["fileSize"];
+            if (componentData.contains("fileDate")) fileDate = componentData["fileDate"];
+            if (componentData.contains("fileTime")) fileTime = componentData["fileTime"];
+            if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
+            if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
+            if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
         }
 
         VideoComponent& operator=(const VideoComponent& other) {
@@ -154,6 +176,12 @@ namespace ECS {
                 playbackSpeed = other.playbackSpeed;
                 looping = other.looping;
                 frameAccumulator = other.frameAccumulator;
+                fileSize = other.fileSize;
+                fileDate = other.fileDate;
+                fileTime = other.fileTime;
+                hasExifData = other.hasExifData;
+                hasLSBData = other.hasLSBData;
+                hasAniStudioMetadata = other.hasAniStudioMetadata;
             }
             return *this;
         }
@@ -178,6 +206,12 @@ namespace ECS {
             videoStreamIndex = -1;
             currentTexture = 0;
             needsTextureUpdate = false;
+            fileSize = other.fileSize;
+            fileDate = other.fileDate;
+            fileTime = other.fileTime;
+            hasExifData = other.hasExifData;
+            hasLSBData = other.hasLSBData;
+            hasAniStudioMetadata = other.hasAniStudioMetadata;
             setupBaseSchema();
         }
 
@@ -226,6 +260,18 @@ namespace ECS {
                     {"looping", {
                         {"type", "boolean"},
                         {"title", "Looping"}
+                    }},
+                    {"fileSize", {
+                        {"type", "integer"},
+                        {"title", "File Size (bytes)"}
+                    }},
+                    {"fileDate", {
+                        {"type", "string"},
+                        {"title", "Date Modified"}
+                    }},
+                    {"fileTime", {
+                        {"type", "string"},
+                        {"title", "Time Modified"}
                     }}
                 }}
             };

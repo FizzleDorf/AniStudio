@@ -6,11 +6,14 @@
 #include <string>
 #include <stb_image.h>
 #include <memory>
+#include <chrono>
+#include <filesystem>
 
 namespace ECS {
     struct ImageComponent : public BaseComponent {
         std::string fileName = "AniStudio";
         std::string filePath = "";
+        std::shared_ptr<unsigned char[]> imageDataPtr;
         unsigned char* imageData = nullptr;
         int width = 0;
         int height = 0;
@@ -18,6 +21,11 @@ namespace ECS {
         GLuint textureID = 0;
         bool hasExifData = false;
         bool hasLSBData = false;
+        bool hasAniStudioMetadata = false;
+
+        uint64_t fileSize = 0;
+        std::string fileDate;
+        std::string fileTime;
 
         ImageComponent() {
             compName = "Image";
@@ -30,12 +38,17 @@ namespace ECS {
                 glDeleteTextures(1, &textureID);
                 textureID = 0;
             }
+            imageDataPtr.reset();
+            imageData = nullptr;
         }
 
         virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             std::unordered_map<std::string, UISchema::PropertyVariant> properties;
             properties["fileName"] = &fileName;
             properties["filePath"] = &filePath;
+            properties["fileSize"] = &fileSize;
+            properties["fileDate"] = &fileDate;
+            properties["fileTime"] = &fileTime;
             return properties;
         }
 
@@ -47,7 +60,13 @@ namespace ECS {
                 {"height", height},
                 {"channels", channels},
                 {"fileName", fileName},
-                {"filePath", filePath}
+                {"filePath", filePath},
+                {"fileSize", fileSize},
+                {"fileDate", fileDate},
+                {"fileTime", fileTime},
+                {"hasExifData", hasExifData},
+                {"hasLSBData", hasLSBData},
+                {"hasAniStudioMetadata", hasAniStudioMetadata}
             };
             return j;
         }
@@ -56,32 +75,49 @@ namespace ECS {
             BaseComponent::Deserialize(j);
 
             nlohmann::json componentData;
-
-            if (j.contains(compName)) {
+            if (j.contains(compName))
                 componentData = j.at(compName);
+            else
+                componentData = j;
+
+            if (componentData.contains("width")) width = componentData["width"];
+            if (componentData.contains("height")) height = componentData["height"];
+            if (componentData.contains("channels")) channels = componentData["channels"];
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("fileSize")) fileSize = componentData["fileSize"];
+            if (componentData.contains("fileDate")) fileDate = componentData["fileDate"];
+            if (componentData.contains("fileTime")) fileTime = componentData["fileTime"];
+            if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
+            if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
+            if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
+        }
+
+        void SetImageData(unsigned char* data, int w, int h, int ch) {
+            if (data && w > 0 && h > 0 && ch > 0) {
+                size_t dataSize = w * h * ch;
+                imageDataPtr = std::shared_ptr<unsigned char[]>(
+                    data,
+                    [](unsigned char* ptr) {
+                        if (ptr) stbi_image_free(ptr);
+                    }
+                );
+                imageData = imageDataPtr.get();
+                width = w;
+                height = h;
+                channels = ch;
             }
             else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
+                ClearImageData();
             }
+        }
 
-            if (componentData.contains("width"))
-                width = componentData["width"];
-            if (componentData.contains("height"))
-                height = componentData["height"];
-            if (componentData.contains("channels"))
-                channels = componentData["channels"];
-            if (componentData.contains("fileName"))
-                fileName = componentData["fileName"];
-            if (componentData.contains("filePath"))
-                filePath = componentData["filePath"];
+        void ClearImageData() {
+            imageDataPtr.reset();
+            imageData = nullptr;
+            width = 0;
+            height = 0;
+            channels = 0;
         }
 
         ImageComponent& operator=(const ImageComponent& other) {
@@ -91,6 +127,24 @@ namespace ECS {
                 width = other.width;
                 height = other.height;
                 channels = other.channels;
+                fileSize = other.fileSize;
+                fileDate = other.fileDate;
+                fileTime = other.fileTime;
+                hasExifData = other.hasExifData;
+                hasLSBData = other.hasLSBData;
+                hasAniStudioMetadata = other.hasAniStudioMetadata;
+
+                if (other.imageData && other.width > 0 && other.height > 0 && other.channels > 0) {
+                    size_t dataSize = other.width * other.height * other.channels;
+                    unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+                    if (newData) {
+                        memcpy(newData, other.imageData, dataSize);
+                        SetImageData(newData, other.width, other.height, other.channels);
+                    }
+                }
+                else {
+                    ClearImageData();
+                }
             }
             return *this;
         }
@@ -103,6 +157,22 @@ namespace ECS {
             channels = other.channels;
             imageData = nullptr;
             textureID = 0;
+            fileSize = other.fileSize;
+            fileDate = other.fileDate;
+            fileTime = other.fileTime;
+            hasExifData = other.hasExifData;
+            hasLSBData = other.hasLSBData;
+            hasAniStudioMetadata = other.hasAniStudioMetadata;
+
+            if (other.imageData && other.width > 0 && other.height > 0 && other.channels > 0) {
+                size_t dataSize = other.width * other.height * other.channels;
+                unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
+                if (newData) {
+                    memcpy(newData, other.imageData, dataSize);
+                    SetImageData(newData, other.width, other.height, other.channels);
+                }
+            }
+
             setupBaseSchema();
         }
 
@@ -119,6 +189,18 @@ namespace ECS {
                     {"filePath", {
                         {"type", "string"},
                         {"title", "File Path"}
+                    }},
+                    {"fileSize", {
+                        {"type", "integer"},
+                        {"title", "File Size (bytes)"}
+                    }},
+                    {"fileDate", {
+                        {"type", "string"},
+                        {"title", "Date Modified"}
+                    }},
+                    {"fileTime", {
+                        {"type", "string"},
+                        {"title", "Time Modified"}
                     }}
                 }}
             };
@@ -126,8 +208,6 @@ namespace ECS {
     };
 
     struct InputImageComponent : public ImageComponent {
-        std::shared_ptr<unsigned char[]> ownedImageData;
-
         InputImageComponent() {
             compName = "InputImage";
             compCategory = "Image";
@@ -140,6 +220,7 @@ namespace ECS {
         }
 
         virtual ~InputImageComponent() {
+            // ImageComponent destructor handles cleanup
         }
 
         virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -169,107 +250,27 @@ namespace ECS {
             BaseComponent::Deserialize(j);
 
             nlohmann::json componentData;
-
-            if (j.contains(compName)) {
+            if (j.contains(compName))
                 componentData = j.at(compName);
-            }
-            else {
-                for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
-                        componentData = it.value();
-                        break;
-                    }
-                }
-                if (componentData.empty()) {
-                    componentData = j;
-                }
-            }
+            else
+                componentData = j;
 
-            if (componentData.contains("fileName"))
-                fileName = componentData["fileName"];
-            if (componentData.contains("filePath"))
-                filePath = componentData["filePath"];
-            if (componentData.contains("width"))
-                width = componentData["width"];
-            if (componentData.contains("height"))
-                height = componentData["height"];
-            if (componentData.contains("channels"))
-                channels = componentData["channels"];
-        }
-
-        void SetImageData(unsigned char* data, int w, int h, int ch) {
-            if (data && w > 0 && h > 0 && ch > 0) {
-                size_t dataSize = w * h * ch;
-
-                ownedImageData = std::shared_ptr<unsigned char[]>(
-                    data,
-                    [](unsigned char* ptr) {
-                        if (ptr) {
-                            stbi_image_free(ptr);
-                        }
-                    }
-                );
-
-                imageData = ownedImageData.get();
-                width = w;
-                height = h;
-                channels = ch;
-            }
-            else {
-                ClearImageData();
-            }
-        }
-
-        void ClearImageData() {
-            ownedImageData.reset();
-            imageData = nullptr;
-            width = 0;
-            height = 0;
-            channels = 0;
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("width")) width = componentData["width"];
+            if (componentData.contains("height")) height = componentData["height"];
+            if (componentData.contains("channels")) channels = componentData["channels"];
         }
 
         InputImageComponent(const InputImageComponent& other) : ImageComponent(other) {
             compName = "InputImage";
             setupInputSchema();
-
-            fileName = other.fileName;
-            filePath = other.filePath;
-            width = other.width;
-            height = other.height;
-            channels = other.channels;
-
-            if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-                size_t dataSize = other.width * other.height * other.channels;
-                unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
-                if (newData) {
-                    memcpy(newData, other.ownedImageData.get(), dataSize);
-                    SetImageData(newData, other.width, other.height, other.channels);
-                }
-            }
         }
 
         InputImageComponent& operator=(const InputImageComponent& other) {
             if (this != &other) {
                 ImageComponent::operator=(other);
                 compName = "InputImage";
-
-                fileName = other.fileName;
-                filePath = other.filePath;
-                width = other.width;
-                height = other.height;
-                channels = other.channels;
-
-                if (other.ownedImageData && other.width > 0 && other.height > 0 && other.channels > 0) {
-                    size_t dataSize = other.width * other.height * other.channels;
-                    unsigned char* newData = static_cast<unsigned char*>(malloc(dataSize));
-                    if (newData) {
-                        memcpy(newData, other.ownedImageData.get(), dataSize);
-                        SetImageData(newData, other.width, other.height, other.channels);
-                    }
-                }
-                else {
-                    ClearImageData();
-                }
                 setupInputSchema();
             }
             return *this;
@@ -325,12 +326,9 @@ namespace ECS {
 
         virtual void Deserialize(const nlohmann::json& j) override {
             ImageComponent::Deserialize(j);
-
             nlohmann::json componentData;
-            if (j.contains(compName)) {
+            if (j.contains(compName))
                 componentData = j.at(compName);
-            }
-
             if (componentData.contains("fileExtension"))
                 fileExtension = componentData["fileExtension"];
         }
@@ -422,12 +420,9 @@ namespace ECS {
 
         virtual void Deserialize(const nlohmann::json& j) override {
             ImageComponent::Deserialize(j);
-
             nlohmann::json componentData;
-            if (j.contains(compName)) {
+            if (j.contains(compName))
                 componentData = j.at(compName);
-            }
-
             if (componentData.contains("value"))
                 value = componentData["value"];
             if (componentData.contains("maskFilePath"))

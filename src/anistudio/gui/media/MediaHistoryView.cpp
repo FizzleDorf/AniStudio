@@ -1,3 +1,4 @@
+// MediaHistoryView.cpp
 #include "MediaHistoryView.hpp"
 #include "Events.hpp"
 #include "DragDropUtils.hpp"
@@ -5,6 +6,8 @@
 #include "ViewManager.hpp"
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
+#include "ImageUtils.hpp"
+#include "ThumbnailFilters.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -63,17 +66,22 @@ namespace GUI {
             });
     }
 
-    void MediaHistoryView::Update(float deltaT) {}
-
-    void MediaHistoryView::Render() {
+    void MediaHistoryView::Update(float deltaT) {
         static auto lastRefresh = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
         if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRefresh).count() > 1000) {
             RefreshEntities();
             lastRefresh = now;
         }
+    }
 
+    void MediaHistoryView::Render() {
         ImGui::Begin("Media History", &windowOpen, ImGuiWindowFlags_MenuBar);
+
+        if (needsSort) {
+            ApplyFiltersAndSort();
+            needsSort = false;
+        }
 
         RenderMenuBar();
 
@@ -83,51 +91,8 @@ namespace GUI {
             return;
         }
 
-        float availableWidth = ImGui::GetContentRegionAvail().x;
-        const float thumbnailSize = 150.0f;
-        float spacing = 8.0f;
-        float itemWidth = (currentDisplayMode == Thumbnail::DisplayMode::Detailed) ? thumbnailSize + 170 : thumbnailSize + spacing;
-        int columns = std::max(1, static_cast<int>(availableWidth / itemWidth));
+        RenderMediaGrid();
 
-        ImGui::Columns(columns, nullptr, false);
-
-        for (size_t i = 0; i < mediaEntities.size(); ++i) {
-            ECS::EntityID entityID = mediaEntities[i];
-            if (!m_entityManager.IsEntityValid(entityID)) {
-                ImGui::NextColumn();
-                continue;
-            }
-            bool isImage = m_entityManager.HasComponent<ECS::ImageComponent>(entityID);
-            bool isVideo = m_entityManager.HasComponent<ECS::VideoComponent>(entityID);
-            if (!isImage && !isVideo) {
-                ImGui::NextColumn();
-                continue;
-            }
-
-            if (currentFilter == MediaFilter::Images && !isImage) {
-                ImGui::NextColumn();
-                continue;
-            }
-            if (currentFilter == MediaFilter::Videos && !isVideo) {
-                ImGui::NextColumn();
-                continue;
-            }
-
-            Thumbnail::ThumbnailData data = BuildThumbnailData(entityID);
-            data.activeEntityID = selectedEntityID;
-            Thumbnail::RenderThumbnail(
-                data,
-                i,
-                thumbnailSize,
-                currentDisplayMode,
-                [this](ECS::EntityID id) { SelectMedia(id); },
-                contextMenuUtils.get(),
-                true
-            );
-            ImGui::NextColumn();
-        }
-
-        ImGui::Columns(1);
         ImGui::End();
 
         if (!windowOpen) {
@@ -140,22 +105,11 @@ namespace GUI {
 
     void MediaHistoryView::RenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
-            if (ImGui::BeginMenu("View")) {
-                const char* modeItems[] = { "Compact", "Detailed" };
-                int modeIdx = static_cast<int>(currentDisplayMode);
-                if (ImGui::Combo("Display Mode", &modeIdx, modeItems, IM_ARRAYSIZE(modeItems))) {
-                    currentDisplayMode = static_cast<Thumbnail::DisplayMode>(modeIdx);
-                }
-                ImGui::EndMenu();
-            }
-            if (ImGui::BeginMenu("Filters")) {
-                const char* filterItems[] = { "All", "Images", "Videos" };
-                int filterIdx = static_cast<int>(currentFilter);
-                if (ImGui::Combo("Media Type", &filterIdx, filterItems, IM_ARRAYSIZE(filterItems))) {
-                    currentFilter = static_cast<MediaFilter>(filterIdx);
-                }
-                ImGui::EndMenu();
-            }
+            bool changed = false;
+            changed |= ThumbnailFilters::RenderViewMenu(filterSettings);
+            changed |= ThumbnailFilters::RenderSortMenu(filterSettings);
+            changed |= ThumbnailFilters::RenderFiltersMenu(filterSettings, false, false);
+
             if (ImGui::BeginMenu("Actions")) {
                 if (ImGui::MenuItem("Refresh")) {
                     RefreshEntities();
@@ -163,58 +117,147 @@ namespace GUI {
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
+            if (changed) {
+                needsSort = true;
+            }
         }
     }
 
-    Thumbnail::ThumbnailData MediaHistoryView::BuildThumbnailData(ECS::EntityID entityID) {
-        Thumbnail::ThumbnailData data;
-        data.entityID = entityID;
+    void MediaHistoryView::ApplyFiltersAndSort() {
+        auto getInfo = [this](ECS::EntityID eid) -> ThumbnailFilters::MediaItemInfo {
+            ThumbnailFilters::MediaItemInfo info;
+            info.entityID = eid;
 
-        if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
-            const auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
-            data.filePath = comp.filePath;
-            data.fileName = comp.fileName;
-            data.textureID = comp.currentTexture;
-            data.width = comp.width;
-            data.height = comp.height;
-            data.fps = static_cast<float>(comp.fps);
-            data.isVideo = true;
-            data.channels = 4;
+            if (!m_entityManager.IsEntityValid(eid)) {
+                return info;
+            }
+
+            if (m_entityManager.HasComponent<ECS::ImageComponent>(eid)) {
+                const auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(eid);
+                if (comp.width <= 0 || comp.height <= 0 || comp.imageData == nullptr) {
+                    return info;
+                }
+                info.fileName = comp.fileName;
+                info.filePath = comp.filePath;
+                info.fileSize = comp.fileSize;
+                info.dateTime = comp.fileDate + " " + comp.fileTime;
+                info.channels = comp.channels;
+                info.hasMetadata = comp.hasAniStudioMetadata;
+                info.width = comp.width;
+                info.height = comp.height;
+                info.isImage = true;
+            }
+            else if (m_entityManager.HasComponent<ECS::VideoComponent>(eid)) {
+                const auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(eid);
+                if (comp.width <= 0 || comp.height <= 0) {
+                    return info;
+                }
+                info.fileName = comp.fileName;
+                info.filePath = comp.filePath;
+                info.fileSize = comp.fileSize;
+                info.dateTime = comp.fileDate + " " + comp.fileTime;
+                info.channels = 4;
+                info.hasMetadata = comp.hasAniStudioMetadata;
+                info.width = comp.width;
+                info.height = comp.height;
+                info.duration = (comp.frameCount > 0) ? comp.frameCount / comp.fps : 0.0;
+                info.fps = static_cast<float>(comp.fps);
+                info.isVideo = true;
+            }
+            return info;
+            };
+        ThumbnailFilters::ApplyFiltersAndSort(mediaEntities, filterSettings, getInfo);
+    }
+
+    void MediaHistoryView::RenderMediaGrid() {
+        float availableWidth = ImGui::GetContentRegionAvail().x;
+        float thumbnailSizePx = GUI::Thumbnail::GetThumbnailSize(filterSettings.thumbnailSize);
+        const float spacing = 12.0f;
+
+        float itemWidth = 0.0f;
+        float itemHeight = 0.0f;
+
+        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::Compact) {
+            itemWidth = thumbnailSizePx + spacing;
+            itemHeight = thumbnailSizePx + ImGui::GetFontSize() + spacing;
         }
-        else if (m_entityManager.HasComponent<ECS::ImageComponent>(entityID)) {
-            const auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
-            data.filePath = comp.filePath;
-            data.fileName = comp.fileName;
-            data.textureID = comp.textureID;
-            data.width = comp.width;
-            data.height = comp.height;
-            data.channels = comp.channels;
-            data.hasExif = comp.hasExifData;
-            data.hasLSB = comp.hasLSBData;
-            data.isVideo = false;
+        else if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+            itemWidth = availableWidth;
+            itemHeight = thumbnailSizePx + 8.0f + spacing;
+        }
+        else {
+            itemWidth = thumbnailSizePx + 160 + spacing;
+            itemHeight = thumbnailSizePx + 60 + spacing;
         }
 
-        try {
-            data.fileSize = std::filesystem::file_size(data.filePath);
+        int columns = std::max(1, static_cast<int>((availableWidth + spacing) / (itemWidth + spacing)));
+        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+            columns = 1;
         }
-        catch (...) { data.fileSize = 0; }
 
-        try {
-            auto ftime = std::filesystem::last_write_time(data.filePath);
-            auto now = std::chrono::system_clock::now();
-            auto diff = ftime - std::filesystem::file_time_type::clock::now();
-            auto sys_time = now + std::chrono::duration_cast<std::chrono::system_clock::duration>(diff);
-            std::time_t tt = std::chrono::system_clock::to_time_t(sys_time);
-            std::tm tm = *std::localtime(&tt);
-            char buffer[32];
-            strftime(buffer, sizeof(buffer), "%Y-%m-%d", &tm);
-            data.fileDate = buffer;
-            strftime(buffer, sizeof(buffer), "%H:%M:%S", &tm);
-            data.fileTime = buffer;
+        int itemIndex = 0;
+
+        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+            GUI::Thumbnail::BeginListMode(thumbnailSizePx);
         }
-        catch (...) {}
 
-        return data;
+        for (size_t i = 0; i < mediaEntities.size(); ++i) {
+            ECS::EntityID entityID = mediaEntities[i];
+            if (!m_entityManager.IsEntityValid(entityID)) continue;
+
+            bool isImage = m_entityManager.HasComponent<ECS::ImageComponent>(entityID);
+            bool isVideo = m_entityManager.HasComponent<ECS::VideoComponent>(entityID);
+            if (!isImage && !isVideo) continue;
+
+            if (filterSettings.displayMode != GUI::Thumbnail::DisplayMode::List) {
+                if (itemIndex > 0 && (itemIndex % columns) != 0) {
+                    ImGui::SameLine(0, spacing);
+                }
+                else if (itemIndex > 0) {
+                    ImGui::NewLine();
+                }
+            }
+
+            std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*> compVariant;
+            if (isImage) {
+                compVariant = &m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
+            }
+            else {
+                compVariant = &m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
+            }
+
+            if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+                GUI::Thumbnail::RenderListRow(
+                    compVariant,
+                    i,
+                    thumbnailSizePx,
+                    [this](ECS::EntityID id) { SelectMedia(id); },
+                    contextMenuUtils.get(),
+                    true,
+                    selectedEntityID
+                );
+            }
+            else {
+                GUI::Thumbnail::RenderThumbnail(
+                    compVariant,
+                    i,
+                    thumbnailSizePx,
+                    filterSettings.displayMode,
+                    [this](ECS::EntityID id) { SelectMedia(id); },
+                    contextMenuUtils.get(),
+                    true,
+                    selectedEntityID
+                );
+            }
+
+            itemIndex++;
+        }
+
+        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+            GUI::Thumbnail::EndListMode();
+        }
+
+        ImGui::NewLine();
     }
 
     void MediaHistoryView::RefreshEntities() {
@@ -243,6 +286,7 @@ namespace GUI {
         if (selectedEntityID != 0 && !m_entityManager.IsEntityValid(selectedEntityID)) {
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
         }
+        needsSort = true;
     }
 
     void MediaHistoryView::OnMediaAdded(ECS::EntityID entity) {
@@ -268,6 +312,37 @@ namespace GUI {
         eventData["workspaceID"] = GetID();
         eventData["entityID"] = entityID;
         ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
+    }
+
+    nlohmann::json MediaHistoryView::Serialize() const {
+        nlohmann::json j = BaseView::Serialize();
+        j["filterSettings"] = {
+            {"mediaType", static_cast<int>(filterSettings.mediaType)},
+            {"extensionFilter", filterSettings.extensionFilter},
+            {"filterHasMetadata", filterSettings.filterHasMetadata},
+            {"filterChannels", filterSettings.filterChannels},
+            {"sortMode", static_cast<int>(filterSettings.sortMode)},
+            {"sortAscending", filterSettings.sortAscending},
+            {"displayMode", static_cast<int>(filterSettings.displayMode)},
+            {"thumbnailSize", static_cast<int>(filterSettings.thumbnailSize)}
+        };
+        return j;
+    }
+
+    void MediaHistoryView::Deserialize(const nlohmann::json& j) {
+        BaseView::Deserialize(j);
+        if (j.contains("filterSettings")) {
+            auto fs = j["filterSettings"];
+            if (fs.contains("mediaType")) filterSettings.mediaType = static_cast<ThumbnailFilters::MediaTypeFilter>(fs["mediaType"].get<int>());
+            if (fs.contains("extensionFilter")) filterSettings.extensionFilter = fs["extensionFilter"].get<std::string>();
+            if (fs.contains("filterHasMetadata")) filterSettings.filterHasMetadata = fs["filterHasMetadata"].get<bool>();
+            if (fs.contains("filterChannels")) filterSettings.filterChannels = fs["filterChannels"].get<int>();
+            if (fs.contains("sortMode")) filterSettings.sortMode = static_cast<ThumbnailFilters::SortMode>(fs["sortMode"].get<int>());
+            if (fs.contains("sortAscending")) filterSettings.sortAscending = fs["sortAscending"].get<bool>();
+            if (fs.contains("displayMode")) filterSettings.displayMode = static_cast<GUI::Thumbnail::DisplayMode>(fs["displayMode"].get<int>());
+            if (fs.contains("thumbnailSize")) filterSettings.thumbnailSize = static_cast<GUI::Thumbnail::ThumbnailSize>(fs["thumbnailSize"].get<int>());
+            needsSort = true;
+        }
     }
 
 }

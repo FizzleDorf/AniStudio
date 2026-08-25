@@ -4,6 +4,7 @@
 #include "ImageUtils.hpp"
 #include "VideoMetadataUtils.hpp"
 #include "FileFormats.hpp"
+#include "MetadataUtils.hpp" // for NormalizeAniStudioMetadata and helper
 
 #ifdef USE_WEBP
 #include <webp/encode.h>
@@ -429,7 +430,7 @@ namespace Utils {
     bool VideoUtils::HasExifMetadata(const std::string& filePath) {
         nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
         if (meta.is_null() || meta.empty()) return false;
-
+        meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
         if (meta.contains("components") && meta["components"].is_array()) {
             for (const auto& comp : meta["components"]) {
                 if (comp.is_object() && !comp.empty()) {
@@ -441,28 +442,19 @@ namespace Utils {
                 }
             }
         }
-        for (auto it = meta.begin(); it != meta.end(); ++it) {
-            if (it.key() != "components" && it.value().is_object() && !it.value().empty()) {
-                return true;
-            }
-            if (it.value().is_string() && !it.value().get<std::string>().empty()) {
-                return true;
-            }
-        }
         return false;
     }
 
     bool VideoUtils::HasLSBMetadata(const std::string& filePath) {
         nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
         if (meta.is_null() || meta.empty()) return false;
-
+        meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
         std::vector<std::string> stealthKeys = { "LSB", "Stealth", "Hidden", "steganography", "lsb" };
         for (const auto& key : stealthKeys) {
             if (meta.contains(key)) {
                 return true;
             }
         }
-
         if (meta.contains("components") && meta["components"].is_array()) {
             for (const auto& comp : meta["components"]) {
                 if (comp.is_object()) {
@@ -480,7 +472,7 @@ namespace Utils {
     int VideoUtils::GetMetadataStatus(const std::string& filePath) {
         nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
         if (meta.is_null() || meta.empty()) return 0;
-
+        meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
         if (meta.contains("components") && meta["components"].is_array()) {
             for (const auto& comp : meta["components"]) {
                 if (comp.is_object() && !comp.empty()) {
@@ -492,18 +484,8 @@ namespace Utils {
                 }
             }
         }
-
         if (meta.contains("dataType") && meta["dataType"] == "entity" && meta.contains("data")) {
             return 1;
-        }
-
-        for (auto it = meta.begin(); it != meta.end(); ++it) {
-            if (it.value().is_object() && !it.value().empty()) {
-                return 2;
-            }
-            if (it.value().is_string() && !it.value().get<std::string>().empty()) {
-                return 2;
-            }
         }
         return 0;
     }

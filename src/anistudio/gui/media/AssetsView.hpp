@@ -1,14 +1,17 @@
+// AssetsView.hpp
 #ifndef ASSETSVIEW_HPP
 #define ASSETSVIEW_HPP
 
 #include "BaseView.hpp"
 #include "ContextMenuUtils.hpp"
 #include "ThumbnailUtils.hpp"
+#include "ThumbnailFilters.hpp"
 #include <vector>
 #include <string>
 #include <filesystem>
 #include <unordered_map>
 #include <set>
+#include <limits>
 
 namespace GUI {
 
@@ -28,6 +31,8 @@ namespace GUI {
         void Init() override;
         void Update(float deltaT) override;
         void Render() override;
+        nlohmann::json Serialize() const override;
+        void Deserialize(const nlohmann::json& j) override;
 
     private:
         std::vector<std::filesystem::path> assetFiles;
@@ -38,27 +43,23 @@ namespace GUI {
         std::set<std::string> loadedPaths;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
-        Thumbnail::DisplayMode currentDisplayMode = Thumbnail::DisplayMode::Detailed;
-        enum class FileTypeFilter { All, Image, Video, Audio };
-        FileTypeFilter currentTypeFilter = FileTypeFilter::All;
-        enum class SortMode { Name, Size, Date };
-        SortMode currentSort = SortMode::Name;
-        bool sortAscending = true;
+        ThumbnailFilters::Settings filterSettings;
+
         ECS::EntityID selectedEntityID = 0;
+        bool needsSort = true;
 
         void RefreshAssets();
         void LoadNewAssets();
         void RenderAssetGrid();
         void LoadAsset(const std::filesystem::path& path);
         void ClearLoadedAssets();
-        void ApplyFiltersAndSort();
         void RenderMenuBar();
         bool CopyFileToAssets(const std::string& sourcePath);
-        Thumbnail::ThumbnailData BuildThumbnailData(const std::filesystem::path& path, ECS::EntityID entityID);
         void SelectAssetEntity(ECS::EntityID entityID);
         void CopyMetadataFromFile(const std::string& filePath);
+        void ApplyFiltersAndSort();
     };
 
-} // namespace GUI
+}
 
 #endif

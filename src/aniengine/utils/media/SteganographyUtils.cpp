@@ -78,25 +78,23 @@ namespace Utils {
         const int row_stride = width * 4;
         size_t bitOffset = 0;
 
-        // First, read signature bits
-        std::string extractedSig;
-        for (char c : signature) {
-            unsigned char byte = 0;
-            for (int bit = 7; bit >= 0; --bit) {
-                if (bitOffset >= width * height) {
-                    std::cerr << "Not enough pixels for signature" << std::endl;
+        // If signature is provided, check it first
+        if (!signature.empty()) {
+            for (char c : signature) {
+                unsigned char byte = 0;
+                for (int bit = 7; bit >= 0; --bit) {
+                    if (bitOffset >= width * height) {
+                        return result;
+                    }
+                    int x = bitOffset % width;
+                    int y = bitOffset / width;
+                    const unsigned char* pixelAlpha = rgbaData + y * row_stride + x * 4 + 3;
+                    byte = (byte << 1) | readBit(pixelAlpha);
+                    bitOffset++;
+                }
+                if (byte != static_cast<unsigned char>(c)) {
                     return result;
                 }
-                int x = bitOffset % width;
-                int y = bitOffset / width;
-                const unsigned char* pixelAlpha = rgbaData + y * row_stride + x * 4 + 3;
-                byte = (byte << 1) | readBit(pixelAlpha);
-                bitOffset++;
-            }
-            extractedSig.push_back(static_cast<char>(byte));
-            if (extractedSig.back() != c) {
-                std::cerr << "Signature mismatch" << std::endl;
-                return result;
             }
         }
 
@@ -104,7 +102,6 @@ namespace Utils {
         uint32_t payloadLenBits = 0;
         for (int i = 0; i < 32; ++i) {
             if (bitOffset >= width * height) {
-                std::cerr << "Not enough pixels for length" << std::endl;
                 return result;
             }
             int x = bitOffset % width;
@@ -123,7 +120,6 @@ namespace Utils {
             if (bitsToRead == 0) bitsToRead = 8;
             for (int b = 0; b < bitsToRead; ++b) {
                 if (bitOffset >= width * height) {
-                    std::cerr << "Not enough pixels for payload" << std::endl;
                     return result;
                 }
                 int x = bitOffset % width;

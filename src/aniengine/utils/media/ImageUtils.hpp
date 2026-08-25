@@ -16,6 +16,7 @@
 #include "WebPMetadataUtils.hpp"
 #include "VideoMetadataUtils.hpp"
 #include "MetadataUtils.hpp"
+#include "SteganographyUtils.hpp"
 #include "FileFormats.hpp"
 
 #ifdef USE_WEBP
@@ -334,34 +335,16 @@ namespace Utils {
         }
 
         static bool HasLSBMetadata(const std::string& filePath) {
-            nlohmann::json meta;
-            try {
-                meta = ReadMetadataFromImage(filePath);
-            }
-            catch (...) {
+            int width, height, channels;
+            unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 4);
+            if (!data) {
                 return false;
             }
-            if (meta.is_null() || meta.empty()) return false;
 
-            std::vector<std::string> stealthKeys = { "LSB", "Stealth", "Hidden", "steganography", "lsb" };
-            for (const auto& key : stealthKeys) {
-                if (meta.contains(key)) {
-                    return true;
-                }
-            }
+            std::vector<unsigned char> extracted = SteganographyUtils::ExtractFromAlpha(data, width, height);
+            stbi_image_free(data);
 
-            if (meta.contains("components") && meta["components"].is_array()) {
-                for (const auto& comp : meta["components"]) {
-                    if (comp.is_object()) {
-                        for (const auto& key : stealthKeys) {
-                            if (comp.contains(key)) {
-                                return true;
-                            }
-                        }
-                    }
-                }
-            }
-            return false;
+            return !extracted.empty();
         }
 
         static int GetMetadataStatus(const std::string& filePath) {
