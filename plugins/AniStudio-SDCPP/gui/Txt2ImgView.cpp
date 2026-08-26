@@ -7,23 +7,30 @@ namespace GUI {
 
     std::vector<std::string> Txt2ImgView::GetDefaultComponents() const {
         return {
-            "CheckpointComponent",
-            "LatentComponent",
-            "SamplerComponent",
-            "GuidanceComponent",
-            "PromptComponent",
-            "OutputImageComponent"
+            "Checkpoint",
+            "Latent",
+            "Sampler",
+            "Guidance",
+            "Prompt",
+            "OutputImage"
         };
     }
 
-    std::vector<std::string> Txt2ImgView::GetDefaultVisibleComponents() const {
+    std::vector<std::string> Txt2ImgView::GetFilteredComponents() const {
         return {
-            "CheckpointComponent",
-            "LatentComponent",
-            "SamplerComponent",
-            "GuidanceComponent",
-            "PromptComponent",
-            "OutputImageComponent"
+            "InputImage",
+            "InputVideo",
+            "OutputVideo",
+            "RefVideo",
+            "RefAudio",
+            "PhotoMaker",
+            "StackedIdEmbed",
+            "VideoParams",
+            "AudioVae",
+            "LlmEncoder",
+            "LlmVision",
+            "HighNoiseDiffusionModel",
+            "HighNoiseSampler"
         };
     }
 

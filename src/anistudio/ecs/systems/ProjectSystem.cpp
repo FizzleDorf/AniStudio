@@ -1,4 +1,3 @@
-// ProjectSystem.cpp
 #include "ProjectSystem.hpp"
 #include "ViewManager.hpp"
 #include "WindowState.hpp"
@@ -46,7 +45,10 @@ namespace ANI {
         , m_componentTypeId(ECS::MAX_COMPONENT_COUNT)
         , m_viewManager(nullptr)
         , m_pluginManager(nullptr)
-        , m_windowHandle(nullptr) {
+        , m_windowHandle(nullptr)
+        , m_autoSaveTimer(0.0f)
+        , m_autoSaveEnabled(true)
+        , m_autoSaveIntervalMinutes(5) {
         sysName = "ProjectSystem";
     }
 
@@ -54,6 +56,7 @@ namespace ANI {
         m_componentTypeId = mgr.RegisterComponent<ProjectComponent>("ProjectComponent");
         m_projectEntity = mgr.AddNewEntity();
         mgr.AddComponent<ProjectComponent>(m_projectEntity);
+        UpdateAutoSaveSettings();
         std::cout << "[ProjectSystem] Started with entity " << m_projectEntity << std::endl;
     }
 
@@ -61,6 +64,19 @@ namespace ANI {
         if (mgr.IsEntityValid(m_projectEntity)) {
             mgr.DestroyEntity(m_projectEntity);
             m_projectEntity = 0;
+        }
+    }
+
+    void ProjectSystem::Update(float deltaT) {
+        if (!IsProjectOpen()) return;
+        if (!m_autoSaveEnabled) return;
+
+        m_autoSaveTimer += deltaT;
+        float intervalSeconds = static_cast<float>(m_autoSaveIntervalMinutes) * 60.0f;
+        if (m_autoSaveTimer >= intervalSeconds) {
+            SaveProject();
+            m_autoSaveTimer = 0.0f;
+            std::cout << "[ProjectSystem] Auto-saved project" << std::endl;
         }
     }
 
@@ -269,6 +285,20 @@ namespace ANI {
         }
     }
 
+    void ProjectSystem::UpdateAutoSaveSettings() {
+        auto settingsSystem = mgr.GetSystem<ECS::SettingsSystem>();
+        if (settingsSystem) {
+            ECS::EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+            if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<ECS::GeneralSettingsComponent>(settingsEntity)) {
+                auto& generalComp = mgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
+                m_autoSaveEnabled = generalComp.autoSaveProjects;
+                m_autoSaveIntervalMinutes = generalComp.autoSaveIntervalMinutes;
+                std::cout << "[ProjectSystem] Auto-save settings updated: enabled=" << m_autoSaveEnabled
+                    << ", interval=" << m_autoSaveIntervalMinutes << " minutes" << std::endl;
+            }
+        }
+    }
+
     bool ProjectSystem::CreateNewProject(const std::string& projectPath, const std::string& projectName) {
         m_lastError.clear();
         try {
@@ -328,6 +358,8 @@ namespace ANI {
                 m_pluginManager->LoadStagingPlugins(true);
                 std::cout << "[ProjectSystem] Processed staging plugins for loaded project" << std::endl;
             }
+
+            UpdateAutoSaveSettings();
 
             std::cout << "[ProjectSystem] Created new project: " << projectName << " at " << projectPath << std::endl;
             if (m_onProjectCreatedCallback) {
@@ -430,6 +462,9 @@ namespace ANI {
                 std::cout << "[ProjectSystem] Processed staging plugins for loaded project" << std::endl;
             }
 
+            UpdateAutoSaveSettings();
+            m_autoSaveTimer = 0.0f;
+
             return true;
         }
         catch (const std::exception& e) {
@@ -510,6 +545,8 @@ namespace ANI {
         comp->currentProjectPath.clear();
         comp->settings = ProjectSettings{};
         m_viewState.Reset();
+
+        m_autoSaveTimer = 0.0f;
 
         std::cout << "[ProjectSystem] Project closed" << std::endl;
 

@@ -1112,6 +1112,7 @@ namespace ANI {
 
             Events::Ref().RegisterEvent("CloseProject", [this, projectSystem]() {
                 if (projectSystem->IsProjectOpen()) {
+                    projectSystem->CloseProject();
                     OnProjectClosed();
                     std::cout << "[StudioCore] CloseProject event handled" << std::endl;
                 }

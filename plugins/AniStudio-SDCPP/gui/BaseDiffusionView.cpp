@@ -88,14 +88,27 @@ namespace GUI {
         stateEntity = m_entityManager.AddNewEntity();
         activeEntity = m_entityManager.AddNewEntity();
 
-        for (const auto& [name, adder] : m_componentAdders) {
-            adder(stateEntity);
+        auto filteredComponents = GetFilteredComponents();
+
+        for (size_t i = 0; i < ALL_COMPONENTS_COUNT; ++i) {
+            std::string name(ALL_COMPONENTS[i]);
+
+            if (std::find(filteredComponents.begin(), filteredComponents.end(), name) != filteredComponents.end()) {
+                continue;
+            }
+
+            auto it = m_componentAdders.find(name);
+            if (it != m_componentAdders.end()) {
+                it->second(stateEntity);
+            }
         }
 
-        auto visible = GetDefaultVisibleComponents();
-        for (const auto& name : visible) {
+        auto defaultComponents = GetDefaultComponents();
+        for (const auto& name : defaultComponents) {
             CopyComponentToActive(name);
         }
+
+        EnsureMutualExclusivity();
     }
 
     void BaseDiffusionView::CopyComponentToActive(const std::string& name) {

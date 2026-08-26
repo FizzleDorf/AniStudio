@@ -1,4 +1,4 @@
-// Img2VidView.hpp (renamed from VideoDiffusionView)
+// Img2VidView.hpp
 #pragma once
 
 #include "BaseDiffusionView.hpp"
@@ -25,7 +25,7 @@ namespace GUI {
 
     protected:
         std::vector<std::string> GetDefaultComponents() const override;
-        std::vector<std::string> GetDefaultVisibleComponents() const override;
+        std::vector<std::string> GetFilteredComponents() const override;
     };
 
 } // namespace GUI

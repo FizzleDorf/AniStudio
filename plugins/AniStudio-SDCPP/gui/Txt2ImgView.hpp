@@ -25,7 +25,7 @@ namespace GUI {
 
     protected:
         std::vector<std::string> GetDefaultComponents() const override;
-        std::vector<std::string> GetDefaultVisibleComponents() const override;
+        std::vector<std::string> GetFilteredComponents() const override;
     };
 
 } // namespace GUI

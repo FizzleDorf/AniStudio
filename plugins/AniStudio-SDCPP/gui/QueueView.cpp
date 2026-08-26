@@ -51,8 +51,32 @@ namespace GUI {
     void QueueView::Init() {
     }
 
+    bool QueueView::IsDiffusionView(BaseView* view) const {
+        if (!view) return false;
+        for (size_t i = 0; i < DIFFUSION_VIEWS_COUNT; ++i) {
+            if (view->viewName == DIFFUSION_VIEWS[i]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void QueueView::RefreshViewList() {
-        m_availableViews = GetViewManager().GetAllViews();
+        m_availableViews.clear();
+
+        WorkspaceID currentWorkspace = GetViewManager().GetActiveWorkspace();
+
+        auto allViews = GetViewManager().GetAllViews();
+        for (auto* view : allViews) {
+            if (!view) continue;
+
+            if (view->GetID() != currentWorkspace) continue;
+
+            if (IsDiffusionView(view)) {
+                m_availableViews.push_back(view);
+            }
+        }
+
         if (m_selectedViewIndex >= (int)m_availableViews.size())
             m_selectedViewIndex = m_availableViews.empty() ? -1 : 0;
     }
@@ -61,7 +85,7 @@ namespace GUI {
         RefreshViewList();
 
         if (m_availableViews.empty()) {
-            ImGui::TextDisabled("No open views available.");
+            ImGui::TextDisabled("No diffusion views available in current workspace.");
             return;
         }
 
@@ -554,6 +578,9 @@ namespace GUI {
 
     nlohmann::json QueueView::Serialize() const {
         nlohmann::json j;
+
+        j["selectedViewIndex"] = m_selectedViewIndex;
+
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         if (sys) {
             auto tasks = sys->GetQueueTasksWithMetadata();
@@ -570,6 +597,10 @@ namespace GUI {
     }
 
     void QueueView::Deserialize(const nlohmann::json& j) {
+        if (j.contains("selectedViewIndex")) {
+            m_selectedViewIndex = j["selectedViewIndex"].get<int>();
+        }
+
         if (j.contains("queueData") && j["queueData"].is_array()) {
             auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
             if (!sys) {

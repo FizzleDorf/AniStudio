@@ -26,7 +26,7 @@ namespace ANI {
         virtual ~ProjectSystem() = default;
 
         virtual void Start() override;
-        virtual void Update(float deltaT) override {}
+        virtual void Update(float deltaT) override;
         virtual void Destroy() override;
 
         void SetWindowHandle(void* windowHandle);
@@ -82,6 +82,10 @@ namespace ANI {
         std::string m_lastError;
         GUI::ViewState m_viewState;
 
+        float m_autoSaveTimer;
+        bool m_autoSaveEnabled;
+        int m_autoSaveIntervalMinutes;
+
         std::function<void(const std::string&)> m_onProjectLoadedCallback;
         std::function<void(const std::string&)> m_onProjectCreatedCallback;
         std::function<void()> m_onProjectClosedCallback;
@@ -101,6 +105,7 @@ namespace ANI {
 
         void AddToRecentProjects(const std::string& projectPath);
         std::string GenerateDefaultProjectName() const;
+        void UpdateAutoSaveSettings();
     };
 
 } // namespace ANI
