@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint> 
 #include <variant>
 #include <vector>
 #include <string>
@@ -11,11 +12,10 @@ struct ImVec4;
 namespace Engine {
 
 	// Centralized property variant types used by both ECS and UI systems
-	// These types bridge the gap between engine data and UI representation
-
 	using PropertyVariant = std::variant<
 		bool*,
 		int*,
+		int64_t*,
 		float*,
 		double*,
 		std::string*,

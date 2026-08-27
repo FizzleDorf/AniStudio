@@ -115,8 +115,8 @@ namespace ECS {
             if (mgr.HasComponent<SamplerComponent>(entityID)) {
                 auto& sampler = mgr.GetComponent<SamplerComponent>(entityID);
                 if (sampler.seed < 0) {
-                    sampler.seed = static_cast<int>(STDDefaultRNG::generate_seed());
-                    if (sampler.seed == 0) sampler.seed = 1;
+                    sampler.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());
+                    if (sampler.seed == 0) sampler.seed = 31337;
                 }
             }
         }
@@ -347,13 +347,10 @@ namespace ECS {
         if (context) {
             sd_cancel_generation(context, SD_CANCEL_RESET);
         }
-
         SDCPP::ResourceManager res;
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
         if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());
-        if (params.seed == 0) params.seed = 1;
         sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
@@ -376,8 +373,6 @@ namespace ECS {
         sd_img_gen_params_t params;
         sd_img_gen_params_init(&params);
         if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());
-        if (params.seed == 0) params.seed = 1;
         sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
@@ -400,8 +395,6 @@ namespace ECS {
         sd_vid_gen_params_t params;
         sd_vid_gen_params_init(&params);
         if (!SDCPP::parseVideoGenParams(metadata, params, res)) return false;
-        if (params.seed < 0) params.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());
-        if (params.seed == 0) params.seed = 1;
         sd_image_t* frames = nullptr;
         int frameCount = 0;
         sd_audio_t* audio = nullptr;

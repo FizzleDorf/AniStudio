@@ -102,7 +102,7 @@ namespace ECS {
             };
         }
 
-        int seed = -1;
+        int64_t seed = -1;
         int steps = 20;
         float denoise = 1.0f;
         int n_threads = 4;
@@ -118,7 +118,7 @@ namespace ECS {
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
-                {"seed", &seed},
+                {"seed", reinterpret_cast<void*>(&seed)},
                 {"steps", &steps},
                 {"denoise", &denoise},
                 {"n_threads", &n_threads},

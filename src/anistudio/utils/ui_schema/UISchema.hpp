@@ -54,6 +54,13 @@ namespace UISchema {
         else if (auto* p = std::get_if<int*>(&propVariant)) {
             return **p;
         }
+        else if (auto* p = std::get_if<int64_t*>(&propVariant)) {
+            return **p;
+        }
+        else if (auto* p = std::get_if<void*>(&propVariant)) {
+            int64_t* val = reinterpret_cast<int64_t*>(*p);
+            return *val;
+        }
         else if (auto* p = std::get_if<float*>(&propVariant)) {
             return **p;
         }
@@ -75,7 +82,6 @@ namespace UISchema {
         return nullptr;
     }
 
-    // ---- Forward declarations ----
     static bool RenderPropertiesForm(const nlohmann::json& schema, Engine::PropertyMap& properties,
         const UIRenderContext& context,
         std::function<void(const std::string& propName, const nlohmann::json& value)> onPropertyRightClick);
@@ -97,7 +103,6 @@ namespace UISchema {
         const UIRenderContext& context,
         std::function<void(const std::string& propName, const nlohmann::json& value)> onPropertyRightClick);
 
-    // ---- Helper: Setup table columns ----
     static void SetupTableColumns(const nlohmann::json& tableSchema, int columns) {
         if (tableSchema.contains("columnSetup") && tableSchema["columnSetup"].is_object()) {
             for (auto it = tableSchema["columnSetup"].begin(); it != tableSchema["columnSetup"].end(); ++it) {
@@ -119,7 +124,6 @@ namespace UISchema {
         }
     }
 
-    // ---- Public entry point ----
     static bool RenderSchema(const nlohmann::json& schema, Engine::PropertyMap& properties,
         std::function<void(const std::string& propName, const nlohmann::json& value)> onPropertyRightClick = nullptr,
         const std::string& componentName = "", int entityId = 0,
@@ -152,7 +156,6 @@ namespace UISchema {
         return modified || fileDialogModified || mediaLoadModified || FileDialogWidgets::WasModified() || MediaLoadingWidgets::WasModified();
     }
 
-    // ---- Separate Windows ----
     static bool RenderSeparateWindows(const nlohmann::json& schema, Engine::PropertyMap& properties,
         const UIRenderContext& context,
         std::function<void(const std::string& propName, const nlohmann::json& value)> onPropertyRightClick) {
@@ -236,7 +239,6 @@ namespace UISchema {
         return modified;
     }
 
-    // ---- Properties Form ----
     static bool RenderPropertiesForm(const nlohmann::json& schema, Engine::PropertyMap& properties,
         const UIRenderContext& context,
         std::function<void(const std::string& propName, const nlohmann::json& value)> onPropertyRightClick) {
@@ -271,7 +273,6 @@ namespace UISchema {
         return modified;
     }
 
-    // ---- Property Widget ----
     static bool RenderPropertyWidget(const std::string& label, const std::string& propName,
         const std::string& widgetType,
         Engine::PropertyVariant& propVariant, const nlohmann::json& propSchema,
@@ -287,6 +288,17 @@ namespace UISchema {
         }
         else if (std::holds_alternative<int*>(propVariant)) {
             int* value = std::get<int*>(propVariant);
+            modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties, context);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<int64_t*>(propVariant)) {
+            int64_t* value = std::get<int64_t*>(propVariant);
+            modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties, context);
+            RenderTooltipIfPresent(propSchema);
+        }
+        else if (std::holds_alternative<void*>(propVariant)) {
+            void* ptr = std::get<void*>(propVariant);
+            int64_t* value = reinterpret_cast<int64_t*>(ptr);
             modified = IntWidgets::Render(label, value, widgetType, propSchema, allProperties, context);
             RenderTooltipIfPresent(propSchema);
         }
@@ -351,7 +363,6 @@ namespace UISchema {
         return modified;
     }
 
-    // ---- Table Rendering ----
     static bool RenderTable(const nlohmann::json& schema, Engine::PropertyMap& properties,
         const UIRenderContext& context,
         std::function<void(const std::string& propName, const nlohmann::json& value)> onPropertyRightClick) {

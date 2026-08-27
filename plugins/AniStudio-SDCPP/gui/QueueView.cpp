@@ -118,6 +118,14 @@ namespace GUI {
             return;
         }
 
+        if (m_entityManager.HasComponent<SamplerComponent>(info.entity) &&
+            m_entityManager.HasComponent<SamplerComponent>(newEntity)) {
+            auto& src = m_entityManager.GetComponent<SamplerComponent>(info.entity);
+            auto& dst = m_entityManager.GetComponent<SamplerComponent>(newEntity);
+            dst.seed = src.seed;
+            printf("[QueueView] Copied seed: %lld -> %lld\n", src.seed, dst.seed);
+        }
+
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         if (!sys) {
             m_entityManager.DestroyEntity(newEntity);

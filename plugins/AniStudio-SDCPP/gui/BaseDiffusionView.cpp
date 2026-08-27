@@ -672,8 +672,20 @@ namespace GUI {
         }
     }
 
-    std::vector<std::string> BaseDiffusionView::GetDefaultVisibleComponents() const {
-        return GetDefaultComponents();
+    void BaseDiffusionView::EnsureMutualExclusivity() {
+        auto compIds = m_entityManager.GetEntityComponents(stateEntity);
+        bool hasDiffusionModel = false, hasCheckpoint = false;
+        for (auto cid : compIds) {
+            std::string name = m_entityManager.GetComponentNameById(cid);
+            if (name == "DiffusionModel") hasDiffusionModel = true;
+            if (name == "Checkpoint") hasCheckpoint = true;
+        }
+        if (hasDiffusionModel && hasCheckpoint) {
+            auto compId = m_entityManager.GetComponentTypeIdByName("Checkpoint");
+            if (compId != 0 && m_entityManager.HasComponentById(stateEntity, compId)) {
+                m_entityManager.RemoveComponentById(stateEntity, compId);
+            }
+        }
     }
 
 } // namespace GUI
