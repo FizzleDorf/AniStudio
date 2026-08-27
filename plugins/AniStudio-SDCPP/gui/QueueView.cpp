@@ -118,12 +118,16 @@ namespace GUI {
             return;
         }
 
-        if (m_entityManager.HasComponent<SamplerComponent>(info.entity) &&
-            m_entityManager.HasComponent<SamplerComponent>(newEntity)) {
+        // forcing samplercomp copy. weird bug with int64_t 
+        // reverting to default after deserialization. this could just be
+        // a dirty build but regardless it's here for now.
+        if (m_entityManager.HasComponent<SamplerComponent>(info.entity)) {
             auto& src = m_entityManager.GetComponent<SamplerComponent>(info.entity);
+            if (m_entityManager.HasComponent<SamplerComponent>(newEntity))
+                m_entityManager.RemoveComponent<SamplerComponent>(newEntity);
+            m_entityManager.AddComponent<SamplerComponent>(newEntity);
             auto& dst = m_entityManager.GetComponent<SamplerComponent>(newEntity);
-            dst.seed = src.seed;
-            printf("[QueueView] Copied seed: %lld -> %lld\n", src.seed, dst.seed);
+            dst = src;
         }
 
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
