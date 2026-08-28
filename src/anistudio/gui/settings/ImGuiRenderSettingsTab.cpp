@@ -26,13 +26,34 @@ namespace ECS {
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "Warning: Some changes require application restart");
             ImGui::Separator();
 
-            if (FilterPass("Input Settings")) RenderInputSettings();
-            if (FilterPass("Window Behavior")) RenderWindowBehavior();
-            if (FilterPass("Navigation Settings")) RenderNavigation();
-            if (FilterPass("Docking Settings")) RenderDocking();
-            if (FilterPass("Multi-Viewport Settings")) RenderViewports();
-            if (FilterPass("Memory & Performance")) RenderMemory();
-            if (FilterPass("Input Text Settings")) RenderInputText();
+            if (FilterPass("Input Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Input Settings")) RenderInputSettings();
+            }
+            if (FilterPass("Window Behavior")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Window Behavior")) RenderWindowBehavior();
+            }
+            if (FilterPass("Navigation Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Navigation Settings")) RenderNavigation();
+            }
+            if (FilterPass("Docking Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Docking Settings")) RenderDocking();
+            }
+            if (FilterPass("Multi-Viewport Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Multi-Viewport Settings")) RenderViewports();
+            }
+            if (FilterPass("Memory & Performance")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Memory & Performance")) RenderMemory();
+            }
+            if (FilterPass("Input Text Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Input Text Settings")) RenderInputText();
+            }
 
             RenderActionButtons();
         }
@@ -51,7 +72,6 @@ namespace ECS {
             io.MouseDragThreshold = dragThreshold;
             m_comp.hasChanges = true;
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderWindowBehavior() {
@@ -63,7 +83,6 @@ namespace ECS {
             m_comp.ApplyWindowBehaviorToImGui();
             m_comp.hasChanges = true;
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderNavigation() {
@@ -77,7 +96,6 @@ namespace ECS {
             m_comp.ApplyNavigationToImGui();
             m_comp.hasChanges = true;
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderDocking() {
@@ -94,7 +112,6 @@ namespace ECS {
             m_comp.ApplyDockingToImGui();
             m_comp.hasChanges = true;
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderViewports() {
@@ -113,7 +130,6 @@ namespace ECS {
             m_comp.ApplyViewportsToImGui();
             m_comp.hasChanges = true;
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderMemory() {
@@ -130,7 +146,6 @@ namespace ECS {
                 m_comp.hasChanges = true;
             }
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderInputText() {
@@ -143,7 +158,6 @@ namespace ECS {
             io.ConfigInputTextEnterKeepActive = m_comp.configInputTextEnterKeepActive;
             m_comp.hasChanges = true;
         }
-        ImGui::Separator();
     }
 
     void ImGuiRenderSettingsTab::RenderActionButtons() {

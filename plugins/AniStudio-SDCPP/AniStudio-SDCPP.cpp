@@ -1,4 +1,3 @@
-// AniStudio-SDCPP.cpp
 #include "BasePlugin.hpp"
 #include "EntityManager.hpp"
 #include "ViewManager.hpp"
@@ -20,6 +19,7 @@
 #include <iostream>
 #include <filesystem>
 #include "MissingPathsPopup.hpp"
+#include "FilePathTab.hpp"
 
 using namespace ECS;
 
@@ -35,7 +35,6 @@ public:
         LogInfo("Initializing Stable Diffusion Addon...");
 
         auto context = GetEngineContext();
-
         if (!context) {
             auto studioCtx = GetStudioContext();
             if (studioCtx) {
@@ -43,12 +42,10 @@ public:
                 LogInfo("Got EngineContext from StudioContext fallback");
             }
         }
-
         if (!context) {
             LogError("Engine context is null! Plugin cannot initialize.");
             return false;
         }
-
         LogInfo("Engine context obtained successfully");
 
         auto fs = entityMgr.GetSystem<ECS::FilePathSystem>();
@@ -59,45 +56,83 @@ public:
         Utils::g_FilePathSystem = fs.get();
         LogInfo("FilePathSystem obtained.");
 
-        if (!fs->HasPath("ModelRoot")) {
-            fs->SetPath("ModelRoot", "");
-        }
         std::string dataPath = fs->GetPath("DataPath");
-        std::string defaultModelRoot;
         if (!dataPath.empty()) {
-            defaultModelRoot = (std::filesystem::path(dataPath) / "models").string();
+            std::string filePath = (std::filesystem::path(dataPath) / "paths.json").string();
+            if (std::filesystem::exists(filePath)) {
+                fs->LoadFromFile(filePath);
+                LogInfo("Loaded paths from: " + filePath);
+            }
         }
-        else {
-            defaultModelRoot = (std::filesystem::current_path() / "models").string();
-        }
-        Utils::SetDefaultPath("ModelRoot", defaultModelRoot);
 
-        const std::vector<std::pair<std::string, std::string>> modelKeys = {
-            {"Checkpoint", "checkpoints"},
-            {"Unet", "unet"},
-            {"Vae", "vae"},
-            {"Taesd", "taesd"},
-            {"Lora", "lora"},
-            {"Embed", "embed"},
-            {"Encoder", "encoder"},
-            {"ControlNet", "controlnet"}
+        const std::vector<std::string> pluginKeys = {
+            "ModelRoot",
+            "checkpoint",
+            "diffusion_model",
+            "high_noise_diffusion_model",
+            "uncond_diffusion_model",
+            "motion_module",
+            "vae",
+            "taesd",
+            "lora",
+            "embed",
+            "encoder",
+            "llm",
+            "upscale",
+            "controlnet"
         };
 
-        for (const auto& [key, subdir] : modelKeys) {
+        for (const auto& key : pluginKeys) {
             if (!fs->HasPath(key)) {
                 fs->SetPath(key, "");
             }
-            std::string defaultPath = (std::filesystem::path(defaultModelRoot) / subdir).string();
-            Utils::SetDefaultPath(key, defaultPath);
         }
 
-        if (!dataPath.empty()) {
-            std::string filePath = (std::filesystem::path(dataPath) / "filepaths.json").string();
-            if (std::filesystem::exists(filePath))
-                fs->LoadFromFile(filePath);
+        std::string modelRoot = fs->GetPath("ModelRoot");
+        if (modelRoot.empty()) {
+            modelRoot = (std::filesystem::current_path() / "models").string();
         }
 
-        Utils::CheckMissingPaths(fs);
+        ECS::FilePathTab::RegisterDefaultPath("ModelRoot", modelRoot);
+
+        const std::vector<std::pair<std::string, std::string>> modelKeys = {
+            {"checkpoint", "checkpoints"},
+            {"diffusion_model", "diffusion_model"},
+            {"high_noise_diffusion_model", "diffusion_model"},
+            {"uncond_diffusion_model", "diffusion_model"},
+            {"motion_module", "motion_module"},
+            {"vae", "vae"},
+            {"taesd", "taesd"},
+            {"lora", "loras"},
+            {"embed", "embeddings"},
+            {"encoder", "clip"},
+            {"llm", "llm"},
+            {"upscale", "upscale_models"},
+            {"controlnet", "controlnet"}
+        };
+
+        for (const auto& [key, subdir] : modelKeys) {
+            ECS::FilePathTab::RegisterModelRootDependentPath(key, subdir);
+        }
+
+        if (!modelRoot.empty()) {
+            ECS::FilePathTab::UpdateModelRootDefaults(modelRoot);
+        }
+
+        ECS::FilePathTab::RegisterCategoryMapper([](const std::string& key) -> std::string {
+            if (key == "ModelRoot") {
+                return "SDCPP";
+            }
+            if (key == "checkpoint" || key == "diffusion_model" || key == "high_noise_diffusion_model" ||
+                key == "uncond_diffusion_model" || key == "motion_module" || key == "vae" ||
+                key == "taesd" || key == "lora" || key == "embed" || key == "encoder" ||
+                key == "llm" || key == "upscale" || key == "controlnet") {
+                return "SDCPP";
+            }
+            return "";
+            });
+
+        Utils::CheckMissingPaths(fs.get());
 
         m_componentIds.clear();
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt"));
@@ -184,6 +219,17 @@ public:
 
         RegisterEventHandlers();
 
+        ANI::Events::Ref().RegisterEventWithData("ProjectOpened",
+            [this](const std::any& data) {
+                if (m_entityMgr) {
+                    auto fs = m_entityMgr->GetSystem<ECS::FilePathSystem>();
+                    if (fs) {
+                        Utils::CheckMissingPaths(fs.get());
+                    }
+                }
+            });
+        m_registeredEvents.push_back("ProjectOpened");
+
         LogInfo("Stable Diffusion Addon initialized");
         return true;
     }
@@ -238,9 +284,6 @@ public:
         viewMgr.RegisterView<GUI::QueueView>("QueueView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::Txt2VidView>("Txt2VidView", "DiffusionAddon");
 
-        // DO NOT load viewstate here - it's already loaded by the project system
-        // The viewstate is only saved on plugin disable via StudioPluginManager
-
         LogInfo("Views registered via direct ViewManager");
         return true;
     }
@@ -268,13 +311,10 @@ public:
         if (fs) {
             std::string configPath = fs->GetPath("DataPath");
             if (!configPath.empty()) {
-                std::string filePath = (std::filesystem::path(configPath) / "filepaths.json").string();
+                std::string filePath = (std::filesystem::path(configPath) / "paths.json").string();
                 fs->SaveToFile(filePath);
             }
         }
-
-        // Save viewstate is handled by StudioPluginManager::disablePlugin()
-        // Do NOT call SaveViewState here
 
         if (m_viewMgr) {
             for (const auto& viewName : m_viewTypeNames) {

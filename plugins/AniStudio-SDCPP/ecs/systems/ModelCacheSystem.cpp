@@ -1,7 +1,36 @@
 #include "ModelCacheSystem.hpp"
 #include <filesystem>
 
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <sys/sysinfo.h>
+#endif
+
 namespace ECS {
+
+    size_t ModelCacheSystem::getAvailableMemory() const {
+#if defined(_WIN32)
+        MEMORYSTATUSEX status;
+        status.dwLength = sizeof(status);
+        if (GlobalMemoryStatusEx(&status)) {
+            return static_cast<size_t>(status.ullAvailPhys);
+        }
+        return 0;
+#else
+        struct sysinfo info;
+        if (sysinfo(&info) == 0) {
+            return static_cast<size_t>(info.freeram) * info.mem_unit;
+        }
+        return 0;
+#endif
+    }
+
+    bool ModelCacheSystem::hasEnoughMemory(size_t requiredBytes) const {
+        size_t available = getAvailableMemory();
+        // Use a safety margin of 10% to avoid filling memory completely
+        return requiredBytes < static_cast<size_t>(available * 0.9);
+    }
 
     sd_ctx_t* ModelCacheSystem::getOrCreateContext(const nlohmann::json& metadata) {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -20,17 +49,31 @@ namespace ECS {
 
         std::cout << "[ModelCacheSystem] CACHE MISS - loading model..." << std::endl;
 
+        size_t requiredMemory = computeMemory(metadata);
+        if (!hasEnoughMemory(requiredMemory)) {
+            m_lastError = "Insufficient available memory to load model. Required: " + std::to_string(requiredMemory) +
+                " bytes, Available: " + std::to_string(getAvailableMemory()) + " bytes.";
+            std::cerr << "[ModelCacheSystem] " << m_lastError << std::endl;
+            return nullptr;
+        }
+
         sd_ctx_params_t ctxParams;
         sd_ctx_params_init(&ctxParams);
         SDCPP::ResourceManager res;
-        if (!SDCPP::parseContextParams(metadata, ctxParams, res)) return nullptr;
+        if (!SDCPP::parseContextParams(metadata, ctxParams, res)) {
+            m_lastError = "Failed to parse context parameters.";
+            return nullptr;
+        }
         sd_ctx_t* ctx = new_sd_ctx(&ctxParams);
-        if (!ctx) return nullptr;
+        if (!ctx) {
+            m_lastError = "new_sd_ctx returned null.";
+            return nullptr;
+        }
 
         ContextInfo info;
         info.ctx = ctx;
         info.metadata = metadata;
-        info.memoryBytes = computeMemory(metadata);
+        info.memoryBytes = requiredMemory;
         info.activeCount = 0;
         info.modelType = detectModelType(metadata);
         info.isInUse = false;
@@ -40,6 +83,7 @@ namespace ECS {
         evictIfNeeded();
 
         std::cout << "[ModelCacheSystem] Cached. Cache size now: " << m_cache.size() << std::endl;
+        m_lastError.clear();
         return ctx;
     }
 
@@ -48,20 +92,35 @@ namespace ECS {
         std::string key = computeKey(metadata);
         if (m_cache.find(key) != m_cache.end()) {
             m_cache[key].lastUsed = std::chrono::steady_clock::now();
+            m_lastError.clear();
             return true;
+        }
+
+        size_t requiredMemory = computeMemory(metadata);
+        if (!hasEnoughMemory(requiredMemory)) {
+            m_lastError = "Insufficient available memory to load model. Required: " + std::to_string(requiredMemory) +
+                " bytes, Available: " + std::to_string(getAvailableMemory()) + " bytes.";
+            std::cerr << "[ModelCacheSystem] " << m_lastError << std::endl;
+            return false;
         }
 
         sd_ctx_params_t ctxParams;
         sd_ctx_params_init(&ctxParams);
         SDCPP::ResourceManager res;
-        if (!SDCPP::parseContextParams(metadata, ctxParams, res)) return false;
+        if (!SDCPP::parseContextParams(metadata, ctxParams, res)) {
+            m_lastError = "Failed to parse context parameters.";
+            return false;
+        }
         sd_ctx_t* ctx = new_sd_ctx(&ctxParams);
-        if (!ctx) return false;
+        if (!ctx) {
+            m_lastError = "new_sd_ctx returned null.";
+            return false;
+        }
 
         ContextInfo info;
         info.ctx = ctx;
         info.metadata = metadata;
-        info.memoryBytes = computeMemory(metadata);
+        info.memoryBytes = requiredMemory;
         info.activeCount = 0;
         info.modelType = detectModelType(metadata);
         info.isInUse = false;
@@ -69,6 +128,7 @@ namespace ECS {
         m_cache[key] = info;
         m_order.push_back(key);
         evictIfNeeded();
+        m_lastError.clear();
         return true;
     }
 

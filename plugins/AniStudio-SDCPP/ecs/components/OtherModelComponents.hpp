@@ -27,7 +27,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "Photo Maker Models"},
-							{"dialogDefaultPath", "models"},
+							{"dialogDefaultPath", "diffusion_model"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for Photo Maker identity embedding/face swapping models"}
@@ -242,7 +242,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".pth,.safetensors,.pt"},
 							{"filterName", "Upscale Models"},
-							{"dialogDefaultPath", "esrgan"},
+							{"dialogDefaultPath", "upscale"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for ESRGAN upscale model files (.pth, .safetensors, .pt)"}
@@ -382,7 +382,7 @@ namespace ECS {
 										{"mode", "file"},
 										{"filters", ".safetensors,.ckpt,.pt"},
 										{"filterName", "LoRA Files"},
-										{"dialogDefaultPath", "loras"},
+										{"dialogDefaultPath", "lora"},
 										{"buttonText", "Browse..."},
 										{"resetButtonText", "Clear"},
 										{"browseTooltip", "Select LoRA file"}

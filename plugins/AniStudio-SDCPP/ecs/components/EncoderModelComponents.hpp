@@ -23,7 +23,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Models"},
-							{"dialogDefaultPath", "Encoder"},
+							{"dialogDefaultPath", "encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP-G text encoder files"}
@@ -61,7 +61,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt"},
 							{"filterName", "CLIP Models"},
-							{"dialogDefaultPath", "Encoder"},
+							{"dialogDefaultPath", "encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for CLIP-L text encoder files"}
@@ -99,7 +99,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "T5 Models"},
-							{"dialogDefaultPath", "Encoder"},
+							{"dialogDefaultPath", "encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for T5-XXL text encoder files for FLUX models"}
@@ -137,7 +137,7 @@ namespace ECS {
 							{"mode", "file"},
 							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
 							{"filterName", "LLM Models"},
-							{"dialogDefaultPath", "Encoder"},
+							{"dialogDefaultPath", "encoder"},
 							{"buttonText", "Browse..."},
 							{"resetButtonText", "Clear"},
 							{"browseTooltip", "Browse for LLM text encoder files"}

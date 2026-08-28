@@ -160,6 +160,7 @@ namespace ECS {
             std::ofstream file(path);
             if (!file.is_open()) return false;
             file << j.dump(4);
+            CreateBackup();
             return true;
         }
 
@@ -170,6 +171,7 @@ namespace ECS {
             nlohmann::json j;
             file >> j;
             Deserialize(j);
+            CreateBackup();
             return true;
         }
 

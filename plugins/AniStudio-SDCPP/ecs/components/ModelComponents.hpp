@@ -6,7 +6,6 @@
 
 namespace ECS {
 
-    // Packaged Checkpoint loader (sd1.5 and sdxl with vae and encoders)
     struct CheckpointComponent : public BaseModelComponent {
         CheckpointComponent() {
             compName = "Checkpoint";
@@ -23,7 +22,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "Checkpoint Models"},
-                            {"dialogDefaultPath", "models"},
+                            {"dialogDefaultPath", "checkpoint"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
@@ -43,7 +42,6 @@ namespace ECS {
         }
     };
 
-    // Diffusion Model only (Flux)
     struct DiffusionModelComponent : public BaseModelComponent {
         DiffusionModelComponent() {
             compName = "DiffusionModel";
@@ -60,7 +58,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "UNet Models"},
-                            {"dialogDefaultPath", "models"},
+                            {"dialogDefaultPath", "diffusion_model"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for UNet/Diffusion model files for FLUX or transformer models"}
@@ -83,7 +81,6 @@ namespace ECS {
     struct HighNoiseDiffusionModelComponent : public BaseModelComponent {
         HighNoiseDiffusionModelComponent() {
             compName = "HighNoiseDiffusionModel";
-
             schema = {
                 {"title", "High Noise UNet/Diffusion Model"},
                 {"type", "object"},
@@ -97,7 +94,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "High Noise UNet Models"},
-                            {"dialogDefaultPath", "models"},
+                            {"dialogDefaultPath", "high_noise_diffusion_model"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for high noise UNet/Diffusion model files (for video generation)"}
@@ -133,7 +130,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "UNet Models"},
-                            {"dialogDefaultPath", "models"},
+                            {"dialogDefaultPath", "uncond_diffusion_model"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for unconditional diffusion model files"}
@@ -153,7 +150,6 @@ namespace ECS {
         }
     };
 
-    // Motion Module Component
     struct MotionModuleComponent : public BaseModelComponent {
         MotionModuleComponent() {
             compName = "MotionModule";
@@ -170,7 +166,7 @@ namespace ECS {
                             {"mode", "file"},
                             {"filters", ".safetensors,.ckpt,.pt,.gguf"},
                             {"filterName", "Motion Module Models"},
-                            {"dialogDefaultPath", "models"},
+                            {"dialogDefaultPath", "motion_module"},
                             {"buttonText", "Browse..."},
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for motion module files (for video generation)"}
@@ -190,4 +186,4 @@ namespace ECS {
         }
     };
 
-} // namespace ECS
+}

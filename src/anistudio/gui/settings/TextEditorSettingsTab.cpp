@@ -20,8 +20,14 @@ namespace ECS {
 
     void TextEditorSettingsTab::Render() {
         if (ImGui::BeginChild("TextEditorSettings", ImVec2(0, 0), false)) {
-            if (FilterPass("General")) RenderGeneralSettings();
-            if (FilterPass("Font")) RenderFontSettings();
+            if (FilterPass("General")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("General")) RenderGeneralSettings();
+            }
+            if (FilterPass("Font")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Font")) RenderFontSettings();
+            }
             RenderActionButtons();
         }
         ImGui::EndChild();
@@ -29,7 +35,6 @@ namespace ECS {
 
     void TextEditorSettingsTab::RenderGeneralSettings() {
         ImGui::TextUnformatted("Default Editor Settings");
-        ImGui::Separator();
 
         bool ln = m_comp.showLineNumbers;
         if (ImGui::Checkbox("Line Numbers (default)", &ln)) {
@@ -97,13 +102,10 @@ namespace ECS {
         else {
             ImGui::TextDisabled("(none selected)");
         }
-
-        ImGui::Separator();
     }
 
     void TextEditorSettingsTab::RenderFontSettings() {
         ImGui::TextUnformatted("Editor Font");
-        ImGui::Separator();
 
         m_fontComp.EnsureInitialized();
 
@@ -136,8 +138,6 @@ namespace ECS {
                 m_fontComp.ApplyFont();
             }
         }
-
-        ImGui::Separator();
     }
 
     void TextEditorSettingsTab::RenderActionButtons() {

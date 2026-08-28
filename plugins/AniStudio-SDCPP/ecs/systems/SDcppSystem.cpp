@@ -12,7 +12,7 @@ namespace ECS {
         taskType(other.taskType), metadata(std::move(other.metadata)),
         fullPath(std::move(other.fullPath)), result(std::move(other.result)),
         sdContext(other.sdContext), contextKey(std::move(other.contextKey)),
-        enqueueTime(other.enqueueTime), startTime(other.startTime) {
+        enqueueTime(other.enqueueTime), startTime(other.startTime), cancelTime(other.cancelTime) {
         other.sdContext = nullptr;
     }
 
@@ -29,6 +29,7 @@ namespace ECS {
             contextKey = std::move(other.contextKey);
             enqueueTime = other.enqueueTime;
             startTime = other.startTime;
+            cancelTime = other.cancelTime;
             other.sdContext = nullptr;
         }
         return *this;
@@ -40,6 +41,7 @@ namespace ECS {
 
     void SDCPPSystem::TaskData::Cancel() {
         cancelled = true;
+        cancelTime = std::chrono::steady_clock::now();
         if (sdContext) sd_cancel_generation(sdContext, SD_CANCEL_ALL);
     }
 
@@ -740,23 +742,35 @@ namespace ECS {
         std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;
         {
             std::unique_lock<std::mutex> lock(queueMutex);
+            const auto now = std::chrono::steady_clock::now();
             for (auto it = taskQueue.begin(); it != taskQueue.end();) {
                 if (it->processing) {
                     if (it->cancelled) {
+                        // If cancelled, check if future is ready or if timeout exceeded
+                        bool shouldRemove = false;
                         if (it->result.valid()) {
                             auto status = it->result.wait_for(std::chrono::milliseconds(0));
                             if (status == std::future_status::ready) {
+                                shouldRemove = true;
                                 try { it->result.get(); }
                                 catch (...) {}
-                                if (!it->contextKey.empty() && m_cacheSystem) {
-                                    m_cacheSystem->releaseContext(it->contextKey);
+                            }
+                            else {
+                                // Check timeout (10 seconds)
+                                auto elapsed = now - it->cancelTime;
+                                if (elapsed > std::chrono::seconds(10)) {
+                                    std::cerr << "[SDCPPSystem] Cancelled task timed out, forcing removal and releasing context.\n";
+                                    shouldRemove = true;
+                                    // We cannot safely get the result, but we can discard it.
+                                    // The thread pool task will finish later, but we ignore it.
                                 }
-                                it = taskQueue.erase(it);
-                                hasActiveTask = false;
-                                continue;
                             }
                         }
                         else {
+                            shouldRemove = true;
+                        }
+
+                        if (shouldRemove) {
                             if (!it->contextKey.empty() && m_cacheSystem) {
                                 m_cacheSystem->releaseContext(it->contextKey);
                             }
@@ -767,6 +781,8 @@ namespace ECS {
                         ++it;
                         continue;
                     }
+
+                    // Non-cancelled completion check
                     if (it->result.valid()) {
                         auto status = it->result.wait_for(std::chrono::milliseconds(0));
                         if (status == std::future_status::ready) {

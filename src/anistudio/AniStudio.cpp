@@ -580,16 +580,16 @@ namespace ANI {
             std::filesystem::create_directories(dataPath);
         }
 
-        std::string filepathsFile = dataPath + "/filepaths.json";
-        fileSys->LoadFromFile(filepathsFile);
+        std::string pathsFile = dataPath + "/paths.json";
+        fileSys->LoadFromFile(pathsFile);
 
         EnsureCorePaths();
 
-        Utils::CheckMissingPaths(fileSys);
+        Utils::CheckMissingPaths(fileSys.get());
 
         InitializeStudioPlugins();
 
-        Utils::CheckMissingPaths(fileSys);
+        Utils::CheckMissingPaths(fileSys.get());
 
         RegisterCoreViews();
         std::cout << "[StudioCore] Core views registered" << std::endl;
@@ -663,8 +663,8 @@ namespace ANI {
         if (fileSys) {
             fileSys->SetPath("CurrentProject", projectPath);
             fileSys->SetPath("ProjectData", projectPath + "/data");
-            fileSys->SetPath("ProjectAssets", projectPath + "/assets");
-            fileSys->SetPath("ProjectOutput", projectPath + "/output");
+            fileSys->SetPath("Assets", projectPath + "/assets");
+            fileSys->SetPath("Output", projectPath + "/output");
             std::filesystem::create_directories(projectPath + "/data");
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
@@ -702,8 +702,8 @@ namespace ANI {
         if (fileSys) {
             fileSys->SetPath("CurrentProject", projectPath);
             fileSys->SetPath("ProjectData", projectPath + "/data");
-            fileSys->SetPath("ProjectAssets", projectPath + "/assets");
-            fileSys->SetPath("ProjectOutput", projectPath + "/output");
+            fileSys->SetPath("Assets", projectPath + "/assets");
+            fileSys->SetPath("Output", projectPath + "/output");
             std::filesystem::create_directories(projectPath + "/data");
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
@@ -727,8 +727,8 @@ namespace ANI {
         if (fileSys) {
             fileSys->SetPath("CurrentProject", "");
             fileSys->SetPath("ProjectData", "");
-            fileSys->SetPath("ProjectAssets", "");
-            fileSys->SetPath("ProjectOutput", "");
+            fileSys->SetPath("Assets", "");
+            fileSys->SetPath("Output", "");
         }
 
         if (studioContext && studioContext->studioPluginManager) {
@@ -962,7 +962,6 @@ namespace ANI {
         auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
         auto pluginManager = studioContext ? studioContext->studioPluginManager : nullptr;
 
-        // Image events
         if (imageSystem) {
             Events::Ref().RegisterEventWithData("LoadImageRequest", [this, imageSystem](const std::any& data) {
                 try {
@@ -1012,7 +1011,6 @@ namespace ANI {
                 });
         }
 
-        // Video events
         if (videoSystem) {
             Events::Ref().RegisterEventWithData("LoadVideoRequest", [this, videoSystem](const std::any& data) {
                 try {
@@ -1062,7 +1060,6 @@ namespace ANI {
                 });
         }
 
-        // Project events
         if (projectSystem) {
             Events::Ref().RegisterEventWithData("ProjectOpened", [projectSystem](const std::any& data) {
                 try {
@@ -1119,7 +1116,6 @@ namespace ANI {
                 });
         }
 
-        // Workspace and View events ? corrected method names
         Events::Ref().RegisterEventWithData("SetActiveWorkspace", [this](const std::any& data) {
             try {
                 GUI::WorkspaceID id = std::any_cast<GUI::WorkspaceID>(data);
@@ -1209,7 +1205,6 @@ namespace ANI {
             }
             });
 
-        // Entity events
         Events::Ref().RegisterEvent("CreateEntity", [this]() {
             ECS::EntityID newEntity = GetEntityManager().AddNewEntity();
             std::cout << "[StudioCore] CreateEntity event: entity " << newEntity << std::endl;
@@ -1266,7 +1261,6 @@ namespace ANI {
             }
             });
 
-        // Plugin events
         if (pluginManager) {
             Events::Ref().RegisterEventWithData("PluginLoaded", [pluginManager](const std::any& data) {
                 try {

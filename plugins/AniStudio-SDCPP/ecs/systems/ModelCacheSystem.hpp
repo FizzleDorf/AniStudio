@@ -58,6 +58,11 @@ namespace ECS {
             return m_cache.size();
         }
 
+        std::string getLastError() const {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            return m_lastError;
+        }
+
     private:
         struct ContextInfo {
             sd_ctx_t* ctx;
@@ -73,11 +78,15 @@ namespace ECS {
         std::deque<std::string> m_order;
         size_t m_maxCacheSize = 10;
         mutable std::mutex m_mutex;
+        mutable std::string m_lastError;
 
         void promote(const std::string& key);
         void evictIfNeeded();
         size_t computeMemory(const nlohmann::json& metadata) const;
         std::string detectModelType(const nlohmann::json& metadata) const;
+
+        bool hasEnoughMemory(size_t requiredBytes) const;
+        size_t getAvailableMemory() const;
     };
 
 }

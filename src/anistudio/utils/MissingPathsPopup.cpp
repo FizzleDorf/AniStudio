@@ -4,17 +4,30 @@
 #include <imgui.h>
 #include <unordered_map>
 #include <algorithm>
+#include <filesystem>
 
 namespace Utils {
 
-    static std::shared_ptr<ECS::FilePathSystem> s_fileSys;
+    static ECS::FilePathSystem* s_fileSys = nullptr;
     static std::vector<std::string> s_missingKeys;
     static bool s_popupOpen = false;
     static std::unordered_map<std::string, std::string> s_tempPaths;
     static std::unordered_map<std::string, std::string> s_defaultPaths;
 
+    static bool IsPathHidden(const std::string& key) {
+        return (key == "CurrentProject" || key == "ProjectData" ||
+            key == "ProjectAssets" || key == "ProjectOutput" ||
+            key == "Output" || key == "LastOpenProject" || key == "ProjectDataPath" ||
+            key == "AssetsFolder" || key == "OutputFolder");
+    }
+
     void SetDefaultPath(const std::string& key, const std::string& defaultPath) {
         s_defaultPaths[key] = defaultPath;
+    }
+
+    std::string GetDefaultPath(const std::string& key) {
+        auto it = s_defaultPaths.find(key);
+        return (it != s_defaultPaths.end()) ? it->second : "";
     }
 
     static std::string GetDefaultPathForKey(const std::string& key) {
@@ -22,16 +35,20 @@ namespace Utils {
         return (it != s_defaultPaths.end()) ? it->second : "";
     }
 
-    void CheckMissingPaths(std::shared_ptr<ECS::FilePathSystem> fileSys) {
+    void CheckMissingPaths(ECS::FilePathSystem* fileSys) {
         if (!fileSys) return;
         s_fileSys = fileSys;
         s_missingKeys.clear();
-        auto allKeys = fileSys->GetAllKeys();
+        std::vector<std::string> allKeys = fileSys->GetAllKeys();
+
         for (const auto& key : allKeys) {
-            if (fileSys->GetPath(key).empty()) {
+            if (IsPathHidden(key)) continue;
+            std::string path = fileSys->GetPath(key);
+            if (path.empty()) {
                 s_missingKeys.push_back(key);
             }
         }
+
         if (s_missingKeys.empty()) {
             s_popupOpen = false;
             s_tempPaths.clear();
@@ -40,7 +57,8 @@ namespace Utils {
             s_popupOpen = true;
             s_tempPaths.clear();
             for (const auto& key : s_missingKeys) {
-                s_tempPaths[key] = "";
+                std::string defaultPath = GetDefaultPathForKey(key);
+                s_tempPaths[key] = defaultPath;
             }
         }
     }
@@ -56,20 +74,26 @@ namespace Utils {
 
             for (auto& key : s_missingKeys) {
                 ImGui::PushID(key.c_str());
+
                 ImGui::Text("%s", key.c_str());
                 ImGui::SameLine(150.0f);
+
                 char buffer[256];
                 strcpy(buffer, s_tempPaths[key].c_str());
+                ImGui::PushItemWidth(200.0f);
                 if (ImGui::InputText("##path", buffer, sizeof(buffer))) {
                     s_tempPaths[key] = buffer;
                 }
+                ImGui::PopItemWidth();
+
                 ImGui::SameLine();
-                if (ImGui::Button("Browse")) {
+                if (ImGui::Button("Browse...")) {
                     std::string selected;
                     if (FileDialog::SelectFolder("Select Folder", selected)) {
                         s_tempPaths[key] = selected;
                     }
                 }
+
                 ImGui::SameLine();
                 std::string defaultPath = GetDefaultPathForKey(key);
                 if (!defaultPath.empty()) {
@@ -77,48 +101,71 @@ namespace Utils {
                         s_tempPaths[key] = defaultPath;
                     }
                 }
+
                 ImGui::PopID();
             }
 
             ImGui::Separator();
 
             if (ImGui::Button("Save")) {
+                bool allFilled = true;
                 for (const auto& pair : s_tempPaths) {
-                    if (!pair.second.empty()) {
-                        s_fileSys->SetPath(pair.first, pair.second);
+                    if (pair.second.empty()) {
+                        allFilled = false;
+                        break;
+                    }
+                }
+
+                if (allFilled) {
+                    for (const auto& pair : s_tempPaths) {
+                        if (!pair.second.empty()) {
+                            s_fileSys->SetPath(pair.first, pair.second);
+                        }
+                    }
+                    std::string dataPath = s_fileSys->GetPath("DataPath");
+                    if (dataPath.empty()) {
+                        dataPath = "./data";
+                    }
+                    std::string filePath = dataPath + "/paths.json";
+                    s_fileSys->SaveToFile(filePath);
+                    s_popupOpen = false;
+                    s_tempPaths.clear();
+                    s_missingKeys.clear();
+                    ImGui::CloseCurrentPopup();
+                }
+                else {
+                    ImGui::OpenPopup("MissingValuesWarning");
+                }
+            }
+
+            ImGui::SameLine();
+
+            if (ImGui::Button("Set All to Default")) {
+                for (const auto& key : s_missingKeys) {
+                    std::string defaultPath = GetDefaultPathForKey(key);
+                    if (!defaultPath.empty()) {
+                        s_fileSys->SetPath(key, defaultPath);
+                        s_tempPaths[key] = defaultPath;
                     }
                 }
                 std::string dataPath = s_fileSys->GetPath("DataPath");
-                if (!dataPath.empty()) {
-                    std::string filepathsFile = dataPath + "/filepaths.json";
-                    s_fileSys->SaveToFile(filepathsFile);
+                if (dataPath.empty()) {
+                    dataPath = "./data";
                 }
+                std::string filePath = dataPath + "/paths.json";
+                s_fileSys->SaveToFile(filePath);
                 s_popupOpen = false;
                 s_tempPaths.clear();
                 s_missingKeys.clear();
                 ImGui::CloseCurrentPopup();
             }
 
-            ImGui::SameLine();
-
-            if (ImGui::Button("Set All to Default")) {
-                // Fill all missing paths with their default values
-                for (const auto& key : s_missingKeys) {
-                    std::string defaultPath = GetDefaultPathForKey(key);
-                    if (!defaultPath.empty()) {
-                        s_fileSys->SetPath(key, defaultPath);
-                        s_tempPaths[key] = defaultPath; // update the displayed temp value too
-                    }
+            if (ImGui::BeginPopupModal("MissingValuesWarning", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::Text("Some paths are still empty. Please fill all paths or use defaults.");
+                if (ImGui::Button("OK")) {
+                    ImGui::CloseCurrentPopup();
                 }
-                std::string dataPath = s_fileSys->GetPath("DataPath");
-                if (!dataPath.empty()) {
-                    std::string filepathsFile = dataPath + "/filepaths.json";
-                    s_fileSys->SaveToFile(filepathsFile);
-                }
-                s_popupOpen = false;
-                s_tempPaths.clear();
-                s_missingKeys.clear();
-                ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
             }
 
             ImGui::EndPopup();

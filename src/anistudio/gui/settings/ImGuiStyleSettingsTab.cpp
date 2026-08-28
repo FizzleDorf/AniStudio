@@ -23,11 +23,26 @@ namespace ECS {
         ImGuiStyle& style = m_comp.currentStyle;
 
         if (ImGui::BeginChild("ImGuiStyleSettings", ImVec2(0, 0), false)) {
-            if (FilterPass("Style Presets")) RenderStylePresets();
-            if (FilterPass("Size Settings")) RenderSizeSettings();
-            if (FilterPass("Border Settings")) RenderBorderSettings();
-            if (FilterPass("Rounding Settings")) RenderRoundingSettings();
-            if (FilterPass("Color Settings")) RenderColorSettings();
+            if (FilterPass("Style Presets")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Style Presets")) RenderStylePresets();
+            }
+            if (FilterPass("Size Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Size Settings")) RenderSizeSettings();
+            }
+            if (FilterPass("Border Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Border Settings")) RenderBorderSettings();
+            }
+            if (FilterPass("Rounding Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Rounding Settings")) RenderRoundingSettings();
+            }
+            if (FilterPass("Color Settings")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Color Settings")) RenderColorSettings();
+            }
             RenderActionButtons();
         }
         ImGui::EndChild();
@@ -61,7 +76,6 @@ namespace ECS {
             if (m_comp.selectedStyleIndex >= (int)m_comp.displayNames.size())
                 m_comp.selectedStyleIndex = 0;
         }
-        ImGui::Separator();
         ImGui::Text("Save current style as:");
         ImGui::InputText("Filename", m_comp.saveAsFilename, IM_ARRAYSIZE(m_comp.saveAsFilename));
         ImGui::SameLine();
@@ -81,7 +95,6 @@ namespace ECS {
                 }
             }
         }
-        ImGui::Separator();
     }
 
     void ImGuiStyleSettingsTab::RenderSizeSettings() {
@@ -125,29 +138,25 @@ namespace ECS {
         if (ImGui::RadioButton("Alpha", alphaFlags == ImGuiColorEditFlags_AlphaPreview)) alphaFlags = ImGuiColorEditFlags_AlphaPreview;
         ImGui::SameLine();
         if (ImGui::RadioButton("Both", alphaFlags == ImGuiColorEditFlags_AlphaPreviewHalf)) alphaFlags = ImGuiColorEditFlags_AlphaPreviewHalf;
-        if (ImGui::BeginChild("colors", ImVec2(0, 300), true)) {
-            ImGui::PushItemWidth(-160);
-            for (int i = 0; i < ImGuiCol_COUNT; i++) {
-                const char* name = ImGui::GetStyleColorName(i);
-                if (!colorFilter.PassFilter(name)) continue;
-                ImGui::PushID(i);
-                if (ImGui::ColorEdit4("##color", (float*)&style.Colors[i], ImGuiColorEditFlags_AlphaBar | alphaFlags)) {
+
+        for (int i = 0; i < ImGuiCol_COUNT; i++) {
+            const char* name = ImGui::GetStyleColorName(i);
+            if (!colorFilter.PassFilter(name)) continue;
+            ImGui::PushID(i);
+            if (ImGui::ColorEdit4("##color", (float*)&style.Colors[i], ImGuiColorEditFlags_AlphaBar | alphaFlags)) {
+                m_comp.hasChanges = true;
+            }
+            if (memcmp(&style.Colors[i], &m_comp.backupStyle.Colors[i], sizeof(ImVec4)) != 0) {
+                ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+                if (ImGui::Button("Revert")) {
+                    style.Colors[i] = m_comp.backupStyle.Colors[i];
                     m_comp.hasChanges = true;
                 }
-                if (memcmp(&style.Colors[i], &m_comp.backupStyle.Colors[i], sizeof(ImVec4)) != 0) {
-                    ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-                    if (ImGui::Button("Revert")) {
-                        style.Colors[i] = m_comp.backupStyle.Colors[i];
-                        m_comp.hasChanges = true;
-                    }
-                }
-                ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
-                ImGui::TextUnformatted(name);
-                ImGui::PopID();
             }
-            ImGui::PopItemWidth();
+            ImGui::SameLine(0.0f, style.ItemInnerSpacing.x);
+            ImGui::TextUnformatted(name);
+            ImGui::PopID();
         }
-        ImGui::EndChild();
     }
 
     void ImGuiStyleSettingsTab::RenderActionButtons() {

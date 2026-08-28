@@ -1,6 +1,6 @@
 {
     "autoSaveIntervalMinutes": 5,
-    "autoSaveProjects": true,
+    "autoSaveProjects": false,
     "confirmBeforeDeleteAssets": true,
     "confirmBeforeExit": true,
     "confirmBeforeOverwriteFiles": true,

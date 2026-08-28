@@ -35,7 +35,7 @@ namespace ECS {
                                         {"mode", "file"},
                                         {"filters", ".pt,.safetensors,.bin"},
                                         {"filterName", "Embedding Files"},
-                                        {"dialogDefaultPath", "embeddings"},
+                                        {"dialogDefaultPath", "embed"},
                                         {"buttonText", "Browse..."},
                                         {"resetButtonText", "Clear"},
                                         {"browseTooltip", "Select embedding file"}

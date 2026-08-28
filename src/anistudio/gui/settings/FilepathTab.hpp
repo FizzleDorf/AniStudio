@@ -3,6 +3,9 @@
 #include "FilePathSystem.hpp"
 #include <unordered_map>
 #include <string>
+#include <vector>
+#include <functional>
+#include <map>
 
 namespace ECS {
 
@@ -24,16 +27,34 @@ namespace ECS {
         bool LoadSettings() override;
         void SetImGuiContext(ImGuiContext* ctx) override {}
 
+        static void RegisterDefaultPath(const std::string& key, const std::string& defaultPath);
+        static void RegisterModelRootDependentPath(const std::string& key, const std::string& subdirectory);
+        static void UpdateModelRootDefaults(const std::string& modelRoot);
+        using CategoryMapper = std::function<std::string(const std::string&)>;
+        static void RegisterCategoryMapper(CategoryMapper mapper);
+
     private:
         FilePathSystem& m_fs;
         std::string m_filter;
         char m_pathFilter[256] = "";
         bool m_hasChanges = false;
         std::unordered_map<std::string, std::string> m_backupPaths;
-        std::string m_settingsFilePath = "./data/paths.json";
 
         bool FilterPass(const std::string& key) const;
         void RenderPathsTable();
+        void RenderActionButtons();
+        std::string GetDefaultPath(const std::string& key) const;
+        void InitializeDefaults();
+        std::string GetCategoryForPath(const std::string& key) const;
+        void DetermineCategoryOrder(const std::map<std::string, std::vector<std::string>>& categoryMap,
+            std::vector<std::string>& order) const;
+        bool IsFileSelector(const std::string& key) const;
+        bool IsPathHidden(const std::string& key) const;
+
+        static std::unordered_map<std::string, std::string> s_defaultPaths;
+        static std::unordered_map<std::string, std::string> s_modelRootDependentPaths;
+        static std::vector<CategoryMapper> s_categoryMappers;
+        static std::string s_currentModelRoot;
     };
 
 }

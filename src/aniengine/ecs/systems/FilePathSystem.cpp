@@ -50,12 +50,33 @@ namespace ECS {
         return comp ? comp->GetAllKeys() : std::vector<std::string>{};
     }
 
+    static bool IsPathHidden(const std::string& key) {
+        return (key == "CurrentProject" || key == "ProjectData" ||
+            key == "ProjectAssets" || key == "ProjectOutput" ||
+            key == "Output" || key == "LastOpenProject" || key == "ProjectDataPath");
+    }
+
     void FilePathSystem::SaveToFile(const std::string& filepath) const {
         auto* comp = GetComponent();
         if (!comp) return;
-        nlohmann::json j = comp->Serialize();
+
+        nlohmann::json j;
+        j["compName"] = comp->compName;
+
+        nlohmann::json pathsJson;
+        const auto& allPaths = comp->GetPathMap();
+        for (const auto& [key, value] : allPaths) {
+            if (IsPathHidden(key)) {
+                continue;
+            }
+            pathsJson[key] = value;
+        }
+        j["paths"] = pathsJson;
+
         std::ofstream file(filepath);
-        if (file.is_open()) { file << j.dump(4); }
+        if (file.is_open()) {
+            file << j.dump(4);
+        }
     }
 
     void FilePathSystem::LoadFromFile(const std::string& filepath) {
@@ -77,6 +98,7 @@ namespace ECS {
         if (!comp) return;
         std::vector<std::string> missing;
         for (const auto& key : comp->GetAllKeys()) {
+            if (IsPathHidden(key)) continue;
             if (comp->GetPath(key).empty()) {
                 missing.push_back(key);
             }

@@ -16,7 +16,9 @@ namespace GUI {
             , selectedContextKey("")
             , showConfirmDialog(false)
             , confirmAction(ConfirmAction::None)
-            , m_loadEntityId(0) {
+            , m_loadEntityId(0)
+            , showMemoryErrorDialog(false)
+            , memoryErrorRetryPending(false) {
             viewName = "Model Cache";
         }
 
@@ -49,6 +51,10 @@ namespace GUI {
 
             if (showConfirmDialog) {
                 RenderConfirmationDialog();
+            }
+
+            if (showMemoryErrorDialog) {
+                RenderMemoryErrorDialog();
             }
         }
 
@@ -84,6 +90,11 @@ namespace GUI {
         std::string confirmMessage;
         ECS::EntityID m_loadEntityId = 0;
 
+        bool showMemoryErrorDialog = false;
+        std::string memoryErrorMessage;
+        bool memoryErrorRetryPending = false;
+        std::string memoryErrorFailedKey;
+
         void RefreshContextList() {
             auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
             if (cacheSystem) {
@@ -103,6 +114,8 @@ namespace GUI {
         void RenderContextTable();
         void RenderCacheActions();
         void RenderConfirmationDialog();
+        void RenderMemoryErrorDialog();
+        void ShowMemoryErrorDialog(const std::string& error, const std::string& failedKey = "");
         void ShowConfirmationDialog(ConfirmAction action, const std::string& message);
         void ExecuteConfirmedAction();
         std::string ExtractDisplayName(const std::string& key) const;

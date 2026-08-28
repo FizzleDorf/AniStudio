@@ -63,6 +63,7 @@ namespace ECS {
             std::string contextKey;
             std::chrono::steady_clock::time_point enqueueTime;
             std::chrono::steady_clock::time_point startTime;
+            std::chrono::steady_clock::time_point cancelTime; // when cancellation was requested
 
             TaskData() = default;
             TaskData(TaskData&& other) noexcept;

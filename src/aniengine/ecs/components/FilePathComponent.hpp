@@ -52,4 +52,4 @@ namespace ECS {
         std::unordered_map<std::string, std::string> m_paths;
     };
 
-} // namespace ECS
+}

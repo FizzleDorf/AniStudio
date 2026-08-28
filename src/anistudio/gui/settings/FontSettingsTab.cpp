@@ -18,8 +18,14 @@ namespace ECS {
     void FontSettingsTab::Render() {
         m_comp.EnsureInitialized();
         if (ImGui::BeginChild("FontSettings", ImVec2(0, 0), false)) {
-            if (FilterPass("Font Family")) RenderFontFamily();
-            if (FilterPass("Global Scale")) RenderScale();
+            if (FilterPass("Font Family")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Font Family")) RenderFontFamily();
+            }
+            if (FilterPass("Global Scale")) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
+                if (ImGui::CollapsingHeader("Global Scale")) RenderScale();
+            }
             RenderActionButtons();
         }
         ImGui::EndChild();

@@ -27,7 +27,8 @@ namespace ECS {
         SDCPPSettingsComponent& m_comp;
         std::string m_filter;
 
+        bool FilterPass(const std::string& section) const;
         void RenderActionButtons();
     };
 
-} // namespace ECS
+}

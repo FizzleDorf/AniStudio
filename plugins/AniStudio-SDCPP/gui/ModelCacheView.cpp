@@ -27,7 +27,16 @@ namespace GUI {
                 nlohmann::json metadata = m_entityManager.SerializeEntity(m_loadEntityId);
                 auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
                 if (cacheSystem) {
-                    cacheSystem->loadModelFromMetadata(metadata);
+                    bool ok = cacheSystem->loadModelFromMetadata(metadata);
+                    if (!ok) {
+                        std::string error = cacheSystem->getLastError();
+                        if (error.find("Insufficient") != std::string::npos) {
+                            ShowMemoryErrorDialog(error, cacheSystem->computeKey(metadata));
+                        }
+                        else {
+                            ImGui::OpenPopup("LoadError");
+                        }
+                    }
                     RefreshContextList();
                 }
             }
@@ -163,6 +172,56 @@ namespace GUI {
             }
             ImGui::End();
         }
+    }
+
+    void ModelCacheView::RenderMemoryErrorDialog() {
+        if (!showMemoryErrorDialog) return;
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(450, 0), ImGuiCond_Appearing);
+        if (ImGui::Begin("Insufficient Memory", &showMemoryErrorDialog,
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+            ImGui::TextWrapped("Not enough available memory to load the model.");
+            ImGui::TextWrapped("Error: %s", memoryErrorMessage.c_str());
+            ImGui::Spacing();
+            ImGui::TextWrapped("You can try unloading inactive models to free up memory and retry.");
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            ImGui::SetCursorPosX(ImGui::GetWindowWidth() * 0.5f - 160);
+            if (ImGui::Button("Unload Inactive and Retry", ImVec2(150, 0))) {
+                auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+                if (cacheSystem) {
+                    cacheSystem->UnloadInactiveModels();
+                    RefreshContextList();
+                    // Retry loading the failed model
+                    if (!memoryErrorFailedKey.empty()) {
+                        // Find the entity that originally triggered the load; we can't easily get it here.
+                        // We'll just refresh the list and let the user retry manually.
+                        // Alternatively, we can call loadModelFromMetadata again if we stored the metadata.
+                        // Since we don't store it, we'll just close the dialog and let user click Load again.
+                        showMemoryErrorDialog = false;
+                        memoryErrorRetryPending = false;
+                        // Optionally, we could attempt to reload the same metadata if we had it.
+                    }
+                }
+                showMemoryErrorDialog = false;
+                memoryErrorRetryPending = false;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(100, 0))) {
+                showMemoryErrorDialog = false;
+                memoryErrorRetryPending = false;
+            }
+            ImGui::End();
+        }
+    }
+
+    void ModelCacheView::ShowMemoryErrorDialog(const std::string& error, const std::string& failedKey) {
+        memoryErrorMessage = error;
+        memoryErrorFailedKey = failedKey;
+        showMemoryErrorDialog = true;
+        memoryErrorRetryPending = false;
     }
 
     void ModelCacheView::ShowConfirmationDialog(ConfirmAction action, const std::string& message) {
