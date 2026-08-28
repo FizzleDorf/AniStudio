@@ -381,6 +381,7 @@ namespace ANI {
             entityMgr.RegisterSystem<TextureSystem>();
             entityMgr.RegisterSystem<ECS::SettingsSystem>();
             entityMgr.RegisterSystem<ProjectSystem>();
+            entityMgr.RegisterSystem<AudioPlaybackSystem>();
 
             auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
             if (projectSystem) {

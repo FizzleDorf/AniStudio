@@ -6,6 +6,7 @@
 #include "DragDropUtils.hpp"
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
+#include "AudioPlaybackSystem.hpp"
 #include <algorithm>
 #include <iostream>
 #include <cmath>
@@ -32,6 +33,12 @@ namespace GUI {
             audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
         }
 
+        auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        if (!playbackSystem) {
+            m_entityManager.RegisterSystem<ECS::AudioPlaybackSystem>();
+            playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        }
+
         if (audioSystem) {
             audioSystem->RegisterAudioAddedCallback([this](ECS::EntityID entity) {
                 OnMediaAdded(entity);
@@ -53,6 +60,14 @@ namespace GUI {
                 size_t size, int channels, int sampleRate) {
                     if (entity == selectedEntityID) {
                         UpdateWaveformData();
+                    }
+                });
+        }
+
+        if (playbackSystem) {
+            playbackSystem->RegisterPlaybackCallback([this](ECS::EntityID entity, const float* data,
+                size_t size, int channels, int sampleRate) {
+                    if (entity == selectedEntityID) {
                     }
                 });
         }
@@ -136,12 +151,12 @@ namespace GUI {
 
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-            auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-            if (audioSystem) {
-                double duration = audioSystem->GetDuration(selectedEntityID);
+            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (playbackSystem) {
+                double duration = playbackSystem->GetDuration(selectedEntityID);
                 if (duration > 0.0) {
                     playbackProgress = static_cast<float>(
-                        audioSystem->GetCurrentPosition(selectedEntityID) / duration
+                        playbackSystem->GetCurrentPosition(selectedEntityID) / duration
                         );
                     if (playbackProgress < 0) playbackProgress = 0;
                     if (playbackProgress > 1) playbackProgress = 1;
@@ -226,14 +241,14 @@ namespace GUI {
 
                 ImGui::Text("File: %s", audioComp.fileName.c_str());
 
-                auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-                if (!audioSystem) {
-                    ImGui::Text("AudioSystem not available.");
+                auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                if (!playbackSystem) {
+                    ImGui::Text("AudioPlaybackSystem not available.");
                     return;
                 }
 
-                double duration = audioSystem->GetDuration(selectedEntityID);
-                double currentTime = audioSystem->GetCurrentPosition(selectedEntityID);
+                double duration = playbackSystem->GetDuration(selectedEntityID);
+                double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
 
                 int minutes = static_cast<int>(currentTime) / 60;
                 int seconds = static_cast<int>(currentTime) % 60;
@@ -243,10 +258,10 @@ namespace GUI {
                 ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
                 ImGui::Text("Channels: %d, Sample Rate: %d Hz", audioComp.channels, audioComp.sampleRate);
 
-                if (audioSystem->IsPlaying(selectedEntityID)) {
+                if (playbackSystem->IsPlaying(selectedEntityID)) {
                     ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Playing");
                 }
-                else if (audioSystem->IsPaused(selectedEntityID)) {
+                else if (playbackSystem->IsPaused(selectedEntityID)) {
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Paused");
                 }
                 else if (audioComp.isPlaying) {
@@ -391,9 +406,9 @@ namespace GUI {
     }
 
     void AudioView::PlayTestTone() {
-        auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-        if (audioSystem) {
-            audioSystem->PlayTestTone();
+        auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        if (playbackSystem) {
+            playbackSystem->PlayTestTone();
         }
     }
 
@@ -491,37 +506,37 @@ namespace GUI {
         }
 
         try {
-            auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-            if (!audioSystem) {
-                ImGui::Text("AudioSystem not available.");
+            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (!playbackSystem) {
+                ImGui::Text("AudioPlaybackSystem not available.");
                 return;
             }
 
             auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
 
-            bool isPlaying = audioSystem->IsPlaying(selectedEntityID);
-            bool isPaused = audioSystem->IsPaused(selectedEntityID);
+            bool isPlaying = playbackSystem->IsPlaying(selectedEntityID);
+            bool isPaused = playbackSystem->IsPaused(selectedEntityID);
 
             if (isPlaying && !isPaused) {
                 if (ImGui::Button("Pause")) {
-                    audioSystem->Pause(selectedEntityID);
+                    playbackSystem->Pause(selectedEntityID);
                 }
             }
             else if (isPaused) {
                 if (ImGui::Button("Resume")) {
-                    audioSystem->Resume(selectedEntityID);
+                    playbackSystem->Resume(selectedEntityID);
                 }
             }
             else {
                 if (ImGui::Button("Play")) {
-                    audioSystem->Play(selectedEntityID, audioComp.looping);
+                    playbackSystem->Play(selectedEntityID, audioComp.looping);
                 }
             }
 
             ImGui::SameLine();
 
             if (ImGui::Button("Stop")) {
-                audioSystem->Stop(selectedEntityID);
+                playbackSystem->Stop(selectedEntityID);
             }
 
             ImGui::SameLine();
@@ -530,9 +545,12 @@ namespace GUI {
             ImGui::SameLine();
             ImGui::Text("Vol:");
             ImGui::SameLine();
-            float volume = audioComp.volume;
-            if (ImGui::SliderFloat("##VolumeSlider", &volume, 0.0f, 1.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
-                audioSystem->SetVolume(selectedEntityID, volume);
+
+            float volumePercent = audioComp.volume * 100.0f;
+            if (ImGui::SliderFloat("##VolumeSlider", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
+                float newVolume = volumePercent / 100.0f;
+                playbackSystem->SetVolume(selectedEntityID, newVolume);
+                audioComp.volume = newVolume;
             }
 
             float progress = playbackProgress;
@@ -540,8 +558,8 @@ namespace GUI {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
             if (ImGui::SliderFloat("##SeekSlider", &progress, 0.0f, 1.0f, "%.1f%%")) {
-                double duration = audioSystem->GetDuration(selectedEntityID);
-                audioSystem->Seek(selectedEntityID, progress * duration);
+                double duration = playbackSystem->GetDuration(selectedEntityID);
+                playbackSystem->Seek(selectedEntityID, progress * duration);
                 playbackProgress = progress;
             }
 
@@ -640,10 +658,10 @@ namespace GUI {
             ImVec2 mousePos = ImGui::GetMousePos();
             float relativeX = (mousePos.x - pos.x) / width;
             if (relativeX >= 0.0f && relativeX <= 1.0f) {
-                auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-                if (audioSystem) {
-                    double duration = audioSystem->GetDuration(selectedEntityID);
-                    audioSystem->Seek(selectedEntityID, relativeX * duration);
+                auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                if (playbackSystem) {
+                    double duration = playbackSystem->GetDuration(selectedEntityID);
+                    playbackSystem->Seek(selectedEntityID, relativeX * duration);
                     playbackProgress = relativeX;
                 }
             }
@@ -724,9 +742,13 @@ namespace GUI {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
 
         try {
+            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (playbackSystem) {
+                playbackSystem->Stop(selectedEntityID);
+            }
+
             auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
             if (audioSystem) {
-                audioSystem->Stop(selectedEntityID);
                 audioSystem->RemoveAudio(selectedEntityID);
             }
 
@@ -745,14 +767,14 @@ namespace GUI {
 
     void AudioView::PauseAllAudio() {
         try {
-            auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-            if (!audioSystem) return;
+            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (!playbackSystem) return;
 
             for (auto entityID : mediaEntities) {
                 if (m_entityManager.IsEntityValid(entityID) &&
                     m_entityManager.HasComponent<ECS::AudioComponent>(entityID)) {
-                    if (audioSystem->IsPlaying(entityID)) {
-                        audioSystem->Pause(entityID);
+                    if (playbackSystem->IsPlaying(entityID)) {
+                        playbackSystem->Pause(entityID);
                     }
                 }
             }

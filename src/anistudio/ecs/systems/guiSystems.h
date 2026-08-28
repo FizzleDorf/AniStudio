@@ -2,3 +2,4 @@
 #include "TextureSystem.hpp"
 #include "SettingsSystem.hpp"
 #include "ProjectSystem.hpp"
+#include "AudioPlaybackSystem.hpp"

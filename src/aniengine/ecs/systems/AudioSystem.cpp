@@ -12,59 +12,11 @@ namespace ECS {
         sysName = "AudioSystem";
         AddComponentSignature<AudioComponent>();
 
-        avdevice_register_all();
-
-        PaError err = Pa_Initialize();
-        if (err != paNoError) {
-            std::cerr << "[AudioSystem] Failed to initialize PortAudio: " << Pa_GetErrorText(err) << std::endl;
-        }
-        else {
-            m_paInitialized = true;
-            std::cout << "[AudioSystem] PortAudio initialized" << std::endl;
-
-            int numDevices = Pa_GetDeviceCount();
-            std::cout << "[AudioSystem] Found " << numDevices << " audio devices" << std::endl;
-            for (int i = 0; i < numDevices; i++) {
-                const PaDeviceInfo* info = Pa_GetDeviceInfo(i);
-                if (info) {
-                    std::cout << "  Device " << i << ": " << info->name
-                        << " (max out channels: " << info->maxOutputChannels << ")" << std::endl;
-                }
-            }
-
-            m_paDeviceIndex = Pa_GetDefaultOutputDevice();
-            std::cout << "[AudioSystem] Default output device: " << m_paDeviceIndex << std::endl;
-            if (m_paDeviceIndex >= 0) {
-                const PaDeviceInfo* info = Pa_GetDeviceInfo(m_paDeviceIndex);
-                if (info) {
-                    m_deviceSampleRate = static_cast<int>(info->defaultSampleRate);
-                    std::cout << "[AudioSystem] Device default sample rate: " << m_deviceSampleRate << " Hz" << std::endl;
-                }
-            }
-        }
-
-        std::cout << "[AudioSystem] Initialized with FFmpeg audio support" << std::endl;
+        std::cout << "[AudioSystem] Initialized (data loading only)" << std::endl;
     }
 
     AudioSystem::~AudioSystem() {
         std::cout << "[AudioSystem] Destructor - cleaning up" << std::endl;
-
-        m_playbackActive = false;
-        if (m_playbackThread.joinable()) {
-            m_playbackCV.notify_one();
-            m_playbackThread.join();
-        }
-
-        if (m_paStream) {
-            Pa_StopStream(m_paStream);
-            Pa_CloseStream(m_paStream);
-            m_paStream = nullptr;
-        }
-
-        if (m_paInitialized) {
-            Pa_Terminate();
-            m_paInitialized = false;
-        }
 
         std::lock_guard<std::mutex> lock(loadMutex);
         for (auto& task : pendingLoads) {
@@ -87,88 +39,23 @@ namespace ECS {
         }
     }
 
-    void AudioSystem::ReopenStream() {
-        if (m_paStream) {
-            Pa_StopStream(m_paStream);
-            Pa_CloseStream(m_paStream);
-            m_paStream = nullptr;
+    AudioSystem::LoadingTask::LoadingTask(LoadingTask&& other) noexcept
+        : entityID(other.entityID)
+        , filePath(std::move(other.filePath))
+        , future(std::move(other.future)) {
+    }
+
+    AudioSystem::LoadingTask& AudioSystem::LoadingTask::operator=(LoadingTask&& other) noexcept {
+        if (this != &other) {
+            entityID = other.entityID;
+            filePath = std::move(other.filePath);
+            future = std::move(other.future);
         }
-
-        if (!m_paInitialized || m_paDeviceIndex < 0) {
-            return;
-        }
-
-        if (m_streamSampleRate == 0 || m_streamChannels == 0) {
-            if (!entities.empty()) {
-                EntityID firstEntity = *entities.begin();
-                if (mgr.IsEntityValid(firstEntity) && mgr.HasComponent<AudioComponent>(firstEntity)) {
-                    auto& audioComp = mgr.GetComponent<AudioComponent>(firstEntity);
-                    if (audioComp.sampleRate > 0) {
-                        m_streamSampleRate = audioComp.sampleRate;
-                        m_streamChannels = audioComp.channels;
-                    }
-                }
-            }
-            if (m_streamSampleRate == 0) m_streamSampleRate = 44100;
-            if (m_streamChannels == 0) m_streamChannels = 2;
-        }
-
-        const PaDeviceInfo* deviceInfo = Pa_GetDeviceInfo(m_paDeviceIndex);
-        if (deviceInfo && m_streamChannels > deviceInfo->maxOutputChannels) {
-            m_streamChannels = deviceInfo->maxOutputChannels;
-        }
-
-        std::cout << "[AudioSystem] Opening stream: " << m_streamSampleRate << "Hz, "
-            << m_streamChannels << "ch" << std::endl;
-
-        PaStreamParameters outputParameters;
-        outputParameters.device = m_paDeviceIndex;
-        outputParameters.channelCount = m_streamChannels;
-        outputParameters.sampleFormat = paFloat32;
-        outputParameters.suggestedLatency = Pa_GetDeviceInfo(m_paDeviceIndex)->defaultLowOutputLatency;
-        outputParameters.hostApiSpecificStreamInfo = nullptr;
-
-        PaError err = Pa_OpenStream(&m_paStream,
-            nullptr,
-            &outputParameters,
-            m_streamSampleRate,
-            m_streamFramesPerBuffer,
-            paClipOff,
-            nullptr, // no callback
-            nullptr);
-
-        if (err != paNoError) {
-            std::cerr << "[AudioSystem] Failed to open PortAudio stream: " << Pa_GetErrorText(err) << std::endl;
-            return;
-        }
-
-        const PaStreamInfo* streamInfo = Pa_GetStreamInfo(m_paStream);
-        if (streamInfo) {
-            m_actualStreamSampleRate = static_cast<int>(streamInfo->sampleRate);
-            std::cout << "[AudioSystem] Actual stream sample rate: " << m_actualStreamSampleRate << " Hz" << std::endl;
-            if (m_actualStreamSampleRate != m_streamSampleRate) {
-                std::cout << "[AudioSystem] WARNING: Stream opened at different sample rate. Adjusting to match." << std::endl;
-                m_streamSampleRate = m_actualStreamSampleRate;
-            }
-        }
-
-        err = Pa_StartStream(m_paStream);
-        if (err != paNoError) {
-            std::cerr << "[AudioSystem] Failed to start PortAudio stream: " << Pa_GetErrorText(err) << std::endl;
-        }
-        else {
-            m_streamInitialized = true;
-            std::cout << "[AudioSystem] PortAudio stream started at " << m_streamSampleRate << " Hz" << std::endl;
-        }
+        return *this;
     }
 
     void AudioSystem::Start() {
         std::cout << "[AudioSystem] Started" << std::endl;
-
-        if (!m_playbackThreadRunning) {
-            m_playbackThreadRunning = true;
-            m_playbackThread = std::thread(&AudioSystem::AudioPlaybackThread, this);
-        }
 
         auto allEntities = mgr.GetAllEntities();
         for (auto entity : allEntities) {
@@ -184,34 +71,14 @@ namespace ECS {
 
     void AudioSystem::Update(float deltaT) {
         ProcessCompletedLoads();
-
-        if (m_streamNeedsReopen && !pendingLoads.empty()) {
-            ReopenStream();
-            m_streamNeedsReopen = false;
-        }
-
-        // No need to update playback here; the thread handles it.
     }
 
     void AudioSystem::Destroy() {
         std::cout << "[AudioSystem] Destroying" << std::endl;
 
-        m_playbackActive = false;
-        if (m_playbackThread.joinable()) {
-            m_playbackCV.notify_one();
-            m_playbackThread.join();
-        }
-
-        if (m_paStream) {
-            Pa_StopStream(m_paStream);
-            Pa_CloseStream(m_paStream);
-            m_paStream = nullptr;
-        }
-
         for (auto entity : entities) {
             if (mgr.HasComponent<AudioComponent>(entity)) {
                 auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-                audioComp.isPlaying = false;
                 audioComp.UnloadAudio();
             }
         }
@@ -244,7 +111,6 @@ namespace ECS {
 
         entities.insert(entity);
         LoadAudioAsync(entity, filePath);
-        m_streamNeedsReopen = true;
     }
 
     void AudioSystem::RemoveAudio(EntityID entity) {
@@ -271,156 +137,6 @@ namespace ECS {
         return result;
     }
 
-    void AudioSystem::Play(EntityID entity, bool loop) {
-        std::lock_guard<std::mutex> lock(playbackMutex);
-
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return;
-        }
-
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-
-        if (audioComp.pcmData.empty()) {
-            std::cerr << "[AudioSystem] No audio data loaded for entity " << entity << std::endl;
-            return;
-        }
-
-        audioComp.looping = loop;
-        audioComp.isPlaying = true;
-        audioComp.isPaused = false;
-        m_playingEntity = entity;
-        m_playbackActive = true;
-        m_playbackPaused = false;
-
-        if (audioComp.currentSampleIndex >= audioComp.pcmData.size() / audioComp.channels) {
-            audioComp.currentSampleIndex = 0;
-            audioComp.currentTime = 0.0;
-        }
-
-        m_playbackCV.notify_one();
-
-        std::cout << "[AudioSystem] Playing audio: " << audioComp.fileName << std::endl;
-        std::cout << "[AudioSystem] PCM total samples: " << audioComp.pcmData.size()
-            << ", channels: " << audioComp.channels
-            << ", first 4 samples: " << audioComp.pcmData[0] << ", "
-            << audioComp.pcmData[1] << ", " << audioComp.pcmData[2] << ", " << audioComp.pcmData[3] << std::endl;
-    }
-
-    void AudioSystem::Stop(EntityID entity) {
-        std::lock_guard<std::mutex> lock(playbackMutex);
-
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return;
-        }
-
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        audioComp.isPlaying = false;
-        audioComp.isPaused = false;
-        audioComp.currentSampleIndex = 0;
-        audioComp.currentTime = 0.0;
-
-        if (m_playingEntity == entity) {
-            m_playbackActive = false;
-            m_playingEntity = 0;
-        }
-    }
-
-    void AudioSystem::Pause(EntityID entity) {
-        std::lock_guard<std::mutex> lock(playbackMutex);
-
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return;
-        }
-
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        if (audioComp.isPlaying) {
-            audioComp.isPaused = true;
-            m_playbackPaused = true;
-        }
-    }
-
-    void AudioSystem::Resume(EntityID entity) {
-        std::lock_guard<std::mutex> lock(playbackMutex);
-
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return;
-        }
-
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        if (audioComp.isPlaying && audioComp.isPaused) {
-            audioComp.isPaused = false;
-            m_playbackPaused = false;
-            m_playbackCV.notify_one();
-        }
-    }
-
-    void AudioSystem::SetVolume(EntityID entity, float volume) {
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return;
-        }
-
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        audioComp.volume = std::clamp(volume, 0.0f, 1.0f);
-    }
-
-    void AudioSystem::Seek(EntityID entity, double position) {
-        std::lock_guard<std::mutex> lock(playbackMutex);
-
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return;
-        }
-
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        if (audioComp.pcmData.empty()) {
-            return;
-        }
-
-        position = std::clamp(position, 0.0, audioComp.duration);
-        audioComp.currentTime = position;
-        audioComp.currentSampleIndex = static_cast<size_t>(position * audioComp.sampleRate) * audioComp.channels;
-
-        if (audioComp.currentSampleIndex >= audioComp.pcmData.size() / audioComp.channels) {
-            audioComp.currentSampleIndex = 0;
-            audioComp.currentTime = 0.0;
-        }
-    }
-
-    double AudioSystem::GetCurrentPosition(EntityID entity) const {
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return 0.0;
-        }
-
-        const auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        return audioComp.currentTime;
-    }
-
-    double AudioSystem::GetDuration(EntityID entity) const {
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return 0.0;
-        }
-
-        const auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        return audioComp.duration;
-    }
-
-    bool AudioSystem::IsPlaying(EntityID entity) const {
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return false;
-        }
-
-        const auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        return audioComp.isPlaying && !audioComp.isPaused;
-    }
-
-    bool AudioSystem::IsPaused(EntityID entity) const {
-        if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
-            return false;
-        }
-
-        const auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        return audioComp.isPlaying && audioComp.isPaused;
-    }
-
     const float* AudioSystem::GetAudioData(EntityID entity, size_t& outSize, int& outChannels) const {
         if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<AudioComponent>(entity)) {
             outSize = 0;
@@ -443,7 +159,7 @@ namespace ECS {
 
         auto& ioPool = threadPoolSys->getIOPool();
 
-        int targetRate = m_actualStreamSampleRate > 0 ? m_actualStreamSampleRate : (m_deviceSampleRate > 0 ? m_deviceSampleRate : 44100);
+        int targetRate = 44100;
         int targetChannels = 2;
 
         auto future = ioPool.submit([filePath, entity, targetRate, targetChannels]() -> LoadResult {
@@ -687,12 +403,6 @@ namespace ECS {
                             audioComp.hasLSBData = result.hasLSB;
                             audioComp.hasAniStudioMetadata = result.hasAniStudio;
 
-                            if (m_streamSampleRate == 0 || m_streamChannels == 0) {
-                                m_streamSampleRate = result.sampleRate;
-                                m_streamChannels = result.channels;
-                                m_streamNeedsReopen = true;
-                            }
-
                             NotifyAudioAdded(result.entityID);
                             NotifyAudioData(result.entityID,
                                 audioComp.pcmData.data(),
@@ -715,117 +425,6 @@ namespace ECS {
                 ++it;
             }
         }
-    }
-
-    // Blocking I/O thread function
-    void AudioSystem::AudioPlaybackThread() {
-        std::cout << "[AudioSystem] Playback thread started" << std::endl;
-        while (m_playbackThreadRunning) {
-            std::unique_lock<std::mutex> lock(m_playbackCV_mutex);
-            m_playbackCV.wait(lock, [this] { return m_playbackActive || !m_playbackThreadRunning; });
-            if (!m_playbackThreadRunning) break;
-
-            // Playback loop
-            while (m_playbackActive && !m_playbackPaused) {
-                if (m_playingEntity == 0 || !mgr.IsEntityValid(m_playingEntity) || !mgr.HasComponent<AudioComponent>(m_playingEntity)) {
-                    m_playbackActive = false;
-                    break;
-                }
-
-                auto& audioComp = mgr.GetComponent<AudioComponent>(m_playingEntity);
-                if (audioComp.pcmData.empty() || !audioComp.isPlaying) {
-                    m_playbackActive = false;
-                    break;
-                }
-
-                int channels = audioComp.channels;
-                int sampleRate = audioComp.sampleRate;
-                const float* data = audioComp.pcmData.data();
-                size_t totalSamples = audioComp.pcmData.size();
-                size_t currentIdx = audioComp.currentSampleIndex;
-
-                // Calculate how many frames to write
-                int framesToWrite = m_streamFramesPerBuffer;
-                size_t samplesToWrite = framesToWrite * channels;
-                if (currentIdx + samplesToWrite > totalSamples) {
-                    samplesToWrite = totalSamples - currentIdx;
-                    framesToWrite = samplesToWrite / channels;
-                }
-
-                if (samplesToWrite == 0) {
-                    // End of stream
-                    if (audioComp.looping) {
-                        audioComp.currentSampleIndex = 0;
-                        audioComp.currentTime = 0.0;
-                        continue;
-                    }
-                    else {
-                        audioComp.isPlaying = false;
-                        m_playbackActive = false;
-                        break;
-                    }
-                }
-
-                // Prepare buffer with volume scaling and clamping
-                std::vector<float> buffer(samplesToWrite);
-                float volume = audioComp.volume;
-                for (size_t i = 0; i < samplesToWrite; ++i) {
-                    float sample = data[currentIdx + i] * volume;
-                    if (sample > 1.0f) sample = 1.0f;
-                    if (sample < -1.0f) sample = -1.0f;
-                    buffer[i] = sample;
-                }
-
-                // Write to stream (blocking)
-                PaError err = Pa_WriteStream(m_paStream, buffer.data(), framesToWrite);
-                if (err != paNoError) {
-                    std::cerr << "[AudioSystem] Pa_WriteStream error: " << Pa_GetErrorText(err) << std::endl;
-                    m_playbackActive = false;
-                    break;
-                }
-
-                // Update position
-                audioComp.currentSampleIndex += samplesToWrite;
-                audioComp.currentTime = static_cast<double>(audioComp.currentSampleIndex) / channels / sampleRate;
-
-                // Notify data (optional)
-                NotifyAudioData(m_playingEntity, buffer.data(), buffer.size(), channels, sampleRate);
-            }
-
-            // If we exit the loop, clear the active flag if not paused
-            if (!m_playbackPaused) {
-                m_playbackActive = false;
-            }
-        }
-        std::cout << "[AudioSystem] Playback thread stopped" << std::endl;
-    }
-
-    void AudioSystem::PlayTestTone() {
-        std::cout << "[AudioSystem] Generating test tone..." << std::endl;
-        const int sampleRate = 44100;
-        const int channels = 2;
-        const int duration = 2;
-        const int totalSamples = sampleRate * duration * channels;
-        std::vector<float> testData(totalSamples);
-        for (int i = 0; i < sampleRate * duration; ++i) {
-            float sample = 0.5f * sin(2.0f * 3.14159f * 440.0f * i / sampleRate);
-            testData[i * 2] = sample;
-            testData[i * 2 + 1] = sample;
-        }
-        EntityID entity = mgr.AddNewEntity();
-        mgr.AddComponent<AudioComponent>(entity);
-        auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        audioComp.pcmData = std::move(testData);
-        audioComp.channels = 2;
-        audioComp.sampleRate = 44100;
-        audioComp.totalSamples = audioComp.pcmData.size() / 2;
-        audioComp.duration = static_cast<double>(audioComp.totalSamples) / sampleRate;
-        audioComp.fileName = "Test Tone";
-        entities.insert(entity);
-        m_streamSampleRate = 44100;
-        m_streamChannels = 2;
-        ReopenStream();
-        Play(entity, false);
     }
 
     void AudioSystem::NotifyAudioAdded(EntityID entity) {
