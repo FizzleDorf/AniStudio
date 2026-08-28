@@ -21,7 +21,6 @@ class AniStudio(ConanFile):
     }
 
     def build_requirements(self):
-        # Simplified CMake requirement
         self.tool_requires("cmake/[>=3.25]")
 
     def requirements(self):
@@ -33,14 +32,12 @@ class AniStudio(ConanFile):
         self.requires("exiv2/0.28.1")
         self.requires("libwebp/1.3.2")
         self.requires("ffmpeg/4.4.4", options={"shared": True})
+        self.requires("portaudio/19.7", options={"shared": True})
 
-        # versioning
         self.requires("neargye-semver/0.3.1")
 
-        # zep dependencies
         self.requires("spdlog/1.11.0")
 
-        # python
         self.requires("pybind11/2.13.6")
 
         if self.settings.os == "Windows":
@@ -61,7 +58,6 @@ class AniStudio(ConanFile):
         if self.settings.compiler.get_safe("cppstd"):
             self.settings.compiler.cppstd = "17"
         
-        # Windows-specific configuration
         if self.settings.os == "Windows":
             self.conf.define("tools.microsoft.msbuild:vs_version", "17")
             self.conf.define("tools.cmake.cmaketoolchain:generator", "Visual Studio 17 2022")
@@ -77,7 +73,6 @@ class AniStudio(ConanFile):
         deps = CMakeDeps(self)
         deps.generate()
 
-    # [Rest of your methods remain unchanged]
     def layout(self):
         self.folders.source = "."
         self.folders.build = "build"

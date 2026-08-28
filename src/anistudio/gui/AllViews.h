@@ -16,3 +16,4 @@
 #include "AssetsView.hpp"
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
+#include "AudioView.hpp"

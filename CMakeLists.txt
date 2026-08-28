@@ -118,7 +118,6 @@ else()
     message(STATUS "Shader directory ${CMAKE_SOURCE_DIR}/src/shaders not found")
 endif()
 
-# === Copy the assets folder ===
 if(EXISTS "${CMAKE_SOURCE_DIR}/assets")
     file(COPY "${CMAKE_SOURCE_DIR}/assets/" DESTINATION "${CMAKE_BINARY_DIR}/assets")
     message(STATUS "Copied assets directory to ${CMAKE_BINARY_DIR}/assets")
@@ -126,7 +125,6 @@ else()
     message(STATUS "Assets directory not found at ${CMAKE_SOURCE_DIR}/assets")
 endif()
 
-# === Copy additional files and directories to build root ===
 if(EXISTS "${CMAKE_SOURCE_DIR}/README.md")
     file(COPY "${CMAKE_SOURCE_DIR}/README.md" DESTINATION "${CMAKE_BINARY_DIR}")
     message(STATUS "Copied README.md to ${CMAKE_BINARY_DIR}")
@@ -162,9 +160,8 @@ find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(pybind11 REQUIRED)
-
-# Use Conan-provided FFmpeg targets
-find_package(ffmpeg CONFIG REQUIRED)
+find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
+find_package(portaudio CONFIG REQUIRED)
 
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
@@ -188,6 +185,9 @@ target_link_libraries(AniEngineDeps INTERFACE
     ffmpeg::avformat
     ffmpeg::avutil
     ffmpeg::swscale
+    ffmpeg::swresample
+    ffmpeg::avdevice
+    portaudio
 )
 
 if(UNIX AND NOT APPLE)
@@ -202,6 +202,8 @@ endif()
 
 target_compile_definitions(AniEngineDeps INTERFACE
     GLEW_STATIC
+    USE_FFMPEG_AUDIO
+    USE_PORTAUDIO
 )
 
 add_library(AniStudioDeps INTERFACE)
@@ -230,6 +232,8 @@ target_compile_definitions(AniStudioDeps INTERFACE
     IMGUIZMO_AVAILABLE
     NODE_EDITOR_AVAILABLE
     IMSEQUENCER_AVAILABLE
+    USE_FFMPEG_AUDIO
+    USE_PORTAUDIO
 )
 
 if(BUILD_ANIENGINE)
@@ -294,7 +298,7 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
     if(WIN32)
-        set(ANISTUDIO_RUNTIME_DLL_PACKAGES glfw ffmpeg libaom-av1 dav1d)
+        set(ANISTUDIO_RUNTIME_DLL_PACKAGES glfw ffmpeg libaom-av1 dav1d portaudio)
 
         foreach(PKG ${ANISTUDIO_RUNTIME_DLL_PACKAGES})
             foreach(CFG_SUFFIX "_RELEASE" "_DEBUG" "_RELWITHDEBINFO" "_MINSIZEREL" "")

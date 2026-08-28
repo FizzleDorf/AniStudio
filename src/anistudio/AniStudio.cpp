@@ -108,6 +108,7 @@ namespace ANI {
         viewManager.RegisterView<GUI::MediaHistoryView>("MediaHistoryView");
         viewManager.RegisterView<GUI::AssetsView>("AssetsView");
         viewManager.RegisterView<GUI::MetadataView>("MetadataView");
+        viewManager.RegisterView<GUI::AudioView>("AudioView");
 
         if (studioContext->studioPluginManager) {
             viewManager.RegisterViewWithFactory("PluginView", "Tools",

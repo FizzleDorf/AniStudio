@@ -47,6 +47,7 @@ namespace ANI {
         entityManager.RegisterComponent<InputVideoComponent>("InputVideo");
         entityManager.RegisterComponent<OutputVideoComponent>("OutputVideo");
         entityManager.RegisterComponent<PythonComponent>("Python");
+        entityManager.RegisterComponent<AudioComponent>("Audio");
 
         entityManager.RegisterComponent<ECS::TransformComponent>("Transform");
         entityManager.RegisterComponent<ECS::MeshComponent>("Mesh");

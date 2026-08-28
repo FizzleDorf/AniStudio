@@ -62,6 +62,7 @@ target_include_directories(AniEngineCore PUBLIC
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/cr/cr"
     "${EXTERNAL_DIR}/stb_image"
+    "${CMAKE_BINARY_DIR}/conan"
 )
 
 target_link_libraries(AniEngineCore PUBLIC
@@ -72,6 +73,12 @@ target_link_libraries(AniEngineCore PUBLIC
     pybind11::embed
     libwebp::libwebp
     exiv2::exiv2
+    ffmpeg::avcodec
+    ffmpeg::avformat
+    ffmpeg::avutil
+    ffmpeg::swscale
+    ffmpeg::swresample
+    ffmpeg::avdevice
 )
 
 if(UNIX AND NOT APPLE)
@@ -86,6 +93,8 @@ target_compile_definitions(AniEngineCore PUBLIC
     GLEW_STATIC
     USE_WEBP
     USE_EXIV2
+    USE_FFMPEG_AUDIO
+    USE_PORTAUDIO
     $<$<CONFIG:Debug>:DEBUG>
     $<$<CONFIG:Release>:NDEBUG>
 )
