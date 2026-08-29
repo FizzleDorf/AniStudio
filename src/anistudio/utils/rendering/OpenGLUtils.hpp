@@ -87,8 +87,6 @@ namespace Utils {
                 }
 
                 glBindTexture(GL_TEXTURE_2D, 0);
-                std::cout << "GenerateTexture: Created texture " << textureID
-                    << " (" << width << "x" << height << ", " << channels << "ch)" << std::endl;
                 return textureID;
             }
             catch (...) {

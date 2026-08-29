@@ -6,6 +6,9 @@
 #include "DragDropUtils.hpp"
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
+#include "AudioPlaybackSystem.hpp"
+#include "AudioSystem.hpp"
+#include "FilePathSystem.hpp"
 #include <algorithm>
 #include <iostream>
 
@@ -22,11 +25,19 @@ namespace GUI {
             std::cerr << "[VideoView] No ImGui context in Init()!" << std::endl;
             return;
         }
+
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (!videoSystem) {
             m_entityManager.RegisterSystem<ECS::VideoSystem>();
             videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         }
+
+        auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        if (!audioPlaybackSystem) {
+            m_entityManager.RegisterSystem<ECS::AudioPlaybackSystem>();
+            audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        }
+
         if (videoSystem) {
             auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
             if (textureSystem) {
@@ -50,10 +61,17 @@ namespace GUI {
                     }
                 }
                 });
+
             videoSystem->RegisterVideoRemovedCallback([this](ECS::EntityID entity) {
                 OnMediaRemoved(entity);
                 });
+
+            videoSystem->RegisterVideoAudioCallback([this](ECS::EntityID videoEntity, ECS::EntityID audioEntity) {
+                std::cout << "[VideoView] Audio track linked to video entity " << videoEntity
+                    << " with audio entity " << audioEntity << std::endl;
+                });
         }
+
         RefreshEntities();
 
         if (!mediaEntities.empty() && selectedEntityID == 0) {
@@ -145,6 +163,21 @@ namespace GUI {
                     }
                     else break;
                 }
+
+                if (videoComp.isPlaying) {
+                    ECS::EntityID audioEntity = GetAudioEntityForVideo(selectedEntityID);
+                    if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity) &&
+                        m_entityManager.HasComponent<ECS::AudioComponent>(audioEntity)) {
+                        auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                        if (audioPlaybackSystem && !audioPlaybackSystem->IsPlaying(audioEntity)) {
+                            ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(selectedEntityID);
+                            if (videoAudioComp && videoAudioComp->audioEnabled) {
+                                audioPlaybackSystem->Play(audioEntity, false);
+                                audioPlaybackSystem->SetPlaybackSpeed(audioEntity, videoComp.playbackSpeed);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -156,15 +189,22 @@ namespace GUI {
         }
         ImGui::SetNextWindowSize(ImVec2(1024, 768), ImGuiCond_FirstUseEver);
         std::string windowName = "Video Viewer##" + std::to_string(GetID());
-        if (!ImGui::Begin(windowName.c_str(), &windowOpen)) {
+        if (!ImGui::Begin(windowName.c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
             ImGui::End();
             return;
         }
         try {
+            RenderMenuBar();
             RenderVideoInfo();
-            RenderSelector();
             RenderControls();
+            RenderSelector();
             RenderPlaybackControls();
+
+            if (HasAudioTrack(selectedEntityID)) {
+                ImGui::SameLine();
+                RenderAudioControls(selectedEntityID);
+            }
+
             ImGui::SameLine();
             bool visible = IsHistoryVisible();
             if (ImGui::Checkbox("Show History", &visible)) {
@@ -187,6 +227,83 @@ namespace GUI {
             eventData["workspaceID"] = GetID();
             eventData["viewTypeName"] = viewName;
             ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+        }
+    }
+
+    void VideoView::RenderMenuBar() {
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                if (ImGui::MenuItem("Load Video(s)")) {
+                    static std::string lastVideoFolder;
+                    std::vector<std::string> filePaths;
+                    if (FileDialog::OpenFiles("Choose Video(s)", FileDialog::FilterType::VIDEO_FILE, filePaths, lastVideoFolder)) {
+                        if (!filePaths.empty()) {
+                            LoadMedia(filePaths);
+                            lastVideoFolder = std::filesystem::path(filePaths[0]).parent_path().string();
+                        }
+                    }
+                }
+                ImGui::Separator();
+
+                if (ImGui::BeginMenu("Save", selectedEntityID != 0)) {
+                    if (ImGui::MenuItem("Save Video (with Audio)", nullptr, false,
+                        selectedEntityID != 0 && HasAudioTrack(selectedEntityID))) {
+                        SaveSelectedMedia();
+                    }
+
+                    if (ImGui::MenuItem("Save Video (No Audio)", nullptr, false, selectedEntityID != 0)) {
+                        SaveSelectedMediaNoAudio();
+                    }
+
+                    ImGui::Separator();
+
+                    if (ImGui::MenuItem("Save Video As (with Audio)", nullptr, false,
+                        selectedEntityID != 0 && HasAudioTrack(selectedEntityID))) {
+                        SaveSelectedMediaAsWithAudio();
+                    }
+
+                    if (ImGui::MenuItem("Save Video As (No Audio)", nullptr, false, selectedEntityID != 0)) {
+                        SaveSelectedMediaAsNoAudio();
+                    }
+
+                    ImGui::EndMenu();
+                }
+
+                ImGui::Separator();
+                if (ImGui::MenuItem("Remove Video", nullptr, false, selectedEntityID != 0)) {
+                    RemoveSelectedMedia();
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Refresh")) {
+                    RefreshEntities();
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("View")) {
+                bool visible = IsHistoryVisible();
+                if (ImGui::MenuItem("Show History", nullptr, &visible)) {
+                    ToggleHistoryView(visible);
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("First Video", nullptr, false, !mediaEntities.empty())) {
+                    if (!mediaEntities.empty()) {
+                        index = 0;
+                        selectedEntityID = mediaEntities[index];
+                        PauseAllVideos();
+                        SeekAudioToFrame(selectedEntityID);
+                    }
+                }
+                if (ImGui::MenuItem("Last Video", nullptr, false, !mediaEntities.empty())) {
+                    if (!mediaEntities.empty()) {
+                        index = static_cast<int>(mediaEntities.size()) - 1;
+                        selectedEntityID = mediaEntities[index];
+                        PauseAllVideos();
+                        SeekAudioToFrame(selectedEntityID);
+                    }
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenuBar();
         }
     }
 
@@ -218,6 +335,14 @@ namespace GUI {
                     videoComp.width, videoComp.height, videoComp.fps, videoComp.frameCount);
                 ImGui::Text("Current Frame: %d / %d", videoComp.currentFrame, videoComp.frameCount);
                 ImGui::Text("Entity ID: %zu", selectedEntityID);
+
+                if (HasAudioTrack(selectedEntityID)) {
+                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Audio Track: Yes");
+                }
+                else {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Audio Track: No");
+                }
+
                 if (selectedEntityID == lastGeneratedVideoID) {
                     ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "✦ NEWLY GENERATED");
                 }
@@ -234,23 +359,18 @@ namespace GUI {
     }
 
     void VideoView::RenderControls() {
-        static std::string lastVideoFolder;
-        if (ImGui::Button("Load Video(s)")) {
-            std::vector<std::string> filePaths;
-            if (FileDialog::OpenFiles("Choose Video(s)", FileDialog::FilterType::VIDEO_FILE, filePaths, lastVideoFolder)) {
-                if (!filePaths.empty()) {
-                    LoadMedia(filePaths);
-                    lastVideoFolder = std::filesystem::path(filePaths[0]).parent_path().string();
-                }
-            }
+        ImGui::PushItemWidth(100.0f);
+        if (ImGui::InputFloat("Zoom", &zoom, 0.1f, 0.5f, "%.1f")) {
+            SetZoom(zoom);
+        }
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        if (ImGui::Button("Refresh")) {
+            RefreshEntities();
         }
         ImGui::SameLine();
         if (selectedEntityID != 0 && ImGui::Button("Remove Video")) {
             RemoveSelectedMedia();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Refresh")) {
-            RefreshEntities();
         }
     }
 
@@ -259,15 +379,36 @@ namespace GUI {
             ImGui::Text("No videos loaded.");
             return;
         }
+        ImGui::PushItemWidth(100.0f);
+        if (ImGui::InputInt("Current Video", &index)) {
+            if (!mediaEntities.empty()) {
+                const int size = static_cast<int>(mediaEntities.size());
+                if (size == 1) index = 0;
+                else index = ((index % size) + size) % size;
+                selectedEntityID = mediaEntities[index];
+                PauseAllVideos();
+                SeekAudioToFrame(selectedEntityID);
+            }
+        }
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        ImGui::Text("Video %d of %zu", index + 1, mediaEntities.size());
+        ImGui::SameLine();
         if (ImGui::Button("First")) {
-            if (!mediaEntities.empty()) { index = 0; selectedEntityID = mediaEntities[index]; PauseAllVideos(); }
+            if (!mediaEntities.empty()) {
+                index = 0;
+                selectedEntityID = mediaEntities[index];
+                PauseAllVideos();
+                SeekAudioToFrame(selectedEntityID);
+            }
         }
         ImGui::SameLine();
-        if (ImGui::Button("Previous")) {
+        if (ImGui::Button("Prev")) {
             if (!mediaEntities.empty()) {
                 index = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
                 selectedEntityID = mediaEntities[index];
                 PauseAllVideos();
+                SeekAudioToFrame(selectedEntityID);
             }
         }
         ImGui::SameLine();
@@ -276,6 +417,7 @@ namespace GUI {
                 index = (index + 1) % static_cast<int>(mediaEntities.size());
                 selectedEntityID = mediaEntities[index];
                 PauseAllVideos();
+                SeekAudioToFrame(selectedEntityID);
             }
         }
         ImGui::SameLine();
@@ -284,19 +426,9 @@ namespace GUI {
                 index = static_cast<int>(mediaEntities.size() - 1);
                 selectedEntityID = mediaEntities[index];
                 PauseAllVideos();
+                SeekAudioToFrame(selectedEntityID);
             }
         }
-        ImGui::SameLine();
-        if (ImGui::InputInt("Current Video", &index)) {
-            if (!mediaEntities.empty()) {
-                const int size = static_cast<int>(mediaEntities.size());
-                if (size == 1) index = 0;
-                else index = ((index % size) + size) % size;
-                selectedEntityID = mediaEntities[index];
-                PauseAllVideos();
-            }
-        }
-        ImGui::Text("Video %d of %zu", index + 1, mediaEntities.size());
     }
 
     void VideoView::RenderPlaybackControls() {
@@ -308,26 +440,90 @@ namespace GUI {
         }
         try {
             auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-            int currentFrame = videoComp.currentFrame;
-            if (ImGui::SliderInt("Frame", &currentFrame, 0, videoComp.frameCount - 1)) {
+            int currentFrame = static_cast<int>(videoComp.currentFrame);
+            if (ImGui::SliderInt("Frame", &currentFrame, 0, static_cast<int>(videoComp.frameCount - 1))) {
                 auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-                if (videoSystem) videoSystem->SeekToFrame(videoComp, currentFrame);
+                if (videoSystem) {
+                    bool wasPlaying = videoComp.isPlaying;
+                    videoComp.isPlaying = false;
+                    videoSystem->SeekToFrame(videoComp, currentFrame);
+                    SeekAudioToFrame(selectedEntityID);
+                    if (wasPlaying) {
+                        videoComp.isPlaying = true;
+                        videoComp.frameAccumulator = 0.0f;
+                        ECS::EntityID audioEntity = GetAudioEntityForVideo(selectedEntityID);
+                        if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity) &&
+                            m_entityManager.HasComponent<ECS::AudioComponent>(audioEntity)) {
+                            auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                            if (audioPlaybackSystem) {
+                                ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(selectedEntityID);
+                                if (videoAudioComp && videoAudioComp->audioEnabled) {
+                                    audioPlaybackSystem->Play(audioEntity, false);
+                                    audioPlaybackSystem->SetPlaybackSpeed(audioEntity, videoComp.playbackSpeed);
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
+            float speed = videoComp.playbackSpeed;
+            if (ImGui::SliderFloat("Speed", &speed, 0.1f, 4.0f, "%.1fx")) {
+                videoComp.playbackSpeed = speed;
+                ECS::EntityID audioEntity = GetAudioEntityForVideo(selectedEntityID);
+                if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity)) {
+                    auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                    if (audioPlaybackSystem) {
+                        audioPlaybackSystem->SetPlaybackSpeed(audioEntity, speed);
+                    }
+                }
+            }
+
+            ImGui::SameLine();
             if (ImGui::Button(videoComp.isPlaying ? "Pause" : "Play")) {
                 videoComp.isPlaying = !videoComp.isPlaying;
                 if (videoComp.isPlaying) videoComp.frameAccumulator = 0.0f;
+
+                ECS::EntityID audioEntity = GetAudioEntityForVideo(selectedEntityID);
+                if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity) &&
+                    m_entityManager.HasComponent<ECS::AudioComponent>(audioEntity)) {
+                    auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                    if (audioPlaybackSystem) {
+                        if (videoComp.isPlaying) {
+                            ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(selectedEntityID);
+                            if (videoAudioComp && videoAudioComp->audioEnabled) {
+                                SeekAudioToFrame(selectedEntityID);
+                                audioPlaybackSystem->Play(audioEntity, false);
+                                audioPlaybackSystem->SetPlaybackSpeed(audioEntity, videoComp.playbackSpeed);
+                            }
+                        }
+                        else {
+                            audioPlaybackSystem->Pause(audioEntity);
+                        }
+                    }
+                }
             }
             ImGui::SameLine();
             if (ImGui::Button("Stop")) {
                 videoComp.isPlaying = false;
                 videoComp.frameAccumulator = 0.0f;
                 auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-                if (videoSystem) videoSystem->SeekToFrame(videoComp, 0);
+                if (videoSystem) {
+                    videoSystem->SeekToFrame(videoComp, 0);
+                    SeekAudioToFrame(selectedEntityID);
+                }
+
+                ECS::EntityID audioEntity = GetAudioEntityForVideo(selectedEntityID);
+                if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity) &&
+                    m_entityManager.HasComponent<ECS::AudioComponent>(audioEntity)) {
+                    auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                    if (audioPlaybackSystem) {
+                        audioPlaybackSystem->Stop(audioEntity);
+                    }
+                }
             }
             ImGui::SameLine();
             ImGui::Checkbox("Loop", &videoComp.looping);
-            ImGui::SameLine();
-            ImGui::SliderFloat("Speed", &videoComp.playbackSpeed, 0.1f, 2.0f, "%.1fx");
             ImGui::Separator();
         }
         catch (const std::exception& e) {
@@ -409,6 +605,111 @@ namespace GUI {
         }
     }
 
+    bool VideoView::HasAudioTrack(ECS::EntityID entity) const {
+        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return false;
+        if (m_entityManager.HasComponent<ECS::VideoAudioComponent>(entity)) {
+            ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(entity);
+            return videoAudioComp != nullptr && videoAudioComp->hasAudio;
+        }
+        return false;
+    }
+
+    ECS::EntityID VideoView::GetAudioEntityForVideo(ECS::EntityID videoEntity) const {
+        if (videoEntity == 0 || !m_entityManager.IsEntityValid(videoEntity)) return 0;
+        if (m_entityManager.HasComponent<ECS::VideoAudioComponent>(videoEntity)) {
+            ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(videoEntity);
+            if (videoAudioComp && videoAudioComp->hasAudio) {
+                return videoAudioComp->audioEntityID;
+            }
+        }
+        return 0;
+    }
+
+    void VideoView::SeekAudioToFrame(ECS::EntityID videoEntity) {
+        if (videoEntity == 0 || !m_entityManager.IsEntityValid(videoEntity)) return;
+        if (!m_entityManager.HasComponent<ECS::VideoComponent>(videoEntity)) return;
+        if (!HasAudioTrack(videoEntity)) return;
+
+        ECS::EntityID audioEntity = GetAudioEntityForVideo(videoEntity);
+        if (audioEntity == 0 || !m_entityManager.IsEntityValid(audioEntity) ||
+            !m_entityManager.HasComponent<ECS::AudioComponent>(audioEntity)) return;
+
+        auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(videoEntity);
+        auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(audioEntity);
+        auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        if (!audioPlaybackSystem) return;
+
+        bool wasPlaying = audioPlaybackSystem->IsPlaying(audioEntity);
+        bool wasPaused = audioPlaybackSystem->IsPaused(audioEntity);
+
+        audioPlaybackSystem->Stop(audioEntity);
+
+        double currentTime = static_cast<double>(videoComp.currentFrame) / videoComp.fps;
+
+        if (currentTime >= audioComp.duration) {
+            currentTime = std::max(0.0, audioComp.duration - 0.01);
+        }
+        if (currentTime < 0) currentTime = 0;
+
+        audioPlaybackSystem->Seek(audioEntity, currentTime);
+
+        audioComp.currentTime = currentTime;
+        audioComp.currentSampleIndex = static_cast<size_t>(currentTime * audioComp.sampleRate) * audioComp.channels;
+
+        if (wasPlaying && !wasPaused) {
+            ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(videoEntity);
+            if (videoAudioComp && videoAudioComp->audioEnabled) {
+                audioPlaybackSystem->Play(audioEntity, false);
+                audioPlaybackSystem->SetPlaybackSpeed(audioEntity, videoComp.playbackSpeed);
+            }
+        }
+        else if (wasPaused) {
+            audioPlaybackSystem->Pause(audioEntity);
+        }
+    }
+
+    void VideoView::RenderAudioControls(ECS::EntityID videoEntity) {
+        if (videoEntity == 0 || !m_entityManager.IsEntityValid(videoEntity)) return;
+
+        if (!m_entityManager.HasComponent<ECS::VideoAudioComponent>(videoEntity)) return;
+
+        ECS::VideoAudioComponent* videoAudioComp = &m_entityManager.GetComponent<ECS::VideoAudioComponent>(videoEntity);
+        if (!videoAudioComp || !videoAudioComp->hasAudio) return;
+
+        ECS::EntityID audioEntity = videoAudioComp->audioEntityID;
+        if (audioEntity == 0 || !m_entityManager.IsEntityValid(audioEntity) ||
+            !m_entityManager.HasComponent<ECS::AudioComponent>(audioEntity)) return;
+
+        auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+        if (!audioPlaybackSystem) return;
+
+        auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(videoEntity);
+
+        ImGui::SameLine();
+        ImGui::Text("Audio:");
+        ImGui::SameLine();
+
+        bool audioEnabled = videoAudioComp->audioEnabled;
+        if (ImGui::Checkbox("##AudioEnabled", &audioEnabled)) {
+            videoAudioComp->audioEnabled = audioEnabled;
+            if (!audioEnabled) {
+                audioPlaybackSystem->Pause(audioEntity);
+            }
+            else if (audioPlaybackSystem->IsPaused(audioEntity)) {
+                audioPlaybackSystem->Resume(audioEntity);
+                audioPlaybackSystem->SetPlaybackSpeed(audioEntity, videoComp.playbackSpeed);
+                SeekAudioToFrame(videoEntity);
+            }
+        }
+
+        ImGui::SameLine();
+        float volumePercent = videoAudioComp->volume * 100.0f;
+        if (ImGui::SliderFloat("##AudioVolume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
+            videoAudioComp->volume = volumePercent / 100.0f;
+            audioPlaybackSystem->SetVolume(audioEntity, videoAudioComp->volume);
+        }
+    }
+
     void VideoView::LoadMedia(const std::vector<std::string>& filePaths) {
         std::cout << "[VideoView] Loading " << filePaths.size() << " videos..." << std::endl;
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
@@ -435,11 +736,145 @@ namespace GUI {
     }
 
     void VideoView::SaveSelectedMedia() {
-        std::cerr << "[VideoView] SaveSelectedMedia not implemented" << std::endl;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
+        if (videoSystem) {
+            videoSystem->SaveVideoAsync(selectedEntityID);
+        }
     }
 
     void VideoView::SaveSelectedMediaAs(const std::string& filePath) {
-        std::cerr << "[VideoView] SaveSelectedMediaAs not implemented" << std::endl;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        if (filePath.empty()) return;
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
+        if (videoSystem) {
+            videoSystem->SaveVideoAsync(selectedEntityID, filePath);
+        }
+    }
+
+    void VideoView::SaveVideoWithAudio(ECS::EntityID entity, const std::string& filePath) {
+        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return;
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
+        if (videoSystem) {
+            videoSystem->SaveVideoAsync(entity, filePath);
+        }
+    }
+
+    void VideoView::SaveVideoNoAudio(ECS::EntityID entity, const std::string& filePath) {
+        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::VideoComponent>(entity)) return;
+
+        auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
+        if (videoComp.filePath.empty()) return;
+
+        std::string outputPath = filePath.empty() ? videoComp.filePath : filePath;
+
+        std::vector<Utils::VideoFrame> frames;
+
+        long long originalFrame = videoComp.currentFrame;
+
+        avformat_seek_file(videoComp.fmtCtx, -1, INT64_MIN, 0, 0, 0);
+        avcodec_flush_buffers(videoComp.codecCtx);
+        videoComp.currentFrame = 0;
+        videoComp.frameAccumulator = 0.0f;
+
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
+        if (!videoSystem) return;
+
+        while (true) {
+            if (!videoSystem->AdvanceOneFrame(videoComp)) {
+                break;
+            }
+
+            Utils::VideoFrame frame;
+            frame.width = videoComp.width;
+            frame.height = videoComp.height;
+            frame.channels = 4;
+
+            unsigned char* data = (unsigned char*)malloc(videoComp.frameDataRGBA.size());
+            if (!data) {
+                videoSystem->SeekToFrame(videoComp, originalFrame);
+                return;
+            }
+            std::memcpy(data, videoComp.frameDataRGBA.data(), videoComp.frameDataRGBA.size());
+            frame.data = data;
+
+            frames.push_back(frame);
+        }
+
+        videoSystem->SeekToFrame(videoComp, originalFrame);
+
+        if (frames.empty()) {
+            std::cerr << "[VideoView] No frames to save" << std::endl;
+            return;
+        }
+
+        nlohmann::json metadata;
+        metadata["fps"] = videoComp.fps;
+        metadata["width"] = videoComp.width;
+        metadata["height"] = videoComp.height;
+        metadata["frameCount"] = frames.size();
+        metadata["originalFile"] = videoComp.filePath;
+        metadata["hasAudio"] = false;
+
+        bool result = Utils::VideoUtils::EncodeFramesToVideo(
+            frames,
+            outputPath,
+            static_cast<int>(videoComp.fps),
+            metadata,
+            nullptr
+        );
+
+        for (auto& frame : frames) {
+            if (frame.data) {
+                free((void*)frame.data);
+            }
+        }
+
+        if (result) {
+            std::cout << "[VideoView] Saved video without audio to: " << outputPath << std::endl;
+            if (filePath.empty()) {
+                videoComp.filePath = outputPath;
+                videoComp.fileName = std::filesystem::path(outputPath).filename().string();
+            }
+        }
+        else {
+            std::cerr << "[VideoView] Failed to save video without audio" << std::endl;
+        }
+    }
+
+    void VideoView::SaveSelectedMediaNoAudio() {
+        SaveVideoNoAudio(selectedEntityID, "");
+    }
+
+    void VideoView::SaveSelectedMediaAsWithAudio() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+        std::string outPath;
+
+        const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+        std::string defaultName = videoComp.fileName;
+
+        if (FileDialog::SaveFile("Save Video As (with Audio)", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
+            SaveVideoWithAudio(selectedEntityID, outPath);
+        }
+    }
+
+    void VideoView::SaveSelectedMediaAsNoAudio() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+        std::string outPath;
+
+        const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+        std::string defaultName = videoComp.fileName;
+
+        if (FileDialog::SaveFile("Save Video As (No Audio)", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
+            SaveVideoNoAudio(selectedEntityID, outPath);
+        }
     }
 
     void VideoView::RemoveSelectedMedia() {
@@ -448,6 +883,19 @@ namespace GUI {
             auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
             videoComp.isPlaying = false;
             videoComp.frameAccumulator = 0.0f;
+
+            ECS::EntityID audioEntity = GetAudioEntityForVideo(selectedEntityID);
+            if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity)) {
+                auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                if (audioPlaybackSystem) {
+                    audioPlaybackSystem->Stop(audioEntity);
+                }
+                auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+                if (audioSystem) {
+                    audioSystem->RemoveAudio(audioEntity);
+                }
+            }
+
             auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
             if (videoSystem) videoSystem->RemoveVideo(selectedEntityID);
             selectedEntityID = 0;
@@ -466,6 +914,14 @@ namespace GUI {
                 if (m_entityManager.IsEntityValid(entityID) && m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
                     auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
                     videoComp.isPlaying = false;
+
+                    ECS::EntityID audioEntity = GetAudioEntityForVideo(entityID);
+                    if (audioEntity != 0 && m_entityManager.IsEntityValid(audioEntity)) {
+                        auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+                        if (audioPlaybackSystem) {
+                            audioPlaybackSystem->Pause(audioEntity);
+                        }
+                    }
                 }
             }
         }

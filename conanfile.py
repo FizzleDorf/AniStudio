@@ -33,6 +33,7 @@ class AniStudio(ConanFile):
         self.requires("libwebp/1.3.2")
         self.requires("ffmpeg/4.4.4", options={"shared": True})
         self.requires("portaudio/19.7", options={"shared": True})
+        self.requires("libsamplerate/0.2.2")
 
         self.requires("neargye-semver/0.3.1")
 

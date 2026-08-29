@@ -12,7 +12,7 @@ namespace GUI {
             return R"({
             "displayName": "Video View",
             "category": "Viewers",
-            "description": "A simple video viewer"
+            "description": "A simple video viewer with audio support"
         })";
         }
 
@@ -51,6 +51,18 @@ namespace GUI {
         void RenderPlaybackControls();
         void RenderSelected();
         void PauseAllVideos();
+
+    private:
+        bool HasAudioTrack(ECS::EntityID entity) const;
+        ECS::EntityID GetAudioEntityForVideo(ECS::EntityID videoEntity) const;
+        void RenderAudioControls(ECS::EntityID videoEntity);
+        void SeekAudioToFrame(ECS::EntityID videoEntity);
+
+        void SaveVideoWithAudio(ECS::EntityID entity, const std::string& filePath);
+        void SaveVideoNoAudio(ECS::EntityID entity, const std::string& filePath);
+        void SaveSelectedMediaNoAudio();
+        void SaveSelectedMediaAsWithAudio();
+        void SaveSelectedMediaAsNoAudio();
     };
 
 }

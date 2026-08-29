@@ -15,6 +15,13 @@ namespace Utils {
         const unsigned char* data = nullptr;
     };
 
+    struct AudioData {
+        std::vector<float> pcmData;
+        int channels = 2;
+        int sampleRate = 44100;
+        double duration = 0.0;
+    };
+
     class VideoUtils {
     public:
         static unsigned char* LoadVideoFrame(const std::string& filePath, double timeInSeconds,
@@ -33,10 +40,12 @@ namespace Utils {
         static bool SaveVideoFrameAsImage(const std::string& videoPath, const std::string& imagePath,
             double timeInSeconds);
 
+        // Updated to include audio support
         static bool EncodeFramesToVideo(const std::vector<VideoFrame>& frames,
             const std::string& outputPath,
             int fps = 24,
-            const nlohmann::json& metadata = nlohmann::json());
+            const nlohmann::json& metadata = nlohmann::json(),
+            const AudioData* audio = nullptr);
 
         static bool HasExifMetadata(const std::string& filePath);
         static bool HasLSBMetadata(const std::string& filePath);

@@ -11,6 +11,7 @@
 #include <thread>
 #include <condition_variable>
 #include <portaudio.h>
+#include <samplerate.h>
 
 namespace ECS {
 
@@ -32,6 +33,7 @@ namespace ECS {
         void Pause(EntityID entity);
         void Resume(EntityID entity);
         void SetVolume(EntityID entity, float volume);
+        void SetPlaybackSpeed(EntityID entity, float speed);
         void Seek(EntityID entity, double position);
         double GetCurrentPosition(EntityID entity) const;
         double GetDuration(EntityID entity) const;
@@ -67,10 +69,17 @@ namespace ECS {
 
         EntityID m_playingEntity = 0;
         float m_playbackVolume = 1.0f;
-        std::atomic<bool> m_playbackActive{ false };
-        std::atomic<bool> m_playbackPaused{ false };
+        float m_playbackSpeed = 1.0f;
+        bool m_playbackActive = false;
+        bool m_playbackPaused = false;
+        double m_playbackSpeedRatio = 1.0;
 
         mutable std::mutex m_playbackMutex;
+
+        // Resampling state
+        SRC_STATE* m_srcState = nullptr;
+        std::vector<float> m_resampleInput;
+        std::vector<float> m_resampleOutput;
     };
 
 } // namespace ECS

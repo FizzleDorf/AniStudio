@@ -162,6 +162,7 @@ find_package(exiv2 CONFIG REQUIRED)
 find_package(pybind11 REQUIRED)
 find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
 find_package(portaudio CONFIG REQUIRED)
+find_package(samplerate REQUIRED)
 
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
@@ -188,6 +189,7 @@ target_link_libraries(AniEngineDeps INTERFACE
     ffmpeg::swresample
     ffmpeg::avdevice
     portaudio
+    SampleRate::samplerate
 )
 
 if(UNIX AND NOT APPLE)
@@ -204,6 +206,7 @@ target_compile_definitions(AniEngineDeps INTERFACE
     GLEW_STATIC
     USE_FFMPEG_AUDIO
     USE_PORTAUDIO
+    USE_LIBSAMPLERATE
 )
 
 add_library(AniStudioDeps INTERFACE)
@@ -234,6 +237,7 @@ target_compile_definitions(AniStudioDeps INTERFACE
     IMSEQUENCER_AVAILABLE
     USE_FFMPEG_AUDIO
     USE_PORTAUDIO
+    USE_LIBSAMPLERATE
 )
 
 if(BUILD_ANIENGINE)
@@ -298,7 +302,7 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
     if(WIN32)
-        set(ANISTUDIO_RUNTIME_DLL_PACKAGES glfw ffmpeg libaom-av1 dav1d portaudio)
+        set(ANISTUDIO_RUNTIME_DLL_PACKAGES glfw ffmpeg libaom-av1 dav1d portaudio samplerate)
 
         foreach(PKG ${ANISTUDIO_RUNTIME_DLL_PACKAGES})
             foreach(CFG_SUFFIX "_RELEASE" "_DEBUG" "_RELWITHDEBINFO" "_MINSIZEREL" "")

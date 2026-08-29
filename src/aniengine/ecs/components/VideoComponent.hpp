@@ -478,4 +478,89 @@ namespace ECS {
         }
     };
 
+    struct VideoAudioComponent : public BaseComponent {
+        ECS::EntityID videoEntityID = 0;
+        ECS::EntityID audioEntityID = 0;
+        bool hasAudio = false;
+        float volume = 1.0f;
+        bool audioEnabled = true;
+        double syncOffset = 0.0;
+
+        VideoAudioComponent() : BaseComponent() {
+            compName = "VideoAudio";
+            compCategory = "Video";
+            setupBaseSchema();
+        }
+
+        virtual ~VideoAudioComponent() = default;
+
+        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
+            properties["videoEntityID"] = &videoEntityID;
+            properties["audioEntityID"] = &audioEntityID;
+            properties["hasAudio"] = &hasAudio;
+            properties["volume"] = &volume;
+            properties["audioEnabled"] = &audioEnabled;
+            properties["syncOffset"] = &syncOffset;
+            return properties;
+        }
+
+        virtual nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j["compName"] = compName;
+            j[compName] = {
+                {"videoEntityID", videoEntityID},
+                {"audioEntityID", audioEntityID},
+                {"hasAudio", hasAudio},
+                {"volume", volume},
+                {"audioEnabled", audioEnabled},
+                {"syncOffset", syncOffset}
+            };
+            return j;
+        }
+
+        virtual void Deserialize(const nlohmann::json& j) override {
+            BaseComponent::Deserialize(j);
+            nlohmann::json componentData;
+            if (j.contains(compName))
+                componentData = j.at(compName);
+            else
+                componentData = j;
+
+            if (componentData.contains("videoEntityID")) videoEntityID = componentData["videoEntityID"];
+            if (componentData.contains("audioEntityID")) audioEntityID = componentData["audioEntityID"];
+            if (componentData.contains("hasAudio")) hasAudio = componentData["hasAudio"];
+            if (componentData.contains("volume")) volume = componentData["volume"];
+            if (componentData.contains("audioEnabled")) audioEnabled = componentData["audioEnabled"];
+            if (componentData.contains("syncOffset")) syncOffset = componentData["syncOffset"];
+        }
+
+        void setupBaseSchema() {
+            schema = {
+                {"title", "Video Audio"},
+                {"type", "object"},
+                {"properties", {
+                    {"hasAudio", {
+                        {"type", "boolean"},
+                        {"title", "Has Audio Track"}
+                    }},
+                    {"audioEnabled", {
+                        {"type", "boolean"},
+                        {"title", "Audio Enabled"}
+                    }},
+                    {"volume", {
+                        {"type", "number"},
+                        {"title", "Volume"},
+                        {"minimum", 0.0},
+                        {"maximum", 1.0}
+                    }},
+                    {"syncOffset", {
+                        {"type", "number"},
+                        {"title", "Sync Offset (seconds)"}
+                    }}
+                }}
+            };
+        }
+    };
+
 } // namespace ECS
