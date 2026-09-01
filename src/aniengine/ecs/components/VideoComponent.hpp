@@ -20,7 +20,6 @@ extern "C" {
 
 namespace ECS {
 
-    // Custom deleters for FFmpeg types
     struct AVFormatContextDeleter {
         void operator()(AVFormatContext* ptr) const {
             if (ptr) avformat_close_input(&ptr);
@@ -51,10 +50,10 @@ namespace ECS {
         }
     };
 
+    // ---- Base Video Component (no texture) ----
     struct VideoComponent : public BaseComponent {
         mutable std::shared_mutex dataMutex;
 
-        // ---- Smart pointers for FFmpeg contexts ----
         std::unique_ptr<AVFormatContext, AVFormatContextDeleter> fmtCtx;
         std::unique_ptr<AVCodecContext, AVCodecContextDeleter> codecCtx;
         std::unique_ptr<AVFrame, AVFrameDeleter> frame;
@@ -62,7 +61,6 @@ namespace ECS {
         std::unique_ptr<SwsContext, SwsContextDeleter> swsCtx;
         int videoStreamIndex = -1;
 
-        // ---- Video metadata ----
         std::string fileName = "AniStudio";
         std::string filePath = "";
         int width = 0;
@@ -76,12 +74,9 @@ namespace ECS {
         float frameAccumulator = 0.0f;
         double currentTime = 0.0;
 
-        // ---- Frame data ----
         std::vector<uint8_t> frameDataRGBA;
-        GLuint currentTexture = 0;
-        bool needsTextureUpdate = false;
+        bool needsTextureUpdate = false;   // triggers texture upload
 
-        // ---- Metadata ----
         bool hasExifData = false;
         bool hasLSBData = false;
         bool hasAniStudioMetadata = false;
@@ -89,25 +84,13 @@ namespace ECS {
         std::string fileDate;
         std::string fileTime;
 
-        // ---- Construction ----
         VideoComponent() {
             compName = "Video";
             compCategory = "Video";
             setupBaseSchema();
         }
 
-        virtual ~VideoComponent() {
-            ReleaseTexture();
-        }
-
-        void ReleaseTexture() {
-            std::unique_lock lock(dataMutex);
-            if (currentTexture != 0) {
-                glDeleteTextures(1, &currentTexture);
-                currentTexture = 0;
-            }
-            needsTextureUpdate = false;
-        }
+        virtual ~VideoComponent() = default;
 
         void UpdateFrameData(std::vector<uint8_t>&& data, int w, int h, long long frame, double time = -1.0) {
             std::unique_lock lock(dataMutex);
@@ -115,16 +98,11 @@ namespace ECS {
             width = w;
             height = h;
             currentFrame = frame;
-            if (time >= 0.0) {
-                currentTime = time;
-            }
-            else {
-                currentTime = static_cast<double>(frame) / (fps > 0.0 ? fps : 30.0);
-            }
+            if (time >= 0.0) currentTime = time;
+            else currentTime = static_cast<double>(frame) / (fps > 0.0 ? fps : 30.0);
             needsTextureUpdate = true;
         }
 
-        // ---- Serialization ----
         virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             std::unordered_map<std::string, UISchema::PropertyVariant> properties;
             properties["fileName"] = &fileName;
@@ -169,10 +147,8 @@ namespace ECS {
         virtual void Deserialize(const nlohmann::json& j) override {
             BaseComponent::Deserialize(j);
             nlohmann::json componentData;
-            if (j.contains(compName))
-                componentData = j.at(compName);
-            else
-                componentData = j;
+            if (j.contains(compName)) componentData = j.at(compName);
+            else componentData = j;
 
             if (componentData.contains("width")) width = componentData["width"];
             if (componentData.contains("height")) height = componentData["height"];
@@ -213,7 +189,6 @@ namespace ECS {
                 hasExifData = other.hasExifData;
                 hasLSBData = other.hasLSBData;
                 hasAniStudioMetadata = other.hasAniStudioMetadata;
-                // Do not copy FFmpeg contexts or texture
             }
             return *this;
         }
@@ -238,7 +213,6 @@ namespace ECS {
             hasExifData = other.hasExifData;
             hasLSBData = other.hasLSBData;
             hasAniStudioMetadata = other.hasAniStudioMetadata;
-            // FFmpeg contexts are not copied - they start empty
             setupBaseSchema();
         }
 
@@ -308,10 +282,8 @@ namespace ECS {
         virtual void Deserialize(const nlohmann::json& j) override {
             BaseComponent::Deserialize(j);
             nlohmann::json componentData;
-            if (j.contains(compName))
-                componentData = j.at(compName);
-            else
-                componentData = j;
+            if (j.contains(compName)) componentData = j.at(compName);
+            else componentData = j;
 
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
@@ -395,10 +367,8 @@ namespace ECS {
         virtual void Deserialize(const nlohmann::json& j) override {
             BaseComponent::Deserialize(j);
             nlohmann::json componentData;
-            if (j.contains(compName))
-                componentData = j.at(compName);
-            else
-                componentData = j;
+            if (j.contains(compName)) componentData = j.at(compName);
+            else componentData = j;
 
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("filePath")) filePath = componentData["filePath"];

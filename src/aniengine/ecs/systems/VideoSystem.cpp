@@ -13,7 +13,6 @@ namespace ECS {
     }
 
     VideoSystem::~VideoSystem() {
-        // Smart pointers will clean up automatically
     }
 
     void VideoSystem::Start() {
@@ -202,25 +201,18 @@ namespace ECS {
     void VideoSystem::ApplyLoadedVideo(LoadResult&& result) {
         EntityID entity = result.entityID;
         if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<VideoComponent>(entity)) {
-            if (result.fmtCtx) avformat_close_input(&result.fmtCtx);
-            if (result.codecCtx) avcodec_free_context(&result.codecCtx);
-            if (result.swsCtx) sws_freeContext(result.swsCtx);
-            if (result.frame) av_frame_free(&result.frame);
-            if (result.pkt) av_packet_free(&result.pkt);
             NotifyLoadComplete(entity, false);
             return;
         }
 
         auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
 
-        // Reset smart pointers (they will clean up old contexts)
         videoComp.fmtCtx.reset();
         videoComp.codecCtx.reset();
         videoComp.swsCtx.reset();
         videoComp.frame.reset();
         videoComp.pkt.reset();
 
-        // Transfer ownership to smart pointers
         videoComp.fmtCtx.reset(result.fmtCtx);
         videoComp.codecCtx.reset(result.codecCtx);
         videoComp.swsCtx.reset(result.swsCtx);
@@ -241,14 +233,15 @@ namespace ECS {
         videoComp.hasLSBData = result.hasLSB;
         videoComp.hasAniStudioMetadata = result.hasAniStudio;
 
+        result.fmtCtx = nullptr;
+        result.codecCtx = nullptr;
+        result.swsCtx = nullptr;
+        result.frame = nullptr;
+        result.pkt = nullptr;
+
         if (!result.firstFrameRGBA.empty()) {
             videoComp.frameDataRGBA = std::move(result.firstFrameRGBA);
             videoComp.needsTextureUpdate = true;
-            if (m_textureCallback) {
-                m_textureCallback(videoComp.GetID(), videoComp.frameDataRGBA.data(),
-                    videoComp.width, videoComp.height, 4,
-                    &videoComp.currentTexture);
-            }
         }
 
         NotifyVideoAdded(entity);
@@ -258,7 +251,6 @@ namespace ECS {
     void VideoSystem::SetVideo(EntityID entity, const std::string& filePath) {
         if (mgr.HasComponent<VideoComponent>(entity)) {
             auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-            // Reset all smart pointers
             videoComp.fmtCtx.reset();
             videoComp.codecCtx.reset();
             videoComp.swsCtx.reset();
@@ -283,7 +275,9 @@ namespace ECS {
     void VideoSystem::RemoveVideo(EntityID entity) {
         if (mgr.HasComponent<VideoComponent>(entity)) {
             auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-            // Smart pointers will clean up automatically
+
+            NotifyVideoRemoved(entity);
+
             videoComp.fmtCtx.reset();
             videoComp.codecCtx.reset();
             videoComp.swsCtx.reset();
@@ -298,7 +292,6 @@ namespace ECS {
             std::lock_guard<std::recursive_mutex> lock2(m_loadMutex);
             m_loadingStatus.erase(entity);
 
-            NotifyVideoRemoved(entity);
             mgr.DestroyEntity(entity);
         }
     }
@@ -360,7 +353,7 @@ namespace ECS {
         }
 
         auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
-        if (videoComp.fmtCtx == nullptr || videoComp.videoStreamIndex < 0) {
+        if (!videoComp.fmtCtx || videoComp.videoStreamIndex < 0) {
             std::cerr << "[VideoSystem] Video not loaded or invalid" << std::endl;
             NotifySaveComplete(entity, false, "");
             return;
@@ -505,19 +498,19 @@ namespace ECS {
                     int width = frame->width;
                     int height = frame->height;
                     size_t dataSize = width * height * 4;
-                    unsigned char* rgbaData = (unsigned char*)malloc(dataSize);
+                    auto rgbaData = std::make_unique<unsigned char[]>(dataSize);
                     if (!rgbaData) {
                         av_packet_unref(pkt);
                         continue;
                     }
-                    uint8_t* dst[1] = { rgbaData };
+                    uint8_t* dst[1] = { rgbaData.get() };
                     int dstLinesize[1] = { width * 4 };
                     sws_scale(swsCtx, frame->data, frame->linesize, 0, height, dst, dstLinesize);
                     Utils::VideoFrame vf;
                     vf.width = width;
                     vf.height = height;
                     vf.channels = 4;
-                    vf.data = rgbaData;
+                    vf.data = rgbaData.release();
                     frames.push_back(vf);
                     decodedFrames++;
                 }

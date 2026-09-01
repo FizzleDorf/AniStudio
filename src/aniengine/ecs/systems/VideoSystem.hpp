@@ -77,6 +77,72 @@ namespace ECS {
             AVFrame* frame = nullptr;
             AVPacket* pkt = nullptr;
             int videoStreamIndex = -1;
+
+            ~LoadResult() {
+                if (fmtCtx) avformat_close_input(&fmtCtx);
+                if (codecCtx) avcodec_free_context(&codecCtx);
+                if (swsCtx) sws_freeContext(swsCtx);
+                if (frame) av_frame_free(&frame);
+                if (pkt) av_packet_free(&pkt);
+            }
+
+            LoadResult() = default;
+            LoadResult(LoadResult&& other) noexcept
+                : success(other.success), entityID(other.entityID), filePath(std::move(other.filePath)),
+                fileName(std::move(other.fileName)), width(other.width), height(other.height),
+                fps(other.fps), frameCount(other.frameCount), firstFrameRGBA(std::move(other.firstFrameRGBA)),
+                fileSize(other.fileSize), fileDate(std::move(other.fileDate)), fileTime(std::move(other.fileTime)),
+                hasExif(other.hasExif), hasLSB(other.hasLSB), hasAniStudio(other.hasAniStudio),
+                fmtCtx(other.fmtCtx), codecCtx(other.codecCtx), swsCtx(other.swsCtx),
+                frame(other.frame), pkt(other.pkt), videoStreamIndex(other.videoStreamIndex) {
+                other.fmtCtx = nullptr;
+                other.codecCtx = nullptr;
+                other.swsCtx = nullptr;
+                other.frame = nullptr;
+                other.pkt = nullptr;
+            }
+
+            LoadResult& operator=(LoadResult&& other) noexcept {
+                if (this != &other) {
+                    if (fmtCtx) avformat_close_input(&fmtCtx);
+                    if (codecCtx) avcodec_free_context(&codecCtx);
+                    if (swsCtx) sws_freeContext(swsCtx);
+                    if (frame) av_frame_free(&frame);
+                    if (pkt) av_packet_free(&pkt);
+
+                    success = other.success;
+                    entityID = other.entityID;
+                    filePath = std::move(other.filePath);
+                    fileName = std::move(other.fileName);
+                    width = other.width;
+                    height = other.height;
+                    fps = other.fps;
+                    frameCount = other.frameCount;
+                    firstFrameRGBA = std::move(other.firstFrameRGBA);
+                    fileSize = other.fileSize;
+                    fileDate = std::move(other.fileDate);
+                    fileTime = std::move(other.fileTime);
+                    hasExif = other.hasExif;
+                    hasLSB = other.hasLSB;
+                    hasAniStudio = other.hasAniStudio;
+                    fmtCtx = other.fmtCtx;
+                    codecCtx = other.codecCtx;
+                    swsCtx = other.swsCtx;
+                    frame = other.frame;
+                    pkt = other.pkt;
+                    videoStreamIndex = other.videoStreamIndex;
+
+                    other.fmtCtx = nullptr;
+                    other.codecCtx = nullptr;
+                    other.swsCtx = nullptr;
+                    other.frame = nullptr;
+                    other.pkt = nullptr;
+                }
+                return *this;
+            }
+
+            LoadResult(const LoadResult&) = delete;
+            LoadResult& operator=(const LoadResult&) = delete;
         };
 
     private:

@@ -6,6 +6,10 @@
 
 namespace ECS {
 
+    const std::vector<std::string> VideoPlaybackSystem::s_hwAccelDevices = {
+        "cuda", "vaapi", "dxva2", "d3d11va", "vulkan", "videotoolbox"
+    };
+
     void VideoPlaybackSystem::VideoTrack::Clock::Reset(double startTime) {
         m_currentTime = startTime;
         m_lastUpdate = std::chrono::steady_clock::now();
@@ -54,10 +58,27 @@ namespace ECS {
         : entity(entity), hasAudio(hasAudio), duration(duration), fps(fps > 0.0 ? fps : 30.0),
         m_owner(owner), m_mgr(mgr) {
         std::cout << "[VideoTrack] Created for entity " << entity << std::endl;
+
+        const char* hwDev = std::getenv("ANI_VIDEO_HW_ACCEL");
+        if (hwDev) {
+            std::string dev(hwDev);
+            std::transform(dev.begin(), dev.end(), dev.begin(), ::tolower);
+            for (const auto& supported : s_hwAccelDevices) {
+                if (dev == supported) {
+                    hwAccelEnabled = true;
+                    std::cout << "[VideoTrack] HW acceleration enabled: " << dev << std::endl;
+                    break;
+                }
+            }
+        }
     }
 
     VideoPlaybackSystem::VideoTrack::~VideoTrack() {
         std::cout << "[VideoTrack] Destroying for entity " << entity << std::endl;
+        if (hwDeviceCtx) {
+            av_buffer_unref(&hwDeviceCtx);
+            hwDeviceCtx = nullptr;
+        }
         m_running.store(false);
         m_cmdCV.notify_all();
         m_bufferCV.notify_all();
@@ -138,6 +159,48 @@ namespace ECS {
         return got;
     }
 
+    bool VideoPlaybackSystem::VideoTrack::InitHWAccel(AVCodecContext* codecCtx) {
+        if (!hwAccelEnabled) return false;
+        if (!codecCtx) return false;
+
+        const char* deviceName = nullptr;
+        AVHWDeviceType hwType = AV_HWDEVICE_TYPE_NONE;
+
+        for (const auto& dev : s_hwAccelDevices) {
+            AVHWDeviceType type = av_hwdevice_find_type_by_name(dev.c_str());
+            if (type != AV_HWDEVICE_TYPE_NONE) {
+                hwType = type;
+                deviceName = dev.c_str();
+                break;
+            }
+        }
+
+        if (hwType == AV_HWDEVICE_TYPE_NONE) {
+            std::cout << "[VideoTrack] No compatible HW acceleration found" << std::endl;
+            hwAccelEnabled = false;
+            return false;
+        }
+
+        int ret = av_hwdevice_ctx_create(&hwDeviceCtx, hwType, nullptr, nullptr, 0);
+        if (ret < 0) {
+            char errbuf[AV_ERROR_MAX_STRING_SIZE] = { 0 };
+            av_strerror(ret, errbuf, sizeof(errbuf));
+            std::cout << "[VideoTrack] Failed to create HW device context: " << errbuf << std::endl;
+            hwAccelEnabled = false;
+            return false;
+        }
+
+        codecCtx->hw_device_ctx = av_buffer_ref(hwDeviceCtx);
+        if (!codecCtx->hw_device_ctx) {
+            std::cout << "[VideoTrack] Failed to ref HW device context" << std::endl;
+            hwAccelEnabled = false;
+            return false;
+        }
+
+        std::cout << "[VideoTrack] HW acceleration initialized: " << deviceName << std::endl;
+        return true;
+    }
+
     bool VideoPlaybackSystem::VideoTrack::DecodeOneFrame(RingFrame& out) {
         if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
             return false;
@@ -164,9 +227,26 @@ namespace ECS {
             bool produced = false;
             if (avcodec_send_packet(videoComp.codecCtx.get(), pkt) == 0) {
                 while (avcodec_receive_frame(videoComp.codecCtx.get(), frame) == 0) {
-                    int w = frame->width;
-                    int h = frame->height;
+                    AVFrame* swFrame = frame;
+                    AVFrame* tempFrame = nullptr;
+
+                    if (hwAccelEnabled && frame->hw_frames_ctx) {
+                        tempFrame = av_frame_alloc();
+                        if (!tempFrame) continue;
+                        int ret = av_hwframe_transfer_data(tempFrame, frame, 0);
+                        if (ret < 0) {
+                            av_frame_free(&tempFrame);
+                            continue;
+                        }
+                        tempFrame->pts = frame->pts;
+                        tempFrame->best_effort_timestamp = frame->best_effort_timestamp;
+                        swFrame = tempFrame;
+                    }
+
+                    int w = swFrame->width;
+                    int h = swFrame->height;
                     if (w <= 0 || h <= 0) {
+                        if (tempFrame) av_frame_free(&tempFrame);
                         continue;
                     }
 
@@ -177,8 +257,8 @@ namespace ECS {
                             w, h, AV_PIX_FMT_RGBA, SWS_BILINEAR, nullptr, nullptr, nullptr));
                     }
 
-                    int64_t ts = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
-                        ? frame->best_effort_timestamp : frame->pts;
+                    int64_t ts = (swFrame->best_effort_timestamp != AV_NOPTS_VALUE)
+                        ? swFrame->best_effort_timestamp : swFrame->pts;
 
                     double pts;
                     if (ts != AV_NOPTS_VALUE) {
@@ -192,12 +272,16 @@ namespace ECS {
                     out.data.resize(size);
                     uint8_t* dst[1] = { out.data.data() };
                     int linesize[1] = { w * 4 };
-                    sws_scale(videoComp.swsCtx.get(), frame->data, frame->linesize, 0, h, dst, linesize);
+                    sws_scale(videoComp.swsCtx.get(), swFrame->data, swFrame->linesize, 0, h, dst, linesize);
 
                     out.width = w;
                     out.height = h;
                     out.pts = pts;
                     out.frameIndex = static_cast<long long>(pts * fps + 0.5);
+
+                    if (tempFrame) {
+                        av_frame_free(&tempFrame);
+                    }
 
                     produced = true;
                     break;
@@ -296,16 +380,12 @@ namespace ECS {
         const FrameIndexEntry& entry = frameIndex[idx];
         int64_t keyframePts = entry.pts;
 
-        std::cout << "[DecodeFrameAt] seeking to keyframe PTS " << keyframePts << std::endl;
-
         int ret = avformat_seek_file(videoComp.fmtCtx.get(), videoComp.videoStreamIndex,
             INT64_MIN, keyframePts, INT64_MAX, AVSEEK_FLAG_BACKWARD);
         if (ret < 0) {
-            std::cout << "[DecodeFrameAt] avformat_seek_file failed, trying av_seek_frame" << std::endl;
             ret = av_seek_frame(videoComp.fmtCtx.get(), videoComp.videoStreamIndex,
                 keyframePts, AVSEEK_FLAG_BACKWARD);
             if (ret < 0) {
-                std::cout << "[DecodeFrameAt] seek failed" << std::endl;
                 return false;
             }
         }
@@ -322,11 +402,9 @@ namespace ECS {
             }
             if (temp.pts >= targetPtsSeconds - tolerance) {
                 out = std::move(temp);
-                std::cout << "[DecodeFrameAt] success: frame=" << out.frameIndex << " pts=" << out.pts << std::endl;
                 return true;
             }
         }
-        std::cout << "[DecodeFrameAt] failed to reach target PTS " << targetPts << std::endl;
         return false;
     }
 
@@ -376,7 +454,26 @@ namespace ECS {
 
     void VideoPlaybackSystem::VideoTrack::WorkerLoop() {
         std::cout << "[WorkerLoop] Started for entity " << entity << std::endl;
+
+        if (hwAccelEnabled) {
+            if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
+                hwAccelEnabled = false;
+            }
+            else {
+                auto& videoComp = m_mgr.GetComponent<VideoComponent>(entity);
+                if (videoComp.codecCtx) {
+                    InitHWAccel(videoComp.codecCtx.get());
+                }
+            }
+        }
+
         while (m_running.load()) {
+            if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
+                std::cout << "[WorkerLoop] Entity invalid, exiting" << std::endl;
+                m_running.store(false);
+                break;
+            }
+
             std::vector<WorkerCmd> cmds;
             {
                 std::lock_guard<std::mutex> lock(m_cmdMutex);
@@ -506,6 +603,22 @@ namespace ECS {
                 }
 
                 bool isPaused = track.paused || track.reachedEnd || track.stopped;
+
+                if (track.restartPending) {
+                    track.restartPending = false;
+                    track.reachedEnd = false;
+                    track.paused = false;
+                    track.stopped = false;
+                    track.clock.Seek(0.0);
+                    track.clock.Play();
+                    track.RequestSeek(0.0, false);
+                    if (track.hasAudio && m_audioPlayback) {
+                        m_audioPlayback->Seek(entity, 0.0);
+                        m_audioPlayback->Play(entity, true);
+                    }
+                    continue;
+                }
+
                 double masterClockTime;
 
                 if (track.hasAudio && m_audioPlayback) {
@@ -546,6 +659,7 @@ namespace ECS {
                     if (track.seekPending) {
                         track.seekPending = false;
                         track.seeking = false;
+
                         if (track.wasPlayingBeforeSeek) {
                             track.wasPlayingBeforeSeek = false;
                             track.paused = false;
@@ -586,13 +700,7 @@ namespace ECS {
             track.paused = false;
             track.seeking = false;
             track.seekPending = false;
-            track.clock.Seek(0.0);
-            track.clock.Play();
-            track.RequestSeek(0.0, false);
-            if (track.hasAudio && m_audioPlayback) {
-                m_audioPlayback->Seek(entity, 0.0);
-                m_audioPlayback->Play(entity, true);
-            }
+            track.restartPending = true;
         }
         else {
             track.paused = true;
@@ -657,6 +765,7 @@ namespace ECS {
                 track.seeking = false;
                 track.seekPending = false;
                 track.firstFrameAfterSeek = true;
+                track.wasPlayingBeforeSeek = true;
                 track.loop = loop;
                 track.clock.Seek(0.0);
                 track.clock.Play();
@@ -696,12 +805,13 @@ namespace ECS {
         track->reachedEnd = false;
         track->seeking = false;
         track->seekPending = false;
-        track->firstFrameAfterSeek = false;
+        track->firstFrameAfterSeek = true;
+        track->wasPlayingBeforeSeek = true;
         track->pendingSeekTimeStore = -1.0;
+        track->restartPending = false;
         track->clock.Reset(startTime);
         track->clock.Play();
         track->StartThread();
-        track->RequestSeek(startTime, false);
 
         if (hasAudio && m_audioPlayback) {
             m_audioPlayback->Seek(entity, startTime);
@@ -757,6 +867,7 @@ namespace ECS {
         track.reachedEnd = false;
         track.seeking = false;
         track.seekPending = false;
+        track.restartPending = false;
         track.clock.Seek(0.0);
         track.clock.Pause();
         track.RequestStop();
@@ -815,8 +926,9 @@ namespace ECS {
             track.seekPending = true;
             track.pendingSeekTime = time;
             track.ClearBuffer();
+            track.restartPending = false;
 
-            track.RequestSeek(time, true);
+            track.RequestSeek(time, !wasPlaying);
         }
         else {
             bool hasAudio = mgr.HasComponent<AudioComponent>(entity);
@@ -827,7 +939,9 @@ namespace ECS {
             track->seeking = false;
             track->seekPending = false;
             track->firstFrameAfterSeek = false;
+            track->wasPlayingBeforeSeek = false;
             track->pendingSeekTimeStore = -1.0;
+            track->restartPending = false;
             track->clock.Reset(time);
             track->StartThread();
             track->RequestSeek(time, true);

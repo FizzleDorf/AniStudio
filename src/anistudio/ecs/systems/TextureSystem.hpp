@@ -3,6 +3,8 @@
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
 #include "ImageComponent.hpp"
+#include "TextureComponent.hpp"
+#include "VideoSystem.hpp"
 #include "ImageUtils.hpp"
 #include "OpenGLUtils.hpp"
 #include "DragDropUtils.hpp"
@@ -12,6 +14,7 @@
 #include <queue>
 #include <mutex>
 #include <functional>
+#include <cstdlib>
 
 namespace ECS {
 
@@ -33,18 +36,30 @@ namespace ECS {
             : BaseSystem(entityMgr), m_needsTextureCreation(false) {
             sysName = "TextureSystem";
             AddComponentSignature<ImageComponent>();
+            AddComponentSignature<TextureComponent>();
         }
 
         ~TextureSystem() override {
             for (auto entity : entities) {
                 if (mgr.HasComponent<ImageComponent>(entity)) {
-                    auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-                    DeleteTexture(imageComp);
+                    auto& imgComp = mgr.GetComponent<ImageComponent>(entity);
+                    DeleteTexture(imgComp);
+                }
+                if (mgr.HasComponent<TextureComponent>(entity)) {
+                    auto& texComp = mgr.GetComponent<TextureComponent>(entity);
+                    DeleteTexture(texComp);
                 }
             }
         }
 
-        void Start() override {}
+        void Start() override {
+            auto videoSystem = mgr.GetSystem<VideoSystem>();
+            if (videoSystem) {
+                videoSystem->RegisterVideoRemovedCallback([this](EntityID entity) {
+                    RemoveTexture(entity);
+                    });
+            }
+        }
 
         void Update(const float deltaT) override {
             CreatePendingTextures();
@@ -78,6 +93,36 @@ namespace ECS {
             m_needsTextureCreation = true;
         }
 
+        void CancelPendingRequests(EntityID entityID) {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            std::queue<TextureCreationRequest> newQueue;
+            while (!textureQueue.empty()) {
+                auto request = textureQueue.front();
+                textureQueue.pop();
+                if (request.entityID == entityID) {
+                    if (request.isVideo) {
+                        if (request.targetTexture && *request.targetTexture != 0) {
+                            glDeleteTextures(1, request.targetTexture);
+                            *request.targetTexture = 0;
+                        }
+                        if (request.imageData) {
+                            free(request.imageData);
+                        }
+                    }
+                    else {
+                        if (request.imageData) {
+                            Utils::ImageUtils::FreeImageData(request.imageData);
+                        }
+                    }
+                }
+                else {
+                    newQueue.push(request);
+                }
+            }
+            textureQueue.swap(newQueue);
+            m_needsTextureCreation = !textureQueue.empty();
+        }
+
         void CreatePendingTextures() {
             std::lock_guard<std::mutex> lock(queueMutex);
 
@@ -109,14 +154,28 @@ namespace ECS {
                 textureQueue.pop();
 
                 if (!mgr.IsEntityValid(request.entityID)) {
-                    if (request.imageData && !request.isVideo) {
-                        Utils::ImageUtils::FreeImageData(request.imageData);
+                    if (request.isVideo) {
+                        if (request.targetTexture && *request.targetTexture != 0) {
+                            glDeleteTextures(1, request.targetTexture);
+                            *request.targetTexture = 0;
+                        }
+                        if (request.imageData) {
+                            free(request.imageData);
+                        }
+                    }
+                    else {
+                        if (request.imageData) {
+                            Utils::ImageUtils::FreeImageData(request.imageData);
+                        }
                     }
                     continue;
                 }
 
                 if (request.isVideo) {
                     if (!request.targetTexture) {
+                        if (request.imageData) {
+                            free(request.imageData);
+                        }
                         continue;
                     }
                     if (*request.targetTexture != 0) {
@@ -129,6 +188,9 @@ namespace ECS {
                     if (texID != 0) {
                         *request.targetTexture = texID;
                     }
+                    if (request.imageData) {
+                        free(request.imageData);
+                    }
                 }
                 else {
                     if (!mgr.HasComponent<ImageComponent>(request.entityID)) {
@@ -137,17 +199,20 @@ namespace ECS {
                         }
                         continue;
                     }
-                    auto& imageComp = mgr.GetComponent<ImageComponent>(request.entityID);
-                    if (imageComp.textureID != 0) {
-                        DeleteTexture(imageComp);
+                    auto& imgComp = mgr.GetComponent<ImageComponent>(request.entityID);
+                    if (imgComp.textureID != 0) {
+                        DeleteTexture(imgComp);
                     }
-                    imageComp.textureID = Utils::OpenGLUtils::GenerateTexture(
+                    imgComp.textureID = Utils::OpenGLUtils::GenerateTexture(
                         request.width, request.height, request.channels, request.imageData
                     );
-                    if (imageComp.textureID != 0) {
-                        imageComp.width = request.width;
-                        imageComp.height = request.height;
-                        imageComp.channels = request.channels;
+                    if (imgComp.textureID != 0) {
+                        imgComp.width = request.width;
+                        imgComp.height = request.height;
+                        imgComp.channels = request.channels;
+                    }
+                    if (request.imageData) {
+                        Utils::ImageUtils::FreeImageData(request.imageData);
                     }
                 }
             }
@@ -156,24 +221,29 @@ namespace ECS {
 
         void RemoveTexture(EntityID entityID) {
             if (mgr.HasComponent<ImageComponent>(entityID)) {
-                auto& imageComp = mgr.GetComponent<ImageComponent>(entityID);
-                DeleteTexture(imageComp);
+                auto& imgComp = mgr.GetComponent<ImageComponent>(entityID);
+                DeleteTexture(imgComp);
             }
+            if (mgr.HasComponent<TextureComponent>(entityID)) {
+                auto& texComp = mgr.GetComponent<TextureComponent>(entityID);
+                DeleteTexture(texComp);
+            }
+            CancelPendingRequests(entityID);
         }
 
         GLuint GetTextureID(EntityID entityID) const {
             if (mgr.HasComponent<ImageComponent>(entityID)) {
                 return mgr.GetComponent<ImageComponent>(entityID).textureID;
             }
+            if (mgr.HasComponent<TextureComponent>(entityID)) {
+                return mgr.GetComponent<TextureComponent>(entityID).textureID;
+            }
             return 0;
         }
 
         bool HasValidTexture(EntityID entityID) const {
-            if (mgr.HasComponent<ImageComponent>(entityID)) {
-                GLuint textureID = mgr.GetComponent<ImageComponent>(entityID).textureID;
-                return textureID != 0 && glIsTexture(textureID);
-            }
-            return false;
+            GLuint texID = GetTextureID(entityID);
+            return texID != 0 && glIsTexture(texID);
         }
 
         bool HasPendingTextures() const { return m_needsTextureCreation; }
@@ -197,16 +267,30 @@ namespace ECS {
         bool m_needsTextureCreation;
         VideoTextureCallback m_videoTextureCallback;
 
-        void DeleteTexture(ImageComponent& imageComp) {
-            if (imageComp.textureID != 0) {
+        void DeleteTexture(ImageComponent& imgComp) {
+            if (imgComp.textureID != 0) {
                 GLFWwindow* currentContext = glfwGetCurrentContext();
                 if (currentContext) {
-                    Utils::OpenGLUtils::DeleteTexture(imageComp.textureID);
+                    Utils::OpenGLUtils::DeleteTexture(imgComp.textureID);
                 }
-                imageComp.textureID = 0;
-                imageComp.width = 0;
-                imageComp.height = 0;
-                imageComp.channels = 0;
+                imgComp.textureID = 0;
+                imgComp.width = 0;
+                imgComp.height = 0;
+                imgComp.channels = 0;
+            }
+        }
+
+        void DeleteTexture(TextureComponent& texComp) {
+            if (texComp.textureID != 0) {
+                GLFWwindow* currentContext = glfwGetCurrentContext();
+                if (currentContext) {
+                    Utils::OpenGLUtils::DeleteTexture(texComp.textureID);
+                }
+                texComp.textureID = 0;
+                texComp.width = 0;
+                texComp.height = 0;
+                texComp.channels = 0;
+                texComp.needsUpdate = false;
             }
         }
     };

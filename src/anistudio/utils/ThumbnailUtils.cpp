@@ -1,6 +1,6 @@
-// ThumbnailUtils.cpp
 #include "ThumbnailUtils.hpp"
 #include "DragDropUtils.hpp"
+#include "TextureComponent.hpp"
 #include <imgui.h>
 #include <chrono>
 #include <iomanip>
@@ -85,6 +85,13 @@ namespace GUI {
             return aud != nullptr && !aud->pcmData.empty();
         }
 
+        static GLuint GetVideoTextureID(ECS::EntityManager* entityManager, ECS::EntityID entityID) {
+            if (!entityManager) return 0;
+            if (!entityManager->IsEntityValid(entityID)) return 0;
+            if (!entityManager->HasComponent<ECS::TextureComponent>(entityID)) return 0;
+            return entityManager->GetComponent<ECS::TextureComponent>(entityID).textureID;
+        }
+
         void BeginListMode(float thumbnailSize) {
             if (s_listTableOpen) return;
 
@@ -139,7 +146,8 @@ namespace GUI {
             std::function<void(ECS::EntityID)> onSelect,
             Utils::ContextMenuUtils* contextMenuUtils,
             bool isEntityLoaded,
-            ECS::EntityID activeEntityID
+            ECS::EntityID activeEntityID,
+            ECS::EntityManager* entityManager
         ) {
             if (!s_listTableOpen) return;
 
@@ -199,7 +207,7 @@ namespace GUI {
                 filePath = vid->filePath;
                 fileName = vid->fileName;
                 entityID = vid->GetID();
-                textureID = vid->currentTexture;
+                textureID = GetVideoTextureID(entityManager, entityID);
                 width = vid->width;
                 height = vid->height;
                 channels = 4;
@@ -468,7 +476,8 @@ namespace GUI {
             std::function<void(ECS::EntityID)> onSelect,
             Utils::ContextMenuUtils* contextMenuUtils,
             bool isEntityLoaded,
-            ECS::EntityID activeEntityID
+            ECS::EntityID activeEntityID,
+            ECS::EntityManager* entityManager
         ) {
             const ECS::ImageComponent* img = nullptr;
             const ECS::VideoComponent* vid = nullptr;
@@ -526,7 +535,7 @@ namespace GUI {
                 filePath = vid->filePath;
                 fileName = vid->fileName;
                 entityID = vid->GetID();
-                textureID = vid->currentTexture;
+                textureID = GetVideoTextureID(entityManager, entityID);
                 width = vid->width;
                 height = vid->height;
                 channels = 4;

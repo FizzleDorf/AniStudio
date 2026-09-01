@@ -1,4 +1,3 @@
-// ThumbnailUtils.hpp
 #pragma once
 
 #include <string>
@@ -38,7 +37,8 @@ namespace GUI {
             std::function<void(ECS::EntityID)> onSelect,
             Utils::ContextMenuUtils* contextMenuUtils,
             bool isEntityLoaded,
-            ECS::EntityID activeEntityID = 0
+            ECS::EntityID activeEntityID = 0,
+            ECS::EntityManager* entityManager = nullptr
         );
 
         void BeginListMode(float thumbnailSize);
@@ -50,7 +50,8 @@ namespace GUI {
             std::function<void(ECS::EntityID)> onSelect,
             Utils::ContextMenuUtils* contextMenuUtils,
             bool isEntityLoaded,
-            ECS::EntityID activeEntityID = 0
+            ECS::EntityID activeEntityID = 0,
+            ECS::EntityManager* entityManager = nullptr
         );
 
     }

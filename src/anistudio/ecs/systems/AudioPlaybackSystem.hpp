@@ -10,6 +10,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <vector>
 
 namespace ECS {
 
@@ -46,7 +47,7 @@ namespace ECS {
     private:
         struct AudioTrackState {
             EntityID entity = 0;
-            const float* pcmData = nullptr;
+            std::vector<float> pcmData;
             size_t totalSamples = 0;
             int channels = 0;
             int sampleRate = 0;

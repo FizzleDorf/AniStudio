@@ -375,6 +375,7 @@ namespace ANI {
             entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
             entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
             entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
+            entityMgr.RegisterComponent<ECS::TextureComponent>("TextureComponent");
 
             entityMgr.RegisterSystem<TextureSystem>();
             entityMgr.RegisterSystem<ECS::SettingsSystem>();

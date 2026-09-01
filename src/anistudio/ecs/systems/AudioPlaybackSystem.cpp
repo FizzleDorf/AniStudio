@@ -36,15 +36,22 @@ namespace ECS {
     }
 
     void AudioPlaybackSystem::Update(float deltaT) {
-        // Track state updates are handled in the audio callback
     }
 
     void AudioPlaybackSystem::Destroy() {
         m_destroying = true;
-        CloseStream();
 
-        std::lock_guard<std::mutex> lock(m_trackMutex);
-        m_tracks.clear();
+        {
+            std::lock_guard<std::mutex> lock(m_trackMutex);
+            m_tracks.clear();
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_streamState->mutex);
+            m_streamState->tracks.clear();
+        }
+
+        CloseStream();
     }
 
     bool AudioPlaybackSystem::OpenStream() {
@@ -124,7 +131,7 @@ namespace ECS {
         for (auto& pair : state->tracks) {
             AudioTrackState& track = pair.second;
 
-            if (track.stopped || track.paused || !track.pcmData) {
+            if (track.stopped || track.paused || track.pcmData.empty()) {
                 continue;
             }
 
@@ -140,31 +147,61 @@ namespace ECS {
                 }
             }
 
-            size_t framesToRead = std::min<size_t>(framesPerBuffer, availableSamples / track.channels);
-            size_t samplesToRead = framesToRead * track.channels;
-            size_t readPos = track.readPosition;
-
-            const float* src = track.pcmData + readPos;
-            float* dst = out;
-
-            float vol = track.volume;
+            float speed = track.speed;
             int channels = track.channels;
+            float vol = track.volume;
 
-            if (channels == 2) {
-                for (size_t i = 0; i < samplesToRead; i += 2) {
-                    dst[i] += src[i] * vol;
-                    dst[i + 1] += src[i + 1] * vol;
+            if (speed <= 0.0f) speed = 1.0f;
+
+            size_t samplesToOutput = framesPerBuffer * channels;
+            size_t outputIdx = 0;
+
+            if (speed == 1.0f) {
+                size_t samplesToRead = std::min(samplesToOutput, availableSamples);
+                const float* src = track.pcmData.data() + track.readPosition;
+
+                if (channels == 2) {
+                    for (size_t i = 0; i < samplesToRead; i += 2) {
+                        out[i] += src[i] * vol;
+                        out[i + 1] += src[i + 1] * vol;
+                    }
                 }
+                else {
+                    for (size_t i = 0; i < samplesToRead; ++i) {
+                        float sample = src[i] * vol;
+                        out[i * 2] += sample;
+                        out[i * 2 + 1] += sample;
+                    }
+                }
+                track.readPosition += samplesToRead;
             }
             else {
-                for (size_t i = 0; i < samplesToRead; ++i) {
-                    float sample = src[i] * vol;
-                    dst[i * 2] += sample;
-                    dst[i * 2 + 1] += sample;
+                double srcPos = static_cast<double>(track.readPosition);
+                double speedFactor = static_cast<double>(speed);
+                size_t maxSrcIdx = track.totalSamples - 1;
+
+                while (outputIdx < samplesToOutput && srcPos < track.totalSamples) {
+                    size_t idx0 = static_cast<size_t>(srcPos);
+                    size_t idx1 = (idx0 + 1 < track.totalSamples) ? idx0 + 1 : idx0;
+                    float frac = static_cast<float>(srcPos - idx0);
+                    float sample = (track.pcmData[idx0] * (1.0f - frac) + track.pcmData[idx1] * frac) * vol;
+
+                    if (channels == 2) {
+                        out[outputIdx] += sample;
+                        if (outputIdx + 1 < samplesToOutput) out[outputIdx + 1] += sample;
+                    }
+                    else {
+                        out[outputIdx] += sample;
+                        if (outputIdx + 1 < samplesToOutput) out[outputIdx + 1] += sample;
+                    }
+
+                    outputIdx += channels;
+                    srcPos += speedFactor;
                 }
+
+                track.readPosition = static_cast<size_t>(srcPos);
             }
 
-            track.readPosition += samplesToRead;
             track.streamTime = static_cast<double>(track.readPosition) /
                 (track.sampleRate * track.channels);
             track.lastPaTime = timeInfo->outputBufferDacTime;
@@ -205,16 +242,23 @@ namespace ECS {
                 if (!it->second.paused) {
                     return;
                 }
+                it->second.pcmData = audioComp.pcmData;
+                it->second.totalSamples = audioComp.pcmData.size();
+                it->second.channels = audioComp.channels;
+                it->second.sampleRate = audioComp.sampleRate;
+                it->second.duration = audioComp.duration;
                 it->second.paused = false;
                 it->second.stopped = false;
                 it->second.endReached = false;
                 it->second.loop = loop;
+                it->second.volume = audioComp.volume;
+                it->second.speed = audioComp.playbackSpeed > 0.0f ? audioComp.playbackSpeed : 1.0f;
                 it->second.streamTime = it->second.readPosition / (it->second.sampleRate * it->second.channels);
             }
             else {
                 AudioTrackState track;
                 track.entity = entity;
-                track.pcmData = audioComp.pcmData.data();
+                track.pcmData = audioComp.pcmData;
                 track.totalSamples = audioComp.pcmData.size();
                 track.channels = audioComp.channels;
                 track.sampleRate = audioComp.sampleRate;
@@ -225,7 +269,7 @@ namespace ECS {
                 track.loop = loop;
                 track.endReached = false;
                 track.volume = audioComp.volume;
-                track.speed = 1.0f;
+                track.speed = audioComp.playbackSpeed > 0.0f ? audioComp.playbackSpeed : 1.0f;
                 track.streamTime = 0.0;
                 track.lastPaTime = 0.0;
 
@@ -350,6 +394,9 @@ namespace ECS {
         auto it = m_tracks.find(entity);
         if (it != m_tracks.end()) {
             it->second.speed = speed;
+            if (mgr.IsEntityValid(entity) && mgr.HasComponent<AudioComponent>(entity)) {
+                mgr.GetComponent<AudioComponent>(entity).playbackSpeed = speed;
+            }
             {
                 std::lock_guard<std::mutex> streamLock(m_streamState->mutex);
                 auto streamIt = m_streamState->tracks.find(entity);

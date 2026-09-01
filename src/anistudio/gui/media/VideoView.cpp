@@ -1,5 +1,6 @@
 #include "VideoView.hpp"
 #include "TextureSystem.hpp"
+#include "TextureComponent.hpp"
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
 #include "Events.hpp"
@@ -59,7 +60,6 @@ namespace GUI {
             playbackSystem->RegisterVideoPlaybackCallback([this](ECS::EntityID entity, const unsigned char* data, int width, int height) {
                 if (entity != selectedEntityID) return;
                 if (!m_entityManager.IsEntityValid(entity) || !m_entityManager.HasComponent<ECS::VideoComponent>(entity)) return;
-
                 (void)data;
                 (void)width;
                 (void)height;
@@ -176,7 +176,10 @@ namespace GUI {
                 if (textureSystem) {
                     std::shared_lock lock(videoComp.dataMutex);
                     if (!videoComp.frameDataRGBA.empty()) {
-                        // Always queue a new texture – the texture system will delete the old one
+                        if (!m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
+                            m_entityManager.AddComponent<ECS::TextureComponent>(selectedEntityID);
+                        }
+                        auto& texComp = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID);
                         unsigned char* copyData = (unsigned char*)malloc(videoComp.frameDataRGBA.size());
                         if (copyData) {
                             memcpy(copyData, videoComp.frameDataRGBA.data(), videoComp.frameDataRGBA.size());
@@ -186,7 +189,7 @@ namespace GUI {
                                 videoComp.width,
                                 videoComp.height,
                                 4,
-                                &videoComp.currentTexture
+                                &texComp.textureID
                             );
                         }
                         videoComp.needsTextureUpdate = false;
@@ -717,8 +720,11 @@ namespace GUI {
 
         try {
             auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            GLuint texID = 0;
+            if (m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
+                texID = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID).textureID;
+            }
 
-            GLuint texID = videoComp.currentTexture;
             if (texID == 0 || !glIsTexture(texID) || videoComp.width <= 0 || videoComp.height <= 0) {
                 ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
                     texID, videoComp.width, videoComp.height);

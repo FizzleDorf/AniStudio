@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdint>
 #include <atomic>
+#include <shared_mutex>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -18,6 +19,8 @@ extern "C" {
 namespace ECS {
 
     struct AudioComponent : BaseComponent {
+        mutable std::shared_mutex dataMutex;
+
         AudioComponent() : BaseComponent() {
             compName = "AudioComponent";
             compCategory = "Media";
@@ -34,6 +37,7 @@ namespace ECS {
             , totalSamples(other.totalSamples)
             , pcmData(other.pcmData)
             , volume(other.volume)
+            , playbackSpeed(other.playbackSpeed)
             , looping(other.looping)
             , reachedEnd(other.reachedEnd)
             , currentTime(other.currentTime)
@@ -61,6 +65,7 @@ namespace ECS {
                 totalSamples = other.totalSamples;
                 pcmData = other.pcmData;
                 volume = other.volume;
+                playbackSpeed = other.playbackSpeed;
                 looping = other.looping;
                 reachedEnd = other.reachedEnd;
                 currentTime = other.currentTime;
@@ -80,6 +85,7 @@ namespace ECS {
         }
 
         void UnloadAudio() {
+            std::unique_lock lock(dataMutex);
             if (swrCtx) {
                 swr_free(&swrCtx);
                 swrCtx = nullptr;
@@ -105,6 +111,15 @@ namespace ECS {
             isLoading = false;
         }
 
+        void UpdatePCMData(std::vector<float>&& data, int ch, int sr, double dur) {
+            std::unique_lock lock(dataMutex);
+            pcmData = std::move(data);
+            channels = ch;
+            sampleRate = sr;
+            duration = dur;
+            totalSamples = pcmData.size();
+        }
+
         virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             std::unordered_map<std::string, UISchema::PropertyVariant> properties;
             properties["filePath"] = &filePath;
@@ -113,6 +128,7 @@ namespace ECS {
             properties["channels"] = &channels;
             properties["sampleRate"] = &sampleRate;
             properties["volume"] = &volume;
+            properties["playbackSpeed"] = &playbackSpeed;
             properties["looping"] = &looping;
             properties["currentTime"] = &currentTime;
             properties["hasExifData"] = &hasExifData;
@@ -132,6 +148,7 @@ namespace ECS {
                 {"channels", channels},
                 {"sampleRate", sampleRate},
                 {"volume", volume},
+                {"playbackSpeed", playbackSpeed},
                 {"looping", looping},
                 {"currentTime", currentTime},
                 {"hasExifData", hasExifData},
@@ -156,6 +173,7 @@ namespace ECS {
             if (componentData.contains("channels")) channels = componentData["channels"];
             if (componentData.contains("sampleRate")) sampleRate = componentData["sampleRate"];
             if (componentData.contains("volume")) volume = componentData["volume"];
+            if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
             if (componentData.contains("looping")) looping = componentData["looping"];
             if (componentData.contains("currentTime")) currentTime = componentData["currentTime"];
             if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
@@ -182,6 +200,7 @@ namespace ECS {
         int audioStreamIndex = -1;
 
         float volume = 1.0f;
+        float playbackSpeed = 1.0f;
         bool looping = false;
         bool reachedEnd = false;
         double currentTime = 0.0;
@@ -209,6 +228,7 @@ namespace ECS {
                     {"channels", {{"type", "integer"}, {"title", "Channels"}}},
                     {"sampleRate", {{"type", "integer"}, {"title", "Sample Rate (Hz)"}}},
                     {"volume", {{"type", "number"}, {"title", "Volume"}, {"minimum", 0.0}, {"maximum", 1.0}}},
+                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}, {"minimum", 0.1}, {"maximum", 4.0}}},
                     {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
                     {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
                     {"hasExifData", {{"type", "boolean"}, {"title", "Has EXIF Metadata"}}},

@@ -21,6 +21,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/hwcontext.h>
 }
 
 namespace ECS {
@@ -123,6 +124,9 @@ namespace ECS {
             std::vector<FrameIndexEntry> frameIndex;
             AVRational streamTimeBase;
             int64_t lastKeyframePts = 0;
+            bool restartPending = false;
+            bool hwAccelEnabled = false;
+            AVBufferRef* hwDeviceCtx = nullptr;
 
             class Clock {
             public:
@@ -146,6 +150,7 @@ namespace ECS {
 
             void WorkerLoop();
             void PerformSeek(double time);
+            bool InitHWAccel(AVCodecContext* codecCtx);
 
             VideoPlaybackSystem* m_owner;
             EntityManager& m_mgr;
@@ -176,6 +181,8 @@ namespace ECS {
         void NotifyPlaybackEnd(EntityID entity);
         void RemoveTrack(EntityID entity);
         void HandleEndOfStream(EntityID entity, VideoTrack& track);
+
+        static const std::vector<std::string> s_hwAccelDevices;
     };
 
 }
