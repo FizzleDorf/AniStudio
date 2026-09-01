@@ -110,7 +110,181 @@ namespace ECS {
         audioComp.fileName = (lastSlash != std::string::npos) ? filePath.substr(lastSlash + 1) : filePath;
 
         entities.insert(entity);
+        audioComp.isLoading = true;
         LoadAudioAsync(entity, filePath);
+    }
+
+    void AudioSystem::AddLoadedAudio(EntityID entity) {
+        if (mgr.IsEntityValid(entity) && mgr.HasComponent<AudioComponent>(entity)) {
+            entities.insert(entity);
+            auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
+            if (!audioComp.pcmData.empty()) {
+                NotifyAudioAdded(entity);
+                NotifyAudioData(entity, audioComp.pcmData.data(),
+                    audioComp.pcmData.size(), audioComp.channels, audioComp.sampleRate);
+            }
+        }
+    }
+
+    AudioSystem::LoadResult AudioSystem::ExtractAudioFromVideoFile(const std::string& filePath, EntityID entity) {
+        LoadResult result;
+        result.filePath = filePath;
+        result.entityID = entity;
+        size_t lastSlash = filePath.find_last_of("/\\");
+        result.fileName = (lastSlash != std::string::npos) ? filePath.substr(lastSlash + 1) + "_audio" : "audio";
+
+        int targetRate = 44100;
+        int targetChannels = 2;
+
+        AVFormatContext* fmtCtx = nullptr;
+        if (avformat_open_input(&fmtCtx, filePath.c_str(), nullptr, nullptr) < 0) {
+            return result;
+        }
+        if (avformat_find_stream_info(fmtCtx, nullptr) < 0) {
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        int audioStream = -1;
+        for (unsigned i = 0; i < fmtCtx->nb_streams; ++i) {
+            if (fmtCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+                audioStream = i;
+                break;
+            }
+        }
+        if (audioStream == -1) {
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        AVCodecParameters* codecPar = fmtCtx->streams[audioStream]->codecpar;
+        const AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
+        if (!codec) {
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        AVCodecContext* codecCtx = avcodec_alloc_context3(codec);
+        if (!codecCtx) {
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+        if (avcodec_parameters_to_context(codecCtx, codecPar) < 0) {
+            avcodec_free_context(&codecCtx);
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+        if (avcodec_open2(codecCtx, codec, nullptr) < 0) {
+            avcodec_free_context(&codecCtx);
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        AVChannelLayout srcLayout, dstLayout;
+        if (!av_channel_layout_check(&codecCtx->ch_layout)) {
+            if (av_channel_layout_check(&codecPar->ch_layout))
+                av_channel_layout_copy(&codecCtx->ch_layout, &codecPar->ch_layout);
+            else if (codecPar->ch_layout.nb_channels > 0)
+                av_channel_layout_default(&codecCtx->ch_layout, codecPar->ch_layout.nb_channels);
+            else
+                av_channel_layout_default(&codecCtx->ch_layout, 2);
+        }
+        av_channel_layout_copy(&srcLayout, &codecCtx->ch_layout);
+        av_channel_layout_default(&dstLayout, targetChannels);
+
+        SwrContext* swrCtx = swr_alloc();
+        if (!swrCtx) {
+            avcodec_free_context(&codecCtx);
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        av_opt_set_chlayout(swrCtx, "in_chlayout", &srcLayout, 0);
+        av_opt_set_chlayout(swrCtx, "out_chlayout", &dstLayout, 0);
+        av_opt_set_int(swrCtx, "in_sample_rate", codecCtx->sample_rate, 0);
+        av_opt_set_int(swrCtx, "out_sample_rate", targetRate, 0);
+        av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", codecCtx->sample_fmt, 0);
+        av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
+
+        if (swr_init(swrCtx) < 0) {
+            swr_free(&swrCtx);
+            avcodec_free_context(&codecCtx);
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        int dstCh = dstLayout.nb_channels;
+        std::vector<float> allPcm;
+
+        AVFrame* frame = av_frame_alloc();
+        AVPacket* pkt = av_packet_alloc();
+        if (!frame || !pkt) {
+            av_packet_free(&pkt);
+            av_frame_free(&frame);
+            swr_free(&swrCtx);
+            avcodec_free_context(&codecCtx);
+            avformat_close_input(&fmtCtx);
+            return result;
+        }
+
+        while (av_read_frame(fmtCtx, pkt) >= 0) {
+            if (pkt->stream_index != audioStream) {
+                av_packet_unref(pkt);
+                continue;
+            }
+            if (avcodec_send_packet(codecCtx, pkt) == 0) {
+                while (avcodec_receive_frame(codecCtx, frame) == 0) {
+                    int numSamples = frame->nb_samples;
+                    if (numSamples > 0) {
+                        int maxOut = numSamples * 2;
+                        uint8_t* outBuf = (uint8_t*)av_malloc(maxOut * dstCh * sizeof(float));
+                        if (outBuf) {
+                            int conv = swr_convert(swrCtx, &outBuf, maxOut,
+                                (const uint8_t**)frame->data, frame->nb_samples);
+                            if (conv > 0) {
+                                float* fdata = (float*)outBuf;
+                                size_t oldSize = allPcm.size();
+                                allPcm.resize(oldSize + conv * dstCh);
+                                std::memcpy(allPcm.data() + oldSize, fdata, conv * dstCh * sizeof(float));
+                            }
+                            av_free(outBuf);
+                        }
+                    }
+                    av_frame_unref(frame);
+                }
+            }
+            av_packet_unref(pkt);
+        }
+
+        int maxOut = 8192;
+        uint8_t* flushBuf = (uint8_t*)av_malloc(maxOut * dstCh * sizeof(float));
+        if (flushBuf) {
+            int conv = swr_convert(swrCtx, &flushBuf, maxOut, nullptr, 0);
+            if (conv > 0) {
+                float* fdata = (float*)flushBuf;
+                size_t oldSize = allPcm.size();
+                allPcm.resize(oldSize + conv * dstCh);
+                std::memcpy(allPcm.data() + oldSize, fdata, conv * dstCh * sizeof(float));
+            }
+            av_free(flushBuf);
+        }
+
+        av_packet_free(&pkt);
+        av_frame_free(&frame);
+        swr_free(&swrCtx);
+        avcodec_free_context(&codecCtx);
+        avformat_close_input(&fmtCtx);
+
+        if (allPcm.empty()) return result;
+
+        result.success = true;
+        result.pcmData = std::move(allPcm);
+        result.channels = dstCh;
+        result.sampleRate = targetRate;
+        result.totalSamples = result.pcmData.size() / dstCh;
+        result.duration = static_cast<double>(result.totalSamples) / targetRate;
+
+        return result;
     }
 
     void AudioSystem::RemoveAudio(EntityID entity) {
@@ -119,7 +293,6 @@ namespace ECS {
         }
 
         auto& audioComp = mgr.GetComponent<AudioComponent>(entity);
-        audioComp.isPlaying = false;
         audioComp.UnloadAudio();
 
         entities.erase(entity);
@@ -228,8 +401,17 @@ namespace ECS {
             return result;
         }
 
-        if (codecCtx->channels == 0 && codecPar->channels > 0) {
-            codecCtx->channels = codecPar->channels;
+        if (!av_channel_layout_check(&codecCtx->ch_layout) && av_channel_layout_check(&codecPar->ch_layout)) {
+            av_channel_layout_copy(&codecCtx->ch_layout, &codecPar->ch_layout);
+        }
+        if (!av_channel_layout_check(&codecCtx->ch_layout) && codecPar->ch_layout.nb_channels > 0) {
+            av_channel_layout_default(&codecCtx->ch_layout, codecPar->ch_layout.nb_channels);
+        }
+        int srcChannels = codecCtx->ch_layout.nb_channels;
+        if (srcChannels == 0) {
+            srcChannels = codecPar->ch_layout.nb_channels;
+            if (srcChannels == 0) srcChannels = 2;
+            av_channel_layout_default(&codecCtx->ch_layout, srcChannels);
         }
 
         if (avcodec_open2(codecCtx, codec, nullptr) < 0) {
@@ -248,10 +430,6 @@ namespace ECS {
             return result;
         }
 
-        std::cout << "[AudioSystem] Source: " << codecCtx->sample_rate << "Hz, "
-            << codecCtx->channels << "ch, target: " << targetSampleRate << "Hz, "
-            << targetChannels << "ch" << std::endl;
-
         SwrContext* swrCtx = swr_alloc();
         if (!swrCtx) {
             av_frame_free(&frame);
@@ -261,15 +439,13 @@ namespace ECS {
             return result;
         }
 
-        uint64_t sourceChannelLayout = codecCtx->channel_layout;
-        if (sourceChannelLayout == 0 && codecCtx->channels > 0) {
-            sourceChannelLayout = av_get_default_channel_layout(codecCtx->channels);
-        }
+        AVChannelLayout inLayout;
+        av_channel_layout_copy(&inLayout, &codecCtx->ch_layout);
+        AVChannelLayout outLayout;
+        av_channel_layout_default(&outLayout, targetChannels);
 
-        uint64_t targetChannelLayout = (targetChannels == 2) ? AV_CH_LAYOUT_STEREO : AV_CH_LAYOUT_MONO;
-
-        av_opt_set_int(swrCtx, "in_channel_layout", sourceChannelLayout, 0);
-        av_opt_set_int(swrCtx, "out_channel_layout", targetChannelLayout, 0);
+        av_opt_set_chlayout(swrCtx, "in_chlayout", &inLayout, 0);
+        av_opt_set_chlayout(swrCtx, "out_chlayout", &outLayout, 0);
         av_opt_set_int(swrCtx, "in_sample_rate", codecCtx->sample_rate, 0);
         av_opt_set_int(swrCtx, "out_sample_rate", targetSampleRate, 0);
         av_opt_set_sample_fmt(swrCtx, "in_sample_fmt", codecCtx->sample_fmt, 0);
@@ -288,6 +464,8 @@ namespace ECS {
             return result;
         }
 
+        int dstChannels = outLayout.nb_channels;
+
         std::vector<float> allPcmData;
 
         while (av_read_frame(fmtCtx, pkt) >= 0) {
@@ -302,7 +480,7 @@ namespace ECS {
 
                     if (numSamples > 0) {
                         int maxOutSamples = numSamples * 2;
-                        uint8_t* outBuffer = (uint8_t*)av_malloc(maxOutSamples * targetChannels * sizeof(float));
+                        uint8_t* outBuffer = (uint8_t*)av_malloc(maxOutSamples * dstChannels * sizeof(float));
 
                         if (outBuffer) {
                             int convertedSamples = swr_convert(swrCtx, &outBuffer, maxOutSamples,
@@ -310,14 +488,14 @@ namespace ECS {
 
                             if (convertedSamples > 0) {
                                 float* floatData = (float*)outBuffer;
-                                for (int i = 0; i < convertedSamples * targetChannels; ++i) {
+                                for (int i = 0; i < convertedSamples * dstChannels; ++i) {
                                     if (floatData[i] < -1.0f) floatData[i] = -1.0f;
                                     if (floatData[i] > 1.0f) floatData[i] = 1.0f;
                                 }
                                 size_t startIndex = allPcmData.size();
-                                allPcmData.resize(startIndex + convertedSamples * targetChannels);
+                                allPcmData.resize(startIndex + convertedSamples * dstChannels);
                                 std::memcpy(allPcmData.data() + startIndex, floatData,
-                                    convertedSamples * targetChannels * sizeof(float));
+                                    convertedSamples * dstChannels * sizeof(float));
                             }
 
                             av_free(outBuffer);
@@ -329,19 +507,19 @@ namespace ECS {
         }
 
         int maxOutSamples = 8192;
-        uint8_t* flushBuffer = (uint8_t*)av_malloc(maxOutSamples * targetChannels * sizeof(float));
+        uint8_t* flushBuffer = (uint8_t*)av_malloc(maxOutSamples * dstChannels * sizeof(float));
         if (flushBuffer) {
             int flushSamples = swr_convert(swrCtx, &flushBuffer, maxOutSamples, nullptr, 0);
             if (flushSamples > 0) {
                 float* floatData = (float*)flushBuffer;
-                for (int i = 0; i < flushSamples * targetChannels; ++i) {
+                for (int i = 0; i < flushSamples * dstChannels; ++i) {
                     if (floatData[i] < -1.0f) floatData[i] = -1.0f;
                     if (floatData[i] > 1.0f) floatData[i] = 1.0f;
                 }
                 size_t startIndex = allPcmData.size();
-                allPcmData.resize(startIndex + flushSamples * targetChannels);
+                allPcmData.resize(startIndex + flushSamples * dstChannels);
                 std::memcpy(allPcmData.data() + startIndex, floatData,
-                    flushSamples * targetChannels * sizeof(float));
+                    flushSamples * dstChannels * sizeof(float));
             }
             av_free(flushBuffer);
         }
@@ -359,9 +537,9 @@ namespace ECS {
 
         result.success = true;
         result.pcmData = std::move(allPcmData);
-        result.channels = targetChannels;
+        result.channels = dstChannels;
         result.sampleRate = targetSampleRate;
-        result.totalSamples = result.pcmData.size() / targetChannels;
+        result.totalSamples = result.pcmData.size() / dstChannels;
         result.duration = static_cast<double>(result.totalSamples) / targetSampleRate;
 
         try {
@@ -402,6 +580,7 @@ namespace ECS {
                             audioComp.hasExifData = result.hasExif;
                             audioComp.hasLSBData = result.hasLSB;
                             audioComp.hasAniStudioMetadata = result.hasAniStudio;
+                            audioComp.isLoading = false;
 
                             NotifyAudioAdded(result.entityID);
                             NotifyAudioData(result.entityID,
@@ -411,6 +590,7 @@ namespace ECS {
                                 audioComp.sampleRate);
                         }
                         else {
+                            audioComp.isLoading = false;
                             std::cerr << "[AudioSystem] Failed to load audio: " << result.filePath << std::endl;
                         }
                     }
@@ -454,4 +634,4 @@ namespace ECS {
         }
     }
 
-} // namespace ECS
+}

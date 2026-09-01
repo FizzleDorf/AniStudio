@@ -26,7 +26,6 @@
 #include "AniEngine.hpp"
 #include "StudioContext.hpp"
 #include "GUI.h"
-#include "ECS.h"
 #include "ProjectSystem.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"

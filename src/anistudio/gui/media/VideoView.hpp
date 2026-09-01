@@ -3,6 +3,7 @@
 #include "BaseMediaView.hpp"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
+#include <vector>
 
 namespace GUI {
 
@@ -12,7 +13,7 @@ namespace GUI {
             return R"({
             "displayName": "Video View",
             "category": "Viewers",
-            "description": "A simple video viewer with audio support"
+            "description": "A video viewer with audio waveform support"
         })";
         }
 
@@ -32,12 +33,9 @@ namespace GUI {
         void LoadVideo(const std::string& filePath);
 
         bool IsHistoryVisible() const override;
-
         std::string GetSelectedFilePath() const override;
 
     protected:
-        bool isPlaying;
-        float playbackSpeed;
         ECS::EntityID lastGeneratedVideoID;
 
         void OnMediaAdded(ECS::EntityID entity) override;
@@ -50,19 +48,38 @@ namespace GUI {
         void RenderSelector();
         void RenderPlaybackControls();
         void RenderSelected();
+        void RenderWaveform();
+        void UpdateWaveformData();
         void PauseAllVideos();
 
     private:
         bool HasAudioTrack(ECS::EntityID entity) const;
-        ECS::EntityID GetAudioEntityForVideo(ECS::EntityID videoEntity) const;
-        void RenderAudioControls(ECS::EntityID videoEntity);
-        void SeekAudioToFrame(ECS::EntityID videoEntity);
+        void RenderAudioControls(ECS::EntityID entity);
+
+        double GetVideoCurrentTime(ECS::EntityID entity) const;
+        double GetVideoDuration(ECS::EntityID entity) const;
+        void SeekVideo(ECS::EntityID entity, double time);
+        void PlayVideo(ECS::EntityID entity, bool loop);
+        void PauseVideo(ECS::EntityID entity);
+        void StopVideo(ECS::EntityID entity);
+        void SetVideoSpeed(ECS::EntityID entity, float speed);
+        void SetVideoVolume(ECS::EntityID entity, float volume);
 
         void SaveVideoWithAudio(ECS::EntityID entity, const std::string& filePath);
         void SaveVideoNoAudio(ECS::EntityID entity, const std::string& filePath);
         void SaveSelectedMediaNoAudio();
         void SaveSelectedMediaAsWithAudio();
         void SaveSelectedMediaAsNoAudio();
+
+        bool m_useTimeSlider = true;
+        bool m_isSeeking = false;
+        bool m_pendingSeek = false;
+        double m_pendingSeekTime = 0.0;
+        ECS::EntityID m_pendingSeekEntity = 0;
+        bool m_loopEnabled = false;
+        bool m_showWaveform = true;
+        float m_playbackProgress = 0.0f;
+        std::vector<float> m_waveformData;
     };
 
 }

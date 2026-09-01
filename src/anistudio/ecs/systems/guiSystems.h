@@ -3,3 +3,4 @@
 #include "SettingsSystem.hpp"
 #include "ProjectSystem.hpp"
 #include "AudioPlaybackSystem.hpp"
+#include "VideoPlaybackSystem.hpp"

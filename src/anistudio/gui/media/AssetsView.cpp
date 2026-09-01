@@ -7,10 +7,12 @@
 #include "DragDropUtils.hpp"
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
+#include "AudioSystem.hpp"
 #include "TextureSystem.hpp"
 #include "ImageUtils.hpp"
 #include "VideoMetadataUtils.hpp"
 #include "ThumbnailFilters.hpp"
+#include "AudioComponent.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <iostream>
@@ -180,6 +182,14 @@ namespace GUI {
                     info.duration = (comp.frameCount > 0) ? comp.frameCount / comp.fps : 0.0;
                     info.fps = static_cast<float>(comp.fps);
                 }
+                else if (m_entityManager.HasComponent<ECS::AudioComponent>(eid)) {
+                    const auto& comp = m_entityManager.GetComponent<ECS::AudioComponent>(eid);
+                    info.fileSize = std::filesystem::file_size(info.filePath);
+                    info.channels = comp.channels;
+                    info.sampleRate = comp.sampleRate;
+                    info.duration = comp.duration;
+                    info.hasMetadata = comp.hasAniStudioMetadata;
+                }
             }
             else {
                 try {
@@ -264,7 +274,7 @@ namespace GUI {
                 }
             }
 
-            std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*> compVariant;
+            std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*> compVariant;
             bool hasComponent = false;
             if (entityID != 0 && m_entityManager.IsEntityValid(entityID)) {
                 if (m_entityManager.HasComponent<ECS::ImageComponent>(entityID)) {
@@ -273,6 +283,10 @@ namespace GUI {
                 }
                 else if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
                     compVariant = &m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
+                    hasComponent = true;
+                }
+                else if (m_entityManager.HasComponent<ECS::AudioComponent>(entityID)) {
+                    compVariant = &m_entityManager.GetComponent<ECS::AudioComponent>(entityID);
                     hasComponent = true;
                 }
             }
@@ -329,6 +343,9 @@ namespace GUI {
                 }
                 else if (m_entityManager.HasComponent<ECS::VideoComponent>(droppedEntity)) {
                     filePath = m_entityManager.GetComponent<ECS::VideoComponent>(droppedEntity).filePath;
+                }
+                else if (m_entityManager.HasComponent<ECS::AudioComponent>(droppedEntity)) {
+                    filePath = m_entityManager.GetComponent<ECS::AudioComponent>(droppedEntity).filePath;
                 }
                 if (!filePath.empty() && std::filesystem::exists(filePath)) {
                     if (CopyFileToAssets(filePath)) {
@@ -400,7 +417,21 @@ namespace GUI {
                 }
             }
             else if (it->second.isAudio) {
-                std::cout << "[AssetsView] Audio file: " << filePath << " (not yet supported)" << std::endl;
+                auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+                if (!audioSystem) {
+                    m_entityManager.RegisterSystem<ECS::AudioSystem>();
+                    audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+                }
+
+                if (audioSystem) {
+                    ECS::EntityID entity = m_entityManager.AddNewEntity();
+                    m_entityManager.AddComponent<ECS::AudioComponent>(entity);
+                    audioSystem->SetAudio(entity, filePath);
+                    loadedEntities.push_back(entity);
+                    pathToEntity[filePath] = entity;
+                    loadedPaths.insert(filePath);
+                    std::cout << "[AssetsView] Loaded audio: " << filePath << " (Entity: " << entity << ")" << std::endl;
+                }
             }
             else {
                 std::cout << "[AssetsView] Unsupported file type: " << ext << std::endl;
@@ -424,6 +455,12 @@ namespace GUI {
                     auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
                     if (videoSystem) {
                         videoSystem->RemoveVideo(entity);
+                    }
+                }
+                else if (m_entityManager.HasComponent<ECS::AudioComponent>(entity)) {
+                    auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+                    if (audioSystem) {
+                        audioSystem->RemoveAudio(entity);
                     }
                 }
                 else {

@@ -1,0 +1,537 @@
+
+<html lang="en">
+    <head>
+        <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAABCFBMVEUAAAA+uf4Ah/2p3PxyvPqNzPkSmP6b0/qTz/mIyPeGx/eIyPeZ0vonpv1qu/ii2fx1wviGx/cFjP0erf+p3PyAxfeAxPcWof6q3PyHyPeKyfgJi/2HzfxCuv4Lk/6p3Pyd2PyGx/cBh/0cqP+Hx/ep3PyGx/dTrvmp3PyGx/cRm/6p3Pya1vyGx/eJyPcGjf0brf+Y0vqp3PwXov6ExvcMlf6p3Pyi2vwap/+FzP2IyPeHyPcPmf4Jkv4Di/16w/gerf8VoP6Ex/hErftft/o8t/4vrv4Ljv2h2Pwsn/xStvtZuvpZtPpNsPpvwvlVsfl0wPh/xPcdrP8Un/40pfwjnPw8qfuLyvgsmPXHAAAANnRSTlMA/sR/BxT+/v7CpjQr/v729fX06ufn59nZ2c/HxMDAp6Wcj46Eg4B8cG9tW1JRUE1FRTYkHRKiySDqAAAAsklEQVQY003P1RqCQBQE4KNid3d3N+quugrYUub7v4ko8sFczfx3A2o8xZoV9FibSYScPeo/qa4TS9czF3C5f9vtCsrs88Wz+3O0MgGoxxASD1eM8GUv4NQQ0icf4g48kRlCsONoAfPaxkri6cExmLHT9BdWS++FEOZtX8w0uM93gmNG67Cd30zKMMJGgyqUQkaItIHq52wa+PMjUDJtxVXIdLQ343J4d0w0jH8H2YJHbR8fvSVyLKSviQAAAABJRU5ErkJggg==">
+        <title>conan graph info</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.9/standalone/umd/vis-network.min.js" integrity="sha512-iTgTmIgxyA2YehKNVbzLJx4j9SnuC5ihtRrtxVkXH/9nF3vXBN5YeNQp+6wufBWKD3u+roHVNOvWBMufQnBbug==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    </head>
+
+    <body>
+        <style>
+            @media print {
+                .noPrint {
+                    display: none;
+                }
+            }
+            .button {
+                background-color: #5555cc;
+                border: none;
+                color: white;
+                padding: 5px 10px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 18px;
+            }
+            label {
+                user-select: none
+            }
+
+            #container {
+                display: grid;
+                grid-template-columns: 75% 25%;
+                grid-template-rows: 50px auto;
+                height: 100vh;
+            }
+            #mylegend {
+                border-bottom: 2px solid #f2f2f2;
+                grid-column-end: span 1;
+                font-size: 14px;
+                height: 100%;
+            }
+            #empty-sidebar, #sidebar {
+                background-color: #f9f9fe;
+                border: none;
+                min-height:100%;
+                height:0;
+                overflow-y: auto;
+                padding: 5px 10px;
+            }
+            #details {
+                background-color: #f3f3f3;
+                overflow-y: auto;
+                border: 1px solid #e4e4e4;
+                border-radius: 5px;
+                padding: 3px 5px;
+            }
+        </style>
+
+        <div id="container">
+            <div id="mylegend"></div>
+            <div id="empty-sidebar">
+                <h3>Controls</h3>
+            </div>
+            <div id="mynetwork"></div>
+            <div id="sidebar">
+                <div>
+                    <input type="checkbox" onchange="switchBuild()" id="show_build_requires" checked />
+                    <label for="show_build_requires">Show build-requires</label>
+                </div>
+                <div>
+                    <input type="checkbox" onchange="switchTest()" id="show_test_requires" checked />
+                    <label for="show_test_requires">Show test-requires</label>
+                </div>
+                <div>
+                    <input type="checkbox" onchange="switchTransitive()" id="show_transitive_requires"/>
+                    <label for="show_transitive_requires">Show transitive-requires</label>
+                </div>
+                <div>
+                    <input type="checkbox" onchange="collapsePackages()" id="collapse_packages"/>
+                    <label for="collapse_packages">Group packages</label>
+                </div>
+                <div>
+                    <input type="checkbox" onchange="showPackageType()" id="show_package_type"/>
+                    <label for="show_package_type">Show package type</label>
+                </div>
+                <div>
+                    <input type="checkbox" onchange="showSubgraph()" id="show_subgraph"/>
+                    <label for="show_subgraph">Show subgraph</label>
+                </div>
+                <div>
+                    <input type="search" placeholder="Search packages..." oninput="searchPackages(this)" onkeydown="onSearchKeyDown(event)">
+                </div>
+                <div>
+                    <input type="search" placeholder="Exclude packages..." title="Add a comma to exclude an additional package" oninput="excludePackages(this)">
+                </div>
+                <div>
+                    <details>
+                    <summary>Extra graph controls</summary>
+                    <div id="controls" class="controls" style="padding: 5;"></div>
+                    </details>
+                </div>
+
+                <div id="details-container" style="padding:10;" class="noPrint">
+                    <h3>Information</h3>
+                    <div id="details">
+                    Click on one package or edge to show information
+                    </div>
+                </div>
+                <div id="error" style="padding:10;" class="noPrint"></div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            const graph_data = {"error": {"branch1": {"dst_id": null, "require": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "ffmpeg/7.1.5", "require": "ffmpeg/7.1.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "src_id": "0", "src_ref": "AniStudio/0.1.0"}, "branch2": {"require": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "ffmpeg/4.4.4", "require": "ffmpeg/4.4.4", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "src_id": "1", "src_ref": "opencv/4.5.5"}, "name": "ffmpeg", "type": "conflict"}, "nodes": {"0": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false, "with_cuda": false}, "dependencies": {"1": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "opencv/4.5.5", "require": "opencv/4.5.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "10": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "imath/3.1.9", "require": "imath/3.1.9", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "11": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "libdeflate/1.19", "require": "libdeflate/1.19", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "12": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "libtiff/4.6.0", "require": "libtiff/4.6.0", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "13": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "xz_utils/5.4.5", "require": "xz_utils/5.4.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "14": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "jbig/20160605", "require": "jbig/20160605", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "15": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "zstd/1.5.5", "require": "zstd/1.5.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "16": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libwebp/1.3.2", "require": "libwebp/1.3.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "18": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "quirc/1.2", "require": "quirc/1.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "2": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zlib/1.2.11", "require": "zlib/1.2.11", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "3": {"build": false, "direct": false, "force": false, "headers": false, "libs": false, "package_id_mode": null, "ref": "eigen/3.4.0", "require": "eigen/3.4.0", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "4": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "protobuf/3.21.12", "require": "protobuf/3.21.12", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "5": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "ade/0.1.2d", "require": "ade/0.1.2d", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "6": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "libjpeg/9e", "require": "libjpeg/9e", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "7": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "openjpeg/2.5.2", "require": "openjpeg/2.5.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "8": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libpng/1.6.44", "require": "libpng/1.6.44", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "9": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "openexr/3.2.3", "require": "openexr/3.2.3", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}}, "deprecated": null, "description": null, "generators": [], "generators_folder": null, "homepage": null, "id": "0", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "conanfile.py (AniStudio/0.1.0)", "languages": [], "license": null, "name": "AniStudio", "options": {"shared": "False", "with_cuda": "False"}, "options_definitions": {"shared": ["True", "False"], "with_cuda": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Consumer", "recipe_folder": "F:\\Stable_Diffusion_Stuff\\AniStudio", "ref": "AniStudio/0.1.0", "remote": null, "revision_mode": "hash", "rrev": null, "rrev_timestamp": null, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "17", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": null, "upload_policy": null, "url": null, "user": null, "vendor": false, "version": "0.1.0", "win_bash": null, "win_bash_run": null}, "1": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"4.5.5": [{"patch_description": "Robust discovery \u0026 injection of OpenEXR", "patch_file": "patches/4.5.5-0001-find-openexr.patch", "patch_type": "conan"}, {"patch_description": "Allow to build objdetect module without dnn", "patch_file": "patches/4.5.5-0002-objdetect-without-dnn.patch", "patch_source": "https://github.com/opencv/opencv/pull/21369", "patch_type": "portability"}, {"patch_description": "Robust discovery \u0026 injection of quirc", "patch_file": "patches/4.5.5-0003-find-quirc.patch", "patch_type": "conan"}, {"patch_description": "Link to Qt through CMake targets", "patch_file": "patches/4.5.5-0004-link-qt-targets.patch", "patch_type": "conan"}, {"patch_description": "Robust discovery \u0026 injection of ade", "patch_file": "patches/4.5.0-0002-find-ade.patch", "patch_type": "conan"}, {"patch_description": "Fix requirements of tracking module", "patch_file": "patches/4.5.1-0001-tracking-no-plot-deps.patch", "patch_type": "conan"}, {"patch_description": "Add missing header in alphamat.hpp", "patch_file": "patches/4.5.1-0002-alphamat-header.patch", "patch_source": "https://github.com/opencv/opencv_contrib/pull/3422", "patch_type": "portability"}, {"patch_description": "Robust discovery of hdf", "patch_file": "patches/4.1.2-0006-hdf.patch", "patch_type": "conan"}, {"patch_description": "Fix discovery of zlib static if Android", "patch_file": "patches/4.5.2-0001-fix-zlib-static-android.patch", "patch_type": "conan"}, {"patch_description": "Honor install layout from conan if Android", "patch_file": "patches/4.1.2-0007-android-install-layout.patch", "patch_type": "conan"}]}, "sources": {"4.5.5": [{"sha256": "a1cfdcf6619387ca9e232687504da996aaa9f7b5689986b8331ec02cb61d28ad", "url": "https://github.com/opencv/opencv/archive/refs/tags/4.5.5.tar.gz"}, {"sha256": "a97c2eaecf7a23c6dbd119a609c6d7fae903e5f9ff5f1fe678933e01c67a6c11", "url": "https://github.com/opencv/opencv_contrib/archive/refs/tags/4.5.5.tar.gz"}]}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"alphamat": false, "aruco": false, "barcode": false, "bgsegm": false, "bioinspired": false, "calib3d": true, "ccalib": false, "contrib": "deprecated", "contrib_freetype": "deprecated", "contrib_sfm": "deprecated", "cpu_baseline": null, "cpu_dispatch": null, "cuda_arch_bin": null, "cudaarithm": false, "cudabgsegm": false, "cudacodec": false, "cudafeatures2d": false, "cudafilters": false, "cudaimgproc": false, "cudalegacy": false, "cudaobjdetect": false, "cudaoptflow": false, "cudastereo": false, "cudawarping": false, "cvv": false, "datasets": false, "dnn": true, "dnn_cuda": false, "dnn_objdetect": false, "dnn_superres": false, "dpm": false, "fPIC": true, "face": false, "features2d": true, "flann": true, "freetype": false, "fuzzy": false, "gapi": true, "hdf": false, "hfs": false, "highgui": true, "img_hash": false, "imgcodecs": true, "imgproc": true, "intensity_transform": false, "line_descriptor": false, "mcc": false, "ml": true, "neon": true, "nonfree": false, "objdetect": true, "optflow": false, "ovis": false, "parallel": false, "phase_unwrapping": false, "photo": true, "plot": false, "quality": false, "rapid": false, "reg": false, "rgbd": false, "saliency": false, "sfm": false, "shape": false, "shared": false, "stereo": false, "stitching": true, "structured_light": false, "superres": false, "surface_matching": false, "text": false, "tracking": false, "video": true, "videoio": true, "videostab": false, "viz": false, "wechat_qrcode": false, "with_ade": "deprecated", "with_avif": false, "with_cublas": false, "with_cuda": false, "with_cudnn": false, "with_cufft": false, "with_eigen": true, "with_ffmpeg": true, "with_flatbuffers": true, "with_gdal": false, "with_gdcm": false, "with_gtk": false, "with_imgcodec_hdr": true, "with_imgcodec_pfm": true, "with_imgcodec_pxm": true, "with_imgcodec_sunraster": true, "with_ipp": false, "with_jpeg": "libjpeg", "with_jpeg2000": "openjpeg", "with_msmf": true, "with_msmf_dxva": true, "with_opencl": false, "with_openexr": true, "with_openvino": false, "with_png": true, "with_protobuf": true, "with_qt": false, "with_quirc": true, "with_tesseract": true, "with_tiff": true, "with_v4l": false, "with_vulkan": false, "with_wayland": true, "with_webp": true, "world": false, "xfeatures2d": false, "ximgproc": false, "xobjdetect": false, "xphoto": false}, "dependencies": {"10": {"build": false, "direct": false, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "imath/3.1.9", "require": "imath/3.1.9", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "11": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "libdeflate/1.19", "require": "libdeflate/1.19", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "12": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libtiff/4.6.0", "require": "libtiff/4.6.0", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "13": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "xz_utils/5.4.5", "require": "xz_utils/5.4.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "14": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "jbig/20160605", "require": "jbig/20160605", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "15": {"build": false, "direct": false, "force": false, "headers": false, "libs": true, "package_id_mode": null, "ref": "zstd/1.5.5", "require": "zstd/1.5.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "16": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libwebp/1.3.2", "require": "libwebp/1.3.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "18": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "quirc/1.2", "require": "quirc/1.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "2": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zlib/1.2.11", "require": "zlib/1.2.11", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": true, "visible": true}, "3": {"build": false, "direct": true, "force": false, "headers": true, "libs": false, "package_id_mode": null, "ref": "eigen/3.4.0", "require": "eigen/3.4.0", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "4": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "protobuf/3.21.12", "require": "protobuf/3.21.12", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": true, "visible": true}, "5": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "ade/0.1.2d", "require": "ade/0.1.2d", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "6": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libjpeg/9e", "require": "libjpeg/9e", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "7": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "openjpeg/2.5.2", "require": "openjpeg/2.5.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "8": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libpng/1.6.44", "require": "libpng/[\u003e=1.6 \u003c2]", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "9": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "openexr/3.2.3", "require": "openexr/3.2.3", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}}, "deprecated": null, "description": "OpenCV (Open Source Computer Vision Library)", "generators": [], "generators_folder": null, "homepage": "https://opencv.org", "id": "1", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "opencv/4.5.5", "languages": [], "license": "Apache-2.0", "name": "opencv", "options": {"alphamat": "False", "aruco": "False", "barcode": "False", "bgsegm": "False", "bioinspired": "False", "calib3d": "True", "ccalib": "False", "contrib": "deprecated", "contrib_freetype": "deprecated", "contrib_sfm": "deprecated", "cpu_baseline": null, "cpu_dispatch": null, "cudaarithm": "False", "cudabgsegm": "False", "cudacodec": "False", "cudafeatures2d": "False", "cudafilters": "False", "cudaimgproc": "False", "cudalegacy": "False", "cudaobjdetect": "False", "cudaoptflow": "False", "cudastereo": "False", "cudawarping": "False", "cvv": "False", "datasets": "False", "dnn": "True", "dnn_objdetect": "False", "dnn_superres": "False", "dpm": "False", "face": "False", "features2d": "True", "flann": "True", "freetype": "False", "fuzzy": "False", "gapi": "True", "hdf": "False", "hfs": "False", "highgui": "True", "img_hash": "False", "imgcodecs": "True", "imgproc": "True", "intensity_transform": "False", "line_descriptor": "False", "mcc": "False", "ml": "True", "nonfree": "False", "objdetect": "True", "optflow": "False", "ovis": "False", "parallel": "False", "phase_unwrapping": "False", "photo": "True", "plot": "False", "quality": "False", "rapid": "False", "reg": "False", "rgbd": "False", "saliency": "False", "sfm": "False", "shape": "False", "shared": "False", "stereo": "False", "stitching": "True", "structured_light": "False", "superres": "False", "surface_matching": "False", "text": "False", "tracking": "False", "video": "True", "videoio": "True", "videostab": "False", "viz": "False", "wechat_qrcode": "False", "with_ade": "deprecated", "with_cuda": "False", "with_eigen": "True", "with_ffmpeg": "True", "with_gdal": "False", "with_gdcm": "False", "with_imgcodec_hdr": "True", "with_imgcodec_pfm": "True", "with_imgcodec_pxm": "True", "with_imgcodec_sunraster": "True", "with_ipp": "False", "with_jpeg": "libjpeg", "with_jpeg2000": "openjpeg", "with_msmf": "True", "with_msmf_dxva": "True", "with_opencl": "False", "with_openexr": "True", "with_png": "True", "with_protobuf": "True", "with_qt": "False", "with_quirc": "True", "with_tiff": "True", "with_vulkan": "False", "with_webp": "True", "world": "False", "xfeatures2d": "False", "ximgproc": "False", "xobjdetect": "False", "xphoto": "False"}, "options_definitions": {"alphamat": ["True", "False"], "aruco": ["True", "False"], "barcode": ["True", "False"], "bgsegm": ["True", "False"], "bioinspired": ["True", "False"], "calib3d": ["True", "False"], "ccalib": ["True", "False"], "contrib": ["True", "False", "deprecated"], "contrib_freetype": ["True", "False", "deprecated"], "contrib_sfm": ["True", "False", "deprecated"], "cpu_baseline": [null, "ANY"], "cpu_dispatch": [null, "ANY"], "cudaarithm": ["True", "False"], "cudabgsegm": ["True", "False"], "cudacodec": ["True", "False"], "cudafeatures2d": ["True", "False"], "cudafilters": ["True", "False"], "cudaimgproc": ["True", "False"], "cudalegacy": ["True", "False"], "cudaobjdetect": ["True", "False"], "cudaoptflow": ["True", "False"], "cudastereo": ["True", "False"], "cudawarping": ["True", "False"], "cvv": ["True", "False"], "datasets": ["True", "False"], "dnn": ["True", "False"], "dnn_objdetect": ["True", "False"], "dnn_superres": ["True", "False"], "dpm": ["True", "False"], "face": ["True", "False"], "features2d": ["True", "False"], "flann": ["True", "False"], "freetype": ["True", "False"], "fuzzy": ["True", "False"], "gapi": ["True", "False"], "hdf": ["True", "False"], "hfs": ["True", "False"], "highgui": ["True", "False"], "img_hash": ["True", "False"], "imgcodecs": ["True", "False"], "imgproc": ["True", "False"], "intensity_transform": ["True", "False"], "line_descriptor": ["True", "False"], "mcc": ["True", "False"], "ml": ["True", "False"], "nonfree": ["True", "False"], "objdetect": ["True", "False"], "optflow": ["True", "False"], "ovis": ["True", "False"], "parallel": ["False", "tbb", "openmp"], "phase_unwrapping": ["True", "False"], "photo": ["True", "False"], "plot": ["True", "False"], "quality": ["True", "False"], "rapid": ["True", "False"], "reg": ["True", "False"], "rgbd": ["True", "False"], "saliency": ["True", "False"], "sfm": ["True", "False"], "shape": ["True", "False"], "shared": ["True", "False"], "stereo": ["True", "False"], "stitching": ["True", "False"], "structured_light": ["True", "False"], "superres": ["True", "False"], "surface_matching": ["True", "False"], "text": ["True", "False"], "tracking": ["True", "False"], "video": ["True", "False"], "videoio": ["True", "False"], "videostab": ["True", "False"], "viz": ["True", "False"], "wechat_qrcode": ["True", "False"], "with_ade": ["True", "False", "deprecated"], "with_cuda": ["True", "False"], "with_eigen": ["True", "False"], "with_ffmpeg": ["True", "False"], "with_gdal": ["True", "False"], "with_gdcm": ["True", "False"], "with_imgcodec_hdr": ["True", "False"], "with_imgcodec_pfm": ["True", "False"], "with_imgcodec_pxm": ["True", "False"], "with_imgcodec_sunraster": ["True", "False"], "with_ipp": ["False", "intel-ipp", "opencv-icv"], "with_jpeg": ["False", "libjpeg", "libjpeg-turbo", "mozjpeg"], "with_jpeg2000": ["False", "jasper", "openjpeg"], "with_msmf": ["True", "False"], "with_msmf_dxva": ["True", "False"], "with_opencl": ["True", "False"], "with_openexr": ["True", "False"], "with_png": ["True", "False"], "with_protobuf": ["True", "False"], "with_qt": ["True", "False"], "with_quirc": ["True", "False"], "with_tiff": ["True", "False"], "with_vulkan": ["True", "False"], "with_webp": ["True", "False"], "world": ["True", "False"], "xfeatures2d": ["True", "False"], "ximgproc": ["True", "False"], "xobjdetect": ["True", "False"], "xphoto": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\opencc197dd3c1fcbc\\e", "ref": "opencv/4.5.5#70f455c3089a8022503f43284f66920e", "remote": null, "revision_mode": "hash", "rrev": "70f455c3089a8022503f43284f66920e", "rrev_timestamp": 1741292764.026, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["computer-vision", "deep-learning", "image-processing"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "4.5.5", "win_bash": null, "win_bash_run": null}, "10": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"3.1.9": {"sha256": "f1d8aacd46afed958babfced3190d2d3c8209b66da451f556abd6da94c165cf3", "url": "https://github.com/AcademySoftwareFoundation/Imath/archive/v3.1.9.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "Imath is a C++ and python library of 2D and 3D vector, matrix, and math operations for computer graphics.", "generators": [], "generators_folder": null, "homepage": "https://github.com/AcademySoftwareFoundation/Imath", "id": "10", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "imath/3.1.9", "languages": [], "license": "BSD-3-Clause", "name": "imath", "options": {"shared": "False"}, "options_definitions": {"shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\imath3353ad56cbc60\\e", "ref": "imath/3.1.9#2e7f5802b247baae47235b4c8d5642c9", "remote": null, "revision_mode": "hash", "rrev": "2e7f5802b247baae47235b4c8d5642c9", "rrev_timestamp": 1708982814.433, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["computer-graphics", "matrix", "openexr", "3d-vector"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "3.1.9", "win_bash": null, "win_bash_run": null}, "11": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"1.19": {"sha256": "27bf62d71cd64728ff43a9feb92f2ac2f2bf748986d856133cc1e51992428c25", "url": "https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.19.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "Heavily optimized library for DEFLATE/zlib/gzip compression and decompression.", "generators": [], "generators_folder": null, "homepage": "https://github.com/ebiggers/libdeflate", "id": "11", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "libdeflate/1.19", "languages": [], "license": "MIT", "name": "libdeflate", "options": {"shared": "False"}, "options_definitions": {"shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\libde5a709949339ac\\e", "ref": "libdeflate/1.19#3ea74a4549efc14d4b1202dc4bfbf602", "remote": null, "revision_mode": "hash", "rrev": "3ea74a4549efc14d4b1202dc4bfbf602", "rrev_timestamp": 1694914376.803, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["compression", "decompression", "deflate", "zlib", "gzip"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "1.19", "win_bash": null, "win_bash_run": null}, "12": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"4.6.0": [{"patch_description": "CMake: robust handling of dependencies", "patch_file": "patches/4.5.1-0001-cmake-dependencies.patch", "patch_type": "conan"}]}, "sources": {"4.6.0": {"sha256": "88b3979e6d5c7e32b50d7ec72fb15af724f6ab2cbf7e10880c360a77e4b5d99a", "url": "https://download.osgeo.org/libtiff/tiff-4.6.0.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"cxx": true, "fPIC": true, "jbig": true, "jpeg": "libjpeg", "libdeflate": true, "lzma": true, "shared": false, "webp": true, "zlib": true, "zstd": true}, "dependencies": {"11": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libdeflate/1.19", "require": "libdeflate/1.19", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "13": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "xz_utils/5.4.5", "require": "xz_utils/5.4.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "14": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "jbig/20160605", "require": "jbig/20160605", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "15": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zstd/1.5.5", "require": "zstd/1.5.5", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "16": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libwebp/1.3.2", "require": "libwebp/1.3.2", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "17": {"build": true, "direct": true, "force": false, "headers": false, "libs": false, "package_id_mode": null, "ref": "cmake/3.30.5", "require": "cmake/[\u003e=3.18 \u003c4]", "run": true, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": false}, "2": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zlib/1.2.11", "require": "zlib/[\u003e=1.2.11 \u003c2]", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "6": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libjpeg/9e", "require": "libjpeg/9e", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}}, "deprecated": null, "description": "Library for Tag Image File Format (TIFF)", "generators": [], "generators_folder": null, "homepage": "http://www.simplesystems.org/libtiff", "id": "12", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "libtiff/4.6.0", "languages": [], "license": "libtiff", "name": "libtiff", "options": {"cxx": "True", "jbig": "True", "jpeg": "libjpeg", "libdeflate": "True", "lzma": "True", "shared": "False", "webp": "True", "zlib": "True", "zstd": "True"}, "options_definitions": {"cxx": ["True", "False"], "jbig": ["True", "False"], "jpeg": ["False", "libjpeg", "libjpeg-turbo", "mozjpeg"], "libdeflate": ["True", "False"], "lzma": ["True", "False"], "shared": ["True", "False"], "webp": ["True", "False"], "zlib": ["True", "False"], "zstd": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\libtib12d4ba4c0c92\\e", "ref": "libtiff/4.6.0#51d0e7e15d032aeec1b64e65c44ecd9f", "remote": null, "revision_mode": "hash", "rrev": "51d0e7e15d032aeec1b64e65c44ecd9f", "rrev_timestamp": 1710002558.618, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["tiff", "image", "bigtiff", "tagged-image-file-format"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "4.6.0", "win_bash": null, "win_bash_run": null}, "13": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"5.4.5": {"sha256": "da9dec6c12cf2ecf269c31ab65b5de18e8e52b96f35d5bcd08c12b43e6878803", "url": ["https://tukaani.org/xz/xz-5.4.5.tar.xz", "https://c3i.jfrog.io/artifactory/conan-center-backup-sources/da9dec6c12cf2ecf269c31ab65b5de18e8e52b96f35d5bcd08c12b43e6878803"]}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "XZ Utils is free general-purpose data compression software with a high compression ratio. XZ Utils were written for POSIX-like systems, but also work on some not-so-POSIX systems. XZ Utils are the successor to LZMA Utils.", "generators": [], "generators_folder": null, "homepage": "https://tukaani.org/xz", "id": "13", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "xz_utils/5.4.5", "languages": [], "license": ["Unlicense", "LGPL-2.1-or-later", "GPL-2.0-or-later", "GPL-3.0-or-later"], "name": "xz_utils", "options": {"shared": "False"}, "options_definitions": {"shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\xz_utc36de450e687d\\e", "ref": "xz_utils/5.4.5#b885d1d79c9d30cff3803f7f551dbe66", "remote": null, "revision_mode": "hash", "rrev": "b885d1d79c9d30cff3803f7f551dbe66", "rrev_timestamp": 1724318972.064, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["lzma", "xz", "compression"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "5.4.5", "win_bash": null, "win_bash_run": null}, "14": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"20160605": [{"patch_file": "patches/0001-add-missing-export.patch"}, {"patch_file": "patches/0002-fix-msvc-export.patch"}]}, "sources": {"20160605": {"sha256": "2669b49ee000150af7709b21c7656f1f6cbea09fd33116c40b41310adeb2b73e", "url": "https://github.com/ImageMagick/jbig/archive/5d8f5f6fa71766ced5e828bf7bfff642ddb8a6ad.zip"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"build_executables": true, "fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "jbig for the Windows build of ImageMagick", "generators": [], "generators_folder": null, "homepage": "https://github.com/ImageMagick/jbig", "id": "14", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "jbig/20160605", "languages": [], "license": "GPL-2.0", "name": "jbig", "options": {"build_executables": "True", "shared": "False"}, "options_definitions": {"build_executables": ["True", "False"], "shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\jbig3182ce73d79c8\\e", "ref": "jbig/20160605#2d29fa02aacd76902e0d2cbbc24631ef", "remote": null, "revision_mode": "hash", "rrev": "2d29fa02aacd76902e0d2cbbc24631ef", "rrev_timestamp": 1676066289.194, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["jbig", "imagemagick", "window", "graphic"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "20160605", "win_bash": null, "win_bash_run": null}, "15": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"1.5.5": [{"patch_description": "use assembler codes only on x86_64", "patch_file": "patches/1.5.2-cmake-remove-asm-except-x86_64.patch", "patch_type": "portability"}, {"patch_description": "Add qnx to platform", "patch_file": "patches/1.5.5-qnx_support.patch", "patch_source": "https://github.com/facebook/zstd/pull/3745", "patch_type": "portability"}]}, "sources": {"1.5.5": {"sha256": "9c4396cc829cfae319a6e2615202e82aad41372073482fce286fac78646d3ee4", "url": "https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-1.5.5.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"build_programs": true, "fPIC": true, "shared": false, "threading": true}, "dependencies": {}, "deprecated": null, "description": "Zstandard - Fast real-time compression algorithm", "generators": [], "generators_folder": null, "homepage": "https://github.com/facebook/zstd", "id": "15", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "zstd/1.5.5", "languages": [], "license": "BSD-3-Clause", "name": "zstd", "options": {"build_programs": "True", "shared": "False", "threading": "True"}, "options_definitions": {"build_programs": ["True", "False"], "shared": ["True", "False"], "threading": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\zstdc952ff066366b\\e", "ref": "zstd/1.5.5#1f239731dc45147c7fc2f54bfbde73df", "remote": null, "revision_mode": "hash", "rrev": "1f239731dc45147c7fc2f54bfbde73df", "rrev_timestamp": 1715599909.17, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["zstandard", "compression", "algorithm", "decoder"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "1.5.5", "win_bash": null, "win_bash_run": null}, "16": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"1.3.2": [{"patch_description": "disable PIC, disable prefix library name on MSVC", "patch_file": "patches/1.3.1-0001-fix-cmake.patch", "patch_type": "conan"}]}, "sources": {"1.3.2": {"sha256": "2a499607df669e40258e53d0ade8035ba4ec0175244869d1025d460562aa09b4", "url": "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.2.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "near_lossless": true, "shared": false, "swap_16bit_csp": false, "with_simd": true}, "dependencies": {}, "deprecated": null, "description": "Library to encode and decode images in WebP format", "generators": [], "generators_folder": null, "homepage": "https://chromium.googlesource.com/webm/libwebp", "id": "16", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "libwebp/1.3.2", "languages": [], "license": "BSD-3-Clause", "name": "libwebp", "options": {"near_lossless": "True", "shared": "False", "swap_16bit_csp": "False", "with_simd": "True"}, "options_definitions": {"near_lossless": ["True", "False"], "shared": ["True", "False"], "swap_16bit_csp": ["True", "False"], "with_simd": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\libwe32a5faf269811\\e", "ref": "libwebp/1.3.2#52f69c4a31c5cf033fdd9230d77a8e38", "remote": null, "revision_mode": "hash", "rrev": "52f69c4a31c5cf033fdd9230d77a8e38", "rrev_timestamp": 1694806992.059, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["image", "libwebp", "webp", "decoding", "encoding"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "1.3.2", "win_bash": null, "win_bash_run": null}, "17": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"3.30.5": {"Linux": {"armv8": {"sha256": "da7dead2c92c1747b40d506d7f7d68590f5bab175316d2e7af73e48a2e417e48", "url": "https://cmake.org/files/v3.30/cmake-3.30.5-linux-aarch64.tar.gz"}, "x86_64": {"sha256": "f747d9b23e1a252a8beafb4ed2bc2ddf78cff7f04a8e4de19f4ff88e9b51dc9d", "url": "https://cmake.org/files/v3.30/cmake-3.30.5-linux-x86_64.tar.gz"}}, "Macos": {"universal": {"sha256": "db21c9d92e544b3a47820627fe89bde8191e6bfb49b9e43d726cec5a5ef96ca7", "url": "https://cmake.org/files/v3.30/cmake-3.30.5-macos10.10-universal.tar.gz"}}, "Windows": {"armv8": {"sha256": "b5fa431bd569b591717a9a0f77c0ab56b072ef8603f924401227c178ac7072d9", "url": "https://cmake.org/files/v3.30/cmake-3.30.5-windows-arm64.zip"}, "x86_64": {"sha256": "5ab6e1faf20256ee4f04886597e8b6c3b1bd1297b58a68a58511af013710004b", "url": "https://cmake.org/files/v3.30/cmake-3.30.5-windows-x86_64.zip"}}}}}, "conf_info": {}, "context": "build", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": null, "dependencies": {}, "deprecated": null, "description": "CMake, the cross-platform, open-source build system.", "generators": [], "generators_folder": null, "homepage": "https://github.com/Kitware/CMake", "id": "17", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "cmake/3.30.5", "languages": [], "license": "BSD-3-Clause", "name": "cmake", "options": {}, "options_definitions": {}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "application", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\cmake943f776efed97\\e", "ref": "cmake/3.30.5#540068cc37f1d21b42b729c82d6bcb29", "remote": null, "revision_mode": "hash", "rrev": "540068cc37f1d21b42b729c82d6bcb29", "rrev_timestamp": 1728562547.207, "settings": {"arch": "x86_64", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["build", "installer"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "3.30.5", "win_bash": null, "win_bash_run": null}, "18": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"1.2": {"sha256": "73c12ea33d337ec38fb81218c7674f57dba7ec0570bddd5c7f7a977c0deb64c5", "url": "https://github.com/dlbeer/quirc/archive/v1.2.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "max_regions": 254, "shared": false}, "dependencies": {}, "deprecated": null, "description": "QR decoder library", "generators": [], "generators_folder": null, "homepage": "https://github.com/dlbeer/quirc", "id": "18", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "quirc/1.2", "languages": [], "license": "ISC", "name": "quirc", "options": {"max_regions": "254", "shared": "False"}, "options_definitions": {"max_regions": ["254", "65534"], "shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\quirccaa783c72b092\\e", "ref": "quirc/1.2#92179dd521786aea0729f2c859cbbcb9", "remote": null, "revision_mode": "hash", "rrev": "92179dd521786aea0729f2c859cbbcb9", "rrev_timestamp": 1684855866.655, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["qr", "decoder"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "1.2", "win_bash": null, "win_bash_run": null}, "2": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"1.2.11": [{"patch_description": "separate static/shared builds, disable debug suffix, disable building examples", "patch_file": "patches/1.2.x/0001-fix-cmake.patch", "patch_type": "conan"}, {"patch_description": "fix condition for WIDECHAR usage", "patch_file": "patches/1.2.x/0003-gzguts-fix-widechar-condition.patch", "patch_source": "https://github.com/madler/zlib/issues/268", "patch_type": "portability"}]}, "sources": {"1.2.11": {"sha256": "c3e5e9fdd5004dcb542feda5ee4f0ff0744628baf8ed2dd5d66f8ca1197cb1a1", "url": "https://zlib.net/fossils/zlib-1.2.11.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "A Massively Spiffy Yet Delicately Unobtrusive Compression Library (Also Free, Not to Mention Unencumbered by Patents)", "generators": [], "generators_folder": null, "homepage": "https://zlib.net", "id": "2", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "zlib/1.2.11", "languages": [], "license": "Zlib", "name": "zlib", "options": {"shared": "False"}, "options_definitions": {"shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\zlibdb1c5346ffee7\\e", "ref": "zlib/1.2.11#fca992a7d96a1b92bd956caa8a97d18f", "remote": null, "revision_mode": "hash", "rrev": "fca992a7d96a1b92bd956caa8a97d18f", "rrev_timestamp": 1705999194.642, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["zlib", "compression"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "1.2.11", "win_bash": null, "win_bash_run": null}, "3": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"3.4.0": [{"patch_description": "Fix vectorized reductions compilation errors for Eigen::half", "patch_file": "patches/3.4.0-0001-vec-reduce-half.patch", "patch_source": "https://gitlab.com/libeigen/eigen/-/commit/b0fe14213ec4c8615de485fe4c2bcd4bab0cbd19.patch", "patch_type": "bugfix"}]}, "sources": {"3.4.0": {"sha256": "b4c198460eba6f28d34894e3a5710998818515104d6e74e5cc331ce31e46e626", "url": "https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.bz2"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"MPL2_only": false}, "dependencies": {}, "deprecated": null, "description": "Eigen is a C++ template library for linear algebra: matrices, vectors, numerical solvers, and related algorithms.", "generators": [], "generators_folder": null, "homepage": "http://eigen.tuxfamily.org", "id": "3", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "eigen/3.4.0", "languages": [], "license": ["MPL-2.0", "LGPL-3.0-or-later"], "name": "eigen", "options": {"MPL2_only": "False"}, "options_definitions": {"MPL2_only": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "header-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\eigenecaf3dc594b0c\\e", "ref": "eigen/3.4.0#2e192482a8acff96fe34766adca2b24c", "remote": null, "revision_mode": "hash", "rrev": "2e192482a8acff96fe34766adca2b24c", "rrev_timestamp": 1680436083.8, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["algebra", "linear-algebra", "matrix", "vector", "numerical", "header-only"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "3.4.0", "win_bash": null, "win_bash_run": null}, "4": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"3.21.12": [{"patch_description": "Handle case where macOS SDK macros may conflict with protobuf message types", "patch_file": "patches/protobuf-3.21.12-upstream-macos-macros.patch", "patch_source": "https://github.com/protocolbuffers/protobuf/pull/10103", "patch_type": "bugfix"}]}, "sources": {"3.21.12": {"sha256": "930c2c3b5ecc6c9c12615cf5ad93f1cd6e12d0aba862b572e076259970ac3a53", "url": "https://github.com/protocolbuffers/protobuf/archive/refs/tags/v3.21.12.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"debug_suffix": true, "fPIC": true, "lite": false, "shared": false, "upb": false, "with_rtti": true, "with_zlib": true}, "dependencies": {"2": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zlib/1.2.11", "require": "zlib/[\u003e=1.2.11 \u003c2]", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}}, "deprecated": null, "description": "Protocol Buffers - Google\u0027s data interchange format", "generators": [], "generators_folder": null, "homepage": "https://github.com/protocolbuffers/protobuf", "id": "4", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "protobuf/3.21.12", "languages": [], "license": "BSD-3-Clause", "name": "protobuf", "options": {"debug_suffix": "True", "lite": "False", "shared": "False", "with_rtti": "True", "with_zlib": "True"}, "options_definitions": {"debug_suffix": ["True", "False"], "lite": ["True", "False"], "shared": ["True", "False"], "with_rtti": ["True", "False"], "with_zlib": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\proto2feea5cf54031\\e", "ref": "protobuf/3.21.12#2099e6c66fcd31b52c3afc0c096c1d02", "remote": null, "revision_mode": "hash", "rrev": "2099e6c66fcd31b52c3afc0c096c1d02", "rrev_timestamp": 1721234378.51, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["protocol-buffers", "protocol-compiler", "serialization", "rpc", "protocol-compiler"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "3.21.12", "win_bash": null, "win_bash_run": null}, "5": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"0.1.2d": {"sha256": "edefba61a33d6cd4b78a9976cb3309c95212610a81ba6dade09882d1794198ff", "url": "https://github.com/opencv/ade/archive/refs/tags/v0.1.2d.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true}, "dependencies": {}, "deprecated": null, "description": "Graph construction, manipulation, and processing framework", "generators": [], "generators_folder": null, "homepage": "https://github.com/opencv/ade", "id": "5", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "ade/0.1.2d", "languages": [], "license": "Apache-2.0", "name": "ade", "options": {}, "options_definitions": {}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\ade3cb58bebe9d3b\\e", "ref": "ade/0.1.2d#f225d0a218a7c9fbb81746806c7de53d", "remote": null, "revision_mode": "hash", "rrev": "f225d0a218a7c9fbb81746806c7de53d", "rrev_timestamp": 1697752528.048, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["graphs", "opencv"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "0.1.2d", "win_bash": null, "win_bash_run": null}, "6": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"9e": [{"patch_description": "Add support to generate DLL on Windows", "patch_file": "patches/0001-9e-libjpeg-add-msvc-dll-support.patch", "patch_type": "portability"}]}, "sources": {"9e": {"sha256": "4077d6a6a75aeb01884f708919d25934c93305e49f7e3f36db9129320e6f4f3d", "url": "https://ijg.org/files/jpegsrc.v9e.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "Libjpeg is a widely used C library for reading and writing JPEG image files.", "generators": [], "generators_folder": null, "homepage": "http://ijg.org", "id": "6", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "libjpeg/9e", "languages": [], "license": "IJG", "name": "libjpeg", "options": {"shared": "False"}, "options_definitions": {"shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\libjpaa8953bc7a0bb\\e", "ref": "libjpeg/9e#ebca87d1efc798db99cc9bbe2297679a", "remote": null, "revision_mode": "hash", "rrev": "ebca87d1efc798db99cc9bbe2297679a", "rrev_timestamp": 1723665906.622, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["image", "format", "jpg", "jpeg", "picture", "multimedia", "graphics"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "9e", "win_bash": null, "win_bash_run": null}, "7": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"2.5.2": {"sha256": "90e3896fed910c376aaf79cdd98bdfdaf98c6472efd8e1debf0a854938cbda6a", "url": "https://github.com/uclouvain/openjpeg/archive/refs/tags/v2.5.2.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"build_codec": false, "fPIC": true, "shared": false}, "dependencies": {}, "deprecated": null, "description": "OpenJPEG is an open-source JPEG 2000 codec written in C language.", "generators": [], "generators_folder": null, "homepage": "https://github.com/uclouvain/openjpeg", "id": "7", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "openjpeg/2.5.2", "languages": [], "license": "BSD-2-Clause", "name": "openjpeg", "options": {"build_codec": "False", "shared": "False"}, "options_definitions": {"build_codec": ["True", "False"], "shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\openj67fd16e1c0b40\\e", "ref": "openjpeg/2.5.2#6f7b733e151d1bbf5ed05cbabb846828", "remote": null, "revision_mode": "hash", "rrev": "6f7b733e151d1bbf5ed05cbabb846828", "rrev_timestamp": 1709653017.024, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["jpeg2000", "jp2", "openjpeg", "image", "multimedia", "format", "graphics"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "2.5.2", "win_bash": null, "win_bash_run": null}, "8": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"sources": {"1.6.44": {"sha256": "60c4da1d5b7f0aa8d158da48e8f8afa9773c1c8baa5d21974df61f1886b8ce8e", "url": "https://sourceforge.net/projects/libpng/files/libpng16/1.6.44/libpng-1.6.44.tar.xz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"api_prefix": "", "fPIC": true, "msa": true, "neon": true, "shared": false, "sse": true, "vsx": true}, "dependencies": {"2": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zlib/1.2.11", "require": "zlib/[\u003e=1.2.11 \u003c2]", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}}, "deprecated": null, "description": "libpng is the official PNG file format reference library.", "generators": [], "generators_folder": null, "homepage": "http://www.libpng.org", "id": "8", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "libpng/1.6.44", "languages": [], "license": "libpng-2.0", "name": "libpng", "options": {"api_prefix": "", "shared": "False", "sse": "True"}, "options_definitions": {"api_prefix": ["ANY"], "shared": ["True", "False"], "sse": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\libpn96b6230f1a784\\e", "ref": "libpng/1.6.44#9e1aa08fb46946c7c91e4ae03bd49811", "remote": null, "revision_mode": "hash", "rrev": "9e1aa08fb46946c7c91e4ae03bd49811", "rrev_timestamp": 1726517437.225, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["png", "graphics", "image"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "1.6.44", "win_bash": null, "win_bash_run": null}, "9": {"author": null, "binary": null, "binary_remote": null, "build_folder": null, "build_id": null, "build_policy": null, "channel": null, "conandata": {"patches": {"3.2.3": [{"patch_description": "Workaround for GCC 5 bug", "patch_file": "patches/3.2.1-gcc5-bug-workaround.patch", "patch_source": "https://gcc.gnu.org/bugzilla/show_bug.cgi?id=82336", "patch_type": "portability"}]}, "sources": {"3.2.3": {"sha256": "f3f6c4165694d5c09e478a791eae69847cadb1333a2948ca222aa09f145eba63", "url": "https://github.com/AcademySoftwareFoundation/openexr/archive/refs/tags/v3.2.3.tar.gz"}}}, "conf_info": {}, "context": "host", "cpp_info": {"root": {"bindirs": ["bin"], "builddirs": null, "cflags": null, "cxxflags": null, "defines": null, "exe": null, "exelinkflags": null, "frameworkdirs": null, "frameworks": null, "includedirs": ["include"], "languages": null, "libdirs": ["lib"], "libs": null, "link_location": null, "location": null, "objects": null, "properties": null, "requires": null, "resdirs": null, "sharedlinkflags": null, "sources": null, "srcdirs": null, "sysroot": null, "system_libs": null, "type": null}}, "default_options": {"fPIC": true, "shared": false}, "dependencies": {"10": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "imath/3.1.9", "require": "imath/3.1.9", "run": false, "skip": false, "test": false, "transitive_headers": true, "transitive_libs": null, "visible": true}, "11": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "libdeflate/1.19", "require": "libdeflate/1.19", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}, "2": {"build": false, "direct": true, "force": false, "headers": true, "libs": true, "package_id_mode": null, "ref": "zlib/1.2.11", "require": "zlib/[\u003e=1.2.11 \u003c2]", "run": false, "skip": false, "test": false, "transitive_headers": null, "transitive_libs": null, "visible": true}}, "deprecated": null, "description": "OpenEXR is a high dynamic-range (HDR) image file format developed by Industrial Light \u0026 Magic for use in computer imaging applications.", "generators": [], "generators_folder": null, "homepage": "https://github.com/AcademySoftwareFoundation/openexr", "id": "9", "immutable_package_folder": null, "info_invalid": null, "invalid_build": false, "label": "openexr/3.2.3", "languages": [], "license": "BSD-3-Clause", "name": "openexr", "options": {"shared": "False"}, "options_definitions": {"shared": ["True", "False"]}, "options_description": null, "package_folder": null, "package_id": null, "package_type": "static-library", "prev": null, "prev_timestamp": null, "provides": null, "python_requires": null, "recipe": "Cache", "recipe_folder": "C:\\Users\\julie\\.conan2\\p\\opene07dff185ed11c\\e", "ref": "openexr/3.2.3#9729562cfe706ed8d5a9a7f398d09eab", "remote": null, "revision_mode": "hash", "rrev": "9729562cfe706ed8d5a9a7f398d09eab", "rrev_timestamp": 1727884743.243, "settings": {"arch": "x86_64", "build_type": "Release", "compiler": "msvc", "compiler.cppstd": "14", "compiler.runtime": "dynamic", "compiler.runtime_type": "Release", "compiler.version": "194", "os": "Windows"}, "source_folder": null, "system_requires": {}, "test": false, "topics": ["openexr", "hdr", "image", "picture"], "upload_policy": null, "url": "https://github.com/conan-io/conan-center-index", "user": null, "vendor": false, "version": "3.2.3", "win_bash": null, "win_bash_run": null}}, "overrides": {}, "replaced_requires": {}, "resolved_ranges": {"cmake/[\u003e=3.18 \u003c4]": "cmake/3.30.5"}, "root": {"0": "AniStudio/0.1.0"}};
+            let hide_build = false;
+            let hide_test = false;
+            let show_transitive = false;
+            let search_pkgs = null;
+            let focus_search = false;
+            let excluded_pkgs = null;
+            let collapse_packages = false;
+            let show_package_type = false;
+            let show_subgraph = false;
+            let color_map = {Cache: "SkyBlue",
+                             Download: "LightGreen",
+                             Build: "Yellow",
+                             Missing: "Orange",
+                             Update: "SeaGreen",
+                             Skip: "White",
+                             Editable: "LightCyan",
+                             EditableBuild: "Cyan",
+                             Invalid: "Red",
+                             Platform: "Violet"};
+            let global_edges = {};
+            let collapsed_packages = null;
+            function define_data(){
+                let nodes = [];
+                let edges = [];
+                collapsed_packages = {"build": {}, "host": {}};
+                let targets = {};
+                global_edges = {};
+                let edge_counter = Math.max(...Object.keys(graph_data["nodes"])) + 1;
+                let conflict=null;
+                let provide_conflict=null;
+                let missing_error=null;
+                let loop_error=null;
+                if (graph_data["error"] && graph_data["error"]["type"] == "conflict")
+                    conflict = graph_data["error"];
+                else if (graph_data["error"] && graph_data["error"]["type"] == "provide_conflict")
+                    provide_conflict = graph_data["error"];
+                else if (graph_data["error"] && graph_data["error"]["type"] == "missing")
+                    missing_error = graph_data["error"];
+                else if (graph_data["error"] && graph_data["error"]["type"] == "loop")
+                    loop_error = [graph_data["error"]['node']['label'], graph_data["error"]['require']['name']];
+                for (const [node_id, node] of Object.entries(graph_data["nodes"])) {
+                    if (node.context == "build" && hide_build) continue;
+                    if (node.test && hide_test) continue;
+                    let shape = node.context == "build" || node.test ? "ellipse" : "box";
+                    let label = getNodeLabel(node);
+                    if (collapse_packages) {
+                        let existing = collapsed_packages[node.context][label];
+                        targets[node_id] = existing;
+                        if (existing) continue;
+                        collapsed_packages[node.context][label] = node_id;
+                    }
+                    if (excluded_pkgs) {
+                        let patterns = excluded_pkgs.split(',')
+                            .map(pattern => pattern.trim())
+                            .filter(pattern => pattern.length > 0)
+                            .map(pattern => pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+                        if (patterns.some(pattern => label.match(pattern))) {
+                            continue;
+                        }
+                    }
+                    if (show_package_type) {
+                         label = "<b>" + label + "\n" + "<i>" + node.package_type + "</i>";
+                    }
+                    borderWidth = 1;
+                    borderColor = "SkyBlue";
+                    font = {multi: 'html'};
+                    shapeProperties = {};
+                    let color = color_map[node.binary]
+                    if (conflict && conflict.branch1.dst_id == node_id){
+                        font.color = "white";
+                        color = "Black";
+                        shape = "circle";
+                    }
+                    if (provide_conflict && provide_conflict.node.id == node_id){
+                        font.color = "white";
+                        color = "Black";
+                        shape = "circle";
+                    }
+                    if (search_pkgs) {
+                        let patterns = search_pkgs.split(',')
+                            .map(pattern => pattern.trim())
+                            .filter(pattern => pattern.length > 0)
+                            .map(pattern => pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+                        if (patterns.some(pattern => label.match(pattern))) {
+                            borderWidth = 3;
+                            borderColor = "Magenta";
+                            if (focus_search) {
+                                focus_search = node_id;
+                            }
+                        }
+                    }
+                    if (node.test) {
+                        font.background = "lightgrey";
+                        shapeProperties = {borderDashes: true};
+                    }
+                    if (node.recipe == "Platform") {
+                        font.background = "Violet";
+                    }
+                    if (node.vendor) {
+                        borderColor = "Red";
+                        shapeProperties = {borderDashes: [3,5]};
+                        borderWidth = 2;
+                    }
+                    nodes.push({
+                        id: node_id,
+                        font: font,
+                        label: label,
+                        shape: shape,
+                        shapeProperties: shapeProperties,
+                        borderWidth: borderWidth,
+                        color: {border: borderColor, background: color,
+                                highlight: {background: color, border: "Blue"}},
+                    });
+                }
+                for (const [node_id, node] of Object.entries(graph_data["nodes"])) {
+                    for (const [dep_id, dep] of Object.entries(node["dependencies"])) {
+                        if (dep.direct){
+                            let target_id = targets[dep_id] || dep_id;
+                            edges.push({id: edge_counter, from: node_id, to: target_id,
+                                        color: {color: "SkyBlue", highlight: "Blue"}});
+                            global_edges[edge_counter++] = dep;
+                        }
+                        if (show_transitive && dep.direct === false){
+                            let target_id = targets[dep_id] || dep_id;
+                            edges.push({id: edge_counter, from: node_id, to: target_id,
+                                        color: {color: "LightGray", highlight: "Gray"},
+                                        dashes: true});
+                            global_edges[edge_counter++] = dep;
+                        }
+                        if (loop_error && loop_error[1] == node["name"] && loop_error[0] == dep["ref"]) {
+                            let target_id = targets[dep_id] || dep_id;
+                            edges.push({id: edge_counter, from: node_id, to: target_id,
+                                        color: {color: "Red", highlight: "Red"},
+                                        smooth: { enabled: true, type: 'curvedCW', roundness: 0.4 },
+                                        arrows: "from",
+                                        label: "loop",
+                                        title: "loop"});
+                            global_edges[edge_counter++] = dep;
+                        }
+                    }
+                }
+                if (conflict) {
+                    let conflict_id = null;
+                    if (conflict.branch1.dst_id) { // already created conflict node
+                        conflict_id = conflict.branch1.dst_id;
+                    }
+                    else {
+                        conflict_id = "conflict_id";
+                        nodes.push({
+                            id: conflict_id,
+                            font: {color: "white"},
+                            label: conflict.name,
+                            shape: "circle",
+                            color: {background: "black",
+                                    highlight: {background: "black", border: "Blue"}},
+                        });
+                        edges.push({id: edge_counter, from: conflict.branch1.src_id, to: conflict_id,
+                                    color: {color: "Red", highlight: "Red"},
+                                    label: conflict.branch1.require.ref});
+                        global_edges[edge_counter++] = conflict.branch1.require;
+                    }
+                    edges.push({id: edge_counter, from: conflict.branch2.src_id, to: conflict_id,
+                                color: {color: "Red", highlight: "Red"},
+                                label: conflict.branch2.require.ref});
+                    global_edges[edge_counter++] = conflict.branch2.require;
+                }
+                if (provide_conflict) {
+                    // The nodes are already there, we'll just add an edge to the conflict node
+                    edges.push({id: edge_counter,
+                                from: provide_conflict.conflicting_node.id,
+                                to: provide_conflict.node.id,
+                                color: {color: "Red", highlight: "Red"},
+                                label: provide_conflict.provided,
+                                title: "Both nodes provide the same requirement: " + provide_conflict.provided.join(", "),
+                                dashes: true});
+                    global_edges[edge_counter++] = {"provided": provide_conflict.provided};
+                }
+                if(missing_error) {
+                    nodes.push({
+                        id: "missing_node",
+                        font: {multi: 'html', color: "white"},
+                        label: missing_error["require"]["ref"],
+                        shape: "Circle",
+                        color: {background: "Black"},
+                    });
+                    edges.push({id: edge_counter,
+                                from: missing_error["node"]["id"],
+                                to: "missing_node",
+                                color: {color: "Red", highlight: "Red"},
+                                label: "missing",
+                                title: "missing",
+                                dashes: true});
+                    global_edges[edge_counter++] = {"missing": missing_error["error"]};
+                }
+                return {nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges)};
+            };
+            function define_legend() {
+                let x = 0;
+                let y = 0;
+                let step = 250;
+                let legend_nodes = [];
+                legend_nodes.push({id: 0, x: x, y: y, shape: "box", font: {size: 35},
+                    label: "require",
+                });
+                legend_nodes.push({id: 1, x: x + step, y: y, font: {size: 35}, shape: "ellipse",
+                    label: "tool-require",
+                });
+                legend_nodes.push({id: 2, x: x + 2* step, y: y, font: {size: 35, background: "lightgrey"},
+                    shape: "ellipse", shapeProperties: {borderDashes: true},
+                    label: "test-require",
+                })
+                let counter = 3;
+                legend_nodes.push({x: x + counter*step, y: y, shape: "ellipse",
+                    label: "platform",
+                    font: {size: 35, background: "Violet"},
+                });
+                counter++;
+                for (const [status, color] of Object.entries(color_map)) {
+                    legend_nodes.push({x: x + counter*step, y: y, shape: "box", font: {size: 35},
+                        label: status,
+                        color: {border: "SkyBlue", background: color}
+                    });
+                    counter++;
+                }
+                legend_nodes.push({x: x + counter*step, y: y, shape: "box",
+                    label: "conflict",
+                    font: {size: 35, color: "white"},
+                    color: {border: "SkyBlue", background: "Black"}
+                });
+                counter++;
+
+                legend_nodes.push({x: x + counter*step, y: y, shape: "box",
+                    label: "vendor", font: {size: 35},
+                    color: {border: "Red"},
+                    shapeProperties: {borderDashes: [3,5]},
+                    borderWidth: 2
+                });
+                return {nodes: new vis.DataSet(legend_nodes)};
+            }
+            let error = document.getElementById("error");
+            if (graph_data["error"]){
+                 let div = document.createElement('div');
+                 div.innerHTML = "<pre>Error in the graph: " + JSON.stringify(graph_data["error"], undefined, 2) + "</pre>";
+                 error.appendChild(div);
+            }
+            let container = document.getElementById('mynetwork');
+            let controls = document.getElementById('controls');
+            let legend_container = document.getElementById('mylegend');
+
+            let options = {
+                autoResize: true,
+                locale: 'en',
+                edges: {
+                    arrows: { to: {enabled: true} },
+                    smooth: { enabled: false}
+                },
+                nodes: {font: {'face': 'monospace', 'align': 'left'}},
+                layout: {
+                    "hierarchical": {
+                        enabled: true,
+                        sortMethod: "directed",
+                        direction: "DU",
+                        nodeSpacing: 170,
+                        blockShifting: true,
+                        edgeMinimization: true,
+                        shakeTowards: "roots",
+                    }
+                },
+                physics: { enabled: false},
+                configure: {
+                    enabled: true,
+                    filter: 'layout physics',
+                    showButton: false,
+                    container: controls
+                }
+            };
+
+            let data = define_data();
+            let network = new vis.Network(container, data, options);
+            let legend_data = define_legend();
+            let options_legend = {interaction: {selectable: false, dragView: false, dragNodes: false,
+                                                zoomView: false}, physics: {enabled: false}};
+            let legend = new vis.Network(legend_container, legend_data, options_legend);
+
+            network.on('click', function (properties) {
+                let ids = properties.nodes;
+                let ids_edges = properties.edges;
+                let control = document.getElementById("details");
+                while (control.firstChild) {
+                    control.removeChild(control.firstChild);
+                }
+                if(ids[0] !== undefined || ids_edges[0] !== undefined) {
+                    selected = graph_data["nodes"][ids[0]] || global_edges[ids_edges[0]];
+                    let div = document.createElement('div');
+                    let f = Object.fromEntries(Object.entries(selected));
+                    div.innerText = JSON.stringify(f, undefined, 2);
+                    let div2 = document.createElement('div');
+                    div2.innerHTML = "<pre>" + div.innerHTML + "</pre>";
+                    control.appendChild(div2);
+                    if (show_subgraph && graph_data["nodes"][ids[0]]) {
+                        setSubgraphSelectionFromNode(ids[0]);
+                    }
+
+                }
+                else {
+                    control.innerHTML = "Click on one package or edge to show information";
+                }
+            });
+            function draw() {
+                let scale = network.getScale();
+                let viewPos = network.getViewPosition();
+                data = define_data();
+                network.setData(data);
+                network.redraw();
+                network.moveTo({position: viewPos, scale: scale});
+                // If we have found a package to focus, we need to move the view
+                if (typeof focus_search === "string") {
+                    network.focus(focus_search, {animation: true, locked: false});
+                }
+            }
+            function switchBuild() {
+                hide_build = !hide_build;
+                draw();
+            }
+            function switchTest() {
+                hide_test = !hide_test;
+                draw();
+            }
+            function switchTransitive() {
+                show_transitive = !show_transitive;
+                draw();
+            }
+            function collapsePackages() {
+                collapse_packages = !collapse_packages;
+                draw();
+            }
+            const debounce = (func, delay) => {
+                let timeout;
+                return function(...args) {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(this, args), delay);
+                };
+            };
+            const debouncedDraw = debounce(draw, 300);
+            function searchPackages(e) {
+                search_pkgs = e.value;
+                debouncedDraw();
+            }
+            function onSearchKeyDown(event) {
+                if (event.key === "Enter") {
+                    focus_search = true;
+                    draw();
+                    focus_search = false;
+                }
+            }
+            function excludePackages(e) {
+                excluded_pkgs = e.value;
+                debouncedDraw();
+            }
+            function showPackageType(e) {
+                show_package_type = !show_package_type;
+                draw();
+            }
+            function showSubgraph(e) {
+                show_subgraph = !show_subgraph;
+                draw();
+            }
+            function showhideclass(id) {
+                let elements = document.getElementsByClassName(id)
+                for (let i = 0; i < elements.length; i++) {
+                    elements[i].style.display = (elements[i].style.display != 'none') ? 'none' : 'block';
+                }
+            }
+            function getNodeLabel(node) {
+                let label = null;
+                if (node["name"])
+                    label =  node["name"] + "/" + node["version"];
+                else if (node["ref"])
+                    label = node["ref"];
+                else
+                    label = node.recipe == "Consumer"? "conanfile": "CLI";
+                return label;
+            }
+            function setSubgraphSelectionFromNode(starting_node_id) {
+                let node_id_list = [starting_node_id];
+                let seen_nodes = [];
+                let seen_edges = [];
+                while (node_id_list.length > 0) {
+                    const node_id = node_id_list.pop();
+                    // The node might be hidden
+                    if (network.findNode(node_id).length == 0) continue;
+                    if (node_id !== undefined && !seen_nodes.includes(node_id)) {
+                        const node = graph_data["nodes"][node_id];
+                        seen_nodes.push(node_id);
+                        for (let dep_id in node["dependencies"]) {
+                            // Collapsed dependencies dont have an edge to the matching id, find which
+                            if (collapse_packages) {
+                                const dep_node = graph_data["nodes"][dep_id];
+                                const context = dep_node["context"];
+                                const label = getNodeLabel(dep_node);
+                                dep_id = collapsed_packages[context][label];
+                            }
+                            node_id_list.push(dep_id);
+                        }
+                        const edges = network.getConnectedEdges(node_id);
+                        for (let edge_id of edges) {
+                            const connectedNodes = network.getConnectedNodes(edge_id);
+                            // Only select edges that have a fromId (0th index) equal to current node
+                            if (!seen_edges.includes(edge_id) && connectedNodes[0] === node_id) {
+                                seen_edges.push(edge_id);
+                            }
+                        }
+                    }
+                }
+                network.setSelection({nodes: seen_nodes, edges: seen_edges},
+                                     {unselectAll: true, highlightEdges: false});
+            }
+            window.addEventListener("load", () => {
+               draw();
+            });
+        </script>
+    </body>
+</html>

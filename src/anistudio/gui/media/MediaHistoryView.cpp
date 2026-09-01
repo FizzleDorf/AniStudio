@@ -6,6 +6,7 @@
 #include "ViewManager.hpp"
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
+#include "AudioSystem.hpp"
 #include "ImageUtils.hpp"
 #include "ThumbnailFilters.hpp"
 #include <imgui.h>
@@ -39,6 +40,16 @@ namespace GUI {
         if (videoSystem) {
             videoSystem->RegisterVideoAddedCallback([this](ECS::EntityID entity) { OnMediaAdded(entity); });
             videoSystem->RegisterVideoRemovedCallback([this](ECS::EntityID entity) { OnMediaRemoved(entity); });
+        }
+
+        audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+        if (!audioSystem) {
+            m_entityManager.RegisterSystem<ECS::AudioSystem>();
+            audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+        }
+        if (audioSystem) {
+            audioSystem->RegisterAudioAddedCallback([this](ECS::EntityID entity) { OnMediaAdded(entity); });
+            audioSystem->RegisterAudioRemovedCallback([this](ECS::EntityID entity) { OnMediaRemoved(entity); });
         }
 
         RefreshEntities();
@@ -108,7 +119,7 @@ namespace GUI {
             bool changed = false;
             changed |= ThumbnailFilters::RenderViewMenu(filterSettings);
             changed |= ThumbnailFilters::RenderSortMenu(filterSettings);
-            changed |= ThumbnailFilters::RenderFiltersMenu(filterSettings, false, false);
+            changed |= ThumbnailFilters::RenderFiltersMenu(filterSettings, true, true);
 
             if (ImGui::BeginMenu("Actions")) {
                 if (ImGui::MenuItem("Refresh")) {
@@ -164,6 +175,21 @@ namespace GUI {
                 info.fps = static_cast<float>(comp.fps);
                 info.isVideo = true;
             }
+            else if (m_entityManager.HasComponent<ECS::AudioComponent>(eid)) {
+                const auto& comp = m_entityManager.GetComponent<ECS::AudioComponent>(eid);
+                if (comp.pcmData.empty()) {
+                    return info;
+                }
+                info.fileName = comp.fileName;
+                info.filePath = comp.filePath;
+                info.fileSize = std::filesystem::file_size(comp.filePath);
+                info.dateTime = "";
+                info.channels = comp.channels;
+                info.sampleRate = comp.sampleRate;
+                info.duration = comp.duration;
+                info.hasMetadata = comp.hasAniStudioMetadata;
+                info.isAudio = true;
+            }
             return info;
             };
         ThumbnailFilters::ApplyFiltersAndSort(mediaEntities, filterSettings, getInfo);
@@ -207,7 +233,8 @@ namespace GUI {
 
             bool isImage = m_entityManager.HasComponent<ECS::ImageComponent>(entityID);
             bool isVideo = m_entityManager.HasComponent<ECS::VideoComponent>(entityID);
-            if (!isImage && !isVideo) continue;
+            bool isAudio = m_entityManager.HasComponent<ECS::AudioComponent>(entityID);
+            if (!isImage && !isVideo && !isAudio) continue;
 
             if (filterSettings.displayMode != GUI::Thumbnail::DisplayMode::List) {
                 if (itemIndex > 0 && (itemIndex % columns) != 0) {
@@ -218,12 +245,15 @@ namespace GUI {
                 }
             }
 
-            std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*> compVariant;
+            std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*> compVariant;
             if (isImage) {
                 compVariant = &m_entityManager.GetComponent<ECS::ImageComponent>(entityID);
             }
-            else {
+            else if (isVideo) {
                 compVariant = &m_entityManager.GetComponent<ECS::VideoComponent>(entityID);
+            }
+            else {
+                compVariant = &m_entityManager.GetComponent<ECS::AudioComponent>(entityID);
             }
 
             if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
@@ -275,6 +305,16 @@ namespace GUI {
 
         if (videoSystem) {
             for (auto id : videoSystem->GetAllVideoEntities()) {
+                if (m_entityManager.IsEntityValid(id)) {
+                    if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
+                        mediaEntities.push_back(id);
+                    }
+                }
+            }
+        }
+
+        if (audioSystem) {
+            for (auto id : audioSystem->GetAllAudioEntities()) {
                 if (m_entityManager.IsEntityValid(id)) {
                     if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
                         mediaEntities.push_back(id);

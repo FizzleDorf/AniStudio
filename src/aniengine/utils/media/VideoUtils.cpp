@@ -380,9 +380,11 @@ namespace Utils {
                         hasAudio = false;
                     }
                     else {
+                        // --- 8.x: set channel layout ---
+                        AVChannelLayout chLayout;
+                        av_channel_layout_default(&chLayout, audio->channels);
+                        av_channel_layout_copy(&audioCodecCtx->ch_layout, &chLayout);
                         audioCodecCtx->sample_rate = targetAudioSampleRate;
-                        audioCodecCtx->channel_layout = AV_CH_LAYOUT_STEREO;
-                        audioCodecCtx->channels = audio->channels;
                         audioCodecCtx->sample_fmt = audioCodec->sample_fmts ? audioCodec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
                         audioCodecCtx->bit_rate = 128000;
                         audioCodecCtx->time_base = AVRational{ 1, audioCodecCtx->sample_rate };
@@ -452,8 +454,11 @@ namespace Utils {
             if (audio->sampleRate != targetAudioSampleRate) {
                 audioSwrCtx = swr_alloc();
                 if (audioSwrCtx) {
-                    av_opt_set_int(audioSwrCtx, "in_channel_layout", AV_CH_LAYOUT_STEREO, 0);
-                    av_opt_set_int(audioSwrCtx, "out_channel_layout", AV_CH_LAYOUT_STEREO, 0);
+                    AVChannelLayout inLayout, outLayout;
+                    av_channel_layout_default(&inLayout, audio->channels);
+                    av_channel_layout_copy(&outLayout, &audioCodecCtx->ch_layout);
+                    av_opt_set_chlayout(audioSwrCtx, "in_chlayout", &inLayout, 0);
+                    av_opt_set_chlayout(audioSwrCtx, "out_chlayout", &outLayout, 0);
                     av_opt_set_int(audioSwrCtx, "in_sample_rate", audio->sampleRate, 0);
                     av_opt_set_int(audioSwrCtx, "out_sample_rate", audioCodecCtx->sample_rate, 0);
                     av_opt_set_sample_fmt(audioSwrCtx, "in_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
@@ -575,12 +580,13 @@ namespace Utils {
             }
         }
 
-        // --- Encode all audio samples separately ---
+        // --- Encode all audio samples separately (FFmpeg 8.x) ---
         if (hasAudio && audioCodecCtx) {
             std::cout << "Encoding audio..." << std::endl;
             size_t audioSamplePos = 0;
             size_t totalAudioSamples = audio->pcmData.size() / audio->channels;
             int samplesPerFrame = audioCodecCtx->frame_size > 0 ? audioCodecCtx->frame_size : 1024;
+            int dstCh = audioCodecCtx->ch_layout.nb_channels;  // direct member
 
             while (audioSamplePos < totalAudioSamples) {
                 size_t samplesToRead = std::min(static_cast<size_t>(samplesPerFrame),
@@ -600,9 +606,9 @@ namespace Utils {
 
                 int convertedSamples = static_cast<int>(samplesToRead);
                 if (audioSwrCtx) {
-                    int maxOutSamples = samplesToRead * 2;
+                    int maxOutSamples = static_cast<int>(samplesToRead * 2);
                     int bytesPerSample = av_get_bytes_per_sample(audioCodecCtx->sample_fmt);
-                    uint8_t* outBuffer = (uint8_t*)av_malloc(maxOutSamples * audioCodecCtx->channels * bytesPerSample);
+                    uint8_t* outBuffer = (uint8_t*)av_malloc(maxOutSamples * dstCh * bytesPerSample);
                     if (!outBuffer) {
                         av_frame_free(&audioFrame);
                         std::cerr << "Failed to allocate audio buffer" << std::endl;
@@ -620,7 +626,7 @@ namespace Utils {
                     }
                     audioFrame->nb_samples = convertedSamples;
                     audioFrame->format = audioCodecCtx->sample_fmt;
-                    audioFrame->channel_layout = audioCodecCtx->channel_layout;
+                    av_channel_layout_copy(&audioFrame->ch_layout, &audioCodecCtx->ch_layout);
                     audioFrame->sample_rate = audioCodecCtx->sample_rate;
                     ret = av_frame_get_buffer(audioFrame, 0);
                     if (ret < 0) {
@@ -631,7 +637,7 @@ namespace Utils {
                         break;
                     }
                     int bytesPerSampleOut = av_get_bytes_per_sample(audioCodecCtx->sample_fmt);
-                    for (int ch = 0; ch < audioCodecCtx->channels; ch++) {
+                    for (int ch = 0; ch < dstCh; ch++) {
                         std::memcpy(audioFrame->data[ch],
                             outBuffer + ch * convertedSamples * bytesPerSampleOut,
                             convertedSamples * bytesPerSampleOut);
@@ -641,7 +647,7 @@ namespace Utils {
                 else {
                     audioFrame->nb_samples = static_cast<int>(samplesToRead);
                     audioFrame->format = audioCodecCtx->sample_fmt;
-                    audioFrame->channel_layout = audioCodecCtx->channel_layout;
+                    av_channel_layout_copy(&audioFrame->ch_layout, &audioCodecCtx->ch_layout);
                     audioFrame->sample_rate = audioCodecCtx->sample_rate;
                     ret = av_frame_get_buffer(audioFrame, 0);
                     if (ret < 0) {
@@ -651,16 +657,16 @@ namespace Utils {
                         break;
                     }
                     if (audioCodecCtx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
-                        for (int ch = 0; ch < audioCodecCtx->channels; ch++) {
+                        for (int ch = 0; ch < dstCh; ch++) {
                             float* out = (float*)audioFrame->data[ch];
                             for (int j = 0; j < convertedSamples; j++) {
-                                out[j] = audioSamples[j * audioCodecCtx->channels + ch];
+                                out[j] = audioSamples[j * dstCh + ch];
                             }
                         }
                     }
                     else {
                         std::memcpy(audioFrame->data[0], audioSamples.data(),
-                            convertedSamples * audioCodecCtx->channels * sizeof(float));
+                            convertedSamples * dstCh * sizeof(float));
                     }
                 }
 

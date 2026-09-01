@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <atomic>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -21,6 +22,57 @@ namespace ECS {
             compName = "AudioComponent";
             compCategory = "Media";
             setupBaseSchema();
+        }
+
+        AudioComponent(const AudioComponent& other)
+            : BaseComponent(other)
+            , filePath(other.filePath)
+            , fileName(other.fileName)
+            , duration(other.duration)
+            , channels(other.channels)
+            , sampleRate(other.sampleRate)
+            , totalSamples(other.totalSamples)
+            , pcmData(other.pcmData)
+            , volume(other.volume)
+            , looping(other.looping)
+            , reachedEnd(other.reachedEnd)
+            , currentTime(other.currentTime)
+            , hasExifData(other.hasExifData)
+            , hasLSBData(other.hasLSBData)
+            , hasAniStudioMetadata(other.hasAniStudioMetadata)
+            , decodeBuffer(other.decodeBuffer)
+            , decodeBufferPosition(other.decodeBufferPosition)
+            , manualSeek(other.manualSeek)
+            , isLoading(false)
+        {
+            compName = "AudioComponent";
+            compCategory = "Media";
+            setupBaseSchema();
+        }
+
+        AudioComponent& operator=(const AudioComponent& other) {
+            if (this != &other) {
+                BaseComponent::operator=(other);
+                filePath = other.filePath;
+                fileName = other.fileName;
+                duration = other.duration;
+                channels = other.channels;
+                sampleRate = other.sampleRate;
+                totalSamples = other.totalSamples;
+                pcmData = other.pcmData;
+                volume = other.volume;
+                looping = other.looping;
+                reachedEnd = other.reachedEnd;
+                currentTime = other.currentTime;
+                hasExifData = other.hasExifData;
+                hasLSBData = other.hasLSBData;
+                hasAniStudioMetadata = other.hasAniStudioMetadata;
+                decodeBuffer = other.decodeBuffer;
+                decodeBufferPosition = other.decodeBufferPosition;
+                manualSeek = other.manualSeek;
+                isLoading = false;
+            }
+            return *this;
         }
 
         ~AudioComponent() {
@@ -50,6 +102,7 @@ namespace ECS {
             }
             pcmData.clear();
             pcmData.shrink_to_fit();
+            isLoading = false;
         }
 
         virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -59,14 +112,13 @@ namespace ECS {
             properties["duration"] = &duration;
             properties["channels"] = &channels;
             properties["sampleRate"] = &sampleRate;
-            properties["isPlaying"] = &isPlaying;
-            properties["isPaused"] = &isPaused;
-            properties["looping"] = &looping;
             properties["volume"] = &volume;
+            properties["looping"] = &looping;
             properties["currentTime"] = &currentTime;
             properties["hasExifData"] = &hasExifData;
             properties["hasLSBData"] = &hasLSBData;
             properties["hasAniStudioMetadata"] = &hasAniStudioMetadata;
+            properties["manualSeek"] = &manualSeek;
             return properties;
         }
 
@@ -79,14 +131,13 @@ namespace ECS {
                 {"duration", duration},
                 {"channels", channels},
                 {"sampleRate", sampleRate},
-                {"isPlaying", isPlaying},
-                {"isPaused", isPaused},
-                {"looping", looping},
                 {"volume", volume},
+                {"looping", looping},
                 {"currentTime", currentTime},
                 {"hasExifData", hasExifData},
                 {"hasLSBData", hasLSBData},
-                {"hasAniStudioMetadata", hasAniStudioMetadata}
+                {"hasAniStudioMetadata", hasAniStudioMetadata},
+                {"manualSeek", manualSeek}
             };
             return j;
         }
@@ -104,30 +155,25 @@ namespace ECS {
             if (componentData.contains("duration")) duration = componentData["duration"];
             if (componentData.contains("channels")) channels = componentData["channels"];
             if (componentData.contains("sampleRate")) sampleRate = componentData["sampleRate"];
-            if (componentData.contains("isPlaying")) isPlaying = componentData["isPlaying"];
-            if (componentData.contains("isPaused")) isPaused = componentData["isPaused"];
-            if (componentData.contains("looping")) looping = componentData["looping"];
             if (componentData.contains("volume")) volume = componentData["volume"];
+            if (componentData.contains("looping")) looping = componentData["looping"];
             if (componentData.contains("currentTime")) currentTime = componentData["currentTime"];
             if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
             if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
             if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
+            if (componentData.contains("manualSeek")) manualSeek = componentData["manualSeek"];
         }
 
-        // File info
         std::string filePath;
         std::string fileName;
 
-        // Audio metadata
         double duration = 0.0;
         int channels = 0;
         int sampleRate = 0;
         int64_t totalSamples = 0;
 
-        // Decoded PCM data (interleaved float format, range -1.0 to 1.0)
         std::vector<float> pcmData;
 
-        // FFmpeg context
         AVFormatContext* fmtCtx = nullptr;
         AVCodecContext* codecCtx = nullptr;
         SwrContext* swrCtx = nullptr;
@@ -135,22 +181,21 @@ namespace ECS {
         AVPacket* pkt = nullptr;
         int audioStreamIndex = -1;
 
-        // Playback state
-        bool isPlaying = false;
-        bool isPaused = false;
-        bool looping = false;
         float volume = 1.0f;
+        bool looping = false;
+        bool reachedEnd = false;
         double currentTime = 0.0;
-        size_t currentSampleIndex = 0;
 
-        // Metadata flags
         bool hasExifData = false;
         bool hasLSBData = false;
         bool hasAniStudioMetadata = false;
 
-        // For streaming/playback
         std::vector<float> decodeBuffer;
         size_t decodeBufferPosition = 0;
+
+        bool manualSeek = false;
+
+        std::atomic<bool> isLoading{ false };
 
     protected:
         void setupBaseSchema() {
@@ -158,60 +203,18 @@ namespace ECS {
                 {"title", "Audio"},
                 {"type", "object"},
                 {"properties", {
-                    {"filePath", {
-                        {"type", "string"},
-                        {"title", "File Path"}
-                    }},
-                    {"fileName", {
-                        {"type", "string"},
-                        {"title", "File Name"}
-                    }},
-                    {"duration", {
-                        {"type", "number"},
-                        {"title", "Duration (seconds)"}
-                    }},
-                    {"channels", {
-                        {"type", "integer"},
-                        {"title", "Channels"}
-                    }},
-                    {"sampleRate", {
-                        {"type", "integer"},
-                        {"title", "Sample Rate (Hz)"}
-                    }},
-                    {"isPlaying", {
-                        {"type", "boolean"},
-                        {"title", "Is Playing"}
-                    }},
-                    {"isPaused", {
-                        {"type", "boolean"},
-                        {"title", "Is Paused"}
-                    }},
-                    {"looping", {
-                        {"type", "boolean"},
-                        {"title", "Looping"}
-                    }},
-                    {"volume", {
-                        {"type", "number"},
-                        {"title", "Volume"},
-                        {"minimum", 0.0},
-                        {"maximum", 1.0}
-                    }},
-                    {"currentTime", {
-                        {"type", "number"},
-                        {"title", "Current Time (seconds)"}
-                    }},
-                    {"hasExifData", {
-                        {"type", "boolean"},
-                        {"title", "Has EXIF Metadata"}
-                    }},
-                    {"hasLSBData", {
-                        {"type", "boolean"},
-                        {"title", "Has LSB Data"}
-                    }},
-                    {"hasAniStudioMetadata", {
-                        {"type", "boolean"},
-                        {"title", "Has AniStudio Metadata"}
-                    }}
+                    {"filePath", {{"type", "string"}, {"title", "File Path"}}},
+                    {"fileName", {{"type", "string"}, {"title", "File Name"}}},
+                    {"duration", {{"type", "number"}, {"title", "Duration (seconds)"}}},
+                    {"channels", {{"type", "integer"}, {"title", "Channels"}}},
+                    {"sampleRate", {{"type", "integer"}, {"title", "Sample Rate (Hz)"}}},
+                    {"volume", {{"type", "number"}, {"title", "Volume"}, {"minimum", 0.0}, {"maximum", 1.0}}},
+                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
+                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
+                    {"hasExifData", {{"type", "boolean"}, {"title", "Has EXIF Metadata"}}},
+                    {"hasLSBData", {{"type", "boolean"}, {"title", "Has LSB Data"}}},
+                    {"hasAniStudioMetadata", {{"type", "boolean"}, {"title", "Has AniStudio Metadata"}}},
+                    {"manualSeek", {{"type", "boolean"}, {"title", "Manual Seek Flag"}}}
                 }}
             };
         }
@@ -403,4 +406,4 @@ namespace ECS {
         }
     };
 
-} // namespace ECS
+}

@@ -81,6 +81,10 @@ namespace GUI {
             return vid != nullptr && vid->width > 0 && vid->height > 0;
         }
 
+        static bool IsAudioLoaded(const ECS::AudioComponent* aud) {
+            return aud != nullptr && !aud->pcmData.empty();
+        }
+
         void BeginListMode(float thumbnailSize) {
             if (s_listTableOpen) return;
 
@@ -92,10 +96,11 @@ namespace GUI {
             float dimsMinWidth = ImGui::CalcTextSize("Dimensions").x + 20.0f;
             float durationMinWidth = ImGui::CalcTextSize("Duration").x + 20.0f;
             float fpsMinWidth = ImGui::CalcTextSize("FPS").x + 20.0f;
+            float sampleRateMinWidth = ImGui::CalcTextSize("Sample Rate").x + 20.0f;
             float dateMinWidth = ImGui::CalcTextSize("Date/Time").x + 20.0f;
             float statusMinWidth = ImGui::CalcTextSize("Status").x + 20.0f;
 
-            bool tableOpen = ImGui::BeginTable("ThumbnailList", 9,
+            bool tableOpen = ImGui::BeginTable("ThumbnailList", 10,
                 ImGuiTableFlags_BordersV | ImGuiTableFlags_RowBg |
                 ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable);
 
@@ -107,6 +112,7 @@ namespace GUI {
                 ImGui::TableSetupColumn("Dimensions", ImGuiTableColumnFlags_WidthFixed, dimsMinWidth);
                 ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthFixed, durationMinWidth);
                 ImGui::TableSetupColumn("FPS", ImGuiTableColumnFlags_WidthFixed, fpsMinWidth);
+                ImGui::TableSetupColumn("Sample Rate", ImGuiTableColumnFlags_WidthFixed, sampleRateMinWidth);
                 ImGui::TableSetupColumn("Date/Time", ImGuiTableColumnFlags_WidthFixed, dateMinWidth);
                 ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, statusMinWidth);
 
@@ -127,7 +133,7 @@ namespace GUI {
         }
 
         void RenderListRow(
-            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*>& component,
+            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
             size_t index,
             float thumbnailSize,
             std::function<void(ECS::EntityID)> onSelect,
@@ -139,7 +145,10 @@ namespace GUI {
 
             const ECS::ImageComponent* img = nullptr;
             const ECS::VideoComponent* vid = nullptr;
+            const ECS::AudioComponent* aud = nullptr;
             bool isImage = false;
+            bool isVideo = false;
+            bool isAudio = false;
 
             if (auto* p = std::get_if<const ECS::ImageComponent*>(&component)) {
                 img = *p;
@@ -147,29 +156,74 @@ namespace GUI {
             }
             else if (auto* p = std::get_if<const ECS::VideoComponent*>(&component)) {
                 vid = *p;
+                isVideo = true;
+            }
+            else if (auto* p = std::get_if<const ECS::AudioComponent*>(&component)) {
+                aud = *p;
+                isAudio = true;
             }
 
-            if (!img && !vid) return;
+            if (!img && !vid && !aud) return;
 
             if (isImage && !IsImageLoaded(img)) return;
-            if (!isImage && !IsVideoLoaded(vid)) return;
+            if (isVideo && !IsVideoLoaded(vid)) return;
+            if (isAudio && !IsAudioLoaded(aud)) return;
 
-            std::string filePath = isImage ? img->filePath : vid->filePath;
-            std::string fileName = isImage ? img->fileName : vid->fileName;
-            ECS::EntityID entityID = isImage ? img->GetID() : vid->GetID();
-            GLuint textureID = isImage ? img->textureID : vid->currentTexture;
-            int width = isImage ? img->width : vid->width;
-            int height = isImage ? img->height : vid->height;
-            int channels = isImage ? img->channels : 4;
-            uint64_t fileSize = isImage ? img->fileSize : vid->fileSize;
-            std::string fileDate = isImage ? img->fileDate : vid->fileDate;
-            std::string fileTime = isImage ? img->fileTime : vid->fileTime;
-            double duration = isImage ? 0.0 : (vid->frameCount > 0 ? vid->frameCount / vid->fps : 0.0);
-            bool hasExif = isImage ? img->hasExifData : vid->hasExifData;
-            bool hasLSB = isImage ? img->hasLSBData : vid->hasLSBData;
-            bool hasAniStudioMetadata = isImage ? img->hasAniStudioMetadata : vid->hasAniStudioMetadata;
-            float fps = isImage ? 0.0f : static_cast<float>(vid->fps);
-            bool isVideo = !isImage;
+            std::string filePath, fileName;
+            ECS::EntityID entityID = 0;
+            GLuint textureID = 0;
+            int width = 0, height = 0, channels = 0;
+            uint64_t fileSize = 0;
+            std::string fileDate, fileTime;
+            double duration = 0.0;
+            bool hasExif = false, hasLSB = false, hasAniStudioMetadata = false;
+            float fps = 0.0f;
+            int sampleRate = 0;
+
+            if (isImage) {
+                filePath = img->filePath;
+                fileName = img->fileName;
+                entityID = img->GetID();
+                textureID = img->textureID;
+                width = img->width;
+                height = img->height;
+                channels = img->channels;
+                fileSize = img->fileSize;
+                fileDate = img->fileDate;
+                fileTime = img->fileTime;
+                hasExif = img->hasExifData;
+                hasLSB = img->hasLSBData;
+                hasAniStudioMetadata = img->hasAniStudioMetadata;
+            }
+            else if (isVideo) {
+                filePath = vid->filePath;
+                fileName = vid->fileName;
+                entityID = vid->GetID();
+                textureID = vid->currentTexture;
+                width = vid->width;
+                height = vid->height;
+                channels = 4;
+                fileSize = vid->fileSize;
+                fileDate = vid->fileDate;
+                fileTime = vid->fileTime;
+                hasExif = vid->hasExifData;
+                hasLSB = vid->hasLSBData;
+                hasAniStudioMetadata = vid->hasAniStudioMetadata;
+                duration = (vid->frameCount > 0) ? vid->frameCount / vid->fps : 0.0;
+                fps = static_cast<float>(vid->fps);
+            }
+            else if (isAudio) {
+                filePath = aud->filePath;
+                fileName = aud->fileName;
+                entityID = aud->GetID();
+                channels = aud->channels;
+                sampleRate = aud->sampleRate;
+                duration = aud->duration;
+                fileSize = std::filesystem::file_size(filePath);
+                hasExif = aud->hasExifData;
+                hasLSB = aud->hasLSBData;
+                hasAniStudioMetadata = aud->hasAniStudioMetadata;
+            }
 
             float rowHeight = thumbnailSize + 8.0f;
             ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
@@ -236,7 +290,19 @@ namespace GUI {
             float thumbSize = thumbnailSize - 4.0f;
             float thumbColWidth = ImGui::GetContentRegionAvail().x;
 
-            if (textureID != 0 && width > 0 && height > 0) {
+            if (isAudio) {
+                float offsetX = (thumbColWidth - thumbSize) * 0.5f;
+                float offsetY = (rowHeight - thumbSize) * 0.5f;
+                ImGui::SetCursorPos(ImVec2(cellPos.x + offsetX, cellPos.y + offsetY));
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImVec2 pos = ImGui::GetCursorScreenPos();
+                dl->AddRectFilled(pos, pos + ImVec2(thumbSize, thumbSize), IM_COL32(60, 60, 80, 200));
+                float iconSize = thumbSize * 0.6f;
+                float iconX = pos.x + (thumbSize - iconSize) * 0.5f;
+                float iconY = pos.y + (thumbSize - iconSize) * 0.5f;
+                dl->AddText(ImVec2(iconX, iconY), IM_COL32(255, 255, 255, 255), "?");
+            }
+            else if (textureID != 0 && width > 0 && height > 0) {
                 float aspect = (height > 0) ? (float)width / height : 1.0f;
                 ImVec2 size;
                 if (aspect > 1.0f) {
@@ -285,13 +351,18 @@ namespace GUI {
             centerText(GetChannelString(channels));
 
             ImGui::TableSetColumnIndex(4);
-            if (width > 0 && height > 0)
-                centerText(std::to_string(width) + "x" + std::to_string(height));
-            else
+            if (isImage || isVideo) {
+                if (width > 0 && height > 0)
+                    centerText(std::to_string(width) + "x" + std::to_string(height));
+                else
+                    centerText("");
+            }
+            else {
                 centerText("");
+            }
 
             ImGui::TableSetColumnIndex(5);
-            if (isVideo && duration > 0)
+            if ((isVideo || isAudio) && duration > 0)
                 centerText(FormatDuration(duration));
             else
                 centerText("");
@@ -303,13 +374,19 @@ namespace GUI {
                 centerText("");
 
             ImGui::TableSetColumnIndex(7);
+            if (isAudio && sampleRate > 0)
+                centerText(std::to_string(sampleRate) + " Hz");
+            else
+                centerText("");
+
+            ImGui::TableSetColumnIndex(8);
             std::string dateTime = CombineDateTime(fileDate, fileTime);
             if (!dateTime.empty())
                 centerText(dateTime);
             else
                 centerText("");
 
-            ImGui::TableSetColumnIndex(8);
+            ImGui::TableSetColumnIndex(9);
             float avail = ImGui::GetContentRegionAvail().x;
 
             auto getStatusColor = [hasAniStudioMetadata](bool flag) -> ImVec4 {
@@ -344,8 +421,10 @@ namespace GUI {
                 ImGui::BeginTooltip();
                 ImGui::Text("File: %s", fileName.c_str());
                 ImGui::Text("Path: %s", filePath.c_str());
-                if (width > 0 && height > 0) {
-                    ImGui::Text("Dimensions: %dx%d", width, height);
+                if (isImage || isVideo) {
+                    if (width > 0 && height > 0) {
+                        ImGui::Text("Dimensions: %dx%d", width, height);
+                    }
                 }
                 if (channels > 0) {
                     ImGui::Text("Channels: %s", GetChannelString(channels).c_str());
@@ -362,8 +441,11 @@ namespace GUI {
                 if (isVideo && fps > 0) {
                     ImGui::Text("FPS: %.1f", fps);
                 }
-                if (isVideo && duration > 0) {
+                if ((isVideo || isAudio) && duration > 0) {
                     ImGui::Text("Duration: %s", FormatDuration(duration).c_str());
+                }
+                if (isAudio && sampleRate > 0) {
+                    ImGui::Text("Sample Rate: %d Hz", sampleRate);
                 }
                 if (hasAniStudioMetadata) {
                     ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "AniStudio Metadata");
@@ -379,7 +461,7 @@ namespace GUI {
         }
 
         void RenderThumbnail(
-            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*>& component,
+            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
             size_t index,
             float thumbnailSize,
             DisplayMode mode,
@@ -390,7 +472,10 @@ namespace GUI {
         ) {
             const ECS::ImageComponent* img = nullptr;
             const ECS::VideoComponent* vid = nullptr;
+            const ECS::AudioComponent* aud = nullptr;
             bool isImage = false;
+            bool isVideo = false;
+            bool isAudio = false;
 
             if (auto* p = std::get_if<const ECS::ImageComponent*>(&component)) {
                 img = *p;
@@ -398,29 +483,74 @@ namespace GUI {
             }
             else if (auto* p = std::get_if<const ECS::VideoComponent*>(&component)) {
                 vid = *p;
+                isVideo = true;
+            }
+            else if (auto* p = std::get_if<const ECS::AudioComponent*>(&component)) {
+                aud = *p;
+                isAudio = true;
             }
 
-            if (!img && !vid) return;
+            if (!img && !vid && !aud) return;
 
             if (isImage && !IsImageLoaded(img)) return;
-            if (!isImage && !IsVideoLoaded(vid)) return;
+            if (isVideo && !IsVideoLoaded(vid)) return;
+            if (isAudio && !IsAudioLoaded(aud)) return;
 
-            std::string filePath = isImage ? img->filePath : vid->filePath;
-            std::string fileName = isImage ? img->fileName : vid->fileName;
-            ECS::EntityID entityID = isImage ? img->GetID() : vid->GetID();
-            GLuint textureID = isImage ? img->textureID : vid->currentTexture;
-            int width = isImage ? img->width : vid->width;
-            int height = isImage ? img->height : vid->height;
-            int channels = isImage ? img->channels : 4;
-            uint64_t fileSize = isImage ? img->fileSize : vid->fileSize;
-            std::string fileDate = isImage ? img->fileDate : vid->fileDate;
-            std::string fileTime = isImage ? img->fileTime : vid->fileTime;
-            double duration = isImage ? 0.0 : (vid->frameCount > 0 ? vid->frameCount / vid->fps : 0.0);
-            bool hasExif = isImage ? img->hasExifData : vid->hasExifData;
-            bool hasLSB = isImage ? img->hasLSBData : vid->hasLSBData;
-            bool hasAniStudioMetadata = isImage ? img->hasAniStudioMetadata : vid->hasAniStudioMetadata;
-            float fps = isImage ? 0.0f : static_cast<float>(vid->fps);
-            bool isVideo = !isImage;
+            std::string filePath, fileName;
+            ECS::EntityID entityID = 0;
+            GLuint textureID = 0;
+            int width = 0, height = 0, channels = 0;
+            uint64_t fileSize = 0;
+            std::string fileDate, fileTime;
+            double duration = 0.0;
+            bool hasExif = false, hasLSB = false, hasAniStudioMetadata = false;
+            float fps = 0.0f;
+            int sampleRate = 0;
+
+            if (isImage) {
+                filePath = img->filePath;
+                fileName = img->fileName;
+                entityID = img->GetID();
+                textureID = img->textureID;
+                width = img->width;
+                height = img->height;
+                channels = img->channels;
+                fileSize = img->fileSize;
+                fileDate = img->fileDate;
+                fileTime = img->fileTime;
+                hasExif = img->hasExifData;
+                hasLSB = img->hasLSBData;
+                hasAniStudioMetadata = img->hasAniStudioMetadata;
+            }
+            else if (isVideo) {
+                filePath = vid->filePath;
+                fileName = vid->fileName;
+                entityID = vid->GetID();
+                textureID = vid->currentTexture;
+                width = vid->width;
+                height = vid->height;
+                channels = 4;
+                fileSize = vid->fileSize;
+                fileDate = vid->fileDate;
+                fileTime = vid->fileTime;
+                hasExif = vid->hasExifData;
+                hasLSB = vid->hasLSBData;
+                hasAniStudioMetadata = vid->hasAniStudioMetadata;
+                duration = (vid->frameCount > 0) ? vid->frameCount / vid->fps : 0.0;
+                fps = static_cast<float>(vid->fps);
+            }
+            else if (isAudio) {
+                filePath = aud->filePath;
+                fileName = aud->fileName;
+                entityID = aud->GetID();
+                channels = aud->channels;
+                sampleRate = aud->sampleRate;
+                duration = aud->duration;
+                fileSize = std::filesystem::file_size(filePath);
+                hasExif = aud->hasExifData;
+                hasLSB = aud->hasLSBData;
+                hasAniStudioMetadata = aud->hasAniStudioMetadata;
+            }
 
             if (mode == DisplayMode::Compact) {
                 float childHeight = thumbnailSize + ImGui::GetFontSize() + 4.0f;
@@ -454,7 +584,19 @@ namespace GUI {
                 ImGui::BeginGroup();
 
                 ImVec2 thumbSize(thumbnailSize, thumbnailSize);
-                if (textureID != 0 && width > 0 && height > 0) {
+                if (isAudio) {
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    ImVec2 pos = ImGui::GetCursorScreenPos();
+                    dl->AddRectFilled(pos, pos + thumbSize, IM_COL32(60, 60, 80, 200));
+                    float iconSize = thumbSize.x * 0.6f;
+                    float iconX = pos.x + (thumbSize.x - iconSize) * 0.5f;
+                    float iconY = pos.y + (thumbSize.y - iconSize) * 0.5f;
+                    dl->AddText(ImVec2(iconX, iconY), IM_COL32(255, 255, 255, 255), "?");
+                    if (ImGui::IsItemClicked()) {
+                        if (onSelect) onSelect(entityID);
+                    }
+                }
+                else if (textureID != 0 && width > 0 && height > 0) {
                     float aspect = (height > 0) ? (float)width / height : 1.0f;
                     ImVec2 size = thumbSize;
                     if (aspect > 1.0f) size.y = thumbSize.x / aspect;
@@ -511,8 +653,10 @@ namespace GUI {
                     ImGui::BeginTooltip();
                     ImGui::Text("File: %s", fileName.c_str());
                     ImGui::Text("Path: %s", filePath.c_str());
-                    if (width > 0 && height > 0) {
-                        ImGui::Text("Dimensions: %dx%d", width, height);
+                    if (isImage || isVideo) {
+                        if (width > 0 && height > 0) {
+                            ImGui::Text("Dimensions: %dx%d", width, height);
+                        }
                     }
                     if (channels > 0) {
                         ImGui::Text("Channels: %s", GetChannelString(channels).c_str());
@@ -529,8 +673,11 @@ namespace GUI {
                     if (isVideo && fps > 0) {
                         ImGui::Text("FPS: %.1f", fps);
                     }
-                    if (isVideo && duration > 0) {
+                    if ((isVideo || isAudio) && duration > 0) {
                         ImGui::Text("Duration: %s", FormatDuration(duration).c_str());
+                    }
+                    if (isAudio && sampleRate > 0) {
+                        ImGui::Text("Sample Rate: %d Hz", sampleRate);
                     }
                     if (hasAniStudioMetadata) {
                         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "AniStudio Metadata");
@@ -587,7 +734,19 @@ namespace GUI {
                 float imageSize = thumbnailSize - 10;
                 ImVec2 cursor = ImGui::GetCursorPos();
 
-                if (textureID != 0 && width > 0 && height > 0) {
+                if (isAudio) {
+                    ImDrawList* dl = ImGui::GetWindowDrawList();
+                    ImVec2 pos = ImGui::GetCursorScreenPos();
+                    dl->AddRectFilled(pos, pos + ImVec2(imageSize, imageSize), IM_COL32(60, 60, 80, 200));
+                    float iconSize = imageSize * 0.6f;
+                    float iconX = pos.x + (imageSize - iconSize) * 0.5f;
+                    float iconY = pos.y + (imageSize - iconSize) * 0.5f;
+                    dl->AddText(ImVec2(iconX, iconY), IM_COL32(255, 255, 255, 255), "?");
+                    if (ImGui::IsItemClicked()) {
+                        if (onSelect) onSelect(entityID);
+                    }
+                }
+                else if (textureID != 0 && width > 0 && height > 0) {
                     float aspect = (height > 0) ? (float)width / height : 1.0f;
                     ImVec2 size;
                     if (aspect > 1.0f) {
@@ -624,8 +783,10 @@ namespace GUI {
                 std::string channelStr = GetChannelString(channels);
                 ImGui::Text("%s | %s", sizeStr.c_str(), channelStr.c_str());
 
-                if (width > 0 && height > 0) {
-                    ImGui::Text("%dx%d", width, height);
+                if (isImage || isVideo) {
+                    if (width > 0 && height > 0) {
+                        ImGui::Text("%dx%d", width, height);
+                    }
                 }
                 if (!fileDate.empty()) ImGui::Text("%s", fileDate.c_str());
                 if (!fileTime.empty()) ImGui::Text("%s", fileTime.c_str());
@@ -635,6 +796,12 @@ namespace GUI {
                         ImGui::Text("Duration: %s", FormatDuration(duration).c_str());
                     }
                     if (fps > 0) ImGui::Text("%.1f fps", fps);
+                }
+                else if (isAudio) {
+                    if (duration > 0) {
+                        ImGui::Text("Duration: %s", FormatDuration(duration).c_str());
+                    }
+                    if (sampleRate > 0) ImGui::Text("%d Hz", sampleRate);
                 }
 
                 auto getStatusColor = [hasAniStudioMetadata](bool flag) -> ImVec4 {
@@ -684,8 +851,10 @@ namespace GUI {
                     ImGui::BeginTooltip();
                     ImGui::Text("File: %s", fileName.c_str());
                     ImGui::Text("Path: %s", filePath.c_str());
-                    if (width > 0 && height > 0) {
-                        ImGui::Text("Dimensions: %dx%d", width, height);
+                    if (isImage || isVideo) {
+                        if (width > 0 && height > 0) {
+                            ImGui::Text("Dimensions: %dx%d", width, height);
+                        }
                     }
                     if (channels > 0) {
                         ImGui::Text("Channels: %s", GetChannelString(channels).c_str());
@@ -702,8 +871,11 @@ namespace GUI {
                     if (isVideo && fps > 0) {
                         ImGui::Text("FPS: %.1f", fps);
                     }
-                    if (isVideo && duration > 0) {
+                    if ((isVideo || isAudio) && duration > 0) {
                         ImGui::Text("Duration: %s", FormatDuration(duration).c_str());
+                    }
+                    if (isAudio && sampleRate > 0) {
+                        ImGui::Text("Sample Rate: %d Hz", sampleRate);
                     }
                     if (hasAniStudioMetadata) {
                         ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "AniStudio Metadata");

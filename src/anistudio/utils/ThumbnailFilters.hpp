@@ -36,6 +36,7 @@ namespace ThumbnailFilters {
         int width = 0;
         int height = 0;
         int channels = 0;
+        int sampleRate = 0;
         bool hasMetadata = false;
         bool isImage = false;
         bool isVideo = false;

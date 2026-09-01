@@ -70,7 +70,6 @@ target_link_libraries(AniEngineCore PUBLIC
     PNG::PNG
     GLEW::GLEW
     glfw
-    pybind11::embed
     libwebp::libwebp
     exiv2::exiv2
     ffmpeg::avcodec

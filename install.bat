@@ -1,24 +1,31 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Check for Python installation
-python --version >nul 2>&1
-if %errorlevel% neq 0 (
-    echo Python is not installed or not in PATH. Please install Python and try again.
+:: Find a real Python (not WindowsApps)
+set PYTHON_EXE=
+for /f "delims=" %%i in ('where python 2^>nul') do (
+    echo %%i | findstr /i "WindowsApps" >nul
+    if errorlevel 1 (
+        set PYTHON_EXE=%%i
+        goto :python_found
+    )
+)
+:python_found
+if not defined PYTHON_EXE (
+    echo ERROR: Could not find Python outside WindowsApps. Please install Python from python.org.
     exit /b 1
 )
+echo Using Python: %PYTHON_EXE%
 
 :: Create build directory if it doesn't exist
-if not exist build (
-    mkdir build
-)
+if not exist build mkdir build
 
 :: Check if virtual environment exists in build directory
 if exist build\venv (
     echo Virtual environment already exists in build directory.
 ) else (
     echo Creating virtual environment in build directory...
-    python -m venv build\venv
+    "%PYTHON_EXE%" -m venv build\venv
 )
 
 :: Activate virtual environment
@@ -39,8 +46,4 @@ conan install . --build=missing -s compiler.cppstd=17
 echo Installation completed successfully.
 echo To build the project, run 'build.bat'
 
-:: Deactivate virtual environment
-deactivate
-
-echo Please restart your command prompt to ensure all PATH changes take effect.
 pause

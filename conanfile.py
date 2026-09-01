@@ -24,14 +24,14 @@ class AniStudio(ConanFile):
         self.tool_requires("cmake/[>=3.25]")
 
     def requirements(self):
-        self.requires("opencv/4.5.5")
         self.requires("glfw/3.4", options={"shared": True})
         self.requires("glew/2.1.0")
         self.requires("zlib/1.2.11")
         self.requires("libpng/1.6.44")
         self.requires("exiv2/0.28.1")
+        self.tool_requires("ninja/1.12.1")
         self.requires("libwebp/1.3.2")
-        self.requires("ffmpeg/4.4.4", options={"shared": True})
+        self.requires("ffmpeg/8.1.2", options={"shared": True,})
         self.requires("portaudio/19.7", options={"shared": True})
         self.requires("libsamplerate/0.2.2")
 

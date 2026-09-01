@@ -1,3 +1,4 @@
+// ThumbnailUtils.hpp
 #pragma once
 
 #include <string>
@@ -8,6 +9,7 @@
 #include "OpenGLWrapper.hpp"
 #include "ImageComponent.hpp"
 #include "VideoComponent.hpp"
+#include "AudioComponent.hpp"
 #include <variant>
 
 namespace GUI {
@@ -29,7 +31,7 @@ namespace GUI {
         float GetThumbnailSize(ThumbnailSize size);
 
         void RenderThumbnail(
-            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*>& component,
+            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
             size_t index,
             float thumbnailSize,
             DisplayMode mode,
@@ -42,7 +44,7 @@ namespace GUI {
         void BeginListMode(float thumbnailSize);
         void EndListMode();
         void RenderListRow(
-            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*>& component,
+            const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
             size_t index,
             float thumbnailSize,
             std::function<void(ECS::EntityID)> onSelect,

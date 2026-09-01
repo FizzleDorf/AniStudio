@@ -2,8 +2,6 @@
 
 #include "GUI.h"
 #include "EntityManager.hpp"
-#include "PythonComponent.hpp"
-#include "PythonSystem.hpp"
 #include "FileDialogUtil.hpp"
 #include <TextEditor.h>
 #include <memory>
@@ -19,15 +17,14 @@ namespace GUI {
             return R"({
             "displayName": "Text Editor",
             "category": "Tools",
-            "description": "Edit text and running python scripts."
+            "description": "Edit text files."
         })";
         }
 
         TextEditorView(ECS::EntityManager& mgr, ViewManager& vm)
-            : BaseView(mgr, vm), pythonEntity(0), showVirtualEnvSettings(false) {
+            : BaseView(mgr, vm) {
             viewName = "TextEditor";
             textEditor = std::make_unique<TextEditor>();
-            venvPathBuffer[0] = '\0';
         }
         ~TextEditorView() = default;
 
@@ -44,33 +41,18 @@ namespace GUI {
 
     private:
         std::unique_ptr<TextEditor> textEditor;
-        ECS::EntityID pythonEntity;
         std::string lastDisplayedOutput;
         std::string lastDisplayedError;
         std::string currentFilePath;
-        bool showVirtualEnvSettings;
 
-        char venvPathBuffer[512];
-
-        bool IsPythonFile() const;
-        void InitializePythonEntity();
         void RenderFileMenu();
         void RenderEditMenu();
         void RenderViewMenu();
         void RenderLanguageMenu();
-        void RenderPythonMenu();
-        void RenderVirtualEnvDialog();
         void RenderStatusBar();
-        void LoadDefaultPythonScript();
-        void CreateDefaultPythonScript(const std::string& filePath);
-        void SetDefaultPythonContent();
-        std::string GetDefaultPythonContent() const;
-        void ExecuteCurrentScript();
-        void ClearPythonOutput();
         void OpenFileDialog();
         void SaveAsFileDialog();
         void SaveFileDialog();
-        size_t ExtractErrorLine(const std::string& error) const;
     };
 
 } // namespace GUI

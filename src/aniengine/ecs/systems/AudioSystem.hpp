@@ -74,6 +74,10 @@ namespace ECS {
 
         const float* GetAudioData(EntityID entity, size_t& outSize, int& outChannels) const;
 
+        void AddLoadedAudio(EntityID entity);
+
+        static LoadResult ExtractAudioFromVideoFile(const std::string& filePath, EntityID entity);
+
     private:
         std::vector<AudioCallback> audioAddedCallbacks;
         std::vector<AudioCallback> audioRemovedCallbacks;
@@ -90,4 +94,4 @@ namespace ECS {
         static LoadResult DecodeAudioFile(const std::string& filePath, EntityID entity, int targetSampleRate, int targetChannels);
     };
 
-} // namespace ECS
+}

@@ -9,9 +9,7 @@
 #include "Events.hpp"
 #include "guiComponents.h"
 #include "guiSystems.h"
-#include "SettingsView.hpp"
 #include "MenuBar.hpp"
-#include "ProjectManagerView.hpp"
 #include "DragDropUtils.hpp"
 #include <iostream>
 #include <thread>
@@ -381,7 +379,10 @@ namespace ANI {
             entityMgr.RegisterSystem<TextureSystem>();
             entityMgr.RegisterSystem<ECS::SettingsSystem>();
             entityMgr.RegisterSystem<ProjectSystem>();
-            entityMgr.RegisterSystem<AudioPlaybackSystem>();
+            entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
+            entityMgr.RegisterSystem<ECS::VideoSystem>();
+            entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
+            entityMgr.RegisterSystem<ECS::VideoAudioSystem>();
 
             auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
             if (projectSystem) {
@@ -431,7 +432,6 @@ namespace ANI {
             running = true;
 
             std::cout << "[StudioCore] StudioCore initialized successfully!" << std::endl;
-            std::cout << "[StudioCore] =========================================" << std::endl;
             return true;
         }
         catch (const std::exception& e) {
@@ -459,6 +459,8 @@ namespace ANI {
 
         auto& entityMgr = studioCore->GetEntityManager();
         entityMgr.RegisterSystem<TextureSystem>();
+        entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
+        entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
 
         auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
         studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, studioCore.get());
@@ -916,7 +918,8 @@ namespace ANI {
         auto& entityMgr = GetEntityManager();
         auto textureSystem = entityMgr.GetSystem<TextureSystem>();
         auto imageSystem = entityMgr.GetSystem<ImageSystem>();
-        auto videoSystem = entityMgr.GetSystem<VideoSystem>();
+        auto videoSystem = entityMgr.GetSystem<ECS::VideoSystem>();
+        auto videoPlaybackSystem = entityMgr.GetSystem<ECS::VideoPlaybackSystem>();
 
         if (textureSystem && imageSystem) {
             imageSystem->RegisterImageAddedCallback([this, textureSystem](EntityID entityID) {
@@ -941,7 +944,7 @@ namespace ANI {
 
             if (videoSystem) {
                 videoSystem->SetVideoTextureCallback(
-                    [textureSystem](EntityID entityID, unsigned char* data, int width, int height, int channels, GLuint* targetTexture) {
+                    [textureSystem](ECS::EntityID entityID, unsigned char* data, int width, int height, int channels, GLuint* targetTexture) {
                         textureSystem->QueueVideoTextureCreation(entityID, data, width, height, channels, targetTexture);
                     }
                 );
@@ -960,7 +963,7 @@ namespace ANI {
 
         auto& entityMgr = GetEntityManager();
         auto imageSystem = entityMgr.GetSystem<ImageSystem>();
-        auto videoSystem = entityMgr.GetSystem<VideoSystem>();
+        auto videoSystem = entityMgr.GetSystem<ECS::VideoSystem>();
         auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
         auto pluginManager = studioContext ? studioContext->studioPluginManager : nullptr;
 
@@ -1021,7 +1024,7 @@ namespace ANI {
                     std::cout << "[StudioCore] LoadVideoRequest: " << filePath << std::endl;
                     auto& entityMgr = GetEntityManager();
                     ECS::EntityID entity = entityMgr.AddNewEntity();
-                    entityMgr.AddComponent<VideoComponent>(entity);
+                    entityMgr.AddComponent<ECS::VideoComponent>(entity);
                     videoSystem->SetVideo(entity, filePath);
                     std::cout << "[StudioCore] Created entity " << entity << " for video" << std::endl;
                 }

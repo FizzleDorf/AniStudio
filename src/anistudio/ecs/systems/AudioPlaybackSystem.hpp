@@ -1,23 +1,22 @@
 #pragma once
-
 #include "BaseSystem.hpp"
 #include "EntityManager.hpp"
 #include "AudioComponent.hpp"
-#include <memory>
-#include <functional>
-#include <vector>
-#include <mutex>
-#include <atomic>
-#include <thread>
-#include <condition_variable>
+#include "ThreadPoolSystem.hpp"
 #include <portaudio.h>
-#include <samplerate.h>
+#include <unordered_map>
+#include <mutex>
+#include <chrono>
+#include <atomic>
+#include <functional>
+#include <memory>
 
 namespace ECS {
 
     class AudioPlaybackSystem : public BaseSystem {
     public:
-        using AudioPlaybackCallback = std::function<void(EntityID, const float*, size_t, int, int)>;
+        using AudioPlaybackCallback = std::function<void(EntityID, const float*, size_t, int)>;
+        using AudioEndCallback = std::function<void(EntityID)>;
 
         AudioPlaybackSystem(EntityManager& entityMgr);
         ~AudioPlaybackSystem() override;
@@ -26,60 +25,71 @@ namespace ECS {
         void Update(float deltaT) override;
         void Destroy() override;
 
-        void RegisterPlaybackCallback(const AudioPlaybackCallback& callback);
+        void RegisterPlaybackCallback(const AudioPlaybackCallback& cb);
+        void RegisterEndCallback(const AudioEndCallback& cb);
 
         void Play(EntityID entity, bool loop = false);
-        void Stop(EntityID entity);
         void Pause(EntityID entity);
         void Resume(EntityID entity);
+        void Stop(EntityID entity);
+        void Seek(EntityID entity, double time);
         void SetVolume(EntityID entity, float volume);
         void SetPlaybackSpeed(EntityID entity, float speed);
-        void Seek(EntityID entity, double position);
-        double GetCurrentPosition(EntityID entity) const;
-        double GetDuration(EntityID entity) const;
+
         bool IsPlaying(EntityID entity) const;
         bool IsPaused(EntityID entity) const;
-
-        std::vector<std::string> GetAvailableDevices() const;
-        bool SetOutputDevice(int deviceIndex);
+        double GetCurrentPosition(EntityID entity) const;
+        double GetDuration(EntityID entity) const;
 
         void PlayTestTone();
 
     private:
-        void ReopenStream();
-        void AudioPlaybackThread();
+        struct AudioTrackState {
+            EntityID entity = 0;
+            const float* pcmData = nullptr;
+            size_t totalSamples = 0;
+            int channels = 0;
+            int sampleRate = 0;
+            double duration = 0.0;
+            size_t readPosition = 0;
+            bool paused = true;
+            bool loop = false;
+            bool stopped = true;
+            bool endReached = false;
+            float volume = 1.0f;
+            float speed = 1.0f;
+            double lastPaTime = 0.0;
+            double streamTime = 0.0;
+        };
+
+        struct AudioStreamState {
+            PaStream* stream = nullptr;
+            std::unordered_map<EntityID, AudioTrackState> tracks;
+            mutable std::mutex mutex;
+            std::atomic<bool> running{ false };
+            bool streamOpen = false;
+        };
+
+        std::unordered_map<EntityID, AudioTrackState> m_tracks;
+        mutable std::mutex m_trackMutex;
+        std::unique_ptr<AudioStreamState> m_streamState;
 
         std::vector<AudioPlaybackCallback> m_callbacks;
+        std::vector<AudioEndCallback> m_endCallbacks;
 
-        PaStream* m_paStream = nullptr;
-        std::atomic<bool> m_paInitialized{ false };
-        std::atomic<int> m_paDeviceIndex{ -1 };
+        std::atomic<bool> m_destroying{ false };
 
-        int m_streamSampleRate = 44100;
-        int m_streamChannels = 2;
-        int m_streamFramesPerBuffer = 1024;
-        bool m_streamInitialized = false;
-        int m_deviceSampleRate = 0;
-        int m_actualStreamSampleRate = 0;
+        static int PaCallback(const void* inputBuffer, void* outputBuffer,
+            unsigned long framesPerBuffer,
+            const PaStreamCallbackTimeInfo* timeInfo,
+            PaStreamCallbackFlags statusFlags,
+            void* userData);
 
-        std::thread m_playbackThread;
-        std::atomic<bool> m_playbackThreadRunning{ false };
-        std::condition_variable m_playbackCV;
-        std::mutex m_playbackCV_mutex;
-
-        EntityID m_playingEntity = 0;
-        float m_playbackVolume = 1.0f;
-        float m_playbackSpeed = 1.0f;
-        bool m_playbackActive = false;
-        bool m_playbackPaused = false;
-        double m_playbackSpeedRatio = 1.0;
-
-        mutable std::mutex m_playbackMutex;
-
-        // Resampling state
-        SRC_STATE* m_srcState = nullptr;
-        std::vector<float> m_resampleInput;
-        std::vector<float> m_resampleOutput;
+        void ProcessTracks(float* outputBuffer, unsigned long framesPerBuffer,
+            const PaStreamCallbackTimeInfo* timeInfo);
+        void NotifyPlaybackEnd(EntityID entity);
+        bool OpenStream();
+        void CloseStream();
     };
 
-} // namespace ECS
+}

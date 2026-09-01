@@ -4,15 +4,15 @@
 #include "EntityManager.hpp"
 #include "VideoComponent.hpp"
 #include "VideoUtils.hpp"
-#include "AudioComponent.hpp"
 #include "Components.h"
 #include "ThreadPoolSystem.hpp"
 #include <memory>
 #include <functional>
 #include <vector>
 #include <chrono>
-#include <iostream>
 #include <future>
+#include <mutex>
+#include <shared_mutex>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -20,7 +20,6 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 #include <libavutil/opt.h>
-#include <libswresample/swresample.h>
 }
 
 namespace ECS {
@@ -29,7 +28,6 @@ namespace ECS {
     public:
         using VideoCallback = std::function<void(EntityID)>;
         using VideoTextureCallback = std::function<void(EntityID, unsigned char*, int, int, int, GLuint*)>;
-        using VideoAudioCallback = std::function<void(EntityID, EntityID)>;
         using SaveCallback = std::function<void(EntityID, bool, const std::string&)>;
         using LoadCallback = std::function<void(EntityID, bool)>;
 
@@ -45,34 +43,17 @@ namespace ECS {
 
         void RegisterVideoAddedCallback(const VideoCallback& cb);
         void RegisterVideoRemovedCallback(const VideoCallback& cb);
-        void RegisterVideoAudioCallback(const VideoAudioCallback& cb);
         void RegisterSaveCallback(const SaveCallback& cb);
         void RegisterLoadCallback(const LoadCallback& cb);
 
         void SetVideoTextureCallback(const VideoTextureCallback& callback);
 
-        bool SeekToFrame(VideoComponent& videoComp, long long frameIndex);
-        bool AdvanceOneFrame(VideoComponent& videoComp);
-        void UpdateMetadataFlags(EntityID entity);
+        bool IsLoading(EntityID entity) const;
+        bool IsSaving(EntityID entity) const;
 
         void SaveVideoAsync(EntityID entity, const std::string& outputPath = "");
-        bool IsSaving(EntityID entity) const;
-        bool IsLoading(EntityID entity) const;
 
-    private:
-        struct SaveTaskData {
-            std::string inputPath;
-            std::string outputPath;
-            std::vector<float> audioPcmData;
-            int audioChannels = 2;
-            int audioSampleRate = 44100;
-            double audioDuration = 0.0;
-            bool hasAudio = false;
-            int fps = 24;
-            int width = 0;
-            int height = 0;
-            long long frameCount = 0;
-        };
+        bool DecodeFrameForSave(VideoComponent& videoComp, long long frameIndex, bool& isNewFrame);
 
         struct LoadResult {
             bool success = false;
@@ -90,20 +71,22 @@ namespace ECS {
             bool hasExif = false;
             bool hasLSB = false;
             bool hasAniStudio = false;
-
-            bool hasAudio = false;
-            std::vector<float> audioPcmData;
-            int audioChannels = 2;
-            int audioSampleRate = 44100;
-            double audioDuration = 0.0;
-
             AVFormatContext* fmtCtx = nullptr;
             AVCodecContext* codecCtx = nullptr;
             SwsContext* swsCtx = nullptr;
             AVFrame* frame = nullptr;
             AVPacket* pkt = nullptr;
             int videoStreamIndex = -1;
-            int audioStreamIndex = -1;
+        };
+
+    private:
+        struct SaveTaskData {
+            std::string inputPath;
+            std::string outputPath;
+            int fps = 24;
+            int width = 0;
+            int height = 0;
+            long long frameCount = 0;
         };
 
         struct LoadingTask {
@@ -119,10 +102,8 @@ namespace ECS {
 
         std::vector<VideoCallback> videoAddedCallbacks;
         std::vector<VideoCallback> videoRemovedCallbacks;
-        std::vector<VideoAudioCallback> videoAudioCallbacks;
         std::vector<SaveCallback> saveCallbacks;
         std::vector<LoadCallback> loadCallbacks;
-        std::chrono::high_resolution_clock::time_point lastFrameTime;
         VideoTextureCallback m_textureCallback;
 
         std::unordered_map<EntityID, std::future<bool>> m_saveFutures;
@@ -130,12 +111,11 @@ namespace ECS {
         mutable std::mutex m_saveMutex;
 
         std::vector<LoadingTask> m_pendingLoads;
-        mutable std::mutex m_loadMutex;
+        mutable std::recursive_mutex m_loadMutex;
         std::unordered_map<EntityID, bool> m_loadingStatus;
 
         void LoadVideoAsync(EntityID entity, const std::string& filePath);
         void ProcessCompletedLoads();
-        bool DecodeNextFrame(VideoComponent& videoComp);
         bool SaveVideoInBackground(const SaveTaskData& taskData);
         void ProcessCompletedSaves();
 

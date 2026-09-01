@@ -48,12 +48,11 @@ namespace GUI {
         void RenderWaveform();
         void UpdateWaveformData();
         void PauseAllAudio();
-        void PlayTestTone();
 
         std::vector<float> waveformData;
         float playbackProgress = 0.0f;
+        float m_sliderValue = 0.0f;
         bool showWaveform = true;
-        bool m_testTonePlaying = false;
     };
 
 } // namespace GUI

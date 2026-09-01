@@ -66,8 +66,9 @@ namespace GUI {
 
         if (playbackSystem) {
             playbackSystem->RegisterPlaybackCallback([this](ECS::EntityID entity, const float* data,
-                size_t size, int channels, int sampleRate) {
+                size_t size, int channels) {
                     if (entity == selectedEntityID) {
+                        // Handle audio data if needed
                     }
                 });
         }
@@ -149,17 +150,20 @@ namespace GUI {
             }
         }
 
+        // Update playback progress for the selected entity
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
             auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
             if (playbackSystem) {
                 double duration = playbackSystem->GetDuration(selectedEntityID);
                 if (duration > 0.0) {
-                    playbackProgress = static_cast<float>(
-                        playbackSystem->GetCurrentPosition(selectedEntityID) / duration
-                        );
+                    double currentPos = playbackSystem->GetCurrentPosition(selectedEntityID);
+                    playbackProgress = static_cast<float>(currentPos / duration);
                     if (playbackProgress < 0) playbackProgress = 0;
                     if (playbackProgress > 1) playbackProgress = 1;
+
+                    // Update the slider value to match playback progress
+                    m_sliderValue = playbackProgress;
                 }
             }
         }
@@ -264,9 +268,6 @@ namespace GUI {
                 else if (playbackSystem->IsPaused(selectedEntityID)) {
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Paused");
                 }
-                else if (audioComp.isPlaying) {
-                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Stopped");
-                }
                 else {
                     ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Stopped");
                 }
@@ -314,6 +315,8 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
         }
 
@@ -325,6 +328,8 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
         }
 
@@ -336,6 +341,8 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
         }
 
@@ -347,6 +354,8 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
         }
 
@@ -360,6 +369,8 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
         }
 
@@ -401,14 +412,10 @@ namespace GUI {
 
         ImGui::SameLine();
         if (ImGui::Button("Play Test Tone")) {
-            PlayTestTone();
-        }
-    }
-
-    void AudioView::PlayTestTone() {
-        auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-        if (playbackSystem) {
-            playbackSystem->PlayTestTone();
+            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (playbackSystem) {
+                playbackSystem->PlayTestTone();
+            }
         }
     }
 
@@ -537,6 +544,8 @@ namespace GUI {
 
             if (ImGui::Button("Stop")) {
                 playbackSystem->Stop(selectedEntityID);
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
 
             ImGui::SameLine();
@@ -553,15 +562,30 @@ namespace GUI {
                 audioComp.volume = newVolume;
             }
 
-            float progress = playbackProgress;
+            // Get current time and duration for display
+            double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
+            double duration = playbackSystem->GetDuration(selectedEntityID);
+
+            // Update slider value from playback progress
+            m_sliderValue = playbackProgress;
+
+            // Progress slider
             ImGui::Text("Progress:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-            if (ImGui::SliderFloat("##SeekSlider", &progress, 0.0f, 1.0f, "%.1f%%")) {
-                double duration = playbackSystem->GetDuration(selectedEntityID);
-                playbackSystem->Seek(selectedEntityID, progress * duration);
-                playbackProgress = progress;
+
+            if (ImGui::SliderFloat("##SeekSlider", &m_sliderValue, 0.0f, 1.0f, "%.1f%%")) {
+                playbackSystem->Seek(selectedEntityID, m_sliderValue * duration);
+                playbackProgress = m_sliderValue;
             }
+
+            // Display time
+            int minutes = static_cast<int>(currentTime) / 60;
+            int seconds = static_cast<int>(currentTime) % 60;
+            int totalMinutes = static_cast<int>(duration) / 60;
+            int totalSeconds = static_cast<int>(duration) % 60;
+
+            ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
 
             ImGui::Separator();
         }
@@ -663,6 +687,7 @@ namespace GUI {
                     double duration = playbackSystem->GetDuration(selectedEntityID);
                     playbackSystem->Seek(selectedEntityID, relativeX * duration);
                     playbackProgress = relativeX;
+                    m_sliderValue = relativeX;
                 }
             }
         }
@@ -756,6 +781,7 @@ namespace GUI {
             index = 0;
             waveformData.clear();
             playbackProgress = 0.0f;
+            m_sliderValue = 0.0f;
             RefreshEntities();
 
             std::cout << "[AudioView] Audio removed successfully" << std::endl;
@@ -815,4 +841,4 @@ namespace GUI {
         return "";
     }
 
-} // namespace GUI
+}

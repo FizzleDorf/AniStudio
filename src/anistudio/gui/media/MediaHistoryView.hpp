@@ -8,6 +8,8 @@
 #include "ThumbnailFilters.hpp"
 #include "ImageComponent.hpp"
 #include "VideoComponent.hpp"
+#include "AudioComponent.hpp"
+#include "AudioSystem.hpp"
 #include <vector>
 #include <unordered_map>
 #include <limits>
@@ -20,7 +22,7 @@ namespace GUI {
             return R"({
             "displayName": "Media History",
             "category": "Viewers",
-            "description": "Shows thumbnails of loaded images and videos"
+            "description": "Shows thumbnails of loaded images, videos, and audio files"
         })";
         }
 
@@ -38,6 +40,7 @@ namespace GUI {
 
         std::shared_ptr<ECS::ImageSystem> imageSystem;
         std::shared_ptr<ECS::VideoSystem> videoSystem;
+        std::shared_ptr<ECS::AudioSystem> audioSystem;
         std::vector<ECS::EntityID> mediaEntities;
         ECS::EntityID selectedEntityID = 0;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;

@@ -40,7 +40,6 @@ namespace Utils {
         static bool SaveVideoFrameAsImage(const std::string& videoPath, const std::string& imagePath,
             double timeInSeconds);
 
-        // Updated to include audio support
         static bool EncodeFramesToVideo(const std::vector<VideoFrame>& frames,
             const std::string& outputPath,
             int fps = 24,

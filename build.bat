@@ -1,158 +1,89 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 
-:: Configuration
+:: Defaults
 set BUILD_TYPE=Release
-set PARALLEL_JOBS=8
-set BUILD_SHARED=OFF
+set JOBS=8
+set CLEAN=0
+set SHARED=OFF
 
-:: Parse command line arguments
-:parse_args
-if "%~1"=="" goto :after_parse
-if /i "%~1"=="--debug" (
-    set BUILD_TYPE=Debug
-    shift
-    goto :parse_args
-)
-if /i "%~1"=="--shared" (
-    set BUILD_SHARED=ON
-    shift
-    goto :parse_args
-)
-if /i "%~1"=="--jobs" (
-    set PARALLEL_JOBS=%~2
-    shift
-    shift
-    goto :parse_args
-)
-if /i "%~1"=="--help" (
-    goto :show_help
-)
-echo Unknown argument: %~1
-goto :show_help
+:: Parse arguments (simple and safe)
+:parse
+if "%1"=="" goto :build
+if /i "%1"=="--debug" set BUILD_TYPE=Debug & shift & goto :parse
+if /i "%1"=="--clean" set CLEAN=1 & shift & goto :parse
+if /i "%1"=="--shared" set SHARED=ON & shift & goto :parse
+if /i "%1"=="--jobs" set JOBS=%2 & shift & shift & goto :parse
+if /i "%1"=="--help" goto :help
+echo Unknown argument: %1
+:help
+echo Usage: build.bat [--debug] [--clean] [--shared] [--jobs N]
+exit /b 0
 
-:after_parse
+:build
+echo ==========================================
+echo Building AniStudio
+echo ==========================================
+echo Build type: %BUILD_TYPE%
+echo Shared libs: %SHARED%
+echo Jobs: %JOBS%
+echo Clean: %CLEAN%
+echo ==========================================
 
-echo ============================================
-echo AniStudio Optimized Build Script
-echo ============================================
-echo Build Type: %BUILD_TYPE%
-echo Shared Libs: %BUILD_SHARED%
-echo Parallel Jobs: %PARALLEL_JOBS%
-echo Clean Build: %CLEAN_BUILD%
-echo ============================================
-
-:: Activate the virtual environment if it exists
-if exist venv\Scripts\activate.bat (
-    echo Activating virtual environment...
-    call venv\Scripts\activate.bat
-) else (
-    echo No virtual environment found, continuing without activation...
+:: Clean if requested
+if %CLEAN%==1 (
+    echo Removing build directory...
+    rmdir /s /q build 2>nul
 )
 
-:: Create build directory if it doesn't exist
-if not exist build (
-    echo Creating build directory...
-    mkdir build
-)
-
+if not exist build mkdir build
 cd build
 
-:: Configure with CMake
-echo ============================================
+:: Configure with CMake (NO Python flags)
+echo.
 echo Configuring with CMake...
-echo ============================================
+echo.
 
 cmake .. ^
+    -G "Visual Studio 17 2022" ^
+    -A x64 ^
     -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
-    -DBUILD_SHARED_LIBS=%BUILD_SHARED% ^
+    -DBUILD_SHARED_LIBS=%SHARED% ^
     -DBUILD_ANIENGINE=ON ^
     -DBUILD_ANISTUDIO=ON ^
     -DBUILD_ANIPLUGINS=ON ^
     -DBUILD_MAIN_APP=ON
 
 if errorlevel 1 (
-    echo ============================================
+    echo.
     echo CMake configuration failed!
-    echo ============================================
-    goto :error_exit
+    cd ..
+    pause
+    exit /b 1
 )
 
-:: Build the project
-echo ============================================
-echo Building project...
-echo ============================================
+:: Build
+echo.
+echo Building...
+echo.
 
-cmake --build . --config %BUILD_TYPE% --parallel %PARALLEL_JOBS%
+cmake --build . --config %BUILD_TYPE% --parallel %JOBS%
 
 if errorlevel 1 (
-    echo ============================================
+    echo.
     echo Build failed!
-    echo ============================================
-    goto :error_exit
+    cd ..
+    pause
+    exit /b 1
 )
 
-echo ============================================
-echo Build completed successfully!
-echo ============================================
 echo.
-echo Binaries location: %CD%\bin
-echo Libraries location: %CD%\lib
-echo Plugins location: %CD%\plugins
+echo ==========================================
+echo Build succeeded!
+echo ==========================================
+echo Binaries: %CD%
+echo Libraries: %CD%\lib
 echo.
 
-:: Check if executable was created
-if exist AniStudio.exe (
-    echo AniStudio executable: AniStudio.exe
-    
-    :: Ask if user wants to run the application
-    set /p RUN_APP="Run AniStudio now? (y/n): "
-    if /i "!RUN_APP!"=="y" (
-        echo Starting AniStudio...
-        AniStudio.exe
-    )
-) else (
-    echo Warning: AniStudio.exe was not found
-)
-
-goto :success_exit
-
-:show_help
-echo.
-echo AniStudio Build Script Usage:
-echo.
-echo build.bat [options]
-echo.
-echo Build Options:
-echo   --clean              Perform a clean build (removes build directory)
-echo   --debug              Build in Debug mode (default: Release)
-echo   --shared             Build shared libraries (default: static)
-echo   --jobs ^<num^>          Number of parallel build jobs (default: 8)
-echo.
-echo Examples:
-echo   build.bat                           # Standard CPU-only build
-echo   build.bat --clean --debug --sycl    # Clean debug build with Intel SYCL
-echo   build.bat --jobs 16                 # Use 16 parallel jobs
-echo.
-goto :end
-
-:error_exit
 cd ..
-if exist venv\Scripts\activate.bat deactivate
-echo.
-echo Build failed! Check the output above for errors.
-echo.
 pause
-exit /b 1
-
-:success_exit
-cd ..
-if exist venv\Scripts\activate.bat deactivate
-echo.
-echo Build completed successfully!
-pause
-exit /b 0
-
-:end
-if exist venv\Scripts\activate.bat deactivate
-exit /b 0

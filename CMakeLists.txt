@@ -30,6 +30,9 @@ if(UNIX AND NOT APPLE)
     set(OpenGL_GL_PREFERENCE GLVND)
 endif()
 
+# ------------------------------------------------------------
+# Conan integration
+# ------------------------------------------------------------
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
     message(STATUS "Conan toolchain not found, installing dependencies...")
@@ -54,6 +57,9 @@ if(NOT CONAN_TOOLCHAIN)
     include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake)
 endif()
 
+# ------------------------------------------------------------
+# Output directories
+# ------------------------------------------------------------
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -75,6 +81,7 @@ file(MAKE_DIRECTORY ${DATA_DIR})
 file(MAKE_DIRECTORY ${DEFAULTS_DIR})
 file(MAKE_DIRECTORY ${SCRIPTS_DIR})
 
+# Copy assets, shaders, etc.
 if(EXISTS "${CMAKE_SOURCE_DIR}/data/defaults")
     file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
     foreach(DEFAULT_FILE ${DEFAULT_FILES})
@@ -154,12 +161,21 @@ else()
     message(STATUS "docs directory not found at ${CMAKE_SOURCE_DIR}/docs")
 endif()
 
+# ------------------------------------------------------------
+# Find dependencies
+# ------------------------------------------------------------
 find_package(GLEW REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
-find_package(pybind11 REQUIRED)
+
+# ---------- Python & pybind11 (completely removed) ----------
+# The following lines are commented out to avoid Python dependency.
+# set(PYBIND11_FINDPYTHON ON)
+# find_package(pybind11 REQUIRED)
+# ---------------------------------------------------------
+
 find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
 find_package(portaudio CONFIG REQUIRED)
 find_package(samplerate REQUIRED)
@@ -171,6 +187,9 @@ if(UNIX AND NOT APPLE)
     endif()
 endif()
 
+# ------------------------------------------------------------
+# Build targets
+# ------------------------------------------------------------
 set(ANIENGINE_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniEngine shared" FORCE)
 set(ANISTUDIO_BUILD_SHARED ${BUILD_SHARED_LIBS} CACHE BOOL "AniStudio shared" FORCE)
 
@@ -181,7 +200,7 @@ target_link_libraries(AniEngineDeps INTERFACE
     PNG::PNG
     GLEW::GLEW
     glfw
-    pybind11::embed
+    # pybind11::embed   <-- REMOVED
     ffmpeg::avcodec
     ffmpeg::avformat
     ffmpeg::avutil
@@ -327,6 +346,9 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     message(STATUS "  Links against: AniStudioCore (brings all engine and studio dependencies)")
 endif()
 
+# ------------------------------------------------------------
+# Plugin helper (unchanged)
+# ------------------------------------------------------------
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
 
@@ -376,6 +398,9 @@ function(add_external_plugin TARGET_NAME)
     message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
+# ------------------------------------------------------------
+# Installation (unchanged)
+# ------------------------------------------------------------
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
 
