@@ -12,6 +12,7 @@
 #include "FilePathSystem.hpp"
 #include "VideoPlaybackSystem.hpp"
 #include "VideoAudioSystem.hpp"
+#include "IconFonts.hpp"
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -268,7 +269,7 @@ namespace GUI {
     void VideoView::RenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Load Video(s)")) {
+                if (ImGui::MenuItem((Icon::FolderOpen() + " Load Video(s)").c_str())) {
                     static std::string lastVideoFolder;
                     std::vector<std::string> filePaths;
                     if (FileDialog::OpenFiles("Choose Video(s)", FileDialog::FilterType::VIDEO_FILE, filePaths, lastVideoFolder)) {
@@ -280,38 +281,44 @@ namespace GUI {
                 }
                 ImGui::Separator();
 
-                if (ImGui::BeginMenu("Save", selectedEntityID != 0)) {
-                    if (ImGui::MenuItem("Save Video (with Audio)", nullptr, false,
+                ImGui::PushID(1);
+                if (ImGui::BeginMenu((Icon::Save() + " Save").c_str(), selectedEntityID != 0)) {
+                    if (ImGui::MenuItem((Icon::Music() + " Save Video (with Audio)").c_str(), nullptr, false,
                         selectedEntityID != 0 && HasAudioTrack(selectedEntityID))) {
                         SaveSelectedMedia();
                     }
 
-                    if (ImGui::MenuItem("Save Video (No Audio)", nullptr, false, selectedEntityID != 0)) {
+                    if (ImGui::MenuItem((Icon::File() + " Save Video (No Audio)").c_str(), nullptr, false, selectedEntityID != 0)) {
                         SaveSelectedMediaNoAudio();
                     }
 
                     ImGui::Separator();
 
-                    if (ImGui::MenuItem("Save Video As (with Audio)", nullptr, false,
+                    if (ImGui::MenuItem((Icon::SaveAs() + " Save Video As (with Audio)").c_str(), nullptr, false,
                         selectedEntityID != 0 && HasAudioTrack(selectedEntityID))) {
                         SaveSelectedMediaAsWithAudio();
                     }
 
-                    if (ImGui::MenuItem("Save Video As (No Audio)", nullptr, false, selectedEntityID != 0)) {
+                    if (ImGui::MenuItem((Icon::SaveAs() + " Save Video As (No Audio)").c_str(), nullptr, false, selectedEntityID != 0)) {
                         SaveSelectedMediaAsNoAudio();
                     }
 
                     ImGui::EndMenu();
                 }
+                ImGui::PopID();
 
                 ImGui::Separator();
-                if (ImGui::MenuItem("Remove Video", nullptr, false, selectedEntityID != 0)) {
+                ImGui::PushID(2);
+                if (ImGui::MenuItem((Icon::Trash() + " Remove Video").c_str(), nullptr, false, selectedEntityID != 0)) {
                     RemoveSelectedMedia();
                 }
+                ImGui::PopID();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Refresh")) {
+                ImGui::PushID(3);
+                if (ImGui::MenuItem((Icon::Refresh() + " Refresh").c_str())) {
                     RefreshEntities();
                 }
+                ImGui::PopID();
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("View")) {
@@ -320,7 +327,8 @@ namespace GUI {
                     ToggleHistoryView(visible);
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("First Video", nullptr, false, !mediaEntities.empty())) {
+                ImGui::PushID(4);
+                if (ImGui::MenuItem((Icon::ArrowFirst() + " First Video").c_str(), nullptr, false, !mediaEntities.empty())) {
                     if (!mediaEntities.empty()) {
                         index = 0;
                         selectedEntityID = mediaEntities[index];
@@ -328,7 +336,9 @@ namespace GUI {
                         UpdateWaveformData();
                     }
                 }
-                if (ImGui::MenuItem("Last Video", nullptr, false, !mediaEntities.empty())) {
+                ImGui::PopID();
+                ImGui::PushID(5);
+                if (ImGui::MenuItem((Icon::ArrowLast() + " Last Video").c_str(), nullptr, false, !mediaEntities.empty())) {
                     if (!mediaEntities.empty()) {
                         index = static_cast<int>(mediaEntities.size()) - 1;
                         selectedEntityID = mediaEntities[index];
@@ -336,8 +346,11 @@ namespace GUI {
                         UpdateWaveformData();
                     }
                 }
+                ImGui::PopID();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Show Waveform", nullptr, &m_showWaveform)) {}
+                ImGui::PushID(6);
+                if (ImGui::MenuItem((Icon::Music() + " Show Waveform").c_str(), nullptr, &m_showWaveform)) {}
+                ImGui::PopID();
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
@@ -421,17 +434,23 @@ namespace GUI {
         }
         ImGui::PopItemWidth();
         ImGui::SameLine();
-        if (ImGui::Button("Refresh")) {
+        ImGui::PushID(10);
+        if (ImGui::Button(Icon::Refresh().c_str())) {
             RefreshEntities();
         }
+        ImGui::PopID();
         ImGui::SameLine();
-        if (selectedEntityID != 0 && ImGui::Button("Remove Video")) {
+        ImGui::PushID(11);
+        if (selectedEntityID != 0 && ImGui::Button((Icon::Trash() + " Remove").c_str())) {
             RemoveSelectedMedia();
         }
+        ImGui::PopID();
         ImGui::SameLine();
-        if (selectedEntityID != 0 && ImGui::Button("Save Video")) {
+        ImGui::PushID(12);
+        if (selectedEntityID != 0 && ImGui::Button((Icon::Save() + " Save").c_str())) {
             SaveSelectedMedia();
         }
+        ImGui::PopID();
     }
 
     void VideoView::RenderSelector() {
@@ -454,7 +473,8 @@ namespace GUI {
         ImGui::SameLine();
         ImGui::Text("Video %d of %zu", index + 1, mediaEntities.size());
         ImGui::SameLine();
-        if (ImGui::Button("First")) {
+        ImGui::PushID(20);
+        if (ImGui::Button(Icon::ArrowFirst().c_str())) {
             if (!mediaEntities.empty()) {
                 index = 0;
                 selectedEntityID = mediaEntities[index];
@@ -462,8 +482,10 @@ namespace GUI {
                 UpdateWaveformData();
             }
         }
+        ImGui::PopID();
         ImGui::SameLine();
-        if (ImGui::Button("Prev")) {
+        ImGui::PushID(21);
+        if (ImGui::Button(Icon::ArrowLeft().c_str())) {
             if (!mediaEntities.empty()) {
                 index = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
                 selectedEntityID = mediaEntities[index];
@@ -471,8 +493,10 @@ namespace GUI {
                 UpdateWaveformData();
             }
         }
+        ImGui::PopID();
         ImGui::SameLine();
-        if (ImGui::Button("Next")) {
+        ImGui::PushID(22);
+        if (ImGui::Button(Icon::ArrowRight().c_str())) {
             if (!mediaEntities.empty()) {
                 index = (index + 1) % static_cast<int>(mediaEntities.size());
                 selectedEntityID = mediaEntities[index];
@@ -480,8 +504,10 @@ namespace GUI {
                 UpdateWaveformData();
             }
         }
+        ImGui::PopID();
         ImGui::SameLine();
-        if (ImGui::Button("Last")) {
+        ImGui::PushID(23);
+        if (ImGui::Button(Icon::ArrowLast().c_str())) {
             if (!mediaEntities.empty()) {
                 index = static_cast<int>(mediaEntities.size() - 1);
                 selectedEntityID = mediaEntities[index];
@@ -489,6 +515,7 @@ namespace GUI {
                 UpdateWaveformData();
             }
         }
+        ImGui::PopID();
     }
 
     double VideoView::GetVideoCurrentTime(ECS::EntityID entity) const {
@@ -638,7 +665,8 @@ namespace GUI {
 
                 ImGui::SameLine();
                 bool playing = playback->IsPlaying(selectedEntityID);
-                if (ImGui::Button(playing ? "Pause" : "Play")) {
+                ImGui::PushID(30);
+                if (ImGui::Button(playing ? Icon::Pause().c_str() : Icon::Play().c_str())) {
                     if (playing) {
                         playback->Pause(selectedEntityID);
                     }
@@ -646,14 +674,19 @@ namespace GUI {
                         playback->Play(selectedEntityID, loopState);
                     }
                 }
+                ImGui::PopID();
                 ImGui::SameLine();
-                if (ImGui::Button("Stop")) {
+                ImGui::PushID(31);
+                if (ImGui::Button(Icon::Stop().c_str())) {
                     playback->Stop(selectedEntityID);
                 }
+                ImGui::PopID();
                 ImGui::SameLine();
-                if (ImGui::Checkbox("Loop", &loopState)) {
+                ImGui::PushID(32);
+                if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
                     videoComp.looping = loopState;
                 }
+                ImGui::PopID();
             }
             else {
                 bool useTimeSlider = true;
@@ -685,7 +718,8 @@ namespace GUI {
 
                 ImGui::SameLine();
                 bool playing = playback->IsPlaying(selectedEntityID);
-                if (ImGui::Button(playing ? "Pause" : "Play")) {
+                ImGui::PushID(33);
+                if (ImGui::Button(playing ? Icon::Pause().c_str() : Icon::Play().c_str())) {
                     if (playing) {
                         playback->Pause(selectedEntityID);
                     }
@@ -693,14 +727,19 @@ namespace GUI {
                         playback->Play(selectedEntityID, loopState);
                     }
                 }
+                ImGui::PopID();
                 ImGui::SameLine();
-                if (ImGui::Button("Stop")) {
+                ImGui::PushID(34);
+                if (ImGui::Button(Icon::Stop().c_str())) {
                     playback->Stop(selectedEntityID);
                 }
+                ImGui::PopID();
                 ImGui::SameLine();
-                if (ImGui::Checkbox("Loop", &loopState)) {
+                ImGui::PushID(35);
+                if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
                     videoComp.looping = loopState;
                 }
+                ImGui::PopID();
             }
             ImGui::Separator();
         }

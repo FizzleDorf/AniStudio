@@ -1,6 +1,7 @@
 #pragma once
 #include "BaseSettingsTab.hpp"
 #include "FontSettingsComponent.hpp"
+#include "IconFonts.hpp"
 
 namespace ECS {
 
@@ -18,7 +19,7 @@ namespace ECS {
         void CreateBackup() override { m_comp.CreateBackup(); }
         void RestoreFromBackup() override {
             m_comp.RestoreFromBackup();
-            m_comp.CheckAndRebuildFonts(); // Force immediate rebuild
+            m_comp.CheckAndRebuildFonts();
         }
         void ResetToDefaults() override { m_comp.ResetToDefaults(); }
         bool SaveSettings() override { return m_comp.SaveSettings(); }
@@ -31,6 +32,7 @@ namespace ECS {
 
         bool FilterPass(const std::string& section) const;
         void RenderFontFamily();
+        void RenderIconFontFamily();
         void RenderScale();
         void RenderActionButtons();
     };

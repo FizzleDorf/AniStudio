@@ -32,16 +32,23 @@ namespace ECS {
             std::string path;
         };
         std::vector<FontEntry> availableFonts;
+        std::vector<FontEntry> availableIconFonts;
         std::string selectedFontName;
+        std::string selectedIconFontName;
         float m_globalFontScale = 1.0f;
         ImGuiContext* imguiContext = nullptr;
         bool hasChanges = false;
 
         void EnsureInitialized();
         void ScanFontsDirectory();
+        void ScanIconFontsDirectory();
+
+        // Debug: expose pending path for UI
+        std::string pendingIconFontPath;
 
     private:
         std::string backupSelectedFontName;
+        std::string backupSelectedIconFontName;
         float backupGlobalFontScale = 1.0f;
         bool isInitialized = false;
         bool fontsScanned = false;
