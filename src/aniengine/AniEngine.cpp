@@ -66,6 +66,7 @@ namespace ANI {
         entityManager.RegisterSystem<FilePathSystem>();
         entityManager.RegisterSystem<ThreadPoolSystem>();
         entityManager.RegisterSystem<ImageSystem>();
+        entityManager.RegisterSystem<AudioSystem>();
         entityManager.RegisterSystem<VideoSystem>();
         entityManager.RegisterSystem<VideoAudioSystem>();
 

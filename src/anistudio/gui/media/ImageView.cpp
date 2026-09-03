@@ -10,6 +10,7 @@
 #include "DragDropUtils.hpp"
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
+#include "IconFonts.hpp"
 #include <algorithm>
 
 namespace GUI {
@@ -102,14 +103,15 @@ namespace GUI {
     void ImageView::Render() {
         if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
             RenderMenuBar();
-            RenderImageInfo();
-            RenderControls();
-            RenderSelector();
+            RenderToolbar();
+            RenderMediaInfo();
             ImGui::Separator();
-            if (ImGui::BeginChild("ImageViewerChild", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) {
-                RenderSelected();
+            if (ImGui::BeginChild("ImageViewerChild", ImVec2(0, -60), true, ImGuiWindowFlags_HorizontalScrollbar)) {
+                RenderMediaContent();
             }
             ImGui::EndChild();
+            RenderControls();
+            RenderSelector();
             HandleClipboardPaste();
         }
         ImGui::End();
@@ -124,7 +126,8 @@ namespace GUI {
     void ImageView::RenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem("Load Image(s)")) {
+                ImGui::PushID(1);
+                if (ImGui::MenuItem((Icon::Image() + " " + Icon::FolderOpen() + " Load Image(s)").c_str())) {
                     auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
                     std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
                     std::vector<std::string> outPaths;
@@ -132,11 +135,15 @@ namespace GUI {
                         if (!outPaths.empty()) LoadMedia(outPaths);
                     }
                 }
+                ImGui::PopID();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Save Image", nullptr, false, selectedEntityID != 0)) {
+                ImGui::PushID(2);
+                if (ImGui::MenuItem((Icon::Save() + " Save Image").c_str(), nullptr, false, selectedEntityID != 0)) {
                     SaveSelectedMedia();
                 }
-                if (ImGui::MenuItem("Save Image As...", nullptr, false, selectedEntityID != 0)) {
+                ImGui::PopID();
+                ImGui::PushID(3);
+                if (ImGui::MenuItem((Icon::SaveAs() + " Save Image As...").c_str(), nullptr, false, selectedEntityID != 0)) {
                     auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
                     std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
                     std::string outPath;
@@ -148,14 +155,19 @@ namespace GUI {
                         }
                     }
                 }
+                ImGui::PopID();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Remove Image", nullptr, false, selectedEntityID != 0)) {
+                ImGui::PushID(4);
+                if (ImGui::MenuItem((Icon::Trash() + " Remove Image").c_str(), nullptr, false, selectedEntityID != 0)) {
                     RemoveSelectedMedia();
                 }
+                ImGui::PopID();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Refresh")) {
+                ImGui::PushID(5);
+                if (ImGui::MenuItem((Icon::Refresh() + " Refresh").c_str())) {
                     RefreshEntities();
                 }
+                ImGui::PopID();
                 ImGui::EndMenu();
             }
             if (ImGui::BeginMenu("View")) {
@@ -164,36 +176,105 @@ namespace GUI {
                     ToggleHistoryView(visible);
                 }
                 ImGui::Separator();
-                if (ImGui::MenuItem("First Image", nullptr, false, !mediaEntities.empty())) {
+                ImGui::PushID(6);
+                if (ImGui::MenuItem((Icon::ArrowFirst() + " First Image").c_str(), nullptr, false, !mediaEntities.empty())) {
                     if (!mediaEntities.empty()) { index = 0; selectedEntityID = mediaEntities[index]; }
                 }
-                if (ImGui::MenuItem("Last Image", nullptr, false, !mediaEntities.empty())) {
+                ImGui::PopID();
+                ImGui::PushID(7);
+                if (ImGui::MenuItem((Icon::ArrowLast() + " Last Image").c_str(), nullptr, false, !mediaEntities.empty())) {
                     if (!mediaEntities.empty()) { index = static_cast<int>(mediaEntities.size()) - 1; selectedEntityID = mediaEntities[index]; }
                 }
+                ImGui::PopID();
                 ImGui::Separator();
+                ImGui::PushID(8);
                 if (ImGui::MenuItem("Auto-switch on Load", nullptr, &autoSwitchOnLoad)) {}
+                ImGui::PopID();
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
         }
     }
 
-    void ImageView::RenderImageInfo() {
+    void ImageView::RenderToolbar() {
+        ImGui::PushID(100);
+
+        // Load button
+        ImGui::PushID(101);
+        if (ImGui::Button((Icon::Image() + " Load").c_str())) {
+            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            std::vector<std::string> outPaths;
+            if (FileDialog::OpenFiles("Choose Image(s)", FileDialog::FilterType::IMAGE_FILE, outPaths, defaultPath)) {
+                if (!outPaths.empty()) LoadMedia(outPaths);
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        // Save button
+        ImGui::PushID(102);
+        if (ImGui::Button((Icon::Save() + " Save").c_str())) {
+            SaveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        // Save As button
+        ImGui::PushID(103);
+        if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
+            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            std::string outPath;
+            if (selectedEntityID != 0) {
+                const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
+                std::string defaultName = imageComp.fileName;
+                if (FileDialog::SaveFile("Save Image As", FileDialog::FilterType::IMAGE_FILE, defaultName, outPath, defaultPath)) {
+                    SaveSelectedMediaAs(outPath);
+                }
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        // Remove button
+        ImGui::PushID(104);
+        if (ImGui::Button((Icon::Trash() + " Remove").c_str())) {
+            RemoveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        // Refresh button
+        ImGui::PushID(105);
+        if (ImGui::Button(Icon::Refresh().c_str())) {
+            RefreshEntities();
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::PushID(106);
+        if (ImGui::Button("Send to Metadata")) {
+            SendSelectedToMetadataView();
+        }
+        ImGui::PopID();
+
+        ImGui::PopID();
+    }
+
+    void ImageView::RenderMediaInfo() {
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
             try {
                 const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
                 ImGui::Text("File: %s", imageComp.fileName.c_str());
-                ImGui::Text("Dimensions: %dx%d", imageComp.width, imageComp.height);
                 ImGui::SameLine();
-                ImGui::Text("Channels: %d", imageComp.channels);
+                ImGui::Text("| Dimensions: %dx%d", imageComp.width, imageComp.height);
                 ImGui::SameLine();
-                ImGui::Text("Entity ID: %zu", selectedEntityID);
+                ImGui::Text("| Channels: %d", imageComp.channels);
+                ImGui::SameLine();
+                ImGui::Text("| Entity ID: %zu", selectedEntityID);
                 RenderMediaContextMenu(selectedEntityID);
-                if (ImGui::Button("Send to Metadata Viewer")) {
-                    SendSelectedToMetadataView();
-                }
-                ImGui::Separator();
             }
             catch (const std::exception& e) {
                 ImGui::Text("Error reading image info: %s", e.what());
@@ -208,6 +289,23 @@ namespace GUI {
         }
         ImGui::PopItemWidth();
         ImGui::SameLine();
+        ImGui::PushID(200);
+        if (ImGui::Button(Icon::Refresh().c_str())) {
+            RefreshEntities();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(201);
+        if (selectedEntityID != 0 && ImGui::Button((Icon::Save() + " Save").c_str())) {
+            SaveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(202);
+        if (selectedEntityID != 0 && ImGui::Button((Icon::Trash() + " Remove").c_str())) {
+            RemoveSelectedMedia();
+        }
+        ImGui::PopID();
         if (GUI::Clipboard::HasEntity() || GUI::Clipboard::HasComponent() || GUI::Clipboard::HasProperty()) {
             ImGui::SameLine();
             std::string label;
@@ -235,9 +333,41 @@ namespace GUI {
         ImGui::PopItemWidth();
         ImGui::SameLine();
         ImGui::Text("Image %d of %zu", index + 1, mediaEntities.size());
+        ImGui::SameLine();
+        ImGui::PushID(203);
+        if (ImGui::Button(Icon::ArrowFirst().c_str())) {
+            if (!mediaEntities.empty()) { index = 0; selectedEntityID = mediaEntities[index]; }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(204);
+        if (ImGui::Button(Icon::ArrowLeft().c_str())) {
+            if (!mediaEntities.empty()) {
+                const int size = static_cast<int>(mediaEntities.size());
+                index = (index - 1 + size) % size;
+                selectedEntityID = mediaEntities[index];
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(205);
+        if (ImGui::Button(Icon::ArrowRight().c_str())) {
+            if (!mediaEntities.empty()) {
+                const int size = static_cast<int>(mediaEntities.size());
+                index = (index + 1) % size;
+                selectedEntityID = mediaEntities[index];
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(206);
+        if (ImGui::Button(Icon::ArrowLast().c_str())) {
+            if (!mediaEntities.empty()) { index = static_cast<int>(mediaEntities.size()) - 1; selectedEntityID = mediaEntities[index]; }
+        }
+        ImGui::PopID();
     }
 
-    void ImageView::RenderSelected() {
+    void ImageView::RenderMediaContent() {
         if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::ImageComponent>(selectedEntityID)) {
             ImGui::Text("No image selected or entity invalid.");

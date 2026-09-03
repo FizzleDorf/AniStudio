@@ -4,6 +4,7 @@
 #include "MetadataView.hpp"
 #include "DragDropUtils.hpp"
 #include "ViewManager.hpp"
+#include "IconFonts.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <iostream>
@@ -236,6 +237,15 @@ namespace GUI {
             }
         }
         std::cerr << "[BaseMediaView] MetadataView not found in workspace after adding." << std::endl;
+    }
+
+    void BaseMediaView::RenderToolbar() {
+    }
+
+    void BaseMediaView::RenderControls() {
+    }
+
+    void BaseMediaView::RenderSelector() {
     }
 
 }

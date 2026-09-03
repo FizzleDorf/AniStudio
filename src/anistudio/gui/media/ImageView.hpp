@@ -37,6 +37,13 @@ namespace GUI {
         std::string GetSelectedFilePath() const override;
 
     protected:
+        void RenderMenuBar() override;
+        void RenderToolbar() override;
+        void RenderControls() override;
+        void RenderMediaInfo() override;
+        void RenderSelector() override;
+        void RenderMediaContent() override;
+
         std::shared_ptr<ECS::ImageSystem> imageSystem;
         bool autoSwitchOnLoad;
 
@@ -45,12 +52,6 @@ namespace GUI {
         std::string GetHistoryViewTypeName() const override;
 
         bool IsImageComponentOnly(ECS::EntityID entityId) const;
-
-        void RenderMenuBar();
-        void RenderImageInfo();
-        void RenderControls();
-        void RenderSelector();
-        void RenderSelected();
     };
 
 }

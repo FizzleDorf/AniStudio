@@ -43,6 +43,14 @@ namespace GUI {
         virtual std::string GetSelectedFilePath() const = 0;
 
     protected:
+        // Rendering functions that can be overridden
+        virtual void RenderMenuBar() = 0;
+        virtual void RenderToolbar();
+        virtual void RenderControls();
+        virtual void RenderMediaInfo() = 0;
+        virtual void RenderSelector();
+        virtual void RenderMediaContent() = 0;
+
         ECS::EntityID selectedEntityID;
         int index;
         float zoom;

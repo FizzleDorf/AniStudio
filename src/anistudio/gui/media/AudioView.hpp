@@ -36,14 +36,18 @@ namespace GUI {
         std::string GetSelectedFilePath() const override;
 
     protected:
+        void RenderMenuBar() override;
+        void RenderToolbar() override;
+        void RenderControls() override;
+        void RenderMediaInfo() override;
+        void RenderSelector() override;
+        void RenderMediaContent() override;
+
         void OnMediaAdded(ECS::EntityID entity) override;
         void OnMediaRemoved(ECS::EntityID entity) override;
         std::string GetHistoryViewTypeName() const override;
 
     private:
-        void RenderAudioInfo();
-        void RenderControls();
-        void RenderSelector();
         void RenderPlaybackControls();
         void RenderWaveform();
         void UpdateWaveformData();

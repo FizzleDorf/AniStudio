@@ -4,6 +4,8 @@
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
 #include <vector>
+#include <unordered_map>
+#include <imgui.h>
 
 namespace GUI {
 
@@ -36,23 +38,47 @@ namespace GUI {
         std::string GetSelectedFilePath() const override;
 
     protected:
+        void RenderMenuBar() override;
+        void RenderToolbar() override;
+        void RenderControls() override;
+        void RenderMediaInfo() override;
+        void RenderSelector() override;
+        void RenderMediaContent() override;
+
         ECS::EntityID lastGeneratedVideoID;
 
         void OnMediaAdded(ECS::EntityID entity) override;
         void OnMediaRemoved(ECS::EntityID entity) override;
         std::string GetHistoryViewTypeName() const override;
 
-        void RenderMenuBar();
-        void RenderVideoInfo();
-        void RenderControls();
-        void RenderSelector();
+        void RenderFullscreen();
+        void RenderTimeline();
         void RenderPlaybackControls();
-        void RenderSelected();
         void RenderWaveform();
         void UpdateWaveformData();
         void PauseAllVideos();
+        void ToggleFullscreen();
+        void NextVideo();
+        void PreviousVideo();
+
+        std::string FormatTimecode(double seconds) const;
 
     private:
+        enum class DisplayMode {
+            FitToWindow,
+            ActualResolution,
+            Fullscreen
+        };
+
+        struct RepeatButtonState {
+            double lastActionTime = 0.0;
+            int repeatCount = 0;
+        };
+
+        std::unordered_map<ImGuiID, RepeatButtonState> m_repeatButtonStates;
+        float GetVideoFPS(ECS::EntityID entity) const;
+        bool ProcessRepeatButton(ImGuiID id, double initialDelay, double repeatRate, bool& outHeld);
+
         bool HasAudioTrack(ECS::EntityID entity) const;
         void RenderAudioControls(ECS::EntityID entity);
 
@@ -78,8 +104,17 @@ namespace GUI {
         ECS::EntityID m_pendingSeekEntity = 0;
         bool m_loopEnabled = false;
         bool m_showWaveform = true;
+        bool m_autoplay = true;
         float m_playbackProgress = 0.0f;
         std::vector<float> m_waveformData;
+
+        DisplayMode m_displayMode = DisplayMode::FitToWindow;
+        bool m_isFullscreen = false;
+        float m_videoAspectRatio = 1.0f;
+
+        float m_fullscreenControlsTimer = 0.0f;
+        bool m_showFullscreenControls = true;
+        ImVec2 m_lastMousePos = ImVec2(0.0f, 0.0f);
     };
 
 }

@@ -62,6 +62,7 @@ namespace Icon {
     inline std::string FastForward() { return u8"\uf050"; }
     inline std::string FastBackward() { return u8"\uf049"; }
     inline std::string VolumeHigh() { return u8"\uf028"; }
+    inline std::string VolumeMedium() { return u8"\uf6a8"; }
     inline std::string VolumeLow() { return u8"\uf027"; }
     inline std::string VolumeOff() { return u8"\uf026"; }
     inline std::string VolumeMute() { return u8"\uf6a9"; }
@@ -306,6 +307,7 @@ namespace Icon {
     inline std::string WindowMinimize() { return u8"\uf2d1"; }
     inline std::string WindowRestore() { return u8"\uf2d2"; }
     inline std::string WindowClose() { return u8"\uf410"; }
+    inline std::string Expand() { return u8"\uf065"; }  // Font Awesome expand icon
 
     // Devices
     inline std::string Mobile() { return u8"\uf3ce"; }

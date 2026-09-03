@@ -7,6 +7,9 @@
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
 #include "AudioPlaybackSystem.hpp"
+#include "FilePathSystem.hpp"
+#include "ClipboardUtilities.hpp"
+#include "IconFonts.hpp"
 #include <algorithm>
 #include <iostream>
 #include <cmath>
@@ -150,7 +153,6 @@ namespace GUI {
             }
         }
 
-        // Update playback progress for the selected entity
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
             auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
@@ -161,8 +163,6 @@ namespace GUI {
                     playbackProgress = static_cast<float>(currentPos / duration);
                     if (playbackProgress < 0) playbackProgress = 0;
                     if (playbackProgress > 1) playbackProgress = 1;
-
-                    // Update the slider value to match playback progress
                     m_sliderValue = playbackProgress;
                 }
             }
@@ -175,32 +175,26 @@ namespace GUI {
             return;
         }
 
-        ImGui::SetNextWindowSize(ImVec2(600, 450), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_FirstUseEver);
         std::string windowName = "Audio Player##" + std::to_string(GetID());
 
-        if (!ImGui::Begin(windowName.c_str(), &windowOpen)) {
+        if (!ImGui::Begin(windowName.c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
             ImGui::End();
             return;
         }
 
         try {
-            RenderAudioInfo();
-            RenderSelector();
-            RenderControls();
-
+            RenderMenuBar();
+            RenderToolbar();
+            RenderMediaInfo();
             ImGui::Separator();
-
-            if (showWaveform) {
-                RenderWaveform();
+            if (ImGui::BeginChild("AudioViewerChild", ImVec2(0, -120), true)) {
+                RenderMediaContent();
             }
-
+            ImGui::EndChild();
+            RenderControls();
             RenderPlaybackControls();
-
-            ImGui::SameLine();
-            bool visible = IsHistoryVisible();
-            if (ImGui::Checkbox("Show History", &visible)) {
-                ToggleHistoryView(visible);
-            }
+            RenderSelector();
 
             HandleClipboardPaste();
         }
@@ -219,25 +213,188 @@ namespace GUI {
         }
     }
 
-    void AudioView::RefreshEntities() {
-        try {
-            mediaEntities.clear();
-            for (auto entityID : m_entityManager.GetAllEntities()) {
-                if (m_entityManager.HasComponent<ECS::AudioComponent>(entityID)) {
-                    mediaEntities.push_back(entityID);
+    void AudioView::RenderMenuBar() {
+        if (ImGui::BeginMenuBar()) {
+            if (ImGui::BeginMenu("File")) {
+                ImGui::PushID(1);
+                if (ImGui::MenuItem((Icon::Music() + " " + Icon::FolderOpen() + " Load Audio(s)").c_str())) {
+                    static std::string lastAudioFolder;
+                    std::vector<std::string> filePaths;
+                    if (FileDialog::OpenFiles("Choose Audio File(s)", FileDialog::FilterType::AUDIO_FILE, filePaths, lastAudioFolder)) {
+                        if (!filePaths.empty()) {
+                            LoadMedia(filePaths);
+                            lastAudioFolder = std::filesystem::path(filePaths[0]).parent_path().string();
+                        }
+                    }
                 }
+                ImGui::PopID();
+                ImGui::Separator();
+                ImGui::PushID(2);
+                if (ImGui::MenuItem((Icon::Save() + " Save Audio").c_str(), nullptr, false, selectedEntityID != 0)) {
+                    SaveSelectedMedia();
+                }
+                ImGui::PopID();
+                ImGui::PushID(3);
+                if (ImGui::MenuItem((Icon::SaveAs() + " Save Audio As...").c_str(), nullptr, false, selectedEntityID != 0)) {
+                    auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+                    std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                    std::string defaultName = "audio.wav";
+                    if (selectedEntityID != 0) {
+                        const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
+                        if (!audioComp.fileName.empty()) {
+                            defaultName = audioComp.fileName;
+                            size_t dotPos = defaultName.find_last_of('.');
+                            if (dotPos != std::string::npos) defaultName = defaultName.substr(0, dotPos);
+                            defaultName += ".wav";
+                        }
+                    }
+                    std::string outPath;
+                    if (FileDialog::SaveFile("Save Audio As", FileDialog::FilterType::AUDIO_FILE, defaultName, outPath, defaultPath)) {
+                        if (!outPath.empty()) SaveSelectedMediaAs(outPath);
+                    }
+                }
+                ImGui::PopID();
+                ImGui::Separator();
+                ImGui::PushID(4);
+                if (ImGui::MenuItem((Icon::Trash() + " Remove Audio").c_str(), nullptr, false, selectedEntityID != 0)) {
+                    RemoveSelectedMedia();
+                }
+                ImGui::PopID();
+                ImGui::Separator();
+                ImGui::PushID(5);
+                if (ImGui::MenuItem((Icon::Refresh() + " Refresh").c_str())) {
+                    RefreshEntities();
+                }
+                ImGui::PopID();
+                ImGui::EndMenu();
             }
-            lastEntityCount = mediaEntities.size();
-            std::cout << "[AudioView] Refreshed entities, found " << mediaEntities.size() << " audio files" << std::endl;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[AudioView] Exception refreshing entities: " << e.what() << std::endl;
-            mediaEntities.clear();
-            lastEntityCount = 0;
+            if (ImGui::BeginMenu("View")) {
+                bool visible = IsHistoryVisible();
+                if (ImGui::MenuItem("Show History", nullptr, &visible)) {
+                    ToggleHistoryView(visible);
+                }
+                ImGui::Separator();
+                ImGui::PushID(6);
+                if (ImGui::MenuItem((Icon::ArrowFirst() + " First Audio").c_str(), nullptr, false, !mediaEntities.empty())) {
+                    if (!mediaEntities.empty()) {
+                        index = 0;
+                        selectedEntityID = mediaEntities[index];
+                        UpdateWaveformData();
+                        PauseAllAudio();
+                        playbackProgress = 0.0f;
+                        m_sliderValue = 0.0f;
+                    }
+                }
+                ImGui::PopID();
+                ImGui::PushID(7);
+                if (ImGui::MenuItem((Icon::ArrowLast() + " Last Audio").c_str(), nullptr, false, !mediaEntities.empty())) {
+                    if (!mediaEntities.empty()) {
+                        index = static_cast<int>(mediaEntities.size()) - 1;
+                        selectedEntityID = mediaEntities[index];
+                        UpdateWaveformData();
+                        PauseAllAudio();
+                        playbackProgress = 0.0f;
+                        m_sliderValue = 0.0f;
+                    }
+                }
+                ImGui::PopID();
+                ImGui::Separator();
+                ImGui::PushID(8);
+                if (ImGui::MenuItem((Icon::Music() + " Show Waveform").c_str(), nullptr, &showWaveform)) {}
+                ImGui::PopID();
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenuBar();
         }
     }
 
-    void AudioView::RenderAudioInfo() {
+    void AudioView::RenderToolbar() {
+        ImGui::PushID(100);
+
+        ImGui::PushID(101);
+        if (ImGui::Button((Icon::Music() + " Load").c_str())) {
+            static std::string lastAudioFolder;
+            std::vector<std::string> filePaths;
+            if (FileDialog::OpenFiles("Choose Audio File(s)", FileDialog::FilterType::AUDIO_FILE, filePaths, lastAudioFolder)) {
+                if (!filePaths.empty()) {
+                    LoadMedia(filePaths);
+                    lastAudioFolder = std::filesystem::path(filePaths[0]).parent_path().string();
+                }
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(102);
+        if (ImGui::Button((Icon::Save() + " Save").c_str())) {
+            SaveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(103);
+        if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
+            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            std::string defaultName = "audio.wav";
+            if (selectedEntityID != 0) {
+                const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
+                if (!audioComp.fileName.empty()) {
+                    defaultName = audioComp.fileName;
+                    size_t dotPos = defaultName.find_last_of('.');
+                    if (dotPos != std::string::npos) defaultName = defaultName.substr(0, dotPos);
+                    defaultName += ".wav";
+                }
+            }
+            std::string outPath;
+            if (FileDialog::SaveFile("Save Audio As", FileDialog::FilterType::AUDIO_FILE, defaultName, outPath, defaultPath)) {
+                if (!outPath.empty()) SaveSelectedMediaAs(outPath);
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(104);
+        if (ImGui::Button((Icon::Trash() + " Remove").c_str())) {
+            RemoveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(105);
+        if (ImGui::Button(Icon::Refresh().c_str())) {
+            RefreshEntities();
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::PushID(106);
+        if (ImGui::Button("Send to Metadata")) {
+            SendSelectedToMetadataView();
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::PushID(107);
+        if (ImGui::Button((Icon::Music() + " Test Tone").c_str())) {
+            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (playbackSystem) {
+                playbackSystem->PlayTestTone();
+            }
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::PushID(108);
+        if (ImGui::Button((Icon::Music() + " Waveform").c_str())) {
+            showWaveform = !showWaveform;
+        }
+        ImGui::PopID();
+
+        ImGui::PopID();
+    }
+
+    void AudioView::RenderMediaInfo() {
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
             try {
@@ -259,38 +416,31 @@ namespace GUI {
                 int totalMinutes = static_cast<int>(duration) / 60;
                 int totalSeconds = static_cast<int>(duration) % 60;
 
-                ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
-                ImGui::Text("Channels: %d, Sample Rate: %d Hz", audioComp.channels, audioComp.sampleRate);
+                ImGui::SameLine();
+                ImGui::Text("| Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
+                ImGui::SameLine();
+                ImGui::Text("| Channels: %d", audioComp.channels);
+                ImGui::SameLine();
+                ImGui::Text("| Sample Rate: %d Hz", audioComp.sampleRate);
 
                 if (playbackSystem->IsPlaying(selectedEntityID)) {
-                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Playing");
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "| %s", Icon::Play().c_str());
                 }
                 else if (playbackSystem->IsPaused(selectedEntityID)) {
-                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Paused");
-                }
-                else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Stopped");
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "| %s", Icon::Pause().c_str());
                 }
 
                 if (audioComp.looping) {
                     ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Loop");
+                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "| %s", Icon::Loop().c_str());
                 }
 
-                if (audioComp.volume < 1.0f) {
-                    ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Volume: %.0f%%", audioComp.volume * 100);
-                }
-
-                ImGui::Text("Entity ID: %zu", selectedEntityID);
+                ImGui::SameLine();
+                ImGui::Text("| Entity ID: %zu", selectedEntityID);
 
                 RenderMediaContextMenu(selectedEntityID);
-
-                if (ImGui::Button("Send to Metadata Viewer")) {
-                    SendSelectedToMetadataView();
-                }
-
-                ImGui::Separator();
             }
             catch (const std::exception& e) {
                 ImGui::Text("Error reading audio info: %s", e.what());
@@ -303,64 +453,27 @@ namespace GUI {
         }
     }
 
+    void AudioView::RenderControls() {
+        ImGui::Checkbox((Icon::Music() + " Show Waveform").c_str(), &showWaveform);
+        ImGui::SameLine();
+
+        if (GUI::Clipboard::HasEntity() || GUI::Clipboard::HasComponent() || GUI::Clipboard::HasProperty()) {
+            ImGui::SameLine();
+            std::string label;
+            if (GUI::Clipboard::HasEntity()) label = "Entity";
+            else if (GUI::Clipboard::HasComponent()) label = "Component";
+            else if (GUI::Clipboard::HasProperty()) label = "Property";
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s", label.c_str());
+        }
+    }
+
     void AudioView::RenderSelector() {
         if (mediaEntities.empty()) {
             ImGui::Text("No audio loaded.");
             return;
         }
 
-        if (ImGui::Button("First")) {
-            if (!mediaEntities.empty()) {
-                index = 0;
-                selectedEntityID = mediaEntities[index];
-                UpdateWaveformData();
-                PauseAllAudio();
-                playbackProgress = 0.0f;
-                m_sliderValue = 0.0f;
-            }
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Previous")) {
-            if (!mediaEntities.empty()) {
-                index = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
-                selectedEntityID = mediaEntities[index];
-                UpdateWaveformData();
-                PauseAllAudio();
-                playbackProgress = 0.0f;
-                m_sliderValue = 0.0f;
-            }
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Next")) {
-            if (!mediaEntities.empty()) {
-                index = (index + 1) % static_cast<int>(mediaEntities.size());
-                selectedEntityID = mediaEntities[index];
-                UpdateWaveformData();
-                PauseAllAudio();
-                playbackProgress = 0.0f;
-                m_sliderValue = 0.0f;
-            }
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Last")) {
-            if (!mediaEntities.empty()) {
-                index = static_cast<int>(mediaEntities.size() - 1);
-                selectedEntityID = mediaEntities[index];
-                UpdateWaveformData();
-                PauseAllAudio();
-                playbackProgress = 0.0f;
-                m_sliderValue = 0.0f;
-            }
-        }
-
-        ImGui::SameLine();
-
+        ImGui::PushItemWidth(100.0f);
         if (ImGui::InputInt("Current Audio", &index)) {
             if (!mediaEntities.empty()) {
                 const int size = static_cast<int>(mediaEntities.size());
@@ -373,134 +486,109 @@ namespace GUI {
                 m_sliderValue = 0.0f;
             }
         }
-
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
         ImGui::Text("Audio %d of %zu", index + 1, mediaEntities.size());
-    }
-
-    void AudioView::RenderControls() {
-        static std::string lastAudioFolder;
-
-        if (ImGui::Button("Load Audio(s)")) {
-            std::vector<std::string> filePaths;
-            if (FileDialog::OpenFiles("Choose Audio File(s)", FileDialog::FilterType::AUDIO_FILE, filePaths, lastAudioFolder)) {
-                if (!filePaths.empty()) {
-                    LoadMedia(filePaths);
-                    lastAudioFolder = std::filesystem::path(filePaths[0]).parent_path().string();
-                }
+        ImGui::SameLine();
+        ImGui::PushID(200);
+        if (ImGui::Button(Icon::ArrowFirst().c_str())) {
+            if (!mediaEntities.empty()) {
+                index = 0;
+                selectedEntityID = mediaEntities[index];
+                UpdateWaveformData();
+                PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
             }
         }
-
+        ImGui::PopID();
         ImGui::SameLine();
+        ImGui::PushID(201);
+        if (ImGui::Button(Icon::ArrowLeft().c_str())) {
+            if (!mediaEntities.empty()) {
+                index = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
+                selectedEntityID = mediaEntities[index];
+                UpdateWaveformData();
+                PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(202);
+        if (ImGui::Button(Icon::ArrowRight().c_str())) {
+            if (!mediaEntities.empty()) {
+                index = (index + 1) % static_cast<int>(mediaEntities.size());
+                selectedEntityID = mediaEntities[index];
+                UpdateWaveformData();
+                PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+        ImGui::PushID(203);
+        if (ImGui::Button(Icon::ArrowLast().c_str())) {
+            if (!mediaEntities.empty()) {
+                index = static_cast<int>(mediaEntities.size()) - 1;
+                selectedEntityID = mediaEntities[index];
+                UpdateWaveformData();
+                PauseAllAudio();
+                playbackProgress = 0.0f;
+                m_sliderValue = 0.0f;
+            }
+        }
+        ImGui::PopID();
+    }
 
-        if (selectedEntityID != 0 && ImGui::Button("Remove Audio")) {
-            RemoveSelectedMedia();
+    void AudioView::RenderMediaContent() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
+            ImGui::Text("No audio loaded.");
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+            return;
         }
 
-        ImGui::SameLine();
-
-        if (ImGui::Button("Refresh")) {
-            RefreshEntities();
+        if (showWaveform) {
+            RenderWaveform();
         }
-
-        ImGui::SameLine();
-        ImGui::Checkbox("Waveform", &showWaveform);
-
-        ImGui::SameLine();
-        if (selectedEntityID != 0 && ImGui::Button("Save Audio")) {
-            SaveSelectedMedia();
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button("Play Test Tone")) {
+        else {
+            const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
+            ImGui::Text("Audio: %s", audioComp.fileName.c_str());
             auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
             if (playbackSystem) {
-                playbackSystem->PlayTestTone();
+                double duration = playbackSystem->GetDuration(selectedEntityID);
+                double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
+                int minutes = static_cast<int>(currentTime) / 60;
+                int seconds = static_cast<int>(currentTime) % 60;
+                int totalMinutes = static_cast<int>(duration) / 60;
+                int totalSeconds = static_cast<int>(duration) % 60;
+                ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
             }
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
         }
     }
 
-    void AudioView::SaveSelectedMedia() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
-            !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-            return;
-        }
-
-        auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
-        if (audioComp.pcmData.empty()) {
-            std::cerr << "[AudioView] No audio data to save." << std::endl;
-            return;
-        }
-
-        std::string defaultName = audioComp.fileName;
-        if (defaultName.empty()) defaultName = "audio";
-        size_t dotPos = defaultName.find_last_of('.');
-        if (dotPos != std::string::npos) defaultName = defaultName.substr(0, dotPos);
-        defaultName += ".wav";
-
-        std::string savePath;
-        std::string defaultDir = std::filesystem::current_path().string();
-        if (FileDialog::SaveFile("Save Audio As", FileDialog::FilterType::AUDIO_FILE, defaultName, savePath, defaultDir)) {
-            if (!savePath.empty()) {
-                SaveSelectedMediaAs(savePath);
+    void AudioView::RefreshEntities() {
+        try {
+            mediaEntities.clear();
+            for (auto entityID : m_entityManager.GetAllEntities()) {
+                if (m_entityManager.HasComponent<ECS::AudioComponent>(entityID)) {
+                    mediaEntities.push_back(entityID);
+                }
             }
+            lastEntityCount = mediaEntities.size();
+            std::cout << "[AudioView] Refreshed entities, found " << mediaEntities.size() << " audio files" << std::endl;
         }
-    }
-
-    void AudioView::SaveSelectedMediaAs(const std::string& filePath) {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
-            !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-            return;
+        catch (const std::exception& e) {
+            std::cerr << "[AudioView] Exception refreshing entities: " << e.what() << std::endl;
+            mediaEntities.clear();
+            lastEntityCount = 0;
         }
-
-        auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
-        if (audioComp.pcmData.empty()) {
-            return;
-        }
-
-        int channels = audioComp.channels;
-        int sampleRate = audioComp.sampleRate;
-        const float* data = audioComp.pcmData.data();
-        size_t totalSamples = audioComp.pcmData.size();
-
-        FILE* f = fopen(filePath.c_str(), "wb");
-        if (!f) {
-            std::cerr << "[AudioView] Failed to open file for writing: " << filePath << std::endl;
-            return;
-        }
-
-        int bitsPerSample = 32;
-        int bytesPerSample = bitsPerSample / 8;
-        int byteRate = sampleRate * channels * bytesPerSample;
-        int blockAlign = channels * bytesPerSample;
-
-        uint32_t dataSize = static_cast<uint32_t>(totalSamples * bytesPerSample);
-        uint32_t fileSize = 44 + dataSize;
-
-        fwrite("RIFF", 1, 4, f);
-        fwrite(&fileSize, 4, 1, f);
-        fwrite("WAVE", 1, 4, f);
-        fwrite("fmt ", 1, 4, f);
-        uint32_t fmtSize = 16;
-        fwrite(&fmtSize, 4, 1, f);
-        uint16_t audioFormat = 3;
-        fwrite(&audioFormat, 2, 1, f);
-        fwrite(&channels, 2, 1, f);
-        fwrite(&sampleRate, 4, 1, f);
-        fwrite(&byteRate, 4, 1, f);
-        fwrite(&blockAlign, 2, 1, f);
-        fwrite(&bitsPerSample, 2, 1, f);
-        fwrite("data", 1, 4, f);
-        fwrite(&dataSize, 4, 1, f);
-
-        for (size_t i = 0; i < totalSamples; ++i) {
-            float sample = data[i];
-            if (sample > 1.0f) sample = 1.0f;
-            if (sample < -1.0f) sample = -1.0f;
-            fwrite(&sample, 4, 1, f);
-        }
-
-        fclose(f);
-        std::cout << "[AudioView] Saved audio to: " << filePath << std::endl;
     }
 
     void AudioView::RenderPlaybackControls() {
@@ -524,68 +612,76 @@ namespace GUI {
             bool isPlaying = playbackSystem->IsPlaying(selectedEntityID);
             bool isPaused = playbackSystem->IsPaused(selectedEntityID);
 
+            ImGui::PushID(300);
             if (isPlaying && !isPaused) {
-                if (ImGui::Button("Pause")) {
+                if (ImGui::Button((Icon::Pause() + " Pause").c_str())) {
                     playbackSystem->Pause(selectedEntityID);
                 }
             }
             else if (isPaused) {
-                if (ImGui::Button("Resume")) {
+                if (ImGui::Button((Icon::Play() + " Resume").c_str())) {
                     playbackSystem->Resume(selectedEntityID);
                 }
             }
             else {
-                if (ImGui::Button("Play")) {
+                if (ImGui::Button((Icon::Play() + " Play").c_str())) {
                     playbackSystem->Play(selectedEntityID, audioComp.looping);
                 }
             }
+            ImGui::PopID();
 
             ImGui::SameLine();
-
-            if (ImGui::Button("Stop")) {
+            ImGui::PushID(301);
+            if (ImGui::Button(Icon::Stop().c_str())) {
                 playbackSystem->Stop(selectedEntityID);
                 playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
             }
+            ImGui::PopID();
 
             ImGui::SameLine();
-            ImGui::Checkbox("Loop", &audioComp.looping);
+            ImGui::PushID(302);
+            if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &audioComp.looping)) {
+                // Toggle loop
+            }
+            ImGui::PopID();
 
             ImGui::SameLine();
             ImGui::Text("Vol:");
             ImGui::SameLine();
 
             float volumePercent = audioComp.volume * 100.0f;
+            ImGui::PushItemWidth(100.0f);
             if (ImGui::SliderFloat("##VolumeSlider", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
                 float newVolume = volumePercent / 100.0f;
                 playbackSystem->SetVolume(selectedEntityID, newVolume);
                 audioComp.volume = newVolume;
             }
+            ImGui::PopItemWidth();
 
-            // Get current time and duration for display
             double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
             double duration = playbackSystem->GetDuration(selectedEntityID);
 
-            // Update slider value from playback progress
             m_sliderValue = playbackProgress;
 
-            // Progress slider
             ImGui::Text("Progress:");
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 100.0f);
 
+            ImGui::PushID(303);
             if (ImGui::SliderFloat("##SeekSlider", &m_sliderValue, 0.0f, 1.0f, "%.1f%%")) {
                 playbackSystem->Seek(selectedEntityID, m_sliderValue * duration);
                 playbackProgress = m_sliderValue;
             }
+            ImGui::PopID();
 
-            // Display time
             int minutes = static_cast<int>(currentTime) / 60;
             int seconds = static_cast<int>(currentTime) % 60;
             int totalMinutes = static_cast<int>(duration) / 60;
             int totalSeconds = static_cast<int>(duration) % 60;
 
-            ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
+            ImGui::SameLine();
+            ImGui::Text("%02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
 
             ImGui::Separator();
         }
@@ -621,7 +717,7 @@ namespace GUI {
 
         ImVec2 avail = ImGui::GetContentRegionAvail();
         float width = avail.x;
-        float height = std::min(avail.y * 0.4f, 128.0f);
+        float height = std::min(avail.y * 0.6f, 200.0f);
 
         if (width <= 0 || height <= 0) return;
 
@@ -761,6 +857,90 @@ namespace GUI {
         catch (const std::exception& e) {
             std::cerr << "[AudioView] Exception loading audio: " << e.what() << std::endl;
         }
+    }
+
+    void AudioView::SaveSelectedMedia() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
+            return;
+        }
+
+        auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
+        if (audioComp.pcmData.empty()) {
+            std::cerr << "[AudioView] No audio data to save." << std::endl;
+            return;
+        }
+
+        std::string defaultName = audioComp.fileName;
+        if (defaultName.empty()) defaultName = "audio";
+        size_t dotPos = defaultName.find_last_of('.');
+        if (dotPos != std::string::npos) defaultName = defaultName.substr(0, dotPos);
+        defaultName += ".wav";
+
+        std::string savePath;
+        std::string defaultDir = std::filesystem::current_path().string();
+        if (FileDialog::SaveFile("Save Audio As", FileDialog::FilterType::AUDIO_FILE, defaultName, savePath, defaultDir)) {
+            if (!savePath.empty()) {
+                SaveSelectedMediaAs(savePath);
+            }
+        }
+    }
+
+    void AudioView::SaveSelectedMediaAs(const std::string& filePath) {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
+            return;
+        }
+
+        auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
+        if (audioComp.pcmData.empty()) {
+            return;
+        }
+
+        int channels = audioComp.channels;
+        int sampleRate = audioComp.sampleRate;
+        const float* data = audioComp.pcmData.data();
+        size_t totalSamples = audioComp.pcmData.size();
+
+        FILE* f = fopen(filePath.c_str(), "wb");
+        if (!f) {
+            std::cerr << "[AudioView] Failed to open file for writing: " << filePath << std::endl;
+            return;
+        }
+
+        int bitsPerSample = 32;
+        int bytesPerSample = bitsPerSample / 8;
+        int byteRate = sampleRate * channels * bytesPerSample;
+        int blockAlign = channels * bytesPerSample;
+
+        uint32_t dataSize = static_cast<uint32_t>(totalSamples * bytesPerSample);
+        uint32_t fileSize = 44 + dataSize;
+
+        fwrite("RIFF", 1, 4, f);
+        fwrite(&fileSize, 4, 1, f);
+        fwrite("WAVE", 1, 4, f);
+        fwrite("fmt ", 1, 4, f);
+        uint32_t fmtSize = 16;
+        fwrite(&fmtSize, 4, 1, f);
+        uint16_t audioFormat = 3;
+        fwrite(&audioFormat, 2, 1, f);
+        fwrite(&channels, 2, 1, f);
+        fwrite(&sampleRate, 4, 1, f);
+        fwrite(&byteRate, 4, 1, f);
+        fwrite(&blockAlign, 2, 1, f);
+        fwrite(&bitsPerSample, 2, 1, f);
+        fwrite("data", 1, 4, f);
+        fwrite(&dataSize, 4, 1, f);
+
+        for (size_t i = 0; i < totalSamples; ++i) {
+            float sample = data[i];
+            if (sample > 1.0f) sample = 1.0f;
+            if (sample < -1.0f) sample = -1.0f;
+            fwrite(&sample, 4, 1, f);
+        }
+
+        fclose(f);
+        std::cout << "[AudioView] Saved audio to: " << filePath << std::endl;
     }
 
     void AudioView::RemoveSelectedMedia() {

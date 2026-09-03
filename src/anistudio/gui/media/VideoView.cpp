@@ -13,6 +13,7 @@
 #include "VideoPlaybackSystem.hpp"
 #include "VideoAudioSystem.hpp"
 #include "IconFonts.hpp"
+#include "ClipboardUtilities.hpp"
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -35,27 +36,9 @@ namespace GUI {
         }
 
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-        if (!videoSystem) {
-            m_entityManager.RegisterSystem<ECS::VideoSystem>();
-            videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-        }
-
         auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-        if (!audioPlaybackSystem) {
-            m_entityManager.RegisterSystem<ECS::AudioPlaybackSystem>();
-            audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-        }
-
         auto playbackSystem = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (!playbackSystem) {
-            m_entityManager.RegisterSystem<ECS::VideoPlaybackSystem>();
-            playbackSystem = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        }
-
         auto vaSystem = m_entityManager.GetSystem<ECS::VideoAudioSystem>();
-        if (!vaSystem) {
-            m_entityManager.RegisterSystem<ECS::VideoAudioSystem>();
-        }
 
         if (playbackSystem) {
             playbackSystem->RegisterVideoPlaybackCallback([this](ECS::EntityID entity, const unsigned char* data, int width, int height) {
@@ -64,6 +47,46 @@ namespace GUI {
                 (void)data;
                 (void)width;
                 (void)height;
+                });
+
+            playbackSystem->RegisterPlaybackEndCallback([this](ECS::EntityID entity) {
+                if (entity != selectedEntityID) return;
+                if (!m_entityManager.IsEntityValid(entity)) return;
+
+                if (!m_autoplay) return;
+
+                bool loopEnabled = false;
+                if (m_entityManager.IsEntityValid(entity) &&
+                    m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
+                    loopEnabled = m_entityManager.GetComponent<ECS::VideoComponent>(entity).looping;
+                }
+
+                if (loopEnabled) {
+                    SeekVideo(entity, 0.0);
+                    m_playbackProgress = 0.0f;
+                    auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+                    if (playback) {
+                        playback->Play(entity, true);
+                    }
+                }
+                else if (mediaEntities.size() > 1) {
+                    int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
+                    if (newIndex != index) {
+                        index = newIndex;
+                        selectedEntityID = mediaEntities[index];
+                        SeekVideo(selectedEntityID, 0.0);
+                        m_playbackProgress = 0.0f;
+                        UpdateWaveformData();
+                        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+                        if (playback) {
+                            playback->Play(selectedEntityID, false);
+                        }
+                    }
+                }
+                else {
+                    SeekVideo(entity, 0.0);
+                    m_playbackProgress = 0.0f;
+                }
                 });
         }
 
@@ -217,39 +240,57 @@ namespace GUI {
             std::cerr << "[VideoView] ERROR: No ImGui context!" << std::endl;
             return;
         }
+
+        if (m_isFullscreen) {
+            RenderFullscreen();
+            return;
+        }
+
         ImGui::SetNextWindowSize(ImVec2(1024, 768), ImGuiCond_FirstUseEver);
         std::string windowName = "Video Viewer##" + std::to_string(GetID());
-        if (!ImGui::Begin(windowName.c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
+        if (!ImGui::Begin(windowName.c_str(), &windowOpen, ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoScrollbar)) {
             ImGui::End();
             return;
         }
+
         try {
             RenderMenuBar();
-            RenderVideoInfo();
-            RenderControls();
-            RenderSelector();
-            RenderPlaybackControls();
-
-            if (HasAudioTrack(selectedEntityID)) {
-                ImGui::SameLine();
-                RenderAudioControls(selectedEntityID);
-            }
-
-            ImGui::SameLine();
-            bool visible = IsHistoryVisible();
-            if (ImGui::Checkbox("Show History", &visible)) {
-                ToggleHistoryView(visible);
-            }
+            RenderToolbar();
+            RenderMediaInfo();
             ImGui::Separator();
-            if (ImGui::BeginChild("VideoViewerChild", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar)) {
-                RenderSelected();
+
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float timelineHeight = 64.0f;
+            float controlsHeight = 86.0f;
+            float selectorHeight = 64.0f;
+            float totalControlsHeight = timelineHeight + controlsHeight + selectorHeight + 20.0f;
+            float videoHeight = avail.y - totalControlsHeight;
+            if (videoHeight < 100.0f) videoHeight = 100.0f;
+            ImVec2 videoSize = ImVec2(avail.x, videoHeight);
+
+            ImGui::PushID("VideoDisplay");
+            if (ImGui::BeginChild("VideoDisplayChild", videoSize, false, ImGuiWindowFlags_NoScrollbar)) {
+                RenderMediaContent();
             }
             ImGui::EndChild();
+            ImGui::PopID();
 
-            if (HasAudioTrack(selectedEntityID) && m_showWaveform) {
-                ImGui::Separator();
+            ImGui::PushID("Timeline");
+            if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.empty()) {
                 RenderWaveform();
             }
+            else {
+                RenderTimeline();
+            }
+            ImGui::PopID();
+
+            ImGui::PushID("Controls");
+            RenderControls();
+            ImGui::PopID();
+
+            ImGui::PushID("Selector");
+            RenderSelector();
+            ImGui::PopID();
 
             HandleClipboardPaste();
         }
@@ -257,7 +298,9 @@ namespace GUI {
             std::cerr << "[VideoView] Exception in Render: " << e.what() << std::endl;
             ImGui::Text("Error rendering VideoView: %s", e.what());
         }
+
         ImGui::End();
+
         if (!windowOpen) {
             std::unordered_map<std::string, std::any> eventData;
             eventData["workspaceID"] = GetID();
@@ -266,10 +309,274 @@ namespace GUI {
         }
     }
 
+    void VideoView::RenderFullscreen() {
+        if (ImGui::IsMouseClicked(0) || ImGui::IsMouseClicked(1)) {
+            m_showFullscreenControls = true;
+            m_fullscreenControlsTimer = 5.0f;
+        }
+        
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImVec2 viewportPos = viewport->Pos;
+        ImVec2 viewportSize = viewport->Size;
+
+        ImGui::SetNextWindowPos(viewportPos);
+        ImGui::SetNextWindowSize(viewportSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0);
+
+        if (ImGui::Begin("Fullscreen Video", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDocking |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+
+            ImGuiIO& io = ImGui::GetIO();
+
+            // Check for escape or F11 to exit fullscreen
+            if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_F11)) {
+                ToggleFullscreen();
+            }
+
+            // Check for mouse movement or any key press to show controls
+            ImVec2 currentMousePos = io.MousePos;
+            bool mouseMoved = (std::abs(currentMousePos.x - m_lastMousePos.x) > 2.0f ||
+                std::abs(currentMousePos.y - m_lastMousePos.y) > 2.0f);
+            m_lastMousePos = currentMousePos;
+
+            // Check if any key is pressed (except modifiers)
+            bool keyPressed = false;
+            for (int key = ImGuiKey_NamedKey_BEGIN; key < ImGuiKey_NamedKey_END; ++key) {
+                if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key))) {
+                    keyPressed = true;
+                    break;
+                }
+            }
+
+            // Show controls on mouse movement or key press
+            if (mouseMoved || keyPressed) {
+                m_showFullscreenControls = true;
+                m_fullscreenControlsTimer = 5.0f;
+            }
+
+            // Auto-hide after 5 seconds
+            if (m_showFullscreenControls) {
+                m_fullscreenControlsTimer -= ImGui::GetIO().DeltaTime;
+                if (m_fullscreenControlsTimer <= 0.0f) {
+                    m_showFullscreenControls = false;
+                }
+            }
+
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float overlayHeight = m_showFullscreenControls ? 140.0f : 0.0f;
+            float displayHeight = avail.y - overlayHeight;
+            if (displayHeight < 100.0f) displayHeight = 100.0f;
+
+            // Video display - fills the available space
+            if (ImGui::BeginChild("FullscreenVideoDisplay", ImVec2(avail.x, displayHeight), false, ImGuiWindowFlags_NoScrollbar)) {
+                RenderMediaContent();
+            }
+            ImGui::EndChild();
+
+            // Controls overlay (only visible when controls are shown)
+            if (m_showFullscreenControls) {
+                ImVec2 overlayPos = ImVec2(0, displayHeight);
+                ImGui::SetCursorPos(overlayPos);
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0.6f));
+                if (ImGui::BeginChild("FullscreenControls", ImVec2(avail.x, overlayHeight), false, ImGuiWindowFlags_NoScrollbar)) {
+                    // Calculate center position for controls
+                    float totalWidth = 700.0f;
+                    float centerX = (avail.x - totalWidth) * 0.5f;
+                    if (centerX < 0) centerX = 0;
+
+                    ImGui::SetCursorPosX(centerX);
+
+                    // Timeline or waveform
+                    if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.empty()) {
+                        // Render waveform with full width, then controls below
+                        float savedCursorX = ImGui::GetCursorPosX();
+                        ImGui::SetCursorPosX(0);
+                        RenderWaveform();
+                        ImGui::SetCursorPosX(centerX);
+                    }
+                    else {
+                        RenderTimeline();
+                    }
+
+                    // Controls
+                    RenderControls();
+
+                    // Exit hint
+                    ImVec2 hintPos = ImVec2(avail.x - 150.0f, 10.0f);
+                    ImGui::SetCursorPos(hintPos);
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 0.4f));
+                    ImGui::Text("Esc to exit");
+                    ImGui::PopStyleColor();
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleColor();
+
+            }
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar(3);
+    }
+
+    void VideoView::RenderMediaContent() {
+        if (!m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            ImGui::Text("No video selected.");
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+            return;
+        }
+
+        try {
+            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            GLuint texID = 0;
+            if (m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
+                texID = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID).textureID;
+            }
+
+            if (texID == 0 || !glIsTexture(texID) || videoComp.width <= 0 || videoComp.height <= 0) {
+                ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
+                    texID, videoComp.width, videoComp.height);
+                HandleFileDropTarget();
+                HandleEntityDropTarget();
+                return;
+            }
+
+            m_videoAspectRatio = static_cast<float>(videoComp.width) / static_cast<float>(videoComp.height);
+
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            ImVec2 imageSize;
+
+            switch (m_displayMode) {
+            case DisplayMode::ActualResolution:
+                imageSize = ImVec2(static_cast<float>(videoComp.width), static_cast<float>(videoComp.height));
+                break;
+            case DisplayMode::Fullscreen:
+            case DisplayMode::FitToWindow:
+            default:
+                float availRatio = avail.x / avail.y;
+                if (availRatio > m_videoAspectRatio) {
+                    imageSize.y = avail.y;
+                    imageSize.x = avail.y * m_videoAspectRatio;
+                }
+                else {
+                    imageSize.x = avail.x;
+                    imageSize.y = avail.x / m_videoAspectRatio;
+                }
+                break;
+            }
+
+            ImVec2 offset = ImVec2(
+                (avail.x - imageSize.x) * 0.5f,
+                (avail.y - imageSize.y) * 0.5f
+            );
+
+            ImGui::SetCursorPos(offset);
+            ImGui::Image((ImTextureID)(intptr_t)texID, imageSize, ImVec2(0, 0), ImVec2(1, 1));
+
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                ToggleFullscreen();
+            }
+
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    nlohmann::json payload;
+                    payload["entityID"] = selectedEntityID;
+                    ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
+                        payload.dump().c_str(), payload.dump().size() + 1);
+                    ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(64, 64));
+                    ImGui::Text("%s", videoComp.fileName.c_str());
+                    ImGui::EndDragDropSource();
+                }
+            }
+
+            RenderMediaContextMenu(selectedEntityID);
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+
+        }
+        catch (const std::exception& e) {
+            ImGui::Text("Error rendering video: %s", e.what());
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+        }
+    }
+
+    void VideoView::RenderTimeline() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            return;
+        }
+
+        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+        if (!playback) return;
+
+        double totalDuration = GetVideoDuration(selectedEntityID);
+        double currentTime = GetVideoCurrentTime(selectedEntityID);
+
+        std::string currentStr = FormatTimecode(currentTime);
+        std::string totalStr = FormatTimecode(totalDuration);
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        float sliderWidth = availWidth - 20.0f;
+
+        if (sliderWidth < 50.0f) sliderWidth = 50.0f;
+
+        // Center the slider
+        float startX = (availWidth - sliderWidth) * 0.5f;
+        if (startX < 0) startX = 0;
+        ImGui::SetCursorPosX(startX);
+
+        // Slider
+        ImGui::PushItemWidth(sliderWidth);
+        ImGui::PushID("TimelineSlider");
+        if (ImGui::SliderFloat("##Timeline", &m_playbackProgress, 0.0f, 1.0f, "")) {
+            playback->Seek(selectedEntityID, m_playbackProgress * totalDuration);
+        }
+        if (ImGui::IsItemHovered()) {
+            float hoverPos = ImGui::GetMousePos().x - ImGui::GetItemRectMin().x;
+            float hoverProgress = hoverPos / ImGui::GetItemRectSize().x;
+            hoverProgress = std::clamp(hoverProgress, 0.0f, 1.0f);
+            double hoverTime = hoverProgress * totalDuration;
+            ImGui::SetTooltip("%s", FormatTimecode(hoverTime).c_str());
+        }
+        ImGui::PopID();
+        ImGui::PopItemWidth();
+
+        // Timestamps on the next line, centered
+        std::string timeDisplay = currentStr + " / " + totalStr;
+        float textWidth = ImGui::CalcTextSize(timeDisplay.c_str()).x;
+        float centerX = (availWidth - textWidth) * 0.5f;
+        if (centerX < 0) centerX = 0;
+        ImGui::SetCursorPosX(centerX);
+        ImGui::Text("%s", timeDisplay.c_str());
+    }
+
+    std::string VideoView::FormatTimecode(double seconds) const {
+        if (seconds < 0) seconds = 0;
+        int totalSeconds = static_cast<int>(seconds);
+        int hours = totalSeconds / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int secs = totalSeconds % 60;
+        std::ostringstream oss;
+        oss << std::setw(2) << std::setfill('0') << hours << ":"
+            << std::setw(2) << std::setfill('0') << minutes << ":"
+            << std::setw(2) << std::setfill('0') << secs;
+        return oss.str();
+    }
+
     void VideoView::RenderMenuBar() {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
-                if (ImGui::MenuItem((Icon::FolderOpen() + " Load Video(s)").c_str())) {
+                ImGui::PushID(1);
+                if (ImGui::MenuItem((Icon::Video() + " " + Icon::FolderOpen() + " Load Video(s)").c_str())) {
                     static std::string lastVideoFolder;
                     std::vector<std::string> filePaths;
                     if (FileDialog::OpenFiles("Choose Video(s)", FileDialog::FilterType::VIDEO_FILE, filePaths, lastVideoFolder)) {
@@ -279,9 +586,10 @@ namespace GUI {
                         }
                     }
                 }
+                ImGui::PopID();
                 ImGui::Separator();
 
-                ImGui::PushID(1);
+                ImGui::PushID(2);
                 if (ImGui::BeginMenu((Icon::Save() + " Save").c_str(), selectedEntityID != 0)) {
                     if (ImGui::MenuItem((Icon::Music() + " Save Video (with Audio)").c_str(), nullptr, false,
                         selectedEntityID != 0 && HasAudioTrack(selectedEntityID))) {
@@ -308,13 +616,13 @@ namespace GUI {
                 ImGui::PopID();
 
                 ImGui::Separator();
-                ImGui::PushID(2);
+                ImGui::PushID(3);
                 if (ImGui::MenuItem((Icon::Trash() + " Remove Video").c_str(), nullptr, false, selectedEntityID != 0)) {
                     RemoveSelectedMedia();
                 }
                 ImGui::PopID();
                 ImGui::Separator();
-                ImGui::PushID(3);
+                ImGui::PushID(4);
                 if (ImGui::MenuItem((Icon::Refresh() + " Refresh").c_str())) {
                     RefreshEntities();
                 }
@@ -327,7 +635,7 @@ namespace GUI {
                     ToggleHistoryView(visible);
                 }
                 ImGui::Separator();
-                ImGui::PushID(4);
+                ImGui::PushID(5);
                 if (ImGui::MenuItem((Icon::ArrowFirst() + " First Video").c_str(), nullptr, false, !mediaEntities.empty())) {
                     if (!mediaEntities.empty()) {
                         index = 0;
@@ -337,7 +645,7 @@ namespace GUI {
                     }
                 }
                 ImGui::PopID();
-                ImGui::PushID(5);
+                ImGui::PushID(6);
                 if (ImGui::MenuItem((Icon::ArrowLast() + " Last Video").c_str(), nullptr, false, !mediaEntities.empty())) {
                     if (!mediaEntities.empty()) {
                         index = static_cast<int>(mediaEntities.size()) - 1;
@@ -348,13 +656,531 @@ namespace GUI {
                 }
                 ImGui::PopID();
                 ImGui::Separator();
-                ImGui::PushID(6);
+                ImGui::PushID(7);
                 if (ImGui::MenuItem((Icon::Music() + " Show Waveform").c_str(), nullptr, &m_showWaveform)) {}
+                ImGui::PopID();
+                ImGui::Separator();
+                ImGui::PushID(8);
+                if (ImGui::MenuItem((Icon::Zoom() + " Fit to Window").c_str(), nullptr, m_displayMode == DisplayMode::FitToWindow)) {
+                    m_displayMode = DisplayMode::FitToWindow;
+                }
+                ImGui::PopID();
+                ImGui::PushID(9);
+                if (ImGui::MenuItem("Actual Resolution", nullptr, m_displayMode == DisplayMode::ActualResolution)) {
+                    m_displayMode = DisplayMode::ActualResolution;
+                }
                 ImGui::PopID();
                 ImGui::EndMenu();
             }
             ImGui::EndMenuBar();
         }
+    }
+
+    void VideoView::RenderToolbar() {
+        ImGui::PushID(100);
+
+        ImGui::PushID(101);
+        if (ImGui::Button((Icon::Video() + " Load").c_str())) {
+            static std::string lastVideoFolder;
+            std::vector<std::string> filePaths;
+            if (FileDialog::OpenFiles("Choose Video(s)", FileDialog::FilterType::VIDEO_FILE, filePaths, lastVideoFolder)) {
+                if (!filePaths.empty()) {
+                    LoadMedia(filePaths);
+                    lastVideoFolder = std::filesystem::path(filePaths[0]).parent_path().string();
+                }
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(102);
+        if (ImGui::Button((Icon::Save() + " Save").c_str())) {
+            SaveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(103);
+        if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
+            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            std::string outPath;
+            const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            std::string defaultName = videoComp.fileName;
+            if (FileDialog::SaveFile("Save Video As", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
+                if (!outPath.empty()) SaveSelectedMediaAs(outPath);
+            }
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(104);
+        if (ImGui::Button((Icon::Trash() + " Remove").c_str())) {
+            RemoveSelectedMedia();
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(105);
+        if (ImGui::Button(Icon::Refresh().c_str())) {
+            RefreshEntities();
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::PushID(106);
+        if (ImGui::Button("Send to Metadata")) {
+            SendSelectedToMetadataView();
+        }
+        ImGui::PopID();
+
+        ImGui::PopID();
+    }
+
+    void VideoView::RenderMediaInfo() {
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            try {
+                const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+
+                ImGui::Text("File: %s | %dx%d | %.2f FPS | %d frames | Time: %s / %s | Frame: %d/%d | Entity: %zu",
+                    videoComp.fileName.c_str(),
+                    videoComp.width, videoComp.height,
+                    videoComp.fps,
+                    videoComp.frameCount,
+                    FormatTimecode(GetVideoCurrentTime(selectedEntityID)).c_str(),
+                    FormatTimecode(GetVideoDuration(selectedEntityID)).c_str(),
+                    videoComp.currentFrame,
+                    videoComp.frameCount,
+                    selectedEntityID);
+
+                if (HasAudioTrack(selectedEntityID)) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "%s", Icon::Music().c_str());
+                }
+
+                if (selectedEntityID == lastGeneratedVideoID) {
+                    ImGui::SameLine();
+                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "NEWLY GENERATED");
+                }
+
+                RenderMediaContextMenu(selectedEntityID);
+            }
+            catch (const std::exception& e) {
+                ImGui::Text("Error reading video info: %s", e.what());
+            }
+        }
+        else {
+            ImGui::Text("No video loaded.");
+            HandleFileDropTarget();
+            HandleEntityDropTarget();
+        }
+    }
+
+    void VideoView::RenderControls() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            ImGui::Text("No video selected.");
+            return;
+        }
+
+        auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+        bool isLoaded = (videoComp.width > 0 && videoComp.height > 0);
+
+        if (!isLoaded) {
+            ImGui::Text("Loading video...");
+            return;
+        }
+
+        try {
+            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+            if (!playback) {
+                ImGui::Text("VideoPlaybackSystem not available.");
+                return;
+            }
+
+            bool loopState = videoComp.looping;
+            bool playing = playback->IsPlaying(selectedEntityID);
+            float speed = videoComp.playbackSpeed;
+
+            // All buttons same size
+            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, 8.0f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
+
+            float availWidth = ImGui::GetContentRegionAvail().x;
+            float totalWidth = 0.0f;
+
+            // Width calculation in visual order:
+            totalWidth += 110.0f + ImGui::GetStyle().ItemSpacing.x; // Speed drag (icon + drag)
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // <<
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // <
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // Play/Pause
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // Stop
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // >
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // >>
+            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // Fullscreen
+            if (HasAudioTrack(selectedEntityID)) {
+                totalWidth += 150.0f + ImGui::GetStyle().ItemSpacing.x; // Volume controls (icon + checkbox + slider)
+            }
+            totalWidth += 80.0f + ImGui::GetStyle().ItemSpacing.x;  // Waveform checkbox (loop removed from here)
+
+            float startX = (availWidth - totalWidth) * 0.5f;
+            if (startX < 0) startX = 0;
+            ImGui::SetCursorPosX(startX);
+
+            // --- Speed drag ---
+            ImGui::Text("%s", Icon::ClockRotateLeft().c_str());
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Playback Speed");
+            }
+            ImGui::SameLine();
+            ImGui::PushItemWidth(80.0f);
+            ImGui::PushID(305);
+            if (ImGui::DragFloat("##Speed", &speed, 0.05f, 0.1f, 4.0f, "%.1fx")) {
+                speed = std::clamp(speed, 0.1f, 4.0f);
+                videoComp.playbackSpeed = speed;
+                playback->SetSpeed(selectedEntityID, speed);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Adjust playback speed (0.1x - 4.0x)");
+            }
+            ImGui::PopID();
+            ImGui::PopItemWidth();
+
+            ImGui::SameLine();
+
+            // --- Volume (if audio track) ---
+            if (HasAudioTrack(selectedEntityID)) {
+                RenderAudioControls(selectedEntityID);
+                ImGui::SameLine();
+            }
+
+            // --- First ---
+            ImGui::PushID(308);
+            if (ImGui::Button(Icon::ArrowFirst().c_str())) {
+                SeekVideo(selectedEntityID, 0.0);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Go to first frame");
+            }
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            // --- Previous (with repeat) ---
+            ImGui::PushID(302);
+            bool held = false;
+            if (ImGui::Button(Icon::ArrowLeft().c_str())) {
+                // Empty - handled by ProcessRepeatButton
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Previous frame (hold for repeat)");
+            }
+            ImGuiID prevID = ImGui::GetItemID();
+            if (ProcessRepeatButton(prevID, 0.4, 0.1, held)) {
+                float fps = GetVideoFPS(selectedEntityID);
+                float step = 1.0f / fps; // one frame
+                // Acceleration: after more repeats, jump larger steps
+                auto it = m_repeatButtonStates.find(prevID);
+                if (it != m_repeatButtonStates.end()) {
+                    int count = it->second.repeatCount;
+                    if (count > 10) step *= 30.0f;   // jump 1 second or 30 frames
+                    else if (count > 5) step *= 10.0f; // jump 10 frames
+                }
+                double current = GetVideoCurrentTime(selectedEntityID);
+                double newTime = current - step;
+                if (newTime < 0.0) newTime = 0.0;
+                SeekVideo(selectedEntityID, newTime);
+            }
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            // --- Play/Pause ---
+            ImGui::PushID(300);
+            if (ImGui::Button(playing ? Icon::Pause().c_str() : Icon::Play().c_str())) {
+                if (playing) {
+                    playback->Pause(selectedEntityID);
+                }
+                else {
+                    // When playing, respect both loop and autoplay
+                    playback->Play(selectedEntityID, loopState);
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip(playing ? "Pause playback" : "Play video");
+            }
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            // --- Stop ---
+            ImGui::PushID(301);
+            if (ImGui::Button(Icon::Stop().c_str())) {
+                playback->Stop(selectedEntityID);
+                m_playbackProgress = 0.0f;
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Stop playback and go to beginning");
+            }
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            // --- Next (with repeat) ---
+            ImGui::PushID(303);
+            if (ImGui::Button(Icon::ArrowRight().c_str())) {
+                // Empty - handled by ProcessRepeatButton
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Next frame (hold for repeat)");
+            }
+            ImGuiID nextID = ImGui::GetItemID();
+            if (ProcessRepeatButton(nextID, 0.4, 0.1, held)) {
+                float fps = GetVideoFPS(selectedEntityID);
+                float step = 1.0f / fps;
+                auto it = m_repeatButtonStates.find(nextID);
+                if (it != m_repeatButtonStates.end()) {
+                    int count = it->second.repeatCount;
+                    if (count > 10) step *= 30.0f;
+                    else if (count > 5) step *= 10.0f;
+                }
+                double current = GetVideoCurrentTime(selectedEntityID);
+                double duration = GetVideoDuration(selectedEntityID);
+                double newTime = current + step;
+                if (newTime > duration) newTime = duration;
+                SeekVideo(selectedEntityID, newTime);
+            }
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            // --- Last ---
+            ImGui::PushID(309);
+            if (ImGui::Button(Icon::ArrowLast().c_str())) {
+                double duration = GetVideoDuration(selectedEntityID);
+                SeekVideo(selectedEntityID, duration - 0.001);
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Go to last frame");
+            }
+            ImGui::PopID();
+
+            ImGui::SameLine();
+
+            // --- Fullscreen ---
+            ImGui::PushID(306);
+            if (ImGui::Button(Icon::Expand().c_str())) {
+                ToggleFullscreen();
+            }
+            ImGui::PopID();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Toggle Fullscreen (F11 or Double-click video)");
+            }
+
+            ImGui::SameLine();
+
+            // --- Waveform (loop removed from here) ---
+            ImGui::PushID(307);
+            if (ImGui::Checkbox((Icon::Music() + " Waveform").c_str(), &m_showWaveform)) {
+                // Toggle handled by checkbox
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Show/hide audio waveform timeline");
+            }
+            ImGui::PopID();
+
+            ImGui::PopStyleVar(2);
+            ImGui::Separator();
+        }
+        catch (const std::exception& e) {
+            ImGui::Text("Error with playback controls: %s", e.what());
+        }
+    }
+
+    void VideoView::RenderSelector() {
+        if (mediaEntities.empty()) {
+            ImGui::Text("No videos loaded.");
+            return;
+        }
+
+        int currentFrame = 0;
+        int totalFrames = 0;
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+            const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+            currentFrame = videoComp.currentFrame;
+            totalFrames = videoComp.frameCount;
+        }
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 6.0f));
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+
+        float totalWidth = 0.0f;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 70.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 200.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 20.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 80.0f + ImGui::GetStyle().ItemSpacing.x;
+        if (m_autoplay) {
+            totalWidth += 60.0f + ImGui::GetStyle().ItemSpacing.x;
+        }
+
+        float startX = (availWidth - totalWidth) * 0.5f;
+        if (startX < 0) startX = 0;
+        ImGui::SetCursorPosX(startX);
+
+        ImGui::PushID(205);
+        if (ImGui::Button(Icon::ArrowFirst().c_str())) {
+            if (!mediaEntities.empty()) {
+                auto oldEntity = selectedEntityID;
+                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+
+                if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
+                    playback->Pause(oldEntity);
+                }
+
+                index = 0;
+                selectedEntityID = mediaEntities[index];
+
+                if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
+                    double currentPos = playback->GetCurrentPosition(selectedEntityID);
+                    SeekVideo(selectedEntityID, currentPos);
+                }
+
+                UpdateWaveformData();
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("First video");
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(206);
+        if (ImGui::Button(Icon::ArrowLeft().c_str())) {
+            PreviousVideo();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Previous video");
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushItemWidth(60.0f);
+        ImGui::PushID(209);
+        if (ImGui::InputInt("##VideoSelector", &index, 0, 0)) {
+            if (!mediaEntities.empty()) {
+                const int size = static_cast<int>(mediaEntities.size());
+                if (size == 1) index = 0;
+                else index = ((index % size) + size) % size;
+
+                auto oldEntity = selectedEntityID;
+                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+
+                if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
+                    playback->Pause(oldEntity);
+                }
+
+                selectedEntityID = mediaEntities[index];
+
+                if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
+                    double currentPos = playback->GetCurrentPosition(selectedEntityID);
+                    SeekVideo(selectedEntityID, currentPos);
+                }
+
+                UpdateWaveformData();
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Video index (zero indexed)");
+        }
+        ImGui::PopID();
+        ImGui::PopItemWidth();
+
+        ImGui::SameLine();
+        ImGui::Text("/ %d videos", (int)mediaEntities.size());
+        ImGui::SameLine();
+
+        ImGui::PushID(207);
+        if (ImGui::Button(Icon::ArrowRight().c_str())) {
+            NextVideo();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Next video");
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        ImGui::PushID(208);
+        if (ImGui::Button(Icon::ArrowLast().c_str())) {
+            if (!mediaEntities.empty()) {
+                auto oldEntity = selectedEntityID;
+                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+
+                if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
+                    playback->Pause(oldEntity);
+                }
+
+                index = static_cast<int>(mediaEntities.size()) - 1;
+                selectedEntityID = mediaEntities[index];
+
+                if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
+                    double currentPos = playback->GetCurrentPosition(selectedEntityID);
+                    SeekVideo(selectedEntityID, currentPos);
+                }
+
+                UpdateWaveformData();
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Last video");
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::Dummy(ImVec2(20.0f, 0.0f));
+        ImGui::SameLine();
+
+        ImGui::PushID(210);
+        if (ImGui::Checkbox((Icon::Play() + " Autoplay").c_str(), &m_autoplay)) {}
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Automatically play next video when current ends");
+        }
+        ImGui::PopID();
+        ImGui::SameLine();
+
+        if (m_autoplay) {
+            bool loopState = false;
+            if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+                m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+                loopState = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).looping;
+            }
+
+            ImGui::PushID(211);
+            if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
+                if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+                    m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+                    m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).looping = loopState;
+
+                    auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+                    if (playback && playback->IsPlaying(selectedEntityID)) {
+                        playback->Play(selectedEntityID, loopState);
+                    }
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Loop current video (only when autoplay is enabled)");
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::PopStyleVar(2);
     }
 
     void VideoView::RefreshEntities() {
@@ -373,149 +1199,6 @@ namespace GUI {
             mediaEntities.clear();
             lastEntityCount = 0;
         }
-    }
-
-    static std::string FormatTimecode(double seconds) {
-        if (seconds < 0) seconds = 0;
-        int totalSeconds = static_cast<int>(seconds);
-        int hours = totalSeconds / 3600;
-        int minutes = (totalSeconds % 3600) / 60;
-        int secs = totalSeconds % 60;
-        std::ostringstream oss;
-        oss << std::setw(2) << std::setfill('0') << hours << ":"
-            << std::setw(2) << std::setfill('0') << minutes << ":"
-            << std::setw(2) << std::setfill('0') << secs;
-        return oss.str();
-    }
-
-    void VideoView::RenderVideoInfo() {
-        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
-            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            try {
-                const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-                ImGui::Text("File: %s", videoComp.fileName.c_str());
-                ImGui::Text("Dimensions: %dx%d, FPS: %.2f, Frames: %d",
-                    videoComp.width, videoComp.height, videoComp.fps, videoComp.frameCount);
-
-                bool hasAudio = HasAudioTrack(selectedEntityID);
-                double totalDuration = GetVideoDuration(selectedEntityID);
-                double currentTime = GetVideoCurrentTime(selectedEntityID);
-
-                ImGui::Text("Time: %s / %s", FormatTimecode(currentTime).c_str(), FormatTimecode(totalDuration).c_str());
-                ImGui::Text("Current Frame: %d / %d", videoComp.currentFrame, videoComp.frameCount);
-                ImGui::Text("Entity ID: %zu", selectedEntityID);
-
-                if (hasAudio) {
-                    ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "Audio Track: Yes");
-                }
-                else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "Audio Track: No");
-                }
-
-                if (selectedEntityID == lastGeneratedVideoID) {
-                    ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "✦ NEWLY GENERATED");
-                }
-                RenderMediaContextMenu(selectedEntityID);
-                if (ImGui::Button("Send to Metadata Viewer")) {
-                    SendSelectedToMetadataView();
-                }
-                ImGui::Separator();
-            }
-            catch (const std::exception& e) {
-                ImGui::Text("Error reading video info: %s", e.what());
-            }
-        }
-    }
-
-    void VideoView::RenderControls() {
-        ImGui::PushItemWidth(100.0f);
-        if (ImGui::InputFloat("Zoom", &zoom, 0.1f, 0.5f, "%.1f")) {
-            SetZoom(zoom);
-        }
-        ImGui::PopItemWidth();
-        ImGui::SameLine();
-        ImGui::PushID(10);
-        if (ImGui::Button(Icon::Refresh().c_str())) {
-            RefreshEntities();
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-        ImGui::PushID(11);
-        if (selectedEntityID != 0 && ImGui::Button((Icon::Trash() + " Remove").c_str())) {
-            RemoveSelectedMedia();
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-        ImGui::PushID(12);
-        if (selectedEntityID != 0 && ImGui::Button((Icon::Save() + " Save").c_str())) {
-            SaveSelectedMedia();
-        }
-        ImGui::PopID();
-    }
-
-    void VideoView::RenderSelector() {
-        if (mediaEntities.empty()) {
-            ImGui::Text("No videos loaded.");
-            return;
-        }
-        ImGui::PushItemWidth(100.0f);
-        if (ImGui::InputInt("Current Video", &index)) {
-            if (!mediaEntities.empty()) {
-                const int size = static_cast<int>(mediaEntities.size());
-                if (size == 1) index = 0;
-                else index = ((index % size) + size) % size;
-                selectedEntityID = mediaEntities[index];
-                SeekVideo(selectedEntityID, 0.0);
-                UpdateWaveformData();
-            }
-        }
-        ImGui::PopItemWidth();
-        ImGui::SameLine();
-        ImGui::Text("Video %d of %zu", index + 1, mediaEntities.size());
-        ImGui::SameLine();
-        ImGui::PushID(20);
-        if (ImGui::Button(Icon::ArrowFirst().c_str())) {
-            if (!mediaEntities.empty()) {
-                index = 0;
-                selectedEntityID = mediaEntities[index];
-                SeekVideo(selectedEntityID, 0.0);
-                UpdateWaveformData();
-            }
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-        ImGui::PushID(21);
-        if (ImGui::Button(Icon::ArrowLeft().c_str())) {
-            if (!mediaEntities.empty()) {
-                index = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
-                selectedEntityID = mediaEntities[index];
-                SeekVideo(selectedEntityID, 0.0);
-                UpdateWaveformData();
-            }
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-        ImGui::PushID(22);
-        if (ImGui::Button(Icon::ArrowRight().c_str())) {
-            if (!mediaEntities.empty()) {
-                index = (index + 1) % static_cast<int>(mediaEntities.size());
-                selectedEntityID = mediaEntities[index];
-                SeekVideo(selectedEntityID, 0.0);
-                UpdateWaveformData();
-            }
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-        ImGui::PushID(23);
-        if (ImGui::Button(Icon::ArrowLast().c_str())) {
-            if (!mediaEntities.empty()) {
-                index = static_cast<int>(mediaEntities.size() - 1);
-                selectedEntityID = mediaEntities[index];
-                SeekVideo(selectedEntityID, GetVideoDuration(selectedEntityID) - 0.001);
-                UpdateWaveformData();
-            }
-        }
-        ImGui::PopID();
     }
 
     double VideoView::GetVideoCurrentTime(ECS::EntityID entity) const {
@@ -606,225 +1289,6 @@ namespace GUI {
         }
     }
 
-    void VideoView::RenderPlaybackControls() {
-        ImGui::Separator();
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
-            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            ImGui::Text("No video selected.");
-            return;
-        }
-
-        auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-        bool isLoaded = (videoComp.width > 0 && videoComp.height > 0);
-
-        if (!isLoaded) {
-            ImGui::Text("Loading video...");
-            return;
-        }
-
-        bool hasAudio = HasAudioTrack(selectedEntityID);
-
-        try {
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-            if (!playback) {
-                ImGui::Text("VideoPlaybackSystem not available.");
-                return;
-            }
-
-            double totalDuration = GetVideoDuration(selectedEntityID);
-            double currentTime = GetVideoCurrentTime(selectedEntityID);
-
-            bool loopState = videoComp.looping;
-
-            if (hasAudio) {
-                bool useTimeSlider = true;
-                ImGui::Checkbox("Use Time Slider", &useTimeSlider);
-
-                if (useTimeSlider) {
-                    float timeSlider = static_cast<float>(currentTime);
-                    if (ImGui::SliderFloat("Time", &timeSlider, 0.0f, static_cast<float>(totalDuration), "%.3f s")) {
-                        double newTime = static_cast<double>(timeSlider);
-                        if (newTime < 0) newTime = 0;
-                        if (newTime >= totalDuration) newTime = totalDuration - 0.001;
-                        playback->Seek(selectedEntityID, newTime);
-                    }
-                }
-                else {
-                    long long frame = videoComp.currentFrame;
-                    int frameSlider = static_cast<int>(frame);
-                    if (ImGui::SliderInt("Frame", &frameSlider, 0, static_cast<int>(videoComp.frameCount - 1))) {
-                        double newTime = static_cast<double>(frameSlider) / videoComp.fps;
-                        playback->Seek(selectedEntityID, newTime);
-                    }
-                }
-
-                float speed = 1.0f;
-                if (ImGui::SliderFloat("Speed", &speed, 0.1f, 4.0f, "%.1fx")) {
-                    playback->SetSpeed(selectedEntityID, speed);
-                }
-
-                ImGui::SameLine();
-                bool playing = playback->IsPlaying(selectedEntityID);
-                ImGui::PushID(30);
-                if (ImGui::Button(playing ? Icon::Pause().c_str() : Icon::Play().c_str())) {
-                    if (playing) {
-                        playback->Pause(selectedEntityID);
-                    }
-                    else {
-                        playback->Play(selectedEntityID, loopState);
-                    }
-                }
-                ImGui::PopID();
-                ImGui::SameLine();
-                ImGui::PushID(31);
-                if (ImGui::Button(Icon::Stop().c_str())) {
-                    playback->Stop(selectedEntityID);
-                }
-                ImGui::PopID();
-                ImGui::SameLine();
-                ImGui::PushID(32);
-                if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
-                    videoComp.looping = loopState;
-                }
-                ImGui::PopID();
-            }
-            else {
-                bool useTimeSlider = true;
-                ImGui::Checkbox("Use Time Slider", &useTimeSlider);
-
-                if (useTimeSlider) {
-                    float timeSlider = static_cast<float>(currentTime);
-                    if (ImGui::SliderFloat("Time", &timeSlider, 0.0f, static_cast<float>(totalDuration), "%.3f s")) {
-                        double newTime = static_cast<double>(timeSlider);
-                        if (newTime < 0) newTime = 0;
-                        if (newTime >= totalDuration) newTime = totalDuration - 0.001;
-                        playback->Seek(selectedEntityID, newTime);
-                    }
-                }
-                else {
-                    long long frame = videoComp.currentFrame;
-                    int frameSlider = static_cast<int>(frame);
-                    if (ImGui::SliderInt("Frame", &frameSlider, 0, static_cast<int>(videoComp.frameCount - 1))) {
-                        double newTime = static_cast<double>(frameSlider) / videoComp.fps;
-                        playback->Seek(selectedEntityID, newTime);
-                    }
-                }
-
-                float speed = 1.0f;
-                if (ImGui::SliderFloat("Speed", &speed, 0.1f, 4.0f, "%.1fx")) {
-                    playback->SetSpeed(selectedEntityID, speed);
-                    videoComp.playbackSpeed = speed;
-                }
-
-                ImGui::SameLine();
-                bool playing = playback->IsPlaying(selectedEntityID);
-                ImGui::PushID(33);
-                if (ImGui::Button(playing ? Icon::Pause().c_str() : Icon::Play().c_str())) {
-                    if (playing) {
-                        playback->Pause(selectedEntityID);
-                    }
-                    else {
-                        playback->Play(selectedEntityID, loopState);
-                    }
-                }
-                ImGui::PopID();
-                ImGui::SameLine();
-                ImGui::PushID(34);
-                if (ImGui::Button(Icon::Stop().c_str())) {
-                    playback->Stop(selectedEntityID);
-                }
-                ImGui::PopID();
-                ImGui::SameLine();
-                ImGui::PushID(35);
-                if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
-                    videoComp.looping = loopState;
-                }
-                ImGui::PopID();
-            }
-            ImGui::Separator();
-        }
-        catch (const std::exception& e) {
-            ImGui::Text("Error with playback controls: %s", e.what());
-        }
-    }
-
-    void VideoView::RenderSelected() {
-        if (!m_entityManager.IsEntityValid(selectedEntityID) ||
-            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            ImGui::Text("No video selected or entity invalid.");
-            HandleFileDropTarget();
-            HandleEntityDropTarget();
-            return;
-        }
-
-        try {
-            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-            GLuint texID = 0;
-            if (m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
-                texID = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID).textureID;
-            }
-
-            if (texID == 0 || !glIsTexture(texID) || videoComp.width <= 0 || videoComp.height <= 0) {
-                ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
-                    texID, videoComp.width, videoComp.height);
-                HandleFileDropTarget();
-                HandleEntityDropTarget();
-                return;
-            }
-
-            if (ImGui::IsWindowHovered() && ImGui::GetIO().MouseWheel != 0.0f) {
-                SetZoom(zoom + ImGui::GetIO().MouseWheel * 0.1f);
-            }
-
-            ImVec2 imageSize = ImVec2(videoComp.width * zoom, videoComp.height * zoom);
-            ImVec2 windowSize = ImGui::GetWindowSize();
-            ImVec2 windowPadding = ImGui::GetStyle().WindowPadding;
-            if (zoom <= 1.0f) {
-                offsetX = (windowSize.x - imageSize.x) * 0.5f;
-                offsetY = (windowSize.y - imageSize.y) * 0.5f;
-            }
-            ImVec2 imagePos = ImVec2(offsetX + windowPadding.x, offsetY + windowPadding.y);
-
-            DrawGrid(videoComp.width, videoComp.height);
-            ImGui::SetCursorPos(imagePos);
-            ImGui::Dummy(imageSize);
-            ImGui::SetCursorPos(imagePos);
-
-            ImGui::Image((ImTextureID)(intptr_t)texID, imageSize, ImVec2(0, 0), ImVec2(1, 1));
-
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
-                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
-                    nlohmann::json payload;
-                    payload["entityID"] = selectedEntityID;
-                    ImGui::SetDragDropPayload(GUI::DragDrop::PAYLOAD_ENTITY,
-                        payload.dump().c_str(), payload.dump().size() + 1);
-                    ImGui::Image((ImTextureID)(intptr_t)texID, ImVec2(64, 64));
-                    ImGui::Text("%s", videoComp.fileName.c_str());
-                    ImGui::EndDragDropSource();
-                }
-            }
-
-            RenderMediaContextMenu(selectedEntityID);
-
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && IsAltKeyDown()) {
-                offsetX += ImGui::GetIO().MouseDelta.x;
-                offsetY += ImGui::GetIO().MouseDelta.y;
-            }
-
-            ImGui::SetCursorPos(ImVec2(imagePos.x + imageSize.x, imagePos.y + imageSize.y));
-            ImGui::Dummy(ImVec2(0, 0));
-
-            HandleFileDropTarget();
-            HandleEntityDropTarget();
-
-        }
-        catch (const std::exception& e) {
-            ImGui::Text("Error rendering video: %s", e.what());
-            HandleFileDropTarget();
-            HandleEntityDropTarget();
-        }
-    }
-
     void VideoView::RenderWaveform() {
         if (!HasAudioTrack(selectedEntityID)) return;
 
@@ -834,7 +1298,6 @@ namespace GUI {
         }
 
         const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
-
         if (audioComp.pcmData.empty()) {
             ImGui::Text("No audio data available for waveform.");
             return;
@@ -843,85 +1306,146 @@ namespace GUI {
         if (m_waveformData.empty()) {
             UpdateWaveformData();
         }
-
         if (m_waveformData.empty()) {
             ImGui::Text("No waveform data available.");
             return;
         }
 
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        float width = avail.x;
-        float height = std::min(avail.y * 0.4f, 128.0f);
+        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+        if (!playback) return;
 
-        if (width <= 0 || height <= 0) return;
+        double totalDuration = playback->GetDuration(selectedEntityID);
+        double currentTime = playback->GetCurrentPosition(selectedEntityID);
 
+        std::string currentStr = FormatTimecode(currentTime);
+        std::string totalStr = FormatTimecode(totalDuration);
+
+        // --- Fixed width for each time label (enough for "HH:MM:SS") ---
+        const float TIME_LABEL_WIDTH = 115.0f;
+        const float WAVEFORM_HEIGHT = 64.0f;
+        float spacing = ImGui::GetStyle().ItemSpacing.x;
+        float availWidth = ImGui::GetContentRegionAvail().x;
+
+        // Calculate waveform width: available minus fixed widths and spacing
+        float waveformWidth = availWidth - (TIME_LABEL_WIDTH * 2) - (spacing * 2);
+        if (waveformWidth < 50.0f) waveformWidth = 50.0f;  // minimum sensible width
+
+        // Center the whole row horizontally (optional)
+        float totalNeeded = (TIME_LABEL_WIDTH * 2) + waveformWidth + (spacing * 2);
+        float startX = (availWidth - totalNeeded) * 0.5f;
+        if (startX < 0.0f) startX = 0.0f;
+        ImGui::SetCursorPosX(startX);
+
+        // --- Current time (fixed width, bordered) ---
+        ImGui::PushID("CurrentTime");
+        ImGui::BeginChild("##CurrentTimeChild", ImVec2(TIME_LABEL_WIDTH, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::SetCursorPos(ImVec2(
+            (TIME_LABEL_WIDTH - ImGui::CalcTextSize(currentStr.c_str()).x) * 0.5f,
+            (WAVEFORM_HEIGHT - ImGui::GetTextLineHeight()) * 0.5f
+        ));
+        ImGui::Text("%s", currentStr.c_str());
+        ImGui::EndChild();
+        ImGui::PopID();
+
+        ImGui::SameLine();
+
+        // --- Waveform area (fill remaining width, also bordered for debugging) ---
+        ImGui::PushID("WaveformArea");
+        ImGui::BeginChild("##WaveformChild", ImVec2(waveformWidth, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
+
+        // Drawing inside the waveform child
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImVec2 size = ImGui::GetContentRegionAvail();  // inside child, so size = (waveformWidth, WAVEFORM_HEIGHT)
+        if (size.x <= 0 || size.y <= 0) {
+            ImGui::EndChild();
+            ImGui::PopID();
+            ImGui::SameLine();
+            // Still need to place total time
+            ImGui::PushID("TotalTime");
+            ImGui::BeginChild("##TotalTimeChild", ImVec2(TIME_LABEL_WIDTH, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
+            ImGui::EndChild();
+            ImGui::PopID();
+            return;
+        }
 
-        drawList->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height),
+        // Background
+        drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
             IM_COL32(20, 20, 30, 200));
 
-        float centerY = pos.y + height * 0.5f;
-        float halfHeight = height * 0.4f;
+        float centerY = pos.y + size.y * 0.5f;
+        float halfHeight = size.y * 0.4f;
 
         size_t totalSamples = m_waveformData.size();
-        size_t samplesToShow = static_cast<size_t>(width);
-
+        size_t samplesToShow = static_cast<size_t>(size.x);
         if (samplesToShow > totalSamples) samplesToShow = totalSamples;
-        if (samplesToShow == 0) return;
+        if (samplesToShow > 0) {
+            float step = static_cast<float>(totalSamples) / static_cast<float>(samplesToShow);
+            size_t currentSample = static_cast<size_t>(m_playbackProgress * totalSamples);
 
-        float step = static_cast<float>(totalSamples) / static_cast<float>(samplesToShow);
-        size_t currentSample = static_cast<size_t>(m_playbackProgress * totalSamples);
+            for (size_t i = 0; i < samplesToShow; ++i) {
+                size_t sampleIndex = static_cast<size_t>(i * step);
+                if (sampleIndex >= totalSamples) break;
+                float x = pos.x + (static_cast<float>(i) / static_cast<float>(samplesToShow)) * size.x;
+                float sample = m_waveformData[sampleIndex];
+                float heightPos = sample * halfHeight;
+                bool isBeforePlayhead = (sampleIndex <= currentSample);
+                ImU32 color = isBeforePlayhead ?
+                    IM_COL32(100, 255, 100, 200) :
+                    IM_COL32(100, 150, 255, 150);
+                drawList->AddLine(
+                    ImVec2(x, centerY - heightPos),
+                    ImVec2(x, centerY + heightPos),
+                    color, 1.0f
+                );
+            }
 
-        for (size_t i = 0; i < samplesToShow; ++i) {
-            size_t sampleIndex = static_cast<size_t>(i * step);
-            if (sampleIndex >= totalSamples) break;
-
-            float x = pos.x + (static_cast<float>(i) / static_cast<float>(samplesToShow)) * width;
-            float sample = m_waveformData[sampleIndex];
-            float heightPos = sample * halfHeight;
-
-            bool isBeforePlayhead = (sampleIndex <= currentSample);
-            ImU32 color = isBeforePlayhead ?
-                IM_COL32(100, 255, 100, 200) :
-                IM_COL32(100, 150, 255, 150);
-
-            drawList->AddLine(
-                ImVec2(x, centerY - heightPos),
-                ImVec2(x, centerY + heightPos),
-                color,
-                1.0f
-            );
+            // Playhead
+            if (m_playbackProgress > 0.0f && m_playbackProgress < 1.0f) {
+                float playheadX = pos.x + m_playbackProgress * size.x;
+                drawList->AddLine(
+                    ImVec2(playheadX, pos.y),
+                    ImVec2(playheadX, pos.y + size.y),
+                    IM_COL32(255, 255, 255, 200), 2.0f
+                );
+            }
+            // Border (drawn by child, but we also draw our own for consistency)
+            drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
+                IM_COL32(100, 100, 120, 255));
         }
 
-        if (m_playbackProgress > 0.0f && m_playbackProgress < 1.0f) {
-            float playheadX = pos.x + m_playbackProgress * width;
-            drawList->AddLine(
-                ImVec2(playheadX, pos.y),
-                ImVec2(playheadX, pos.y + height),
-                IM_COL32(255, 255, 255, 200),
-                2.0f
-            );
-        }
-
-        drawList->AddRect(pos, ImVec2(pos.x + width, pos.y + height),
-            IM_COL32(100, 100, 120, 255));
-
-        ImGui::InvisibleButton("WaveformClick", ImVec2(width, height));
+        // Invisible button for seeking (only over the waveform area)
+        ImGui::InvisibleButton("WaveformSeek", size);
         if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             ImVec2 mousePos = ImGui::GetMousePos();
-            float relativeX = (mousePos.x - pos.x) / width;
-            if (relativeX >= 0.0f && relativeX <= 1.0f) {
-                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-                if (playback) {
-                    double duration = playback->GetDuration(selectedEntityID);
-                    playback->Seek(selectedEntityID, relativeX * duration);
-                    m_playbackProgress = relativeX;
-                }
-            }
+            float relativeX = (mousePos.x - pos.x) / size.x;
+            relativeX = std::clamp(relativeX, 0.0f, 1.0f);
+            playback->Seek(selectedEntityID, relativeX * totalDuration);
+            m_playbackProgress = relativeX;
+        }
+        if (ImGui::IsItemHovered()) {
+            ImVec2 mousePos = ImGui::GetMousePos();
+            float relativeX = (mousePos.x - pos.x) / size.x;
+            relativeX = std::clamp(relativeX, 0.0f, 1.0f);
+            double hoverTime = relativeX * totalDuration;
+            ImGui::SetTooltip("%s", FormatTimecode(hoverTime).c_str());
         }
 
-        ImGui::Dummy(ImVec2(0, height + 4));
+        ImGui::EndChild();
+        ImGui::PopID();
+
+        ImGui::SameLine();
+
+        // --- Total time (fixed width, bordered) ---
+        ImGui::PushID("TotalTime");
+        ImGui::BeginChild("##TotalTimeChild", ImVec2(TIME_LABEL_WIDTH, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
+        ImGui::SetCursorPos(ImVec2(
+            (TIME_LABEL_WIDTH - ImGui::CalcTextSize(totalStr.c_str()).x) * 0.5f,
+            (WAVEFORM_HEIGHT - ImGui::GetTextLineHeight()) * 0.5f
+        ));
+        ImGui::Text("%s", totalStr.c_str());
+        ImGui::EndChild();
+        ImGui::PopID();
     }
 
     void VideoView::UpdateWaveformData() {
@@ -980,23 +1504,91 @@ namespace GUI {
 
         auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(entity);
 
-        ImGui::SameLine();
-        ImGui::Text("Audio:");
+        // Show volume icon based on volume level
+        float vol = audioComp.volume;
+        if (vol <= 0.0f) {
+            ImGui::Text("%s", Icon::VolumeOff().c_str());
+        }
+        else if (vol < 0.33f) {
+            ImGui::Text("%s", Icon::VolumeLow().c_str());
+        }
+        else if (vol < 0.66f) {
+            ImGui::Text("%s", Icon::VolumeMedium().c_str());
+        }
+        else {
+            ImGui::Text("%s", Icon::VolumeHigh().c_str());
+        }
         ImGui::SameLine();
 
         bool audioEnabled = (audioComp.volume > 0.0f);
+        ImGui::PushID(400);
         if (ImGui::Checkbox("##AudioEnabled", &audioEnabled)) {
             float newVolume = audioEnabled ? 1.0f : 0.0f;
             playback->SetVolume(entity, newVolume);
             audioComp.volume = newVolume;
         }
+        ImGui::PopID();
 
         ImGui::SameLine();
+        ImGui::PushItemWidth(70.0f);
         float volumePercent = audioComp.volume * 100.0f;
+        ImGui::PushID(401);
         if (ImGui::SliderFloat("##AudioVolume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
             float newVolume = volumePercent / 100.0f;
             playback->SetVolume(entity, newVolume);
             audioComp.volume = newVolume;
+        }
+        ImGui::PopID();
+        ImGui::PopItemWidth();
+    }
+
+    void VideoView::ToggleFullscreen() {
+        m_isFullscreen = !m_isFullscreen;
+    }
+
+    void VideoView::NextVideo() {
+        if (mediaEntities.empty()) return;
+        int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
+        if (newIndex != index) {
+            auto oldEntity = selectedEntityID;
+            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+
+            if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
+                playback->Pause(oldEntity);
+            }
+
+            index = newIndex;
+            selectedEntityID = mediaEntities[index];
+
+            if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
+                double currentPos = playback->GetCurrentPosition(selectedEntityID);
+                SeekVideo(selectedEntityID, currentPos);
+            }
+
+            UpdateWaveformData();
+        }
+    }
+
+    void VideoView::PreviousVideo() {
+        if (mediaEntities.empty()) return;
+        int newIndex = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
+        if (newIndex != index) {
+            auto oldEntity = selectedEntityID;
+            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
+
+            if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
+                playback->Pause(oldEntity);
+            }
+
+            index = newIndex;
+            selectedEntityID = mediaEntities[index];
+
+            if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
+                double currentPos = playback->GetCurrentPosition(selectedEntityID);
+                SeekVideo(selectedEntityID, currentPos);
+            }
+
+            UpdateWaveformData();
         }
     }
 
@@ -1255,6 +1847,55 @@ namespace GUI {
             return m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).filePath;
         }
         return "";
+    }
+
+    float VideoView::GetVideoFPS(ECS::EntityID entity) const {
+        if (entity != 0 && m_entityManager.IsEntityValid(entity) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
+            return m_entityManager.GetComponent<ECS::VideoComponent>(entity).fps;
+        }
+        return 30.0f; // fallback
+    }
+
+    bool VideoView::ProcessRepeatButton(ImGuiID id, double initialDelay, double repeatRate, bool& outHeld) {
+        auto it = m_repeatButtonStates.find(id);
+        if (it == m_repeatButtonStates.end()) {
+            it = m_repeatButtonStates.emplace(id, RepeatButtonState{}).first;
+        }
+        auto& state = it->second;
+
+        bool triggered = false;
+
+        if (ImGui::IsItemActive()) {
+            double now = ImGui::GetTime();
+            if (state.repeatCount == 0) {
+                // First press: action immediately, start timer
+                state.lastActionTime = now;
+                state.repeatCount = 1;
+                triggered = true;
+            }
+            else {
+                // Determine delay for this repeat
+                double delay = (state.repeatCount == 1) ? initialDelay : repeatRate;
+                // Acceleration: after some repeats, reduce delay and increase step size
+                if (state.repeatCount > 5) delay = repeatRate * 0.5;   // faster
+                if (state.repeatCount > 10) delay = repeatRate * 0.25; // even faster
+
+                if (now - state.lastActionTime >= delay) {
+                    state.lastActionTime = now;
+                    state.repeatCount++;
+                    triggered = true;
+                }
+            }
+            outHeld = true;
+        }
+        else {
+            // Button released – reset state
+            state.repeatCount = 0;
+            outHeld = false;
+        }
+
+        return triggered;
     }
 
 }
