@@ -297,7 +297,26 @@ namespace ECS {
 
         entities.erase(entity);
         NotifyAudioRemoved(entity);
-        mgr.DestroyEntity(entity);
+    }
+
+    void AudioSystem::ClearCache(EntityID entity) {
+        {
+            std::lock_guard<std::mutex> lock(loadMutex);
+            pendingLoads.erase(
+                std::remove_if(pendingLoads.begin(), pendingLoads.end(),
+                    [entity](const LoadingTask& t) { return t.entityID == entity; }),
+                pendingLoads.end());
+        }
+
+        if (mgr.IsEntityValid(entity) && mgr.HasComponent<AudioComponent>(entity)) {
+            auto& ac = mgr.GetComponent<AudioComponent>(entity);
+            ac.UnloadAudio();
+            ac.isLoading = false;
+            ac.currentTime = 0.0;
+            ac.reachedEnd = false;
+        }
+
+        entities.erase(entity);
     }
 
     std::vector<EntityID> AudioSystem::GetAllAudioEntities() const {

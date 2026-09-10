@@ -4,3 +4,4 @@
 #include "ProjectSystem.hpp"
 #include "AudioPlaybackSystem.hpp"
 #include "VideoPlaybackSystem.hpp"
+#include "MediaEngineSystem.hpp"

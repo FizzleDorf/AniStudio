@@ -39,6 +39,7 @@ namespace ECS {
 
         void SetVideo(EntityID entity, const std::string& filePath);
         void RemoveVideo(EntityID entity);
+        void ClearCache(EntityID entity);
         std::vector<EntityID> GetAllVideoEntities() const;
 
         void RegisterVideoAddedCallback(const VideoCallback& cb);

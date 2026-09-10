@@ -41,6 +41,7 @@ namespace ECS {
         bool IsPaused(EntityID entity) const;
         double GetCurrentPosition(EntityID entity) const;
         double GetDuration(EntityID entity) const;
+        void ClearCache(EntityID entity);
 
         void PlayTestTone();
 

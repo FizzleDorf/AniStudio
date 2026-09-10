@@ -3,8 +3,12 @@
 #include "BaseMediaView.hpp"
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
+#include "PlaybackStateComponent.hpp"
+#include "MediaEngineSystem.hpp"
+#include "PlaybackEvents.hpp"
+#include "WaveformUtils.hpp"
+#include "RepeatButtonUtils.hpp"
 #include <vector>
-#include <unordered_map>
 #include <imgui.h>
 
 namespace GUI {
@@ -33,9 +37,11 @@ namespace GUI {
         void RefreshEntities() override;
 
         void LoadVideo(const std::string& filePath);
-
         bool IsHistoryVisible() const override;
         std::string GetSelectedFilePath() const override;
+
+        void SetPlaybackMode(ECS::PlaybackMode mode);
+        ECS::PlaybackMode GetPlaybackMode() const;
 
     protected:
         void RenderMenuBar() override;
@@ -53,39 +59,20 @@ namespace GUI {
 
         void RenderFullscreen();
         void RenderTimeline();
-        void RenderPlaybackControls();
         void RenderWaveform();
         void UpdateWaveformData();
         void PauseAllVideos();
         void ToggleFullscreen();
         void NextVideo();
         void PreviousVideo();
-
         std::string FormatTimecode(double seconds) const;
 
     private:
-        enum class DisplayMode {
-            FitToWindow,
-            ActualResolution,
-            Fullscreen
-        };
-
-        struct RepeatButtonState {
-            double lastActionTime = 0.0;
-            int repeatCount = 0;
-        };
-
-        std::unordered_map<ImGuiID, RepeatButtonState> m_repeatButtonStates;
-        float GetVideoFPS(ECS::EntityID entity) const;
-        bool ProcessRepeatButton(ImGuiID id, double initialDelay, double repeatRate, bool& outHeld);
-
         bool HasAudioTrack(ECS::EntityID entity) const;
         void RenderAudioControls(ECS::EntityID entity);
 
-        double GetVideoCurrentTime(ECS::EntityID entity) const;
-        double GetVideoDuration(ECS::EntityID entity) const;
         void SeekVideo(ECS::EntityID entity, double time);
-        void PlayVideo(ECS::EntityID entity, bool loop);
+        void PlayVideo(ECS::EntityID entity);
         void PauseVideo(ECS::EntityID entity);
         void StopVideo(ECS::EntityID entity);
         void SetVideoSpeed(ECS::EntityID entity, float speed);
@@ -97,17 +84,19 @@ namespace GUI {
         void SaveSelectedMediaAsWithAudio();
         void SaveSelectedMediaAsNoAudio();
 
-        bool m_useTimeSlider = true;
-        bool m_isSeeking = false;
-        bool m_pendingSeek = false;
-        double m_pendingSeekTime = 0.0;
-        ECS::EntityID m_pendingSeekEntity = 0;
-        bool m_loopEnabled = false;
         bool m_showWaveform = true;
         bool m_autoplay = true;
         float m_playbackProgress = 0.0f;
-        std::vector<float> m_waveformData;
 
+        WaveformData m_waveformData;
+        WaveformRenderer m_waveformRenderer;
+        RepeatButtonHandler m_repeatButtonHandler;
+
+        enum class DisplayMode {
+            FitToWindow,
+            ActualResolution,
+            Fullscreen
+        };
         DisplayMode m_displayMode = DisplayMode::FitToWindow;
         bool m_isFullscreen = false;
         float m_videoAspectRatio = 1.0f;
@@ -115,6 +104,15 @@ namespace GUI {
         float m_fullscreenControlsTimer = 0.0f;
         bool m_showFullscreenControls = true;
         ImVec2 m_lastMousePos = ImVec2(0.0f, 0.0f);
+
+        bool m_isSeeking = false;
+        bool m_pendingSeek = false;
+        double m_pendingSeekTime = 0.0;
+        ECS::EntityID m_pendingSeekEntity = 0;
+
+        ECS::PlaybackMode m_playbackMode = ECS::PlaybackMode::Cached;
+        std::shared_ptr<ECS::MediaEngineSystem> m_mediaEngine;
+        std::shared_ptr<ECS::AudioSystem> m_audioSystem;
     };
 
 }

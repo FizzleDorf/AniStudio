@@ -70,6 +70,7 @@ namespace ECS {
 
         void SetAudio(EntityID entity, const std::string& filePath);
         void RemoveAudio(EntityID entity);
+        void ClearCache(EntityID entity);
         std::vector<EntityID> GetAllAudioEntities() const;
 
         const float* GetAudioData(EntityID entity, size_t& outSize, int& outChannels) const;

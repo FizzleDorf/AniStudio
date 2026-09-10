@@ -17,7 +17,6 @@
 #include <filesystem>
 #include <imgui.h>
 #include "GuiStyleHelpers.hpp"
-#include "FileDialogUtil.hpp"
 #include "MissingPathsPopup.hpp"
 #include "GeneralSettingsTab.hpp"
 #include "ImGuiStyleSettingsTab.hpp"
@@ -371,19 +370,23 @@ namespace ANI {
 
             auto& entityMgr = GetEntityManager();
 
+            // Register components
             entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
             entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
             entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
             entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
             entityMgr.RegisterComponent<ECS::TextureComponent>("TextureComponent");
+            entityMgr.RegisterComponent<ECS::PlaybackStateComponent>("PlaybackState");
 
+            // Register systems
             entityMgr.RegisterSystem<TextureSystem>();
             entityMgr.RegisterSystem<ECS::SettingsSystem>();
             entityMgr.RegisterSystem<ProjectSystem>();
             entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
-            entityMgr.RegisterSystem<ECS::VideoSystem>();
             entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
             entityMgr.RegisterSystem<ECS::VideoAudioSystem>();
+            entityMgr.RegisterSystem<ECS::AVStreamingSystem>();
+            entityMgr.RegisterSystem<ECS::MediaEngineSystem>();
 
             auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
             if (projectSystem) {
@@ -459,9 +462,6 @@ namespace ANI {
         studioCore->studioContext->viewManager->SetEntityManager(*studioCore->studioContext->entityManager);
 
         auto& entityMgr = studioCore->GetEntityManager();
-        entityMgr.RegisterSystem<TextureSystem>();
-        entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
-        entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
 
         auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
         studioCore->m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, studioCore.get());

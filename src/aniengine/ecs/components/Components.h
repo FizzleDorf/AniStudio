@@ -9,3 +9,4 @@
 #include "FilepathComponent.hpp"
 #include "AudioComponent.hpp"
 #include "VideoAudioComponent.hpp"
+#include "PlaybackStateComponent.hpp"

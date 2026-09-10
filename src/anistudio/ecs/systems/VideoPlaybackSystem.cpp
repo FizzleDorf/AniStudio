@@ -159,6 +159,18 @@ namespace ECS {
         return got;
     }
 
+    void VideoPlaybackSystem::ClearCache(EntityID entity) {
+        std::unique_ptr<VideoTrack> track;
+        {
+            std::lock_guard<std::mutex> lock(m_tracksMutex);
+            auto it = m_tracks.find(entity);
+            if (it == m_tracks.end()) return;
+            track = std::move(it->second);
+            m_tracks.erase(it);
+        }
+        track.reset();
+    }
+
     bool VideoPlaybackSystem::VideoTrack::InitHWAccel(AVCodecContext* codecCtx) {
         if (!hwAccelEnabled) return false;
         if (!codecCtx) return false;

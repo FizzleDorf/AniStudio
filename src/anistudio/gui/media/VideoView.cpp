@@ -12,6 +12,7 @@
 #include "FilePathSystem.hpp"
 #include "VideoPlaybackSystem.hpp"
 #include "VideoAudioSystem.hpp"
+#include "PlaybackEvents.hpp"
 #include "IconFonts.hpp"
 #include "ClipboardUtilities.hpp"
 #include <algorithm>
@@ -26,6 +27,10 @@ namespace GUI {
     VideoView::VideoView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseMediaView(mgr, vm), lastGeneratedVideoID(0) {
         viewName = "VideoView";
+
+        WaveformRenderer::Config wfConfig;
+        wfConfig.height = 64.0f;
+        m_waveformRenderer.SetConfig(wfConfig);
     }
 
     void VideoView::Init() {
@@ -35,61 +40,110 @@ namespace GUI {
             return;
         }
 
-        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-        auto audioPlaybackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-        auto playbackSystem = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        auto vaSystem = m_entityManager.GetSystem<ECS::VideoAudioSystem>();
+        m_audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
 
-        if (playbackSystem) {
-            playbackSystem->RegisterVideoPlaybackCallback([this](ECS::EntityID entity, const unsigned char* data, int width, int height) {
-                if (entity != selectedEntityID) return;
-                if (!m_entityManager.IsEntityValid(entity) || !m_entityManager.HasComponent<ECS::VideoComponent>(entity)) return;
-                (void)data;
-                (void)width;
-                (void)height;
-                });
+        m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
+        if (!m_mediaEngine) {
+            m_entityManager.RegisterSystem<ECS::MediaEngineSystem>();
+            m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
+            m_mediaEngine->Start();
+        }
 
-            playbackSystem->RegisterPlaybackEndCallback([this](ECS::EntityID entity) {
-                if (entity != selectedEntityID) return;
-                if (!m_entityManager.IsEntityValid(entity)) return;
-
-                if (!m_autoplay) return;
-
-                bool loopEnabled = false;
-                if (m_entityManager.IsEntityValid(entity) &&
-                    m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
-                    loopEnabled = m_entityManager.GetComponent<ECS::VideoComponent>(entity).looping;
+        auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
+        if (textureSystem && m_mediaEngine) {
+            m_mediaEngine->SetVideoTextureCallback(
+                [textureSystem](ECS::EntityID entity, unsigned char* data, int w, int h, int ch, GLuint* target) {
+                    textureSystem->QueueVideoTextureCreation(entity, data, w, h, ch, target);
                 }
+            );
+        }
 
-                if (loopEnabled) {
-                    SeekVideo(entity, 0.0);
-                    m_playbackProgress = 0.0f;
-                    auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-                    if (playback) {
-                        playback->Play(entity, true);
-                    }
-                }
-                else if (mediaEntities.size() > 1) {
-                    int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
-                    if (newIndex != index) {
-                        index = newIndex;
-                        selectedEntityID = mediaEntities[index];
-                        SeekVideo(selectedEntityID, 0.0);
-                        m_playbackProgress = 0.0f;
-                        UpdateWaveformData();
-                        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-                        if (playback) {
-                            playback->Play(selectedEntityID, false);
+        auto& events = ANI::Events::Ref();
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_LOAD,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onLoad(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onPlay(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onPause(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onStop(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSeek(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSetSpeed(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSetVolume(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onRemove(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSetMode(data);
+            });
+
+        std::cout << "[VideoView] Registered playback events" << std::endl;
+
+        if (m_mediaEngine) {
+            m_mediaEngine->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
+                if (entity != selectedEntityID) return;
+                if (state == ECS::PlaybackState::EndOfStream) {
+                    if (m_autoplay) {
+                        bool loopEnabled = false;
+                        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+                            auto& stateComp = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+                            loopEnabled = stateComp.looping;
+                        }
+
+                        if (loopEnabled) {
+                            SeekVideo(entity, 0.0);
+                            m_playbackProgress = 0.0f;
+                            PlayVideo(entity);
+                        }
+                        else if (mediaEntities.size() > 1) {
+                            int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
+                            if (newIndex != index) {
+                                index = newIndex;
+                                selectedEntityID = mediaEntities[index];
+                                SeekVideo(selectedEntityID, 0.0);
+                                m_playbackProgress = 0.0f;
+                                UpdateWaveformData();
+                                PlayVideo(selectedEntityID);
+                            }
+                        }
+                        else {
+                            SeekVideo(entity, 0.0);
+                            m_playbackProgress = 0.0f;
                         }
                     }
-                }
-                else {
-                    SeekVideo(entity, 0.0);
-                    m_playbackProgress = 0.0f;
                 }
                 });
         }
 
+        auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (videoSystem) {
             auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
             if (textureSystem) {
@@ -102,14 +156,6 @@ namespace GUI {
             }
             videoSystem->RegisterVideoAddedCallback([this](ECS::EntityID entity) {
                 OnMediaAdded(entity);
-                if (!mediaEntities.empty()) {
-                    auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
-                    if (it != mediaEntities.end()) {
-                        index = static_cast<int>(std::distance(mediaEntities.begin(), it));
-                        selectedEntityID = entity;
-                        UpdateWaveformData();
-                    }
-                }
                 });
             videoSystem->RegisterVideoRemovedCallback([this](ECS::EntityID entity) {
                 OnMediaRemoved(entity);
@@ -117,7 +163,6 @@ namespace GUI {
         }
 
         RefreshEntities();
-
         if (!mediaEntities.empty() && selectedEntityID == 0) {
             index = static_cast<int>(mediaEntities.size()) - 1;
             selectedEntityID = mediaEntities[index];
@@ -149,6 +194,25 @@ namespace GUI {
             });
     }
 
+    void VideoView::SetPlaybackMode(ECS::PlaybackMode mode) {
+        if (mode == m_playbackMode) return;
+        m_playbackMode = mode;
+
+        for (auto entity : mediaEntities) {
+            if (m_entityManager.IsEntityValid(entity) &&
+                m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+                state.mode = mode;
+                auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+                ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE, eventData);
+            }
+        }
+    }
+
+    ECS::PlaybackMode VideoView::GetPlaybackMode() const {
+        return m_playbackMode;
+    }
+
     void VideoView::Update(float deltaT) {
         size_t currentCount = 0;
         for (auto entityID : m_entityManager.GetAllEntities()) {
@@ -156,6 +220,7 @@ namespace GUI {
                 currentCount++;
             }
         }
+
         if (currentCount != lastEntityCount) {
             RefreshEntities();
             if (selectedEntityID != 0 && !m_entityManager.IsEntityValid(selectedEntityID)) {
@@ -165,7 +230,7 @@ namespace GUI {
             if (mediaEntities.empty()) {
                 selectedEntityID = 0;
                 index = 0;
-                m_waveformData.clear();
+                m_waveformData.Clear();
             }
             else if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
                 index = static_cast<int>(mediaEntities.size()) - 1;
@@ -177,17 +242,10 @@ namespace GUI {
                 if (it != mediaEntities.end()) {
                     index = static_cast<int>(std::distance(mediaEntities.begin(), it));
                 }
-                else {
-                    if (!mediaEntities.empty()) {
-                        index = static_cast<int>(mediaEntities.size()) - 1;
-                        selectedEntityID = mediaEntities[index];
-                        UpdateWaveformData();
-                    }
-                    else {
-                        selectedEntityID = 0;
-                        index = 0;
-                        m_waveformData.clear();
-                    }
+                else if (!mediaEntities.empty()) {
+                    index = static_cast<int>(mediaEntities.size()) - 1;
+                    selectedEntityID = mediaEntities[index];
+                    UpdateWaveformData();
                 }
             }
         }
@@ -195,6 +253,7 @@ namespace GUI {
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
             auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+
             if (videoComp.needsTextureUpdate) {
                 auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
                 if (textureSystem) {
@@ -221,13 +280,10 @@ namespace GUI {
                 }
             }
 
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-            if (playback) {
-                double duration = GetVideoDuration(selectedEntityID);
-                if (duration > 0.0) {
-                    m_playbackProgress = static_cast<float>(
-                        playback->GetCurrentPosition(selectedEntityID) / duration
-                        );
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                if (state.duration > 0.0) {
+                    m_playbackProgress = static_cast<float>(state.currentTime / state.duration);
                     if (m_playbackProgress < 0) m_playbackProgress = 0;
                     if (m_playbackProgress > 1) m_playbackProgress = 1;
                 }
@@ -276,7 +332,7 @@ namespace GUI {
             ImGui::PopID();
 
             ImGui::PushID("Timeline");
-            if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.empty()) {
+            if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.IsEmpty()) {
                 RenderWaveform();
             }
             else {
@@ -314,7 +370,7 @@ namespace GUI {
             m_showFullscreenControls = true;
             m_fullscreenControlsTimer = 5.0f;
         }
-        
+
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImVec2 viewportPos = viewport->Pos;
         ImVec2 viewportSize = viewport->Size;
@@ -335,18 +391,15 @@ namespace GUI {
 
             ImGuiIO& io = ImGui::GetIO();
 
-            // Check for escape or F11 to exit fullscreen
             if (ImGui::IsKeyPressed(ImGuiKey_Escape) || ImGui::IsKeyPressed(ImGuiKey_F11)) {
                 ToggleFullscreen();
             }
 
-            // Check for mouse movement or any key press to show controls
             ImVec2 currentMousePos = io.MousePos;
             bool mouseMoved = (std::abs(currentMousePos.x - m_lastMousePos.x) > 2.0f ||
                 std::abs(currentMousePos.y - m_lastMousePos.y) > 2.0f);
             m_lastMousePos = currentMousePos;
 
-            // Check if any key is pressed (except modifiers)
             bool keyPressed = false;
             for (int key = ImGuiKey_NamedKey_BEGIN; key < ImGuiKey_NamedKey_END; ++key) {
                 if (ImGui::IsKeyPressed(static_cast<ImGuiKey>(key))) {
@@ -355,13 +408,11 @@ namespace GUI {
                 }
             }
 
-            // Show controls on mouse movement or key press
             if (mouseMoved || keyPressed) {
                 m_showFullscreenControls = true;
                 m_fullscreenControlsTimer = 5.0f;
             }
 
-            // Auto-hide after 5 seconds
             if (m_showFullscreenControls) {
                 m_fullscreenControlsTimer -= ImGui::GetIO().DeltaTime;
                 if (m_fullscreenControlsTimer <= 0.0f) {
@@ -374,28 +425,23 @@ namespace GUI {
             float displayHeight = avail.y - overlayHeight;
             if (displayHeight < 100.0f) displayHeight = 100.0f;
 
-            // Video display - fills the available space
             if (ImGui::BeginChild("FullscreenVideoDisplay", ImVec2(avail.x, displayHeight), false, ImGuiWindowFlags_NoScrollbar)) {
                 RenderMediaContent();
             }
             ImGui::EndChild();
 
-            // Controls overlay (only visible when controls are shown)
             if (m_showFullscreenControls) {
                 ImVec2 overlayPos = ImVec2(0, displayHeight);
                 ImGui::SetCursorPos(overlayPos);
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0, 0, 0, 0.6f));
                 if (ImGui::BeginChild("FullscreenControls", ImVec2(avail.x, overlayHeight), false, ImGuiWindowFlags_NoScrollbar)) {
-                    // Calculate center position for controls
                     float totalWidth = 700.0f;
                     float centerX = (avail.x - totalWidth) * 0.5f;
                     if (centerX < 0) centerX = 0;
 
                     ImGui::SetCursorPosX(centerX);
 
-                    // Timeline or waveform
-                    if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.empty()) {
-                        // Render waveform with full width, then controls below
+                    if (HasAudioTrack(selectedEntityID) && m_showWaveform && !m_waveformData.IsEmpty()) {
                         float savedCursorX = ImGui::GetCursorPosX();
                         ImGui::SetCursorPosX(0);
                         RenderWaveform();
@@ -405,10 +451,8 @@ namespace GUI {
                         RenderTimeline();
                     }
 
-                    // Controls
                     RenderControls();
 
-                    // Exit hint
                     ImVec2 hintPos = ImVec2(avail.x - 150.0f, 10.0f);
                     ImGui::SetCursorPos(hintPos);
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 0.4f));
@@ -417,7 +461,6 @@ namespace GUI {
                 }
                 ImGui::EndChild();
                 ImGui::PopStyleColor();
-
             }
         }
 
@@ -426,9 +469,19 @@ namespace GUI {
     }
 
     void VideoView::RenderMediaContent() {
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+
         if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            ImGui::Text("No video selected.");
+            const char* text = "No video selected.";
+            float textWidth = ImGui::CalcTextSize(text).x;
+            float textHeight = ImGui::GetTextLineHeight();
+            ImVec2 pos = ImVec2(
+                (avail.x - textWidth) * 0.5f,
+                (avail.y - textHeight) * 0.5f
+            );
+            ImGui::SetCursorPos(pos);
+            ImGui::Text("%s", text);
             HandleFileDropTarget();
             HandleEntityDropTarget();
             return;
@@ -442,8 +495,15 @@ namespace GUI {
             }
 
             if (texID == 0 || !glIsTexture(texID) || videoComp.width <= 0 || videoComp.height <= 0) {
-                ImGui::Text("Video loading... (Texture ID: %u, Size: %dx%d)",
-                    texID, videoComp.width, videoComp.height);
+                const char* text = "Video loading...";
+                float textWidth = ImGui::CalcTextSize(text).x;
+                float textHeight = ImGui::GetTextLineHeight();
+                ImVec2 pos = ImVec2(
+                    (avail.x - textWidth) * 0.5f,
+                    (avail.y - textHeight) * 0.5f
+                );
+                ImGui::SetCursorPos(pos);
+                ImGui::Text("%s", text);
                 HandleFileDropTarget();
                 HandleEntityDropTarget();
                 return;
@@ -451,7 +511,6 @@ namespace GUI {
 
             m_videoAspectRatio = static_cast<float>(videoComp.width) / static_cast<float>(videoComp.height);
 
-            ImVec2 avail = ImGui::GetContentRegionAvail();
             ImVec2 imageSize;
 
             switch (m_displayMode) {
@@ -500,10 +559,17 @@ namespace GUI {
             RenderMediaContextMenu(selectedEntityID);
             HandleFileDropTarget();
             HandleEntityDropTarget();
-
         }
         catch (const std::exception& e) {
-            ImGui::Text("Error rendering video: %s", e.what());
+            const char* text = "Error rendering video";
+            float textWidth = ImGui::CalcTextSize(text).x;
+            float textHeight = ImGui::GetTextLineHeight();
+            ImVec2 pos = ImVec2(
+                (avail.x - textWidth) * 0.5f,
+                (avail.y - textHeight) * 0.5f
+            );
+            ImGui::SetCursorPos(pos);
+            ImGui::Text("%s", text);
             HandleFileDropTarget();
             HandleEntityDropTarget();
         }
@@ -515,42 +581,39 @@ namespace GUI {
             return;
         }
 
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (!playback) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            return;
+        }
 
-        double totalDuration = GetVideoDuration(selectedEntityID);
-        double currentTime = GetVideoCurrentTime(selectedEntityID);
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
 
-        std::string currentStr = FormatTimecode(currentTime);
-        std::string totalStr = FormatTimecode(totalDuration);
+        std::string currentStr = FormatTimecode(state.currentTime);
+        std::string totalStr = FormatTimecode(state.duration);
 
         float availWidth = ImGui::GetContentRegionAvail().x;
         float sliderWidth = availWidth - 20.0f;
 
         if (sliderWidth < 50.0f) sliderWidth = 50.0f;
 
-        // Center the slider
         float startX = (availWidth - sliderWidth) * 0.5f;
         if (startX < 0) startX = 0;
         ImGui::SetCursorPosX(startX);
 
-        // Slider
         ImGui::PushItemWidth(sliderWidth);
         ImGui::PushID("TimelineSlider");
         if (ImGui::SliderFloat("##Timeline", &m_playbackProgress, 0.0f, 1.0f, "")) {
-            playback->Seek(selectedEntityID, m_playbackProgress * totalDuration);
+            SeekVideo(selectedEntityID, m_playbackProgress * state.duration);
         }
         if (ImGui::IsItemHovered()) {
             float hoverPos = ImGui::GetMousePos().x - ImGui::GetItemRectMin().x;
             float hoverProgress = hoverPos / ImGui::GetItemRectSize().x;
             hoverProgress = std::clamp(hoverProgress, 0.0f, 1.0f);
-            double hoverTime = hoverProgress * totalDuration;
+            double hoverTime = hoverProgress * state.duration;
             ImGui::SetTooltip("%s", FormatTimecode(hoverTime).c_str());
         }
         ImGui::PopID();
         ImGui::PopItemWidth();
 
-        // Timestamps on the next line, centered
         std::string timeDisplay = currentStr + " / " + totalStr;
         float textWidth = ImGui::CalcTextSize(timeDisplay.c_str()).x;
         float centerX = (availWidth - textWidth) * 0.5f;
@@ -650,7 +713,10 @@ namespace GUI {
                     if (!mediaEntities.empty()) {
                         index = static_cast<int>(mediaEntities.size()) - 1;
                         selectedEntityID = mediaEntities[index];
-                        SeekVideo(selectedEntityID, GetVideoDuration(selectedEntityID) - 0.001);
+                        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                            SeekVideo(selectedEntityID, state.duration - 0.001);
+                        }
                         UpdateWaveformData();
                     }
                 }
@@ -743,13 +809,21 @@ namespace GUI {
             try {
                 const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
 
+                double currentTime = 0.0;
+                double duration = 0.0;
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    currentTime = state.currentTime;
+                    duration = state.duration;
+                }
+
                 ImGui::Text("File: %s | %dx%d | %.2f FPS | %d frames | Time: %s / %s | Frame: %d/%d | Entity: %zu",
                     videoComp.fileName.c_str(),
                     videoComp.width, videoComp.height,
                     videoComp.fps,
                     videoComp.frameCount,
-                    FormatTimecode(GetVideoCurrentTime(selectedEntityID)).c_str(),
-                    FormatTimecode(GetVideoDuration(selectedEntityID)).c_str(),
+                    FormatTimecode(currentTime).c_str(),
+                    FormatTimecode(duration).c_str(),
                     videoComp.currentFrame,
                     videoComp.frameCount,
                     selectedEntityID);
@@ -778,9 +852,43 @@ namespace GUI {
     }
 
     void VideoView::RenderControls() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
-            !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            ImGui::Text("No video selected.");
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, 8.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+        float totalWidth = 0.0f;
+
+        totalWidth += 110.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
+        totalWidth += 80.0f + ImGui::GetStyle().ItemSpacing.x;
+
+        float startX = (availWidth - totalWidth) * 0.5f;
+        if (startX < 0) startX = 0;
+        ImGui::SetCursorPosX(startX);
+
+        bool hasVideo = (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID));
+
+        if (!hasVideo) {
+            ImGui::TextDisabled("No video loaded");
+            ImGui::PopStyleVar(2);
+            ImGui::Separator();
+
+            ImGui::Text("Mode:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Cached", m_playbackMode == ECS::PlaybackMode::Cached)) {
+                SetPlaybackMode(ECS::PlaybackMode::Cached);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Streaming", m_playbackMode == ECS::PlaybackMode::Streaming)) {
+                SetPlaybackMode(ECS::PlaybackMode::Streaming);
+            }
             return;
         }
 
@@ -788,47 +896,36 @@ namespace GUI {
         bool isLoaded = (videoComp.width > 0 && videoComp.height > 0);
 
         if (!isLoaded) {
-            ImGui::Text("Loading video...");
+            ImGui::TextDisabled("Loading video...");
+            ImGui::PopStyleVar(2);
+            ImGui::Separator();
+
+            ImGui::Text("Mode:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Cached", m_playbackMode == ECS::PlaybackMode::Cached)) {
+                SetPlaybackMode(ECS::PlaybackMode::Cached);
+            }
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Streaming", m_playbackMode == ECS::PlaybackMode::Streaming)) {
+                SetPlaybackMode(ECS::PlaybackMode::Streaming);
+            }
             return;
         }
 
         try {
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-            if (!playback) {
-                ImGui::Text("VideoPlaybackSystem not available.");
-                return;
-            }
-
-            bool loopState = videoComp.looping;
-            bool playing = playback->IsPlaying(selectedEntityID);
+            bool playing = false;
+            bool loopState = false;
             float speed = videoComp.playbackSpeed;
 
-            // All buttons same size
-            ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(24.0f, 8.0f));
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
-
-            float availWidth = ImGui::GetContentRegionAvail().x;
-            float totalWidth = 0.0f;
-
-            // Width calculation in visual order:
-            totalWidth += 110.0f + ImGui::GetStyle().ItemSpacing.x; // Speed drag (icon + drag)
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // <<
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // <
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // Play/Pause
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // Stop
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // >
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // >>
-            totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;  // Fullscreen
-            if (HasAudioTrack(selectedEntityID)) {
-                totalWidth += 150.0f + ImGui::GetStyle().ItemSpacing.x; // Volume controls (icon + checkbox + slider)
+            if (m_mediaEngine) {
+                playing = (m_mediaEngine->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
             }
-            totalWidth += 80.0f + ImGui::GetStyle().ItemSpacing.x;  // Waveform checkbox (loop removed from here)
 
-            float startX = (availWidth - totalWidth) * 0.5f;
-            if (startX < 0) startX = 0;
-            ImGui::SetCursorPosX(startX);
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                loopState = state.looping;
+            }
 
-            // --- Speed drag ---
             ImGui::Text("%s", Icon::ClockRotateLeft().c_str());
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Playback Speed");
@@ -839,7 +936,7 @@ namespace GUI {
             if (ImGui::DragFloat("##Speed", &speed, 0.05f, 0.1f, 4.0f, "%.1fx")) {
                 speed = std::clamp(speed, 0.1f, 4.0f);
                 videoComp.playbackSpeed = speed;
-                playback->SetSpeed(selectedEntityID, speed);
+                SetVideoSpeed(selectedEntityID, speed);
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Adjust playback speed (0.1x - 4.0x)");
@@ -849,13 +946,11 @@ namespace GUI {
 
             ImGui::SameLine();
 
-            // --- Volume (if audio track) ---
             if (HasAudioTrack(selectedEntityID)) {
                 RenderAudioControls(selectedEntityID);
                 ImGui::SameLine();
             }
 
-            // --- First ---
             ImGui::PushID(308);
             if (ImGui::Button(Icon::ArrowFirst().c_str())) {
                 SeekVideo(selectedEntityID, 0.0);
@@ -864,111 +959,108 @@ namespace GUI {
                 ImGui::SetTooltip("Go to first frame");
             }
             ImGui::PopID();
-
             ImGui::SameLine();
 
-            // --- Previous (with repeat) ---
             ImGui::PushID(302);
             bool held = false;
             if (ImGui::Button(Icon::ArrowLeft().c_str())) {
-                // Empty - handled by ProcessRepeatButton
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Previous frame (hold for repeat)");
             }
             ImGuiID prevID = ImGui::GetItemID();
-            if (ProcessRepeatButton(prevID, 0.4, 0.1, held)) {
-                float fps = GetVideoFPS(selectedEntityID);
-                float step = 1.0f / fps; // one frame
-                // Acceleration: after more repeats, jump larger steps
-                auto it = m_repeatButtonStates.find(prevID);
-                if (it != m_repeatButtonStates.end()) {
+            if (m_repeatButtonHandler.Process(prevID, 0.4, 0.1, held)) {
+                float fps = videoComp.fps;
+                float step = 1.0f / fps;
+                auto& states = m_repeatButtonHandler.GetAllStates();
+                auto it = states.find(prevID);
+                if (it != states.end()) {
                     int count = it->second.repeatCount;
-                    if (count > 10) step *= 30.0f;   // jump 1 second or 30 frames
-                    else if (count > 5) step *= 10.0f; // jump 10 frames
+                    if (count > 10) step *= 30.0f;
+                    else if (count > 5) step *= 10.0f;
                 }
-                double current = GetVideoCurrentTime(selectedEntityID);
+                double current = 0.0;
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    current = state.currentTime;
+                }
                 double newTime = current - step;
                 if (newTime < 0.0) newTime = 0.0;
                 SeekVideo(selectedEntityID, newTime);
             }
             ImGui::PopID();
-
             ImGui::SameLine();
 
-            // --- Play/Pause ---
             ImGui::PushID(300);
             if (ImGui::Button(playing ? Icon::Pause().c_str() : Icon::Play().c_str())) {
                 if (playing) {
-                    playback->Pause(selectedEntityID);
+                    PauseVideo(selectedEntityID);
                 }
                 else {
-                    // When playing, respect both loop and autoplay
-                    playback->Play(selectedEntityID, loopState);
+                    PlayVideo(selectedEntityID);
                 }
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip(playing ? "Pause playback" : "Play video");
             }
             ImGui::PopID();
-
             ImGui::SameLine();
 
-            // --- Stop ---
             ImGui::PushID(301);
             if (ImGui::Button(Icon::Stop().c_str())) {
-                playback->Stop(selectedEntityID);
+                StopVideo(selectedEntityID);
                 m_playbackProgress = 0.0f;
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Stop playback and go to beginning");
             }
             ImGui::PopID();
-
             ImGui::SameLine();
 
-            // --- Next (with repeat) ---
             ImGui::PushID(303);
             if (ImGui::Button(Icon::ArrowRight().c_str())) {
-                // Empty - handled by ProcessRepeatButton
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Next frame (hold for repeat)");
             }
             ImGuiID nextID = ImGui::GetItemID();
-            if (ProcessRepeatButton(nextID, 0.4, 0.1, held)) {
-                float fps = GetVideoFPS(selectedEntityID);
+            if (m_repeatButtonHandler.Process(nextID, 0.4, 0.1, held)) {
+                float fps = videoComp.fps;
                 float step = 1.0f / fps;
-                auto it = m_repeatButtonStates.find(nextID);
-                if (it != m_repeatButtonStates.end()) {
+                auto& states = m_repeatButtonHandler.GetAllStates();
+                auto it = states.find(nextID);
+                if (it != states.end()) {
                     int count = it->second.repeatCount;
                     if (count > 10) step *= 30.0f;
                     else if (count > 5) step *= 10.0f;
                 }
-                double current = GetVideoCurrentTime(selectedEntityID);
-                double duration = GetVideoDuration(selectedEntityID);
+                double current = 0.0;
+                double duration = 0.0;
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    current = state.currentTime;
+                    duration = state.duration;
+                }
                 double newTime = current + step;
                 if (newTime > duration) newTime = duration;
                 SeekVideo(selectedEntityID, newTime);
             }
             ImGui::PopID();
-
             ImGui::SameLine();
 
-            // --- Last ---
             ImGui::PushID(309);
             if (ImGui::Button(Icon::ArrowLast().c_str())) {
-                double duration = GetVideoDuration(selectedEntityID);
-                SeekVideo(selectedEntityID, duration - 0.001);
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    SeekVideo(selectedEntityID, state.duration - 0.001);
+                }
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Go to last frame");
             }
             ImGui::PopID();
-
             ImGui::SameLine();
 
-            // --- Fullscreen ---
             ImGui::PushID(306);
             if (ImGui::Button(Icon::Expand().c_str())) {
                 ToggleFullscreen();
@@ -977,30 +1069,78 @@ namespace GUI {
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Toggle Fullscreen (F11 or Double-click video)");
             }
-
             ImGui::SameLine();
 
-            // --- Waveform (loop removed from here) ---
             ImGui::PushID(307);
             if (ImGui::Checkbox((Icon::Music() + " Waveform").c_str(), &m_showWaveform)) {
-                // Toggle handled by checkbox
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Show/hide audio waveform timeline");
             }
             ImGui::PopID();
 
-            ImGui::PopStyleVar(2);
-            ImGui::Separator();
         }
         catch (const std::exception& e) {
             ImGui::Text("Error with playback controls: %s", e.what());
         }
+
+        ImGui::PopStyleVar(2);
+        ImGui::Separator();
+
+        ImGui::Text("Mode:");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Cached", m_playbackMode == ECS::PlaybackMode::Cached)) {
+            SetPlaybackMode(ECS::PlaybackMode::Cached);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Streaming", m_playbackMode == ECS::PlaybackMode::Streaming)) {
+            SetPlaybackMode(ECS::PlaybackMode::Streaming);
+        }
+
+        if (hasVideo) {
+            bool loopState = false;
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                loopState = state.looping;
+            }
+
+            ImGui::SameLine();
+            ImGui::PushID(310);
+            if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    state.looping = loopState;
+                }
+                if (m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+                    auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+                    videoComp.looping = loopState;
+                }
+            }
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("Loop current video");
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::SameLine();
+        ImGui::PushID(311);
+        if (ImGui::Checkbox((Icon::Play() + " Autoplay").c_str(), &m_autoplay)) {
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Auto play next video when current ends");
+        }
+        ImGui::PopID();
     }
 
     void VideoView::RenderSelector() {
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 6.0f));
+
+        float availWidth = ImGui::GetContentRegionAvail().x;
+
         if (mediaEntities.empty()) {
-            ImGui::Text("No videos loaded.");
+            ImGui::TextDisabled("No videos loaded.");
+            ImGui::PopStyleVar(2);
             return;
         }
 
@@ -1013,11 +1153,6 @@ namespace GUI {
             totalFrames = videoComp.frameCount;
         }
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.0f, 6.0f));
-        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(6.0f, 6.0f));
-
-        float availWidth = ImGui::GetContentRegionAvail().x;
-
         float totalWidth = 0.0f;
         totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
         totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
@@ -1026,10 +1161,6 @@ namespace GUI {
         totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
         totalWidth += 50.0f + ImGui::GetStyle().ItemSpacing.x;
         totalWidth += 20.0f + ImGui::GetStyle().ItemSpacing.x;
-        totalWidth += 80.0f + ImGui::GetStyle().ItemSpacing.x;
-        if (m_autoplay) {
-            totalWidth += 60.0f + ImGui::GetStyle().ItemSpacing.x;
-        }
 
         float startX = (availWidth - totalWidth) * 0.5f;
         if (startX < 0) startX = 0;
@@ -1038,21 +1169,9 @@ namespace GUI {
         ImGui::PushID(205);
         if (ImGui::Button(Icon::ArrowFirst().c_str())) {
             if (!mediaEntities.empty()) {
-                auto oldEntity = selectedEntityID;
-                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-
-                if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
-                    playback->Pause(oldEntity);
-                }
-
                 index = 0;
                 selectedEntityID = mediaEntities[index];
-
-                if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
-                    double currentPos = playback->GetCurrentPosition(selectedEntityID);
-                    SeekVideo(selectedEntityID, currentPos);
-                }
-
+                SeekVideo(selectedEntityID, 0.0);
                 UpdateWaveformData();
             }
         }
@@ -1079,21 +1198,8 @@ namespace GUI {
                 const int size = static_cast<int>(mediaEntities.size());
                 if (size == 1) index = 0;
                 else index = ((index % size) + size) % size;
-
-                auto oldEntity = selectedEntityID;
-                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-
-                if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
-                    playback->Pause(oldEntity);
-                }
-
                 selectedEntityID = mediaEntities[index];
-
-                if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
-                    double currentPos = playback->GetCurrentPosition(selectedEntityID);
-                    SeekVideo(selectedEntityID, currentPos);
-                }
-
+                SeekVideo(selectedEntityID, 0.0);
                 UpdateWaveformData();
             }
         }
@@ -1120,21 +1226,9 @@ namespace GUI {
         ImGui::PushID(208);
         if (ImGui::Button(Icon::ArrowLast().c_str())) {
             if (!mediaEntities.empty()) {
-                auto oldEntity = selectedEntityID;
-                auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-
-                if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
-                    playback->Pause(oldEntity);
-                }
-
                 index = static_cast<int>(mediaEntities.size()) - 1;
                 selectedEntityID = mediaEntities[index];
-
-                if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
-                    double currentPos = playback->GetCurrentPosition(selectedEntityID);
-                    SeekVideo(selectedEntityID, currentPos);
-                }
-
+                SeekVideo(selectedEntityID, 0.0);
                 UpdateWaveformData();
             }
         }
@@ -1142,43 +1236,6 @@ namespace GUI {
             ImGui::SetTooltip("Last video");
         }
         ImGui::PopID();
-
-        ImGui::SameLine();
-        ImGui::Dummy(ImVec2(20.0f, 0.0f));
-        ImGui::SameLine();
-
-        ImGui::PushID(210);
-        if (ImGui::Checkbox((Icon::Play() + " Autoplay").c_str(), &m_autoplay)) {}
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Automatically play next video when current ends");
-        }
-        ImGui::PopID();
-        ImGui::SameLine();
-
-        if (m_autoplay) {
-            bool loopState = false;
-            if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
-                m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-                loopState = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).looping;
-            }
-
-            ImGui::PushID(211);
-            if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
-                if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
-                    m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-                    m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).looping = loopState;
-
-                    auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-                    if (playback && playback->IsPlaying(selectedEntityID)) {
-                        playback->Play(selectedEntityID, loopState);
-                    }
-                }
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("Loop current video (only when autoplay is enabled)");
-            }
-            ImGui::PopID();
-        }
 
         ImGui::PopStyleVar(2);
     }
@@ -1201,29 +1258,6 @@ namespace GUI {
         }
     }
 
-    double VideoView::GetVideoCurrentTime(ECS::EntityID entity) const {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback) {
-            return playback->GetCurrentPosition(entity);
-        }
-        if (m_entityManager.IsEntityValid(entity) && m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
-            return m_entityManager.GetComponent<ECS::VideoComponent>(entity).currentTime;
-        }
-        return 0.0;
-    }
-
-    double VideoView::GetVideoDuration(ECS::EntityID entity) const {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback) {
-            return playback->GetDuration(entity);
-        }
-        if (m_entityManager.IsEntityValid(entity) && m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
-            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
-            return videoComp.frameCount / videoComp.fps;
-        }
-        return 0.0;
-    }
-
     void VideoView::SeekVideo(ECS::EntityID entity, double time) {
         if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return;
 
@@ -1237,10 +1271,13 @@ namespace GUI {
         m_isSeeking = true;
 
         try {
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-            if (playback) {
-                playback->Seek(entity, time);
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+                state.currentTime = time;
             }
+
+            auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+            ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK, eventData);
         }
         catch (const std::exception& e) {
             std::cerr << "[VideoView] Seek error: " << e.what() << std::endl;
@@ -1254,39 +1291,63 @@ namespace GUI {
         }
     }
 
-    void VideoView::PlayVideo(ECS::EntityID entity, bool loop) {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback) {
-            playback->Play(entity, loop);
-        }
+    void VideoView::PlayVideo(ECS::EntityID entity) {
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.state = ECS::PlaybackState::Playing;
+        state.isPaused = false;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, eventData);
     }
 
     void VideoView::PauseVideo(ECS::EntityID entity) {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback) {
-            playback->Pause(entity);
-        }
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.state = ECS::PlaybackState::Paused;
+        state.isPaused = true;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE, eventData);
     }
 
     void VideoView::StopVideo(ECS::EntityID entity) {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback) {
-            playback->Stop(entity);
-        }
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.state = ECS::PlaybackState::Stopped;
+        state.isPaused = false;
+        state.currentTime = 0.0;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP, eventData);
     }
 
     void VideoView::SetVideoSpeed(ECS::EntityID entity, float speed) {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback) {
-            playback->SetSpeed(entity, speed);
-        }
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.speed = speed;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED, eventData);
     }
 
     void VideoView::SetVideoVolume(ECS::EntityID entity, float volume) {
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (playback && HasAudioTrack(entity)) {
-            playback->SetVolume(entity, volume);
-        }
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.volume = volume;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME, eventData);
     }
 
     void VideoView::RenderWaveform() {
@@ -1303,192 +1364,51 @@ namespace GUI {
             return;
         }
 
-        if (m_waveformData.empty()) {
+        if (m_waveformData.IsEmpty()) {
             UpdateWaveformData();
         }
-        if (m_waveformData.empty()) {
+        if (m_waveformData.IsEmpty()) {
             ImGui::Text("No waveform data available.");
             return;
         }
 
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (!playback) return;
-
-        double totalDuration = playback->GetDuration(selectedEntityID);
-        double currentTime = playback->GetCurrentPosition(selectedEntityID);
+        double currentTime = 0.0;
+        double duration = 0.0;
+        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+            currentTime = state.currentTime;
+            duration = state.duration;
+        }
 
         std::string currentStr = FormatTimecode(currentTime);
-        std::string totalStr = FormatTimecode(totalDuration);
+        std::string totalStr = FormatTimecode(duration);
 
-        // --- Fixed width for each time label (enough for "HH:MM:SS") ---
-        const float TIME_LABEL_WIDTH = 115.0f;
-        const float WAVEFORM_HEIGHT = 64.0f;
-        float spacing = ImGui::GetStyle().ItemSpacing.x;
-        float availWidth = ImGui::GetContentRegionAvail().x;
-
-        // Calculate waveform width: available minus fixed widths and spacing
-        float waveformWidth = availWidth - (TIME_LABEL_WIDTH * 2) - (spacing * 2);
-        if (waveformWidth < 50.0f) waveformWidth = 50.0f;  // minimum sensible width
-
-        // Center the whole row horizontally (optional)
-        float totalNeeded = (TIME_LABEL_WIDTH * 2) + waveformWidth + (spacing * 2);
-        float startX = (availWidth - totalNeeded) * 0.5f;
-        if (startX < 0.0f) startX = 0.0f;
-        ImGui::SetCursorPosX(startX);
-
-        // --- Current time (fixed width, bordered) ---
-        ImGui::PushID("CurrentTime");
-        ImGui::BeginChild("##CurrentTimeChild", ImVec2(TIME_LABEL_WIDTH, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
-        ImGui::SetCursorPos(ImVec2(
-            (TIME_LABEL_WIDTH - ImGui::CalcTextSize(currentStr.c_str()).x) * 0.5f,
-            (WAVEFORM_HEIGHT - ImGui::GetTextLineHeight()) * 0.5f
-        ));
-        ImGui::Text("%s", currentStr.c_str());
-        ImGui::EndChild();
-        ImGui::PopID();
-
-        ImGui::SameLine();
-
-        // --- Waveform area (fill remaining width, also bordered for debugging) ---
-        ImGui::PushID("WaveformArea");
-        ImGui::BeginChild("##WaveformChild", ImVec2(waveformWidth, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
-
-        // Drawing inside the waveform child
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImVec2 size = ImGui::GetContentRegionAvail();  // inside child, so size = (waveformWidth, WAVEFORM_HEIGHT)
-        if (size.x <= 0 || size.y <= 0) {
-            ImGui::EndChild();
-            ImGui::PopID();
-            ImGui::SameLine();
-            // Still need to place total time
-            ImGui::PushID("TotalTime");
-            ImGui::BeginChild("##TotalTimeChild", ImVec2(TIME_LABEL_WIDTH, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
-            ImGui::EndChild();
-            ImGui::PopID();
-            return;
-        }
-
-        // Background
-        drawList->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-            IM_COL32(20, 20, 30, 200));
-
-        float centerY = pos.y + size.y * 0.5f;
-        float halfHeight = size.y * 0.4f;
-
-        size_t totalSamples = m_waveformData.size();
-        size_t samplesToShow = static_cast<size_t>(size.x);
-        if (samplesToShow > totalSamples) samplesToShow = totalSamples;
-        if (samplesToShow > 0) {
-            float step = static_cast<float>(totalSamples) / static_cast<float>(samplesToShow);
-            size_t currentSample = static_cast<size_t>(m_playbackProgress * totalSamples);
-
-            for (size_t i = 0; i < samplesToShow; ++i) {
-                size_t sampleIndex = static_cast<size_t>(i * step);
-                if (sampleIndex >= totalSamples) break;
-                float x = pos.x + (static_cast<float>(i) / static_cast<float>(samplesToShow)) * size.x;
-                float sample = m_waveformData[sampleIndex];
-                float heightPos = sample * halfHeight;
-                bool isBeforePlayhead = (sampleIndex <= currentSample);
-                ImU32 color = isBeforePlayhead ?
-                    IM_COL32(100, 255, 100, 200) :
-                    IM_COL32(100, 150, 255, 150);
-                drawList->AddLine(
-                    ImVec2(x, centerY - heightPos),
-                    ImVec2(x, centerY + heightPos),
-                    color, 1.0f
-                );
-            }
-
-            // Playhead
-            if (m_playbackProgress > 0.0f && m_playbackProgress < 1.0f) {
-                float playheadX = pos.x + m_playbackProgress * size.x;
-                drawList->AddLine(
-                    ImVec2(playheadX, pos.y),
-                    ImVec2(playheadX, pos.y + size.y),
-                    IM_COL32(255, 255, 255, 200), 2.0f
-                );
-            }
-            // Border (drawn by child, but we also draw our own for consistency)
-            drawList->AddRect(pos, ImVec2(pos.x + size.x, pos.y + size.y),
-                IM_COL32(100, 100, 120, 255));
-        }
-
-        // Invisible button for seeking (only over the waveform area)
-        ImGui::InvisibleButton("WaveformSeek", size);
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            float relativeX = (mousePos.x - pos.x) / size.x;
-            relativeX = std::clamp(relativeX, 0.0f, 1.0f);
-            playback->Seek(selectedEntityID, relativeX * totalDuration);
-            m_playbackProgress = relativeX;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            float relativeX = (mousePos.x - pos.x) / size.x;
-            relativeX = std::clamp(relativeX, 0.0f, 1.0f);
-            double hoverTime = relativeX * totalDuration;
-            ImGui::SetTooltip("%s", FormatTimecode(hoverTime).c_str());
-        }
-
-        ImGui::EndChild();
-        ImGui::PopID();
-
-        ImGui::SameLine();
-
-        // --- Total time (fixed width, bordered) ---
-        ImGui::PushID("TotalTime");
-        ImGui::BeginChild("##TotalTimeChild", ImVec2(TIME_LABEL_WIDTH, WAVEFORM_HEIGHT), true, ImGuiWindowFlags_NoScrollbar);
-        ImGui::SetCursorPos(ImVec2(
-            (TIME_LABEL_WIDTH - ImGui::CalcTextSize(totalStr.c_str()).x) * 0.5f,
-            (WAVEFORM_HEIGHT - ImGui::GetTextLineHeight()) * 0.5f
-        ));
-        ImGui::Text("%s", totalStr.c_str());
-        ImGui::EndChild();
-        ImGui::PopID();
+        m_waveformRenderer.Render(m_waveformData, m_playbackProgress, currentStr, totalStr,
+            [this](double progress) {
+                double duration = 0.0;
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    duration = state.duration;
+                }
+                SeekVideo(selectedEntityID, progress * duration);
+            });
     }
 
     void VideoView::UpdateWaveformData() {
         if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-            m_waveformData.clear();
+            m_waveformData.Clear();
             return;
         }
 
         const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
 
         if (audioComp.pcmData.empty()) {
-            m_waveformData.clear();
+            m_waveformData.Clear();
             return;
         }
 
-        const float* data = audioComp.pcmData.data();
-        size_t totalSamples = audioComp.pcmData.size() / audioComp.channels;
-        int channels = audioComp.channels;
-
-        size_t targetSize = 4096;
-        m_waveformData.resize(targetSize);
-
-        if (totalSamples > 0) {
-            float step = static_cast<float>(totalSamples) / static_cast<float>(targetSize);
-
-            for (size_t i = 0; i < targetSize; ++i) {
-                size_t startIdx = static_cast<size_t>(i * step);
-                size_t endIdx = static_cast<size_t>((i + 1) * step);
-                if (endIdx > totalSamples) endIdx = totalSamples;
-
-                float peak = 0.0f;
-                for (size_t j = startIdx; j < endIdx; ++j) {
-                    float sample = 0.0f;
-                    for (int c = 0; c < channels; ++c) {
-                        sample += std::abs(data[j * channels + c]);
-                    }
-                    sample /= channels;
-                    if (sample > peak) peak = sample;
-                }
-                m_waveformData[i] = peak;
-            }
-        }
+        m_waveformData.Update(audioComp.pcmData.data(), audioComp.pcmData.size(), audioComp.channels);
     }
 
     bool VideoView::HasAudioTrack(ECS::EntityID entity) const {
@@ -1499,12 +1419,8 @@ namespace GUI {
     void VideoView::RenderAudioControls(ECS::EntityID entity) {
         if (!HasAudioTrack(entity)) return;
 
-        auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-        if (!playback) return;
-
         auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(entity);
 
-        // Show volume icon based on volume level
         float vol = audioComp.volume;
         if (vol <= 0.0f) {
             ImGui::Text("%s", Icon::VolumeOff().c_str());
@@ -1524,7 +1440,7 @@ namespace GUI {
         ImGui::PushID(400);
         if (ImGui::Checkbox("##AudioEnabled", &audioEnabled)) {
             float newVolume = audioEnabled ? 1.0f : 0.0f;
-            playback->SetVolume(entity, newVolume);
+            SetVideoVolume(entity, newVolume);
             audioComp.volume = newVolume;
         }
         ImGui::PopID();
@@ -1535,7 +1451,7 @@ namespace GUI {
         ImGui::PushID(401);
         if (ImGui::SliderFloat("##AudioVolume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
             float newVolume = volumePercent / 100.0f;
-            playback->SetVolume(entity, newVolume);
+            SetVideoVolume(entity, newVolume);
             audioComp.volume = newVolume;
         }
         ImGui::PopID();
@@ -1550,21 +1466,12 @@ namespace GUI {
         if (mediaEntities.empty()) return;
         int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
         if (newIndex != index) {
-            auto oldEntity = selectedEntityID;
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-
-            if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
-                playback->Pause(oldEntity);
+            if (m_mediaEngine) {
+                StopVideo(selectedEntityID);
             }
-
             index = newIndex;
             selectedEntityID = mediaEntities[index];
-
-            if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
-                double currentPos = playback->GetCurrentPosition(selectedEntityID);
-                SeekVideo(selectedEntityID, currentPos);
-            }
-
+            SeekVideo(selectedEntityID, 0.0);
             UpdateWaveformData();
         }
     }
@@ -1573,37 +1480,36 @@ namespace GUI {
         if (mediaEntities.empty()) return;
         int newIndex = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
         if (newIndex != index) {
-            auto oldEntity = selectedEntityID;
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-
-            if (playback && oldEntity != 0 && m_entityManager.IsEntityValid(oldEntity)) {
-                playback->Pause(oldEntity);
+            if (m_mediaEngine) {
+                StopVideo(selectedEntityID);
             }
-
             index = newIndex;
             selectedEntityID = mediaEntities[index];
-
-            if (playback && selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID)) {
-                double currentPos = playback->GetCurrentPosition(selectedEntityID);
-                SeekVideo(selectedEntityID, currentPos);
-            }
-
+            SeekVideo(selectedEntityID, 0.0);
             UpdateWaveformData();
         }
     }
 
     void VideoView::LoadMedia(const std::vector<std::string>& filePaths) {
-        std::cout << "[VideoView] Loading " << filePaths.size() << " videos..." << std::endl;
-        auto vaSystem = m_entityManager.GetSystem<ECS::VideoAudioSystem>();
-        if (!vaSystem) {
-            std::cerr << "[VideoView] VideoAudioSystem not found!" << std::endl;
+        std::cout << "[VideoView] LoadMedia called with " << filePaths.size() << " files" << std::endl;
+
+        if (!m_mediaEngine) {
+            std::cerr << "[VideoView] MediaEngineSystem is null!" << std::endl;
             return;
         }
+
         try {
             for (const auto& filePath : filePaths) {
                 if (filePath.empty()) continue;
-                ECS::EntityID entity = vaSystem->LoadVideoWithAudio(filePath);
-                std::cout << "[VideoView] Loaded: " << filePath << " (Entity: " << entity << ")" << std::endl;
+
+                ECS::EntityID entity = m_mediaEngine->LoadMedia(filePath, ECS::TrackType::Both, m_playbackMode);
+                if (entity == 0) continue;
+
+                std::cout << "[VideoView] Created entity " << entity
+                    << " for: " << filePath << std::endl;
+
+                auto playEvent = ANI::PlaybackEvents::MakeEntityEvent(entity);
+                ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, playEvent);
             }
         }
         catch (const std::exception& e) {
@@ -1629,6 +1535,40 @@ namespace GUI {
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (videoSystem) {
             videoSystem->SaveVideoAsync(selectedEntityID, filePath);
+        }
+    }
+
+    void VideoView::SaveSelectedMediaNoAudio() {
+        SaveVideoNoAudio(selectedEntityID, "");
+    }
+
+    void VideoView::SaveSelectedMediaAsWithAudio() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+        std::string outPath;
+
+        const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+        std::string defaultName = videoComp.fileName;
+
+        if (FileDialog::SaveFile("Save Video As (with Audio)", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
+            SaveVideoWithAudio(selectedEntityID, outPath);
+        }
+    }
+
+    void VideoView::SaveSelectedMediaAsNoAudio() {
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+
+        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+        std::string outPath;
+
+        const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+        std::string defaultName = videoComp.fileName;
+
+        if (FileDialog::SaveFile("Save Video As (No Audio)", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
+            SaveVideoNoAudio(selectedEntityID, outPath);
         }
     }
 
@@ -1736,77 +1676,32 @@ namespace GUI {
         }
     }
 
-    void VideoView::SaveSelectedMediaNoAudio() {
-        SaveVideoNoAudio(selectedEntityID, "");
-    }
-
-    void VideoView::SaveSelectedMediaAsWithAudio() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
-
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
-        std::string outPath;
-
-        const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-        std::string defaultName = videoComp.fileName;
-
-        if (FileDialog::SaveFile("Save Video As (with Audio)", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
-            SaveVideoWithAudio(selectedEntityID, outPath);
-        }
-    }
-
-    void VideoView::SaveSelectedMediaAsNoAudio() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
-
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
-        std::string outPath;
-
-        const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-        std::string defaultName = videoComp.fileName;
-
-        if (FileDialog::SaveFile("Save Video As (No Audio)", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
-            SaveVideoNoAudio(selectedEntityID, outPath);
-        }
-    }
-
     void VideoView::RemoveSelectedMedia() {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
-        try {
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-            if (playback) {
-                playback->Stop(selectedEntityID);
-            }
 
-            auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-            if (videoSystem) videoSystem->RemoveVideo(selectedEntityID);
-            selectedEntityID = 0;
-            index = 0;
-            m_waveformData.clear();
-            RefreshEntities();
-            std::cout << "[VideoView] Video removed successfully" << std::endl;
+        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+            state.isLoaded = false;
         }
-        catch (const std::exception& e) {
-            std::cerr << "[VideoView] Exception removing video: " << e.what() << std::endl;
-        }
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(selectedEntityID);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE, eventData);
+
+        selectedEntityID = 0;
+        index = 0;
+        m_waveformData.Clear();
+        RefreshEntities();
     }
 
     void VideoView::PauseAllVideos() {
-        try {
-            auto playback = m_entityManager.GetSystem<ECS::VideoPlaybackSystem>();
-            if (!playback) return;
-
-            for (auto entityID : mediaEntities) {
-                if (m_entityManager.IsEntityValid(entityID) &&
-                    m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
-                    if (playback->IsPlaying(entityID)) {
-                        playback->Pause(entityID);
-                    }
+        if (!m_mediaEngine) return;
+        for (auto entityID : mediaEntities) {
+            if (m_entityManager.IsEntityValid(entityID) &&
+                m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entityID)) {
+                if (m_mediaEngine->GetState(entityID) == ECS::PlaybackState::Playing) {
+                    PauseVideo(entityID);
                 }
             }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[VideoView] Exception pausing videos: " << e.what() << std::endl;
         }
     }
 
@@ -1826,7 +1721,7 @@ namespace GUI {
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
         if (selectedEntityID == 0) {
-            m_waveformData.clear();
+            m_waveformData.Clear();
         }
         else {
             UpdateWaveformData();
@@ -1847,55 +1742,6 @@ namespace GUI {
             return m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID).filePath;
         }
         return "";
-    }
-
-    float VideoView::GetVideoFPS(ECS::EntityID entity) const {
-        if (entity != 0 && m_entityManager.IsEntityValid(entity) &&
-            m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
-            return m_entityManager.GetComponent<ECS::VideoComponent>(entity).fps;
-        }
-        return 30.0f; // fallback
-    }
-
-    bool VideoView::ProcessRepeatButton(ImGuiID id, double initialDelay, double repeatRate, bool& outHeld) {
-        auto it = m_repeatButtonStates.find(id);
-        if (it == m_repeatButtonStates.end()) {
-            it = m_repeatButtonStates.emplace(id, RepeatButtonState{}).first;
-        }
-        auto& state = it->second;
-
-        bool triggered = false;
-
-        if (ImGui::IsItemActive()) {
-            double now = ImGui::GetTime();
-            if (state.repeatCount == 0) {
-                // First press: action immediately, start timer
-                state.lastActionTime = now;
-                state.repeatCount = 1;
-                triggered = true;
-            }
-            else {
-                // Determine delay for this repeat
-                double delay = (state.repeatCount == 1) ? initialDelay : repeatRate;
-                // Acceleration: after some repeats, reduce delay and increase step size
-                if (state.repeatCount > 5) delay = repeatRate * 0.5;   // faster
-                if (state.repeatCount > 10) delay = repeatRate * 0.25; // even faster
-
-                if (now - state.lastActionTime >= delay) {
-                    state.lastActionTime = now;
-                    state.repeatCount++;
-                    triggered = true;
-                }
-            }
-            outHeld = true;
-        }
-        else {
-            // Button released – reset state
-            state.repeatCount = 0;
-            outHeld = false;
-        }
-
-        return triggered;
     }
 
 }

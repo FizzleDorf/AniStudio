@@ -498,4 +498,15 @@ namespace ECS {
         }
     }
 
+    void AudioPlaybackSystem::ClearCache(EntityID entity) {
+        {
+            std::lock_guard<std::mutex> lock(m_streamState->mutex);
+            m_streamState->tracks.erase(entity);
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_trackMutex);
+            m_tracks.erase(entity);
+        }
+    }
+
 }

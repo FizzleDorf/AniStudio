@@ -3,9 +3,12 @@
 #include "BaseMediaView.hpp"
 #include "AudioComponent.hpp"
 #include "AudioSystem.hpp"
+#include "MediaEngineSystem.hpp"
+#include "PlaybackStateComponent.hpp"
+#include "PlaybackEvents.hpp"
+#include "WaveformUtils.hpp"
 #include <string>
 #include <vector>
-#include <chrono>
 
 namespace GUI {
 
@@ -35,6 +38,9 @@ namespace GUI {
         bool IsHistoryVisible() const override;
         std::string GetSelectedFilePath() const override;
 
+        void SetPlaybackMode(ECS::PlaybackMode mode);
+        ECS::PlaybackMode GetPlaybackMode() const;
+
     protected:
         void RenderMenuBar() override;
         void RenderToolbar() override;
@@ -53,10 +59,21 @@ namespace GUI {
         void UpdateWaveformData();
         void PauseAllAudio();
 
-        std::vector<float> waveformData;
-        float playbackProgress = 0.0f;
+        void PlayAudio(ECS::EntityID entity);
+        void PauseAudio(ECS::EntityID entity);
+        void StopAudio(ECS::EntityID entity);
+        void SeekAudio(ECS::EntityID entity, double time);
+        void SetAudioVolume(ECS::EntityID entity, float volume);
+
+        WaveformData m_waveformData;
+        WaveformRenderer m_waveformRenderer;
+        float m_playbackProgress = 0.0f;
         float m_sliderValue = 0.0f;
-        bool showWaveform = true;
+        bool m_showWaveform = true;
+        bool m_autoplay = true;
+
+        ECS::PlaybackMode m_playbackMode = ECS::PlaybackMode::Cached;
+        std::shared_ptr<ECS::MediaEngineSystem> m_mediaEngine;
     };
 
-} // namespace GUI
+}

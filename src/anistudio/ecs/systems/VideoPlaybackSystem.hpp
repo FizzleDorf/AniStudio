@@ -48,6 +48,7 @@ namespace ECS {
         void Seek(EntityID entity, double time);
         void SetSpeed(EntityID entity, float speed);
         void SetVolume(EntityID entity, float volume);
+        void ClearCache(EntityID entity);
 
         bool IsPlaying(EntityID entity) const;
         bool IsPaused(EntityID entity) const;

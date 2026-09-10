@@ -7,7 +7,9 @@
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
 #include "AudioPlaybackSystem.hpp"
+#include "AudioSystem.hpp"
 #include "FilePathSystem.hpp"
+#include "PlaybackEvents.hpp"
 #include "ClipboardUtilities.hpp"
 #include "IconFonts.hpp"
 #include <algorithm>
@@ -20,6 +22,10 @@ namespace GUI {
     AudioView::AudioView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseMediaView(mgr, vm) {
         viewName = "AudioView";
+
+        WaveformRenderer::Config wfConfig;
+        wfConfig.height = 120.0f;
+        m_waveformRenderer.SetConfig(wfConfig);
     }
 
     void AudioView::Init() {
@@ -28,6 +34,101 @@ namespace GUI {
         if (!ImGui::GetCurrentContext()) {
             std::cerr << "[AudioView] No ImGui context in Init()!" << std::endl;
             return;
+        }
+
+        m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
+        if (!m_mediaEngine) {
+            m_entityManager.RegisterSystem<ECS::MediaEngineSystem>();
+            m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
+            m_mediaEngine->Start();
+        }
+
+        auto& events = ANI::Events::Ref();
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_LOAD,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onLoad(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onPlay(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onPause(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onStop(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSeek(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSetSpeed(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSetVolume(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onRemove(data);
+            });
+
+        events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE,
+            [this](const std::any& data) {
+                if (m_mediaEngine) m_mediaEngine->onSetMode(data);
+            });
+
+        std::cout << "[AudioView] Registered playback events" << std::endl;
+
+        if (m_mediaEngine) {
+            m_mediaEngine->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
+                if (entity != selectedEntityID) return;
+                if (state == ECS::PlaybackState::EndOfStream) {
+                    if (m_autoplay) {
+                        bool loopEnabled = false;
+                        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+                            auto& stateComp = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+                            loopEnabled = stateComp.looping;
+                        }
+
+                        if (loopEnabled) {
+                            SeekAudio(entity, 0.0);
+                            m_playbackProgress = 0.0f;
+                            m_sliderValue = 0.0f;
+                            PlayAudio(entity);
+                        }
+                        else if (mediaEntities.size() > 1) {
+                            int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
+                            if (newIndex != index) {
+                                index = newIndex;
+                                selectedEntityID = mediaEntities[index];
+                                SeekAudio(selectedEntityID, 0.0);
+                                m_playbackProgress = 0.0f;
+                                m_sliderValue = 0.0f;
+                                UpdateWaveformData();
+                                PlayAudio(selectedEntityID);
+                            }
+                        }
+                        else {
+                            SeekAudio(entity, 0.0);
+                            m_playbackProgress = 0.0f;
+                            m_sliderValue = 0.0f;
+                        }
+                    }
+                }
+                });
         }
 
         auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
@@ -70,9 +171,7 @@ namespace GUI {
         if (playbackSystem) {
             playbackSystem->RegisterPlaybackCallback([this](ECS::EntityID entity, const float* data,
                 size_t size, int channels) {
-                    if (entity == selectedEntityID) {
-                        // Handle audio data if needed
-                    }
+                    (void)entity; (void)data; (void)size; (void)channels;
                 });
         }
 
@@ -83,8 +182,6 @@ namespace GUI {
             selectedEntityID = mediaEntities[index];
             UpdateWaveformData();
         }
-
-        std::cout << "[AudioView] Initialization complete" << std::endl;
 
         ANI::Events::Ref().RegisterEventWithData("SelectMediaEntity", [this](const std::any& data) {
             try {
@@ -109,6 +206,27 @@ namespace GUI {
                 std::cerr << "[AudioView] SelectMediaEntity event error: " << e.what() << std::endl;
             }
             });
+
+        std::cout << "[AudioView] Initialization complete" << std::endl;
+    }
+
+    void AudioView::SetPlaybackMode(ECS::PlaybackMode mode) {
+        if (mode == m_playbackMode) return;
+        m_playbackMode = mode;
+
+        for (auto entity : mediaEntities) {
+            if (m_entityManager.IsEntityValid(entity) &&
+                m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+                state.mode = mode;
+                auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+                ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE, eventData);
+            }
+        }
+    }
+
+    ECS::PlaybackMode AudioView::GetPlaybackMode() const {
+        return m_playbackMode;
     }
 
     void AudioView::Update(float deltaT) {
@@ -126,7 +244,7 @@ namespace GUI {
             if (mediaEntities.empty()) {
                 selectedEntityID = 0;
                 index = 0;
-                waveformData.clear();
+                m_waveformData.Clear();
             }
             else if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
                 index = static_cast<int>(mediaEntities.size()) - 1;
@@ -138,32 +256,23 @@ namespace GUI {
                 if (it != mediaEntities.end()) {
                     index = static_cast<int>(std::distance(mediaEntities.begin(), it));
                 }
-                else {
-                    if (!mediaEntities.empty()) {
-                        index = static_cast<int>(mediaEntities.size()) - 1;
-                        selectedEntityID = mediaEntities[index];
-                        UpdateWaveformData();
-                    }
-                    else {
-                        selectedEntityID = 0;
-                        index = 0;
-                        waveformData.clear();
-                    }
+                else if (!mediaEntities.empty()) {
+                    index = static_cast<int>(mediaEntities.size()) - 1;
+                    selectedEntityID = mediaEntities[index];
+                    UpdateWaveformData();
                 }
             }
         }
 
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (playbackSystem) {
-                double duration = playbackSystem->GetDuration(selectedEntityID);
-                if (duration > 0.0) {
-                    double currentPos = playbackSystem->GetCurrentPosition(selectedEntityID);
-                    playbackProgress = static_cast<float>(currentPos / duration);
-                    if (playbackProgress < 0) playbackProgress = 0;
-                    if (playbackProgress > 1) playbackProgress = 1;
-                    m_sliderValue = playbackProgress;
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                if (state.duration > 0.0) {
+                    m_playbackProgress = static_cast<float>(state.currentTime / state.duration);
+                    if (m_playbackProgress < 0) m_playbackProgress = 0;
+                    if (m_playbackProgress > 1) m_playbackProgress = 1;
+                    m_sliderValue = m_playbackProgress;
                 }
             }
         }
@@ -281,7 +390,7 @@ namespace GUI {
                         selectedEntityID = mediaEntities[index];
                         UpdateWaveformData();
                         PauseAllAudio();
-                        playbackProgress = 0.0f;
+                        m_playbackProgress = 0.0f;
                         m_sliderValue = 0.0f;
                     }
                 }
@@ -293,14 +402,14 @@ namespace GUI {
                         selectedEntityID = mediaEntities[index];
                         UpdateWaveformData();
                         PauseAllAudio();
-                        playbackProgress = 0.0f;
+                        m_playbackProgress = 0.0f;
                         m_sliderValue = 0.0f;
                     }
                 }
                 ImGui::PopID();
                 ImGui::Separator();
                 ImGui::PushID(8);
-                if (ImGui::MenuItem((Icon::Music() + " Show Waveform").c_str(), nullptr, &showWaveform)) {}
+                if (ImGui::MenuItem((Icon::Music() + " Show Waveform").c_str(), nullptr, &m_showWaveform)) {}
                 ImGui::PopID();
                 ImGui::EndMenu();
             }
@@ -387,7 +496,7 @@ namespace GUI {
         ImGui::SameLine();
         ImGui::PushID(108);
         if (ImGui::Button((Icon::Music() + " Waveform").c_str())) {
-            showWaveform = !showWaveform;
+            m_showWaveform = !m_showWaveform;
         }
         ImGui::PopID();
 
@@ -402,14 +511,13 @@ namespace GUI {
 
                 ImGui::Text("File: %s", audioComp.fileName.c_str());
 
-                auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-                if (!playbackSystem) {
-                    ImGui::Text("AudioPlaybackSystem not available.");
-                    return;
+                double currentTime = 0.0;
+                double duration = 0.0;
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    currentTime = state.currentTime;
+                    duration = state.duration;
                 }
-
-                double duration = playbackSystem->GetDuration(selectedEntityID);
-                double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
 
                 int minutes = static_cast<int>(currentTime) / 60;
                 int seconds = static_cast<int>(currentTime) % 60;
@@ -423,13 +531,14 @@ namespace GUI {
                 ImGui::SameLine();
                 ImGui::Text("| Sample Rate: %d Hz", audioComp.sampleRate);
 
-                if (playbackSystem->IsPlaying(selectedEntityID)) {
+                bool isPlaying = false;
+                if (m_mediaEngine) {
+                    isPlaying = (m_mediaEngine->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
+                }
+
+                if (isPlaying) {
                     ImGui::SameLine();
                     ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "| %s", Icon::Play().c_str());
-                }
-                else if (playbackSystem->IsPaused(selectedEntityID)) {
-                    ImGui::SameLine();
-                    ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "| %s", Icon::Pause().c_str());
                 }
 
                 if (audioComp.looping) {
@@ -454,7 +563,7 @@ namespace GUI {
     }
 
     void AudioView::RenderControls() {
-        ImGui::Checkbox((Icon::Music() + " Show Waveform").c_str(), &showWaveform);
+        ImGui::Checkbox((Icon::Music() + " Show Waveform").c_str(), &m_showWaveform);
         ImGui::SameLine();
 
         if (GUI::Clipboard::HasEntity() || GUI::Clipboard::HasComponent() || GUI::Clipboard::HasProperty()) {
@@ -465,6 +574,52 @@ namespace GUI {
             else if (GUI::Clipboard::HasProperty()) label = "Property";
             ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Clipboard: %s", label.c_str());
         }
+
+        ImGui::SameLine();
+        ImGui::Text("Mode:");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Cached", m_playbackMode == ECS::PlaybackMode::Cached)) {
+            SetPlaybackMode(ECS::PlaybackMode::Cached);
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Streaming", m_playbackMode == ECS::PlaybackMode::Streaming)) {
+            SetPlaybackMode(ECS::PlaybackMode::Streaming);
+        }
+
+        bool loopState = false;
+        if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+            m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+            loopState = state.looping;
+        }
+
+        ImGui::SameLine();
+        ImGui::PushID(300);
+        if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
+            if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+                m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                state.looping = loopState;
+            }
+            if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
+                m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
+                auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
+                audioComp.looping = loopState;
+            }
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Loop current audio");
+        }
+        ImGui::PopID();
+
+        ImGui::SameLine();
+        ImGui::PushID(301);
+        if (ImGui::Checkbox((Icon::Play() + " Autoplay").c_str(), &m_autoplay)) {
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Auto play next audio when current ends");
+        }
+        ImGui::PopID();
     }
 
     void AudioView::RenderSelector() {
@@ -482,7 +637,7 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
-                playbackProgress = 0.0f;
+                m_playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
             }
         }
@@ -497,7 +652,7 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
-                playbackProgress = 0.0f;
+                m_playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
             }
         }
@@ -510,7 +665,7 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
-                playbackProgress = 0.0f;
+                m_playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
             }
         }
@@ -523,7 +678,7 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
-                playbackProgress = 0.0f;
+                m_playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
             }
         }
@@ -536,7 +691,7 @@ namespace GUI {
                 selectedEntityID = mediaEntities[index];
                 UpdateWaveformData();
                 PauseAllAudio();
-                playbackProgress = 0.0f;
+                m_playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
             }
         }
@@ -552,22 +707,24 @@ namespace GUI {
             return;
         }
 
-        if (showWaveform) {
+        if (m_showWaveform) {
             RenderWaveform();
         }
         else {
             const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
             ImGui::Text("Audio: %s", audioComp.fileName.c_str());
-            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (playbackSystem) {
-                double duration = playbackSystem->GetDuration(selectedEntityID);
-                double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
-                int minutes = static_cast<int>(currentTime) / 60;
-                int seconds = static_cast<int>(currentTime) % 60;
-                int totalMinutes = static_cast<int>(duration) / 60;
-                int totalSeconds = static_cast<int>(duration) % 60;
-                ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
+            double currentTime = 0.0;
+            double duration = 0.0;
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                currentTime = state.currentTime;
+                duration = state.duration;
             }
+            int minutes = static_cast<int>(currentTime) / 60;
+            int seconds = static_cast<int>(currentTime) % 60;
+            int totalMinutes = static_cast<int>(duration) / 60;
+            int totalSeconds = static_cast<int>(duration) % 60;
+            ImGui::Text("Time: %02d:%02d / %02d:%02d", minutes, seconds, totalMinutes, totalSeconds);
             HandleFileDropTarget();
             HandleEntityDropTarget();
         }
@@ -601,48 +758,32 @@ namespace GUI {
         }
 
         try {
-            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (!playbackSystem) {
-                ImGui::Text("AudioPlaybackSystem not available.");
-                return;
-            }
-
             auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
 
-            bool isPlaying = playbackSystem->IsPlaying(selectedEntityID);
-            bool isPaused = playbackSystem->IsPaused(selectedEntityID);
-
-            ImGui::PushID(300);
-            if (isPlaying && !isPaused) {
-                if (ImGui::Button((Icon::Pause() + " Pause").c_str())) {
-                    playbackSystem->Pause(selectedEntityID);
-                }
+            bool isPlaying = false;
+            if (m_mediaEngine) {
+                isPlaying = (m_mediaEngine->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
             }
-            else if (isPaused) {
-                if (ImGui::Button((Icon::Play() + " Resume").c_str())) {
-                    playbackSystem->Resume(selectedEntityID);
+
+            ImGui::PushID(400);
+            if (isPlaying) {
+                if (ImGui::Button((Icon::Pause() + " Pause").c_str())) {
+                    PauseAudio(selectedEntityID);
                 }
             }
             else {
                 if (ImGui::Button((Icon::Play() + " Play").c_str())) {
-                    playbackSystem->Play(selectedEntityID, audioComp.looping);
+                    PlayAudio(selectedEntityID);
                 }
             }
             ImGui::PopID();
 
             ImGui::SameLine();
-            ImGui::PushID(301);
+            ImGui::PushID(401);
             if (ImGui::Button(Icon::Stop().c_str())) {
-                playbackSystem->Stop(selectedEntityID);
-                playbackProgress = 0.0f;
+                StopAudio(selectedEntityID);
+                m_playbackProgress = 0.0f;
                 m_sliderValue = 0.0f;
-            }
-            ImGui::PopID();
-
-            ImGui::SameLine();
-            ImGui::PushID(302);
-            if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &audioComp.looping)) {
-                // Toggle loop
             }
             ImGui::PopID();
 
@@ -654,24 +795,30 @@ namespace GUI {
             ImGui::PushItemWidth(100.0f);
             if (ImGui::SliderFloat("##VolumeSlider", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
                 float newVolume = volumePercent / 100.0f;
-                playbackSystem->SetVolume(selectedEntityID, newVolume);
+                SetAudioVolume(selectedEntityID, newVolume);
                 audioComp.volume = newVolume;
             }
             ImGui::PopItemWidth();
 
-            double currentTime = playbackSystem->GetCurrentPosition(selectedEntityID);
-            double duration = playbackSystem->GetDuration(selectedEntityID);
+            double currentTime = 0.0;
+            double duration = 0.0;
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                currentTime = state.currentTime;
+                duration = state.duration;
+            }
 
-            m_sliderValue = playbackProgress;
+            m_sliderValue = m_playbackProgress;
 
             ImGui::Text("Progress:");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 100.0f);
 
-            ImGui::PushID(303);
+            ImGui::PushID(402);
             if (ImGui::SliderFloat("##SeekSlider", &m_sliderValue, 0.0f, 1.0f, "%.1f%%")) {
-                playbackSystem->Seek(selectedEntityID, m_sliderValue * duration);
-                playbackProgress = m_sliderValue;
+                double seekTime = m_sliderValue * duration;
+                SeekAudio(selectedEntityID, seekTime);
+                m_playbackProgress = m_sliderValue;
             }
             ImGui::PopID();
 
@@ -706,140 +853,61 @@ namespace GUI {
             return;
         }
 
-        if (waveformData.empty()) {
+        if (m_waveformData.IsEmpty()) {
             UpdateWaveformData();
         }
 
-        if (waveformData.empty()) {
+        if (m_waveformData.IsEmpty()) {
             ImGui::Text("No waveform data available.");
             return;
         }
 
-        ImVec2 avail = ImGui::GetContentRegionAvail();
-        float width = avail.x;
-        float height = std::min(avail.y * 0.6f, 200.0f);
-
-        if (width <= 0 || height <= 0) return;
-
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-
-        drawList->AddRectFilled(pos, ImVec2(pos.x + width, pos.y + height),
-            IM_COL32(20, 20, 30, 200));
-
-        float centerY = pos.y + height * 0.5f;
-        float halfHeight = height * 0.4f;
-
-        size_t totalSamples = waveformData.size();
-        size_t samplesToShow = static_cast<size_t>(width);
-
-        if (samplesToShow > totalSamples) samplesToShow = totalSamples;
-        if (samplesToShow == 0) return;
-
-        float step = static_cast<float>(totalSamples) / static_cast<float>(samplesToShow);
-        size_t currentSample = static_cast<size_t>(playbackProgress * totalSamples);
-
-        for (size_t i = 0; i < samplesToShow; ++i) {
-            size_t sampleIndex = static_cast<size_t>(i * step);
-            if (sampleIndex >= totalSamples) break;
-
-            float x = pos.x + (static_cast<float>(i) / static_cast<float>(samplesToShow)) * width;
-            float sample = waveformData[sampleIndex];
-            float heightPos = sample * halfHeight;
-
-            bool isBeforePlayhead = (sampleIndex <= currentSample);
-            ImU32 color = isBeforePlayhead ?
-                IM_COL32(100, 255, 100, 200) :
-                IM_COL32(100, 150, 255, 150);
-
-            drawList->AddLine(
-                ImVec2(x, centerY - heightPos),
-                ImVec2(x, centerY + heightPos),
-                color,
-                1.0f
-            );
+        double currentTime = 0.0;
+        double duration = 0.0;
+        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+            currentTime = state.currentTime;
+            duration = state.duration;
         }
 
-        if (playbackProgress > 0.0f && playbackProgress < 1.0f) {
-            float playheadX = pos.x + playbackProgress * width;
-            drawList->AddLine(
-                ImVec2(playheadX, pos.y),
-                ImVec2(playheadX, pos.y + height),
-                IM_COL32(255, 255, 255, 200),
-                2.0f
-            );
-        }
+        std::string currentStr = GUI::FormatTimecode(currentTime);
+        std::string totalStr = GUI::FormatTimecode(duration);
 
-        drawList->AddRect(pos, ImVec2(pos.x + width, pos.y + height),
-            IM_COL32(100, 100, 120, 255));
-
-        ImGui::InvisibleButton("WaveformClick", ImVec2(width, height));
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            float relativeX = (mousePos.x - pos.x) / width;
-            if (relativeX >= 0.0f && relativeX <= 1.0f) {
-                auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-                if (playbackSystem) {
-                    double duration = playbackSystem->GetDuration(selectedEntityID);
-                    playbackSystem->Seek(selectedEntityID, relativeX * duration);
-                    playbackProgress = relativeX;
-                    m_sliderValue = relativeX;
+        m_waveformRenderer.Render(m_waveformData, m_playbackProgress, currentStr, totalStr,
+            [this](double progress) {
+                double duration = 0.0;
+                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                    duration = state.duration;
                 }
-            }
-        }
-
-        ImGui::Dummy(ImVec2(0, height + 4));
+                SeekAudio(selectedEntityID, progress * duration);
+                m_playbackProgress = static_cast<float>(progress);
+                m_sliderValue = static_cast<float>(progress);
+            });
     }
 
     void AudioView::UpdateWaveformData() {
         if (!m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-            waveformData.clear();
+            m_waveformData.Clear();
             return;
         }
 
         const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
 
         if (audioComp.pcmData.empty()) {
-            waveformData.clear();
+            m_waveformData.Clear();
             return;
         }
 
-        const float* data = audioComp.pcmData.data();
-        size_t totalSamples = audioComp.pcmData.size() / audioComp.channels;
-        int channels = audioComp.channels;
-
-        size_t targetSize = 4096;
-        waveformData.resize(targetSize);
-
-        if (totalSamples > 0) {
-            float step = static_cast<float>(totalSamples) / static_cast<float>(targetSize);
-
-            for (size_t i = 0; i < targetSize; ++i) {
-                size_t startIdx = static_cast<size_t>(i * step);
-                size_t endIdx = static_cast<size_t>((i + 1) * step);
-                if (endIdx > totalSamples) endIdx = totalSamples;
-
-                float peak = 0.0f;
-                for (size_t j = startIdx; j < endIdx; ++j) {
-                    float sample = 0.0f;
-                    for (int c = 0; c < channels; ++c) {
-                        sample += std::abs(data[j * channels + c]);
-                    }
-                    sample /= channels;
-                    if (sample > peak) peak = sample;
-                }
-                waveformData[i] = peak;
-            }
-        }
+        m_waveformData.Update(audioComp.pcmData.data(), audioComp.pcmData.size(), audioComp.channels);
     }
 
     void AudioView::LoadMedia(const std::vector<std::string>& filePaths) {
-        std::cout << "[AudioView] Loading " << filePaths.size() << " audio files..." << std::endl;
+        std::cout << "[AudioView] LoadMedia called with " << filePaths.size() << " files" << std::endl;
 
-        auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-        if (!audioSystem) {
-            std::cerr << "[AudioView] Error: AudioSystem not found!" << std::endl;
+        if (!m_mediaEngine) {
+            std::cerr << "[AudioView] MediaEngineSystem is null!" << std::endl;
             return;
         }
 
@@ -847,11 +915,19 @@ namespace GUI {
             for (const auto& filePath : filePaths) {
                 if (filePath.empty()) continue;
 
-                ECS::EntityID entity = m_entityManager.AddNewEntity();
-                m_entityManager.AddComponent<ECS::AudioComponent>(entity);
-                audioSystem->SetAudio(entity, filePath);
+                ECS::EntityID entity = m_mediaEngine->LoadMedia(
+                    filePath, ECS::TrackType::Audio, m_playbackMode);
 
-                std::cout << "[AudioView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
+                if (entity == 0) {
+                    std::cerr << "[AudioView] Failed to load audio: " << filePath << std::endl;
+                    continue;
+                }
+
+                std::cout << "[AudioView] Created entity " << entity
+                    << " for: " << filePath << std::endl;
+
+                auto playEvent = ANI::PlaybackEvents::MakeEntityEvent(entity);
+                ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, playEvent);
             }
         }
         catch (const std::exception& e) {
@@ -946,47 +1022,31 @@ namespace GUI {
     void AudioView::RemoveSelectedMedia() {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
 
-        try {
-            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (playbackSystem) {
-                playbackSystem->Stop(selectedEntityID);
-            }
-
-            auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-            if (audioSystem) {
-                audioSystem->RemoveAudio(selectedEntityID);
-            }
-
-            selectedEntityID = 0;
-            index = 0;
-            waveformData.clear();
-            playbackProgress = 0.0f;
-            m_sliderValue = 0.0f;
-            RefreshEntities();
-
-            std::cout << "[AudioView] Audio removed successfully" << std::endl;
+        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+            state.isLoaded = false;
         }
-        catch (const std::exception& e) {
-            std::cerr << "[AudioView] Exception removing audio: " << e.what() << std::endl;
-        }
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(selectedEntityID);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE, eventData);
+
+        selectedEntityID = 0;
+        index = 0;
+        m_waveformData.Clear();
+        m_playbackProgress = 0.0f;
+        m_sliderValue = 0.0f;
+        RefreshEntities();
     }
 
     void AudioView::PauseAllAudio() {
-        try {
-            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (!playbackSystem) return;
-
-            for (auto entityID : mediaEntities) {
-                if (m_entityManager.IsEntityValid(entityID) &&
-                    m_entityManager.HasComponent<ECS::AudioComponent>(entityID)) {
-                    if (playbackSystem->IsPlaying(entityID)) {
-                        playbackSystem->Pause(entityID);
-                    }
+        if (!m_mediaEngine) return;
+        for (auto entityID : mediaEntities) {
+            if (m_entityManager.IsEntityValid(entityID) &&
+                m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entityID)) {
+                if (m_mediaEngine->GetState(entityID) == ECS::PlaybackState::Playing) {
+                    PauseAudio(entityID);
                 }
             }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[AudioView] Exception pausing audio: " << e.what() << std::endl;
         }
     }
 
@@ -998,7 +1058,7 @@ namespace GUI {
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
         if (selectedEntityID == 0) {
-            waveformData.clear();
+            m_waveformData.Clear();
         }
         else {
             UpdateWaveformData();
@@ -1019,6 +1079,65 @@ namespace GUI {
             return m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID).filePath;
         }
         return "";
+    }
+
+    void AudioView::PlayAudio(ECS::EntityID entity) {
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.state = ECS::PlaybackState::Playing;
+        state.isPaused = false;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, eventData);
+    }
+
+    void AudioView::PauseAudio(ECS::EntityID entity) {
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.state = ECS::PlaybackState::Paused;
+        state.isPaused = true;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE, eventData);
+    }
+
+    void AudioView::StopAudio(ECS::EntityID entity) {
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.state = ECS::PlaybackState::Stopped;
+        state.isPaused = false;
+        state.currentTime = 0.0;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP, eventData);
+    }
+
+    void AudioView::SeekAudio(ECS::EntityID entity, double time) {
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.currentTime = time;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK, eventData);
+    }
+
+    void AudioView::SetAudioVolume(ECS::EntityID entity, float volume) {
+        if (!m_entityManager.IsEntityValid(entity)) return;
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+
+        auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
+        state.volume = volume;
+
+        auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME, eventData);
     }
 
 }

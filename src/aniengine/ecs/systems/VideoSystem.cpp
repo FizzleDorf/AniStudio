@@ -291,8 +291,40 @@ namespace ECS {
             m_savePaths.erase(entity);
             std::lock_guard<std::recursive_mutex> lock2(m_loadMutex);
             m_loadingStatus.erase(entity);
+        }
+    }
 
-            mgr.DestroyEntity(entity);
+    void VideoSystem::ClearCache(EntityID entity) {
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_loadMutex);
+            m_loadingStatus.erase(entity);
+            m_pendingLoads.erase(
+                std::remove_if(m_pendingLoads.begin(), m_pendingLoads.end(),
+                    [entity](const LoadingTask& t) { return t.entityID == entity; }),
+                m_pendingLoads.end());
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(m_saveMutex);
+            m_saveFutures.erase(entity);
+            m_savePaths.erase(entity);
+        }
+
+        if (mgr.IsEntityValid(entity) && mgr.HasComponent<VideoComponent>(entity)) {
+            auto& vc = mgr.GetComponent<VideoComponent>(entity);
+            vc.fmtCtx.reset();
+            vc.codecCtx.reset();
+            vc.swsCtx.reset();
+            vc.frame.reset();
+            vc.pkt.reset();
+            vc.frameDataRGBA.clear();
+            vc.needsTextureUpdate = false;
+            vc.width = 0;
+            vc.height = 0;
+            vc.fps = 0.0;
+            vc.frameCount = 0;
+            vc.currentFrame = 0;
+            vc.currentTime = 0.0;
         }
     }
 
