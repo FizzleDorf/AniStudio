@@ -92,5 +92,8 @@ namespace ANI {
 
 		// File path service initialization
 		void InitializeCorePaths();
+
+		// Session logging
+		void OpenSessionLog();
 	};
 }

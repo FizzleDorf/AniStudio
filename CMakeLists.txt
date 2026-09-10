@@ -261,6 +261,10 @@ if(UNIX AND NOT APPLE)
     target_include_directories(AniEngineDeps INTERFACE ${X11_INCLUDE_DIR})
 endif()
 
+target_include_directories(AniEngineDeps INTERFACE
+    ${CMAKE_SOURCE_DIR}/src/aniengine/utils
+)
+
 target_compile_definitions(AniEngineDeps INTERFACE
     GLEW_STATIC
     USE_FFMPEG_AUDIO
@@ -302,6 +306,14 @@ target_compile_definitions(AniStudioDeps INTERFACE
 if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
     target_link_libraries(AniEngineCore PUBLIC AniEngineDeps)
+
+    # Optional: expose Log.hpp in the IDE target view (headers don't compile,
+    # but this makes it show up in Visual Studio / CLion / Xcode).
+    if(TARGET AniEngineCore)
+        target_sources(AniEngineCore PRIVATE
+            ${CMAKE_SOURCE_DIR}/src/aniengine/utils/Log.hpp
+        )
+    endif()
 endif()
 
 # ------------------------------------------------------------

@@ -29,6 +29,7 @@
 #include "GeneralSettingsComponent.hpp"
 #include "SettingsSystem.hpp"
 #include "ProjectManagerView.hpp"
+#include "Log.hpp"
 
 #ifdef _WIN32
 #include <GLFW/glfw3native.h>
@@ -40,6 +41,7 @@ namespace ANI {
         : initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
         m_isShuttingDown(false), m_showMissingPathsPopup(false) {
         std::cout << "[StudioCore] Constructor called" << std::endl;
+        ANI_LOG_INFO("StudioCore constructor (smoke test)");
     }
 
     StudioCore::~StudioCore() {
