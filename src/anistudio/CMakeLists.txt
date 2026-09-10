@@ -52,7 +52,7 @@ add_library(AniStudioCore ${ANISTUDIO_SOURCES})
 if(BUILD_SHARED_LIBS)
     target_compile_definitions(AniStudioCore PRIVATE BUILDING_ANISTUDIO)
     if(WIN32)
-        set_target_properties(AniStudioCore PROPERTIES 
+        set_target_properties(AniStudioCore PROPERTIES
             WINDOWS_EXPORT_ALL_SYMBOLS ON
             ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
             LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
@@ -72,8 +72,8 @@ endif()
 
 target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/ecs/components
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/ecs/systems
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/components>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ecs/systems>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/base>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui/project>
@@ -86,6 +86,7 @@ target_include_directories(AniStudioCore PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/utils/widgets>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/events>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/plugins>
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/net>
     "${EXTERNAL_DIR}/glm"
     "${EXTERNAL_DIR}/nlohmann_json"
     "${EXTERNAL_DIR}/imgui"
@@ -113,7 +114,7 @@ target_link_libraries(AniStudioCore PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(AniStudioCore PRIVATE ole32 shell32 uuid)
+    target_link_libraries(AniStudioCore PRIVATE ole32 shell32 uuid ws2_32)
 endif()
 
 if(LINUX)

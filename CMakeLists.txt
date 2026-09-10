@@ -15,6 +15,12 @@ option(BUILD_ANISTUDIO "Build AniStudio library" ON)
 option(BUILD_MAIN_APP "Build the main AniStudio application" ON)
 option(BUILD_SHARED_LIBS "Build shared libraries instead of static" ON)
 
+# ------------------------------------------------------------
+# Build mode: local | server | client | both
+# ------------------------------------------------------------
+set(BUILD_APP_MODE "local" CACHE STRING "Build mode: local | server | client | both")
+set_property(CACHE BUILD_APP_MODE PROPERTY STRINGS "local" "server" "client" "both")
+
 set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libraries" FORCE)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -170,12 +176,6 @@ find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 
-# ---------- Python & pybind11 (completely removed) ----------
-# The following lines are commented out to avoid Python dependency.
-# set(PYBIND11_FINDPYTHON ON)
-# find_package(pybind11 REQUIRED)
-# ---------------------------------------------------------
-
 find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
 find_package(portaudio CONFIG REQUIRED)
 find_package(samplerate REQUIRED)
@@ -186,6 +186,47 @@ if(UNIX AND NOT APPLE)
         message(FATAL_ERROR "X11 development libraries not found!")
     endif()
 endif()
+
+# ------------------------------------------------------------
+# Windows runtime DLL packages
+# ------------------------------------------------------------
+if(WIN32)
+    set(ANISTUDIO_RUNTIME_DLL_PACKAGES
+        glfw
+        ffmpeg
+        libaom-av1
+        dav1d
+        portaudio
+        samplerate
+        glew
+    )
+endif()
+
+function(anistudio_copy_runtime_dlls TARGET_NAME)
+    if(NOT WIN32)
+        return()
+    endif()
+
+    foreach(PKG ${ANISTUDIO_RUNTIME_DLL_PACKAGES})
+        foreach(CFG_SUFFIX "_RELEASE" "_DEBUG" "_RELWITHDEBINFO" "_MINSIZEREL" "")
+            if(DEFINED ${PKG}_BIN_DIRS${CFG_SUFFIX})
+                foreach(BIN_DIR ${${PKG}_BIN_DIRS${CFG_SUFFIX}})
+                    if(EXISTS "${BIN_DIR}")
+                        file(GLOB _pkg_dlls "${BIN_DIR}/*.dll")
+                        foreach(DLL_FILE ${_pkg_dlls})
+                            add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+                                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                                    "${DLL_FILE}"
+                                    "$<TARGET_FILE_DIR:${TARGET_NAME}>"
+                                COMMENT "Copying ${DLL_FILE} next to ${TARGET_NAME}"
+                            )
+                        endforeach()
+                    endif()
+                endforeach()
+            endif()
+        endforeach()
+    endforeach()
+endfunction()
 
 # ------------------------------------------------------------
 # Build targets
@@ -200,7 +241,6 @@ target_link_libraries(AniEngineDeps INTERFACE
     PNG::PNG
     GLEW::GLEW
     glfw
-    # pybind11::embed   <-- REMOVED
     ffmpeg::avcodec
     ffmpeg::avformat
     ffmpeg::avutil
@@ -264,15 +304,134 @@ if(BUILD_ANIENGINE)
     target_link_libraries(AniEngineCore PUBLIC AniEngineDeps)
 endif()
 
+# ------------------------------------------------------------
+# Net library (shared between server and client binaries)
+#
+# NOTE: this MUST come before add_subdirectory(src/anistudio) so
+# that AniStudioCore can link against AniNet.
+# ------------------------------------------------------------
+if(BUILD_ANIENGINE AND EXISTS "${CMAKE_SOURCE_DIR}/src/net")
+    add_library(AniNet STATIC
+        ${CMAKE_SOURCE_DIR}/src/net/SocketTransport.cpp
+        ${CMAKE_SOURCE_DIR}/src/net/NetClient.cpp
+        ${CMAKE_SOURCE_DIR}/src/net/ServerSession.cpp
+        ${CMAKE_SOURCE_DIR}/src/net/Discovery.cpp
+    )
+    target_include_directories(AniNet PUBLIC
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/net
+    )
+    target_link_libraries(AniNet PUBLIC AniEngineCore)
+
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(AniNet PUBLIC pthread dl rt)
+    endif()
+    if(WIN32)
+        target_link_libraries(AniNet PUBLIC ws2_32)
+    endif()
+
+    message(STATUS "AniNet library enabled (networked server/client support)")
+else()
+    message(STATUS "AniNet library disabled (src/net not found)")
+endif()
+
 if(BUILD_ANISTUDIO)
     add_subdirectory(src/anistudio)
     if(TARGET AniStudioCore)
-        target_link_libraries(AniStudioCore PUBLIC AniEngineCore AniStudioDeps)
+        target_link_libraries(AniStudioCore PUBLIC AniEngineCore AniStudioDeps AniNet)
     endif()
 endif()
 
-if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
+# ------------------------------------------------------------
+# Helper functions for client and server targets
+# ------------------------------------------------------------
+function(anistudio_configure_client_target TARGET_NAME)
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        WIN32_EXECUTABLE FALSE
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        PREFIX ""
+    )
+    target_compile_definitions(${TARGET_NAME} PRIVATE
+        GLEW_STATIC
+        IMGUI_DEFINE_MATH_OPERATORS
+    )
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/core
+        ${CMAKE_SOURCE_DIR}/src/timer
+        ${CMAKE_SOURCE_DIR}/src/net
+        ${CMAKE_SOURCE_DIR}/src/anistudio/gui
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(${TARGET_NAME} PRIVATE
+        AniStudioCore
+        AniNet
+        glfw
+        GLEW::GLEW
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_options(${TARGET_NAME} PRIVATE
+            -Wl,--no-as-needed
+            -Wl,--copy-dt-needed-entries
+            -Wl,-rpath-link,${CMAKE_BINARY_DIR}/lib
+        )
+        target_link_libraries(${TARGET_NAME} PRIVATE ${X11_LIBRARIES})
+    endif()
+    if(WIN32)
+        target_link_libraries(${TARGET_NAME} PRIVATE ws2_32)
+    endif()
+endfunction()
 
+function(anistudio_configure_server_target TARGET_NAME)
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        WIN32_EXECUTABLE FALSE
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        PREFIX ""
+    )
+    target_include_directories(${TARGET_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/net
+        ${CMAKE_SOURCE_DIR}/include
+    )
+    target_link_libraries(${TARGET_NAME} PRIVATE
+        AniStudioCore
+        AniEngineCore
+        AniNet
+    )
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(${TARGET_NAME} PRIVATE pthread dl rt)
+    endif()
+    if(WIN32)
+        target_link_libraries(${TARGET_NAME} PRIVATE ws2_32)
+    endif()
+endfunction()
+
+# ------------------------------------------------------------
+# Dispatch on BUILD_APP_MODE
+# ------------------------------------------------------------
+set(_build_local  FALSE)
+set(_build_server FALSE)
+set(_build_client FALSE)
+
+if(BUILD_APP_MODE STREQUAL "local")
+    set(_build_local TRUE)
+elseif(BUILD_APP_MODE STREQUAL "server")
+    set(_build_server TRUE)
+elseif(BUILD_APP_MODE STREQUAL "client")
+    set(_build_client TRUE)
+elseif(BUILD_APP_MODE STREQUAL "both")
+    set(_build_server TRUE)
+    set(_build_client TRUE)
+else()
+    message(FATAL_ERROR "Unknown BUILD_APP_MODE='${BUILD_APP_MODE}'. Use: local | server | client | both")
+endif()
+
+# ----- local binary -----
+if(_build_local AND BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
         ${CMAKE_SOURCE_DIR}/src/core/Core.cpp
@@ -320,34 +479,48 @@ if(BUILD_MAIN_APP AND BUILD_ANISTUDIO)
 
     target_precompile_headers(${PROJECT_NAME} PRIVATE src/pch.h)
 
-    if(WIN32)
-        set(ANISTUDIO_RUNTIME_DLL_PACKAGES glfw ffmpeg libaom-av1 dav1d portaudio samplerate)
+    anistudio_copy_runtime_dlls(${PROJECT_NAME})
 
-        foreach(PKG ${ANISTUDIO_RUNTIME_DLL_PACKAGES})
-            foreach(CFG_SUFFIX "_RELEASE" "_DEBUG" "_RELWITHDEBINFO" "_MINSIZEREL" "")
-                if(DEFINED ${PKG}_BIN_DIRS${CFG_SUFFIX})
-                    foreach(BIN_DIR ${${PKG}_BIN_DIRS${CFG_SUFFIX}})
-                        file(GLOB _pkg_dlls "${BIN_DIR}/*.dll")
-                        foreach(DLL_FILE ${_pkg_dlls})
-                            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                                COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                                    "${DLL_FILE}"
-                                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-                                COMMENT "Copying ${DLL_FILE} next to ${PROJECT_NAME}"
-                            )
-                        endforeach()
-                    endforeach()
-                endif()
-            endforeach()
-        endforeach()
+    message(STATUS "Main application will be built (local mode)")
+endif()
+
+# ----- server binary -----
+if(_build_server)
+    if(NOT TARGET AniNet)
+        message(FATAL_ERROR "BUILD_APP_MODE=${BUILD_APP_MODE} requires src/net (AniNet target)")
     endif()
 
-    message(STATUS "Main application will be built")
-    message(STATUS "  Links against: AniStudioCore (brings all engine and studio dependencies)")
+    add_executable(AniServer
+        ${CMAKE_SOURCE_DIR}/src/net/main_server.cpp
+    )
+    anistudio_configure_server_target(AniServer)
+    anistudio_copy_runtime_dlls(AniServer)
+
+    message(STATUS "Server binary will be built: AniServer")
+endif()
+
+# ----- client binary -----
+if(_build_client)
+    if(NOT TARGET AniNet)
+        message(FATAL_ERROR "BUILD_APP_MODE=${BUILD_APP_MODE} requires src/net (AniNet target)")
+    endif()
+    if(NOT TARGET AniStudioCore)
+        message(FATAL_ERROR "BUILD_APP_MODE=${BUILD_APP_MODE} requires AniStudioCore (enable BUILD_ANISTUDIO)")
+    endif()
+
+    add_executable(AniClient
+        ${CMAKE_SOURCE_DIR}/src/net/main_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/core/Core.cpp
+        ${CMAKE_SOURCE_DIR}/src/timer/Timer.cpp
+    )
+    anistudio_configure_client_target(AniClient)
+    anistudio_copy_runtime_dlls(AniClient)
+
+    message(STATUS "Client binary will be built: AniClient")
 endif()
 
 # ------------------------------------------------------------
-# Plugin helper (unchanged)
+# Plugin helper
 # ------------------------------------------------------------
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
@@ -399,13 +572,25 @@ function(add_external_plugin TARGET_NAME)
 endfunction()
 
 # ------------------------------------------------------------
-# Installation (unchanged)
+# Installation
 # ------------------------------------------------------------
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
 
-    if(BUILD_MAIN_APP AND TARGET ${PROJECT_NAME})
+    if(_build_local AND TARGET ${PROJECT_NAME})
         install(TARGETS ${PROJECT_NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
+
+    if(_build_server AND TARGET AniServer)
+        install(TARGETS AniServer
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        )
+    endif()
+
+    if(_build_client AND TARGET AniClient)
+        install(TARGETS AniClient
             RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         )
     endif()
@@ -481,12 +666,27 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     install(DIRECTORY DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins)
 endif()
 
+# ------------------------------------------------------------
+# Summary
+# ------------------------------------------------------------
 message(STATUS "")
 message(STATUS "AniStudio build configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Build app mode: ${BUILD_APP_MODE}")
 message(STATUS "  Shared libraries: ${BUILD_SHARED_LIBS}")
 message(STATUS "  Runtime library: ${CMAKE_MSVC_RUNTIME_LIBRARY}")
+message(STATUS "")
+message(STATUS "Targets to build:")
+if(_build_local)
+    message(STATUS "  - ${PROJECT_NAME} (local desktop app)")
+endif()
+if(_build_server)
+    message(STATUS "  - AniServer (headless server)")
+endif()
+if(_build_client)
+    message(STATUS "  - AniClient (networked client)")
+endif()
 message(STATUS "")
 message(STATUS "Output directories:")
 message(STATUS "  Binaries: ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")

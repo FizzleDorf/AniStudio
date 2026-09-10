@@ -1,5 +1,8 @@
 #include "DebugView.hpp"
 #include "Events.hpp"
+#include "NetClient.hpp"
+
+#include <imgui.h>
 
 namespace GUI {
 
@@ -13,8 +16,80 @@ namespace GUI {
     }
 
     void DebugView::Render() {
+        if (m_netClient) {
+            RenderClientPanel();
+            return;
+        }
+
         RenderEntityPanel();
         RenderSystemPanel();
+    }
+
+    void DebugView::RenderClientPanel() {
+        auto& client = *m_netClient;
+
+        if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen)) {
+            ImGui::TextColored(ImVec4(0.5f, 0.9f, 1.0f, 1.0f), "NETWORKED CLIENT");
+            ImGui::Separator();
+
+            uint64_t localSession = 0;
+            uint64_t projectID = 0;
+            size_t   entityCount = 0;
+            std::vector<std::pair<uint64_t, std::pair<float, float>>> presences;
+
+            {
+                std::lock_guard<std::mutex> lk(client.Mirror().mtx);
+                localSession = client.Mirror().localSessionID;
+                projectID = client.Mirror().projectID;
+                entityCount = client.Mirror().components.size();
+                presences.reserve(client.Mirror().presences.size());
+                for (auto& [sid, p] : client.Mirror().presences) {
+                    presences.emplace_back(sid, std::make_pair(p.x, p.y));
+                }
+            }
+
+            ImGui::Text("Local session: %llu", (unsigned long long)localSession);
+            ImGui::Text("Project:       %llu", (unsigned long long)projectID);
+            ImGui::Text("Entities seen: %zu", entityCount);
+
+            ImGui::Separator();
+            ImGui::Text("Presences (%zu):", presences.size());
+
+            if (ImGui::BeginChild("PresenceList", ImVec2(0, 120), true)) {
+                for (auto& [sid, pos] : presences) {
+                    const bool isSelf = (sid == localSession);
+                    if (isSelf) {
+                        ImGui::TextColored(ImVec4(0.5f, 1.0f, 0.5f, 1.0f),
+                            "Session %llu (you)  ->  (%.1f, %.1f)",
+                            (unsigned long long)sid, pos.first, pos.second);
+                    }
+                    else {
+                        ImGui::Text("Session %llu        ->  (%.1f, %.1f)",
+                            (unsigned long long)sid, pos.first, pos.second);
+                    }
+                }
+            }
+            ImGui::EndChild();
+
+            ImGui::Separator();
+            ImGui::Text("Send cursor update:");
+
+            static float x = 0.f, y = 0.f;
+            bool moved = false;
+            moved |= ImGui::SliderFloat("X", &x, 0.f, 1920.f);
+            moved |= ImGui::SliderFloat("Y", &y, 0.f, 1080.f);
+            if (moved) {
+                client.SendMoveCursor(x, y);
+            }
+        }
+        ImGui::End();
+
+        if (!windowOpen) {
+            std::unordered_map<std::string, std::any> eventData;
+            eventData["workspaceID"] = GetID();
+            eventData["viewTypeName"] = viewName;
+            ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
+        }
     }
 
     void DebugView::RenderEntityPanel() {

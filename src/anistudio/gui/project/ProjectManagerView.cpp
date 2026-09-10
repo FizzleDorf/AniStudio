@@ -1,6 +1,7 @@
 #include "ProjectManagerView.hpp"
 #include "ProjectSystem.hpp"
 #include "SettingsView.hpp"
+#include "Events.hpp"
 #include <imgui.h>
 #include <filesystem>
 #include <iostream>
@@ -37,6 +38,14 @@ namespace GUI {
             return;
         }
 
+        if (m_networkStartup.IsActive()) {
+            NetworkStartupResult result;
+            if (m_networkStartup.Render(m_projectSystem, result)) {
+                if (onNetworkReady) onNetworkReady(result);
+            }
+            return;
+        }
+
         if (autoLoadState.showPopup) {
             RenderAutoLoadPopup();
             if (autoLoadState.showPopup) {
@@ -49,7 +58,7 @@ namespace GUI {
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(600, 500), ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(ImVec2(600, 540), ImGuiCond_Appearing);
 
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar;
@@ -61,10 +70,28 @@ namespace GUI {
             ImGui::Text("Media Creation & AI Generation Tool");
             ImGui::Separator();
 
+            if (m_networkMode) {
+                ImGui::TextColored(ImVec4(0.5f, 0.9f, 1.0f, 1.0f),
+                    "Networked client mode - host or join a project");
+                ImGui::Spacing();
+
+                if (ImGui::Button("Host Project...", ImVec2(-FLT_MIN, 48))) {
+                    m_networkStartup.Begin(true);
+                }
+                if (ImGui::Button("Join Server...", ImVec2(-FLT_MIN, 48))) {
+                    m_networkStartup.Begin(false);
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::TextDisabled("Or work locally (no network):");
+                ImGui::Spacing();
+            }
+
             ImGui::Text("Recent Projects:");
             auto recentProjects = m_projectSystem.GetRecentProjects();
 
-            if (ImGui::BeginChild("RecentProjectsList", ImVec2(0, 180), true)) {
+            if (ImGui::BeginChild("RecentProjectsList", ImVec2(0, 150), true)) {
                 if (recentProjects.empty()) {
                     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
                     ImGui::Text("No recent projects found");
@@ -116,13 +143,8 @@ namespace GUI {
             }
 
             if (ImGui::Button("Settings", ImVec2(-FLT_MIN, buttonHeight))) {
-                if (m_studioCore) {
-                    m_studioCore->GetSettingsView().Show();
-                    std::cout << "[ProjectManagerView] Opening Settings dialog" << std::endl;
-                }
-                else {
-                    std::cerr << "[ProjectManagerView] ERROR: Cannot open settings - StudioCore is null!" << std::endl;
-                }
+                ANI::Events::Ref().QueueEvent("OpenSettings");
+                std::cout << "[ProjectManagerView] Requested Settings" << std::endl;
             }
 
             if (ImGui::Button("Exit", ImVec2(-FLT_MIN, buttonHeight))) {

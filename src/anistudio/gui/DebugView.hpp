@@ -6,6 +6,8 @@
 
 using namespace ECS;
 
+namespace Net { class NetClient; }
+
 namespace GUI {
 
     class DebugView : public BaseView {
@@ -19,20 +21,27 @@ namespace GUI {
         }
 
         DebugView(ECS::EntityManager& mgr, ViewManager& vm)
-            : BaseView(mgr, vm) { 
-            viewName = "DebugView"; 
+            : BaseView(mgr, vm) {
+            viewName = "DebugView";
         }
         ~DebugView() = default;
+
         void Init();
         void Render();
         void RenderEntityPanel();
         void RenderSystemPanel();
+
+        void SetNetClient(Net::NetClient* client) { m_netClient = client; }
 
     private:
         std::vector<EntityID> entities;
         EntityID selectedEntity = -1;
         int entityIndex = 0;
 
+        Net::NetClient* m_netClient = nullptr;
+
         void RefreshEntities();
+        void RenderClientPanel();
     };
+
 } // namespace GUI

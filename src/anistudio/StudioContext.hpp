@@ -5,57 +5,63 @@
 namespace GUI { class ViewManager; }
 namespace Plugins { class StudioPluginManager; }
 namespace Utils { class WindowState; }
+namespace Net { class NetClient; }
 
 namespace ANI {
 
-	class StudioContext : public EngineContext {
-	public:
-		std::shared_ptr<GUI::ViewManager> viewManager;
-		std::shared_ptr<Utils::WindowState> windowState;
-		std::shared_ptr<Plugins::StudioPluginManager> studioPluginManager;
+    class StudioContext : public EngineContext {
+    public:
+        enum class Mode { Local, Client, Server };
 
-		// Window/UI settings
-		void* windowHandle = nullptr;
-		void* imguiContext = nullptr;
+        std::shared_ptr<GUI::ViewManager> viewManager;
+        std::shared_ptr<Utils::WindowState> windowState;
+        std::shared_ptr<Plugins::StudioPluginManager> studioPluginManager;
 
-		// UI state
-		bool showProjectManagerView = true;
+        Mode             mode = Mode::Local;
+        Net::NetClient* netClient = nullptr;
+        bool             networkConnected = false;
 
-		StudioContext() = default;
+        void* windowHandle = nullptr;
+        void* imguiContext = nullptr;
 
-		bool isValid() const {
-			return EngineContext::isValid() &&
-				viewManager &&
-				windowState;
-		}
+        bool showProjectManagerView = true;
 
-		// Helper factory
-		static std::shared_ptr<StudioContext> Create() {
-			auto context = std::make_shared<StudioContext>();
-			context->entityManager = std::make_shared<ECS::EntityManager>();
-			context->viewManager = std::make_shared<GUI::ViewManager>();
-			context->windowState = std::make_shared<Utils::WindowState>();
-			return context;
-		}
+        StudioContext() = default;
 
-		static std::shared_ptr<StudioContext> FromEngine(
-			std::shared_ptr<EngineContext> engineContext) {
+        bool isValid() const {
+            return EngineContext::isValid() && viewManager && windowState;
+        }
 
-			if (!engineContext) return nullptr;
+        bool isLocal()  const { return mode == Mode::Local; }
+        bool isClient() const { return mode == Mode::Client; }
+        bool isServer() const { return mode == Mode::Server; }
+        bool isRemote() const { return mode == Mode::Client; }
 
-			auto studioContext = std::make_shared<StudioContext>();
+        static std::shared_ptr<StudioContext> Create() {
+            auto context = std::make_shared<StudioContext>();
+            context->entityManager = std::make_shared<ECS::EntityManager>();
+            context->viewManager = std::make_shared<GUI::ViewManager>();
+            context->windowState = std::make_shared<Utils::WindowState>();
+            return context;
+        }
 
-			studioContext->entityManager = engineContext->entityManager;
-			studioContext->pluginManager = engineContext->pluginManager;
-			studioContext->pluginDirectory = engineContext->pluginDirectory;
-			studioContext->hotReloadEnabled = engineContext->hotReloadEnabled;
+        static std::shared_ptr<StudioContext> FromEngine(
+            std::shared_ptr<EngineContext> engineContext) {
 
-			// Initialize studio-specific members
-			studioContext->viewManager = std::make_shared<GUI::ViewManager>();
-			studioContext->windowState = std::make_shared<Utils::WindowState>();
+            if (!engineContext) return nullptr;
 
-			return studioContext;
-		}
-	};
+            auto studioContext = std::make_shared<StudioContext>();
+
+            studioContext->entityManager = engineContext->entityManager;
+            studioContext->pluginManager = engineContext->pluginManager;
+            studioContext->pluginDirectory = engineContext->pluginDirectory;
+            studioContext->hotReloadEnabled = engineContext->hotReloadEnabled;
+
+            studioContext->viewManager = std::make_shared<GUI::ViewManager>();
+            studioContext->windowState = std::make_shared<Utils::WindowState>();
+
+            return studioContext;
+        }
+    };
 
 } // namespace ANI

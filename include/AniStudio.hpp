@@ -46,22 +46,24 @@ namespace GUI {
     class SettingsView;
 }
 
+namespace Net { class NetClient; }
+
 namespace ANI {
 
     class ANI_STUDIO_API StudioCore {
     public:
-        // Constructor/Destructor
         StudioCore();
         ~StudioCore();
 
-        // Core lifecycle
         bool Initialize();
+        bool InitializeCoreOnly();
+        bool InitializeGUI();
+
         void CompleteInitialization();
         void Shutdown();
         void Update(float deltaTime);
         void Render();
 
-        // Manager access via context
         ECS::EntityManager& GetEntityManager() {
             if (!studioContext || !studioContext->entityManager) {
                 throw std::runtime_error("StudioContext or EntityManager not initialized");
@@ -84,16 +86,21 @@ namespace ANI {
             return *system;
         }
 
-        // Settings access
+        GUI::ProjectManagerView& GetProjectManagerView();
         GUI::SettingsView& GetSettingsView();
 
-        // Context access
         std::shared_ptr<StudioContext> GetStudioContext() const { return studioContext; }
 
-        // Create StudioCore with existing context
+        void SetMode(StudioContext::Mode m) {
+            if (studioContext) studioContext->mode = m;
+        }
+        StudioContext::Mode GetMode() const {
+            return studioContext ? studioContext->mode : StudioContext::Mode::Local;
+        }
+        void SetNetworkClientMode(bool on);
+
         static std::unique_ptr<StudioCore> CreateWithContext(std::shared_ptr<StudioContext> existingContext);
 
-        // Studio state
         bool IsRunning() const { return running && engineCore.IsRunning(); }
         void SetRunning(bool isRunning) {
             running = isRunning;
@@ -102,17 +109,14 @@ namespace ANI {
 
         bool IsInitialized() const { return initialized; }
 
-        // Window management
         void SetWindowHandle(void* window);
         void SetImGuiContext(void* context);
         void SetCoreCallbacks();
         void SetCoreEvents();
 
-        // Workspace management
         void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
         GUI::WorkspaceID GetActiveWorkspace() const;
 
-        // Project event handlers
         void OnProjectLoaded(const std::string& projectPath);
         void OnProjectCreated(const std::string& projectPath);
         void OnProjectClosed();
@@ -125,37 +129,30 @@ namespace ANI {
 
         std::shared_ptr<StudioContext> studioContext;
 
-        // Pointers to the imgui and glfw instances
         void* windowHandle;
         void* imguiContext;
 
-        // Core systems
         EngineCore engineCore;
 
-        // Standalone views (lazy initialized)
         std::unique_ptr<GUI::MenuBar> m_menuBar;
         std::unique_ptr<GUI::ProjectManagerView> m_projectManagerView;
         std::unique_ptr<GUI::SettingsView> m_settingsView;
         bool m_showProjectManagerView = false;
 
-        // Missing paths storage
         std::vector<std::string> m_missingKeys;
 
-        // Use existing WindowState utility
         Utils::WindowState m_windowState;
 
-        // Internal setup
         void RegisterCoreViews();
         void SetupProjectCallbacks();
         void InitializeStudioPlugins();
+        void RegisterCoreComponentsAndSystems();
 
-        // Window state management
         void InitializeWindowState();
         void SyncWindowStateFromGLFW();
         void ApplyWindowStateToGLFW();
         std::string GetDefaultWindowStatePath() const;
 
-        // File path helpers
         void EnsureCorePaths();
         std::string GetDefaultPathForKey(const std::string& key) const;
     };

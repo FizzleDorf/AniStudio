@@ -28,6 +28,7 @@
 #include "TextEditorFontUtil.hpp"
 #include "GeneralSettingsComponent.hpp"
 #include "SettingsSystem.hpp"
+#include "ProjectManagerView.hpp"
 
 #ifdef _WIN32
 #include <GLFW/glfw3native.h>
@@ -45,6 +46,160 @@ namespace ANI {
         if (initialized) {
             Shutdown();
         }
+    }
+
+    void StudioCore::RegisterCoreComponentsAndSystems() {
+        auto& entityMgr = GetEntityManager();
+
+        entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
+        entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
+        entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
+        entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
+        entityMgr.RegisterComponent<ECS::TextureComponent>("TextureComponent");
+        entityMgr.RegisterComponent<ECS::PlaybackStateComponent>("PlaybackState");
+
+        entityMgr.RegisterSystem<TextureSystem>();
+        entityMgr.RegisterSystem<ECS::SettingsSystem>();
+        entityMgr.RegisterSystem<ProjectSystem>();
+        entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
+        entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
+        entityMgr.RegisterSystem<ECS::VideoAudioSystem>();
+        entityMgr.RegisterSystem<ECS::AVStreamingSystem>();
+        entityMgr.RegisterSystem<ECS::MediaEngineSystem>();
+
+        auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
+        if (projectSystem) {
+            projectSystem->SetWindowHandle(windowHandle);
+            if (studioContext && studioContext->viewManager) {
+                projectSystem->SetViewManager(studioContext->viewManager.get());
+            }
+
+            auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
+            if (fileSys) {
+                std::string defaultPath = fileSys->GetPath("DefaultProject");
+                if (!defaultPath.empty()) {
+                    projectSystem->SetDefaultProjectPath(defaultPath);
+                }
+            }
+        }
+    }
+
+    bool StudioCore::InitializeCoreOnly() {
+        if (initialized) {
+            std::cerr << "[StudioCore] Already initialized!" << std::endl;
+            return false;
+        }
+
+        try {
+            std::cout << "[StudioCore] =========================================" << std::endl;
+            std::cout << "[StudioCore] InitializeCoreOnly (server / headless)..." << std::endl;
+
+            std::cout << "[StudioCore] Initializing EngineCore..." << std::endl;
+            if (!engineCore.Initialize()) {
+                std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
+                return false;
+            }
+
+            auto engineContext = engineCore.GetEngineContext();
+            if (!engineContext) {
+                std::cerr << "[StudioCore] Failed to get EngineContext from EngineCore!" << std::endl;
+                return false;
+            }
+
+            studioContext = StudioContext::FromEngine(engineContext);
+            if (!studioContext || !studioContext->isValid()) {
+                std::cerr << "[StudioCore] Failed to create valid StudioContext!" << std::endl;
+                return false;
+            }
+            studioContext->mode = StudioContext::Mode::Server;
+
+            studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
+
+            RegisterCoreComponentsAndSystems();
+
+            SetupProjectCallbacks();
+            SetCoreCallbacks();
+            SetCoreEvents();
+
+            initialized = true;
+            running = true;
+
+            std::cout << "[StudioCore] Core-only initialization complete (no GUI)." << std::endl;
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[StudioCore] Core-only initialization failed: " << e.what() << std::endl;
+            Shutdown();
+            return false;
+        }
+    }
+
+    bool StudioCore::InitializeGUI() {
+        if (!initialized || !studioContext) {
+            std::cerr << "[StudioCore] InitializeGUI called before InitializeCoreOnly!" << std::endl;
+            return false;
+        }
+        if (studioContext->isServer()) {
+            std::cerr << "[StudioCore] InitializeGUI skipped in Server mode." << std::endl;
+            return true;
+        }
+
+        try {
+            std::cout << "[StudioCore] InitializeGUI..." << std::endl;
+
+            auto& entityMgr = GetEntityManager();
+
+            auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
+            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, this);
+
+            auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
+            std::string defaultProjectPath;
+            if (fileSys) {
+                defaultProjectPath = fileSys->GetPath("DefaultProject");
+            }
+
+            if (defaultProjectPath.empty()) {
+                std::string exeDir = ".";
+                std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
+                defaultProjectPath = (basePath / "projects").string();
+                if (fileSys) {
+                    fileSys->SetPath("DefaultProject", defaultProjectPath);
+                }
+                std::cout << "[StudioCore] Set DefaultProject to: " << defaultProjectPath << std::endl;
+            }
+
+            if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
+                std::filesystem::create_directories(defaultProjectPath);
+            }
+
+            RegisterCoreViews();
+
+            std::cout << "[StudioCore] GUI initialization complete." << std::endl;
+            return true;
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[StudioCore] InitializeGUI failed: " << e.what() << std::endl;
+            return false;
+        }
+    }
+
+    bool StudioCore::Initialize() {
+        if (!InitializeCoreOnly()) return false;
+
+        studioContext->mode = StudioContext::Mode::Local;
+
+        if (!InitializeGUI()) return false;
+        return true;
+    }
+
+    void StudioCore::SetNetworkClientMode(bool on) {
+        if (m_projectManagerView) {
+            m_projectManagerView->SetNetworkMode(on);
+        }
+    }
+
+    GUI::ProjectManagerView& StudioCore::GetProjectManagerView() {
+        return *m_projectManagerView;
     }
 
     GUI::SettingsView& StudioCore::GetSettingsView() {
@@ -338,113 +493,6 @@ namespace ANI {
             << " at (" << m_windowState.GetPosX() << "," << m_windowState.GetPosY() << ")" << std::endl;
     }
 
-    bool StudioCore::Initialize() {
-        if (initialized) {
-            std::cerr << "[StudioCore] Already initialized!" << std::endl;
-            return false;
-        }
-
-        try {
-            std::cout << "[StudioCore] =========================================" << std::endl;
-            std::cout << "[StudioCore] Initializing StudioCore..." << std::endl;
-
-            std::cout << "[StudioCore] Initializing EngineCore..." << std::endl;
-            if (!engineCore.Initialize()) {
-                std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
-                return false;
-            }
-
-            auto engineContext = engineCore.GetEngineContext();
-            if (!engineContext) {
-                std::cerr << "[StudioCore] Failed to get EngineContext from EngineCore!" << std::endl;
-                return false;
-            }
-
-            studioContext = StudioContext::FromEngine(engineContext);
-            if (!studioContext || !studioContext->isValid()) {
-                std::cerr << "[StudioCore] Failed to create valid StudioContext!" << std::endl;
-                return false;
-            }
-
-            studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
-
-            auto& entityMgr = GetEntityManager();
-
-            // Register components
-            entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
-            entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
-            entityMgr.RegisterComponent<ECS::FontSettingsComponent>("FontSettings");
-            entityMgr.RegisterComponent<ECS::TextEditorSettingsComponent>("TextEditorSettings");
-            entityMgr.RegisterComponent<ECS::TextureComponent>("TextureComponent");
-            entityMgr.RegisterComponent<ECS::PlaybackStateComponent>("PlaybackState");
-
-            // Register systems
-            entityMgr.RegisterSystem<TextureSystem>();
-            entityMgr.RegisterSystem<ECS::SettingsSystem>();
-            entityMgr.RegisterSystem<ProjectSystem>();
-            entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
-            entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
-            entityMgr.RegisterSystem<ECS::VideoAudioSystem>();
-            entityMgr.RegisterSystem<ECS::AVStreamingSystem>();
-            entityMgr.RegisterSystem<ECS::MediaEngineSystem>();
-
-            auto projectSystem = entityMgr.GetSystem<ProjectSystem>();
-            if (projectSystem) {
-                projectSystem->SetWindowHandle(windowHandle);
-                if (studioContext && studioContext->viewManager) {
-                    projectSystem->SetViewManager(studioContext->viewManager.get());
-                }
-
-                auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
-                if (fileSys) {
-                    std::string defaultPath = fileSys->GetPath("DefaultProject");
-                    if (!defaultPath.empty()) {
-                        projectSystem->SetDefaultProjectPath(defaultPath);
-                    }
-                }
-            }
-
-            m_projectManagerView = std::make_unique<GUI::ProjectManagerView>(*projectSystem, this);
-
-            auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
-            std::string defaultProjectPath;
-            if (fileSys) {
-                defaultProjectPath = fileSys->GetPath("DefaultProject");
-            }
-
-            if (defaultProjectPath.empty()) {
-                std::string exeDir = ".";
-                if (!exeDir.empty()) {
-                    std::filesystem::path basePath = std::filesystem::path(exeDir).parent_path();
-                    defaultProjectPath = (basePath / "projects").string();
-                    if (fileSys) {
-                        fileSys->SetPath("DefaultProject", defaultProjectPath);
-                    }
-                    std::cout << "[StudioCore] Set DefaultProject to: " << defaultProjectPath << std::endl;
-                }
-            }
-
-            if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
-                std::filesystem::create_directories(defaultProjectPath);
-            }
-
-            SetupProjectCallbacks();
-            SetCoreCallbacks();
-            SetCoreEvents();
-
-            initialized = true;
-            running = true;
-
-            std::cout << "[StudioCore] StudioCore initialized successfully!" << std::endl;
-            return true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[StudioCore] Initialization failed: " << e.what() << std::endl;
-            Shutdown();
-            return false;
-        }
-    }
-
     std::unique_ptr<StudioCore> StudioCore::CreateWithContext(std::shared_ptr<StudioContext> existingContext) {
         if (!existingContext || !existingContext->isValid()) {
             std::cerr << "[StudioCore] Invalid context provided to CreateWithContext!" << std::endl;
@@ -515,6 +563,8 @@ namespace ANI {
     void StudioCore::CompleteInitialization() {
         static bool completedInitialization = false;
         if (completedInitialization) return;
+
+        if (studioContext && studioContext->isServer()) return;
 
         std::cout << "[StudioCore] Completing full initialization..." << std::endl;
 
@@ -596,8 +646,11 @@ namespace ANI {
 
         Utils::CheckMissingPaths(fileSys.get());
 
-        RegisterCoreViews();
-        std::cout << "[StudioCore] Core views registered" << std::endl;
+        if (studioContext->viewManager &&
+            studioContext->viewManager->GetRegisteredViews().empty()) {
+            RegisterCoreViews();
+            std::cout << "[StudioCore] Core views registered (deferred)" << std::endl;
+        }
 
         auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
         if (settingsSystem) {
@@ -641,12 +694,16 @@ namespace ANI {
             }
         }
 
-        m_projectManagerView->Init();
-        std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;
+        if (m_projectManagerView) {
+            m_projectManagerView->Init();
+            std::cout << "[StudioCore] ProjectManagerView initialized" << std::endl;
+        }
 
         auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
-        m_menuBar = std::make_unique<GUI::MenuBar>(*projectSystem, *studioContext->viewManager, *this);
-        std::cout << "[StudioCore] MenuBar created" << std::endl;
+        if (studioContext && studioContext->viewManager) {
+            m_menuBar = std::make_unique<GUI::MenuBar>(*projectSystem, *studioContext->viewManager, *this);
+            std::cout << "[StudioCore] MenuBar created" << std::endl;
+        }
 
         if (projectSystem) {
             m_showProjectManagerView = projectSystem->ShouldShowStartup();
@@ -743,11 +800,13 @@ namespace ANI {
 
         m_showProjectManagerView = true;
 
-        SyncWindowStateFromGLFW();
-        std::string defaultPath = GetDefaultWindowStatePath();
-        std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
-        m_windowState.SaveToFile(defaultPath);
-        std::cout << "[StudioCore] Saved current window state as default" << std::endl;
+        if (windowHandle) {
+            SyncWindowStateFromGLFW();
+            std::string defaultPath = GetDefaultWindowStatePath();
+            std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+            m_windowState.SaveToFile(defaultPath);
+            std::cout << "[StudioCore] Saved current window state as default" << std::endl;
+        }
 
         Utils::ImGuiStateUtils::OnProjectClosed();
 
@@ -775,30 +834,32 @@ namespace ANI {
         m_isShuttingDown = true;
 
         try {
-            auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
-            if (projectSystem && projectSystem->IsProjectOpen()) {
-                std::cout << "[StudioCore] Saving open project BEFORE shutdown: "
-                    << projectSystem->GetCurrentProjectName() << std::endl;
+            if (studioContext && !studioContext->isServer()) {
+                auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
+                if (projectSystem && projectSystem->IsProjectOpen()) {
+                    std::cout << "[StudioCore] Saving open project BEFORE shutdown: "
+                        << projectSystem->GetCurrentProjectName() << std::endl;
 
-                if (studioContext && studioContext->studioPluginManager) {
-                    studioContext->studioPluginManager->SaveProjectPluginState();
+                    if (studioContext && studioContext->studioPluginManager) {
+                        studioContext->studioPluginManager->SaveProjectPluginState();
+                    }
+
+                    projectSystem->SaveProject();
+                    Events::Ref().QueueEvent("ProjectSaved");
+                }
+                else if (windowHandle) {
+                    SyncWindowStateFromGLFW();
+                    std::string defaultPath = GetDefaultWindowStatePath();
+                    if (!defaultPath.empty()) {
+                        std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
+                        m_windowState.SaveToFile(defaultPath);
+                        std::cout << "[StudioCore] Saved default window state during shutdown" << std::endl;
+                    }
                 }
 
-                projectSystem->SaveProject();
-                Events::Ref().QueueEvent("ProjectSaved");
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::cout << "[StudioCore] Critical saves completed" << std::endl;
             }
-            else {
-                SyncWindowStateFromGLFW();
-                std::string defaultPath = GetDefaultWindowStatePath();
-                if (!defaultPath.empty()) {
-                    std::filesystem::create_directories(std::filesystem::path(defaultPath).parent_path());
-                    m_windowState.SaveToFile(defaultPath);
-                    std::cout << "[StudioCore] Saved default window state during shutdown" << std::endl;
-                }
-            }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            std::cout << "[StudioCore] Critical saves completed" << std::endl;
 
             m_menuBar.reset();
             m_projectManagerView.reset();
@@ -842,11 +903,13 @@ namespace ANI {
 
             if (m_menuBar) m_menuBar->Update(deltaTime);
 
-            if (m_showProjectManagerView) {
+            if (m_showProjectManagerView && m_projectManagerView) {
                 m_projectManagerView->Update(deltaTime);
             }
 
-            studioContext->viewManager->Update(deltaTime);
+            if (studioContext->viewManager) {
+                studioContext->viewManager->Update(deltaTime);
+            }
         }
         catch (const std::exception& e) {
             std::cerr << "[StudioCore] Update error: " << e.what() << std::endl;
@@ -856,17 +919,26 @@ namespace ANI {
     void StudioCore::Render() {
         if (!running || !initialized || !studioContext) return;
 
+        if (studioContext->isServer()) return;
+
         try {
             CompleteInitialization();
 
             auto projectSystem = GetEntityManager().GetSystem<ProjectSystem>();
             bool isProjectOpen = projectSystem ? projectSystem->IsProjectOpen() : false;
 
-            if (!isProjectOpen && m_showProjectManagerView && m_projectManagerView) {
+            // Only force the dockspace once the client has actually joined a
+            // server. Until then, the normal startup screen must be visible so
+            // the user can pick Host or Join.
+            const bool forceDockspace =
+                (studioContext->mode == StudioContext::Mode::Client &&
+                    studioContext->networkConnected);
+
+            if (!isProjectOpen && !forceDockspace && m_showProjectManagerView && m_projectManagerView) {
                 m_projectManagerView->Render();
             }
 
-            if (isProjectOpen) {
+            if (isProjectOpen || forceDockspace) {
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
                 ImGui::SetNextWindowPos(viewport->WorkPos);
                 ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -1296,6 +1368,10 @@ namespace ANI {
             catch (const std::exception& e) {
                 std::cerr << "[StudioCore] SettingsChanged event error: " << e.what() << std::endl;
             }
+            });
+
+        Events::Ref().RegisterEvent("OpenSettings", [this]() {
+            GetSettingsView().Show();
             });
 
         std::cout << "[StudioCore] Core system events registered successfully" << std::endl;

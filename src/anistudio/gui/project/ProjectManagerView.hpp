@@ -4,6 +4,7 @@
 #include "ProjectSystem.hpp"
 #include "ProjectPopups.hpp"
 #include "AutoLoadPopup.hpp"
+#include "NetworkStartup.hpp"
 
 namespace GUI {
 
@@ -14,6 +15,9 @@ namespace GUI {
         ProjectPopupState popupState;
         AutoLoadPopupState autoLoadState;
 
+        NetworkStartup m_networkStartup;
+        bool m_networkMode = false;
+
     public:
         ProjectManagerView(ANI::ProjectSystem& projectSystem, ANI::StudioCore* studioCore);
 
@@ -21,12 +25,17 @@ namespace GUI {
         void Update(const float deltaT);
         void Render();
 
+        void SetNetworkMode(bool on) { m_networkMode = on; }
+        bool IsNetworkMode() const { return m_networkMode; }
+
         void ShowNewProjectDialog();
         void ShowLoadProjectDialog();
         void ShowAutoLoadPopup(const std::string& lastProjectPath);
 
         bool IsAutoLoadPopupActive() const { return autoLoadState.showPopup; }
         bool ShouldAutoLoad() const { return autoLoadState.shouldAutoLoad; }
+
+        std::function<void(const NetworkStartupResult&)> onNetworkReady;
 
     private:
         void RenderAutoLoadPopup();
