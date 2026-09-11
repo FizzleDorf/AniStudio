@@ -6,3 +6,4 @@
 #include "TextureComponent.hpp"
 #include "FontSettingsComponent.hpp"
 #include "TextEditorSettingsComponent.hpp"
+#include "ProjectComponent.hpp"

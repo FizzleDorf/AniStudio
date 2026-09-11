@@ -10,7 +10,7 @@
 
 namespace GUI {
 
-    MenuBar::MenuBar(ANI::ProjectSystem& projectSys, ViewManager& viewMgr, ANI::StudioCore& m_studioCore)
+    MenuBar::MenuBar(ECS::ProjectSystem& projectSys, ViewManager& viewMgr, ANI::StudioCore& m_studioCore)
         : projectSystem(projectSys), viewManager(viewMgr), m_studioCore(m_studioCore) {
 
         popupState.InitializeBuffers(projectSys);

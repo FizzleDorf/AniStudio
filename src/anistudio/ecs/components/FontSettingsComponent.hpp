@@ -11,6 +11,18 @@ namespace ECS {
         using FontRebuildCallback = void(*)();
 
         FontSettingsComponent() = default;
+
+        const char* GetCompName() const override { return "FontSettingsComponent"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        FontSettingsComponent(const FontSettingsComponent& other);
+        FontSettingsComponent& operator=(const FontSettingsComponent& other);
+
         ~FontSettingsComponent() = default;
 
         bool SaveSettings() override;
@@ -43,7 +55,6 @@ namespace ECS {
         void ScanFontsDirectory();
         void ScanIconFontsDirectory();
 
-        // Debug: expose pending path for UI
         std::string pendingIconFontPath;
 
     private:

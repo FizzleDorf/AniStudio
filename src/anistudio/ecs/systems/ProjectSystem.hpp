@@ -18,7 +18,7 @@ namespace Plugins {
     class StudioPluginManager;
 }
 
-namespace ANI {
+namespace ECS {
 
     class ProjectSystem : public ECS::BaseSystem {
     public:
@@ -108,4 +108,4 @@ namespace ANI {
         void UpdateAutoSaveSettings();
     };
 
-} // namespace ANI
+} // namespace ECS

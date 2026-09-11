@@ -6,9 +6,60 @@
 namespace ECS {
 
     TextEditorSettingsComponent::TextEditorSettingsComponent() {
-        compName = "TextEditorSettingsComponent";
         ResetToDefaults();
         CreateBackup();
+    }
+
+    TextEditorSettingsComponent::TextEditorSettingsComponent(const TextEditorSettingsComponent& other)
+        : BaseSettingsComponent(other)
+        , showLineNumbers(other.showLineNumbers)
+        , wordWrap(other.wordWrap)
+        , showWhitespace(other.showWhitespace)
+        , autoIndent(other.autoIndent)
+        , lineFolding(other.lineFolding)
+        , useCustomFont(other.useCustomFont)
+        , tabSize(other.tabSize)
+        , defaultLanguage(other.defaultLanguage)
+        , autocompleteFile(other.autocompleteFile)
+        , editorFontName(other.editorFontName)
+        , m_hasChanges(other.m_hasChanges)
+        , backupShowLineNumbers(other.backupShowLineNumbers)
+        , backupWordWrap(other.backupWordWrap)
+        , backupShowWhitespace(other.backupShowWhitespace)
+        , backupAutoIndent(other.backupAutoIndent)
+        , backupLineFolding(other.backupLineFolding)
+        , backupUseCustomFont(other.backupUseCustomFont)
+        , backupTabSize(other.backupTabSize)
+        , backupDefaultLanguage(other.backupDefaultLanguage)
+        , backupAutocompleteFile(other.backupAutocompleteFile)
+        , backupEditorFontName(other.backupEditorFontName) {
+    }
+
+    TextEditorSettingsComponent& TextEditorSettingsComponent::operator=(const TextEditorSettingsComponent& other) {
+        if (this != &other) {
+            showLineNumbers = other.showLineNumbers;
+            wordWrap = other.wordWrap;
+            showWhitespace = other.showWhitespace;
+            autoIndent = other.autoIndent;
+            lineFolding = other.lineFolding;
+            useCustomFont = other.useCustomFont;
+            tabSize = other.tabSize;
+            defaultLanguage = other.defaultLanguage;
+            autocompleteFile = other.autocompleteFile;
+            editorFontName = other.editorFontName;
+            m_hasChanges = other.m_hasChanges;
+            backupShowLineNumbers = other.backupShowLineNumbers;
+            backupWordWrap = other.backupWordWrap;
+            backupShowWhitespace = other.backupShowWhitespace;
+            backupAutoIndent = other.backupAutoIndent;
+            backupLineFolding = other.backupLineFolding;
+            backupUseCustomFont = other.backupUseCustomFont;
+            backupTabSize = other.backupTabSize;
+            backupDefaultLanguage = other.backupDefaultLanguage;
+            backupAutocompleteFile = other.backupAutocompleteFile;
+            backupEditorFontName = other.backupEditorFontName;
+        }
+        return *this;
     }
 
     bool TextEditorSettingsComponent::SaveSettings() {

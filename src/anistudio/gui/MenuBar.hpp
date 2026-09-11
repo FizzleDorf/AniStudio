@@ -8,8 +8,12 @@
 #include <set>
 
 namespace ANI {
-    class ProjectSystem;
+    
     class StudioCore;
+}
+
+namespace ECS {
+    class ProjectSystem;
 }
 
 namespace GUI {
@@ -17,7 +21,7 @@ namespace GUI {
 
     class MenuBar {
     public:
-        MenuBar(ANI::ProjectSystem& projectSystem, ViewManager& viewMgr, ANI::StudioCore& m_studioCore);
+        MenuBar(ECS::ProjectSystem& projectSystem, ViewManager& viewMgr, ANI::StudioCore& m_studioCore);
 
         void Update(float deltaTime);
         void Render();
@@ -52,7 +56,7 @@ namespace GUI {
         void ToggleViewInCurrentWorkspace(const std::string& viewTypeName);
 
         // References
-        ANI::ProjectSystem& projectSystem;
+        ECS::ProjectSystem& projectSystem;
         ViewManager& viewManager;
         ANI::StudioCore& m_studioCore;
 

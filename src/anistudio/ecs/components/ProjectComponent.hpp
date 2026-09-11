@@ -3,7 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 
-namespace ANI {
+namespace ECS {
 
     struct ProjectSettings {
         std::string projectName = "Untitled Project";
@@ -19,28 +19,57 @@ namespace ANI {
 
     class ProjectComponent : public ECS::BaseComponent {
     public:
-        ProjectComponent() {
-            compName = "ProjectComponent";
-        }
-
         bool isOpen = false;
         std::string currentProjectPath;
         ProjectSettings settings;
 
+        ProjectComponent() = default;
+
+        const char* GetCompName() const override { return "ProjectComponent"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        ProjectComponent(const ProjectComponent& other) : BaseComponent(other) {
+            isOpen = other.isOpen;
+            currentProjectPath = other.currentProjectPath;
+            settings = other.settings;
+        }
+
+        ProjectComponent& operator=(const ProjectComponent& other) {
+            if (this != &other) {
+                isOpen = other.isOpen;
+                currentProjectPath = other.currentProjectPath;
+                settings = other.settings;
+            }
+            return *this;
+        }
+
         nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j["compName"] = compName;
-            j["isOpen"] = isOpen;
-            j["currentProjectPath"] = currentProjectPath;
-            j["settings"] = settings.Serialize();
+            j[GetCompName()] = {
+                {"isOpen", isOpen},
+                {"currentProjectPath", currentProjectPath},
+                {"settings", settings.Serialize()}
+            };
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            if (j.contains("isOpen")) isOpen = j["isOpen"];
-            if (j.contains("currentProjectPath")) currentProjectPath = j["currentProjectPath"];
-            if (j.contains("settings")) settings.Deserialize(j["settings"]);
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("isOpen")) isOpen = componentData["isOpen"];
+            if (componentData.contains("currentProjectPath")) currentProjectPath = componentData["currentProjectPath"];
+            if (componentData.contains("settings")) settings.Deserialize(componentData["settings"]);
         }
     };
 
-} // namespace ANI
+} // namespace ECS

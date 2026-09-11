@@ -7,39 +7,38 @@
 namespace ECS {
 
 	struct CameraComponent : public BaseComponent {
-		// Camera parameters
 		glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);
 		glm::vec3 front = glm::vec3(0.0f, 0.0f, -1.0f);
 		glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 		glm::vec3 right = glm::vec3(1.0f, 0.0f, 0.0f);
 		glm::vec3 worldUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
-		// Euler angles
 		float yaw = -90.0f;
 		float pitch = 0.0f;
 
-		// Projection parameters
 		float fov = 45.0f;
 		float aspectRatio = 16.0f / 9.0f;
 		float nearPlane = 0.1f;
 		float farPlane = 100.0f;
 
-		// Camera options
 		float movementSpeed = 2.5f;
 		float mouseSensitivity = 0.1f;
 		float zoom = 45.0f;
 
-		// Cached matrices
 		mutable glm::mat4 viewMatrix = glm::mat4(1.0f);
 		mutable glm::mat4 projectionMatrix = glm::mat4(1.0f);
 		mutable bool viewDirty = true;
 		mutable bool projectionDirty = true;
 
 		CameraComponent() {
-			compName = "Camera";
-			compCategory = "3D";
+			UpdateCameraVectors();
+		}
 
-			schema = {
+		const char* GetCompName() const override { return "Camera"; }
+		const char* GetCompCategory() const override { return "3D"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "Camera"},
 				{"type", "object"},
 				{"properties", {
@@ -62,11 +61,54 @@ namespace ECS {
 					{{"name", "projection_matrix"}, {"type", "mat4"}}
 				}}
 			};
-
-			UpdateCameraVectors();
+			return j;
 		}
 
-		// Get view matrix
+		CameraComponent(const CameraComponent& other) : BaseComponent(other) {
+			position = other.position;
+			front = other.front;
+			up = other.up;
+			right = other.right;
+			worldUp = other.worldUp;
+			yaw = other.yaw;
+			pitch = other.pitch;
+			fov = other.fov;
+			aspectRatio = other.aspectRatio;
+			nearPlane = other.nearPlane;
+			farPlane = other.farPlane;
+			movementSpeed = other.movementSpeed;
+			mouseSensitivity = other.mouseSensitivity;
+			zoom = other.zoom;
+			viewMatrix = other.viewMatrix;
+			projectionMatrix = other.projectionMatrix;
+			viewDirty = true;
+			projectionDirty = true;
+		}
+
+		CameraComponent& operator=(const CameraComponent& other) {
+			if (this != &other) {
+				position = other.position;
+				front = other.front;
+				up = other.up;
+				right = other.right;
+				worldUp = other.worldUp;
+				yaw = other.yaw;
+				pitch = other.pitch;
+				fov = other.fov;
+				aspectRatio = other.aspectRatio;
+				nearPlane = other.nearPlane;
+				farPlane = other.farPlane;
+				movementSpeed = other.movementSpeed;
+				mouseSensitivity = other.mouseSensitivity;
+				zoom = other.zoom;
+				viewMatrix = other.viewMatrix;
+				projectionMatrix = other.projectionMatrix;
+				viewDirty = true;
+				projectionDirty = true;
+			}
+			return *this;
+		}
+
 		const glm::mat4& GetViewMatrix() const {
 			if (viewDirty) {
 				viewMatrix = glm::lookAt(position, position + front, up);
@@ -75,7 +117,6 @@ namespace ECS {
 			return viewMatrix;
 		}
 
-		// Get projection matrix
 		const glm::mat4& GetProjectionMatrix() const {
 			if (projectionDirty) {
 				projectionMatrix = glm::perspective(glm::radians(fov), aspectRatio, nearPlane, farPlane);
@@ -84,45 +125,40 @@ namespace ECS {
 			return projectionMatrix;
 		}
 
-		// Set aspect ratio and mark projection dirty
 		void SetAspectRatio(float ratio) {
 			aspectRatio = ratio;
 			projectionDirty = true;
 		}
 
-		// Set position and mark view dirty
 		void SetPosition(const glm::vec3& pos) {
 			position = pos;
 			viewDirty = true;
 		}
 
-		// Set field of view and mark projection dirty
 		void SetFOV(float newFov) {
 			fov = glm::clamp(newFov, 1.0f, 120.0f);
 			projectionDirty = true;
 		}
 
-		// Process keyboard input
 		void ProcessKeyboard(int direction, float deltaTime) {
 			float velocity = movementSpeed * deltaTime;
 
-			if (direction == 0) // FORWARD
+			if (direction == 0)
 				position += front * velocity;
-			if (direction == 1) // BACKWARD
+			if (direction == 1)
 				position -= front * velocity;
-			if (direction == 2) // LEFT
+			if (direction == 2)
 				position -= right * velocity;
-			if (direction == 3) // RIGHT
+			if (direction == 3)
 				position += right * velocity;
-			if (direction == 4) // UP
+			if (direction == 4)
 				position += up * velocity;
-			if (direction == 5) // DOWN
+			if (direction == 5)
 				position -= up * velocity;
 
 			viewDirty = true;
 		}
 
-		// Process mouse movement
 		void ProcessMouseMovement(float xOffset, float yOffset, bool constrainPitch = true) {
 			xOffset *= mouseSensitivity;
 			yOffset *= mouseSensitivity;
@@ -140,7 +176,6 @@ namespace ECS {
 			UpdateCameraVectors();
 		}
 
-		// Process mouse scroll
 		void ProcessMouseScroll(float yOffset) {
 			zoom -= yOffset;
 			if (zoom < 1.0f)
@@ -149,7 +184,6 @@ namespace ECS {
 				zoom = 45.0f;
 		}
 
-		// Get property map for UI rendering
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"position_x", &position.x},
@@ -163,36 +197,41 @@ namespace ECS {
 			};
 		}
 
-		// Serialization
 		nlohmann::json Serialize() const override {
-			auto j = BaseComponent::Serialize();
-			j["position"] = { position.x, position.y, position.z };
-			j["yaw"] = yaw;
-			j["pitch"] = pitch;
-			j["fov"] = fov;
-			j["aspectRatio"] = aspectRatio;
-			j["nearPlane"] = nearPlane;
-			j["farPlane"] = farPlane;
-			j["movementSpeed"] = movementSpeed;
-			j["mouseSensitivity"] = mouseSensitivity;
+			nlohmann::json j;
+			j[GetCompName()] = {
+				{"position", { position.x, position.y, position.z }},
+				{"yaw", yaw},
+				{"pitch", pitch},
+				{"fov", fov},
+				{"aspectRatio", aspectRatio},
+				{"nearPlane", nearPlane},
+				{"farPlane", farPlane},
+				{"movementSpeed", movementSpeed},
+				{"mouseSensitivity", mouseSensitivity}
+			};
 			return j;
 		}
 
-		// Deserialization
 		void Deserialize(const nlohmann::json& j) override {
-			BaseComponent::Deserialize(j);
+			const char* key = GetCompName();
+			nlohmann::json componentData;
+			if (j.contains(key))
+				componentData = j.at(key);
+			else
+				componentData = j;
 
-			if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
-				position = glm::vec3(j["position"][0], j["position"][1], j["position"][2]);
+			if (componentData.contains("position") && componentData["position"].is_array() && componentData["position"].size() >= 3) {
+				position = glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]);
 			}
-			if (j.contains("yaw")) yaw = j["yaw"];
-			if (j.contains("pitch")) pitch = j["pitch"];
-			if (j.contains("fov")) fov = j["fov"];
-			if (j.contains("aspectRatio")) aspectRatio = j["aspectRatio"];
-			if (j.contains("nearPlane")) nearPlane = j["nearPlane"];
-			if (j.contains("farPlane")) farPlane = j["farPlane"];
-			if (j.contains("movementSpeed")) movementSpeed = j["movementSpeed"];
-			if (j.contains("mouseSensitivity")) mouseSensitivity = j["mouseSensitivity"];
+			if (componentData.contains("yaw")) yaw = componentData["yaw"];
+			if (componentData.contains("pitch")) pitch = componentData["pitch"];
+			if (componentData.contains("fov")) fov = componentData["fov"];
+			if (componentData.contains("aspectRatio")) aspectRatio = componentData["aspectRatio"];
+			if (componentData.contains("nearPlane")) nearPlane = componentData["nearPlane"];
+			if (componentData.contains("farPlane")) farPlane = componentData["farPlane"];
+			if (componentData.contains("movementSpeed")) movementSpeed = componentData["movementSpeed"];
+			if (componentData.contains("mouseSensitivity")) mouseSensitivity = componentData["mouseSensitivity"];
 
 			UpdateCameraVectors();
 			viewDirty = true;
@@ -201,14 +240,12 @@ namespace ECS {
 
 	private:
 		void UpdateCameraVectors() {
-			// Calculate the new front vector
 			glm::vec3 frontVec;
 			frontVec.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
 			frontVec.y = sin(glm::radians(pitch));
 			frontVec.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
 			front = glm::normalize(frontVec);
 
-			// Re-calculate the right and up vector
 			right = glm::normalize(glm::cross(front, worldUp));
 			up = glm::normalize(glm::cross(right, front));
 

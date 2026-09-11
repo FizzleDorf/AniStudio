@@ -17,7 +17,7 @@
 #include <sstream>
 #include <set>
 
-namespace ANI {
+namespace ECS {
 
     nlohmann::json ProjectSettings::Serialize() const {
         nlohmann::json j;
@@ -799,4 +799,4 @@ namespace ANI {
         return GetProjectDataPath() + "/window_state.json";
     }
 
-} // namespace ANI
+} // namespace ECS

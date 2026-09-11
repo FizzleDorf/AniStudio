@@ -9,7 +9,13 @@ namespace ECS {
     struct CheckpointComponent : public BaseModelComponent {
         CheckpointComponent() {
             compName = "Checkpoint";
-            schema = {
+        }
+
+        const char* GetCompName() const override { return "Checkpoint"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Checkpoint Model"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -30,6 +36,7 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
         CheckpointComponent& operator=(const CheckpointComponent& other) {

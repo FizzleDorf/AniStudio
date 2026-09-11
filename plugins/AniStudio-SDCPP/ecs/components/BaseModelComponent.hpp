@@ -14,18 +14,33 @@ namespace ECS {
 		std::string modelName = "";
 		bool isModelLoaded = false;
 
-		virtual void RefreshSchema() override {
-			if (schema.contains("properties") && schema["properties"].contains("modelPath")) {
-				auto& prop = schema["properties"]["modelPath"];
-				if (prop.contains("ui:options")) {
-					auto& options = prop["ui:options"];
-					options["dialogDefaultPath"] = "";
-				}
-			}
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
+				{"title", "Base Model"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Checkpoint"},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".safetensors,.ckpt,.pt,.gguf"},
+							{"filterName", "Checkpoint Models"},
+							{"dialogDefaultPath", "checkpoint"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for checkpoint model files (.safetensors, .ckpt, .pt, .gguf)"}
+						}}
+					}}
+				}}
+			};
+			return j;
 		}
 
 		virtual nlohmann::json Serialize() const override {
-			return { {compName, {
+			return { {GetCompName(), {
 				{"modelName", modelName},
 				{"modelPath", modelPath}
 			}} };

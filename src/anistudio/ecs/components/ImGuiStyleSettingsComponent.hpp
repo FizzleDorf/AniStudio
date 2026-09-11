@@ -11,6 +11,17 @@ namespace ECS {
     public:
         ImGuiStyleSettingsComponent();
 
+        const char* GetCompName() const override { return "ImGuiStyleSettingsComponent"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        ImGuiStyleSettingsComponent(const ImGuiStyleSettingsComponent& other);
+        ImGuiStyleSettingsComponent& operator=(const ImGuiStyleSettingsComponent& other);
+
         bool SaveSettings() override;
         bool LoadSettings() override;
         void ResetToDefaults() override;

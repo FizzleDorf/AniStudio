@@ -17,7 +17,7 @@ namespace ECS {
 
         nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j["compName"] = compName;
+            j["compName"] = GetCompName();
             return j;
         }
         void Deserialize(const nlohmann::json& j) override {}

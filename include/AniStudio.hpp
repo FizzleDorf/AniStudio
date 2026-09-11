@@ -29,7 +29,7 @@
 #include "ProjectSystem.hpp"
 #include "ImGuiStateUtils.hpp"
 #include "WindowState.hpp"
-#include "guiSystems.h"
+#include "AniStudioSystems.hpp"
 #include "StudioPluginManager.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -55,15 +55,29 @@ namespace ANI {
         StudioCore();
         ~StudioCore();
 
+        // ---------------------------------------------------------------------
+        // Lifecycle
+        // ---------------------------------------------------------------------
+        // Full studio init (core + GUI). Requires SetImGuiContext() and
+        // SetWindowHandle() to have been called by the host beforehand for
+        // GUI mode.
         bool Initialize();
+
+        // Headless / server mode: engine, ECS, systems, events only.
         bool InitializeCoreOnly();
+
+        // GUI layer: views, settings tabs, plugin manager, menu bar.
+        // Called from Initialize(); can be called explicitly if you need to
+        // build the core first and bring the GUI up later.
         bool InitializeGUI();
 
-        void CompleteInitialization();
         void Shutdown();
         void Update(float deltaTime);
         void Render();
 
+        // ---------------------------------------------------------------------
+        // Accessors
+        // ---------------------------------------------------------------------
         ECS::EntityManager& GetEntityManager() {
             if (!studioContext || !studioContext->entityManager) {
                 throw std::runtime_error("StudioContext or EntityManager not initialized");
@@ -78,8 +92,8 @@ namespace ANI {
             return *studioContext->viewManager;
         }
 
-        ANI::ProjectSystem& GetProjectSystem() {
-            auto system = GetEntityManager().GetSystem<ProjectSystem>();
+        ECS::ProjectSystem& GetProjectSystem() {
+            auto system = GetEntityManager().GetSystem<ECS::ProjectSystem>();
             if (!system) {
                 throw std::runtime_error("ProjectSystem not registered with EntityManager");
             }
@@ -101,6 +115,9 @@ namespace ANI {
 
         static std::unique_ptr<StudioCore> CreateWithContext(std::shared_ptr<StudioContext> existingContext);
 
+        // ---------------------------------------------------------------------
+        // State
+        // ---------------------------------------------------------------------
         bool IsRunning() const { return running && engineCore.IsRunning(); }
         void SetRunning(bool isRunning) {
             running = isRunning;
@@ -109,19 +126,35 @@ namespace ANI {
 
         bool IsInitialized() const { return initialized; }
 
+        // ---------------------------------------------------------------------
+        // Host integration
+        // ---------------------------------------------------------------------
         void SetWindowHandle(void* window);
         void SetImGuiContext(void* context);
+
+        // ---------------------------------------------------------------------
+        // Core wiring (called internally; exposed for advanced hosts)
+        // ---------------------------------------------------------------------
         void SetCoreCallbacks();
         void SetCoreEvents();
 
+        // ---------------------------------------------------------------------
+        // Workspace
+        // ---------------------------------------------------------------------
         void SetActiveWorkspace(GUI::WorkspaceID workspaceID);
         GUI::WorkspaceID GetActiveWorkspace() const;
 
+        // ---------------------------------------------------------------------
+        // Project lifecycle (called from ProjectSystem callbacks)
+        // ---------------------------------------------------------------------
         void OnProjectLoaded(const std::string& projectPath);
         void OnProjectCreated(const std::string& projectPath);
         void OnProjectClosed();
 
     private:
+        // ---------------------------------------------------------------------
+        // State
+        // ---------------------------------------------------------------------
         bool initialized;
         bool running;
         bool m_isShuttingDown;
@@ -143,17 +176,37 @@ namespace ANI {
 
         Utils::WindowState m_windowState;
 
-        void RegisterCoreViews();
-        void SetupProjectCallbacks();
-        void InitializeStudioPlugins();
-        void RegisterCoreComponentsAndSystems();
+        // ---------------------------------------------------------------------
+        // Initialization helpers
+        //   (Registration of components / systems / views lives in
+        //    StudioRegistration.cpp ? see ANI::Registration namespace.)
+        // ---------------------------------------------------------------------
 
+        // Seeds / repairs all core FilePathSystem keys.
+        void EnsureCorePaths();
+
+        // Points ImGui's io.IniFilename at the path stored in FilePathSystem.
+        // Requires ImGui::SetCurrentContext() to have already been called.
+        void ConfigureImGuiIniPath();
+
+        // Creates the plugin manager, scans the plugin directory, and wires
+        // the engine/studio contexts. Requires a valid ImGui context.
+        void InitializeStudioPlugins();
+
+        // Registers the standard settings tabs (general, style, render,
+        // fonts, text editor) on the SettingsSystem.
+        void RegisterSettingsTabs();
+
+        // Wires ProjectSystem callbacks (load/created/closed/view-state).
+        void SetupProjectCallbacks();
+
+        // ---------------------------------------------------------------------
+        // Window state helpers
+        // ---------------------------------------------------------------------
         void InitializeWindowState();
         void SyncWindowStateFromGLFW();
         void ApplyWindowStateToGLFW();
         std::string GetDefaultWindowStatePath() const;
-
-        void EnsureCorePaths();
-        std::string GetDefaultPathForKey(const std::string& key) const;
     };
-}
+
+} // namespace ANI

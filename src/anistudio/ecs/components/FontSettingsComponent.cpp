@@ -11,6 +11,46 @@ namespace ECS {
 
     FontSettingsComponent::FontRebuildCallback FontSettingsComponent::s_fontRebuildCallback = nullptr;
 
+    FontSettingsComponent::FontSettingsComponent(const FontSettingsComponent& other)
+        : BaseSettingsComponent(other)
+        , availableFonts(other.availableFonts)
+        , availableIconFonts(other.availableIconFonts)
+        , selectedFontName(other.selectedFontName)
+        , selectedIconFontName(other.selectedIconFontName)
+        , m_globalFontScale(other.m_globalFontScale)
+        , imguiContext(other.imguiContext)
+        , hasChanges(other.hasChanges)
+        , pendingIconFontPath(other.pendingIconFontPath)
+        , backupSelectedFontName(other.backupSelectedFontName)
+        , backupSelectedIconFontName(other.backupSelectedIconFontName)
+        , backupGlobalFontScale(other.backupGlobalFontScale)
+        , isInitialized(other.isInitialized)
+        , fontsScanned(other.fontsScanned)
+        , fontsNeedRebuild(other.fontsNeedRebuild)
+        , pendingFontPath(other.pendingFontPath) {
+    }
+
+    FontSettingsComponent& FontSettingsComponent::operator=(const FontSettingsComponent& other) {
+        if (this != &other) {
+            availableFonts = other.availableFonts;
+            availableIconFonts = other.availableIconFonts;
+            selectedFontName = other.selectedFontName;
+            selectedIconFontName = other.selectedIconFontName;
+            m_globalFontScale = other.m_globalFontScale;
+            imguiContext = other.imguiContext;
+            hasChanges = other.hasChanges;
+            pendingIconFontPath = other.pendingIconFontPath;
+            backupSelectedFontName = other.backupSelectedFontName;
+            backupSelectedIconFontName = other.backupSelectedIconFontName;
+            backupGlobalFontScale = other.backupGlobalFontScale;
+            isInitialized = other.isInitialized;
+            fontsScanned = other.fontsScanned;
+            fontsNeedRebuild = other.fontsNeedRebuild;
+            pendingFontPath = other.pendingFontPath;
+        }
+        return *this;
+    }
+
     void FontSettingsComponent::EnsureInitialized() {
         if (isInitialized) return;
         ScanFontsDirectory();
@@ -136,7 +176,6 @@ namespace ECS {
 
         const float fontSize = 16.0f;
 
-        // 1. Load the main font
         ImFont* mainFont = nullptr;
         if (!pendingFontPath.empty() && std::filesystem::exists(pendingFontPath)) {
             ImFontConfig config;
@@ -152,12 +191,9 @@ namespace ECS {
             std::cout << "[FontSettings] Using default font" << std::endl;
         }
 
-        // 2. Load the icon font with MergeMode
         if (!pendingIconFontPath.empty() && std::filesystem::exists(pendingIconFontPath)) {
-            // IMPORTANT: The glyph ranges MUST be specified for older ImGui versions
-            // Font Awesome uses the Private Use Area (PUA) from 0xf000 to 0xf8ff
             static const ImWchar iconRanges[] = {
-                0xf000, 0xf8ff,  // Font Awesome 5/6/7 Private Use Area
+                0xf000, 0xf8ff,
                 0
             };
 
@@ -173,7 +209,7 @@ namespace ECS {
                 pendingIconFontPath.c_str(),
                 fontSize,
                 &config,
-                iconRanges  // This is critical - MUST specify the ranges
+                iconRanges
             );
 
             std::cout << "[FontSettings] Loaded icon font: " << pendingIconFontPath << std::endl;
@@ -182,7 +218,6 @@ namespace ECS {
             std::cout << "[FontSettings] No icon font loaded" << std::endl;
         }
 
-        // 3. Build the font atlas
         if (!io.Fonts->Build()) {
             std::cerr << "[FontSettings] Failed to build font atlas!" << std::endl;
             io.Fonts->Clear();
@@ -190,7 +225,6 @@ namespace ECS {
             io.Fonts->Build();
         }
 
-        // 4. Recreate device objects
         if (!ImGui_ImplOpenGL3_CreateDeviceObjects()) {
             std::cerr << "[FontSettings] Failed to create OpenGL device objects!" << std::endl;
             fontsNeedRebuild = true;

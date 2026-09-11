@@ -8,7 +8,38 @@
 namespace ECS {
 
     ImGuiStyleSettingsComponent::ImGuiStyleSettingsComponent() {
-        compName = "ImGuiStyleSettingsComponent";
+    }
+
+    ImGuiStyleSettingsComponent::ImGuiStyleSettingsComponent(const ImGuiStyleSettingsComponent& other)
+        : BaseSettingsComponent(other)
+        , currentStyle(other.currentStyle)
+        , backupStyle(other.backupStyle)
+        , hasChanges(other.hasChanges)
+        , imguiContext(other.imguiContext)
+        , availableStyles(other.availableStyles)
+        , displayNames(other.displayNames)
+        , selectedStyleIndex(other.selectedStyleIndex)
+        , isInitialized(other.isInitialized)
+        , m_filePathSystem(other.m_filePathSystem)
+        , currentStyleFile(other.currentStyleFile) {
+        std::memcpy(saveAsFilename, other.saveAsFilename, sizeof(saveAsFilename));
+    }
+
+    ImGuiStyleSettingsComponent& ImGuiStyleSettingsComponent::operator=(const ImGuiStyleSettingsComponent& other) {
+        if (this != &other) {
+            currentStyle = other.currentStyle;
+            backupStyle = other.backupStyle;
+            hasChanges = other.hasChanges;
+            imguiContext = other.imguiContext;
+            availableStyles = other.availableStyles;
+            displayNames = other.displayNames;
+            selectedStyleIndex = other.selectedStyleIndex;
+            isInitialized = other.isInitialized;
+            m_filePathSystem = other.m_filePathSystem;
+            currentStyleFile = other.currentStyleFile;
+            std::memcpy(saveAsFilename, other.saveAsFilename, sizeof(saveAsFilename));
+        }
+        return *this;
     }
 
     std::string ImGuiStyleSettingsComponent::GetStylesDirectory() const {

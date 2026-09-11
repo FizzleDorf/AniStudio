@@ -4,7 +4,7 @@
 #include <vector>
 #include <functional>
 
-namespace ANI { class ProjectSystem; }
+namespace ECS { class ProjectSystem; }
 
 namespace GUI {
 
@@ -21,17 +21,17 @@ namespace GUI {
 
     class NetworkStartup {
     public:
-        bool Render(ANI::ProjectSystem& projectSystem, NetworkStartupResult& out);
+        bool Render(ECS::ProjectSystem& projectSystem, NetworkStartupResult& out);
         void Begin(bool hostMode);
         bool IsActive() const { return m_active; }
 
     private:
         enum class Page { Username, HostProject, JoinList, Confirm };
 
-        void RenderUsernamePage(ANI::ProjectSystem&);
-        void RenderHostProjectPage(ANI::ProjectSystem&);
-        void RenderJoinListPage(ANI::ProjectSystem&);
-        void RenderConfirmPage(ANI::ProjectSystem&);
+        void RenderUsernamePage(ECS::ProjectSystem&);
+        void RenderHostProjectPage(ECS::ProjectSystem&);
+        void RenderJoinListPage(ECS::ProjectSystem&);
+        void RenderConfirmPage(ECS::ProjectSystem&);
 
         bool m_active = false;
         bool m_hostMode = true;

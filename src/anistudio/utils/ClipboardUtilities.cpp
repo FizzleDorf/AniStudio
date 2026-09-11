@@ -278,7 +278,6 @@ namespace GUI {
                     auto* dstComp = mgr.GetComponentById(target, cid);
                     if (dstComp) {
                         dstComp->Deserialize(srcComp->Serialize());
-                        dstComp->RefreshSchema();
                     }
                 }
             }
@@ -298,7 +297,6 @@ namespace GUI {
             nlohmann::json data = s_data;
             data.erase("__componentName");
             comp->Deserialize(data);
-            comp->RefreshSchema();
             return true;
         }
 
@@ -316,7 +314,6 @@ namespace GUI {
             auto it = props.find(propName);
             if (it == props.end()) return false;
             if (!JsonToPropertyVariant(s_data["value"], it->second)) return false;
-            comp->RefreshSchema();
             return true;
         }
 
@@ -349,7 +346,6 @@ namespace GUI {
             auto* comp = mgr.GetComponentById(target, cid);
             if (!comp) return false;
             comp->Deserialize(componentData);
-            comp->RefreshSchema();
             return true;
         }
 
@@ -382,7 +378,6 @@ namespace GUI {
             auto it = props.find(propName);
             if (it == props.end()) return false;
             if (!JsonToPropertyVariant(componentData[propName], it->second)) return false;
-            comp->RefreshSchema();
             return true;
         }
 

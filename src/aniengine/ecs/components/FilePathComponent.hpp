@@ -7,7 +7,27 @@ namespace ECS {
 
     class FilePathComponent : public BaseComponent {
     public:
-        FilePathComponent() { compName = "FilePathComponent"; }
+        FilePathComponent() = default;
+
+        const char* GetCompName() const override { return "FilePathComponent"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        FilePathComponent(const FilePathComponent& other)
+            : BaseComponent(other)
+            , m_paths(other.m_paths) {
+        }
+
+        FilePathComponent& operator=(const FilePathComponent& other) {
+            if (this != &other) {
+                m_paths = other.m_paths;
+            }
+            return *this;
+        }
 
         std::string GetPath(const std::string& key) const {
             auto it = m_paths.find(key);
@@ -35,15 +55,23 @@ namespace ECS {
 
         nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j["compName"] = compName;
-            j["paths"] = m_paths;
+            j[GetCompName()] = {
+                {"paths", m_paths}
+            };
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            if (j.contains("paths") && j["paths"].is_object()) {
-                for (auto& [key, value] : j["paths"].items()) {
-                    if (value.is_string()) m_paths[key] = value.get<std::string>();
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("paths") && componentData["paths"].is_object()) {
+                for (auto& [pathKey, value] : componentData["paths"].items()) {
+                    if (value.is_string()) m_paths[pathKey] = value.get<std::string>();
                 }
             }
         }

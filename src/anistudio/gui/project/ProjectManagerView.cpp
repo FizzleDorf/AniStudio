@@ -8,7 +8,7 @@
 
 namespace GUI {
 
-    ProjectManagerView::ProjectManagerView(ANI::ProjectSystem& projectSystem, ANI::StudioCore* studioCore)
+    ProjectManagerView::ProjectManagerView(ECS::ProjectSystem& projectSystem, ANI::StudioCore* studioCore)
         : m_projectSystem(projectSystem), m_studioCore(studioCore) {
         std::cout << "[ProjectManagerView] Constructor - StudioCore: " << m_studioCore << std::endl;
     }

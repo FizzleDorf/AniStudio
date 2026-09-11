@@ -6,9 +6,116 @@
 namespace ECS {
 
     GeneralSettingsComponent::GeneralSettingsComponent() {
-        compName = "GeneralSettingsComponent";
         LoadSettings();
         CreateBackup();
+    }
+
+    GeneralSettingsComponent::GeneralSettingsComponent(const GeneralSettingsComponent& other)
+        : BaseSettingsComponent(other)
+        , showStartupScreen(other.showStartupScreen)
+        , loadLastProject(other.loadLastProject)
+        , autoSaveProjects(other.autoSaveProjects)
+        , autoSaveIntervalMinutes(other.autoSaveIntervalMinutes)
+        , confirmBeforeExit(other.confirmBeforeExit)
+        , confirmBeforeDeleteAssets(other.confirmBeforeDeleteAssets)
+        , confirmBeforeOverwriteFiles(other.confirmBeforeOverwriteFiles)
+        , maxRecentProjects(other.maxRecentProjects)
+        , maxUndoLevels(other.maxUndoLevels)
+        , enableHardwareAcceleration(other.enableHardwareAcceleration)
+        , enableLogging(other.enableLogging)
+        , logLevel(other.logLevel)
+        , logToFile(other.logToFile)
+        , maxLogFileSize(other.maxLogFileSize)
+        , hasChanges(other.hasChanges)
+        , windowWidth(other.windowWidth)
+        , windowHeight(other.windowHeight)
+        , windowPosX(other.windowPosX)
+        , windowPosY(other.windowPosY)
+        , windowMaximized(other.windowMaximized)
+        , windowFullscreen(other.windowFullscreen)
+        , windowVsync(other.windowVsync)
+        , lastOpenProject(other.lastOpenProject)
+        , recentProjects(other.recentProjects)
+        , useNewestPluginVersions(other.useNewestPluginVersions)
+        , backupShowStartupScreen(other.backupShowStartupScreen)
+        , backupLoadLastProject(other.backupLoadLastProject)
+        , backupAutoSaveProjects(other.backupAutoSaveProjects)
+        , backupAutoSaveIntervalMinutes(other.backupAutoSaveIntervalMinutes)
+        , backupConfirmBeforeExit(other.backupConfirmBeforeExit)
+        , backupConfirmBeforeDeleteAssets(other.backupConfirmBeforeDeleteAssets)
+        , backupConfirmBeforeOverwriteFiles(other.backupConfirmBeforeOverwriteFiles)
+        , backupMaxRecentProjects(other.backupMaxRecentProjects)
+        , backupMaxUndoLevels(other.backupMaxUndoLevels)
+        , backupEnableHardwareAcceleration(other.backupEnableHardwareAcceleration)
+        , backupEnableLogging(other.backupEnableLogging)
+        , backupLogLevel(other.backupLogLevel)
+        , backupLogToFile(other.backupLogToFile)
+        , backupMaxLogFileSize(other.backupMaxLogFileSize)
+        , backupWindowWidth(other.backupWindowWidth)
+        , backupWindowHeight(other.backupWindowHeight)
+        , backupWindowPosX(other.backupWindowPosX)
+        , backupWindowPosY(other.backupWindowPosY)
+        , backupWindowMaximized(other.backupWindowMaximized)
+        , backupWindowFullscreen(other.backupWindowFullscreen)
+        , backupWindowVsync(other.backupWindowVsync)
+        , backupLastOpenProject(other.backupLastOpenProject)
+        , backupRecentProjects(other.backupRecentProjects)
+        , backupUseNewestPluginVersions(other.backupUseNewestPluginVersions) {
+    }
+
+    GeneralSettingsComponent& GeneralSettingsComponent::operator=(const GeneralSettingsComponent& other) {
+        if (this != &other) {
+            showStartupScreen = other.showStartupScreen;
+            loadLastProject = other.loadLastProject;
+            autoSaveProjects = other.autoSaveProjects;
+            autoSaveIntervalMinutes = other.autoSaveIntervalMinutes;
+            confirmBeforeExit = other.confirmBeforeExit;
+            confirmBeforeDeleteAssets = other.confirmBeforeDeleteAssets;
+            confirmBeforeOverwriteFiles = other.confirmBeforeOverwriteFiles;
+            maxRecentProjects = other.maxRecentProjects;
+            maxUndoLevels = other.maxUndoLevels;
+            enableHardwareAcceleration = other.enableHardwareAcceleration;
+            enableLogging = other.enableLogging;
+            logLevel = other.logLevel;
+            logToFile = other.logToFile;
+            maxLogFileSize = other.maxLogFileSize;
+            hasChanges = other.hasChanges;
+            windowWidth = other.windowWidth;
+            windowHeight = other.windowHeight;
+            windowPosX = other.windowPosX;
+            windowPosY = other.windowPosY;
+            windowMaximized = other.windowMaximized;
+            windowFullscreen = other.windowFullscreen;
+            windowVsync = other.windowVsync;
+            lastOpenProject = other.lastOpenProject;
+            recentProjects = other.recentProjects;
+            useNewestPluginVersions = other.useNewestPluginVersions;
+            backupShowStartupScreen = other.backupShowStartupScreen;
+            backupLoadLastProject = other.backupLoadLastProject;
+            backupAutoSaveProjects = other.backupAutoSaveProjects;
+            backupAutoSaveIntervalMinutes = other.backupAutoSaveIntervalMinutes;
+            backupConfirmBeforeExit = other.backupConfirmBeforeExit;
+            backupConfirmBeforeDeleteAssets = other.backupConfirmBeforeDeleteAssets;
+            backupConfirmBeforeOverwriteFiles = other.backupConfirmBeforeOverwriteFiles;
+            backupMaxRecentProjects = other.backupMaxRecentProjects;
+            backupMaxUndoLevels = other.backupMaxUndoLevels;
+            backupEnableHardwareAcceleration = other.backupEnableHardwareAcceleration;
+            backupEnableLogging = other.backupEnableLogging;
+            backupLogLevel = other.backupLogLevel;
+            backupLogToFile = other.backupLogToFile;
+            backupMaxLogFileSize = other.backupMaxLogFileSize;
+            backupWindowWidth = other.backupWindowWidth;
+            backupWindowHeight = other.backupWindowHeight;
+            backupWindowPosX = other.backupWindowPosX;
+            backupWindowPosY = other.backupWindowPosY;
+            backupWindowMaximized = other.backupWindowMaximized;
+            backupWindowFullscreen = other.backupWindowFullscreen;
+            backupWindowVsync = other.backupWindowVsync;
+            backupLastOpenProject = other.backupLastOpenProject;
+            backupRecentProjects = other.backupRecentProjects;
+            backupUseNewestPluginVersions = other.backupUseNewestPluginVersions;
+        }
+        return *this;
     }
 
     bool GeneralSettingsComponent::SaveSettings() {

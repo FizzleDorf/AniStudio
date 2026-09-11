@@ -5,80 +5,53 @@
 #include <unordered_map>
 #include <variant>
 #include <string>
-
- // Include centralized Engine property types
 #include "PropertyTypes.hpp"
 
 namespace ECS {
+	// Parent for all components
 	struct BaseComponent {
-		const char * compName = "Base_Component";
-		const char * compCategory = "";
 
-		// Single schema definition for node, inputs, outputs, and UI
-		nlohmann::json schema = {};
-
-		BaseComponent() : entityID() {}
-		virtual ~BaseComponent() {}
-
-		inline const EntityID GetID() const { return entityID; }
-
-		// Get node schema part
-		nlohmann::json getNodeSchema() const {
-			nlohmann::json nodeSchema = {
-				{"inputs", nlohmann::json::array()},
-				{"outputs", nlohmann::json::array()}
-			};
-
-			if (schema.contains("title"))
-				nodeSchema["title"] = schema["title"];
-
-			if (schema.contains("inputs"))
-				nodeSchema["inputs"] = schema["inputs"];
-
-			if (schema.contains("outputs"))
-				nodeSchema["outputs"] = schema["outputs"];
-
-			return nodeSchema;
+		// Names and Categories are defined in the compiler
+		virtual const char* GetCompName() const { return "Base_Component";}
+		virtual const char* GetCompCategory() const { return "";}
+		
+		// Schema for rendering the UI. This is static so it only
+		//	Allocated after the first use and stays cached in the binary.
+		//	Components that don't use the schema don't allocate.
+		// TODO: at some point the schema rendering through json should
+		//	be replaced
+ 		virtual const nlohmann::json& GetSchema() const {
+			const static nlohmann::json j = "uiSchema";
+			return j;
 		}
 
-		// Get UI schema part
-		nlohmann::json getUISchema() const {
-			nlohmann::json uiSchema = {
-				{"type", "object"},
-				{"properties", {}}
-			};
-
-			if (schema.contains("properties"))
-				uiSchema["properties"] = schema["properties"];
-
-			return uiSchema;
-		}
-
-		virtual void RefreshSchema() {
-			// Base implementation does nothing
-			// Derived components should override this
-		}
-
-		// Get property map for UI rendering - to be overridden by derived components
+		// Get property map for UI rendering
 		virtual std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() {
 			return {}; // Empty map by default
 		}
 
-		// Serialize to JSON
+		// Simple getter for the EntityID that owns this component.
+		inline const EntityID GetID() const { return entityID; }
+
+		BaseComponent() : entityID() {}
+		virtual ~BaseComponent() {}
+
+		// Serialize (write) to JSON
 		virtual nlohmann::json Serialize() const {
 			nlohmann::json j;
-			j["compName"] = compName;
+			j["compName"] = GetCompName();
 			return j;
 		}
 
-		// Deserialize from JSON
+		// Deserialize (read) from JSON
 		virtual void Deserialize(const nlohmann::json& j) {
-			//if (j.contains("compName"))
-				// compName = j["compName"];
+			if (j.contains(GetCompName())) {
+				// parse params here
+			}
 		}
 
 	private:
-		friend class EntityManager; // Friend class
+		friend class EntityManager; // Entity manager is a friend for protexted access.
 		EntityID entityID;
 	};
 } // namespace ECS

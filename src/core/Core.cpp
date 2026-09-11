@@ -1,6 +1,6 @@
 #include "Core.hpp"
 #include "Events.hpp"
-#include "guiSystems.h"
+#include "AniStudioSystems.hpp"
 #include <iostream>
 #include <sstream>
 #include <chrono>
@@ -43,23 +43,18 @@ namespace ANI {
         }
         std::cout << "[Core] Window and ImGui fully initialized" << '\n';
 
+        m_studioCore.SetImGuiContext(GetImGuiContext());
+        std::cout << "[Core] ImGui context set" << '\n';
+
         if (!m_studioCore.Initialize()) {
             throw std::runtime_error("Failed to initialize StudioCore");
         }
-        std::cout << "[Core] StudioCore basic initialization complete" << '\n';
-
-        m_studioCore.SetWindowHandle(m_window);
-        m_studioCore.SetImGuiContext(GetImGuiContext());
-        std::cout << "[Core] Window handle and ImGui context set" << '\n';
-
-        std::cout << "[Core] Completing StudioCore initialization..." << '\n';
-        m_studioCore.CompleteInitialization();
         std::cout << "[Core] StudioCore fully initialized" << '\n';
 
-        std::cout << "[Core] Registering event handlers..." << '\n';
-        RegisterEventHandlers();
-        std::cout << "[Core] Event handlers registered" << '\n';
+        m_studioCore.SetWindowHandle(m_window);
+        std::cout << "[Core] Window handle set" << '\n';
 
+        RegisterEventHandlers();
         std::cout << "[Core] Initialization complete!" << '\n';
     }
 
@@ -275,4 +270,4 @@ namespace ANI {
         glfwSwapBuffers(m_window);
     }
 
-}
+} // namespace ANI

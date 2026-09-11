@@ -118,13 +118,13 @@ if(NOT CONAN_TOOLCHAIN)
     message(FATAL_ERROR "Conan toolchain not found at ${CONAN_TOOLCHAIN_PATH}")
 endif()
 
-find_package(OpenCV REQUIRED)
 find_package(glew REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
-find_package(FFmpeg REQUIRED)
+find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
+
 find_package(pybind11 REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(CURL QUIET)
@@ -337,7 +337,6 @@ target_include_directories(${TARGET_NAME} PUBLIC
 target_link_libraries(${TARGET_NAME} PRIVATE
     AniStudioCore
     AniEngineCore
-    ${OpenCV_LIBS}
     GLEW::GLEW
     ZLIB::ZLIB
     PNG::PNG
@@ -349,6 +348,12 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     pybind11::embed
     nfd
     libwebp::libwebp
+    ffmpeg::avcodec
+    ffmpeg::avformat
+    ffmpeg::avutil
+    ffmpeg::swscale
+    ffmpeg::swresample
+    ffmpeg::avdevice
 )
 
 if(SD_USE_SYSTEM_GGML)
@@ -422,6 +427,15 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
     USE_WEBP
     USE_EXIV2
 )
+
+foreach(_ffmpeg_tgt ffmpeg::avcodec ffmpeg::avformat ffmpeg::avutil ffmpeg::swscale ffmpeg::swresample ffmpeg::avdevice)
+    if(TARGET ${_ffmpeg_tgt})
+        get_target_property(_ffmpeg_incs ${_ffmpeg_tgt} INTERFACE_INCLUDE_DIRECTORIES)
+        message(STATUS "FFmpeg target ${_ffmpeg_tgt} includes: ${_ffmpeg_incs}")
+    else()
+        message(WARNING "FFmpeg target ${_ffmpeg_tgt} is NOT defined!")
+    endif()
+endforeach()
 
 set(ADDON_STAGING_DIR "${ANISTUDIO_ROOT}/build/plugins/${TARGET_NAME}/staging")
 file(MAKE_DIRECTORY "${ADDON_STAGING_DIR}")

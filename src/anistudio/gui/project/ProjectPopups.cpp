@@ -12,7 +12,7 @@
 
 namespace GUI {
 
-    void ProjectPopupState::InitializeBuffers(ANI::ProjectSystem& projectSystem) {
+    void ProjectPopupState::InitializeBuffers(ECS::ProjectSystem& projectSystem) {
         std::string defaultProjectName = GenerateDefaultProjectName(projectSystem);
 
         memset(projectNameBuffer, 0, sizeof(projectNameBuffer));
@@ -28,7 +28,7 @@ namespace GUI {
         }
     }
 
-    std::string ProjectPopupState::GenerateDefaultProjectName(ANI::ProjectSystem& projectSystem) const {
+    std::string ProjectPopupState::GenerateDefaultProjectName(ECS::ProjectSystem& projectSystem) const {
         std::string baseName = "AniProject";
         std::string defaultPath = projectSystem.GetDefaultProjectPath();
 
@@ -51,7 +51,7 @@ namespace GUI {
         return candidateName;
     }
 
-    void ProjectPopupState::LoadTemplates(ANI::ProjectSystem& projectSystem) {
+    void ProjectPopupState::LoadTemplates(ECS::ProjectSystem& projectSystem) {
         templates.clear();
 
         auto fileSys = projectSystem.GetFilePathSystem();
@@ -116,13 +116,13 @@ namespace GUI {
         }
     }
 
-    void ProjectPopupState::RefreshRecentProjects(ANI::ProjectSystem& projectSystem) {
+    void ProjectPopupState::RefreshRecentProjects(ECS::ProjectSystem& projectSystem) {
         recentProjects = projectSystem.GetRecentProjects();
     }
 
     namespace ProjectPopups {
 
-        void RenderNewProjectPopup(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
+        void RenderNewProjectPopup(ProjectPopupState& state, ECS::ProjectSystem& projectSystem) {
             if (state.showNewProjectPopup) {
                 ImGui::OpenPopup("Create New Project##NewProjectPopup");
             }
@@ -184,7 +184,7 @@ namespace GUI {
             }
         }
 
-        void RenderLoadProjectPopup(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
+        void RenderLoadProjectPopup(ProjectPopupState& state, ECS::ProjectSystem& projectSystem) {
             if (state.showLoadProjectPopup) {
                 ImGui::OpenPopup("Load Project##LoadProjectPopup");
             }
@@ -293,7 +293,7 @@ namespace GUI {
             ImGui::EndChild();
         }
 
-        void ShowRecentProjects(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
+        void ShowRecentProjects(ProjectPopupState& state, ECS::ProjectSystem& projectSystem) {
             ImGui::Text("Recent Projects:");
 
             if (state.recentProjects.empty()) {
@@ -325,7 +325,7 @@ namespace GUI {
             ImGui::EndChild();
         }
 
-        void CreateProject(ProjectPopupState& state, ANI::ProjectSystem& projectSystem) {
+        void CreateProject(ProjectPopupState& state, ECS::ProjectSystem& projectSystem) {
             std::string projectName = std::string(state.projectNameBuffer);
             std::string projectPath = std::string(state.projectPathBuffer);
 

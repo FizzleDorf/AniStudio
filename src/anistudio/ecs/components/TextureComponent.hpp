@@ -11,25 +11,47 @@ namespace ECS {
         int channels = 0;
         bool needsUpdate = false;
 
-        TextureComponent() {
-            compName = "Texture";
-            compCategory = "Rendering";
+        TextureComponent() = default;
+
+        const char* GetCompName() const override { return "Texture"; }
+        const char* GetCompCategory() const override { return "Rendering"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
         }
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> props;
-            props["textureID"] = &textureID;
-            props["width"] = &width;
-            props["height"] = &height;
-            props["channels"] = &channels;
-            props["needsUpdate"] = &needsUpdate;
-            return props;
+        TextureComponent(const TextureComponent& other) : BaseComponent(other) {
+            textureID = 0;
+            width = other.width;
+            height = other.height;
+            channels = other.channels;
+            needsUpdate = other.needsUpdate;
         }
 
-        virtual nlohmann::json Serialize() const override {
+        TextureComponent& operator=(const TextureComponent& other) {
+            if (this != &other) {
+                width = other.width;
+                height = other.height;
+                channels = other.channels;
+                needsUpdate = other.needsUpdate;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"textureID", &textureID},
+                {"width", &width},
+                {"height", &height},
+                {"channels", &channels},
+                {"needsUpdate", &needsUpdate}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
+            j[GetCompName()] = {
                 {"textureID", textureID},
                 {"width", width},
                 {"height", height},
@@ -39,14 +61,19 @@ namespace ECS {
             return j;
         }
 
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            auto& data = j.contains(compName) ? j[compName] : j;
-            if (data.contains("textureID")) textureID = data["textureID"];
-            if (data.contains("width")) width = data["width"];
-            if (data.contains("height")) height = data["height"];
-            if (data.contains("channels")) channels = data["channels"];
-            if (data.contains("needsUpdate")) needsUpdate = data["needsUpdate"];
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("textureID")) textureID = componentData["textureID"];
+            if (componentData.contains("width")) width = componentData["width"];
+            if (componentData.contains("height")) height = componentData["height"];
+            if (componentData.contains("channels")) channels = componentData["channels"];
+            if (componentData.contains("needsUpdate")) needsUpdate = componentData["needsUpdate"];
         }
     };
 

@@ -33,7 +33,7 @@ namespace ECS {
                 ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
                 if (ImGui::CollapsingHeader("SDCPP Options")) {
                     UISchema::RenderSchema(
-                        m_comp.schema,
+                        m_comp.GetSchema(),
                         m_comp.GetPropertyMap(),
                         nullptr,
                         "SDCPP",

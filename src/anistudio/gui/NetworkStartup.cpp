@@ -21,7 +21,7 @@ namespace GUI {
         m_recentProjects.clear();
     }
 
-    bool NetworkStartup::Render(ANI::ProjectSystem& projectSystem, NetworkStartupResult& out) {
+    bool NetworkStartup::Render(ECS::ProjectSystem& projectSystem, NetworkStartupResult& out) {
         if (!m_active) return false;
 
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -85,7 +85,7 @@ namespace GUI {
         return false;
     }
 
-    void NetworkStartup::RenderUsernamePage(ANI::ProjectSystem& projectSystem) {
+    void NetworkStartup::RenderUsernamePage(ECS::ProjectSystem& projectSystem) {
         ImGui::Text("Welcome to AniStudio Networking");
         ImGui::Separator();
         ImGui::Spacing();
@@ -129,7 +129,7 @@ namespace GUI {
         }
     }
 
-    void NetworkStartup::RenderHostProjectPage(ANI::ProjectSystem& projectSystem) {
+    void NetworkStartup::RenderHostProjectPage(ECS::ProjectSystem& projectSystem) {
         ImGui::Text("Host a Project");
         ImGui::Separator();
         ImGui::TextDisabled("Username: %s", m_usernameBuffer);
@@ -214,7 +214,7 @@ namespace GUI {
         }
     }
 
-    void NetworkStartup::RenderJoinListPage(ANI::ProjectSystem& projectSystem) {
+    void NetworkStartup::RenderJoinListPage(ECS::ProjectSystem& projectSystem) {
         ImGui::Text("Join a Server");
         ImGui::Separator();
         ImGui::TextDisabled("Username: %s", m_usernameBuffer);
@@ -302,7 +302,7 @@ namespace GUI {
         }
     }
 
-    void NetworkStartup::RenderConfirmPage(ANI::ProjectSystem& projectSystem) {
+    void NetworkStartup::RenderConfirmPage(ECS::ProjectSystem& projectSystem) {
         ImGui::Text("Ready");
         ImGui::Separator();
 

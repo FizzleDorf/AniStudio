@@ -12,16 +12,16 @@ namespace ECS {
 		glm::vec3 rotation = glm::vec3(0.0f);
 		glm::vec3 scale = glm::vec3(1.0f);
 
-		// Cached transform matrix
 		mutable glm::mat4 transformMatrix = glm::mat4(1.0f);
 		mutable bool isDirty = true;
 
-		TransformComponent() {
-			compName = "Transform";
-			compCategory = "3D";
+		TransformComponent() = default;
 
-			// Define schema for node inputs/outputs and UI
-			schema = {
+		const char* GetCompName() const override { return "Transform"; }
+		const char* GetCompCategory() const override { return "3D"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "Transform"},
 				{"type", "object"},
 				{"properties", {
@@ -54,9 +54,28 @@ namespace ECS {
 					{{"name", "transform_matrix"}, {"type", "mat4"}}
 				}}
 			};
+			return j;
 		}
 
-		// Get the transform matrix (cached and only recalculated when dirty)
+		TransformComponent(const TransformComponent& other) : BaseComponent(other) {
+			position = other.position;
+			rotation = other.rotation;
+			scale = other.scale;
+			transformMatrix = other.transformMatrix;
+			isDirty = true;
+		}
+
+		TransformComponent& operator=(const TransformComponent& other) {
+			if (this != &other) {
+				position = other.position;
+				rotation = other.rotation;
+				scale = other.scale;
+				transformMatrix = other.transformMatrix;
+				isDirty = true;
+			}
+			return *this;
+		}
+
 		const glm::mat4& GetTransformMatrix() const {
 			if (isDirty) {
 				UpdateTransformMatrix();
@@ -65,31 +84,26 @@ namespace ECS {
 			return transformMatrix;
 		}
 
-		// Set position and mark dirty
 		void SetPosition(const glm::vec3& pos) {
 			position = pos;
 			isDirty = true;
 		}
 
-		// Set rotation (Euler angles in radians) and mark dirty
 		void SetRotation(const glm::vec3& rot) {
 			rotation = rot;
 			isDirty = true;
 		}
 
-		// Set scale and mark dirty
 		void SetScale(const glm::vec3& scl) {
 			scale = scl;
 			isDirty = true;
 		}
 
-		// Set transform from matrix (decompose and mark dirty)
 		void SetFromMatrix(const glm::mat4& matrix) {
 			DecomposeMatrix(matrix);
 			isDirty = true;
 		}
 
-		// Get property map for UI rendering
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"position_x", &position.x},
@@ -104,29 +118,34 @@ namespace ECS {
 			};
 		}
 
-		// Serialization
 		nlohmann::json Serialize() const override {
-			auto j = BaseComponent::Serialize();
-			j["position"] = { position.x, position.y, position.z };
-			j["rotation"] = { rotation.x, rotation.y, rotation.z };
-			j["scale"] = { scale.x, scale.y, scale.z };
+			nlohmann::json j;
+			j[GetCompName()] = {
+				{"position", { position.x, position.y, position.z }},
+				{"rotation", { rotation.x, rotation.y, rotation.z }},
+				{"scale", { scale.x, scale.y, scale.z }}
+			};
 			return j;
 		}
 
-		// Deserialization
 		void Deserialize(const nlohmann::json& j) override {
-			BaseComponent::Deserialize(j);
+			const char* key = GetCompName();
+			nlohmann::json componentData;
+			if (j.contains(key))
+				componentData = j.at(key);
+			else
+				componentData = j;
 
-			if (j.contains("position") && j["position"].is_array() && j["position"].size() >= 3) {
-				position = glm::vec3(j["position"][0], j["position"][1], j["position"][2]);
+			if (componentData.contains("position") && componentData["position"].is_array() && componentData["position"].size() >= 3) {
+				position = glm::vec3(componentData["position"][0], componentData["position"][1], componentData["position"][2]);
 			}
 
-			if (j.contains("rotation") && j["rotation"].is_array() && j["rotation"].size() >= 3) {
-				rotation = glm::vec3(j["rotation"][0], j["rotation"][1], j["rotation"][2]);
+			if (componentData.contains("rotation") && componentData["rotation"].is_array() && componentData["rotation"].size() >= 3) {
+				rotation = glm::vec3(componentData["rotation"][0], componentData["rotation"][1], componentData["rotation"][2]);
 			}
 
-			if (j.contains("scale") && j["scale"].is_array() && j["scale"].size() >= 3) {
-				scale = glm::vec3(j["scale"][0], j["scale"][1], j["scale"][2]);
+			if (componentData.contains("scale") && componentData["scale"].is_array() && componentData["scale"].size() >= 3) {
+				scale = glm::vec3(componentData["scale"][0], componentData["scale"][1], componentData["scale"][2]);
 			}
 
 			isDirty = true;
@@ -134,7 +153,6 @@ namespace ECS {
 
 	private:
 		void UpdateTransformMatrix() const {
-			// Create transformation matrix: T * R * S
 			glm::mat4 translation = glm::translate(glm::mat4(1.0f), position);
 			glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
 			glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -146,22 +164,18 @@ namespace ECS {
 		}
 
 		void DecomposeMatrix(const glm::mat4& matrix) {
-			// Extract translation
 			position = glm::vec3(matrix[3]);
 
-			// Extract scale
 			scale.x = glm::length(glm::vec3(matrix[0]));
 			scale.y = glm::length(glm::vec3(matrix[1]));
 			scale.z = glm::length(glm::vec3(matrix[2]));
 
-			// Remove scaling from the matrix
 			glm::mat3 rotMatrix = glm::mat3(
 				glm::vec3(matrix[0]) / scale.x,
 				glm::vec3(matrix[1]) / scale.y,
 				glm::vec3(matrix[2]) / scale.z
 			);
 
-			// Extract rotation (convert to Euler angles)
 			rotation.y = asin(-rotMatrix[0][2]);
 			if (cos(rotation.y) != 0) {
 				rotation.x = atan2(rotMatrix[1][2], rotMatrix[2][2]);

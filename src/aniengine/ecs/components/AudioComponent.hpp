@@ -21,10 +21,32 @@ namespace ECS {
     struct AudioComponent : BaseComponent {
         mutable std::shared_mutex dataMutex;
 
-        AudioComponent() : BaseComponent() {
-            compName = "AudioComponent";
-            compCategory = "Media";
-            setupBaseSchema();
+        AudioComponent() : BaseComponent() {}
+
+        const char* GetCompName() const override { return "AudioComponent"; }
+        const char* GetCompCategory() const override { return "Media"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
+                {"title", "Audio"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {{"type", "string"}, {"title", "File Path"}}},
+                    {"fileName", {{"type", "string"}, {"title", "File Name"}}},
+                    {"duration", {{"type", "number"}, {"title", "Duration (seconds)"}}},
+                    {"channels", {{"type", "integer"}, {"title", "Channels"}}},
+                    {"sampleRate", {{"type", "integer"}, {"title", "Sample Rate (Hz)"}}},
+                    {"volume", {{"type", "number"}, {"title", "Volume"}, {"minimum", 0.0}, {"maximum", 1.0}}},
+                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}, {"minimum", 0.1}, {"maximum", 4.0}}},
+                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
+                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
+                    {"hasExifData", {{"type", "boolean"}, {"title", "Has EXIF Metadata"}}},
+                    {"hasLSBData", {{"type", "boolean"}, {"title", "Has LSB Data"}}},
+                    {"hasAniStudioMetadata", {{"type", "boolean"}, {"title", "Has AniStudio Metadata"}}},
+                    {"manualSeek", {{"type", "boolean"}, {"title", "Manual Seek Flag"}}}
+                }}
+            };
+            return j;
         }
 
         AudioComponent(const AudioComponent& other)
@@ -49,14 +71,10 @@ namespace ECS {
             , manualSeek(other.manualSeek)
             , isLoading(false)
         {
-            compName = "AudioComponent";
-            compCategory = "Media";
-            setupBaseSchema();
         }
 
         AudioComponent& operator=(const AudioComponent& other) {
             if (this != &other) {
-                BaseComponent::operator=(other);
                 filePath = other.filePath;
                 fileName = other.fileName;
                 duration = other.duration;
@@ -86,26 +104,11 @@ namespace ECS {
 
         void UnloadAudio() {
             std::unique_lock lock(dataMutex);
-            if (swrCtx) {
-                swr_free(&swrCtx);
-                swrCtx = nullptr;
-            }
-            if (fmtCtx) {
-                avformat_close_input(&fmtCtx);
-                fmtCtx = nullptr;
-            }
-            if (codecCtx) {
-                avcodec_free_context(&codecCtx);
-                codecCtx = nullptr;
-            }
-            if (frame) {
-                av_frame_free(&frame);
-                frame = nullptr;
-            }
-            if (pkt) {
-                av_packet_free(&pkt);
-                pkt = nullptr;
-            }
+            if (swrCtx) { swr_free(&swrCtx); swrCtx = nullptr; }
+            if (fmtCtx) { avformat_close_input(&fmtCtx); fmtCtx = nullptr; }
+            if (codecCtx) { avcodec_free_context(&codecCtx); codecCtx = nullptr; }
+            if (frame) { av_frame_free(&frame); frame = nullptr; }
+            if (pkt) { av_packet_free(&pkt); pkt = nullptr; }
             pcmData.clear();
             pcmData.shrink_to_fit();
             isLoading = false;
@@ -120,28 +123,27 @@ namespace ECS {
             totalSamples = pcmData.size();
         }
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["filePath"] = &filePath;
-            properties["fileName"] = &fileName;
-            properties["duration"] = &duration;
-            properties["channels"] = &channels;
-            properties["sampleRate"] = &sampleRate;
-            properties["volume"] = &volume;
-            properties["playbackSpeed"] = &playbackSpeed;
-            properties["looping"] = &looping;
-            properties["currentTime"] = &currentTime;
-            properties["hasExifData"] = &hasExifData;
-            properties["hasLSBData"] = &hasLSBData;
-            properties["hasAniStudioMetadata"] = &hasAniStudioMetadata;
-            properties["manualSeek"] = &manualSeek;
-            return properties;
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"filePath", &filePath},
+                {"fileName", &fileName},
+                {"duration", &duration},
+                {"channels", &channels},
+                {"sampleRate", &sampleRate},
+                {"volume", &volume},
+                {"playbackSpeed", &playbackSpeed},
+                {"looping", &looping},
+                {"currentTime", &currentTime},
+                {"hasExifData", &hasExifData},
+                {"hasLSBData", &hasLSBData},
+                {"hasAniStudioMetadata", &hasAniStudioMetadata},
+                {"manualSeek", &manualSeek}
+            };
         }
 
-        virtual nlohmann::json Serialize() const override {
+        nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
+            j[GetCompName()] = {
                 {"filePath", filePath},
                 {"fileName", fileName},
                 {"duration", duration},
@@ -159,11 +161,11 @@ namespace ECS {
             return j;
         }
 
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName))
-                componentData = j.at(compName);
+            if (j.contains(key))
+                componentData = j.at(key);
             else
                 componentData = j;
 
@@ -215,94 +217,16 @@ namespace ECS {
         bool manualSeek = false;
 
         std::atomic<bool> isLoading{ false };
-
-    protected:
-        void setupBaseSchema() {
-            schema = {
-                {"title", "Audio"},
-                {"type", "object"},
-                {"properties", {
-                    {"filePath", {{"type", "string"}, {"title", "File Path"}}},
-                    {"fileName", {{"type", "string"}, {"title", "File Name"}}},
-                    {"duration", {{"type", "number"}, {"title", "Duration (seconds)"}}},
-                    {"channels", {{"type", "integer"}, {"title", "Channels"}}},
-                    {"sampleRate", {{"type", "integer"}, {"title", "Sample Rate (Hz)"}}},
-                    {"volume", {{"type", "number"}, {"title", "Volume"}, {"minimum", 0.0}, {"maximum", 1.0}}},
-                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}, {"minimum", 0.1}, {"maximum", 4.0}}},
-                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
-                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
-                    {"hasExifData", {{"type", "boolean"}, {"title", "Has EXIF Metadata"}}},
-                    {"hasLSBData", {{"type", "boolean"}, {"title", "Has LSB Data"}}},
-                    {"hasAniStudioMetadata", {{"type", "boolean"}, {"title", "Has AniStudio Metadata"}}},
-                    {"manualSeek", {{"type", "boolean"}, {"title", "Manual Seek Flag"}}}
-                }}
-            };
-        }
     };
 
     struct InputAudioComponent : public AudioComponent {
-        InputAudioComponent() {
-            compName = "InputAudio";
-            compCategory = "Media";
-            setupInputSchema();
-        }
+        InputAudioComponent() = default;
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["filePath"] = &filePath;
-            properties["fileName"] = &fileName;
-            properties["duration"] = &duration;
-            properties["channels"] = &channels;
-            properties["sampleRate"] = &sampleRate;
-            return properties;
-        }
+        const char* GetCompName() const override { return "InputAudio"; }
+        const char* GetCompCategory() const override { return "Media"; }
 
-        virtual nlohmann::json Serialize() const override {
-            nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
-                {"filePath", filePath},
-                {"fileName", fileName},
-                {"duration", duration},
-                {"channels", channels},
-                {"sampleRate", sampleRate}
-            };
-            return j;
-        }
-
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName))
-                componentData = j.at(compName);
-            else
-                componentData = j;
-
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("duration")) duration = componentData["duration"];
-            if (componentData.contains("channels")) channels = componentData["channels"];
-            if (componentData.contains("sampleRate")) sampleRate = componentData["sampleRate"];
-        }
-
-        InputAudioComponent& operator=(const InputAudioComponent& other) {
-            if (this != &other) {
-                AudioComponent::operator=(other);
-                compName = "InputAudio";
-                setupInputSchema();
-            }
-            return *this;
-        }
-
-        InputAudioComponent(const InputAudioComponent& other) : AudioComponent(other) {
-            compName = "InputAudio";
-            setupInputSchema();
-        }
-
-    private:
-        void setupInputSchema() {
-            auto items = FileFormats::GetComboItemsJson(FileFormats::GetAudioExtensions());
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Input Audio"},
                 {"type", "object"},
                 {"properties", {
@@ -322,70 +246,70 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePath", "fileName", "duration", "channels", "sampleRate"}}
             };
+            return j;
+        }
+
+        InputAudioComponent(const InputAudioComponent& other)
+            : AudioComponent(other) {
+        }
+
+        InputAudioComponent& operator=(const InputAudioComponent& other) {
+            if (this != &other) {
+                AudioComponent::operator=(other);
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"filePath", &filePath},
+                {"fileName", &fileName},
+                {"duration", &duration},
+                {"channels", &channels},
+                {"sampleRate", &sampleRate}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"filePath", filePath},
+                {"fileName", fileName},
+                {"duration", duration},
+                {"channels", channels},
+                {"sampleRate", sampleRate}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("duration")) duration = componentData["duration"];
+            if (componentData.contains("channels")) channels = componentData["channels"];
+            if (componentData.contains("sampleRate")) sampleRate = componentData["sampleRate"];
         }
     };
 
     struct OutputAudioComponent : public AudioComponent {
         std::string fileExtension = ".wav";
 
-        OutputAudioComponent() {
-            compName = "OutputAudio";
-            compCategory = "Media";
-            setupOutputSchema();
-        }
+        OutputAudioComponent() = default;
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["filePath"] = &filePath;
-            properties["fileName"] = &fileName;
-            properties["fileExtension"] = &fileExtension;
-            return properties;
-        }
+        const char* GetCompName() const override { return "OutputAudio"; }
+        const char* GetCompCategory() const override { return "Media"; }
 
-        virtual nlohmann::json Serialize() const override {
-            nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
-                {"filePath", filePath},
-                {"fileName", fileName},
-                {"fileExtension", fileExtension}
-            };
-            return j;
-        }
-
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName))
-                componentData = j.at(compName);
-            else
-                componentData = j;
-
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
-        }
-
-        OutputAudioComponent& operator=(const OutputAudioComponent& other) {
-            if (this != &other) {
-                AudioComponent::operator=(other);
-                compName = "OutputAudio";
-                fileExtension = other.fileExtension;
-                setupOutputSchema();
-            }
-            return *this;
-        }
-
-        OutputAudioComponent(const OutputAudioComponent& other) : AudioComponent(other) {
-            compName = "OutputAudio";
-            fileExtension = other.fileExtension;
-            setupOutputSchema();
-        }
-
-    private:
-        void setupOutputSchema() {
-            auto items = FileFormats::GetComboItemsJson(FileFormats::GetAudioExtensions());
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json items =
+                FileFormats::GetComboItemsJson(FileFormats::GetAudioExtensions());
+            static const nlohmann::json j = {
                 {"title", "Output Audio"},
                 {"type", "object"},
                 {"properties", {
@@ -423,6 +347,51 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePath", "fileName", "fileExtension"}}
             };
+            return j;
+        }
+
+        OutputAudioComponent(const OutputAudioComponent& other)
+            : AudioComponent(other)
+            , fileExtension(other.fileExtension) {
+        }
+
+        OutputAudioComponent& operator=(const OutputAudioComponent& other) {
+            if (this != &other) {
+                AudioComponent::operator=(other);
+                fileExtension = other.fileExtension;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"filePath", &filePath},
+                {"fileName", &fileName},
+                {"fileExtension", &fileExtension}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"filePath", filePath},
+                {"fileName", fileName},
+                {"fileExtension", fileExtension}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
         }
     };
 

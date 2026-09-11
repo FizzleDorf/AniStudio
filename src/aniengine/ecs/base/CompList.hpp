@@ -42,9 +42,6 @@ namespace ECS {
 			if (comp != data.end()) {
 				data.erase(comp);
 			}
-			else {
-				std::cout << "No component found for entity: " << entity << std::endl;
-			}
 		}
 
 		size_t Size() const {

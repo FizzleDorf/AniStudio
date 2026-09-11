@@ -13,8 +13,10 @@ namespace ECS {
         SamplerComponent() {
             compName = "Sampler";
             compCategory = "Sampling";
+        }
 
-            schema = {
+        const nlohmann::json& GetSchema() const override{
+            static const nlohmann::json j = {
                 {"title", "Sampler Settings"},
                 {"type", "object"},
                 {"propertyOrder", {
@@ -100,6 +102,7 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
         int64_t seed = -1;

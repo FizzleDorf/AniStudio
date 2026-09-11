@@ -61,7 +61,7 @@ namespace ECS {
         if (!comp) return;
 
         nlohmann::json j;
-        j["compName"] = comp->compName;
+        j["compName"] = comp->GetCompName();
 
         nlohmann::json pathsJson;
         const auto& allPaths = comp->GetPathMap();

@@ -20,25 +20,24 @@ namespace ECS {
 		std::vector<Vertex> vertices;
 		std::vector<unsigned int> indices;
 
-		// OpenGL objects
 		unsigned int VAO = 0;
 		unsigned int VBO = 0;
 		unsigned int EBO = 0;
 
-		// Material properties
 		unsigned int textureID = 0;
 		glm::vec3 color = glm::vec3(1.0f);
 
-		// Mesh info
 		std::string meshPath;
 		std::string meshName;
 		bool isLoaded = false;
 
-		MeshComponent() {
-			compName = "Mesh";
-			compCategory = "3D";
+		MeshComponent() = default;
 
-			schema = {
+		const char* GetCompName() const override { return "Mesh"; }
+		const char* GetCompCategory() const override { return "3D"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "Mesh"},
 				{"type", "object"},
 				{"properties", {
@@ -60,6 +59,7 @@ namespace ECS {
 					{{"name", "rendered_mesh"}, {"type", "mesh"}}
 				}}
 			};
+			return j;
 		}
 
 		~MeshComponent() {
@@ -82,31 +82,24 @@ namespace ECS {
 		}
 
 		void SetupMesh() {
-			// Generate and bind VAO
 			glGenVertexArrays(1, &VAO);
 			glGenBuffers(1, &VBO);
 			glGenBuffers(1, &EBO);
 
 			glBindVertexArray(VAO);
 
-			// Load vertex data
 			glBindBuffer(GL_ARRAY_BUFFER, VBO);
 			glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);
 
-			// Load index data
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
 
-			// Set vertex attribute pointers
-			// Position attribute
 			glEnableVertexAttribArray(0);
 			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
 
-			// Normal attribute
 			glEnableVertexAttribArray(1);
 			glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
 
-			// Texture coordinate attribute
 			glEnableVertexAttribArray(2);
 			glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoords));
 
@@ -118,12 +111,10 @@ namespace ECS {
 			if (!isLoaded || VAO == 0) return;
 
 			glBindVertexArray(VAO);
-			// Explicit cast to avoid C4267 warning (size_t Å® GLsizei)
 			glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 		}
 
-		// Get property map for UI rendering
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
 			return {
 				{"meshPath", &meshPath},
@@ -134,32 +125,31 @@ namespace ECS {
 			};
 		}
 
-		// Serialization
 		nlohmann::json Serialize() const override {
-			auto j = BaseComponent::Serialize();
-			j["meshPath"] = meshPath;
-			j["meshName"] = meshName;
-			j["color"] = { color.r, color.g, color.b };
-			j["isLoaded"] = isLoaded;
+			nlohmann::json j;
+			j[GetCompName()] = {
+				{"meshPath", meshPath},
+				{"meshName", meshName},
+				{"color", { color.r, color.g, color.b }},
+				{"isLoaded", isLoaded}
+			};
 			return j;
 		}
 
-		// Deserialization
 		void Deserialize(const nlohmann::json& j) override {
-			BaseComponent::Deserialize(j);
+			const char* key = GetCompName();
+			nlohmann::json componentData;
+			if (j.contains(key))
+				componentData = j.at(key);
+			else
+				componentData = j;
 
-			if (j.contains("meshPath")) {
-				meshPath = j["meshPath"];
+			if (componentData.contains("meshPath")) meshPath = componentData["meshPath"];
+			if (componentData.contains("meshName")) meshName = componentData["meshName"];
+			if (componentData.contains("color") && componentData["color"].is_array() && componentData["color"].size() >= 3) {
+				color = glm::vec3(componentData["color"][0], componentData["color"][1], componentData["color"][2]);
 			}
-			if (j.contains("meshName")) {
-				meshName = j["meshName"];
-			}
-			if (j.contains("color") && j["color"].is_array() && j["color"].size() >= 3) {
-				color = glm::vec3(j["color"][0], j["color"][1], j["color"][2]);
-			}
-			if (j.contains("isLoaded")) {
-				isLoaded = j["isLoaded"];
-			}
+			if (componentData.contains("isLoaded")) isLoaded = componentData["isLoaded"];
 		}
 	};
 

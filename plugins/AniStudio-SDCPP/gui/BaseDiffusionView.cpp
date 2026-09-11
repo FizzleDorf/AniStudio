@@ -127,7 +127,6 @@ namespace GUI {
         auto* activeComp = m_entityManager.GetComponentById(activeEntity, compId);
         if (activeComp) {
             activeComp->Deserialize(compData);
-            activeComp->RefreshSchema();
         }
     }
 
@@ -148,7 +147,6 @@ namespace GUI {
             auto* stateComp = m_entityManager.GetComponentById(stateEntity, compId);
             if (stateComp) {
                 stateComp->Deserialize(data);
-                stateComp->RefreshSchema();
             }
         }
     }
@@ -329,7 +327,7 @@ namespace GUI {
                 }
             }
             else {
-                if (comp->schema.empty()) {
+                if (comp->GetSchema().empty()) {
                     ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1), "No schema for %s", name.c_str());
                 }
                 else {
@@ -350,7 +348,7 @@ namespace GUI {
                             ImGui::EndPopup();
                         }
                         };
-                    UISchema::RenderSchema(comp->schema, comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
+                    UISchema::RenderSchema(comp->GetSchema(), comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
                 }
             }
 

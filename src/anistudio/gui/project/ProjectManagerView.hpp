@@ -10,7 +10,7 @@ namespace GUI {
 
     class ProjectManagerView {
     private:
-        ANI::ProjectSystem& m_projectSystem;
+        ECS::ProjectSystem& m_projectSystem;
         ANI::StudioCore* m_studioCore;
         ProjectPopupState popupState;
         AutoLoadPopupState autoLoadState;
@@ -19,7 +19,7 @@ namespace GUI {
         bool m_networkMode = false;
 
     public:
-        ProjectManagerView(ANI::ProjectSystem& projectSystem, ANI::StudioCore* studioCore);
+        ProjectManagerView(ECS::ProjectSystem& projectSystem, ANI::StudioCore* studioCore);
 
         void Init();
         void Update(const float deltaT);

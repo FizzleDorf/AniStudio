@@ -370,7 +370,7 @@ public:
     void OnUpdate(float deltaTime) override {
         if (!m_entityMgr) return;
 
-        auto projSys = m_entityMgr->GetSystem<ANI::ProjectSystem>();
+        auto projSys = m_entityMgr->GetSystem<ECS::ProjectSystem>();
         if (!projSys) return;
 
         bool isOpen = projSys->IsProjectOpen();

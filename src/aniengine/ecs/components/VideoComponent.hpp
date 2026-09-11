@@ -50,7 +50,6 @@ namespace ECS {
         }
     };
 
-    // ---- Base Video Component (no texture) ----
     struct VideoComponent : public BaseComponent {
         mutable std::shared_mutex dataMutex;
 
@@ -75,7 +74,7 @@ namespace ECS {
         double currentTime = 0.0;
 
         std::vector<uint8_t> frameDataRGBA;
-        bool needsTextureUpdate = false;   // triggers texture upload
+        bool needsTextureUpdate = false;
 
         bool hasExifData = false;
         bool hasLSBData = false;
@@ -84,87 +83,54 @@ namespace ECS {
         std::string fileDate;
         std::string fileTime;
 
-        VideoComponent() {
-            compName = "Video";
-            compCategory = "Video";
-            setupBaseSchema();
-        }
+        VideoComponent() = default;
 
-        virtual ~VideoComponent() = default;
+        const char* GetCompName() const override { return "Video"; }
+        const char* GetCompCategory() const override { return "Video"; }
 
-        void UpdateFrameData(std::vector<uint8_t>&& data, int w, int h, long long frame, double time = -1.0) {
-            std::unique_lock lock(dataMutex);
-            frameDataRGBA = std::move(data);
-            width = w;
-            height = h;
-            currentFrame = frame;
-            if (time >= 0.0) currentTime = time;
-            else currentTime = static_cast<double>(frame) / (fps > 0.0 ? fps : 30.0);
-            needsTextureUpdate = true;
-        }
-
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["fileName"] = &fileName;
-            properties["filePath"] = &filePath;
-            properties["width"] = &width;
-            properties["height"] = &height;
-            properties["fps"] = &fps;
-            properties["frameCount"] = &frameCount;
-            properties["currentFrame"] = &currentFrame;
-            properties["playbackSpeed"] = &playbackSpeed;
-            properties["looping"] = &looping;
-            properties["currentTime"] = &currentTime;
-            properties["fileSize"] = &fileSize;
-            properties["fileDate"] = &fileDate;
-            properties["fileTime"] = &fileTime;
-            return properties;
-        }
-
-        virtual nlohmann::json Serialize() const override {
-            nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
-                {"width", width},
-                {"height", height},
-                {"fps", fps},
-                {"frameCount", frameCount},
-                {"fileName", fileName},
-                {"filePath", filePath},
-                {"playbackSpeed", playbackSpeed},
-                {"looping", looping},
-                {"currentTime", currentTime},
-                {"fileSize", fileSize},
-                {"fileDate", fileDate},
-                {"fileTime", fileTime},
-                {"hasExifData", hasExifData},
-                {"hasLSBData", hasLSBData},
-                {"hasAniStudioMetadata", hasAniStudioMetadata}
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
+                {"title", "Video"},
+                {"type", "object"},
+                {"properties", {
+                    {"fileName", {{"type", "string"}, {"title", "File Name"}}},
+                    {"filePath", {{"type", "string"}, {"title", "File Path"}}},
+                    {"width", {{"type", "integer"}, {"title", "Width"}}},
+                    {"height", {{"type", "integer"}, {"title", "Height"}}},
+                    {"fps", {{"type", "number"}, {"title", "FPS"}}},
+                    {"frameCount", {{"type", "integer"}, {"title", "Frame Count"}}},
+                    {"currentFrame", {{"type", "integer"}, {"title", "Current Frame"}}},
+                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}}},
+                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
+                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
+                    {"fileSize", {{"type", "integer"}, {"title", "File Size (bytes)"}}},
+                    {"fileDate", {{"type", "string"}, {"title", "Date Modified"}}},
+                    {"fileTime", {{"type", "string"}, {"title", "Time Modified"}}}
+                }}
             };
             return j;
         }
 
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName)) componentData = j.at(compName);
-            else componentData = j;
-
-            if (componentData.contains("width")) width = componentData["width"];
-            if (componentData.contains("height")) height = componentData["height"];
-            if (componentData.contains("fps")) fps = componentData["fps"];
-            if (componentData.contains("frameCount")) frameCount = componentData["frameCount"];
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
-            if (componentData.contains("looping")) looping = componentData["looping"];
-            if (componentData.contains("currentTime")) currentTime = componentData["currentTime"];
-            if (componentData.contains("fileSize")) fileSize = componentData["fileSize"];
-            if (componentData.contains("fileDate")) fileDate = componentData["fileDate"];
-            if (componentData.contains("fileTime")) fileTime = componentData["fileTime"];
-            if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
-            if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
-            if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
+        VideoComponent(const VideoComponent& other) : BaseComponent(other) {
+            std::shared_lock otherLock(other.dataMutex);
+            fileName = other.fileName;
+            filePath = other.filePath;
+            width = other.width;
+            height = other.height;
+            fps = other.fps;
+            frameCount = other.frameCount;
+            currentFrame = other.currentFrame;
+            playbackSpeed = other.playbackSpeed;
+            looping = other.looping;
+            isPaused = other.isPaused;
+            frameAccumulator = other.frameAccumulator;
+            currentTime = other.currentTime;
+            fileSize = other.fileSize;
+            fileDate = other.fileDate;
+            fileTime = other.fileTime;
+            hasExifData = other.hasExifData;
+            hasLSBData = other.hasLSBData;
+            hasAniStudioMetadata = other.hasAniStudioMetadata;
         }
 
         VideoComponent& operator=(const VideoComponent& other) {
@@ -193,126 +159,91 @@ namespace ECS {
             return *this;
         }
 
-        VideoComponent(const VideoComponent& other) : BaseComponent(other) {
-            std::shared_lock otherLock(other.dataMutex);
-            fileName = other.fileName;
-            filePath = other.filePath;
-            width = other.width;
-            height = other.height;
-            fps = other.fps;
-            frameCount = other.frameCount;
-            currentFrame = other.currentFrame;
-            playbackSpeed = other.playbackSpeed;
-            looping = other.looping;
-            isPaused = other.isPaused;
-            frameAccumulator = other.frameAccumulator;
-            currentTime = other.currentTime;
-            fileSize = other.fileSize;
-            fileDate = other.fileDate;
-            fileTime = other.fileTime;
-            hasExifData = other.hasExifData;
-            hasLSBData = other.hasLSBData;
-            hasAniStudioMetadata = other.hasAniStudioMetadata;
-            setupBaseSchema();
+        virtual ~VideoComponent() = default;
+
+        void UpdateFrameData(std::vector<uint8_t>&& data, int w, int h, long long frame, double time = -1.0) {
+            std::unique_lock lock(dataMutex);
+            frameDataRGBA = std::move(data);
+            width = w;
+            height = h;
+            currentFrame = frame;
+            if (time >= 0.0) currentTime = time;
+            else currentTime = static_cast<double>(frame) / (fps > 0.0 ? fps : 30.0);
+            needsTextureUpdate = true;
         }
 
-    protected:
-        void setupBaseSchema() {
-            schema = {
-                {"title", "Video"},
-                {"type", "object"},
-                {"properties", {
-                    {"fileName", {{"type", "string"}, {"title", "File Name"}}},
-                    {"filePath", {{"type", "string"}, {"title", "File Path"}}},
-                    {"width", {{"type", "integer"}, {"title", "Width"}}},
-                    {"height", {{"type", "integer"}, {"title", "Height"}}},
-                    {"fps", {{"type", "number"}, {"title", "FPS"}}},
-                    {"frameCount", {{"type", "integer"}, {"title", "Frame Count"}}},
-                    {"currentFrame", {{"type", "integer"}, {"title", "Current Frame"}}},
-                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}}},
-                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
-                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
-                    {"fileSize", {{"type", "integer"}, {"title", "File Size (bytes)"}}},
-                    {"fileDate", {{"type", "string"}, {"title", "Date Modified"}}},
-                    {"fileTime", {{"type", "string"}, {"title", "Time Modified"}}}
-                }}
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"fileName", &fileName},
+                {"filePath", &filePath},
+                {"width", &width},
+                {"height", &height},
+                {"fps", &fps},
+                {"frameCount", &frameCount},
+                {"currentFrame", &currentFrame},
+                {"playbackSpeed", &playbackSpeed},
+                {"looping", &looping},
+                {"currentTime", &currentTime},
+                {"fileSize", &fileSize},
+                {"fileDate", &fileDate},
+                {"fileTime", &fileTime}
             };
         }
-    };
 
-    // ---- Input Video Component ----
-    struct InputVideoComponent : public VideoComponent {
-        InputVideoComponent() {
-            compName = "InputVideo";
-            compCategory = "Video";
-            setupInputSchema();
-        }
-
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["fileName"] = &fileName;
-            properties["filePath"] = &filePath;
-            properties["width"] = &width;
-            properties["height"] = &height;
-            properties["fps"] = &fps;
-            properties["frameCount"] = &frameCount;
-            properties["currentFrame"] = &currentFrame;
-            properties["playbackSpeed"] = &playbackSpeed;
-            properties["looping"] = &looping;
-            return properties;
-        }
-
-        virtual nlohmann::json Serialize() const override {
+        nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
-                {"fileName", fileName},
-                {"filePath", filePath},
+            j[GetCompName()] = {
                 {"width", width},
                 {"height", height},
                 {"fps", fps},
                 {"frameCount", frameCount},
-                {"currentFrame", currentFrame},
+                {"fileName", fileName},
+                {"filePath", filePath},
                 {"playbackSpeed", playbackSpeed},
-                {"looping", looping}
+                {"looping", looping},
+                {"currentTime", currentTime},
+                {"fileSize", fileSize},
+                {"fileDate", fileDate},
+                {"fileTime", fileTime},
+                {"hasExifData", hasExifData},
+                {"hasLSBData", hasLSBData},
+                {"hasAniStudioMetadata", hasAniStudioMetadata}
             };
             return j;
         }
 
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) componentData = j.at(compName);
+            if (j.contains(key)) componentData = j.at(key);
             else componentData = j;
 
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("width")) width = componentData["width"];
             if (componentData.contains("height")) height = componentData["height"];
             if (componentData.contains("fps")) fps = componentData["fps"];
             if (componentData.contains("frameCount")) frameCount = componentData["frameCount"];
-            if (componentData.contains("currentFrame")) currentFrame = componentData["currentFrame"];
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
             if (componentData.contains("looping")) looping = componentData["looping"];
+            if (componentData.contains("currentTime")) currentTime = componentData["currentTime"];
+            if (componentData.contains("fileSize")) fileSize = componentData["fileSize"];
+            if (componentData.contains("fileDate")) fileDate = componentData["fileDate"];
+            if (componentData.contains("fileTime")) fileTime = componentData["fileTime"];
+            if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
+            if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
+            if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
         }
+    };
 
-        InputVideoComponent& operator=(const InputVideoComponent& other) {
-            if (this != &other) {
-                VideoComponent::operator=(other);
-                compName = "InputVideo";
-                setupInputSchema();
-            }
-            return *this;
-        }
+    struct InputVideoComponent : public VideoComponent {
+        InputVideoComponent() = default;
 
-        InputVideoComponent(const InputVideoComponent& other) : VideoComponent(other) {
-            compName = "InputVideo";
-            setupInputSchema();
-        }
+        const char* GetCompName() const override { return "InputVideo"; }
+        const char* GetCompCategory() const override { return "Video"; }
 
-    private:
-        void setupInputSchema() {
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Input Video"},
                 {"type", "object"},
                 {"properties", {
@@ -332,69 +263,78 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePath", "fileName", "width", "height", "fps", "frameCount"}}
             };
-        }
-    };
-
-    // ---- Output Video Component ----
-    struct OutputVideoComponent : public VideoComponent {
-        std::string fileExtension = ".mp4";
-
-        OutputVideoComponent() {
-            compName = "OutputVideo";
-            compCategory = "Video";
-            setupOutputSchema();
-        }
-
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            std::unordered_map<std::string, UISchema::PropertyVariant> properties;
-            properties["fileName"] = &fileName;
-            properties["filePath"] = &filePath;
-            properties["fileExtension"] = &fileExtension;
-            return properties;
-        }
-
-        virtual nlohmann::json Serialize() const override {
-            nlohmann::json j;
-            j["compName"] = compName;
-            j[compName] = {
-                {"fileName", fileName},
-                {"filePath", filePath},
-                {"fileExtension", fileExtension}
-            };
             return j;
         }
 
-        virtual void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName)) componentData = j.at(compName);
-            else componentData = j;
+        InputVideoComponent(const InputVideoComponent& other) : VideoComponent(other) {}
 
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
-        }
-
-        OutputVideoComponent& operator=(const OutputVideoComponent& other) {
+        InputVideoComponent& operator=(const InputVideoComponent& other) {
             if (this != &other) {
                 VideoComponent::operator=(other);
-                compName = "OutputVideo";
-                fileExtension = other.fileExtension;
-                setupOutputSchema();
             }
             return *this;
         }
 
-        OutputVideoComponent(const OutputVideoComponent& other) : VideoComponent(other) {
-            compName = "OutputVideo";
-            fileExtension = other.fileExtension;
-            setupOutputSchema();
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"fileName", &fileName},
+                {"filePath", &filePath},
+                {"width", &width},
+                {"height", &height},
+                {"fps", &fps},
+                {"frameCount", &frameCount},
+                {"currentFrame", &currentFrame},
+                {"playbackSpeed", &playbackSpeed},
+                {"looping", &looping}
+            };
         }
 
-    private:
-        void setupOutputSchema() {
-            auto items = FileFormats::GetComboItemsJson(FileFormats::GetVideoExtensions());
-            schema = {
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"fileName", fileName},
+                {"filePath", filePath},
+                {"width", width},
+                {"height", height},
+                {"fps", fps},
+                {"frameCount", frameCount},
+                {"currentFrame", currentFrame},
+                {"playbackSpeed", playbackSpeed},
+                {"looping", looping}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) componentData = j.at(key);
+            else componentData = j;
+
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("width")) width = componentData["width"];
+            if (componentData.contains("height")) height = componentData["height"];
+            if (componentData.contains("fps")) fps = componentData["fps"];
+            if (componentData.contains("frameCount")) frameCount = componentData["frameCount"];
+            if (componentData.contains("currentFrame")) currentFrame = componentData["currentFrame"];
+            if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
+            if (componentData.contains("looping")) looping = componentData["looping"];
+        }
+    };
+
+    struct OutputVideoComponent : public VideoComponent {
+        std::string fileExtension = ".mp4";
+
+        OutputVideoComponent() = default;
+
+        const char* GetCompName() const override { return "OutputVideo"; }
+        const char* GetCompCategory() const override { return "Video"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json items =
+                FileFormats::GetComboItemsJson(FileFormats::GetVideoExtensions());
+            static const nlohmann::json j = {
                 {"title", "Output Video"},
                 {"type", "object"},
                 {"properties", {
@@ -432,6 +372,49 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePath", "fileName", "fileExtension"}}
             };
+            return j;
+        }
+
+        OutputVideoComponent(const OutputVideoComponent& other)
+            : VideoComponent(other)
+            , fileExtension(other.fileExtension) {
+        }
+
+        OutputVideoComponent& operator=(const OutputVideoComponent& other) {
+            if (this != &other) {
+                VideoComponent::operator=(other);
+                fileExtension = other.fileExtension;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"fileName", &fileName},
+                {"filePath", &filePath},
+                {"fileExtension", &fileExtension}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"fileName", fileName},
+                {"filePath", filePath},
+                {"fileExtension", fileExtension}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) componentData = j.at(key);
+            else componentData = j;
+
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
         }
     };
 

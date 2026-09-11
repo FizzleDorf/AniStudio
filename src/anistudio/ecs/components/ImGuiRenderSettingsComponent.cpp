@@ -7,7 +7,68 @@
 namespace ECS {
 
     ImGuiRenderSettingsComponent::ImGuiRenderSettingsComponent() {
-        compName = "ImGuiRenderSettingsComponent";
+    }
+
+    ImGuiRenderSettingsComponent::ImGuiRenderSettingsComponent(const ImGuiRenderSettingsComponent& other)
+        : BaseSettingsComponent(other)
+        , configWindowsResizeFromEdges(other.configWindowsResizeFromEdges)
+        , configWindowsMoveFromTitleBarOnly(other.configWindowsMoveFromTitleBarOnly)
+        , configDragClickToInputText(other.configDragClickToInputText)
+        , configNavEnableKeyboard(other.configNavEnableKeyboard)
+        , configNavEnableGamepad(other.configNavEnableGamepad)
+        , configNavMoveSetMousePos(other.configNavMoveSetMousePos)
+        , configNavCaptureKeyboard(other.configNavCaptureKeyboard)
+        , configNavEscapeClearFocusItem(other.configNavEscapeClearFocusItem)
+        , configMemoryCompactTimer(other.configMemoryCompactTimer)
+        , configDebugHighlightIdConflicts(other.configDebugHighlightIdConflicts)
+        , configDockingEnable(other.configDockingEnable)
+        , configDockingWithShift(other.configDockingWithShift)
+        , configDockingAlwaysTabBar(other.configDockingAlwaysTabBar)
+        , configDockingTransparentPayload(other.configDockingTransparentPayload)
+        , configViewportsEnable(other.configViewportsEnable)
+        , configViewportsNoAutoMerge(other.configViewportsNoAutoMerge)
+        , configViewportsNoTaskBarIcon(other.configViewportsNoTaskBarIcon)
+        , configViewportsNoDecoration(other.configViewportsNoDecoration)
+        , configViewportsNoDefaultParent(other.configViewportsNoDefaultParent)
+        , configMacOSXBehaviors(other.configMacOSXBehaviors)
+        , configInputTextCursorBlink(other.configInputTextCursorBlink)
+        , configInputTextEnterKeepActive(other.configInputTextEnterKeepActive)
+        , hasChanges(other.hasChanges)
+        , imguiContext(other.imguiContext)
+        , backupConfigFlags(other.backupConfigFlags)
+        , isInitialized(other.isInitialized) {
+    }
+
+    ImGuiRenderSettingsComponent& ImGuiRenderSettingsComponent::operator=(const ImGuiRenderSettingsComponent& other) {
+        if (this != &other) {
+            configWindowsResizeFromEdges = other.configWindowsResizeFromEdges;
+            configWindowsMoveFromTitleBarOnly = other.configWindowsMoveFromTitleBarOnly;
+            configDragClickToInputText = other.configDragClickToInputText;
+            configNavEnableKeyboard = other.configNavEnableKeyboard;
+            configNavEnableGamepad = other.configNavEnableGamepad;
+            configNavMoveSetMousePos = other.configNavMoveSetMousePos;
+            configNavCaptureKeyboard = other.configNavCaptureKeyboard;
+            configNavEscapeClearFocusItem = other.configNavEscapeClearFocusItem;
+            configMemoryCompactTimer = other.configMemoryCompactTimer;
+            configDebugHighlightIdConflicts = other.configDebugHighlightIdConflicts;
+            configDockingEnable = other.configDockingEnable;
+            configDockingWithShift = other.configDockingWithShift;
+            configDockingAlwaysTabBar = other.configDockingAlwaysTabBar;
+            configDockingTransparentPayload = other.configDockingTransparentPayload;
+            configViewportsEnable = other.configViewportsEnable;
+            configViewportsNoAutoMerge = other.configViewportsNoAutoMerge;
+            configViewportsNoTaskBarIcon = other.configViewportsNoTaskBarIcon;
+            configViewportsNoDecoration = other.configViewportsNoDecoration;
+            configViewportsNoDefaultParent = other.configViewportsNoDefaultParent;
+            configMacOSXBehaviors = other.configMacOSXBehaviors;
+            configInputTextCursorBlink = other.configInputTextCursorBlink;
+            configInputTextEnterKeepActive = other.configInputTextEnterKeepActive;
+            hasChanges = other.hasChanges;
+            imguiContext = other.imguiContext;
+            backupConfigFlags = other.backupConfigFlags;
+            isInitialized = other.isInitialized;
+        }
+        return *this;
     }
 
     void ImGuiRenderSettingsComponent::EnsureInitialized() {

@@ -10,6 +10,17 @@ namespace ECS {
     public:
         GeneralSettingsComponent();
 
+        const char* GetCompName() const override { return "GeneralSettingsComponent"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        GeneralSettingsComponent(const GeneralSettingsComponent& other);
+        GeneralSettingsComponent& operator=(const GeneralSettingsComponent& other);
+
         bool SaveSettings() override;
         bool LoadSettings() override;
         void ResetToDefaults() override;

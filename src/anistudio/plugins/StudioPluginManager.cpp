@@ -223,7 +223,7 @@ namespace Plugins {
     }
 
     void StudioPluginManager::SaveViewState() {
-        auto projSys = entityManager.GetSystem<ANI::ProjectSystem>();
+        auto projSys = entityManager.GetSystem<ECS::ProjectSystem>();
         if (projSys && projSys->IsProjectOpen()) {
             projSys->SaveViewState();
             std::cout << "[StudioPluginManager] Saved viewstate before plugin disable." << std::endl;
@@ -231,7 +231,7 @@ namespace Plugins {
     }
 
     void StudioPluginManager::LoadViewState() {
-        auto projSys = entityManager.GetSystem<ANI::ProjectSystem>();
+        auto projSys = entityManager.GetSystem<ECS::ProjectSystem>();
         if (projSys && projSys->IsProjectOpen()) {
             projSys->LoadViewState();
             std::cout << "[StudioPluginManager] Reloaded viewstate after plugin enable." << std::endl;
