@@ -27,7 +27,7 @@ class AniStudio(ConanFile):
     def requirements(self):
         self.requires("glfw/3.4", options={"shared": True})
         self.requires("glew/2.1.0")
-        self.requires("zlib/1.2.11")
+        self.requires("zlib/1.3.1")
         self.requires("libpng/1.6.44")
         self.requires("exiv2/0.28.1")
         self.tool_requires("ninja/1.12.1")
