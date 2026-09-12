@@ -69,6 +69,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            imagemagick \
             libva-dev \
             libgl1-mesa-dev libglu1-mesa-dev \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
@@ -83,10 +84,16 @@ jobs:
         with:
           arch: ${{ matrix.msvc_arch }}
 
-      - name: Install Conan
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "conan>=2.0,<3"
+      - name: Restore Conan package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-core-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-core-${{ runner.os }}-${{ matrix.variant }}-
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
 
       - name: Configure Conan Center remote
         shell: bash
@@ -97,14 +104,6 @@ jobs:
       - name: Detect Conan profile
         shell: bash
         run: conan profile detect --force
-
-      - name: Restore Conan cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-${{ matrix.variant }}-conan-cpp17-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.variant }}-conan-cpp17-
 
       - name: Conan install
         shell: bash
@@ -134,6 +133,85 @@ jobs:
 
       - name: Build
         run: cmake --build build --config Release --parallel
+
+      - name: Build AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          APPDIR="$PWD/AppDir"
+          rm -rf "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/AniStudio"
+
+          cp build/AniStudio "$APPDIR/usr/bin/"
+
+          for so in $(find build -maxdepth 1 -name "*.so*"); do
+            cp "$so" "$APPDIR/usr/lib/"
+          done
+
+          ldd build/AniStudio 2>/dev/null | awk '/=>/ {print $3}' | grep -v '^$' | while read dep; do
+            case "$dep" in
+              /lib/*|/usr/lib/*|/lib64/*|/usr/lib64/*) ;;
+              *) cp -n "$dep" "$APPDIR/usr/lib/" 2>/dev/null || true ;;
+            esac
+          done
+
+          for so in "$APPDIR/usr/lib"/*.so*; do
+            [ -f "$so" ] || continue
+            ldd "$so" 2>/dev/null | awk '/=>/ {print $3}' | grep -v '^$' | while read dep; do
+              case "$dep" in
+                /lib/*|/usr/lib/*|/lib64/*|/usr/lib64/*) ;;
+                *) cp -n "$dep" "$APPDIR/usr/lib/" 2>/dev/null || true ;;
+              esac
+            done
+          done
+
+          cp -r build/data    "$APPDIR/usr/share/AniStudio/" 2>/dev/null || true
+          cp -r build/shaders "$APPDIR/usr/share/AniStudio/" 2>/dev/null || true
+          cp -r build/assets  "$APPDIR/usr/share/AniStudio/" 2>/dev/null || true
+
+          if [ -f assets/favicom.jpg ]; then
+            convert assets/favicom.jpg "$APPDIR/AniStudio.png" || \
+              cp assets/favicom.jpg "$APPDIR/AniStudio.png"
+          fi
+
+          cat > "$APPDIR/AniStudio.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=AniStudio
+          Exec=AniStudio
+          Icon=AniStudio
+          Categories=Graphics;AudioVideo;
+          Terminal=false
+          EOF
+
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$HERE/usr/lib:$LD_LIBRARY_PATH"
+          exec "$HERE/usr/bin/AniStudio" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          if [ "${{ matrix.variant }}" == "linux-arm64" ]; then
+            TOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-aarch64.AppImage"
+            export ARCH=aarch64
+          else
+            TOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+            export ARCH=x86_64
+          fi
+          wget -q "$TOOL_URL" -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+
+          /tmp/appimagetool --appimage-extract-and-run "$APPDIR" \
+            "AniStudio-${{ steps.ver.outputs.hash }}-${{ matrix.variant }}.AppImage"
+
+      - name: Upload AppImage
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppImage-${{ matrix.variant }}
+          path: AniStudio-${{ steps.ver.outputs.hash }}-*.AppImage
+          retention-days: 7
 
       - name: Package core
         shell: bash
@@ -307,10 +385,16 @@ jobs:
         with:
           arch: ${{ matrix.msvc_arch }}
 
-      - name: Install Conan
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "conan>=2.0,<3"
+      - name: Restore Conan package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-plugin-${{ runner.os }}-${{ matrix.variant }}-${{ matrix.backend }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-plugin-${{ runner.os }}-${{ matrix.variant }}-${{ matrix.backend }}-
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
 
       - name: Configure Conan Center remote
         shell: bash
@@ -321,14 +405,6 @@ jobs:
       - name: Detect Conan profile
         shell: bash
         run: conan profile detect --force
-
-      - name: Restore Conan cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-${{ matrix.variant }}-plugin-conan-cpp17-${{ hashFiles('conanfile.py') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.variant }}-plugin-conan-cpp17-
 
       - name: Conan install (plugin toolchain)
         shell: bash
@@ -483,13 +559,17 @@ jobs:
         with:
           path: artifacts
 
-      - run: find artifacts -type f -name "*.tar.gz" | sort
+      - run: |
+          find artifacts -type f -name "*.tar.gz" | sort
+          find artifacts -type f -name "*.AppImage" | sort
 
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.ver.outputs.hash }}
           tag_name: ${{ github.ref_name }}
-          files: artifacts/**/*.tar.gz
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.AppImage
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
