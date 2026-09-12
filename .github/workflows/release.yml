@@ -100,7 +100,7 @@ jobs:
         run: |
           conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
           conan remote list
-          conan profile show default
+          conan profile show
 
       - name: Restore Conan Cache
         uses: actions/cache@v4
@@ -285,6 +285,7 @@ jobs:
         run: |
           conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
           conan remote list
+          conan profile show
 
       - name: Restore Conan Cache
         uses: actions/cache@v4
