@@ -185,7 +185,7 @@ find_package(exiv2 CONFIG REQUIRED)
 
 find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
 find_package(portaudio CONFIG REQUIRED)
-find_package(samplerate REQUIRED)
+find_package(SampleRate REQUIRED)
 
 if(UNIX AND NOT APPLE)
     find_package(X11 REQUIRED)
@@ -201,7 +201,7 @@ if(WIN32)
         libaom-av1
         dav1d
         portaudio
-        samplerate
+        SampleRate 
         glew
     )
 endif()
