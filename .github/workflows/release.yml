@@ -84,6 +84,9 @@ jobs:
         with:
           arch: ${{ matrix.msvc_arch }}
 
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+
       - name: Restore Conan package cache
         uses: actions/cache@v4
         with:
@@ -91,9 +94,6 @@ jobs:
           key: conan-core-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-core-${{ runner.os }}-${{ matrix.variant }}-
-
-      - name: Setup Conan
-        uses: conan-io/setup-conan@v1
 
       - name: Configure Conan Center remote
         shell: bash
@@ -110,9 +110,19 @@ jobs:
         run: |
           conan install . --build=missing \
             -s compiler.cppstd=17 -s build_type=Release \
-            --output-folder=build \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          if [ ! -f build/conan/conan_toolchain.cmake ]; then
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            ls -la build/ || true
+            ls -la build/conan/ || true
+            exit 1
+          fi
+          echo "Conan toolchain present"
 
       - name: Configure
         shell: bash
@@ -385,6 +395,9 @@ jobs:
         with:
           arch: ${{ matrix.msvc_arch }}
 
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+
       - name: Restore Conan package cache
         uses: actions/cache@v4
         with:
@@ -392,9 +405,6 @@ jobs:
           key: conan-plugin-${{ runner.os }}-${{ matrix.variant }}-${{ matrix.backend }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-plugin-${{ runner.os }}-${{ matrix.variant }}-${{ matrix.backend }}-
-
-      - name: Setup Conan
-        uses: conan-io/setup-conan@v1
 
       - name: Configure Conan Center remote
         shell: bash
@@ -411,9 +421,19 @@ jobs:
         run: |
           conan install . --build=missing \
             -s compiler.cppstd=17 -s build_type=Release \
-            --output-folder=build \
             -c tools.system.package_manager:mode=install \
             -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          if [ ! -f build/conan/conan_toolchain.cmake ]; then
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            ls -la build/ || true
+            ls -la build/conan/ || true
+            exit 1
+          fi
+          echo "Conan toolchain present"
 
       - name: Download core artifact
         uses: actions/download-artifact@v4

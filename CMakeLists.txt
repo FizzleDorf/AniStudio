@@ -38,6 +38,13 @@ endif()
 
 # ------------------------------------------------------------
 # Conan integration
+#
+# conanfile.py's layout() puts generators in <source>/build/conan.
+# CMake is configured with -B build so CMAKE_BINARY_DIR == <source>/build,
+# meaning the toolchain lands at ${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake.
+# Do NOT pass --output-folder here; that fights layout() and produces
+# build/build/conan. Explicitly set cppstd=17 so the CMake fallback path
+# behaves the same as the workflow's explicit `conan install` step.
 # ------------------------------------------------------------
 include(${CMAKE_BINARY_DIR}/conan/conan_toolchain.cmake OPTIONAL RESULT_VARIABLE CONAN_TOOLCHAIN)
 if(NOT CONAN_TOOLCHAIN)
@@ -50,8 +57,9 @@ if(NOT CONAN_TOOLCHAIN)
 
     execute_process(
         COMMAND ${CONAN_CMD} install "${CMAKE_SOURCE_DIR}"
-                --output-folder="${CMAKE_BINARY_DIR}"
                 --build=missing
+                -s compiler.cppstd=17
+                -s build_type=Release
         RESULT_VARIABLE CONAN_RESULT
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
@@ -87,7 +95,6 @@ file(MAKE_DIRECTORY ${DATA_DIR})
 file(MAKE_DIRECTORY ${DEFAULTS_DIR})
 file(MAKE_DIRECTORY ${SCRIPTS_DIR})
 
-# Copy assets, shaders, etc.
 if(EXISTS "${CMAKE_SOURCE_DIR}/data/defaults")
     file(GLOB_RECURSE DEFAULT_FILES "${CMAKE_SOURCE_DIR}/data/defaults/*")
     foreach(DEFAULT_FILE ${DEFAULT_FILES})
@@ -187,9 +194,6 @@ if(UNIX AND NOT APPLE)
     endif()
 endif()
 
-# ------------------------------------------------------------
-# Windows runtime DLL packages
-# ------------------------------------------------------------
 if(WIN32)
     set(ANISTUDIO_RUNTIME_DLL_PACKAGES
         glfw
@@ -307,8 +311,6 @@ if(BUILD_ANIENGINE)
     add_subdirectory(src/aniengine)
     target_link_libraries(AniEngineCore PUBLIC AniEngineDeps)
 
-    # Optional: expose Log.hpp in the IDE target view (headers don't compile,
-    # but this makes it show up in Visual Studio / CLion / Xcode).
     if(TARGET AniEngineCore)
         target_sources(AniEngineCore PRIVATE
             ${CMAKE_SOURCE_DIR}/src/aniengine/utils/Log.hpp
@@ -316,12 +318,6 @@ if(BUILD_ANIENGINE)
     endif()
 endif()
 
-# ------------------------------------------------------------
-# Net library (shared between server and client binaries)
-#
-# NOTE: this MUST come before add_subdirectory(src/anistudio) so
-# that AniStudioCore can link against AniNet.
-# ------------------------------------------------------------
 if(BUILD_ANIENGINE AND EXISTS "${CMAKE_SOURCE_DIR}/src/net")
     add_library(AniNet STATIC
         ${CMAKE_SOURCE_DIR}/src/net/SocketTransport.cpp
@@ -354,9 +350,6 @@ if(BUILD_ANISTUDIO)
     endif()
 endif()
 
-# ------------------------------------------------------------
-# Helper functions for client and server targets
-# ------------------------------------------------------------
 function(anistudio_configure_client_target TARGET_NAME)
     set_target_properties(${TARGET_NAME} PROPERTIES
         WIN32_EXECUTABLE FALSE
@@ -422,9 +415,6 @@ function(anistudio_configure_server_target TARGET_NAME)
     endif()
 endfunction()
 
-# ------------------------------------------------------------
-# Dispatch on BUILD_APP_MODE
-# ------------------------------------------------------------
 set(_build_local  FALSE)
 set(_build_server FALSE)
 set(_build_client FALSE)
@@ -442,7 +432,6 @@ else()
     message(FATAL_ERROR "Unknown BUILD_APP_MODE='${BUILD_APP_MODE}'. Use: local | server | client | both")
 endif()
 
-# ----- local binary -----
 if(_build_local AND BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     add_executable(${PROJECT_NAME}
         ${CMAKE_SOURCE_DIR}/src/main.cpp
@@ -496,7 +485,6 @@ if(_build_local AND BUILD_MAIN_APP AND BUILD_ANISTUDIO)
     message(STATUS "Main application will be built (local mode)")
 endif()
 
-# ----- server binary -----
 if(_build_server)
     if(NOT TARGET AniNet)
         message(FATAL_ERROR "BUILD_APP_MODE=${BUILD_APP_MODE} requires src/net (AniNet target)")
@@ -511,7 +499,6 @@ if(_build_server)
     message(STATUS "Server binary will be built: AniServer")
 endif()
 
-# ----- client binary -----
 if(_build_client)
     if(NOT TARGET AniNet)
         message(FATAL_ERROR "BUILD_APP_MODE=${BUILD_APP_MODE} requires src/net (AniNet target)")
@@ -531,9 +518,6 @@ if(_build_client)
     message(STATUS "Client binary will be built: AniClient")
 endif()
 
-# ------------------------------------------------------------
-# Plugin helper
-# ------------------------------------------------------------
 function(add_external_plugin TARGET_NAME)
     cmake_parse_arguments(PLUGIN "" "" "SOURCES;LIBRARIES;INCLUDE_DIRS" ${ARGN})
 
@@ -583,9 +567,6 @@ function(add_external_plugin TARGET_NAME)
     message(STATUS "Added external plugin: ${TARGET_NAME}")
 endfunction()
 
-# ------------------------------------------------------------
-# Installation
-# ------------------------------------------------------------
 if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     include(GNUInstallDirs)
 
@@ -678,9 +659,6 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     install(DIRECTORY DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins)
 endif()
 
-# ------------------------------------------------------------
-# Summary
-# ------------------------------------------------------------
 message(STATUS "")
 message(STATUS "AniStudio build configuration:")
 message(STATUS "  Version: ${PROJECT_VERSION}")

@@ -4,20 +4,21 @@ from conan.tools.files import copy
 from conan.errors import ConanInvalidConfiguration
 import os
 
+
 class AniStudio(ConanFile):
     name = "AniStudio"
     version = "0.1.0"
-    
+
     settings = "os", "compiler", "build_type", "arch"
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
-        "with_cuda": [True, False]
+        "with_cuda": [True, False],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
-        "with_cuda": False
+        "with_cuda": False,
     }
 
     def build_requirements(self):
@@ -31,14 +32,12 @@ class AniStudio(ConanFile):
         self.requires("exiv2/0.28.1")
         self.tool_requires("ninja/1.12.1")
         self.requires("libwebp/1.3.2")
-        self.requires("ffmpeg/8.1.2", options={"shared": True,})
+        self.requires("ffmpeg/8.1.2", options={"shared": True})
         self.requires("portaudio/19.7", options={"shared": True})
         self.requires("libsamplerate/0.2.2")
 
         self.requires("neargye-semver/0.3.1")
-
         self.requires("spdlog/1.11.0")
-
         self.requires("pybind11/2.13.6")
 
         if self.settings.os == "Windows":
@@ -58,10 +57,13 @@ class AniStudio(ConanFile):
             self.options.rm_safe("fPIC")
         if self.settings.compiler.get_safe("cppstd"):
             self.settings.compiler.cppstd = "17"
-        
+
         if self.settings.os == "Windows":
             self.conf.define("tools.microsoft.msbuild:vs_version", "17")
-            self.conf.define("tools.cmake.cmaketoolchain:generator", "Visual Studio 17 2022")
+            self.conf.define(
+                "tools.cmake.cmaketoolchain:generator",
+                "Visual Studio 17 2022",
+            )
 
     def generate(self):
         tc = CMakeToolchain(self)
@@ -70,7 +72,7 @@ class AniStudio(ConanFile):
         tc.variables["CMAKE_CXX_EXTENSIONS"] = "OFF"
         tc.variables["WITH_CUDA"] = self.options.with_cuda
         tc.generate()
-        
+
         deps = CMakeDeps(self)
         deps.generate()
 
@@ -87,8 +89,13 @@ class AniStudio(ConanFile):
     def package(self):
         cmake = CMake(self)
         cmake.install()
-        copy(self, "LICENSE*", src=self.source_folder, dst=os.path.join(self.package_folder, "licenses"))
-        
+        copy(
+            self,
+            "LICENSE*",
+            src=self.source_folder,
+            dst=os.path.join(self.package_folder, "licenses"),
+        )
+
     def package_info(self):
         self.cpp_info.libs = ["media_creation_tool"]
         if self.settings.os == "Linux":
