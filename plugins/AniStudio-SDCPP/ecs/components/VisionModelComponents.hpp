@@ -7,12 +7,14 @@
 
 namespace ECS {
 
-    // Clip Vision 
     struct ClipVisionComponent : public BaseModelComponent {
-        ClipVisionComponent() {
-            compName = "ClipVision";
+        ClipVisionComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "ClipVision"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "CLIP Vision Encoder"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -33,7 +35,10 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
+
+        ClipVisionComponent(const ClipVisionComponent& other) : BaseModelComponent(other) {}
 
         ClipVisionComponent& operator=(const ClipVisionComponent& other) {
             if (this != &other) {
@@ -45,12 +50,14 @@ namespace ECS {
         }
     };
 
-    // Llm Vision Encoder
     struct LlmVisionComponent : public BaseModelComponent {
-        LlmVisionComponent() {
-            compName = "LlmVision";
+        LlmVisionComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "LlmVision"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "LLM Vision Encoder"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -71,7 +78,10 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
+
+        LlmVisionComponent(const LlmVisionComponent& other) : BaseModelComponent(other) {}
 
         LlmVisionComponent& operator=(const LlmVisionComponent& other) {
             if (this != &other) {

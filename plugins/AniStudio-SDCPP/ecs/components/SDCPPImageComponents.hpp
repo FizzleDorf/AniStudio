@@ -13,49 +13,13 @@ namespace ECS {
         float startStep = 0.0f;
         float endStep = 1.0f;
 
-        ControlNetImageComponent() : InputImageComponent() {
-            compName = "ControlNetImage";
-            compCategory = "Image";
-            setupControlNetSchema();
-        }
+        ControlNetImageComponent() : InputImageComponent() {}
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            auto properties = InputImageComponent::GetPropertyMap();
-            properties["controlType"] = &controlType;
-            properties["strength"] = &strength;
-            properties["startStep"] = &startStep;
-            properties["endStep"] = &endStep;
-            return properties;
-        }
+        const char* GetCompName() const override { return "ControlNetImage"; }
+        const char* GetCompCategory() const override { return "Image"; }
 
-        virtual nlohmann::json Serialize() const override {
-            auto j = InputImageComponent::Serialize();
-            j[compName]["controlType"] = controlType;
-            j[compName]["strength"] = strength;
-            j[compName]["startStep"] = startStep;
-            j[compName]["endStep"] = endStep;
-            return j;
-        }
-
-        virtual void Deserialize(const nlohmann::json& j) override {
-            InputImageComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            if (componentData.contains("controlType"))
-                controlType = componentData["controlType"];
-            if (componentData.contains("strength"))
-                strength = componentData["strength"];
-            if (componentData.contains("startStep"))
-                startStep = componentData["startStep"];
-            if (componentData.contains("endStep"))
-                endStep = componentData["endStep"];
-        }
-
-    private:
-        void setupControlNetSchema() {
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "ControlNet Image"},
                 {"type", "object"},
                 {"properties", {
@@ -112,6 +76,64 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePath", "controlType", "strength", "startStep", "endStep"}}
             };
+            return j;
+        }
+
+        ControlNetImageComponent(const ControlNetImageComponent& other)
+            : InputImageComponent(other)
+            , controlType(other.controlType)
+            , strength(other.strength)
+            , startStep(other.startStep)
+            , endStep(other.endStep) {
+        }
+
+        ControlNetImageComponent& operator=(const ControlNetImageComponent& other) {
+            if (this != &other) {
+                InputImageComponent::operator=(other);
+                controlType = other.controlType;
+                strength = other.strength;
+                startStep = other.startStep;
+                endStep = other.endStep;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            auto properties = InputImageComponent::GetPropertyMap();
+            properties["controlType"] = &controlType;
+            properties["strength"] = &strength;
+            properties["startStep"] = &startStep;
+            properties["endStep"] = &endStep;
+            return properties;
+        }
+
+        nlohmann::json Serialize() const override {
+            auto j = InputImageComponent::Serialize();
+            j[GetCompName()]["controlType"] = controlType;
+            j[GetCompName()]["strength"] = strength;
+            j[GetCompName()]["startStep"] = startStep;
+            j[GetCompName()]["endStep"] = endStep;
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            InputImageComponent::Deserialize(j);
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) {
+                componentData = j.at(key);
+            }
+            else {
+                componentData = j;
+            }
+            if (componentData.contains("controlType"))
+                controlType = componentData["controlType"];
+            if (componentData.contains("strength"))
+                strength = componentData["strength"];
+            if (componentData.contains("startStep"))
+                startStep = componentData["startStep"];
+            if (componentData.contains("endStep"))
+                endStep = componentData["endStep"];
         }
     };
 
@@ -119,41 +141,13 @@ namespace ECS {
         float styleStrength = 1.0f;
         bool isPrimaryID = true;
 
-        PhotoMakerImageComponent() : InputImageComponent() {
-            compName = "PhotoMakerImage";
-            compCategory = "Image";
-            setupPhotoMakerSchema();
-        }
+        PhotoMakerImageComponent() : InputImageComponent() {}
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            auto properties = InputImageComponent::GetPropertyMap();
-            properties["styleStrength"] = &styleStrength;
-            properties["isPrimaryID"] = &isPrimaryID;
-            return properties;
-        }
+        const char* GetCompName() const override { return "PhotoMakerImage"; }
+        const char* GetCompCategory() const override { return "Image"; }
 
-        virtual nlohmann::json Serialize() const override {
-            auto j = InputImageComponent::Serialize();
-            j[compName]["styleStrength"] = styleStrength;
-            j[compName]["isPrimaryID"] = isPrimaryID;
-            return j;
-        }
-
-        virtual void Deserialize(const nlohmann::json& j) override {
-            InputImageComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            if (componentData.contains("styleStrength"))
-                styleStrength = componentData["styleStrength"];
-            if (componentData.contains("isPrimaryID"))
-                isPrimaryID = componentData["isPrimaryID"];
-        }
-
-    private:
-        void setupPhotoMakerSchema() {
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "PhotoMaker ID Image"},
                 {"type", "object"},
                 {"properties", {
@@ -186,6 +180,52 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePath", "styleStrength", "isPrimaryID"}}
             };
+            return j;
+        }
+
+        PhotoMakerImageComponent(const PhotoMakerImageComponent& other)
+            : InputImageComponent(other)
+            , styleStrength(other.styleStrength)
+            , isPrimaryID(other.isPrimaryID) {
+        }
+
+        PhotoMakerImageComponent& operator=(const PhotoMakerImageComponent& other) {
+            if (this != &other) {
+                InputImageComponent::operator=(other);
+                styleStrength = other.styleStrength;
+                isPrimaryID = other.isPrimaryID;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            auto properties = InputImageComponent::GetPropertyMap();
+            properties["styleStrength"] = &styleStrength;
+            properties["isPrimaryID"] = &isPrimaryID;
+            return properties;
+        }
+
+        nlohmann::json Serialize() const override {
+            auto j = InputImageComponent::Serialize();
+            j[GetCompName()]["styleStrength"] = styleStrength;
+            j[GetCompName()]["isPrimaryID"] = isPrimaryID;
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            InputImageComponent::Deserialize(j);
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) {
+                componentData = j.at(key);
+            }
+            else {
+                componentData = j;
+            }
+            if (componentData.contains("styleStrength"))
+                styleStrength = componentData["styleStrength"];
+            if (componentData.contains("isPrimaryID"))
+                isPrimaryID = componentData["isPrimaryID"];
         }
     };
 
@@ -193,41 +233,13 @@ namespace ECS {
         std::vector<std::string> ref_image_paths;
         std::string ref_image_args;
 
-        RefImagesComponent() : InputImageComponent() {
-            compName = "RefImages";
-            compCategory = "Image";
-            setupRefImagesSchema();
-        }
+        RefImagesComponent() : InputImageComponent() {}
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            auto properties = InputImageComponent::GetPropertyMap();
-            properties["ref_image_paths"] = &ref_image_paths;
-            properties["ref_image_args"] = &ref_image_args;
-            return properties;
-        }
+        const char* GetCompName() const override { return "RefImages"; }
+        const char* GetCompCategory() const override { return "Image"; }
 
-        virtual nlohmann::json Serialize() const override {
-            auto j = InputImageComponent::Serialize();
-            j[compName]["ref_image_paths"] = ref_image_paths;
-            j[compName]["ref_image_args"] = ref_image_args;
-            return j;
-        }
-
-        virtual void Deserialize(const nlohmann::json& j) override {
-            InputImageComponent::Deserialize(j);
-            nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
-            }
-            if (componentData.contains("ref_image_paths"))
-                ref_image_paths = componentData["ref_image_paths"].get<std::vector<std::string>>();
-            if (componentData.contains("ref_image_args"))
-                ref_image_args = componentData["ref_image_args"].get<std::string>();
-        }
-
-    private:
-        void setupRefImagesSchema() {
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Reference Images"},
                 {"type", "object"},
                 {"properties", {
@@ -252,42 +264,65 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"ref_image_paths", "ref_image_args"}}
             };
+            return j;
+        }
+
+        RefImagesComponent(const RefImagesComponent& other)
+            : InputImageComponent(other)
+            , ref_image_paths(other.ref_image_paths)
+            , ref_image_args(other.ref_image_args) {
+        }
+
+        RefImagesComponent& operator=(const RefImagesComponent& other) {
+            if (this != &other) {
+                InputImageComponent::operator=(other);
+                ref_image_paths = other.ref_image_paths;
+                ref_image_args = other.ref_image_args;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            auto properties = InputImageComponent::GetPropertyMap();
+            properties["ref_image_paths"] = &ref_image_paths;
+            properties["ref_image_args"] = &ref_image_args;
+            return properties;
+        }
+
+        nlohmann::json Serialize() const override {
+            auto j = InputImageComponent::Serialize();
+            j[GetCompName()]["ref_image_paths"] = ref_image_paths;
+            j[GetCompName()]["ref_image_args"] = ref_image_args;
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            InputImageComponent::Deserialize(j);
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) {
+                componentData = j.at(key);
+            }
+            else {
+                componentData = j;
+            }
+            if (componentData.contains("ref_image_paths"))
+                ref_image_paths = componentData["ref_image_paths"].get<std::vector<std::string>>();
+            if (componentData.contains("ref_image_args"))
+                ref_image_args = componentData["ref_image_args"].get<std::string>();
         }
     };
 
     struct ControlFramesComponent : public InputImageComponent {
         std::vector<std::string> filePaths;
 
-        ControlFramesComponent() : InputImageComponent() {
-            compName = "ControlFrames";
-            compCategory = "Video";
-            setupControlFramesSchema();
-        }
+        ControlFramesComponent() : InputImageComponent() {}
 
-        virtual std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            auto properties = InputImageComponent::GetPropertyMap();
-            properties["filePaths"] = &filePaths;
-            return properties;
-        }
+        const char* GetCompName() const override { return "ControlFrames"; }
+        const char* GetCompCategory() const override { return "Video"; }
 
-        virtual nlohmann::json Serialize() const override {
-            auto j = InputImageComponent::Serialize();
-            j[compName]["filePaths"] = filePaths;
-            return j;
-        }
-
-        virtual void Deserialize(const nlohmann::json& j) override {
-            InputImageComponent::Deserialize(j);
-            if (j.contains(compName)) {
-                auto compData = j.at(compName);
-                if (compData.contains("filePaths"))
-                    filePaths = compData["filePaths"].get<std::vector<std::string>>();
-            }
-        }
-
-    private:
-        void setupControlFramesSchema() {
-            schema = {
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Control Frames"},
                 {"type", "object"},
                 {"properties", {
@@ -307,6 +342,46 @@ namespace ECS {
                 }},
                 {"propertyOrder", {"filePaths"}}
             };
+            return j;
+        }
+
+        ControlFramesComponent(const ControlFramesComponent& other)
+            : InputImageComponent(other)
+            , filePaths(other.filePaths) {
+        }
+
+        ControlFramesComponent& operator=(const ControlFramesComponent& other) {
+            if (this != &other) {
+                InputImageComponent::operator=(other);
+                filePaths = other.filePaths;
+            }
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            auto properties = InputImageComponent::GetPropertyMap();
+            properties["filePaths"] = &filePaths;
+            return properties;
+        }
+
+        nlohmann::json Serialize() const override {
+            auto j = InputImageComponent::Serialize();
+            j[GetCompName()]["filePaths"] = filePaths;
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            InputImageComponent::Deserialize(j);
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) {
+                componentData = j.at(key);
+            }
+            else {
+                componentData = j;
+            }
+            if (componentData.contains("filePaths"))
+                filePaths = componentData["filePaths"].get<std::vector<std::string>>();
         }
     };
 } // namespace ECS

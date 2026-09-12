@@ -6,11 +6,14 @@
 
 namespace ECS {
 
-	// Clip G Encoder
 	struct ClipGComponent : public BaseModelComponent {
-		ClipGComponent() {
-			compName = "ClipG";
-			schema = {
+		ClipGComponent() = default;
+
+		const char* GetCompName() const override { return "ClipG"; }
+		const char* GetCompCategory() const override { return "Models"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "CLIP-G Text Encoder"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath"}},
@@ -31,7 +34,10 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
+
+		ClipGComponent(const ClipGComponent& other) : BaseModelComponent(other) {}
 
 		ClipGComponent& operator=(const ClipGComponent& other) {
 			if (this != &other) {
@@ -43,12 +49,14 @@ namespace ECS {
 		}
 	};
 
-	// Clip L Encoder
 	struct ClipLComponent : public BaseModelComponent {
-		ClipLComponent() {
-			compName = "ClipL";
+		ClipLComponent() = default;
 
-			schema = {
+		const char* GetCompName() const override { return "ClipL"; }
+		const char* GetCompCategory() const override { return "Models"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "CLIP-L Text Encoder"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath"}},
@@ -69,7 +77,10 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
+
+		ClipLComponent(const ClipLComponent& other) : BaseModelComponent(other) {}
 
 		ClipLComponent& operator=(const ClipLComponent& other) {
 			if (this != &other) {
@@ -81,12 +92,14 @@ namespace ECS {
 		}
 	};
 
-	// T5 Encoder
 	struct T5XXLComponent : public BaseModelComponent {
-		T5XXLComponent() {
-			compName = "T5XXL";
+		T5XXLComponent() = default;
 
-			schema = {
+		const char* GetCompName() const override { return "T5XXL"; }
+		const char* GetCompCategory() const override { return "Models"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "T5-XXL Text Encoder"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath"}},
@@ -107,7 +120,10 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
+
+		T5XXLComponent(const T5XXLComponent& other) : BaseModelComponent(other) {}
 
 		T5XXLComponent& operator=(const T5XXLComponent& other) {
 			if (this != &other) {
@@ -119,12 +135,14 @@ namespace ECS {
 		}
 	};
 
-	// LLM Encoder
 	struct LlmEncoderComponent : public BaseModelComponent {
-		LlmEncoderComponent() {
-			compName = "LlmEncoder";
+		LlmEncoderComponent() = default;
 
-			schema = {
+		const char* GetCompName() const override { return "LlmEncoder"; }
+		const char* GetCompCategory() const override { return "Models"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "LLM Text Encoder"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath"}},
@@ -145,7 +163,10 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
+
+		LlmEncoderComponent(const LlmEncoderComponent& other) : BaseModelComponent(other) {}
 
 		LlmEncoderComponent& operator=(const LlmEncoderComponent& other) {
 			if (this != &other) {

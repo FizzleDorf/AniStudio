@@ -1,5 +1,5 @@
 #include "ViewManager.hpp"
-#include <iostream>
+#include "Log.hpp"
 #include <cassert>
 #include <imgui.h>
 
@@ -52,7 +52,7 @@ namespace GUI {
                 if (workspaceIt != workspaces.end()) {
                     auto viewIt = workspaceIt->second.find(viewTypeID);
                     if (viewIt != workspaceIt->second.end() && viewIt->second) {
-                        if (!viewIt->second->windowOpen) {
+                        if (!viewIt->second->IsWindowOpen()) {
                             viewsToRemove.push_back(viewTypeID);
                             continue;
                         }
@@ -60,7 +60,7 @@ namespace GUI {
                             viewIt->second->Render();
                         }
                         catch (const std::exception& e) {
-                            std::cerr << "[ViewManager] Exception rendering view: " << e.what() << std::endl;
+                            ANI_LOG_ERROR("[ViewManager] Exception rendering view: %s", e.what());
                         }
                     }
                 }
@@ -80,10 +80,10 @@ namespace GUI {
         auto allWorkspaces = GetAllWorkspaces();
         if (std::find(allWorkspaces.begin(), allWorkspaces.end(), workspaceID) != allWorkspaces.end()) {
             m_activeWorkspaceID = workspaceID;
-            std::cout << "[ViewManager] Set active workspace to: " << workspaceID << std::endl;
+            ANI_LOG_INFO("[ViewManager] Set active workspace to: %u", (unsigned)workspaceID);
         }
         else {
-            std::cerr << "[ViewManager] Cannot set active workspace - ID " << workspaceID << " does not exist" << std::endl;
+            ANI_LOG_ERROR("[ViewManager] Cannot set active workspace - ID %u does not exist", (unsigned)workspaceID);
         }
     }
 
@@ -101,7 +101,7 @@ namespace GUI {
 
         if (std::find(allWorkspaces.begin(), allWorkspaces.end(), m_activeWorkspaceID) == allWorkspaces.end()) {
             m_activeWorkspaceID = allWorkspaces[0];
-            std::cout << "[ViewManager] Switched to valid workspace: " << m_activeWorkspaceID << std::endl;
+            ANI_LOG_INFO("[ViewManager] Switched to valid workspace: %u", (unsigned)m_activeWorkspaceID);
         }
     }
 
@@ -118,7 +118,8 @@ namespace GUI {
             m_activeWorkspaceID = viewList;
         }
 
-        std::cout << "[ViewManager] Created workspace " << viewList << " with name: " << defaultName << std::endl;
+        ANI_LOG_INFO("[ViewManager] Created workspace %u with name: %s",
+            (unsigned)viewList, defaultName.c_str());
 
         return viewList;
     }
@@ -175,14 +176,14 @@ namespace GUI {
         viewFactories[name] = factory;
         viewMetadata[name] = metadataGetter;
 
-        std::cout << "Registered custom view type: " << name << " with ID: " << typeId
-            << " from source: " << source << std::endl;
+        ANI_LOG_INFO("[ViewManager] Registered custom view type: %s with ID: %u from source: %s",
+            name.c_str(), (unsigned)typeId, source.c_str());
     }
 
     WorkspaceID ViewManager::CreateViewByName(const std::string& viewTypeName, ECS::EntityManager& entityMgr) {
         auto factoryIt = viewFactories.find(viewTypeName);
         if (factoryIt == viewFactories.end()) {
-            std::cerr << "[ViewManager] No factory registered for view type: " << viewTypeName << std::endl;
+            ANI_LOG_ERROR("[ViewManager] No factory registered for view type: %s", viewTypeName.c_str());
             return 0;
         }
 
@@ -200,7 +201,7 @@ namespace GUI {
                 }
             }
 
-            std::cout << "[ViewManager] Calling factory for " << viewTypeName << std::endl;
+            ANI_LOG_INFO("[ViewManager] Calling factory for %s", viewTypeName.c_str());
             auto view = factoryIt->second(entityMgr, *this);
 
             if (!view) {
@@ -212,9 +213,9 @@ namespace GUI {
             }
 
             view->workspaceID = id;
-            std::cout << "[ViewManager] Calling Init() for " << viewTypeName << std::endl;
+            ANI_LOG_INFO("[ViewManager] Calling Init() for %s", viewTypeName.c_str());
             view->Init();
-            std::cout << "[ViewManager] Init() succeeded for " << viewTypeName << std::endl;
+            ANI_LOG_INFO("[ViewManager] Init() succeeded for %s", viewTypeName.c_str());
 
             ViewTypeID typeID = GetViewType(viewTypeName);
             workspaces[id][typeID] = std::move(view);
@@ -223,11 +224,13 @@ namespace GUI {
                 ImGui::SetCurrentContext(previousContext);
             }
 
-            std::cout << "[ViewManager] Created and initialized view: " << viewTypeName << " with ID: " << id << std::endl;
+            ANI_LOG_INFO("[ViewManager] Created and initialized view: %s with ID: %u",
+                viewTypeName.c_str(), (unsigned)id);
             return id;
         }
         catch (const std::exception& e) {
-            std::cerr << "[ViewManager] Failed to create view " << viewTypeName << ": " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ViewManager] Failed to create view %s: %s",
+                viewTypeName.c_str(), e.what());
             return 0;
         }
     }
@@ -240,7 +243,7 @@ namespace GUI {
             viewType = GetViewType(name);
         }
         catch (const std::exception&) {
-            std::cerr << "[ViewManager] View type not registered: " << name << std::endl;
+            ANI_LOG_ERROR("[ViewManager] View type not registered: %s", name.c_str());
             return;
         }
 
@@ -250,7 +253,7 @@ namespace GUI {
     void ViewManager::UnregisterViewByType(ViewTypeID viewType) {
         std::lock_guard<std::mutex> lock(m_viewRegistryMutex);
 
-        std::cout << "[ViewManager] Unregistering view type ID: " << viewType << std::endl;
+        ANI_LOG_INFO("[ViewManager] Unregistering view type ID: %u", (unsigned)viewType);
 
         RemoveViewFromAllWorkspaces(viewType);
 
@@ -295,7 +298,7 @@ namespace GUI {
             viewFactories.erase(viewName);
         }
 
-        std::cout << "[ViewManager] Successfully unregistered view type ID: " << viewType << std::endl;
+        ANI_LOG_INFO("[ViewManager] Successfully unregistered view type ID: %u", (unsigned)viewType);
     }
 
     void ViewManager::RemoveViewFromAllWorkspaces(ViewTypeID viewType) {
@@ -333,8 +336,8 @@ namespace GUI {
         while (it != viewSources.end()) {
             if (it->second == source) {
                 const std::string& viewName = it->first;
-                std::cout << "Unregistering view: " << viewName
-                    << " from source: " << source << std::endl;
+                ANI_LOG_INFO("[ViewManager] Unregistering view: %s from source: %s",
+                    viewName.c_str(), source.c_str());
 
                 registeredViews.erase(viewName);
                 viewMetadata.erase(viewName);
@@ -357,7 +360,7 @@ namespace GUI {
         if (viewFactories.erase(viewName) > 0) removed = true;
 
         if (removed) {
-            std::cout << "[ViewManager] Unregistered view type: " << viewName << std::endl;
+            ANI_LOG_INFO("[ViewManager] Unregistered view type: %s", viewName.c_str());
         }
 
         return removed;
@@ -379,12 +382,12 @@ namespace GUI {
             viewTypeID = GetViewType(viewName);
         }
         catch (const std::exception&) {
-            std::cout << "[ViewManager] View type not found: " << viewName << std::endl;
+            ANI_LOG_INFO("[ViewManager] View type not found: %s", viewName.c_str());
             return;
         }
 
-        std::cout << "[ViewManager] Closing all instances of view: " << viewName
-            << " (ID: " << viewTypeID << ")" << std::endl;
+        ANI_LOG_INFO("[ViewManager] Closing all instances of view: %s (ID: %u)",
+            viewName.c_str(), (unsigned)viewTypeID);
 
         std::vector<WorkspaceID> workspacesToRemove;
 
@@ -394,12 +397,32 @@ namespace GUI {
 
             auto viewIt = viewsMap.find(viewTypeID);
             if (viewIt != viewsMap.end()) {
-                std::cout << "[ViewManager] Removing view instance from workspace " << workspaceID << std::endl;
+                if (viewIt->second) {
+                    json state;
+                    try {
+                        state = viewIt->second->Serialize();
+                    }
+                    catch (const std::exception& e) {
+                        ANI_LOG_ERROR("[ViewManager] Serialize failed for %s: %s",
+                            viewName.c_str(), e.what());
+                        state = json::object();
+                    }
+
+                    if (m_viewClosingCallback) {
+                        m_viewClosingCallback(workspaceID, viewTypeID, viewName, state);
+                    }
+                }
+
+                ANI_LOG_INFO("[ViewManager] Removing view instance from workspace %u", (unsigned)workspaceID);
                 viewsMap.erase(viewIt);
 
                 auto sigIt = workspaceSignatures.find(workspaceID);
                 if (sigIt != workspaceSignatures.end()) {
                     sigIt->second->erase(viewTypeID);
+                }
+
+                if (m_viewClosedCallback) {
+                    m_viewClosedCallback(workspaceID, viewTypeID, viewName);
                 }
             }
 
@@ -476,7 +499,8 @@ namespace GUI {
         for (auto& [workspaceID, viewsMap] : workspaces) {
             std::vector<ViewTypeID> viewsToRemove;
             for (auto& [viewTypeID, view] : viewsMap) {
-                if (!view->windowOpen) {
+                if (!view) continue;
+                if (!view->IsWindowOpen()) {
                     viewsToRemove.push_back(viewTypeID);
                     continue;
                 }
@@ -484,7 +508,7 @@ namespace GUI {
                     view->Update(deltaT);
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[ViewManager] Exception updating view: " << e.what() << std::endl;
+                    ANI_LOG_ERROR("[ViewManager] Exception updating view: %s", e.what());
                 }
             }
             for (const auto& viewTypeID : viewsToRemove) {
@@ -510,17 +534,17 @@ namespace GUI {
     }
 
     void ViewManager::Reset() {
-        std::cout << "[ViewManager] Performing soft reset..." << std::endl;
+        ANI_LOG_INFO("[ViewManager] Performing soft reset...");
         ResetWorkspaceData();
-        std::cout << "[ViewManager] Soft reset complete. View registrations preserved." << std::endl;
-        std::cout << "[ViewManager] Registered views count: " << registeredViews.size() << std::endl;
+        ANI_LOG_INFO("[ViewManager] Soft reset complete. View registrations preserved.");
+        ANI_LOG_INFO("[ViewManager] Registered views count: %zu", registeredViews.size());
     }
 
     void ViewManager::FullReset() {
-        std::cout << "[ViewManager] Performing full reset..." << std::endl;
+        ANI_LOG_INFO("[ViewManager] Performing full reset...");
         ResetWorkspaceData();
         ResetRegistrationData();
-        std::cout << "[ViewManager] Full reset complete." << std::endl;
+        ANI_LOG_INFO("[ViewManager] Full reset complete.");
     }
 
     std::vector<WorkspaceID> ViewManager::GetAllWorkspaces() const {
@@ -539,39 +563,84 @@ namespace GUI {
         return workspaceSignatures;
     }
 
+    // -------------------------------------------------------------------------
+    // LookupViewName: exact same behavior as the old inline scan of
+    // registeredViews. No m_viewIDToName fallback. This is what worked before.
+    // -------------------------------------------------------------------------
+    std::string ViewManager::LookupViewName(ViewTypeID viewType) const {
+        for (const auto& [name, id] : registeredViews) {
+            if (id == viewType) return name;
+        }
+        return {};
+    }
+
     void ViewManager::AddViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
         assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
+
+        std::string viewName = LookupViewName(viewType);
+
+        if (m_viewOpeningCallback) {
+            m_viewOpeningCallback(viewList, viewType, viewName);
+        }
 
         GetViewSignature(viewList)->insert(viewType);
         CreateViewInstanceForWorkspace(viewList, viewType);
 
-        std::cout << "[ViewManager] Added view type " << viewType << " to workspace " << viewList << std::endl;
+        if (m_viewOpenedCallback) {
+            m_viewOpenedCallback(viewList, viewType, viewName);
+        }
+
+        ANI_LOG_INFO("[ViewManager] Added view type %u to workspace %u",
+            (unsigned)viewType, (unsigned)viewList);
     }
 
     void ViewManager::RemoveViewByType(const WorkspaceID viewList, const ViewTypeID viewType) {
         assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
 
-        GetViewSignature(viewList)->erase(viewType);
-        RemoveViewInstanceFromWorkspace(viewList, viewType);
+        std::string viewName = LookupViewName(viewType);
+        json state = json::object();
+        bool haveState = false;
 
-        std::cout << "[ViewManager] Removed view type " << viewType << " from workspace " << viewList << std::endl;
-    }
-
-    void ViewManager::CreateViewInstanceForWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID) {
-        std::string viewTypeName;
-        for (const auto& [name, typeID] : registeredViews) {
-            if (typeID == viewTypeID) {
-                viewTypeName = name;
-                break;
+        auto workspaceIt = workspaces.find(viewList);
+        if (workspaceIt != workspaces.end()) {
+            auto viewIt = workspaceIt->second.find(viewType);
+            if (viewIt != workspaceIt->second.end() && viewIt->second) {
+                try {
+                    state = viewIt->second->Serialize();
+                    haveState = true;
+                }
+                catch (const std::exception& e) {
+                    ANI_LOG_ERROR("[ViewManager] Serialize failed for %s: %s",
+                        viewName.c_str(), e.what());
+                }
             }
         }
 
+        if (haveState && m_viewClosingCallback) {
+            m_viewClosingCallback(viewList, viewType, viewName, state);
+        }
+
+        GetViewSignature(viewList)->erase(viewType);
+        RemoveViewInstanceFromWorkspace(viewList, viewType);
+
+        if (m_viewClosedCallback) {
+            m_viewClosedCallback(viewList, viewType, viewName);
+        }
+
+        ANI_LOG_INFO("[ViewManager] Removed view type %u from workspace %u",
+            (unsigned)viewType, (unsigned)viewList);
+    }
+
+    void ViewManager::CreateViewInstanceForWorkspace(WorkspaceID workspaceID, ViewTypeID viewTypeID) {
+        std::string viewTypeName = LookupViewName(viewTypeID);
+
         if (viewTypeName.empty()) {
-            std::cerr << "[ViewManager] ERROR: No view name found for type ID " << viewTypeID << std::endl;
+            ANI_LOG_ERROR("[ViewManager] No view name found for type ID %u", (unsigned)viewTypeID);
             return;
         }
 
-        std::cout << "[ViewManager] Found view name '" << viewTypeName << "' for type ID " << viewTypeID << std::endl;
+        ANI_LOG_INFO("[ViewManager] Found view name '%s' for type ID %u",
+            viewTypeName.c_str(), (unsigned)viewTypeID);
 
         auto factoryIt = viewFactories.find(viewTypeName);
         if (factoryIt != viewFactories.end() && entityManager) {
@@ -587,25 +656,25 @@ namespace GUI {
             }
 
             try {
-                std::cout << "[ViewManager] Calling factory for '" << viewTypeName << "'" << std::endl;
+                ANI_LOG_INFO("[ViewManager] Calling factory for '%s'", viewTypeName.c_str());
                 auto view = factoryIt->second(*entityManager, *this);
 
                 if (view) {
                     view->workspaceID = workspaceID;
-                    std::cout << "[ViewManager] Calling Init() for " << viewTypeName << std::endl;
+                    ANI_LOG_INFO("[ViewManager] Calling Init() for %s", viewTypeName.c_str());
                     view->Init();
-                    std::cout << "[ViewManager] Init() succeeded for " << viewTypeName << std::endl;
+                    ANI_LOG_INFO("[ViewManager] Init() succeeded for %s", viewTypeName.c_str());
                     workspaces[workspaceID][viewTypeID] = std::move(view);
-                    std::cout << "[ViewManager] SUCCESS: Created view instance '" << viewTypeName
-                        << "' for workspace " << workspaceID << std::endl;
+                    ANI_LOG_INFO("[ViewManager] SUCCESS: Created view instance '%s' for workspace %u",
+                        viewTypeName.c_str(), (unsigned)workspaceID);
                 }
                 else {
-                    std::cerr << "[ViewManager] Factory returned nullptr for '" << viewTypeName << "'" << std::endl;
+                    ANI_LOG_ERROR("[ViewManager] Factory returned nullptr for '%s'", viewTypeName.c_str());
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[ViewManager] EXCEPTION creating view '" << viewTypeName
-                    << "': " << e.what() << std::endl;
+                ANI_LOG_ERROR("[ViewManager] EXCEPTION creating view '%s': %s",
+                    viewTypeName.c_str(), e.what());
             }
 
             if (contextSwitched && previousContext) {
@@ -613,7 +682,7 @@ namespace GUI {
             }
         }
         else {
-            std::cerr << "[ViewManager] ERROR: No factory found for '" << viewTypeName << "'" << std::endl;
+            ANI_LOG_ERROR("[ViewManager] No factory found for '%s'", viewTypeName.c_str());
         }
     }
 
@@ -622,8 +691,8 @@ namespace GUI {
         if (workspaceIt != workspaces.end()) {
             auto viewIt = workspaceIt->second.find(viewTypeID);
             if (viewIt != workspaceIt->second.end()) {
-                std::cout << "[ViewManager] Removing view instance (type " << viewTypeID
-                    << ") from workspace " << workspaceID << std::endl;
+                ANI_LOG_INFO("[ViewManager] Removing view instance (type %u) from workspace %u",
+                    (unsigned)viewTypeID, (unsigned)workspaceID);
                 workspaceIt->second.erase(viewIt);
 
                 if (workspaceIt->second.empty()) {
@@ -642,7 +711,7 @@ namespace GUI {
 
     void ViewManager::SetImGuiContext(void* context) {
         m_imguiContext = context;
-        std::cout << "[ViewManager] Set ImGui context: " << m_imguiContext << std::endl;
+        ANI_LOG_INFO("[ViewManager] Set ImGui context: %p", m_imguiContext);
     }
 
     void* ViewManager::GetImGuiContext() const {
@@ -651,7 +720,7 @@ namespace GUI {
 
     void ViewManager::SetWindowHandle(void* handle) {
         m_windowHandle = handle;
-        std::cout << "[ViewManager] Set window handle: " << m_windowHandle << std::endl;
+        ANI_LOG_INFO("[ViewManager] Set window handle: %p", m_windowHandle);
     }
 
     void* ViewManager::GetWindowHandle() {
@@ -660,17 +729,18 @@ namespace GUI {
 
     void ViewManager::SetWorkspaceName(WorkspaceID workspaceID, const std::string& name) {
         if (name.empty()) {
-            std::cerr << "[ViewManager] Cannot set empty workspace name" << std::endl;
+            ANI_LOG_ERROR("[ViewManager] Cannot set empty workspace name");
             return;
         }
 
         if (IsWorkspaceNameTaken(name, workspaceID)) {
-            std::cerr << "[ViewManager] Workspace name '" << name << "' is already taken" << std::endl;
+            ANI_LOG_ERROR("[ViewManager] Workspace name '%s' is already taken", name.c_str());
             return;
         }
 
         workspaceNames[workspaceID] = name;
-        std::cout << "[ViewManager] Set workspace " << workspaceID << " name to: " << name << std::endl;
+        ANI_LOG_INFO("[ViewManager] Set workspace %u name to: %s",
+            (unsigned)workspaceID, name.c_str());
     }
 
     std::string ViewManager::GetWorkspaceName(WorkspaceID workspaceID) const {
@@ -705,7 +775,7 @@ namespace GUI {
     json ViewManager::SerializeViewLists() const {
         json workspacesJson = json::object();
 
-        std::cout << "[ViewManager] Serializing workspaces..." << std::endl;
+        ANI_LOG_INFO("[ViewManager] Serializing workspaces...");
 
         std::set<WorkspaceID> allWorkspaceIDs;
 
@@ -717,7 +787,7 @@ namespace GUI {
             allWorkspaceIDs.insert(workspaceID);
         }
 
-        std::cout << "[ViewManager] Total unique workspaces found: " << allWorkspaceIDs.size() << std::endl;
+        ANI_LOG_INFO("[ViewManager] Total unique workspaces found: %zu", allWorkspaceIDs.size());
 
         for (WorkspaceID workspaceID : allWorkspaceIDs) {
             json workspaceJson = json::object();
@@ -725,26 +795,28 @@ namespace GUI {
             workspaceJson["name"] = GetWorkspaceName(workspaceID);
             workspaceJson["views"] = json::array();
 
-            std::cout << "[ViewManager] Serializing workspace " << workspaceID << " (" << GetWorkspaceName(workspaceID) << ")" << std::endl;
+            ANI_LOG_INFO("[ViewManager] Serializing workspace %u (%s)",
+                (unsigned)workspaceID, GetWorkspaceName(workspaceID).c_str());
 
             auto workspaceIt = workspaces.find(workspaceID);
             if (workspaceIt != workspaces.end()) {
                 for (const auto& [viewTypeID, view] : workspaceIt->second) {
                     if (view) {
-                        std::string viewTypeName;
-                        for (const auto& [name, typeID] : registeredViews) {
-                            if (typeID == viewTypeID) {
-                                viewTypeName = name;
-                                break;
-                            }
-                        }
+                        std::string viewTypeName = LookupViewName(viewTypeID);
 
                         if (!viewTypeName.empty()) {
                             json viewJson = json::object();
-                            viewJson[viewTypeName] = view->Serialize();
+                            try {
+                                viewJson[viewTypeName] = view->Serialize();
+                            }
+                            catch (const std::exception& e) {
+                                ANI_LOG_ERROR("[ViewManager] Serialize failed for %s: %s",
+                                    viewTypeName.c_str(), e.what());
+                                viewJson[viewTypeName] = json::object();
+                            }
                             workspaceJson["views"].push_back(viewJson);
 
-                            std::cout << "[ViewManager]   Added view: " << viewTypeName << " with data" << std::endl;
+                            ANI_LOG_INFO("[ViewManager]   Added view: %s with data", viewTypeName.c_str());
                         }
                     }
                 }
@@ -758,20 +830,14 @@ namespace GUI {
                         continue;
                     }
 
-                    std::string viewTypeName;
-                    for (const auto& [name, typeID] : registeredViews) {
-                        if (typeID == viewTypeID) {
-                            viewTypeName = name;
-                            break;
-                        }
-                    }
+                    std::string viewTypeName = LookupViewName(viewTypeID);
 
                     if (!viewTypeName.empty()) {
                         json viewJson = json::object();
                         viewJson[viewTypeName] = json::object();
                         workspaceJson["views"].push_back(viewJson);
 
-                        std::cout << "[ViewManager]   Added template view: " << viewTypeName << " (no data)" << std::endl;
+                        ANI_LOG_INFO("[ViewManager]   Added template view: %s (no data)", viewTypeName.c_str());
                     }
                 }
             }
@@ -779,30 +845,31 @@ namespace GUI {
             std::string workspaceKey = std::to_string(workspaceID);
             workspacesJson[workspaceKey] = workspaceJson;
 
-            std::cout << "[ViewManager] Workspace " << workspaceID << " serialized with " << workspaceJson["views"].size() << " views" << std::endl;
+            ANI_LOG_INFO("[ViewManager] Workspace %u serialized with %zu views",
+                (unsigned)workspaceID, workspaceJson["views"].size());
         }
 
-        std::cout << "[ViewManager] Serialization complete. Total workspaces: " << workspacesJson.size() << std::endl;
+        ANI_LOG_INFO("[ViewManager] Serialization complete. Total workspaces: %zu", workspacesJson.size());
         return workspacesJson;
     }
 
     void ViewManager::DeserializeViewLists(const json& workspacesJson) {
-        std::cout << "[ViewManager] Deserializing workspaces..." << std::endl;
+        ANI_LOG_INFO("[ViewManager] Deserializing workspaces...");
 
         if (workspacesJson.is_null()) {
-            std::cout << "[ViewManager] Workspaces JSON is null, nothing to deserialize" << std::endl;
+            ANI_LOG_INFO("[ViewManager] Workspaces JSON is null, nothing to deserialize");
             return;
         }
 
         if (!workspacesJson.is_object()) {
-            std::cerr << "[ViewManager] Workspaces JSON is not an object!" << std::endl;
+            ANI_LOG_ERROR("[ViewManager] Workspaces JSON is not an object!");
             return;
         }
 
-        std::cout << "[ViewManager] Found " << workspacesJson.size() << " workspaces to deserialize" << std::endl;
+        ANI_LOG_INFO("[ViewManager] Found %zu workspaces to deserialize", workspacesJson.size());
 
         if (!entityManager) {
-            std::cerr << "[ViewManager] ERROR: entityManager is null during deserialization!" << std::endl;
+            ANI_LOG_ERROR("[ViewManager] entityManager is null during deserialization!");
             return;
         }
 
@@ -812,12 +879,12 @@ namespace GUI {
             const json& workspaceJson = workspaceIt.value();
 
             if (!workspaceJson.contains("ID")) {
-                std::cerr << "[ViewManager] Workspace JSON missing ID" << std::endl;
+                ANI_LOG_ERROR("[ViewManager] Workspace JSON missing ID");
                 continue;
             }
 
             WorkspaceID workspaceID = workspaceJson["ID"];
-            std::cout << "[ViewManager] Deserializing workspace " << workspaceID << std::endl;
+            ANI_LOG_INFO("[ViewManager] Deserializing workspace %u", (unsigned)workspaceID);
 
             usedWorkspaceIDs.insert(workspaceID);
 
@@ -825,7 +892,7 @@ namespace GUI {
                 std::string loadedName = workspaceJson["name"];
                 if (IsWorkspaceNameTaken(loadedName, workspaceID)) {
                     loadedName = GenerateUniqueWorkspaceName(loadedName);
-                    std::cout << "[ViewManager] Name conflict resolved, using: " << loadedName << std::endl;
+                    ANI_LOG_INFO("[ViewManager] Name conflict resolved, using: %s", loadedName.c_str());
                 }
                 workspaceNames[workspaceID] = loadedName;
             }
@@ -835,17 +902,17 @@ namespace GUI {
 
             if (workspaceSignatures.find(workspaceID) == workspaceSignatures.end()) {
                 AddViewSignature(workspaceID);
-                std::cout << "[ViewManager] Created signature for workspace " << workspaceID << std::endl;
+                ANI_LOG_INFO("[ViewManager] Created signature for workspace %u", (unsigned)workspaceID);
             }
 
             if (!workspaceJson.contains("views") || !workspaceJson["views"].is_array()) {
-                std::cout << "[ViewManager] Workspace " << workspaceID << " has no views" << std::endl;
+                ANI_LOG_INFO("[ViewManager] Workspace %u has no views", (unsigned)workspaceID);
                 continue;
             }
 
             for (const auto& viewJson : workspaceJson["views"]) {
                 if (!viewJson.is_object()) {
-                    std::cerr << "[ViewManager] View JSON is not an object" << std::endl;
+                    ANI_LOG_ERROR("[ViewManager] View JSON is not an object");
                     continue;
                 }
 
@@ -853,7 +920,7 @@ namespace GUI {
                     std::string viewTypeName = viewIt.key();
                     const json& viewData = viewIt.value();
 
-                    std::cout << "[ViewManager]   Deserializing view: " << viewTypeName << std::endl;
+                    ANI_LOG_INFO("[ViewManager]   Deserializing view: %s", viewTypeName.c_str());
 
                     try {
                         ViewTypeID viewTypeID = GetViewType(viewTypeName);
@@ -874,37 +941,37 @@ namespace GUI {
                             }
 
                             try {
-                                std::cout << "[ViewManager] Calling factory for " << viewTypeName << std::endl;
+                                ANI_LOG_INFO("[ViewManager] Calling factory for %s", viewTypeName.c_str());
                                 auto view = factoryIt->second(*entityManager, *this);
-                                std::cout << "[ViewManager] Factory call returned for " << viewTypeName << std::endl;
+                                ANI_LOG_INFO("[ViewManager] Factory call returned for %s", viewTypeName.c_str());
 
                                 if (view) {
                                     view->workspaceID = workspaceID;
-                                    std::cout << "[ViewManager] Calling Init() for " << viewTypeName << std::endl;
+                                    ANI_LOG_INFO("[ViewManager] Calling Init() for %s", viewTypeName.c_str());
                                     view->Init();
-                                    std::cout << "[ViewManager] Init() succeeded for " << viewTypeName << std::endl;
+                                    ANI_LOG_INFO("[ViewManager] Init() succeeded for %s", viewTypeName.c_str());
 
                                     if (!viewData.is_null() && !viewData.empty()) {
-                                        std::cout << "[ViewManager] Calling Deserialize() for " << viewTypeName << std::endl;
+                                        ANI_LOG_INFO("[ViewManager] Calling Deserialize() for %s", viewTypeName.c_str());
                                         view->Deserialize(viewData);
-                                        std::cout << "[ViewManager] Deserialize() succeeded for " << viewTypeName << std::endl;
-                                        std::cout << "[ViewManager]     Recreated view: " << viewTypeName << " with data" << std::endl;
+                                        ANI_LOG_INFO("[ViewManager] Deserialize() succeeded for %s", viewTypeName.c_str());
+                                        ANI_LOG_INFO("[ViewManager]     Recreated view: %s with data", viewTypeName.c_str());
                                     }
                                     else {
-                                        std::cout << "[ViewManager]     Recreated view: " << viewTypeName << " (no data)" << std::endl;
+                                        ANI_LOG_INFO("[ViewManager]     Recreated view: %s (no data)", viewTypeName.c_str());
                                     }
 
                                     workspaces[workspaceID][viewTypeID] = std::move(view);
                                 }
                                 else {
-                                    std::cerr << "[ViewManager] Factory returned nullptr for " << viewTypeName << std::endl;
+                                    ANI_LOG_ERROR("[ViewManager] Factory returned nullptr for %s", viewTypeName.c_str());
                                 }
                             }
                             catch (const std::exception& e) {
-                                std::cerr << "[ViewManager] Exception during view creation/init: " << e.what() << std::endl;
+                                ANI_LOG_ERROR("[ViewManager] Exception during view creation/init: %s", e.what());
                             }
                             catch (...) {
-                                std::cerr << "[ViewManager] Unknown exception during view creation/init" << std::endl;
+                                ANI_LOG_ERROR("[ViewManager] Unknown exception during view creation/init");
                             }
 
                             if (contextSwitched && previousContext) {
@@ -912,26 +979,27 @@ namespace GUI {
                             }
                         }
                         else {
-                            std::cout << "[ViewManager]     Added view to signature only: " << viewTypeName << std::endl;
+                            ANI_LOG_INFO("[ViewManager]     Added view to signature only: %s", viewTypeName.c_str());
                             if (!entityManager) {
-                                std::cerr << "[ViewManager] entityManager is null, cannot instantiate view" << std::endl;
+                                ANI_LOG_ERROR("[ViewManager] entityManager is null, cannot instantiate view");
                             }
                             if (factoryIt == viewFactories.end()) {
-                                std::cerr << "[ViewManager] No factory found for " << viewTypeName << std::endl;
+                                ANI_LOG_ERROR("[ViewManager] No factory found for %s", viewTypeName.c_str());
                             }
                         }
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[ViewManager] Failed to deserialize view " << viewTypeName << ": " << e.what() << std::endl;
+                        ANI_LOG_ERROR("[ViewManager] Failed to deserialize view %s: %s",
+                            viewTypeName.c_str(), e.what());
                     }
                     catch (...) {
-                        std::cerr << "[ViewManager] Unknown exception deserializing view " << viewTypeName << std::endl;
+                        ANI_LOG_ERROR("[ViewManager] Unknown exception deserializing view %s", viewTypeName.c_str());
                     }
                 }
             }
         }
 
-        std::cout << "[ViewManager] Updating workspace tracking..." << std::endl;
+        ANI_LOG_INFO("[ViewManager] Updating workspace tracking...");
 
         std::queue<WorkspaceID> empty;
         std::swap(availableWorkspaces, empty);
@@ -951,12 +1019,12 @@ namespace GUI {
             }
         }
 
-        std::cout << "[ViewManager] Workspace tracking updated:" << std::endl;
-        std::cout << "  - Active workspaces: " << workspaceCount << std::endl;
-        std::cout << "  - Highest used ID: " << maxUsedID << std::endl;
-        std::cout << "  - Available workspace IDs: " << availableWorkspaces.size() << std::endl;
+        ANI_LOG_INFO("[ViewManager] Workspace tracking updated:");
+        ANI_LOG_INFO("  - Active workspaces: %u", (unsigned)workspaceCount);
+        ANI_LOG_INFO("  - Highest used ID: %u", (unsigned)maxUsedID);
+        ANI_LOG_INFO("  - Available workspace IDs: %zu", availableWorkspaces.size());
 
-        std::cout << "[ViewManager] Deserialization complete" << std::endl;
+        ANI_LOG_INFO("[ViewManager] Deserialization complete");
     }
 
     void ViewManager::AddViewSignature(const WorkspaceID viewList) {
@@ -995,7 +1063,7 @@ namespace GUI {
         viewSources.clear();
         viewFactories.clear();
 
-        std::cout << "[ViewManager] Registration data cleared" << std::endl;
+        ANI_LOG_INFO("[ViewManager] Registration data cleared");
     }
 
 } // namespace GUI

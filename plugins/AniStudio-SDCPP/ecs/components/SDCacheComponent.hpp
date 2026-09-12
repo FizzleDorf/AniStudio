@@ -1,4 +1,3 @@
-// SDCacheComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -34,11 +33,13 @@ namespace ECS {
         int spectrum_warmup_steps = 4;
         float spectrum_stop_percent = 0.9f;
 
-        EasyCacheComponent() {
-            compName = "EasyCache";
-            compCategory = "Performance";
+        EasyCacheComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "EasyCache"; }
+        const char* GetCompCategory() const override { return "Performance"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "EasyCache Settings"},
                 {"type", "object"},
                 {"description", "Cache management for faster generation (set mode to EASYCACHE to enable)."},
@@ -275,6 +276,64 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        EasyCacheComponent(const EasyCacheComponent& other) : BaseComponent(other) {
+            mode = other.mode;
+            reuse_threshold = other.reuse_threshold;
+            start_percent = other.start_percent;
+            end_percent = other.end_percent;
+            error_decay_rate = other.error_decay_rate;
+            use_relative_threshold = other.use_relative_threshold;
+            reset_error_on_compute = other.reset_error_on_compute;
+            Fn_compute_blocks = other.Fn_compute_blocks;
+            Bn_compute_blocks = other.Bn_compute_blocks;
+            residual_diff_threshold = other.residual_diff_threshold;
+            max_warmup_steps = other.max_warmup_steps;
+            max_cached_steps = other.max_cached_steps;
+            max_continuous_cached_steps = other.max_continuous_cached_steps;
+            taylorseer_n_derivatives = other.taylorseer_n_derivatives;
+            taylorseer_skip_interval = other.taylorseer_skip_interval;
+            scm_mask = other.scm_mask;
+            scm_policy_dynamic = other.scm_policy_dynamic;
+            spectrum_w = other.spectrum_w;
+            spectrum_m = other.spectrum_m;
+            spectrum_lam = other.spectrum_lam;
+            spectrum_window_size = other.spectrum_window_size;
+            spectrum_flex_window = other.spectrum_flex_window;
+            spectrum_warmup_steps = other.spectrum_warmup_steps;
+            spectrum_stop_percent = other.spectrum_stop_percent;
+        }
+
+        EasyCacheComponent& operator=(const EasyCacheComponent& other) {
+            if (this != &other) {
+                mode = other.mode;
+                reuse_threshold = other.reuse_threshold;
+                start_percent = other.start_percent;
+                end_percent = other.end_percent;
+                error_decay_rate = other.error_decay_rate;
+                use_relative_threshold = other.use_relative_threshold;
+                reset_error_on_compute = other.reset_error_on_compute;
+                Fn_compute_blocks = other.Fn_compute_blocks;
+                Bn_compute_blocks = other.Bn_compute_blocks;
+                residual_diff_threshold = other.residual_diff_threshold;
+                max_warmup_steps = other.max_warmup_steps;
+                max_cached_steps = other.max_cached_steps;
+                max_continuous_cached_steps = other.max_continuous_cached_steps;
+                taylorseer_n_derivatives = other.taylorseer_n_derivatives;
+                taylorseer_skip_interval = other.taylorseer_skip_interval;
+                scm_mask = other.scm_mask;
+                scm_policy_dynamic = other.scm_policy_dynamic;
+                spectrum_w = other.spectrum_w;
+                spectrum_m = other.spectrum_m;
+                spectrum_lam = other.spectrum_lam;
+                spectrum_window_size = other.spectrum_window_size;
+                spectrum_flex_window = other.spectrum_flex_window;
+                spectrum_warmup_steps = other.spectrum_warmup_steps;
+                spectrum_stop_percent = other.spectrum_stop_percent;
+            }
+            return *this;
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -307,7 +366,8 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"mode", mode},
                 {"reuse_threshold", reuse_threshold},
                 {"start_percent", start_percent},
@@ -332,15 +392,16 @@ namespace ECS {
                 {"spectrum_flex_window", spectrum_flex_window},
                 {"spectrum_warmup_steps", spectrum_warmup_steps},
                 {"spectrum_stop_percent", spectrum_stop_percent}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
 
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 componentData = j;

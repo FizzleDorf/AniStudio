@@ -41,8 +41,7 @@ namespace ANI {
     StudioCore::StudioCore()
         : initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
         m_isShuttingDown(false), m_showMissingPathsPopup(false) {
-        std::cout << "[StudioCore] Constructor called" << std::endl;
-        ANI_LOG_INFO("StudioCore constructor (smoke test)");
+        ANI_LOG_INFO("StudioCore constructor");
     }
 
     StudioCore::~StudioCore() {
@@ -53,28 +52,28 @@ namespace ANI {
 
     bool StudioCore::InitializeCoreOnly() {
         if (initialized) {
-            std::cerr << "[StudioCore] Already initialized!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Already initialized!");
             return false;
         }
 
         try {
-            std::cout << "[StudioCore] =========================================" << std::endl;
-            std::cout << "[StudioCore] InitializeCoreOnly (server / headless)..." << std::endl;
+            ANI_LOG_INFO("[StudioCore] =========================================");
+            ANI_LOG_INFO("[StudioCore] InitializeCoreOnly (server / headless)...");
 
             if (!engineCore.Initialize()) {
-                std::cerr << "[StudioCore] Failed to initialize EngineCore!" << std::endl;
+                ANI_LOG_ERROR("[StudioCore] Failed to initialize EngineCore!");
                 return false;
             }
 
             auto engineContext = engineCore.GetEngineContext();
             if (!engineContext) {
-                std::cerr << "[StudioCore] Failed to get EngineContext!" << std::endl;
+                ANI_LOG_ERROR("[StudioCore] Failed to get EngineContext!");
                 return false;
             }
 
             studioContext = StudioContext::FromEngine(engineContext);
             if (!studioContext || !studioContext->isValid()) {
-                std::cerr << "[StudioCore] Failed to create valid StudioContext!" << std::endl;
+                ANI_LOG_ERROR("[StudioCore] Failed to create valid StudioContext!");
                 return false;
             }
             studioContext->mode = StudioContext::Mode::Server;
@@ -94,11 +93,11 @@ namespace ANI {
             initialized = true;
             running = true;
 
-            std::cout << "[StudioCore] Core-only initialization complete (no GUI)." << std::endl;
+            ANI_LOG_INFO("[StudioCore] Core-only initialization complete (no GUI).");
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioCore] Core-only initialization failed: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Core-only initialization failed: %s", e.what());
             Shutdown();
             return false;
         }
@@ -106,20 +105,20 @@ namespace ANI {
 
     bool StudioCore::InitializeGUI() {
         if (!initialized || !studioContext) {
-            std::cerr << "[StudioCore] InitializeGUI called before InitializeCoreOnly!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] InitializeGUI called before InitializeCoreOnly!");
             return false;
         }
         if (studioContext->isServer()) {
-            std::cerr << "[StudioCore] InitializeGUI skipped in Server mode." << std::endl;
+            ANI_LOG_INFO("[StudioCore] InitializeGUI skipped in Server mode.");
             return true;
         }
         if (!imguiContext) {
-            std::cerr << "[StudioCore] InitializeGUI requires a valid ImGui context!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] InitializeGUI requires a valid ImGui context!");
             return false;
         }
 
         try {
-            std::cout << "[StudioCore] InitializeGUI..." << std::endl;
+            ANI_LOG_INFO("[StudioCore] InitializeGUI...");
 
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
 
@@ -135,8 +134,8 @@ namespace ANI {
                 if (fileSys) {
                     fileSys->SetPath("DefaultProject", defaultProjectPath);
                 }
-                std::cout << "[StudioCore] Set DefaultProject to: "
-                    << defaultProjectPath << std::endl;
+                ANI_LOG_INFO("[StudioCore] Set DefaultProject to: %s",
+                    defaultProjectPath.c_str());
             }
             if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
                 std::filesystem::create_directories(defaultProjectPath);
@@ -162,11 +161,17 @@ namespace ANI {
 
             ImGuiIO& io = ImGui::GetIO();
             if (!io.Fonts || io.Fonts->Fonts.Size == 0) {
-                std::cerr << "[StudioCore] ERROR: ImGui fonts not loaded!" << std::endl;
+                ANI_LOG_ERROR("[StudioCore] ImGui fonts not loaded!");
                 return false;
             }
 
             InitializeStudioPlugins();
+
+            if (auto ps = entityMgr.GetSystem<ECS::ProjectSystem>()) {
+                if (studioContext && studioContext->studioPluginManager) {
+                    ps->SetPluginManager(studioContext->studioPluginManager.get());
+                }
+            }
 
             Registration::RegisterViews(entityMgr,
                 *studioContext->viewManager,
@@ -189,13 +194,12 @@ namespace ANI {
             m_showProjectManagerView =
                 projectSystem ? projectSystem->ShouldShowStartup() : true;
 
-            std::cout << "[StudioCore] GUI initialization complete. "
-                << "Show startup view: "
-                << (m_showProjectManagerView ? "YES" : "NO") << std::endl;
+            ANI_LOG_INFO("[StudioCore] GUI initialization complete. Show startup view: %s",
+                m_showProjectManagerView ? "YES" : "NO");
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioCore] InitializeGUI failed: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[StudioCore] InitializeGUI failed: %s", e.what());
             return false;
         }
     }
@@ -215,8 +219,7 @@ namespace ANI {
     std::unique_ptr<StudioCore> StudioCore::CreateWithContext(
         std::shared_ptr<StudioContext> existingContext) {
         if (!existingContext || !existingContext->isValid()) {
-            std::cerr << "[StudioCore] Invalid context provided to CreateWithContext!"
-                << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Invalid context provided to CreateWithContext!");
             return nullptr;
         }
 
@@ -224,8 +227,7 @@ namespace ANI {
         studioCore->studioContext = existingContext;
 
         if (!studioCore->engineCore.Initialize()) {
-            std::cerr << "[StudioCore] Failed to initialize EngineCore "
-                << "with existing context!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Failed to initialize EngineCore with existing context!");
             return nullptr;
         }
 
@@ -252,13 +254,19 @@ namespace ANI {
         }
 
         studioCore->SetupProjectCallbacks();
+
+        if (projectSystem && studioCore->studioContext->studioPluginManager) {
+            projectSystem->SetPluginManager(
+                studioCore->studioContext->studioPluginManager.get());
+        }
+
         studioCore->SetCoreCallbacks();
         studioCore->SetCoreEvents();
 
         studioCore->initialized = true;
         studioCore->running = true;
 
-        std::cout << "[StudioCore] Created with existing context successfully" << std::endl;
+        ANI_LOG_INFO("[StudioCore] Created with existing context successfully");
         return studioCore;
     }
 
@@ -268,7 +276,7 @@ namespace ANI {
 
         std::string imguiIniPath = fileSys->GetPath("ImguiState");
         if (imguiIniPath.empty()) {
-            std::cerr << "[StudioCore] WARNING: ImguiState path missing!" << std::endl;
+            ANI_LOG_WARN("[StudioCore] ImguiState path missing!");
             return;
         }
 
@@ -279,8 +287,7 @@ namespace ANI {
 
         static std::string persistentIniPath = imguiIniPath;
         ImGui::GetIO().IniFilename = persistentIniPath.c_str();
-        std::cout << "[StudioCore] ImGui INI path: "
-            << ImGui::GetIO().IniFilename << std::endl;
+        ANI_LOG_INFO("[StudioCore] ImGui INI path: %s", ImGui::GetIO().IniFilename);
     }
 
     void StudioCore::RegisterSettingsTabs() {
@@ -291,8 +298,7 @@ namespace ANI {
         EntityID settingsEntity = settingsSystem->GetSettingsEntity();
         auto& entityMgr = *studioContext->entityManager;
         if (!entityMgr.IsEntityValid(settingsEntity)) {
-            std::cerr << "[StudioCore] Settings entity not valid; skipping tabs."
-                << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Settings entity not valid; skipping tabs.");
             return;
         }
 
@@ -331,7 +337,7 @@ namespace ANI {
 
         settingsSystem->LoadAllSettings();
 
-        std::cout << "[StudioCore] Core settings tabs registered." << std::endl;
+        ANI_LOG_INFO("[StudioCore] Core settings tabs registered.");
     }
 
     void StudioCore::EnsureCorePaths() {
@@ -372,7 +378,7 @@ namespace ANI {
 
     GUI::SettingsView& StudioCore::GetSettingsView() {
         if (!m_settingsView) {
-            std::cout << "[StudioCore] Lazy creating SettingsView..." << std::endl;
+            ANI_LOG_INFO("[StudioCore] Lazy creating SettingsView...");
             m_settingsView = std::make_unique<GUI::SettingsView>();
 
             if (imguiContext) {
@@ -388,7 +394,7 @@ namespace ANI {
 
     void StudioCore::SetImGuiContext(void* context) {
         imguiContext = context;
-        std::cout << "[StudioCore] ImGui context set to: " << imguiContext << std::endl;
+        ANI_LOG_INFO("[StudioCore] ImGui context set to: %p", imguiContext);
 
         if (studioContext) {
             studioContext->imguiContext = context;
@@ -400,18 +406,18 @@ namespace ANI {
 
     void StudioCore::InitializeStudioPlugins() {
         if (!studioContext) {
-            std::cerr << "[StudioCore] StudioContext not initialized!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] StudioContext not initialized!");
             return;
         }
         if (!imguiContext) {
-            std::cerr << "[StudioCore] ERROR: ImGui context is null!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] ImGui context is null!");
             return;
         }
 
         ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
         ImGuiIO& io = ImGui::GetIO();
         if (!io.Fonts || io.Fonts->Fonts.Size == 0) {
-            std::cerr << "[StudioCore] ERROR: ImGui not fully initialized!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] ImGui not fully initialized!");
             return;
         }
 
@@ -434,8 +440,7 @@ namespace ANI {
             fileSys ? fileSys->GetPath("Plugins") : std::string{};
         if (pluginDirectory.empty()) {
             pluginDirectory = "./plugins";
-            std::cerr << "[StudioCore] WARNING: Using default plugin dir: "
-                << pluginDirectory << std::endl;
+            ANI_LOG_WARN("[StudioCore] Using default plugin dir: %s", pluginDirectory.c_str());
         }
         if (!std::filesystem::exists(pluginDirectory)) {
             std::filesystem::create_directories(pluginDirectory);
@@ -444,21 +449,19 @@ namespace ANI {
         studioContext->studioPluginManager->scanPluginDirectory(pluginDirectory);
         studioContext->studioPluginManager->enableHotReload(true);
 
-        std::cout << "[StudioCore] Plugin system initialized (hot reload on)."
-            << std::endl;
+        ANI_LOG_INFO("[StudioCore] Plugin system initialized (hot reload on).");
     }
 
     void StudioCore::SetupProjectCallbacks() {
         auto projectSystem =
             GetEntityManager().GetSystem<ECS::ProjectSystem>();
         if (!projectSystem) {
-            std::cerr << "[StudioCore] ProjectSystem not initialized!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] ProjectSystem not initialized!");
             return;
         }
 
-        if (studioContext && studioContext->studioPluginManager) {
-            projectSystem->SetPluginManager(
-                studioContext->studioPluginManager.get());
+        if (studioContext && studioContext->viewManager) {
+            projectSystem->SetViewManager(studioContext->viewManager.get());
         }
 
         projectSystem->SetProjectLoadedCallback(
@@ -480,7 +483,7 @@ namespace ANI {
         auto fileSys =
             studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
         if (!fileSys) {
-            std::cerr << "[StudioCore] FilePathSystem not available!" << std::endl;
+            ANI_LOG_ERROR("[StudioCore] FilePathSystem not available!");
             return;
         }
 
@@ -565,7 +568,7 @@ namespace ANI {
     }
 
     void StudioCore::OnProjectLoaded(const std::string& projectPath) {
-        std::cout << "[StudioCore] Project loaded: " << projectPath << std::endl;
+        ANI_LOG_INFO("[StudioCore] Project loaded: %s", projectPath.c_str());
 
         if (auto fileSys =
             studioContext->entityManager->GetSystem<ECS::FilePathSystem>()) {
@@ -578,9 +581,11 @@ namespace ANI {
             std::filesystem::create_directories(projectPath + "/output");
         }
 
-        if (studioContext && studioContext->studioPluginManager) {
-            studioContext->studioPluginManager->SetProjectContext(projectPath);
-        }
+        // NOTE: Plugin project context (SetProjectContext / PrepareProjectPlugins)
+        // is handled inside ProjectSystem::LoadProject *before* the viewstate
+        // is loaded, so plugin view types are registered by the time
+        // ViewManager::DeserializeViewLists runs. Do not call SetProjectContext
+        // here ? doing so would re-run LoadPluginsFromState after viewstate load.
 
         m_showProjectManagerView = false;
         Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
@@ -588,7 +593,7 @@ namespace ANI {
     }
 
     void StudioCore::OnProjectCreated(const std::string& projectPath) {
-        std::cout << "[StudioCore] Project created: " << projectPath << std::endl;
+        ANI_LOG_INFO("[StudioCore] Project created: %s", projectPath.c_str());
 
         if (auto fileSys =
             studioContext->entityManager->GetSystem<ECS::FilePathSystem>()) {
@@ -601,9 +606,8 @@ namespace ANI {
             std::filesystem::create_directories(projectPath + "/output");
         }
 
-        if (studioContext && studioContext->studioPluginManager) {
-            studioContext->studioPluginManager->SetProjectContext(projectPath);
-        }
+        // Plugin project context is handled inside ProjectSystem::CreateNewProject
+        // now, mirroring LoadProject.
 
         m_showProjectManagerView = false;
         Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
@@ -611,7 +615,7 @@ namespace ANI {
     }
 
     void StudioCore::OnProjectClosed() {
-        std::cout << "[StudioCore] OnProjectClosed() called" << std::endl;
+        ANI_LOG_INFO("[StudioCore] OnProjectClosed() called");
 
         if (auto fileSys =
             studioContext->entityManager->GetSystem<ECS::FilePathSystem>()) {
@@ -653,14 +657,15 @@ namespace ANI {
     void StudioCore::Shutdown() {
         if (!initialized) return;
 
-        std::cout << "[StudioCore] Starting shutdown sequence..." << std::endl;
+        ANI_LOG_INFO("[StudioCore] Starting shutdown sequence...");
         running = false;
         m_isShuttingDown = true;
 
         try {
+            auto projectSystem =
+                GetEntityManager().GetSystem<ECS::ProjectSystem>();
+
             if (studioContext && !studioContext->isServer()) {
-                auto projectSystem =
-                    GetEntityManager().GetSystem<ECS::ProjectSystem>();
                 if (projectSystem && projectSystem->IsProjectOpen()) {
                     if (studioContext->studioPluginManager) {
                         studioContext->studioPluginManager->SaveProjectPluginState();
@@ -681,6 +686,10 @@ namespace ANI {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
 
+            if (projectSystem) {
+                projectSystem->SetSuppressViewStateSave(true);
+            }
+
             m_menuBar.reset();
             m_projectManagerView.reset();
             m_settingsView.reset();
@@ -697,12 +706,11 @@ namespace ANI {
             studioContext.reset();
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioCore] Exception during shutdown: "
-                << e.what() << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Exception during shutdown: %s", e.what());
         }
 
         initialized = false;
-        std::cout << "[StudioCore] Shutdown complete." << std::endl;
+        ANI_LOG_INFO("[StudioCore] Shutdown complete.");
     }
 
     void StudioCore::Update(float deltaTime) {
@@ -724,7 +732,7 @@ namespace ANI {
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioCore] Update error: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Update error: %s", e.what());
         }
     }
 
@@ -793,12 +801,12 @@ namespace ANI {
             Utils::RenderMissingPathsPopup();
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioCore] Render error: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Render error: %s", e.what());
         }
     }
 
     void StudioCore::SetCoreCallbacks() {
-        std::cout << "[StudioCore] Setting up core system callbacks..." << std::endl;
+        ANI_LOG_INFO("[StudioCore] Setting up core system callbacks...");
 
         auto& entityMgr = GetEntityManager();
         auto textureSystem = entityMgr.GetSystem<TextureSystem>();
@@ -806,7 +814,7 @@ namespace ANI {
         auto videoSystem = entityMgr.GetSystem<ECS::VideoSystem>();
 
         if (!textureSystem || !imageSystem) {
-            std::cerr << "[StudioCore] ERROR: Required systems missing." << std::endl;
+            ANI_LOG_ERROR("[StudioCore] Required systems missing.");
             return;
         }
 
@@ -839,7 +847,7 @@ namespace ANI {
     }
 
     void StudioCore::SetCoreEvents() {
-        std::cout << "[StudioCore] Registering core system events..." << std::endl;
+        ANI_LOG_INFO("[StudioCore] Registering core system events...");
 
         auto& entityMgr = GetEntityManager();
         auto imageSystem = entityMgr.GetSystem<ImageSystem>();
@@ -862,8 +870,7 @@ namespace ANI {
                         imageSystem->SetImage(entity, filePath);
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[StudioCore] LoadImageRequest error: "
-                            << e.what() << std::endl;
+                        ANI_LOG_ERROR("[StudioCore] LoadImageRequest error: %s", e.what());
                     }
                 });
 
@@ -874,8 +881,7 @@ namespace ANI {
                             std::any_cast<ECS::EntityID>(data));
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[StudioCore] RemoveImageRequest error: "
-                            << e.what() << std::endl;
+                        ANI_LOG_ERROR("[StudioCore] RemoveImageRequest error: %s", e.what());
                     }
                 });
 
@@ -910,8 +916,7 @@ namespace ANI {
                         videoSystem->SetVideo(entity, filePath);
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[StudioCore] LoadVideoRequest error: "
-                            << e.what() << std::endl;
+                        ANI_LOG_ERROR("[StudioCore] LoadVideoRequest error: %s", e.what());
                     }
                 });
 
@@ -922,8 +927,7 @@ namespace ANI {
                             std::any_cast<ECS::EntityID>(data));
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[StudioCore] RemoveVideoRequest error: "
-                            << e.what() << std::endl;
+                        ANI_LOG_ERROR("[StudioCore] RemoveVideoRequest error: %s", e.what());
                     }
                 });
 
@@ -972,8 +976,7 @@ namespace ANI {
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] SetActiveWorkspace error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] SetActiveWorkspace error: %s", e.what());
                 }
             });
 
@@ -991,8 +994,7 @@ namespace ANI {
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] CreateWorkspace error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] CreateWorkspace error: %s", e.what());
                 }
             });
 
@@ -1011,8 +1013,7 @@ namespace ANI {
                     vm->DestroyView(id);
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] DeleteWorkspace error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] DeleteWorkspace error: %s", e.what());
                 }
             });
 
@@ -1031,8 +1032,7 @@ namespace ANI {
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] AddView error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] AddView error: %s", e.what());
                 }
             });
 
@@ -1051,8 +1051,7 @@ namespace ANI {
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] RemoveView error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] RemoveView error: %s", e.what());
                 }
             });
 
@@ -1067,8 +1066,7 @@ namespace ANI {
                         std::any_cast<ECS::EntityID>(data));
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] DestroyEntity error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] DestroyEntity error: %s", e.what());
                 }
             });
 
@@ -1079,8 +1077,7 @@ namespace ANI {
                         std::any_cast<ECS::EntityID>(data));
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] CloneEntity error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] CloneEntity error: %s", e.what());
                 }
             });
 
@@ -1100,8 +1097,7 @@ namespace ANI {
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] AddComponent error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] AddComponent error: %s", e.what());
                 }
             });
 
@@ -1118,8 +1114,7 @@ namespace ANI {
                     GetEntityManager().RemoveComponentById(entityID, ctid);
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioCore] RemoveComponent error: "
-                        << e.what() << std::endl;
+                    ANI_LOG_ERROR("[StudioCore] RemoveComponent error: %s", e.what());
                 }
             });
 

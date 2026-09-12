@@ -1,4 +1,3 @@
-// VideoModelComponents.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -10,10 +9,22 @@
 namespace ECS {
 
     struct VideoParamsComponent : public BaseComponent {
-        VideoParamsComponent() {
-            compName = "VideoParams";
+        int video_frames = 25;
+        float vace_strength = 0.0f;
+        int motion_bucket_id = 127;
+        int fps = 6;
+        float augmentation_level = 0.0f;
+        float min_cfg = 1.0f;
+        float moe_boundary = 0.0f;
+        float flow_shift = 3.0f;
 
-            schema = {
+        VideoParamsComponent() = default;
+
+        const char* GetCompName() const override { return "VideoParams"; }
+        const char* GetCompCategory() const override { return "Video"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Video Generation Settings"},
                 {"type", "object"},
                 {"propertyOrder", {"video_frames", "vace_strength", "motion_bucket_id", "fps", "augmentation_level",
@@ -122,28 +133,18 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        int video_frames = 25;
-        float vace_strength = 0.0f;
-        int motion_bucket_id = 127;
-        int fps = 6;
-        float augmentation_level = 0.0f;
-        float min_cfg = 1.0f;
-        float moe_boundary = 0.0f;
-        float flow_shift = 3.0f;
-
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"video_frames", &video_frames},
-                {"vace_strength", &vace_strength},
-                {"motion_bucket_id", &motion_bucket_id},
-                {"fps", &fps},
-                {"augmentation_level", &augmentation_level},
-                {"min_cfg", &min_cfg},
-                {"moe_boundary", &moe_boundary},
-                {"flow_shift", &flow_shift}
-            };
+        VideoParamsComponent(const VideoParamsComponent& other) : BaseComponent(other) {
+            video_frames = other.video_frames;
+            vace_strength = other.vace_strength;
+            motion_bucket_id = other.motion_bucket_id;
+            fps = other.fps;
+            augmentation_level = other.augmentation_level;
+            min_cfg = other.min_cfg;
+            moe_boundary = other.moe_boundary;
+            flow_shift = other.flow_shift;
         }
 
         VideoParamsComponent& operator=(const VideoParamsComponent& other) {
@@ -160,8 +161,22 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"video_frames", &video_frames},
+                {"vace_strength", &vace_strength},
+                {"motion_bucket_id", &motion_bucket_id},
+                {"fps", &fps},
+                {"augmentation_level", &augmentation_level},
+                {"min_cfg", &min_cfg},
+                {"moe_boundary", &moe_boundary},
+                {"flow_shift", &flow_shift}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"video_frames", video_frames},
                 {"vace_strength", vace_strength},
                 {"motion_bucket_id", motion_bucket_id},
@@ -170,19 +185,20 @@ namespace ECS {
                 {"min_cfg", min_cfg},
                 {"moe_boundary", moe_boundary},
                 {"flow_shift", flow_shift}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
 
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -212,10 +228,19 @@ namespace ECS {
     };
 
     struct HighNoiseSamplerComponent : public BaseComponent {
-        HighNoiseSamplerComponent() {
-            compName = "HighNoiseSampler";
+        std::string high_noise_sample_method = "EULER";
+        std::string high_noise_scheduler_method = "DISCRETE";
+        int high_noise_steps = 8;
+        float high_noise_cfg = 3.5f;
+        float high_noise_eta = 0.0f;
 
-            schema = {
+        HighNoiseSamplerComponent() = default;
+
+        const char* GetCompName() const override { return "HighNoiseSampler"; }
+        const char* GetCompCategory() const override { return "Sampling"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
             {"title", "High Noise Sampler Settings"},
             {"type", "object"},
             {"propertyOrder", {"high_noise_sample_method", "high_noise_scheduler_method",
@@ -277,22 +302,15 @@ namespace ECS {
                 }}
             }}
             };
+            return j;
         }
 
-        std::string high_noise_sample_method = "EULER";
-        std::string high_noise_scheduler_method = "DISCRETE";
-        int high_noise_steps = 8;
-        float high_noise_cfg = 3.5f;
-        float high_noise_eta = 0.0f;
-
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"high_noise_sample_method", &high_noise_sample_method},
-                {"high_noise_scheduler_method", &high_noise_scheduler_method},
-                {"high_noise_cfg", &high_noise_cfg},
-                {"high_noise_steps", &high_noise_steps},
-                {"high_noise_eta", &high_noise_eta}
-            };
+        HighNoiseSamplerComponent(const HighNoiseSamplerComponent& other) : BaseComponent(other) {
+            high_noise_sample_method = other.high_noise_sample_method;
+            high_noise_scheduler_method = other.high_noise_scheduler_method;
+            high_noise_steps = other.high_noise_steps;
+            high_noise_cfg = other.high_noise_cfg;
+            high_noise_eta = other.high_noise_eta;
         }
 
         HighNoiseSamplerComponent& operator=(const HighNoiseSamplerComponent& other) {
@@ -306,26 +324,38 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"high_noise_sample_method", &high_noise_sample_method},
+                {"high_noise_scheduler_method", &high_noise_scheduler_method},
+                {"high_noise_cfg", &high_noise_cfg},
+                {"high_noise_steps", &high_noise_steps},
+                {"high_noise_eta", &high_noise_eta}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"high_noise_sample_method", high_noise_sample_method},
                 {"high_noise_scheduler_method", high_noise_scheduler_method},
                 {"high_noise_cfg", high_noise_cfg},
                 {"high_noise_steps", high_noise_steps},
                 {"high_noise_eta", high_noise_eta}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
 
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }

@@ -7,9 +7,7 @@
 namespace ECS {
 
     struct CheckpointComponent : public BaseModelComponent {
-        CheckpointComponent() {
-            compName = "Checkpoint";
-        }
+        CheckpointComponent() = default;
 
         const char* GetCompName() const override { return "Checkpoint"; }
         const char* GetCompCategory() const override { return "Model"; }
@@ -39,6 +37,8 @@ namespace ECS {
             return j;
         }
 
+        CheckpointComponent(const CheckpointComponent& other) : BaseModelComponent(other) {}
+
         CheckpointComponent& operator=(const CheckpointComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
@@ -50,9 +50,13 @@ namespace ECS {
     };
 
     struct DiffusionModelComponent : public BaseModelComponent {
-        DiffusionModelComponent() {
-            compName = "DiffusionModel";
-            schema = {
+        DiffusionModelComponent() = default;
+
+        const char* GetCompName() const override { return "DiffusionModel"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "UNet/Diffusion Model"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -73,7 +77,10 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
+
+        DiffusionModelComponent(const DiffusionModelComponent& other) : BaseModelComponent(other) {}
 
         DiffusionModelComponent& operator=(const DiffusionModelComponent& other) {
             if (this != &other) {
@@ -86,9 +93,13 @@ namespace ECS {
     };
 
     struct HighNoiseDiffusionModelComponent : public BaseModelComponent {
-        HighNoiseDiffusionModelComponent() {
-            compName = "HighNoiseDiffusionModel";
-            schema = {
+        HighNoiseDiffusionModelComponent() = default;
+
+        const char* GetCompName() const override { return "HighNoiseDiffusionModel"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "High Noise UNet/Diffusion Model"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -109,6 +120,11 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        HighNoiseDiffusionModelComponent(const HighNoiseDiffusionModelComponent& other)
+            : BaseModelComponent(other) {
         }
 
         HighNoiseDiffusionModelComponent& operator=(const HighNoiseDiffusionModelComponent& other) {
@@ -122,9 +138,13 @@ namespace ECS {
     };
 
     struct UncondDiffusionModelComponent : public BaseModelComponent {
-        UncondDiffusionModelComponent() {
-            compName = "UncondDiffusionModel";
-            schema = {
+        UncondDiffusionModelComponent() = default;
+
+        const char* GetCompName() const override { return "UncondDiffusionModel"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Unconditional Diffusion Model"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -145,6 +165,11 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        UncondDiffusionModelComponent(const UncondDiffusionModelComponent& other)
+            : BaseModelComponent(other) {
         }
 
         UncondDiffusionModelComponent& operator=(const UncondDiffusionModelComponent& other) {
@@ -158,9 +183,13 @@ namespace ECS {
     };
 
     struct MotionModuleComponent : public BaseModelComponent {
-        MotionModuleComponent() {
-            compName = "MotionModule";
-            schema = {
+        MotionModuleComponent() = default;
+
+        const char* GetCompName() const override { return "MotionModule"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Motion Module"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -181,7 +210,10 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
+
+        MotionModuleComponent(const MotionModuleComponent& other) : BaseModelComponent(other) {}
 
         MotionModuleComponent& operator=(const MotionModuleComponent& other) {
             if (this != &other) {

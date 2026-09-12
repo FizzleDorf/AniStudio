@@ -7,11 +7,17 @@
 namespace ECS {
 
 	struct PromptComponent : public BaseComponent {
-		PromptComponent() {
-			compName = "Prompt";
-			compCategory = "Sampling";
+		std::string posPrompt = "";
+		std::string negPrompt = "";
+		bool normalize_input = false;
 
-			schema = {
+		PromptComponent() = default;
+
+		const char* GetCompName() const override { return "Prompt"; }
+		const char* GetCompCategory() const override { return "Sampling"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "Prompt Settings"},
 				{"type", "object"},
 				{"propertyOrder", {"normalize_input", "posPrompt", "negPrompt"}},
@@ -44,18 +50,13 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
 
-		std::string posPrompt = "";
-		std::string negPrompt = "";
-		bool normalize_input = false;
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"posPrompt", &posPrompt},
-				{"negPrompt", &negPrompt},
-				{"normalize_input", &normalize_input}
-			};
+		PromptComponent(const PromptComponent& other) : BaseComponent(other) {
+			posPrompt = other.posPrompt;
+			negPrompt = other.negPrompt;
+			normalize_input = other.normalize_input;
 		}
 
 		PromptComponent& operator=(const PromptComponent& other) {
@@ -67,10 +68,17 @@ namespace ECS {
 			return *this;
 		}
 
+		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			return {
+				{"posPrompt", &posPrompt},
+				{"negPrompt", &negPrompt},
+				{"normalize_input", &normalize_input}
+			};
+		}
+
 		nlohmann::json Serialize() const override {
 			nlohmann::json j;
-			j["compName"] = compName;
-			j[compName] = {
+			j[GetCompName()] = {
 				{"posPrompt", posPrompt},
 				{"negPrompt", negPrompt},
 				{"normalize_input", normalize_input}
@@ -79,15 +87,15 @@ namespace ECS {
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
-			BaseComponent::Deserialize(j);
+			const char* key = GetCompName();
 
 			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
+			if (j.contains(key)) {
+				componentData = j.at(key);
 			}
 			else {
 				for (auto it = j.begin(); it != j.end(); ++it) {
-					if (it.key() == compName) {
+					if (it.key() == key) {
 						componentData = it.value();
 						break;
 					}

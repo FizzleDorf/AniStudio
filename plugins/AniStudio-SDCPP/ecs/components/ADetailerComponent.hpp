@@ -1,4 +1,3 @@
-// ADetailerComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -39,226 +38,228 @@ namespace ECS {
         std::string sort_by = "none";
         std::string extra_ad_args_override;
 
-        ADetailerComponent() {
-            compName = "ADetailer";
-            compCategory = "ADetailer";
+        ADetailerComponent() = default;
 
-            std::vector<std::string> maskModeItems = { "none", "merge", "merge_invert" };
-            std::vector<std::string> sortByItems = { "none", "left_to_right", "center_to_edge", "area" };
+        const char* GetCompName() const override { return "ADetailer"; }
+        const char* GetCompCategory() const override { return "ADetailer"; }
 
-            schema = {
-                {"title", "ADetailer Settings"},
-                {"type", "object"},
-                {"propertyOrder", {
-                    "detector_path", "ad_prompt", "ad_negative_prompt",
-                    "input_size", "confidence", "nms", "max_detections",
-                    "mask_k_largest", "mask_min_ratio", "mask_max_ratio",
-                    "dilate_erode", "x_offset", "y_offset",
-                    "mask_mode", "merge_masks", "invert_mask", "mask_blur",
-                    "inpaint_padding", "inpaint_width", "inpaint_height",
-                    "denoising_strength", "steps", "cfg_scale",
-                    "sample_method", "scheduler", "sort_by", "extra_ad_args_override"
-                }},
-                {"properties", {
-                    {"detector_path", {
-                        {"type", "string"},
-                        {"title", "Detector Path"},
-                        {"ui:widget", "file_selector"},
-                        {"ui:options", {
-                            {"mode", "file"},
-                            {"filters", ".safetensors,.pt"},
-                            {"filterName", "YOLO Detectors"},
-                            {"buttonText", "Browse..."},
-                            {"resetButtonText", "Clear"}
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = [] {
+                std::vector<std::string> maskModeItems = { "none", "merge", "merge_invert" };
+                std::vector<std::string> sortByItems = { "none", "left_to_right", "center_to_edge", "area" };
+                return nlohmann::json{
+                    {"title", "ADetailer Settings"},
+                    {"type", "object"},
+                    {"propertyOrder", {
+                        "detector_path", "ad_prompt", "ad_negative_prompt",
+                        "input_size", "confidence", "nms", "max_detections",
+                        "mask_k_largest", "mask_min_ratio", "mask_max_ratio",
+                        "dilate_erode", "x_offset", "y_offset",
+                        "mask_mode", "merge_masks", "invert_mask", "mask_blur",
+                        "inpaint_padding", "inpaint_width", "inpaint_height",
+                        "denoising_strength", "steps", "cfg_scale",
+                        "sample_method", "scheduler", "sort_by", "extra_ad_args_override"
+                    }},
+                    {"properties", {
+                        {"detector_path", {
+                            {"type", "string"},
+                            {"title", "Detector Path"},
+                            {"ui:widget", "file_selector"},
+                            {"ui:options", {
+                                {"mode", "file"},
+                                {"filters", ".safetensors,.pt"},
+                                {"filterName", "YOLO Detectors"},
+                                {"buttonText", "Browse..."},
+                                {"resetButtonText", "Clear"}
+                            }}
+                        }},
+                        {"ad_prompt", {
+                            {"type", "string"},
+                            {"title", "AD Prompt Override"},
+                            {"ui:widget", "textarea"}
+                        }},
+                        {"ad_negative_prompt", {
+                            {"type", "string"},
+                            {"title", "AD Negative Prompt Override"},
+                            {"ui:widget", "textarea"}
+                        }},
+                        {"input_size", {
+                            {"type", "integer"},
+                            {"title", "Input Size"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 32}, {"max", 1024}, {"step", 32}}}
+                        }},
+                        {"confidence", {
+                            {"type", "number"},
+                            {"title", "Confidence"},
+                            {"ui:widget", "input_float"},
+                            {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
+                        }},
+                        {"nms", {
+                            {"type", "number"},
+                            {"title", "NMS IoU"},
+                            {"ui:widget", "input_float"},
+                            {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
+                        }},
+                        {"max_detections", {
+                            {"type", "integer"},
+                            {"title", "Max Detections"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 1}, {"max", 1000}}}
+                        }},
+                        {"mask_k_largest", {
+                            {"type", "integer"},
+                            {"title", "Keep K Largest"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 0}, {"max", 100}}}
+                        }},
+                        {"mask_min_ratio", {
+                            {"type", "number"},
+                            {"title", "Min Bbox Ratio"},
+                            {"ui:widget", "input_float"},
+                            {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
+                        }},
+                        {"mask_max_ratio", {
+                            {"type", "number"},
+                            {"title", "Max Bbox Ratio"},
+                            {"ui:widget", "input_float"},
+                            {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
+                        }},
+                        {"dilate_erode", {
+                            {"type", "integer"},
+                            {"title", "Dilate/Erode"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", -100}, {"max", 100}}}
+                        }},
+                        {"x_offset", {
+                            {"type", "integer"},
+                            {"title", "X Offset"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", -1000}, {"max", 1000}}}
+                        }},
+                        {"y_offset", {
+                            {"type", "integer"},
+                            {"title", "Y Offset"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", -1000}, {"max", 1000}}}
+                        }},
+                        {"mask_mode", {
+                            {"type", "string"},
+                            {"title", "Mask Mode"},
+                            {"ui:widget", "combo"},
+                            {"items", maskModeItems}
+                        }},
+                        {"merge_masks", {
+                            {"type", "boolean"},
+                            {"title", "Merge Masks"},
+                            {"ui:widget", "checkbox"}
+                        }},
+                        {"invert_mask", {
+                            {"type", "boolean"},
+                            {"title", "Invert Mask"},
+                            {"ui:widget", "checkbox"}
+                        }},
+                        {"mask_blur", {
+                            {"type", "integer"},
+                            {"title", "Mask Blur"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 0}, {"max", 100}}}
+                        }},
+                        {"inpaint_padding", {
+                            {"type", "integer"},
+                            {"title", "Inpaint Padding"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 0}, {"max", 512}}}
+                        }},
+                        {"inpaint_width", {
+                            {"type", "integer"},
+                            {"title", "Inpaint Width"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 0}, {"max", 2048}}}
+                        }},
+                        {"inpaint_height", {
+                            {"type", "integer"},
+                            {"title", "Inpaint Height"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 0}, {"max", 2048}}}
+                        }},
+                        {"denoising_strength", {
+                            {"type", "number"},
+                            {"title", "Denoising Strength"},
+                            {"ui:widget", "input_float"},
+                            {"ui:options", {{"step", 0.01f}, {"min", -1.0f}, {"max", 1.0f}}}
+                        }},
+                        {"steps", {
+                            {"type", "integer"},
+                            {"title", "Steps"},
+                            {"ui:widget", "input_int"},
+                            {"ui:options", {{"min", 0}, {"max", 150}}}
+                        }},
+                        {"cfg_scale", {
+                            {"type", "number"},
+                            {"title", "CFG Scale"},
+                            {"ui:widget", "input_float"},
+                            {"ui:options", {{"step", 0.1f}, {"min", -1.0f}, {"max", 30.0f}}}
+                        }},
+                        {"sample_method", {
+                            {"type", "string"},
+                            {"title", "Sampler"},
+                            {"ui:widget", "combo"},
+                            {"items", get_sample_method_names()},
+                            {"itemCount", static_cast<int>(get_sample_method_names().size())}
+                        }},
+                        {"scheduler", {
+                            {"type", "string"},
+                            {"title", "Scheduler"},
+                            {"ui:widget", "combo"},
+                            {"items", get_scheduler_names()},
+                            {"itemCount", static_cast<int>(get_scheduler_names().size())}
+                        }},
+                        {"sort_by", {
+                            {"type", "string"},
+                            {"title", "Sort By"},
+                            {"ui:widget", "combo"},
+                            {"items", sortByItems}
+                        }},
+                        {"extra_ad_args_override", {
+                            {"type", "string"},
+                            {"title", "Extra AD Args Override"},
+                            {"ui:widget", "textarea"}
                         }}
-                    }},
-                    {"ad_prompt", {
-                        {"type", "string"},
-                        {"title", "AD Prompt Override"},
-                        {"ui:widget", "textarea"}
-                    }},
-                    {"ad_negative_prompt", {
-                        {"type", "string"},
-                        {"title", "AD Negative Prompt Override"},
-                        {"ui:widget", "textarea"}
-                    }},
-                    {"input_size", {
-                        {"type", "integer"},
-                        {"title", "Input Size"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 32}, {"max", 1024}, {"step", 32}}}
-                    }},
-                    {"confidence", {
-                        {"type", "number"},
-                        {"title", "Confidence"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
-                    }},
-                    {"nms", {
-                        {"type", "number"},
-                        {"title", "NMS IoU"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
-                    }},
-                    {"max_detections", {
-                        {"type", "integer"},
-                        {"title", "Max Detections"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 1}, {"max", 1000}}}
-                    }},
-                    {"mask_k_largest", {
-                        {"type", "integer"},
-                        {"title", "Keep K Largest"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 0}, {"max", 100}}}
-                    }},
-                    {"mask_min_ratio", {
-                        {"type", "number"},
-                        {"title", "Min Bbox Ratio"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
-                    }},
-                    {"mask_max_ratio", {
-                        {"type", "number"},
-                        {"title", "Max Bbox Ratio"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
-                    }},
-                    {"dilate_erode", {
-                        {"type", "integer"},
-                        {"title", "Dilate/Erode"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", -100}, {"max", 100}}}
-                    }},
-                    {"x_offset", {
-                        {"type", "integer"},
-                        {"title", "X Offset"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", -1000}, {"max", 1000}}}
-                    }},
-                    {"y_offset", {
-                        {"type", "integer"},
-                        {"title", "Y Offset"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", -1000}, {"max", 1000}}}
-                    }},
-                    {"mask_mode", {
-                        {"type", "string"},
-                        {"title", "Mask Mode"},
-                        {"ui:widget", "combo"},
-                        {"items", maskModeItems}
-                    }},
-                    {"merge_masks", {
-                        {"type", "boolean"},
-                        {"title", "Merge Masks"},
-                        {"ui:widget", "checkbox"}
-                    }},
-                    {"invert_mask", {
-                        {"type", "boolean"},
-                        {"title", "Invert Mask"},
-                        {"ui:widget", "checkbox"}
-                    }},
-                    {"mask_blur", {
-                        {"type", "integer"},
-                        {"title", "Mask Blur"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 0}, {"max", 100}}}
-                    }},
-                    {"inpaint_padding", {
-                        {"type", "integer"},
-                        {"title", "Inpaint Padding"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 0}, {"max", 512}}}
-                    }},
-                    {"inpaint_width", {
-                        {"type", "integer"},
-                        {"title", "Inpaint Width"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 0}, {"max", 2048}}}
-                    }},
-                    {"inpaint_height", {
-                        {"type", "integer"},
-                        {"title", "Inpaint Height"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 0}, {"max", 2048}}}
-                    }},
-                    {"denoising_strength", {
-                        {"type", "number"},
-                        {"title", "Denoising Strength"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {{"step", 0.01f}, {"min", -1.0f}, {"max", 1.0f}}}
-                    }},
-                    {"steps", {
-                        {"type", "integer"},
-                        {"title", "Steps"},
-                        {"ui:widget", "input_int"},
-                        {"ui:options", {{"min", 0}, {"max", 150}}}
-                    }},
-                    {"cfg_scale", {
-                        {"type", "number"},
-                        {"title", "CFG Scale"},
-                        {"ui:widget", "input_float"},
-                        {"ui:options", {{"step", 0.1f}, {"min", -1.0f}, {"max", 30.0f}}}
-                    }},
-                    {"sample_method", {
-                        {"type", "string"},
-                        {"title", "Sampler"},
-                        {"ui:widget", "combo"},
-                        {"items", get_sample_method_names()},
-                        {"itemCount", static_cast<int>(get_sample_method_names().size())}
-                    }},
-                    {"scheduler", {
-                        {"type", "string"},
-                        {"title", "Scheduler"},
-                        {"ui:widget", "combo"},
-                        {"items", get_scheduler_names()},
-                        {"itemCount", static_cast<int>(get_scheduler_names().size())}
-                    }},
-                    {"sort_by", {
-                        {"type", "string"},
-                        {"title", "Sort By"},
-                        {"ui:widget", "combo"},
-                        {"items", sortByItems}
-                    }},
-                    {"extra_ad_args_override", {
-                        {"type", "string"},
-                        {"title", "Extra AD Args Override"},
-                        {"ui:widget", "textarea"}
                     }}
-                }}
-            };
+                };
+                }();
+            return j;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"detector_path", &detector_path},
-                {"ad_prompt", &ad_prompt},
-                {"ad_negative_prompt", &ad_negative_prompt},
-                {"input_size", &input_size},
-                {"confidence", &confidence},
-                {"nms", &nms},
-                {"max_detections", &max_detections},
-                {"mask_k_largest", &mask_k_largest},
-                {"mask_min_ratio", &mask_min_ratio},
-                {"mask_max_ratio", &mask_max_ratio},
-                {"dilate_erode", &dilate_erode},
-                {"x_offset", &x_offset},
-                {"y_offset", &y_offset},
-                {"mask_mode", &mask_mode},
-                {"merge_masks", &merge_masks},
-                {"invert_mask", &invert_mask},
-                {"mask_blur", &mask_blur},
-                {"inpaint_padding", &inpaint_padding},
-                {"inpaint_width", &inpaint_width},
-                {"inpaint_height", &inpaint_height},
-                {"denoising_strength", &denoising_strength},
-                {"steps", &steps},
-                {"cfg_scale", &cfg_scale},
-                {"sample_method", &sample_method},
-                {"scheduler", &scheduler},
-                {"sort_by", &sort_by},
-                {"extra_ad_args_override", &extra_ad_args_override}
-            };
+        ADetailerComponent(const ADetailerComponent& other) : BaseComponent(other) {
+            detector_path = other.detector_path;
+            ad_prompt = other.ad_prompt;
+            ad_negative_prompt = other.ad_negative_prompt;
+            input_size = other.input_size;
+            confidence = other.confidence;
+            nms = other.nms;
+            max_detections = other.max_detections;
+            mask_k_largest = other.mask_k_largest;
+            mask_min_ratio = other.mask_min_ratio;
+            mask_max_ratio = other.mask_max_ratio;
+            dilate_erode = other.dilate_erode;
+            x_offset = other.x_offset;
+            y_offset = other.y_offset;
+            mask_mode = other.mask_mode;
+            merge_masks = other.merge_masks;
+            invert_mask = other.invert_mask;
+            mask_blur = other.mask_blur;
+            inpaint_padding = other.inpaint_padding;
+            inpaint_width = other.inpaint_width;
+            inpaint_height = other.inpaint_height;
+            denoising_strength = other.denoising_strength;
+            steps = other.steps;
+            cfg_scale = other.cfg_scale;
+            sample_method = other.sample_method;
+            scheduler = other.scheduler;
+            sort_by = other.sort_by;
+            extra_ad_args_override = other.extra_ad_args_override;
         }
 
         ADetailerComponent& operator=(const ADetailerComponent& other) {
@@ -294,8 +295,41 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"detector_path", &detector_path},
+                {"ad_prompt", &ad_prompt},
+                {"ad_negative_prompt", &ad_negative_prompt},
+                {"input_size", &input_size},
+                {"confidence", &confidence},
+                {"nms", &nms},
+                {"max_detections", &max_detections},
+                {"mask_k_largest", &mask_k_largest},
+                {"mask_min_ratio", &mask_min_ratio},
+                {"mask_max_ratio", &mask_max_ratio},
+                {"dilate_erode", &dilate_erode},
+                {"x_offset", &x_offset},
+                {"y_offset", &y_offset},
+                {"mask_mode", &mask_mode},
+                {"merge_masks", &merge_masks},
+                {"invert_mask", &invert_mask},
+                {"mask_blur", &mask_blur},
+                {"inpaint_padding", &inpaint_padding},
+                {"inpaint_width", &inpaint_width},
+                {"inpaint_height", &inpaint_height},
+                {"denoising_strength", &denoising_strength},
+                {"steps", &steps},
+                {"cfg_scale", &cfg_scale},
+                {"sample_method", &sample_method},
+                {"scheduler", &scheduler},
+                {"sort_by", &sort_by},
+                {"extra_ad_args_override", &extra_ad_args_override}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"detector_path", detector_path},
                 {"ad_prompt", ad_prompt},
                 {"ad_negative_prompt", ad_negative_prompt},
@@ -323,18 +357,19 @@ namespace ECS {
                 {"scheduler", scheduler},
                 {"sort_by", sort_by},
                 {"extra_ad_args_override", extra_ad_args_override}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -368,7 +403,6 @@ namespace ECS {
             if (componentData.contains("steps")) steps = componentData["steps"];
             if (componentData.contains("cfg_scale")) cfg_scale = componentData["cfg_scale"];
 
-            // Type checks for fields that may be numbers
             if (componentData.contains("sample_method")) {
                 const auto& val = componentData["sample_method"];
                 if (val.is_string()) sample_method = val.get<std::string>();

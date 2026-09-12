@@ -1,4 +1,3 @@
-// SDCPPSettingsComponent.hpp
 #pragma once
 #include "BaseSettingsComponent.hpp"
 #include "DiffusionOptions.hpp"
@@ -29,11 +28,13 @@ namespace ECS {
         int log_level = 1;
         std::string model_args;
 
-        SDCPPSettingsComponent() {
-            compName = "SDCPP";
-            compCategory = "SDCPP";
+        SDCPPSettingsComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "SDCPP"; }
+        const char* GetCompCategory() const override { return "SDCPP"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Global SDCPP Settings"},
                 {"type", "object"},
                 {"propertyOrder", {
@@ -152,6 +153,53 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        SDCPPSettingsComponent(const SDCPPSettingsComponent& other)
+            : BaseSettingsComponent(other)
+            , enable_mmap(other.enable_mmap)
+            , flash_attn(other.flash_attn)
+            , max_vram(other.max_vram)
+            , stream_layers(other.stream_layers)
+            , eager_load(other.eager_load)
+            , backend(other.backend)
+            , params_backend(other.params_backend)
+            , split_mode(other.split_mode)
+            , auto_fit(other.auto_fit)
+            , rpc_servers(other.rpc_servers)
+            , lora_apply_mode(other.lora_apply_mode)
+            , diffusion_flash_attn(other.diffusion_flash_attn)
+            , diffusion_conv_direct(other.diffusion_conv_direct)
+            , vae_conv_direct(other.vae_conv_direct)
+            , force_sdxl_vae_conv_scale(other.force_sdxl_vae_conv_scale)
+            , log_level(other.log_level)
+            , model_args(other.model_args)
+            , backupJson(other.backupJson) {
+        }
+
+        SDCPPSettingsComponent& operator=(const SDCPPSettingsComponent& other) {
+            if (this != &other) {
+                enable_mmap = other.enable_mmap;
+                flash_attn = other.flash_attn;
+                max_vram = other.max_vram;
+                stream_layers = other.stream_layers;
+                eager_load = other.eager_load;
+                backend = other.backend;
+                params_backend = other.params_backend;
+                split_mode = other.split_mode;
+                auto_fit = other.auto_fit;
+                rpc_servers = other.rpc_servers;
+                lora_apply_mode = other.lora_apply_mode;
+                diffusion_flash_attn = other.diffusion_flash_attn;
+                diffusion_conv_direct = other.diffusion_conv_direct;
+                vae_conv_direct = other.vae_conv_direct;
+                force_sdxl_vae_conv_scale = other.force_sdxl_vae_conv_scale;
+                log_level = other.log_level;
+                model_args = other.model_args;
+                backupJson = other.backupJson;
+            }
+            return *this;
         }
 
         bool SaveSettings() override {

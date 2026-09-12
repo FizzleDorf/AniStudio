@@ -10,11 +10,13 @@
 #include "SDCPPComponents.h"
 #include "ProjectSystem.hpp"
 #include "ImageUtils.hpp"
+#include "Log.hpp"
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
+#include <typeinfo>
 
 using namespace ECS;
 using namespace ANI;
@@ -26,6 +28,7 @@ namespace GUI {
         contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
         RegisterAllComponentAdders();
         m_quickLoaded = false;
+        m_hasRestoredState = false;
     }
 
     BaseDiffusionView::~BaseDiffusionView() {
@@ -39,7 +42,17 @@ namespace GUI {
     }
 
     void BaseDiffusionView::Init() {
-        InitializeBase();
+        ANI_LOG_INFO("[BaseDiffusionView::Init] view='%s' hasRestoredState=%d",
+            viewName.c_str(), m_hasRestoredState ? 1 : 0);
+
+        if (activeEntity == 0) {
+            activeEntity = m_entityManager.AddNewEntity();
+            ANI_LOG_INFO("[BaseDiffusionView::Init] created placeholder activeEntity=%u", (unsigned)activeEntity);
+        }
+
+        // NOTE: Do NOT call ResetToDefaults() here.
+        // ViewManager calls Init() then Deserialize(). If no Deserialize() happens,
+        // Render() will fall back to defaults on the first frame.
     }
 
     void BaseDiffusionView::RegisterAllComponentAdders() {
@@ -81,14 +94,21 @@ namespace GUI {
         m_componentAdders["EasyCache"] = [this](EntityID e) { this->m_entityManager.AddComponent<EasyCacheComponent>(e); };
     }
 
-    void BaseDiffusionView::InitializeBase() {
-        if (stateEntity != 0) m_entityManager.DestroyEntity(stateEntity);
-        if (activeEntity != 0) m_entityManager.DestroyEntity(activeEntity);
+    void BaseDiffusionView::ResetToDefaults() {
+        ANI_LOG_INFO("[ResetToDefaults] view='%s' old activeEntity=%u",
+            viewName.c_str(), (unsigned)activeEntity);
 
-        stateEntity = m_entityManager.AddNewEntity();
+        if (activeEntity != 0) {
+            m_entityManager.DestroyEntity(activeEntity);
+            activeEntity = 0;
+        }
+
         activeEntity = m_entityManager.AddNewEntity();
 
+        ANI_LOG_INFO("[ResetToDefaults] new activeEntity=%u", (unsigned)activeEntity);
+
         auto filteredComponents = GetFilteredComponents();
+        std::string defaultModel = GetDefaultModelComponent();
 
         for (size_t i = 0; i < ALL_COMPONENTS_COUNT; ++i) {
             std::string name(ALL_COMPONENTS[i]);
@@ -97,57 +117,32 @@ namespace GUI {
                 continue;
             }
 
+            if (name == "DiffusionModel" || name == "Checkpoint") {
+                if (name != defaultModel) {
+                    continue;
+                }
+            }
+
             auto it = m_componentAdders.find(name);
             if (it != m_componentAdders.end()) {
-                it->second(stateEntity);
+                ANI_LOG_TRACE("[ResetToDefaults] adding '%s' to activeEntity %u",
+                    name.c_str(), (unsigned)activeEntity);
+                it->second(activeEntity);
+            }
+            else {
+                ANI_LOG_WARN("[ResetToDefaults] no adder for '%s'", name.c_str());
             }
         }
 
-        auto defaultComponents = GetDefaultComponents();
-        for (const auto& name : defaultComponents) {
-            CopyComponentToActive(name);
-        }
+        m_hasRestoredState = true;
 
-        EnsureMutualExclusivity();
-    }
-
-    void BaseDiffusionView::CopyComponentToActive(const std::string& name) {
-        auto it = m_componentAdders.find(name);
-        if (it == m_componentAdders.end()) return;
-        auto compId = m_entityManager.GetComponentTypeIdByName(name);
-        if (compId == 0) return;
-        auto* stateComp = m_entityManager.GetComponentById(stateEntity, compId);
-        if (!stateComp) return;
-        nlohmann::json compData = stateComp->Serialize();
-
-        if (m_entityManager.HasComponentById(activeEntity, compId)) {
-            m_entityManager.RemoveComponentById(activeEntity, compId);
-        }
-        it->second(activeEntity);
-        auto* activeComp = m_entityManager.GetComponentById(activeEntity, compId);
-        if (activeComp) {
-            activeComp->Deserialize(compData);
-        }
+        ANI_LOG_INFO("[ResetToDefaults] done. activeEntity=%u", (unsigned)activeEntity);
     }
 
     void BaseDiffusionView::RemoveComponentFromActive(const std::string& name) {
         auto compId = m_entityManager.GetComponentTypeIdByName(name);
         if (compId != 0 && m_entityManager.HasComponentById(activeEntity, compId)) {
             m_entityManager.RemoveComponentById(activeEntity, compId);
-        }
-    }
-
-    void BaseDiffusionView::SyncComponentToState(ECS::ComponentTypeID compId) {
-        if (!UseStateActiveSeparation()) return;
-        if (!m_entityManager.HasComponentById(activeEntity, compId)) return;
-        auto* activeComp = m_entityManager.GetComponentById(activeEntity, compId);
-        if (!activeComp) return;
-        nlohmann::json data = activeComp->Serialize();
-        if (m_entityManager.HasComponentById(stateEntity, compId)) {
-            auto* stateComp = m_entityManager.GetComponentById(stateEntity, compId);
-            if (stateComp) {
-                stateComp->Deserialize(data);
-            }
         }
     }
 
@@ -180,11 +175,17 @@ namespace GUI {
             itWith->second(entity);
             return;
         }
-        std::cerr << "[BaseDiffusionView] No adder found for component: " << name << std::endl;
+        ANI_LOG_ERROR("[BaseDiffusionView] No adder found for component: %s", name.c_str());
+    }
+
+    bool BaseDiffusionView::IsComponentFiltered(const std::string& name) const {
+        auto filtered = GetFilteredComponents();
+        return std::find(filtered.begin(), filtered.end(), name) != filtered.end();
     }
 
     void BaseDiffusionView::RenderComponent(ECS::ComponentTypeID compId, const std::string& name) {
         auto* comp = m_entityManager.GetComponentById(activeEntity, compId);
+
         if (!comp) {
             ImGui::TextColored(ImVec4(1, 1, 0, 1), "Component %s not on active entity", name.c_str());
             return;
@@ -327,7 +328,9 @@ namespace GUI {
                 }
             }
             else {
-                if (comp->GetSchema().empty()) {
+                const auto& schema = comp->GetSchema();
+
+                if (schema.empty()) {
                     ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1), "No schema for %s", name.c_str());
                 }
                 else {
@@ -348,12 +351,9 @@ namespace GUI {
                             ImGui::EndPopup();
                         }
                         };
-                    UISchema::RenderSchema(comp->GetSchema(), comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
-                }
-            }
 
-            if (UseStateActiveSeparation()) {
-                SyncComponentToState(compId);
+                    UISchema::RenderSchema(schema, comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
+                }
             }
 
             ImGui::Unindent();
@@ -364,14 +364,16 @@ namespace GUI {
 
     void BaseDiffusionView::RenderComponentsUI() {
         auto compIds = m_entityManager.GetEntityComponents(activeEntity);
+
         if (compIds.empty()) {
             ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "No active components.");
             return;
         }
+
         std::vector<std::pair<ECS::ComponentTypeID, std::string>> comps;
+        comps.reserve(compIds.size());
         for (auto cid : compIds) {
-            std::string name = m_entityManager.GetComponentNameById(cid);
-            comps.emplace_back(cid, name);
+            comps.emplace_back(cid, m_entityManager.GetComponentNameById(cid));
         }
         std::sort(comps.begin(), comps.end(), [](auto& a, auto& b) { return a.second < b.second; });
 
@@ -424,7 +426,7 @@ namespace GUI {
                     QuickLoad();
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reset View"))
-                    Init();
+                    ResetToDefaults();
                 ImGui::EndMenu();
             }
 
@@ -517,6 +519,12 @@ namespace GUI {
     }
 
     void BaseDiffusionView::Render() {
+        // If no saved state was restored and the active entity is empty, populate defaults now.
+        if (!m_hasRestoredState && m_entityManager.GetEntityComponents(activeEntity).empty()) {
+            ANI_LOG_INFO("[Render] view='%s' no restored state, resetting to defaults", viewName.c_str());
+            ResetToDefaults();
+        }
+
         ImGui::SetNextWindowSize(ImVec2(400, 600), ImGuiCond_FirstUseEver);
         if (ImGui::Begin(GetWindowTitle().c_str(), &windowOpen, ImGuiWindowFlags_MenuBar)) {
             RenderMenuBar();
@@ -534,6 +542,9 @@ namespace GUI {
             std::unordered_map<std::string, std::any> eventData;
             eventData["workspaceID"] = GetID();
             eventData["viewTypeName"] = viewName;
+            eventData["serializedState"] = Serialize();
+            ANI_LOG_INFO("[Render] view='%s' queuing RemoveView with serializedState",
+                viewName.c_str());
             ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
         }
     }
@@ -545,11 +556,36 @@ namespace GUI {
     }
 
     void BaseDiffusionView::Deserialize(const nlohmann::json& j) {
+        ANI_LOG_INFO("[Deserialize] view='%s'", viewName.c_str());
+
         try {
-            activeEntity = m_entityManager.DeserializeEntity(j["activeEntity"]);
-            m_quickLoaded = true;
+            // Destroy the placeholder created by Init().
+            if (activeEntity != 0) {
+                m_entityManager.DestroyEntity(activeEntity);
+                activeEntity = 0;
+            }
+
+            if (j.contains("activeEntity") && !j["activeEntity"].is_null()) {
+                activeEntity = m_entityManager.DeserializeEntity(j["activeEntity"]);
+                m_hasRestoredState = true;
+                m_quickLoaded = true;
+                ANI_LOG_INFO("[Deserialize] view='%s' restored activeEntity=%u",
+                    viewName.c_str(), (unsigned)activeEntity);
+            }
+            else {
+                activeEntity = m_entityManager.AddNewEntity();
+                ANI_LOG_INFO("[Deserialize] view='%s' created fresh activeEntity=%u (no data)",
+                    viewName.c_str(), (unsigned)activeEntity);
+            }
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("[Deserialize] view='%s' exception: %s", viewName.c_str(), e.what());
+            ResetToDefaults();
+        }
+        catch (...) {
+            ANI_LOG_ERROR("[Deserialize] view='%s' unknown exception", viewName.c_str());
+            ResetToDefaults();
+        }
     }
 
     void BaseDiffusionView::QuickSave() {
@@ -608,81 +644,64 @@ namespace GUI {
     }
 
     void BaseDiffusionView::LoadMetadataFromMedia(const std::string& filePath) {
-        std::cout << "[BaseDiffusionView] LoadMetadataFromMedia: " << filePath << std::endl;
+        ANI_LOG_INFO("[LoadMetadataFromMedia] %s", filePath.c_str());
         try {
             nlohmann::json metadata = Utils::ImageUtils::ReadMetadataFromImage(filePath);
-            if (!metadata.is_null() && !metadata.empty()) {
-                std::cout << "[BaseDiffusionView] Found metadata in media file: " << filePath << std::endl;
+            if (metadata.is_null() || metadata.empty()) {
+                ANI_LOG_INFO("[LoadMetadataFromMedia] no metadata in: %s", filePath.c_str());
+                return;
+            }
 
-                nlohmann::json entityData = metadata;
-
-                if (!metadata.contains("components")) {
-                    nlohmann::json wrapped;
-                    wrapped["components"] = nlohmann::json::array();
-                    for (auto it = metadata.begin(); it != metadata.end(); ++it) {
-                        if (it.value().is_object()) {
-                            nlohmann::json comp;
-                            comp[it.key()] = it.value();
-                            wrapped["components"].push_back(comp);
-                        }
+            nlohmann::json entityData = metadata;
+            if (!metadata.contains("components")) {
+                nlohmann::json wrapped;
+                wrapped["components"] = nlohmann::json::array();
+                for (auto it = metadata.begin(); it != metadata.end(); ++it) {
+                    if (it.value().is_object()) {
+                        nlohmann::json comp;
+                        comp[it.key()] = it.value();
+                        wrapped["components"].push_back(comp);
                     }
-                    entityData = wrapped;
-                    std::cout << "[BaseDiffusionView] Wrapped metadata into entity format" << std::endl;
                 }
+                entityData = wrapped;
+                ANI_LOG_INFO("[LoadMetadataFromMedia] wrapped metadata into entity format");
+            }
 
-                if (entityData.contains("components") && entityData["components"].is_array()) {
-                    bool validComponents = false;
-                    for (const auto& comp : entityData["components"]) {
-                        if (comp.is_object() && !comp.empty()) {
-                            validComponents = true;
-                            break;
-                        }
-                    }
+            if (!entityData.contains("components") || !entityData["components"].is_array()) {
+                ANI_LOG_WARN("[LoadMetadataFromMedia] missing 'components' array after wrapping");
+                return;
+            }
 
-                    if (!validComponents) {
-                        std::cout << "[BaseDiffusionView] Media metadata contains no valid components, skipping" << std::endl;
-                        return;
-                    }
-
-                    std::cout << "[BaseDiffusionView] Loading metadata from media file" << std::endl;
-
-                    if (activeEntity != 0) {
-                        m_entityManager.DestroyEntity(activeEntity);
-                    }
-                    activeEntity = m_entityManager.DeserializeEntity(entityData);
-                    m_quickLoaded = true;
-
-                    std::cout << "[BaseDiffusionView] Successfully loaded metadata from media file: " << filePath << std::endl;
-                }
-                else {
-                    std::cout << "[BaseDiffusionView] Media metadata missing 'components' array after wrapping" << std::endl;
+            bool validComponents = false;
+            for (const auto& comp : entityData["components"]) {
+                if (comp.is_object() && !comp.empty()) {
+                    validComponents = true;
+                    break;
                 }
             }
-            else {
-                std::cout << "[BaseDiffusionView] No metadata found in media file: " << filePath << std::endl;
+
+            if (!validComponents) {
+                ANI_LOG_WARN("[LoadMetadataFromMedia] no valid components, skipping");
+                return;
             }
+
+            ANI_LOG_INFO("[LoadMetadataFromMedia] loading metadata");
+
+            if (activeEntity != 0) {
+                m_entityManager.DestroyEntity(activeEntity);
+            }
+            activeEntity = m_entityManager.DeserializeEntity(entityData);
+            m_hasRestoredState = true;
+            m_quickLoaded = true;
+
+            ANI_LOG_INFO("[LoadMetadataFromMedia] success. activeEntity=%u",
+                (unsigned)activeEntity);
         }
         catch (const std::exception& e) {
-            std::cerr << "[BaseDiffusionView] Failed to load metadata from media file: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[LoadMetadataFromMedia] exception: %s", e.what());
         }
         catch (...) {
-            std::cerr << "[BaseDiffusionView] Unknown error loading metadata from media file" << std::endl;
-        }
-    }
-
-    void BaseDiffusionView::EnsureMutualExclusivity() {
-        auto compIds = m_entityManager.GetEntityComponents(stateEntity);
-        bool hasDiffusionModel = false, hasCheckpoint = false;
-        for (auto cid : compIds) {
-            std::string name = m_entityManager.GetComponentNameById(cid);
-            if (name == "DiffusionModel") hasDiffusionModel = true;
-            if (name == "Checkpoint") hasCheckpoint = true;
-        }
-        if (hasDiffusionModel && hasCheckpoint) {
-            auto compId = m_entityManager.GetComponentTypeIdByName("Checkpoint");
-            if (compId != 0 && m_entityManager.HasComponentById(stateEntity, compId)) {
-                m_entityManager.RemoveComponentById(stateEntity, compId);
-            }
+            ANI_LOG_ERROR("[LoadMetadataFromMedia] unknown exception");
         }
     }
 

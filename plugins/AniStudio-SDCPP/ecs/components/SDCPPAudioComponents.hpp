@@ -8,10 +8,15 @@
 namespace ECS {
 
     struct RefAudioComponent : public BaseComponent {
-        RefAudioComponent() {
-            compName = "RefAudio";
+        std::vector<std::string> audioPaths;
 
-            schema = {
+        RefAudioComponent() = default;
+
+        const char* GetCompName() const override { return "RefAudio"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Reference Audio"},
                 {"type", "object"},
                 {"properties", {
@@ -39,9 +44,20 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::vector<std::string> audioPaths;
+        RefAudioComponent(const RefAudioComponent& other)
+            : BaseComponent(other)
+            , audioPaths(other.audioPaths) {
+        }
+
+        RefAudioComponent& operator=(const RefAudioComponent& other) {
+            if (this != &other) {
+                audioPaths = other.audioPaths;
+            }
+            return *this;
+        }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {};
@@ -49,20 +65,22 @@ namespace ECS {
 
         nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j[compName]["audioPaths"] = audioPaths;
+            j[GetCompName()] = {
+                {"audioPaths", audioPaths}
+            };
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
 
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -76,20 +94,18 @@ namespace ECS {
                 audioPaths = componentData["audioPaths"].get<std::vector<std::string>>();
             }
         }
-
-        RefAudioComponent& operator=(const RefAudioComponent& other) {
-            if (this != &other) {
-                audioPaths = other.audioPaths;
-            }
-            return *this;
-        }
     };
 
     struct RefVideoAudioComponent : public BaseComponent {
-        RefVideoAudioComponent() {
-            compName = "RefVideoAudio";
+        std::vector<std::string> audioPaths;
 
-            schema = {
+        RefVideoAudioComponent() = default;
+
+        const char* GetCompName() const override { return "RefVideoAudio"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Paired Video Audio"},
                 {"type", "object"},
                 {"properties", {
@@ -109,9 +125,20 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::vector<std::string> audioPaths;
+        RefVideoAudioComponent(const RefVideoAudioComponent& other)
+            : BaseComponent(other)
+            , audioPaths(other.audioPaths) {
+        }
+
+        RefVideoAudioComponent& operator=(const RefVideoAudioComponent& other) {
+            if (this != &other) {
+                audioPaths = other.audioPaths;
+            }
+            return *this;
+        }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {};
@@ -119,15 +146,17 @@ namespace ECS {
 
         nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j[compName]["audioPaths"] = audioPaths;
+            j[GetCompName()] = {
+                {"audioPaths", audioPaths}
+            };
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 componentData = j;

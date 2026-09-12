@@ -82,6 +82,9 @@ namespace GUI {
 
 		ViewManager& GetViewManager() const { return m_viewManager; }
 
+		bool IsWindowOpen() const { return windowOpen; }
+		void SetWindowOpen(bool open) { windowOpen = open; }
+
 	protected:
 		ECS::EntityManager& m_entityManager;
 		bool windowOpen = true;

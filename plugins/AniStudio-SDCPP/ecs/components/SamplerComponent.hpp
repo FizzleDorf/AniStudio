@@ -1,4 +1,3 @@
-// SamplerComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -10,12 +9,26 @@
 namespace ECS {
 
     struct SamplerComponent : public ECS::BaseComponent {
-        SamplerComponent() {
-            compName = "Sampler";
-            compCategory = "Sampling";
-        }
+        int64_t seed = -1;
+        int steps = 20;
+        float denoise = 1.0f;
+        int n_threads = 4;
+        bool free_params_immediately = true;
+        bool offload_params_to_cpu = false;
+        bool keep_clip_on_cpu = false;
+        bool keep_control_net_on_cpu = false;
 
-        const nlohmann::json& GetSchema() const override{
+        std::string current_sample_method = "EULER";
+        std::string current_scheduler_method = "DISCRETE";
+
+        std::string extra_sample_args;
+
+        SamplerComponent() = default;
+
+        const char* GetCompName() const override { return "Sampler"; }
+        const char* GetCompCategory() const override { return "Sampling"; }
+
+        const nlohmann::json& GetSchema() const override {
             static const nlohmann::json j = {
                 {"title", "Sampler Settings"},
                 {"type", "object"},
@@ -105,34 +118,18 @@ namespace ECS {
             return j;
         }
 
-        int64_t seed = -1;
-        int steps = 20;
-        float denoise = 1.0f;
-        int n_threads = 4;
-        bool free_params_immediately = true;
-        bool offload_params_to_cpu = false;
-        bool keep_clip_on_cpu = false;
-        bool keep_control_net_on_cpu = false;
-
-        std::string current_sample_method = "EULER";
-        std::string current_scheduler_method = "DISCRETE";
-
-        std::string extra_sample_args;
-
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"seed", reinterpret_cast<void*>(&seed)},
-                {"steps", &steps},
-                {"denoise", &denoise},
-                {"n_threads", &n_threads},
-                {"free_params_immediately", &free_params_immediately},
-                {"offload_params_to_cpu", &offload_params_to_cpu},
-                {"keep_clip_on_cpu", &keep_clip_on_cpu},
-                {"keep_control_net_on_cpu", &keep_control_net_on_cpu},
-                {"current_sample_method", &current_sample_method},
-                {"current_scheduler_method", &current_scheduler_method},
-                {"extra_sample_args", &extra_sample_args}
-            };
+        SamplerComponent(const SamplerComponent& other) : BaseComponent(other) {
+            seed = other.seed;
+            steps = other.steps;
+            denoise = other.denoise;
+            n_threads = other.n_threads;
+            free_params_immediately = other.free_params_immediately;
+            offload_params_to_cpu = other.offload_params_to_cpu;
+            keep_clip_on_cpu = other.keep_clip_on_cpu;
+            keep_control_net_on_cpu = other.keep_control_net_on_cpu;
+            current_sample_method = other.current_sample_method;
+            current_scheduler_method = other.current_scheduler_method;
+            extra_sample_args = other.extra_sample_args;
         }
 
         SamplerComponent& operator=(const SamplerComponent& other) {
@@ -152,8 +149,25 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"seed", reinterpret_cast<void*>(&seed)},
+                {"steps", &steps},
+                {"denoise", &denoise},
+                {"n_threads", &n_threads},
+                {"free_params_immediately", &free_params_immediately},
+                {"offload_params_to_cpu", &offload_params_to_cpu},
+                {"keep_clip_on_cpu", &keep_clip_on_cpu},
+                {"keep_control_net_on_cpu", &keep_control_net_on_cpu},
+                {"current_sample_method", &current_sample_method},
+                {"current_scheduler_method", &current_scheduler_method},
+                {"extra_sample_args", &extra_sample_args}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"seed", seed},
                 {"steps", steps},
                 {"denoise", denoise},
@@ -165,18 +179,19 @@ namespace ECS {
                 {"current_sample_method", current_sample_method},
                 {"current_scheduler_method", current_scheduler_method},
                 {"extra_sample_args", extra_sample_args}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }

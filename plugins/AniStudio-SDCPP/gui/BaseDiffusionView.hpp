@@ -7,6 +7,7 @@
 #include "Components.h"
 #include "ContextMenuUtils.hpp"
 #include "ClipboardUtilities.hpp"
+#include "Log.hpp"
 #include <memory>
 #include <unordered_map>
 #include <string>
@@ -27,8 +28,6 @@ namespace GUI {
 
         ECS::EntityID GetActiveEntity() const { return activeEntity; }
         virtual std::string GetTaskType() const = 0;
-
-        virtual bool UseStateActiveSeparation() const { return true; }
 
         void QuickSave();
         void QuickLoad();
@@ -77,18 +76,17 @@ namespace GUI {
 
         static constexpr size_t ALL_COMPONENTS_COUNT = sizeof(ALL_COMPONENTS) / sizeof(ALL_COMPONENTS[0]);
 
-        ECS::EntityID stateEntity = 0;
         ECS::EntityID activeEntity = 0;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
         bool m_quickLoaded = false;
+        bool m_hasRestoredState = false;
 
         virtual std::vector<std::string> GetDefaultComponents() const = 0;
         virtual std::vector<std::string> GetFilteredComponents() const { return {}; }
+        virtual std::string GetDefaultModelComponent() const { return "Checkpoint"; }
 
-        void InitializeBase();
-        void CopyComponentToActive(const std::string& name);
+        void ResetToDefaults();
         void RemoveComponentFromActive(const std::string& name);
-        void SyncComponentToState(ECS::ComponentTypeID compId);
         void RenderComponent(ECS::ComponentTypeID compId, const std::string& name);
         void RenderComponentsUI();
 
@@ -102,8 +100,6 @@ namespace GUI {
         std::vector<std::string> GetAllComponentNames() const;
         void AddComponentByName(ECS::EntityID entity, const std::string& name);
         bool IsComponentFiltered(const std::string& name) const;
-        bool HasDiffusionModelOrCheckpoint() const;
-        void EnsureMutualExclusivity();
     };
 
 } // namespace GUI

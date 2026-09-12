@@ -1,4 +1,3 @@
-// AutoEncoderComponent.hpp
 #pragma once
 
 #include "BaseModelComponent.hpp"
@@ -12,10 +11,17 @@
 namespace ECS {
 
     struct VaeComponent : public BaseModelComponent {
-        VaeComponent() {
-            compName = "Vae";
+        bool keep_vae_on_cpu = false;
+        bool vae_decode_only = false;
+        std::string vae_format = "AUTO";
 
-            schema = {
+        VaeComponent() = default;
+
+        const char* GetCompName() const override { return "Vae"; }
+        const char* GetCompCategory() const override { return "Models"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "VAE Settings"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath", "keep_vae_on_cpu", "vae_decode_only", "vae_format"}},
@@ -56,20 +62,13 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        bool keep_vae_on_cpu = false;
-        bool vae_decode_only = false;
-        std::string vae_format = "AUTO";
-
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"modelPath", &modelPath},
-                {"modelName", &modelName},
-                {"keep_vae_on_cpu", &keep_vae_on_cpu},
-                {"vae_decode_only", &vae_decode_only},
-                {"vae_format", &vae_format}
-            };
+        VaeComponent(const VaeComponent& other) : BaseModelComponent(other) {
+            keep_vae_on_cpu = other.keep_vae_on_cpu;
+            vae_decode_only = other.vae_decode_only;
+            vae_format = other.vae_format;
         }
 
         VaeComponent& operator=(const VaeComponent& other) {
@@ -84,26 +83,37 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"modelPath", &modelPath},
+                {"modelName", &modelName},
+                {"keep_vae_on_cpu", &keep_vae_on_cpu},
+                {"vae_decode_only", &vae_decode_only},
+                {"vae_format", &vae_format}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"modelName", modelName},
                 {"modelPath", modelPath},
                 {"keep_vae_on_cpu", keep_vae_on_cpu},
                 {"vae_decode_only", vae_decode_only},
                 {"vae_format", vae_format}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseModelComponent::Deserialize(j);
-
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -113,6 +123,8 @@ namespace ECS {
                 }
             }
 
+            if (componentData.contains("modelName")) modelName = componentData["modelName"];
+            if (componentData.contains("modelPath")) modelPath = componentData["modelPath"];
             if (componentData.contains("keep_vae_on_cpu")) keep_vae_on_cpu = componentData["keep_vae_on_cpu"].get<bool>();
             if (componentData.contains("vae_decode_only")) vae_decode_only = componentData["vae_decode_only"].get<bool>();
             if (componentData.contains("vae_format")) {
@@ -129,10 +141,22 @@ namespace ECS {
     };
 
     struct VaeTilingComponent : public BaseComponent {
-        VaeTilingComponent() {
-            compName = "VaeTiling";
+        bool isTiled = false;
+        bool temporal_tiling = false;
+        int tile_size_x = 64;
+        int tile_size_y = 64;
+        float target_overlap = 0.75f;
+        float rel_size_x = 64.0f;
+        float rel_size_y = 64.0f;
+        std::string extra_tiling_args;
 
-            schema = {
+        VaeTilingComponent() = default;
+
+        const char* GetCompName() const override { return "VaeTiling"; }
+        const char* GetCompCategory() const override { return "Models"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "VAE Tiling Settings"},
                 {"type", "object"},
                 {"propertyOrder", {"isTiled", "temporal_tiling", "tile_size_x", "tile_size_y",
@@ -218,16 +242,33 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        bool isTiled = false;
-        bool temporal_tiling = false;
-        int tile_size_x = 64;
-        int tile_size_y = 64;
-        float target_overlap = 0.75f;
-        float rel_size_x = 64.0f;
-        float rel_size_y = 64.0f;
-        std::string extra_tiling_args;
+        VaeTilingComponent(const VaeTilingComponent& other) : BaseComponent(other) {
+            isTiled = other.isTiled;
+            temporal_tiling = other.temporal_tiling;
+            tile_size_x = other.tile_size_x;
+            tile_size_y = other.tile_size_y;
+            target_overlap = other.target_overlap;
+            rel_size_x = other.rel_size_x;
+            rel_size_y = other.rel_size_y;
+            extra_tiling_args = other.extra_tiling_args;
+        }
+
+        VaeTilingComponent& operator=(const VaeTilingComponent& other) {
+            if (this != &other) {
+                isTiled = other.isTiled;
+                temporal_tiling = other.temporal_tiling;
+                tile_size_x = other.tile_size_x;
+                tile_size_y = other.tile_size_y;
+                target_overlap = other.target_overlap;
+                rel_size_x = other.rel_size_x;
+                rel_size_y = other.rel_size_y;
+                extra_tiling_args = other.extra_tiling_args;
+            }
+            return *this;
+        }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
@@ -243,7 +284,8 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"isTiled", isTiled},
                 {"temporal_tiling", temporal_tiling},
                 {"tile_size_x", tile_size_x},
@@ -252,17 +294,19 @@ namespace ECS {
                 {"rel_size_x", rel_size_x},
                 {"rel_size_y", rel_size_y},
                 {"extra_tiling_args", extra_tiling_args}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
             nlohmann::json data;
-            if (j.contains(compName)) {
-                data = j.at(compName);
+            if (j.contains(key)) {
+                data = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         data = it.value();
                         break;
                     }
@@ -284,10 +328,13 @@ namespace ECS {
     };
 
     struct TaesdComponent : public BaseModelComponent {
-        TaesdComponent() {
-            compName = "Taesd";
+        TaesdComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "Taesd"; }
+        const char* GetCompCategory() const override { return "Models"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "TAESD Fast VAE"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -308,7 +355,10 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
+
+        TaesdComponent(const TaesdComponent& other) : BaseModelComponent(other) {}
 
         TaesdComponent& operator=(const TaesdComponent& other) {
             if (this != &other) {
@@ -321,10 +371,13 @@ namespace ECS {
     };
 
     struct AudioVaeComponent : public BaseModelComponent {
-        AudioVaeComponent() {
-            compName = "AudioVae";
+        AudioVaeComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "AudioVae"; }
+        const char* GetCompCategory() const override { return "Models"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Audio VAE"},
                 {"type", "object"},
                 {"propertyOrder", {"modelPath"}},
@@ -345,7 +398,10 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
+
+        AudioVaeComponent(const AudioVaeComponent& other) : BaseModelComponent(other) {}
 
         AudioVaeComponent& operator=(const AudioVaeComponent& other) {
             if (this != &other) {

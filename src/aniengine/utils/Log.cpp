@@ -8,29 +8,38 @@
 #include <ctime>
 #include <filesystem>
 #include <system_error>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <vector>
+#include <deque>
 
 #ifdef _WIN32
 #include <io.h>
+#include <fcntl.h>
+#include <windows.h>
 #define ANI_LOG_FILENO    _fileno
 #define ANI_LOG_DUP(fd)   _dup(fd)
 #define ANI_LOG_DUP2(a,b) _dup2((a),(b))
 #define ANI_LOG_CLOSE(fd) _close(fd)
+#define ANI_LOG_READ(fd,buf,n) _read((fd),(buf),(unsigned int)(n))
+#define ANI_LOG_WRITE(fd,buf,n) _write((fd),(buf),(unsigned int)(n))
+#define ANI_LOG_PIPE(fds) _pipe((fds), 65536, _O_BINARY)
 #else
 #include <unistd.h>
 #define ANI_LOG_FILENO    ::fileno
 #define ANI_LOG_DUP(fd)   ::dup(fd)
 #define ANI_LOG_DUP2(a,b) ::dup2((a),(b))
 #define ANI_LOG_CLOSE(fd) ::close(fd)
+#define ANI_LOG_READ(fd,buf,n) ::read((fd),(buf),(n))
+#define ANI_LOG_WRITE(fd,buf,n) ::write((fd),(buf),(n))
+#define ANI_LOG_PIPE(fds) ::pipe((fds))
 #endif
 
 namespace ANI::Log {
 
     namespace {
 
-        // Single copy of all logger state. Lives in AniEngineCore.dll only,
-        // because this .cpp is compiled into that target. Every other module
-        // calls the exported functions, so there is exactly one g_level, one
-        // g_file, one set of redirected fds across the whole process.
         std::atomic<int> g_level{ static_cast<int>(Level::Trace) };
 
         SinkFn g_sink = nullptr;
@@ -39,12 +48,15 @@ namespace ANI::Log {
         std::FILE* g_file = nullptr;
         int         g_savedStderrFd = -1;
         int         g_savedStdoutFd = -1;
+        int         g_pipeWriteFd = -1;
+        int         g_pipeReadFd = -1;
         std::string g_path;
 
-        // Thread-local buffer for MakeSessionFilename and SessionPath so the
-        // caller gets a valid pointer without worrying about a shared
-        // std::string being mutated under them. 512 bytes is plenty for any
-        // reasonable Windows path plus the filename.
+        std::thread             g_pumpThread;
+        std::atomic<bool>       g_pumpRunning{ false };
+        std::mutex              g_pumpMutex;
+        std::condition_variable g_pumpCv;
+
         thread_local char g_pathBuf[512];
 
         struct Stamp { int year, mon, day, hour, min, sec, ms; };
@@ -85,8 +97,6 @@ namespace ANI::Log {
             }
         }
 
-        // Strips everything up to the last slash or backslash so log lines
-        // read "AniEngine.cpp:29" instead of the full absolute path.
         const char* ShortFile(const char* f) {
             if (!f) return "?";
             const char* last = f;
@@ -100,9 +110,42 @@ namespace ANI::Log {
             return last;
         }
 
-        // Opens the file and points stderr and stdout at it. On any failure
-        // every fd opened so far is closed and no globals are touched, so
-        // the caller can safely retry or fall back.
+        void PumpLoop() {
+            std::vector<char> buf(8192);
+
+            while (g_pumpRunning.load(std::memory_order_relaxed)) {
+                int n = ANI_LOG_READ(g_pipeReadFd, buf.data(),
+                    static_cast<int>(buf.size()));
+                if (n <= 0) {
+                    std::unique_lock<std::mutex> lk(g_pumpMutex);
+                    g_pumpCv.wait_for(lk, std::chrono::milliseconds(20));
+                    continue;
+                }
+
+                if (g_savedStderrFd >= 0) {
+                    ANI_LOG_WRITE(g_savedStderrFd, buf.data(), n);
+                }
+                if (g_file) {
+                    std::fwrite(buf.data(), 1, static_cast<size_t>(n), g_file);
+                    std::fflush(g_file);
+                }
+            }
+
+            for (;;) {
+                int n = ANI_LOG_READ(g_pipeReadFd, buf.data(),
+                    static_cast<int>(buf.size()));
+                if (n <= 0) break;
+
+                if (g_savedStderrFd >= 0) {
+                    ANI_LOG_WRITE(g_savedStderrFd, buf.data(), n);
+                }
+                if (g_file) {
+                    std::fwrite(buf.data(), 1, static_cast<size_t>(n), g_file);
+                    std::fflush(g_file);
+                }
+            }
+        }
+
         bool RedirectBegin(const std::string& path) {
             if (g_file) return false;
 
@@ -124,61 +167,112 @@ namespace ANI::Log {
             int stderrFd = ANI_LOG_FILENO(stderr);
             int stdoutFd = ANI_LOG_FILENO(stdout);
 
-            int dupErr = ANI_LOG_DUP(stderrFd);
-            if (dupErr < 0) { std::fclose(f); return false; }
+            int savedErr = ANI_LOG_DUP(stderrFd);
+            if (savedErr < 0) { std::fclose(f); return false; }
 
-            int dupOut = -1;
+            int savedOut = -1;
             if (stdoutFd >= 0) {
-                dupOut = ANI_LOG_DUP(stdoutFd);
-                if (dupOut < 0) {
-                    ANI_LOG_CLOSE(dupErr);
+                savedOut = ANI_LOG_DUP(stdoutFd);
+                if (savedOut < 0) {
+                    ANI_LOG_CLOSE(savedErr);
                     std::fclose(f);
                     return false;
                 }
             }
 
-            int fileFd = ANI_LOG_FILENO(f);
-
-            if (ANI_LOG_DUP2(fileFd, stderrFd) != 0) {
-                ANI_LOG_CLOSE(dupErr);
-                if (dupOut >= 0) ANI_LOG_CLOSE(dupOut);
-                std::fclose(f);
-                return false;
-            }
-
-            if (dupOut >= 0 && ANI_LOG_DUP2(fileFd, stdoutFd) != 0) {
-                ANI_LOG_DUP2(dupErr, stderrFd);
-                ANI_LOG_CLOSE(dupErr);
-                ANI_LOG_CLOSE(dupOut);
+            int pipeFds[2] = { -1, -1 };
+            if (ANI_LOG_PIPE(pipeFds) != 0) {
+                ANI_LOG_CLOSE(savedErr);
+                if (savedOut >= 0) ANI_LOG_CLOSE(savedOut);
                 std::fclose(f);
                 return false;
             }
 
             g_file = f;
-            g_savedStderrFd = dupErr;
-            g_savedStdoutFd = dupOut;
+            g_savedStderrFd = savedErr;
+            g_savedStdoutFd = savedOut;
+            g_pipeReadFd = pipeFds[0];
+            g_pipeWriteFd = pipeFds[1];
             g_path = path;
+
+            if (ANI_LOG_DUP2(g_pipeWriteFd, stderrFd) != 0) {
+                ANI_LOG_CLOSE(g_pipeReadFd);
+                ANI_LOG_CLOSE(g_pipeWriteFd);
+                ANI_LOG_CLOSE(savedErr);
+                if (savedOut >= 0) ANI_LOG_CLOSE(savedOut);
+                std::fclose(f);
+                g_file = nullptr;
+                g_pipeReadFd = -1;
+                g_pipeWriteFd = -1;
+                g_savedStderrFd = -1;
+                g_savedStdoutFd = -1;
+                g_path.clear();
+                return false;
+            }
+
+            if (savedOut >= 0 && ANI_LOG_DUP2(g_pipeWriteFd, stdoutFd) != 0) {
+                ANI_LOG_DUP2(savedErr, stderrFd);
+                ANI_LOG_CLOSE(g_pipeReadFd);
+                ANI_LOG_CLOSE(g_pipeWriteFd);
+                ANI_LOG_CLOSE(savedErr);
+                ANI_LOG_CLOSE(savedOut);
+                std::fclose(f);
+                g_file = nullptr;
+                g_pipeReadFd = -1;
+                g_pipeWriteFd = -1;
+                g_savedStderrFd = -1;
+                g_savedStdoutFd = -1;
+                g_path.clear();
+                return false;
+            }
+
+            g_pumpRunning.store(true, std::memory_order_relaxed);
+            g_pumpThread = std::thread(PumpLoop);
+
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+            std::setvbuf(stderr, nullptr, _IONBF, 0);
+
             return true;
         }
 
         void RedirectEnd() {
             if (!g_file) return;
 
-            // Push anything sitting in the FILE buffers into the file before
-            // we restore the original fds, otherwise later writes to stderr
-            // would go to the console while older buffered lines were still
-            // pending.
             std::fflush(stdout);
             std::fflush(stderr);
-            std::fflush(g_file);
 
             if (g_savedStderrFd >= 0) {
                 ANI_LOG_DUP2(g_savedStderrFd, ANI_LOG_FILENO(stderr));
+            }
+            if (g_savedStdoutFd >= 0) {
+                ANI_LOG_DUP2(g_savedStdoutFd, ANI_LOG_FILENO(stdout));
+            }
+
+            g_pumpRunning.store(false, std::memory_order_relaxed);
+            {
+                std::lock_guard<std::mutex> lk(g_pumpMutex);
+                g_pumpCv.notify_all();
+            }
+
+            if (g_pipeWriteFd >= 0) {
+                ANI_LOG_CLOSE(g_pipeWriteFd);
+                g_pipeWriteFd = -1;
+            }
+
+            if (g_pumpThread.joinable()) {
+                g_pumpThread.join();
+            }
+
+            if (g_pipeReadFd >= 0) {
+                ANI_LOG_CLOSE(g_pipeReadFd);
+                g_pipeReadFd = -1;
+            }
+
+            if (g_savedStderrFd >= 0) {
                 ANI_LOG_CLOSE(g_savedStderrFd);
                 g_savedStderrFd = -1;
             }
             if (g_savedStdoutFd >= 0) {
-                ANI_LOG_DUP2(g_savedStdoutFd, ANI_LOG_FILENO(stdout));
                 ANI_LOG_CLOSE(g_savedStdoutFd);
                 g_savedStdoutFd = -1;
             }
@@ -247,8 +341,6 @@ namespace ANI::Log {
         char timeBuf[32];
         FormatTimePrefix(timeBuf, sizeof(timeBuf));
 
-        // "%-5s" left-justifies the level tag into five columns so the
-        // bracket after it lines up across INFO/TRACE/ERROR.
         char prefix[320];
         std::snprintf(prefix, sizeof(prefix), "[%s][%-5s][%s:%d] ",
             timeBuf, LevelName(lvl), ShortFile(file), line);

@@ -1,4 +1,3 @@
-// OtherModelComponents.hpp
 #pragma once
 
 #include "BaseModelComponent.hpp"
@@ -12,9 +11,13 @@
 namespace ECS {
 
 	struct PhotoMakerComponent : public BaseModelComponent {
-		PhotoMakerComponent() {
-			compName = "PhotoMaker";
-			schema = {
+		PhotoMakerComponent() = default;
+
+		const char* GetCompName() const override { return "PhotoMaker"; }
+		const char* GetCompCategory() const override { return "Model"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "Photo Maker"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath"}},
@@ -35,7 +38,10 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
+
+		PhotoMakerComponent(const PhotoMakerComponent& other) : BaseModelComponent(other) {}
 
 		PhotoMakerComponent& operator=(const PhotoMakerComponent& other) {
 			if (this != &other) {
@@ -48,9 +54,13 @@ namespace ECS {
 	};
 
 	struct PulidWeightsComponent : public BaseModelComponent {
-		PulidWeightsComponent() {
-			compName = "PulidWeights";
-			schema = {
+		PulidWeightsComponent() = default;
+
+		const char* GetCompName() const override { return "PulidWeights"; }
+		const char* GetCompCategory() const override { return "Model"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "PulID Weights"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath"}},
@@ -71,7 +81,10 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
+
+		PulidWeightsComponent(const PulidWeightsComponent& other) : BaseModelComponent(other) {}
 
 		PulidWeightsComponent& operator=(const PulidWeightsComponent& other) {
 			if (this != &other) {
@@ -84,10 +97,18 @@ namespace ECS {
 	};
 
 	struct ControlNetComponent : public ECS::BaseModelComponent {
-		ControlNetComponent() {
-			compName = "ControlNet";
+		float cnStrength = 1.0f;
+		float applyStart = 0.0f;
+		float applyEnd = 1.0f;
+		bool keep_control_net_cpu = false;
 
-			schema = {
+		ControlNetComponent() = default;
+
+		const char* GetCompName() const override { return "ControlNet"; }
+		const char* GetCompCategory() const override { return "Model"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "ControlNet Settings"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath", "cnStrength", "applyStart", "applyEnd", "keep_control_net_cpu"}},
@@ -153,22 +174,14 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
 
-		float cnStrength = 1.0f;
-		float applyStart = 0.0f;
-		float applyEnd = 1.0f;
-		bool keep_control_net_cpu = false;
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelPath", &modelPath},
-				{"modelName", &modelName},
-				{"cnStrength", &cnStrength},
-				{"applyStart", &applyStart},
-				{"applyEnd", &applyEnd},
-				{"keep_control_net_cpu", &keep_control_net_cpu}
-			};
+		ControlNetComponent(const ControlNetComponent& other) : BaseModelComponent(other) {
+			cnStrength = other.cnStrength;
+			applyStart = other.applyStart;
+			applyEnd = other.applyEnd;
+			keep_control_net_cpu = other.keep_control_net_cpu;
 		}
 
 		ControlNetComponent& operator=(const ControlNetComponent& other) {
@@ -184,27 +197,39 @@ namespace ECS {
 			return *this;
 		}
 
+		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			return {
+				{"modelPath", &modelPath},
+				{"modelName", &modelName},
+				{"cnStrength", &cnStrength},
+				{"applyStart", &applyStart},
+				{"applyEnd", &applyEnd},
+				{"keep_control_net_cpu", &keep_control_net_cpu}
+			};
+		}
+
 		nlohmann::json Serialize() const override {
-			return { {compName, {
+			nlohmann::json j;
+			j[GetCompName()] = {
 				{"modelName", modelName},
 				{"modelPath", modelPath},
 				{"cnStrength", cnStrength},
 				{"applyStart", applyStart},
 				{"applyEnd", applyEnd},
 				{"keep_control_net_cpu", keep_control_net_cpu}
-			}} };
+			};
+			return j;
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
-			BaseModelComponent::Deserialize(j);
-
+			const char* key = GetCompName();
 			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
+			if (j.contains(key)) {
+				componentData = j.at(key);
 			}
 			else {
 				for (auto it = j.begin(); it != j.end(); ++it) {
-					if (it.key() == compName) {
+					if (it.key() == key) {
 						componentData = it.value();
 						break;
 					}
@@ -214,6 +239,8 @@ namespace ECS {
 				}
 			}
 
+			if (componentData.contains("modelName")) modelName = componentData["modelName"];
+			if (componentData.contains("modelPath")) modelPath = componentData["modelPath"];
 			if (componentData.contains("cnStrength"))
 				cnStrength = componentData["cnStrength"];
 			if (componentData.contains("applyStart"))
@@ -226,10 +253,17 @@ namespace ECS {
 	};
 
 	struct EsrganComponent : public BaseModelComponent {
-		EsrganComponent() {
-			compName = "Esrgan";
+		uint32_t upscaleFactor = 2;
+		uint32_t tileSize = 512;
+		bool preserveAspectRatio = true;
 
-			schema = {
+		EsrganComponent() = default;
+
+		const char* GetCompName() const override { return "Esrgan"; }
+		const char* GetCompCategory() const override { return "Model"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "ESRGAN Upscaler"},
 				{"type", "object"},
 				{"propertyOrder", {"modelPath", "upscaleFactor", "tileSize", "preserveAspectRatio"}},
@@ -280,20 +314,13 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
 
-		uint32_t upscaleFactor = 2;
-		uint32_t tileSize = 512;
-		bool preserveAspectRatio = true;
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"modelPath", &modelPath},
-				{"modelName", &modelName},
-				{"upscaleFactor", reinterpret_cast<int*>(&upscaleFactor)},
-				{"tileSize", reinterpret_cast<int*>(&tileSize)},
-				{"preserveAspectRatio", &preserveAspectRatio}
-			};
+		EsrganComponent(const EsrganComponent& other) : BaseModelComponent(other) {
+			upscaleFactor = other.upscaleFactor;
+			tileSize = other.tileSize;
+			preserveAspectRatio = other.preserveAspectRatio;
 		}
 
 		EsrganComponent& operator=(const EsrganComponent& other) {
@@ -308,26 +335,37 @@ namespace ECS {
 			return *this;
 		}
 
+		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			return {
+				{"modelPath", &modelPath},
+				{"modelName", &modelName},
+				{"upscaleFactor", reinterpret_cast<int*>(&upscaleFactor)},
+				{"tileSize", reinterpret_cast<int*>(&tileSize)},
+				{"preserveAspectRatio", &preserveAspectRatio}
+			};
+		}
+
 		nlohmann::json Serialize() const override {
-			return { {compName, {
+			nlohmann::json j;
+			j[GetCompName()] = {
 				{"modelName", modelName},
 				{"modelPath", modelPath},
 				{"upscaleFactor", upscaleFactor},
 				{"tileSize", tileSize},
 				{"preserveAspectRatio", preserveAspectRatio}
-			}} };
+			};
+			return j;
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
-			BaseModelComponent::Deserialize(j);
-
+			const char* key = GetCompName();
 			nlohmann::json componentData;
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
+			if (j.contains(key)) {
+				componentData = j.at(key);
 			}
 			else {
 				for (auto it = j.begin(); it != j.end(); ++it) {
-					if (it.key() == compName) {
+					if (it.key() == key) {
 						componentData = it.value();
 						break;
 					}
@@ -337,6 +375,8 @@ namespace ECS {
 				}
 			}
 
+			if (componentData.contains("modelName")) modelName = componentData["modelName"];
+			if (componentData.contains("modelPath")) modelPath = componentData["modelPath"];
 			if (componentData.contains("upscaleFactor"))
 				upscaleFactor = componentData["upscaleFactor"];
 			if (componentData.contains("tileSize"))
@@ -353,9 +393,16 @@ namespace ECS {
 			bool is_high_noise = false;
 		};
 
-		LoraComponent() {
-			compName = "Lora";
-			schema = {
+		std::string lora_apply_mode = "LORA_APPLY_AUTO";
+		std::vector<LoraEntry> loras;
+
+		LoraComponent() = default;
+
+		const char* GetCompName() const override { return "Lora"; }
+		const char* GetCompCategory() const override { return "Model"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
 				{"title", "LoRA Settings"},
 				{"type", "object"},
 				{"propertyOrder", {"lora_apply_mode", "loras"}},
@@ -395,16 +442,12 @@ namespace ECS {
 					}}
 				}}
 			};
+			return j;
 		}
 
-		std::string lora_apply_mode = "LORA_APPLY_AUTO";
-		std::vector<LoraEntry> loras;
-
-		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-			return {
-				{"lora_apply_mode", &lora_apply_mode},
-				{"loras", reinterpret_cast<void*>(&loras)}
-			};
+		LoraComponent(const LoraComponent& other) : BaseModelComponent(other) {
+			lora_apply_mode = other.lora_apply_mode;
+			loras = other.loras;
 		}
 
 		LoraComponent& operator=(const LoraComponent& other) {
@@ -413,6 +456,13 @@ namespace ECS {
 				loras = other.loras;
 			}
 			return *this;
+		}
+
+		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+			return {
+				{"lora_apply_mode", &lora_apply_mode},
+				{"loras", reinterpret_cast<void*>(&loras)}
+			};
 		}
 
 		nlohmann::json Serialize() const override {
@@ -424,18 +474,19 @@ namespace ECS {
 					{"is_high_noise", entry.is_high_noise}
 					});
 			}
-			return { {compName, {
+			nlohmann::json j;
+			j[GetCompName()] = {
 				{"lora_apply_mode", lora_apply_mode},
 				{"loras", arr}
-			}} };
+			};
+			return j;
 		}
 
 		void Deserialize(const nlohmann::json& j) override {
-			BaseModelComponent::Deserialize(j);
-
+			const char* key = GetCompName();
 			nlohmann::json comp;
-			if (j.contains(compName)) {
-				comp = j[compName];
+			if (j.contains(key)) {
+				comp = j.at(key);
 			}
 			else {
 				comp = j;
@@ -478,4 +529,4 @@ namespace ECS {
 		}
 	};
 
-} // namespace ECS
+}

@@ -8,14 +8,15 @@
 #include "GeneralSettingsComponent.hpp"
 #include "SettingsSystem.hpp"
 #include "StudioPluginManager.hpp"
+#include "Log.hpp"
 #include <GLFW/glfw3.h>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <set>
+#include <algorithm>
 
 namespace ECS {
 
@@ -57,7 +58,7 @@ namespace ECS {
         m_projectEntity = mgr.AddNewEntity();
         mgr.AddComponent<ProjectComponent>(m_projectEntity);
         UpdateAutoSaveSettings();
-        std::cout << "[ProjectSystem] Started with entity " << m_projectEntity << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] Started with entity %u", (unsigned)m_projectEntity);
     }
 
     void ProjectSystem::Destroy() {
@@ -76,7 +77,7 @@ namespace ECS {
         if (m_autoSaveTimer >= intervalSeconds) {
             SaveProject();
             m_autoSaveTimer = 0.0f;
-            std::cout << "[ProjectSystem] Auto-saved project" << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Auto-saved project");
         }
     }
 
@@ -88,17 +89,41 @@ namespace ECS {
 
     void ProjectSystem::SetWindowHandle(void* windowHandle) {
         m_windowHandle = windowHandle;
-        std::cout << "[ProjectSystem] Window handle set" << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] Window handle set");
     }
 
     void ProjectSystem::SetViewManager(GUI::ViewManager* viewManager) {
         m_viewManager = viewManager;
-        std::cout << "[ProjectSystem] ViewManager set" << std::endl;
+
+        if (m_viewManager) {
+            m_viewManager->SetViewClosingCallback(
+                [this](GUI::WorkspaceID ws, GUI::ViewTypeID type,
+                    const std::string& name, const nlohmann::json& state) {
+                        HandleViewClosing(ws, type, name, state);
+                });
+            m_viewManager->SetViewClosedCallback(
+                [this](GUI::WorkspaceID ws, GUI::ViewTypeID type,
+                    const std::string& name) {
+                        HandleViewClosed(ws, type, name);
+                });
+            m_viewManager->SetViewOpeningCallback(
+                [this](GUI::WorkspaceID ws, GUI::ViewTypeID type,
+                    const std::string& name) {
+                        HandleViewOpening(ws, type, name);
+                });
+            m_viewManager->SetViewOpenedCallback(
+                [this](GUI::WorkspaceID ws, GUI::ViewTypeID type,
+                    const std::string& name) {
+                        HandleViewOpened(ws, type, name);
+                });
+        }
+
+        ANI_LOG_INFO("[ProjectSystem] ViewManager set and callbacks registered");
     }
 
     void ProjectSystem::SetPluginManager(Plugins::StudioPluginManager* pluginManager) {
         m_pluginManager = pluginManager;
-        std::cout << "[ProjectSystem] PluginManager set" << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] PluginManager set");
     }
 
     std::shared_ptr<ECS::FilePathSystem> ProjectSystem::GetFilePathSystem() const {
@@ -120,69 +145,172 @@ namespace ECS {
         }
     }
 
-    std::string ProjectSystem::GenerateDefaultProjectName() const {
-        std::string baseName = "AniProject";
-        std::string defaultPath = GetDefaultProjectPath();
-
-        if (defaultPath.empty()) {
-            return baseName + "1";
-        }
-
-        int counter = 1;
-        std::string candidateName;
-
-        do {
-            candidateName = baseName + std::to_string(counter);
-            counter++;
-            if (counter > 9999) {
-                candidateName = baseName + "_" + std::to_string(std::time(nullptr));
-                break;
-            }
-        } while (IsProjectNameTaken(candidateName));
-
-        return candidateName;
+    std::string ProjectSystem::GetCaptureDirectory() const {
+        std::string data = GetProjectDataPath();
+        if (data.empty()) return "";
+        return data + "/capture";
     }
 
-    bool ProjectSystem::ShouldShowStartup() const {
-        std::cout << "[ProjectSystem] ShouldShowStartup check:" << std::endl;
-        std::cout << "  - Project open: " << (IsProjectOpen() ? "YES" : "NO") << std::endl;
+    std::string ProjectSystem::GetQuicksaveDirectory() const {
+        std::string data = GetProjectDataPath();
+        if (data.empty()) return "";
+        return data + "/quicksaves";
+    }
 
-        if (IsProjectOpen()) {
-            std::cout << "  - Project already open" << std::endl;
-            return false;
-        }
+    std::string ProjectSystem::GetCapturePath(const std::string& viewName, GUI::WorkspaceID workspaceID) const {
+        std::string dir = GetCaptureDirectory();
+        if (dir.empty()) return "";
+        return dir + "/" + viewName + "_" + std::to_string((unsigned)workspaceID) + ".json";
+    }
 
-        auto fileSys = GetFilePathSystem();
-        std::string lastProjectPath;
-        if (fileSys) {
-            lastProjectPath = fileSys->GetPath("LastOpenProject");
-        }
+    std::string ProjectSystem::GetQuicksavePath(const std::string& viewName, GUI::WorkspaceID workspaceID) const {
+        std::string dir = GetQuicksaveDirectory();
+        if (dir.empty()) return "";
+        return dir + "/" + viewName + "_" + std::to_string((unsigned)workspaceID) + ".json";
+    }
 
-        bool loadLastProject = true;
-        auto settingsSystem = mgr.GetSystem<ECS::SettingsSystem>();
-        if (settingsSystem) {
-            ECS::EntityID settingsEntity = settingsSystem->GetSettingsEntity();
-            if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<ECS::GeneralSettingsComponent>(settingsEntity)) {
-                auto& generalComp = mgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
-                loadLastProject = generalComp.loadLastProject;
-                std::cout << "  - loadLastProject setting: " << (loadLastProject ? "YES" : "NO") << std::endl;
+    bool ProjectSystem::WriteJsonFile(const std::string& path, const nlohmann::json& j) const {
+        if (path.empty()) return false;
+        try {
+            std::filesystem::path p(path);
+            if (p.has_parent_path()) {
+                std::filesystem::create_directories(p.parent_path());
             }
-        }
-
-        if (!loadLastProject) {
-            std::cout << "  - loadLastProject is disabled, showing startup" << std::endl;
+            std::ofstream file(path);
+            if (!file.is_open()) {
+                ANI_LOG_ERROR("[ProjectSystem] Failed to open %s for writing", path.c_str());
+                return false;
+            }
+            file << j.dump(4);
             return true;
         }
-
-        if (!lastProjectPath.empty() && std::filesystem::exists(lastProjectPath)) {
-            std::cout << "  - Has last opened project: " << lastProjectPath << std::endl;
-            const_cast<ProjectSystem*>(this)->LoadProject(lastProjectPath);
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("[ProjectSystem] Exception writing %s: %s", path.c_str(), e.what());
             return false;
         }
+    }
 
-        std::cout << "  - No last opened project" << std::endl;
-        std::cout << "  - Should show startup: YES" << std::endl;
-        return true;
+    bool ProjectSystem::ReadJsonFile(const std::string& path, nlohmann::json& out) const {
+        try {
+            std::ifstream file(path);
+            if (!file.is_open()) return false;
+            file >> out;
+            return true;
+        }
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("[ProjectSystem] Exception reading %s: %s", path.c_str(), e.what());
+            return false;
+        }
+    }
+
+    void ProjectSystem::HandleViewClosing(GUI::WorkspaceID workspaceID, GUI::ViewTypeID /*viewType*/,
+        const std::string& viewName, const nlohmann::json& state) {
+        if (m_suppressViewStateSave) return;
+        if (!IsProjectOpen()) return;
+        if (viewName.empty()) {
+            ANI_LOG_WARN("[ProjectSystem] ViewClosing with empty viewName, skipping capture");
+            return;
+        }
+
+        std::string path = GetCapturePath(viewName, workspaceID);
+        if (path.empty()) {
+            ANI_LOG_WARN("[ProjectSystem] ViewClosing: no capture path (project data dir missing)");
+            return;
+        }
+
+        nlohmann::json wrapper;
+        wrapper["viewName"] = viewName;
+        wrapper["workspaceID"] = (unsigned)workspaceID;
+        wrapper["state"] = state;
+
+        if (WriteJsonFile(path, wrapper)) {
+            ANI_LOG_INFO("[ProjectSystem] Captured view state: %s", path.c_str());
+        }
+    }
+
+    void ProjectSystem::HandleViewClosed(GUI::WorkspaceID workspaceID, GUI::ViewTypeID /*viewType*/,
+        const std::string& viewName) {
+        ANI_LOG_INFO("[ProjectSystem] View closed: %s in workspace %u",
+            viewName.c_str(), (unsigned)workspaceID);
+        if (m_suppressViewStateSave) return;
+        if (IsProjectOpen()) {
+            SaveViewState();
+        }
+    }
+
+    void ProjectSystem::HandleViewOpening(GUI::WorkspaceID workspaceID, GUI::ViewTypeID /*viewType*/,
+        const std::string& viewName) {
+        ANI_LOG_INFO("[ProjectSystem] View opening: %s in workspace %u",
+            viewName.c_str(), (unsigned)workspaceID);
+    }
+
+    void ProjectSystem::HandleViewOpened(GUI::WorkspaceID workspaceID, GUI::ViewTypeID /*viewType*/,
+        const std::string& viewName) {
+        ANI_LOG_INFO("[ProjectSystem] View opened: %s in workspace %u",
+            viewName.c_str(), (unsigned)workspaceID);
+
+        if (m_suppressCaptureApply) return;
+
+        if (!IsProjectOpen() || !m_viewManager) return;
+        if (viewName.empty()) return;
+
+        std::string path = GetCapturePath(viewName, workspaceID);
+        if (path.empty()) return;
+
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec)) {
+            return;
+        }
+
+        nlohmann::json wrapper;
+        if (!ReadJsonFile(path, wrapper) || !wrapper.contains("state")) {
+            ANI_LOG_WARN("[ProjectSystem] Capture file invalid, leaving on disk: %s", path.c_str());
+            return;
+        }
+
+        GUI::ViewTypeID viewType;
+        try {
+            viewType = m_viewManager->GetViewType(viewName);
+        }
+        catch (const std::exception&) {
+            ANI_LOG_WARN("[ProjectSystem] Capture refers to unregistered view '%s', leaving file",
+                viewName.c_str());
+            return;
+        }
+
+        auto& wsMap = m_viewManager->GetWorkspaces();
+        auto wsIt = wsMap.find(workspaceID);
+        if (wsIt == wsMap.end()) {
+            ANI_LOG_WARN("[ProjectSystem] Capture references unknown workspace %u, leaving file",
+                (unsigned)workspaceID);
+            return;
+        }
+
+        auto vIt = wsIt->second.find(viewType);
+        if (vIt == wsIt->second.end() || !vIt->second) {
+            ANI_LOG_WARN("[ProjectSystem] View instance not present after open for %s, leaving file",
+                viewName.c_str());
+            return;
+        }
+
+        try {
+            vIt->second->Deserialize(wrapper["state"]);
+            ANI_LOG_INFO("[ProjectSystem] Applied captured state for %s in workspace %u",
+                viewName.c_str(), (unsigned)workspaceID);
+        }
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("[ProjectSystem] Failed to apply capture for %s: %s",
+                viewName.c_str(), e.what());
+            return;
+        }
+
+        std::error_code rmEc;
+        if (std::filesystem::remove(path, rmEc)) {
+            ANI_LOG_INFO("[ProjectSystem] Consumed capture file: %s", path.c_str());
+        }
+        else {
+            ANI_LOG_WARN("[ProjectSystem] Failed to remove capture file: %s", path.c_str());
+        }
     }
 
     bool ProjectSystem::IsProjectOpen() const {
@@ -257,7 +385,7 @@ namespace ECS {
         std::vector<std::string> recentProjects;
         std::string defaultPath = GetDefaultProjectPath();
         if (defaultPath.empty()) {
-            std::cerr << "[ProjectSystem] ERROR: DefaultProject path is empty!" << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] DefaultProject path is empty!");
             return recentProjects;
         }
 
@@ -272,7 +400,7 @@ namespace ECS {
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Error scanning for projects: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] Error scanning for projects: %s", e.what());
         }
 
         return recentProjects;
@@ -293,8 +421,8 @@ namespace ECS {
                 auto& generalComp = mgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
                 m_autoSaveEnabled = generalComp.autoSaveProjects;
                 m_autoSaveIntervalMinutes = generalComp.autoSaveIntervalMinutes;
-                std::cout << "[ProjectSystem] Auto-save settings updated: enabled=" << m_autoSaveEnabled
-                    << ", interval=" << m_autoSaveIntervalMinutes << " minutes" << std::endl;
+                ANI_LOG_INFO("[ProjectSystem] Auto-save settings updated: enabled=%d, interval=%d minutes",
+                    m_autoSaveEnabled ? 1 : 0, m_autoSaveIntervalMinutes);
             }
         }
     }
@@ -310,6 +438,8 @@ namespace ECS {
 
             std::filesystem::create_directories(projPath);
             std::filesystem::create_directories(projPath / "data");
+            std::filesystem::create_directories(projPath / "data" / "capture");
+            std::filesystem::create_directories(projPath / "data" / "quicksaves");
             std::filesystem::create_directories(projPath / "assets");
             std::filesystem::create_directories(projPath / "output");
             std::filesystem::create_directories(projPath / "settings");
@@ -342,7 +472,7 @@ namespace ECS {
                 GUI::WorkspaceID defaultWorkspace = m_viewManager->CreateView();
                 m_viewState.SetLastActiveWorkspace(defaultWorkspace);
                 m_viewManager->SetActiveWorkspace(defaultWorkspace);
-                std::cout << "[ProjectSystem] Created default workspace: " << defaultWorkspace << std::endl;
+                ANI_LOG_INFO("[ProjectSystem] Created default workspace: %u", (unsigned)defaultWorkspace);
             }
 
             if (!SaveProject()) {
@@ -354,14 +484,20 @@ namespace ECS {
 
             AddToRecentProjects(projectPath);
 
+            // Process staged plugins and set project context BEFORE firing the
+            // created callback so plugin view types are available for any
+            // subsequent view/layout setup.
             if (m_pluginManager) {
                 m_pluginManager->LoadStagingPlugins(true);
-                std::cout << "[ProjectSystem] Processed staging plugins for loaded project" << std::endl;
+                m_pluginManager->SetProjectContext(projectPath);
+                m_pluginManager->PrepareProjectPlugins();
+                ANI_LOG_INFO("[ProjectSystem] Processed plugins for created project");
             }
 
             UpdateAutoSaveSettings();
 
-            std::cout << "[ProjectSystem] Created new project: " << projectName << " at " << projectPath << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Created new project: %s at %s",
+                projectName.c_str(), projectPath.c_str());
             if (m_onProjectCreatedCallback) {
                 m_onProjectCreatedCallback(projectPath);
             }
@@ -369,7 +505,7 @@ namespace ECS {
         }
         catch (const std::exception& e) {
             m_lastError = "Exception creating project: " + std::string(e.what());
-            std::cerr << "[ProjectSystem] " << m_lastError << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] %s", m_lastError.c_str());
             return false;
         }
     }
@@ -419,6 +555,9 @@ namespace ECS {
 
             UpdateProjectSpecificPaths();
 
+            std::filesystem::create_directories(projPath / "data" / "capture");
+            std::filesystem::create_directories(projPath / "data" / "quicksaves");
+
             auto fileSys = GetFilePathSystem();
             if (fileSys) {
                 fileSys->SetPath("LastOpenProject", projectPath);
@@ -426,40 +565,61 @@ namespace ECS {
 
             AddToRecentProjects(projectPath);
 
-            std::cout << "[ProjectSystem] Loaded project: " << comp->settings.projectName << " from " << projectPath << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Loaded project: %s from %s",
+                comp->settings.projectName.c_str(), projectPath.c_str());
             if (fileSys) {
-                std::cout << "  - AssetsFolder: " << fileSys->GetPath("AssetsFolder") << std::endl;
-                std::cout << "  - OutputFolder: " << fileSys->GetPath("OutputFolder") << std::endl;
+                ANI_LOG_INFO("  - AssetsFolder: %s", fileSys->GetPath("AssetsFolder").c_str());
+                ANI_LOG_INFO("  - OutputFolder: %s", fileSys->GetPath("OutputFolder").c_str());
             }
 
-            if (m_onProjectLoadedCallback) {
-                m_onProjectLoadedCallback(projectPath);
+            // -----------------------------------------------------------------
+            // 1) Plugins FIRST.
+            //    - LoadStagingPlugins moves any staged DLLs into versioned slots.
+            //    - SetProjectContext loads the project's plugin_state.json and
+            //      enables the plugins that were enabled in that project. Enabling
+            //      a plugin calls OnStudioInit, which registers its view types with
+            //      the ViewManager.
+            //    - PrepareProjectPlugins sweeps any remaining enabled-but-not-yet-
+            //      enabled plugins (idempotent).
+            // -----------------------------------------------------------------
+            if (m_pluginManager) {
+                m_pluginManager->LoadStagingPlugins(true);
+                m_pluginManager->SetProjectContext(projectPath);
+                m_pluginManager->PrepareProjectPlugins();
+                ANI_LOG_INFO("[ProjectSystem] Plugins prepared before viewstate load");
             }
 
+            // -----------------------------------------------------------------
+            // 2) ViewState SECOND ? all view types (including plugin views) are
+            //    now registered, so DeserializeViewLists can resolve them.
+            // -----------------------------------------------------------------
             LoadViewState();
 
             if (m_viewManager) {
                 auto allWorkspaces = m_viewManager->GetAllWorkspaces();
                 if (allWorkspaces.empty()) {
-                    std::cout << "[ProjectSystem] No workspaces found, creating default workspace" << std::endl;
+                    ANI_LOG_INFO("[ProjectSystem] No workspaces found, creating default workspace");
                     GUI::WorkspaceID defaultWorkspace = m_viewManager->CreateView();
                     m_viewState.SetLastActiveWorkspace(defaultWorkspace);
                     m_viewManager->SetActiveWorkspace(defaultWorkspace);
-                    std::cout << "[ProjectSystem] Created default workspace: " << defaultWorkspace << std::endl;
+                    ANI_LOG_INFO("[ProjectSystem] Created default workspace: %u", (unsigned)defaultWorkspace);
                 }
                 else {
-                    std::cout << "[ProjectSystem] Loaded " << allWorkspaces.size() << " workspaces" << std::endl;
+                    ANI_LOG_INFO("[ProjectSystem] Loaded %zu workspaces", allWorkspaces.size());
                 }
             }
 
+            // -----------------------------------------------------------------
+            // 3) Layout / window state / paths.
+            // -----------------------------------------------------------------
             LoadImGuiLayout();
             LoadAndApplyProjectWindowState();
 
             UpdateProjectSpecificPaths();
 
-            if (m_pluginManager) {
-                m_pluginManager->LoadStagingPlugins(true);
-                std::cout << "[ProjectSystem] Processed staging plugins for loaded project" << std::endl;
+            // 4) Pure notification callback last.
+            if (m_onProjectLoadedCallback) {
+                m_onProjectLoadedCallback(projectPath);
             }
 
             UpdateAutoSaveSettings();
@@ -469,7 +629,7 @@ namespace ECS {
         }
         catch (const std::exception& e) {
             m_lastError = "Exception loading project: " + std::string(e.what());
-            std::cerr << "[ProjectSystem] " << m_lastError << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] %s", m_lastError.c_str());
             return false;
         }
     }
@@ -508,12 +668,12 @@ namespace ECS {
 
             UpdateProjectSpecificPaths();
 
-            std::cout << "[ProjectSystem] Project saved: " << comp->settings.projectName << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Project saved: %s", comp->settings.projectName.c_str());
             return true;
         }
         catch (const std::exception& e) {
             m_lastError = "Exception saving project: " + std::string(e.what());
-            std::cerr << "[ProjectSystem] " << m_lastError << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] %s", m_lastError.c_str());
             return false;
         }
     }
@@ -521,12 +681,12 @@ namespace ECS {
     void ProjectSystem::CloseProject() {
         auto* comp = GetProjectComponent();
         if (!comp || !comp->isOpen) {
-            std::cout << "[ProjectSystem] No project to close" << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] No project to close");
             return;
         }
 
-        std::cout << "[ProjectSystem] CloseProject() called" << std::endl;
-        std::cout << "[ProjectSystem] Closing project: " << comp->settings.projectName << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] CloseProject() called");
+        ANI_LOG_INFO("[ProjectSystem] Closing project: %s", comp->settings.projectName.c_str());
 
         SaveProject();
 
@@ -548,7 +708,7 @@ namespace ECS {
 
         m_autoSaveTimer = 0.0f;
 
-        std::cout << "[ProjectSystem] Project closed" << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] Project closed");
 
         if (m_onProjectClosedCallback) {
             m_onProjectClosedCallback();
@@ -563,7 +723,7 @@ namespace ECS {
         }
 
         try {
-            std::cout << "[ProjectSystem] Applying project template: " << template_.name << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Applying project template: %s", template_.name.c_str());
 
             GUI::WorkspaceID currentWorkspace = m_viewState.GetLastActiveWorkspace();
             if (m_viewManager) {
@@ -573,41 +733,45 @@ namespace ECS {
 
                 for (const auto& viewTypeName : template_.defaultOpenViews) {
                     try {
-                        std::cout << "[ProjectSystem] Adding view: " << viewTypeName << " to workspace: " << currentWorkspace << std::endl;
+                        ANI_LOG_INFO("[ProjectSystem] Adding view: %s to workspace: %u",
+                            viewTypeName.c_str(), (unsigned)currentWorkspace);
                         GUI::ViewTypeID viewType = m_viewManager->GetViewType(viewTypeName);
                         m_viewManager->AddViewByType(currentWorkspace, viewType);
-                        std::cout << "[ProjectSystem] Successfully added view: " << viewTypeName << std::endl;
+                        ANI_LOG_INFO("[ProjectSystem] Successfully added view: %s", viewTypeName.c_str());
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[ProjectSystem] Failed to add view " << viewTypeName << ": " << e.what() << std::endl;
+                        ANI_LOG_ERROR("[ProjectSystem] Failed to add view %s: %s",
+                            viewTypeName.c_str(), e.what());
                     }
                 }
             }
 
             if (!template_.settings.empty()) {
-                std::cout << "[ProjectSystem] Template has settings (not implemented yet)" << std::endl;
+                ANI_LOG_INFO("[ProjectSystem] Template has settings (not implemented yet)");
             }
 
             SaveProject();
-            std::cout << "[ProjectSystem] Successfully applied template: " << template_.name << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Successfully applied template: %s", template_.name.c_str());
             return true;
         }
         catch (const std::exception& e) {
             m_lastError = "Exception applying project template: " + std::string(e.what());
-            std::cerr << "[ProjectSystem] " << m_lastError << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] %s", m_lastError.c_str());
             return false;
         }
     }
 
     bool ProjectSystem::SaveViewState() {
+        if (m_suppressViewStateSave) return false;
         if (!m_viewManager) return false;
         try {
             std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
-            std::cout << "[ProjectSystem] Saving ViewState with active workspace: " << m_viewState.GetLastActiveWorkspace() << std::endl;
+            ANI_LOG_INFO("[ProjectSystem] Saving ViewState with active workspace: %u",
+                (unsigned)m_viewState.GetLastActiveWorkspace());
             return m_viewState.SaveViewManagerState(*m_viewManager, viewStatePath);
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Exception saving ViewState: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] Exception saving ViewState: %s", e.what());
             return false;
         }
     }
@@ -617,7 +781,10 @@ namespace ECS {
 
         try {
             std::string viewStatePath = GetProjectDataPath() + "/viewstate.json";
+
+            m_suppressCaptureApply = true;
             bool success = m_viewState.LoadViewManagerState(*m_viewManager, viewStatePath);
+            m_suppressCaptureApply = false;
 
             if (success) {
                 GUI::WorkspaceID lastActiveWorkspace = m_viewState.GetLastActiveWorkspace();
@@ -627,17 +794,20 @@ namespace ECS {
                     if (!allWorkspaces.empty()) {
                         lastActiveWorkspace = allWorkspaces[0];
                         m_viewState.SetLastActiveWorkspace(lastActiveWorkspace);
-                        std::cout << "[ProjectSystem] Corrected active workspace to: " << lastActiveWorkspace << std::endl;
+                        ANI_LOG_INFO("[ProjectSystem] Corrected active workspace to: %u",
+                            (unsigned)lastActiveWorkspace);
                     }
                     else {
                         lastActiveWorkspace = m_viewManager->CreateView();
                         m_viewState.SetLastActiveWorkspace(lastActiveWorkspace);
-                        std::cout << "[ProjectSystem] Created default workspace: " << lastActiveWorkspace << std::endl;
+                        ANI_LOG_INFO("[ProjectSystem] Created default workspace: %u",
+                            (unsigned)lastActiveWorkspace);
                     }
                 }
 
                 m_viewManager->SetActiveWorkspace(lastActiveWorkspace);
-                std::cout << "[ProjectSystem] Loaded ViewState with active workspace: " << lastActiveWorkspace << std::endl;
+                ANI_LOG_INFO("[ProjectSystem] Loaded ViewState with active workspace: %u",
+                    (unsigned)lastActiveWorkspace);
 
                 if (m_onViewStateLoadedCallback) {
                     m_onViewStateLoadedCallback(lastActiveWorkspace);
@@ -647,7 +817,8 @@ namespace ECS {
             return success;
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Exception loading ViewState: " << e.what() << std::endl;
+            m_suppressCaptureApply = false;
+            ANI_LOG_ERROR("[ProjectSystem] Exception loading ViewState: %s", e.what());
             return false;
         }
     }
@@ -660,7 +831,7 @@ namespace ECS {
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Exception saving ImGui layout: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] Exception saving ImGui layout: %s", e.what());
             return false;
         }
     }
@@ -673,7 +844,7 @@ namespace ECS {
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Exception loading ImGui layout: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] Exception loading ImGui layout: %s", e.what());
             return false;
         }
     }
@@ -709,7 +880,7 @@ namespace ECS {
             return windowState.SaveToFile(windowStatePath);
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Exception saving window state: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] Exception saving window state: %s", e.what());
             return false;
         }
     }
@@ -738,12 +909,12 @@ namespace ECS {
                     glfwRestoreWindow(glfwWindow);
                 }
 
-                std::cout << "[ProjectSystem] Applied project window state" << std::endl;
+                ANI_LOG_INFO("[ProjectSystem] Applied project window state");
                 return true;
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[ProjectSystem] Exception loading window state: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ProjectSystem] Exception loading window state: %s", e.what());
         }
 
         return false;
@@ -764,10 +935,10 @@ namespace ECS {
             fileSys->SetPath("ProjectDataPath", dataPath);
         }
 
-        std::cout << "[ProjectSystem] Updated project-specific paths:" << std::endl;
-        std::cout << "  - AssetsFolder: " << assetsPath << std::endl;
-        std::cout << "  - OutputFolder: " << outputPath << std::endl;
-        std::cout << "  - ProjectDataPath: " << dataPath << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] Updated project-specific paths:");
+        ANI_LOG_INFO("  - AssetsFolder: %s", assetsPath.c_str());
+        ANI_LOG_INFO("  - OutputFolder: %s", outputPath.c_str());
+        ANI_LOG_INFO("  - ProjectDataPath: %s", dataPath.c_str());
     }
 
     void ProjectSystem::ClearProjectSpecificPaths() {
@@ -778,7 +949,7 @@ namespace ECS {
             fileSys->SetPath("ProjectDataPath", "");
         }
 
-        std::cout << "[ProjectSystem] Cleared project-specific paths" << std::endl;
+        ANI_LOG_INFO("[ProjectSystem] Cleared project-specific paths");
     }
 
     std::string ProjectSystem::GetProjectAssetsPath() const {
@@ -797,6 +968,70 @@ namespace ECS {
         auto* comp = GetProjectComponent();
         if (!comp || !comp->isOpen) return "";
         return GetProjectDataPath() + "/window_state.json";
+    }
+
+    std::string ProjectSystem::GenerateDefaultProjectName() const {
+        std::string baseName = "AniProject";
+        std::string defaultPath = GetDefaultProjectPath();
+
+        if (defaultPath.empty()) {
+            return baseName + "1";
+        }
+
+        int counter = 1;
+        std::string candidateName;
+
+        do {
+            candidateName = baseName + std::to_string(counter);
+            counter++;
+            if (counter > 9999) {
+                candidateName = baseName + "_" + std::to_string(std::time(nullptr));
+                break;
+            }
+        } while (IsProjectNameTaken(candidateName));
+
+        return candidateName;
+    }
+
+    bool ProjectSystem::ShouldShowStartup() const {
+        ANI_LOG_INFO("[ProjectSystem] ShouldShowStartup check:");
+        ANI_LOG_INFO("  - Project open: %s", IsProjectOpen() ? "YES" : "NO");
+
+        if (IsProjectOpen()) {
+            ANI_LOG_INFO("  - Project already open");
+            return false;
+        }
+
+        auto fileSys = GetFilePathSystem();
+        std::string lastProjectPath;
+        if (fileSys) {
+            lastProjectPath = fileSys->GetPath("LastOpenProject");
+        }
+
+        bool loadLastProject = true;
+        auto settingsSystem = mgr.GetSystem<ECS::SettingsSystem>();
+        if (settingsSystem) {
+            ECS::EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+            if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<ECS::GeneralSettingsComponent>(settingsEntity)) {
+                auto& generalComp = mgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
+                loadLastProject = generalComp.loadLastProject;
+                ANI_LOG_INFO("  - loadLastProject setting: %s", loadLastProject ? "YES" : "NO");
+            }
+        }
+
+        if (!loadLastProject) {
+            ANI_LOG_INFO("  - loadLastProject is disabled, showing startup");
+            return true;
+        }
+
+        if (!lastProjectPath.empty() && std::filesystem::exists(lastProjectPath)) {
+            ANI_LOG_INFO("  - Has last opened project: %s", lastProjectPath.c_str());
+            const_cast<ProjectSystem*>(this)->LoadProject(lastProjectPath);
+            return false;
+        }
+
+        ANI_LOG_INFO("  - No last opened project");
+        return true;
     }
 
 } // namespace ECS

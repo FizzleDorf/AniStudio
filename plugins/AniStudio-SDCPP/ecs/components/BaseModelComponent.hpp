@@ -6,13 +6,11 @@
 namespace ECS {
 
 	struct BaseModelComponent : public BaseComponent {
-		BaseModelComponent() {
-			compName = "Models";
-			compCategory = "Models";
-		}
 		std::string modelPath = "";
 		std::string modelName = "";
 		bool isModelLoaded = false;
+
+		BaseModelComponent() = default;
 
 		const nlohmann::json& GetSchema() const override {
 			static const nlohmann::json j = {
@@ -39,11 +37,19 @@ namespace ECS {
 			return j;
 		}
 
-		virtual nlohmann::json Serialize() const override {
-			return { {GetCompName(), {
-				{"modelName", modelName},
-				{"modelPath", modelPath}
-			}} };
+		BaseModelComponent(const BaseModelComponent& other) : BaseComponent(other) {
+			modelPath = other.modelPath;
+			modelName = other.modelName;
+			isModelLoaded = other.isModelLoaded;
+		}
+
+		BaseModelComponent& operator=(const BaseModelComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
 		}
 
 		std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -53,15 +59,25 @@ namespace ECS {
 			};
 		}
 
-		virtual void Deserialize(const nlohmann::json& j) override {
+		nlohmann::json Serialize() const override {
+			nlohmann::json j;
+			j[GetCompName()] = {
+				{"modelName", modelName},
+				{"modelPath", modelPath}
+			};
+			return j;
+		}
+
+		void Deserialize(const nlohmann::json& j) override {
+			const char* key = GetCompName();
 			nlohmann::json componentData;
 
-			if (j.contains(compName)) {
-				componentData = j.at(compName);
+			if (j.contains(key)) {
+				componentData = j.at(key);
 			}
 			else {
 				for (auto it = j.begin(); it != j.end(); ++it) {
-					if (it.key() == compName) {
+					if (it.key() == key) {
 						componentData = it.value();
 						break;
 					}
@@ -78,7 +94,7 @@ namespace ECS {
 		}
 
 		virtual const char* GetDefaultDirectory() const {
-			return compName;
+			return GetCompName();
 		}
 	};
 }

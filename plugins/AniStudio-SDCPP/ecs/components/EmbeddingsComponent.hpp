@@ -9,12 +9,15 @@
 namespace ECS {
 
     struct EmbeddingsComponent : public BaseComponent {
-        std::vector<std::pair<std::string, std::string>> embeddings; // name, path
+        std::vector<std::pair<std::string, std::string>> embeddings;
 
-        EmbeddingsComponent() {
-            compName = "Embeddings";
-            compCategory = "Model";
-            schema = {
+        EmbeddingsComponent() = default;
+
+        const char* GetCompName() const override { return "Embeddings"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Textual Inversion Embeddings"},
                 {"type", "object"},
                 {"properties", {
@@ -46,12 +49,12 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"embeddings", &embeddings}
-            };
+        EmbeddingsComponent(const EmbeddingsComponent& other)
+            : BaseComponent(other)
+            , embeddings(other.embeddings) {
         }
 
         EmbeddingsComponent& operator=(const EmbeddingsComponent& other) {
@@ -61,25 +64,31 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"embeddings", &embeddings}
+            };
+        }
+
         nlohmann::json Serialize() const override {
             nlohmann::json j;
             nlohmann::json arr = nlohmann::json::array();
             for (const auto& e : embeddings) {
                 arr.push_back({ {"name", e.first}, {"path", e.second} });
             }
-            j[compName] = arr;
+            j[GetCompName()] = arr;
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json arr;
-            if (j.contains(compName)) {
-                arr = j.at(compName);
+            if (j.contains(key)) {
+                arr = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         arr = it.value();
                         break;
                     }

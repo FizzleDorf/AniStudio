@@ -16,11 +16,13 @@ namespace ECS {
         int shifted_timestep = -1;
         float flow_shift = 0.0f;
 
-        GuidanceComponent() {
-            compName = "Guidance";
-            compCategory = "Sampling";
+        GuidanceComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "Guidance"; }
+        const char* GetCompCategory() const override { return "Sampling"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Guidance & Sampling Settings"},
                 {"type", "object"},
                 {"propertyOrder", {
@@ -72,17 +74,16 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"txt_cfg", &txt_cfg},
-                {"img_cfg", &img_cfg},
-                {"distilled_guidance", &distilled_guidance},
-                {"eta", &eta},
-                {"shifted_timestep", &shifted_timestep},
-                {"flow_shift", &flow_shift},
-            };
+        GuidanceComponent(const GuidanceComponent& other) : BaseComponent(other) {
+            txt_cfg = other.txt_cfg;
+            img_cfg = other.img_cfg;
+            distilled_guidance = other.distilled_guidance;
+            eta = other.eta;
+            shifted_timestep = other.shifted_timestep;
+            flow_shift = other.flow_shift;
         }
 
         GuidanceComponent& operator=(const GuidanceComponent& other) {
@@ -97,26 +98,39 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"txt_cfg", &txt_cfg},
+                {"img_cfg", &img_cfg},
+                {"distilled_guidance", &distilled_guidance},
+                {"eta", &eta},
+                {"shifted_timestep", &shifted_timestep},
+                {"flow_shift", &flow_shift}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"txt_cfg", txt_cfg},
                 {"img_cfg", img_cfg},
                 {"distilled_guidance", distilled_guidance},
                 {"eta", eta},
                 {"shifted_timestep", shifted_timestep},
-                {"flow_shift", flow_shift},
-            }} };
+                {"flow_shift", flow_shift}
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -142,11 +156,13 @@ namespace ECS {
         float slg_layer_end = 1.0f;
         std::string slg_layers = "";
 
-        SLGComponent() {
-            compName = "SLG";
-            compCategory = "Sampling";
+        SLGComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "SLG"; }
+        const char* GetCompCategory() const override { return "Sampling"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Skip Layer Guidance (SLG)"},
                 {"type", "object"},
                 {"propertyOrder", {
@@ -188,16 +204,15 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"enable_slg", &enable_slg},
-                {"slg_scale", &slg_scale},
-                {"slg_layer_start", &slg_layer_start},
-                {"slg_layer_end", &slg_layer_end},
-                {"slg_layers", &slg_layers},
-            };
+        SLGComponent(const SLGComponent& other) : BaseComponent(other) {
+            enable_slg = other.enable_slg;
+            slg_scale = other.slg_scale;
+            slg_layer_start = other.slg_layer_start;
+            slg_layer_end = other.slg_layer_end;
+            slg_layers = other.slg_layers;
         }
 
         SLGComponent& operator=(const SLGComponent& other) {
@@ -211,25 +226,37 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"enable_slg", &enable_slg},
+                {"slg_scale", &slg_scale},
+                {"slg_layer_start", &slg_layer_start},
+                {"slg_layer_end", &slg_layer_end},
+                {"slg_layers", &slg_layers}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"enable_slg", enable_slg},
                 {"slg_scale", slg_scale},
                 {"slg_layer_start", slg_layer_start},
                 {"slg_layer_end", slg_layer_end},
-                {"slg_layers", slg_layers},
-            }} };
+                {"slg_layers", slg_layers}
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -250,11 +277,13 @@ namespace ECS {
     struct CustomSigmasComponent : public ECS::BaseComponent {
         std::vector<float> custom_sigmas;
 
-        CustomSigmasComponent() {
-            compName = "CustomSigmas";
-            compCategory = "Sampling";
+        CustomSigmasComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "CustomSigmas"; }
+        const char* GetCompCategory() const override { return "Sampling"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Custom Sigmas"},
                 {"type", "object"},
                 {"propertyOrder", {"custom_sigmas"}},
@@ -268,12 +297,12 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"custom_sigmas", &custom_sigmas},
-            };
+        CustomSigmasComponent(const CustomSigmasComponent& other)
+            : BaseComponent(other)
+            , custom_sigmas(other.custom_sigmas) {
         }
 
         CustomSigmasComponent& operator=(const CustomSigmasComponent& other) {
@@ -283,21 +312,29 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"custom_sigmas", &custom_sigmas}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
-                {"custom_sigmas", custom_sigmas},
-            }} };
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"custom_sigmas", custom_sigmas}
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }

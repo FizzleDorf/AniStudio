@@ -11,11 +11,13 @@ namespace ECS {
         bool enable_chroma_mode = false;
         std::string chroma_model_type = "standard";
 
-        ChromaComponent() {
-            compName = "Chroma";
-            compCategory = "Advanced";
+        ChromaComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "Chroma"; }
+        const char* GetCompCategory() const override { return "Advanced"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Chroma Settings"},
                 {"type", "object"},
                 {"properties", {
@@ -55,6 +57,26 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        ChromaComponent(const ChromaComponent& other) : BaseComponent(other) {
+            use_dit_mask = other.use_dit_mask;
+            use_t5_mask = other.use_t5_mask;
+            t5_mask_pad = other.t5_mask_pad;
+            enable_chroma_mode = other.enable_chroma_mode;
+            chroma_model_type = other.chroma_model_type;
+        }
+
+        ChromaComponent& operator=(const ChromaComponent& other) {
+            if (this != &other) {
+                use_dit_mask = other.use_dit_mask;
+                use_t5_mask = other.use_t5_mask;
+                t5_mask_pad = other.t5_mask_pad;
+                enable_chroma_mode = other.enable_chroma_mode;
+                chroma_model_type = other.chroma_model_type;
+            }
+            return *this;
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -68,8 +90,8 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            nlohmann::json j = BaseComponent::Serialize();
-            j[compName] = {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"use_dit_mask", use_dit_mask},
                 {"use_t5_mask", use_t5_mask},
                 {"t5_mask_pad", t5_mask_pad},
@@ -80,15 +102,18 @@ namespace ECS {
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            if (j.contains(compName)) {
-                auto comp = j[compName];
-                if (comp.contains("use_dit_mask")) use_dit_mask = comp["use_dit_mask"];
-                if (comp.contains("use_t5_mask")) use_t5_mask = comp["use_t5_mask"];
-                if (comp.contains("t5_mask_pad")) t5_mask_pad = comp["t5_mask_pad"];
-                if (comp.contains("enable_chroma_mode")) enable_chroma_mode = comp["enable_chroma_mode"];
-                if (comp.contains("chroma_model_type")) chroma_model_type = comp["chroma_model_type"];
-            }
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("use_dit_mask")) use_dit_mask = componentData["use_dit_mask"];
+            if (componentData.contains("use_t5_mask")) use_t5_mask = componentData["use_t5_mask"];
+            if (componentData.contains("t5_mask_pad")) t5_mask_pad = componentData["t5_mask_pad"];
+            if (componentData.contains("enable_chroma_mode")) enable_chroma_mode = componentData["enable_chroma_mode"];
+            if (componentData.contains("chroma_model_type")) chroma_model_type = componentData["chroma_model_type"];
         }
 
         std::string get_model_args() const {
@@ -110,11 +135,13 @@ namespace ECS {
         bool enabled = false;
         float strength = 1.0f;
 
-        StackedIdEmbedComponent() {
-            compName = "StackedIdEmbed";
-            compCategory = "Model";
+        StackedIdEmbedComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "StackedIdEmbed"; }
+        const char* GetCompCategory() const override { return "Model"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Stacked ID Embedding"},
                 {"type", "object"},
                 {"properties", {
@@ -146,6 +173,24 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        StackedIdEmbedComponent(const StackedIdEmbedComponent& other) : BaseComponent(other) {
+            modelName = other.modelName;
+            modelPath = other.modelPath;
+            enabled = other.enabled;
+            strength = other.strength;
+        }
+
+        StackedIdEmbedComponent& operator=(const StackedIdEmbedComponent& other) {
+            if (this != &other) {
+                modelName = other.modelName;
+                modelPath = other.modelPath;
+                enabled = other.enabled;
+                strength = other.strength;
+            }
+            return *this;
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -158,8 +203,8 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            nlohmann::json j = BaseComponent::Serialize();
-            j[compName] = {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"modelName", modelName},
                 {"modelPath", modelPath},
                 {"enabled", enabled},
@@ -169,14 +214,17 @@ namespace ECS {
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
-            if (j.contains(compName)) {
-                auto comp = j[compName];
-                if (comp.contains("modelName")) modelName = comp["modelName"];
-                if (comp.contains("modelPath")) modelPath = comp["modelPath"];
-                if (comp.contains("enabled")) enabled = comp["enabled"];
-                if (comp.contains("strength")) strength = comp["strength"];
-            }
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("modelName")) modelName = componentData["modelName"];
+            if (componentData.contains("modelPath")) modelPath = componentData["modelPath"];
+            if (componentData.contains("enabled")) enabled = componentData["enabled"];
+            if (componentData.contains("strength")) strength = componentData["strength"];
         }
     };
 

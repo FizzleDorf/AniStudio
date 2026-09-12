@@ -1,4 +1,3 @@
-// ConversionComponent.hpp
 #pragma once
 
 #include "BaseComponent.hpp"
@@ -16,11 +15,13 @@ namespace ECS {
         std::string outputType = "F16";
         int nThreads = -1;
 
-        ConversionComponent() {
-            compName = "Conversion";
-            compCategory = "Tools";
+        ConversionComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "Conversion"; }
+        const char* GetCompCategory() const override { return "Tools"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Model Conversion Settings"},
                 {"type", "object"},
                 {"propertyOrder", {"tensorTypeRules", "convertName", "outputType", "nThreads"}},
@@ -59,6 +60,24 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
+        }
+
+        ConversionComponent(const ConversionComponent& other) : BaseComponent(other) {
+            tensorTypeRules = other.tensorTypeRules;
+            convertName = other.convertName;
+            outputType = other.outputType;
+            nThreads = other.nThreads;
+        }
+
+        ConversionComponent& operator=(const ConversionComponent& other) {
+            if (this != &other) {
+                tensorTypeRules = other.tensorTypeRules;
+                convertName = other.convertName;
+                outputType = other.outputType;
+                nThreads = other.nThreads;
+            }
+            return *this;
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -71,26 +90,32 @@ namespace ECS {
         }
 
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"tensorTypeRules", tensorTypeRules},
                 {"convertName", convertName},
                 {"outputType", outputType},
                 {"nThreads", nThreads}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            if (j.contains(compName)) {
-                auto compData = j.at(compName);
-                if (compData.contains("tensorTypeRules"))
-                    tensorTypeRules = compData["tensorTypeRules"];
-                if (compData.contains("convertName"))
-                    convertName = compData["convertName"];
-                if (compData.contains("outputType"))
-                    outputType = compData["outputType"];
-                if (compData.contains("nThreads"))
-                    nThreads = compData["nThreads"];
-            }
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key))
+                componentData = j.at(key);
+            else
+                componentData = j;
+
+            if (componentData.contains("tensorTypeRules"))
+                tensorTypeRules = componentData["tensorTypeRules"];
+            if (componentData.contains("convertName"))
+                convertName = componentData["convertName"];
+            if (componentData.contains("outputType"))
+                outputType = componentData["outputType"];
+            if (componentData.contains("nThreads"))
+                nThreads = componentData["nThreads"];
         }
 
         enum sd_type_t get_output_type_enum() const {

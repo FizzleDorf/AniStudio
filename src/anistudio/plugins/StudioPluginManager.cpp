@@ -314,24 +314,35 @@ namespace Plugins {
                 }
 
                 for (const auto& file : std::filesystem::directory_iterator(pluginStagingDir)) {
-                    if (file.is_regular_file() && file.path().extension() != ".dll" &&
-                        file.path().extension() != ".so" && file.path().extension() != ".dylib") {
+                    if (file.is_regular_file()) {
                         std::string destFile = (pluginEntry.path() / file.path().filename()).string();
                         try {
-                            std::filesystem::copy_file(file.path(), destFile);
-                            std::cout << "[StudioPluginManager] Copied extra file: " << file.path().filename() << std::endl;
+                            std::filesystem::copy_file(file.path(), destFile,
+                                std::filesystem::copy_options::overwrite_existing);
+                            std::cout << "[StudioPluginManager] Copied staging file: "
+                                << file.path().filename() << std::endl;
                         }
-                        catch (...) {}
+                        catch (const std::exception& e) {
+                            std::cerr << "[StudioPluginManager] Failed to copy staging file "
+                                << file.path().filename() << ": " << e.what() << std::endl;
+                        }
                     }
                 }
 
-                try {
-                    if (std::filesystem::is_empty(pluginStagingDir)) {
-                        std::filesystem::remove(pluginStagingDir);
-                        std::cout << "[StudioPluginManager] Removed empty staging directory: " << pluginStagingDir << std::endl;
+                for (const auto& file : std::filesystem::directory_iterator(pluginStagingDir)) {
+                    if (file.is_regular_file()) {
+                        std::error_code ec;
+                        std::filesystem::remove(file.path(), ec);
+                        if (ec) {
+                            std::cerr << "[StudioPluginManager] Failed to delete staging file "
+                                << file.path().filename() << ": " << ec.message() << std::endl;
+                        }
+                        else {
+                            std::cout << "[StudioPluginManager] Deleted staging file: "
+                                << file.path().filename() << std::endl;
+                        }
                     }
                 }
-                catch (...) {}
 
                 if (!loadPlugin(pluginEntry.path().string())) {
                     std::cerr << "[StudioPluginManager] Failed to load plugin from: " << pluginEntry.path() << std::endl;
@@ -344,6 +355,37 @@ namespace Plugins {
         }
         catch (const std::exception& e) {
             std::cerr << "[StudioPluginManager] Exception loading staging plugins: " << e.what() << std::endl;
+        }
+    }
+
+    void StudioPluginManager::PrepareProjectPlugins() {
+        LoadStagingPlugins(true);
+
+        if (!pluginState) {
+            std::cout << "[StudioPluginManager] No plugin state, nothing to enable." << std::endl;
+            return;
+        }
+
+        auto states = pluginState->GetAllPluginStates();
+        for (const auto& [pluginName, state] : states) {
+            if (!state.enabled) continue;
+
+            auto it = plugins.find(pluginName);
+            if (it == plugins.end() || !it->second.loaded) {
+                std::cout << "[StudioPluginManager] Plugin " << pluginName
+                    << " is enabled in project state but not loaded; skipping enable." << std::endl;
+                continue;
+            }
+
+            if (it->second.enabled) {
+                continue;
+            }
+
+            std::cout << "[StudioPluginManager] Enabling project plugin: " << pluginName << std::endl;
+            if (!enablePlugin(pluginName)) {
+                std::cerr << "[StudioPluginManager] Failed to enable project plugin: "
+                    << pluginName << std::endl;
+            }
         }
     }
 

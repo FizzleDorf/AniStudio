@@ -25,7 +25,6 @@ namespace GUI {
 
     protected:
         std::vector<std::string> GetDefaultComponents() const override;
-        bool UseStateActiveSeparation() const override { return false; }
         std::vector<std::string> GetFilteredComponents() const override;
     };
 

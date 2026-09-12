@@ -2,6 +2,7 @@
 #include "BaseView.hpp"
 #include "Workspace.hpp"
 #include "ViewTypes.hpp"
+#include "Log.hpp"
 #include <memory>
 #include <vector>
 #include <string>
@@ -22,6 +23,11 @@ using json = nlohmann::json;
 namespace GUI {
 
     using ViewCreationCallback = std::function<std::unique_ptr<BaseView>(ECS::EntityManager&, ViewManager&)>;
+
+    using ViewClosingCallback = std::function<void(WorkspaceID, ViewTypeID, const std::string&, const json&)>;
+    using ViewClosedCallback = std::function<void(WorkspaceID, ViewTypeID, const std::string&)>;
+    using ViewOpeningCallback = std::function<void(WorkspaceID, ViewTypeID, const std::string&)>;
+    using ViewOpenedCallback = std::function<void(WorkspaceID, ViewTypeID, const std::string&)>;
 
     class ViewManager {
     public:
@@ -109,6 +115,13 @@ namespace GUI {
         void DeserializeViewLists(const json& viewListsJson);
         std::vector<BaseView*> GetAllViews() const;
 
+        void SetViewClosingCallback(ViewClosingCallback cb) { m_viewClosingCallback = std::move(cb); }
+        void SetViewClosedCallback(ViewClosedCallback cb) { m_viewClosedCallback = std::move(cb); }
+        void SetViewOpeningCallback(ViewOpeningCallback cb) { m_viewOpeningCallback = std::move(cb); }
+        void SetViewOpenedCallback(ViewOpenedCallback cb) { m_viewOpenedCallback = std::move(cb); }
+
+        std::string LookupViewName(ViewTypeID viewType) const;
+
     private:
         template <typename T>
         void AddWorkspace();
@@ -142,6 +155,11 @@ namespace GUI {
         std::unordered_map<WorkspaceID, std::unordered_map<ViewTypeID, std::unique_ptr<BaseView>>> workspaces;
         std::unordered_map<WorkspaceID, std::string> workspaceNames;
 
+        ViewClosingCallback m_viewClosingCallback;
+        ViewClosedCallback  m_viewClosedCallback;
+        ViewOpeningCallback m_viewOpeningCallback;
+        ViewOpenedCallback  m_viewOpenedCallback;
+
         ECS::EntityManager* entityManager = nullptr;
 
         WorkspaceID m_activeWorkspaceID = 0;
@@ -166,7 +184,7 @@ namespace GUI {
         assert(GetViewSignature(viewList)->size() < MAX_VIEW_COUNT && "View count limit reached!");
 
         if (HasView<T>(viewList)) {
-            std::cerr << "View with ID " << viewList << " already exists! Skipping AddView." << std::endl;
+            ANI_LOG_WARN("[ViewManager] View with ID %u already exists! Skipping AddView.", (unsigned)viewList);
             return;
         }
 
@@ -187,7 +205,8 @@ namespace GUI {
         view.Init();
 
         auto viewListPtr = GetViewList<T>();
-        std::cout << "Adding and initializing view - ID: " << viewList << ", Type: " << typeid(T).name() << std::endl;
+        ANI_LOG_INFO("[ViewManager] Adding and initializing view - ID: %u, Type: %s",
+            (unsigned)viewList, typeid(T).name());
         viewListPtr->Insert(std::forward<T>(view));
     }
 
@@ -264,7 +283,8 @@ namespace GUI {
             return std::make_unique<T>(mgr, vm);
             };
 
-        std::cout << "Registered view type: " << name << " with ID: " << typeId << std::endl;
+        ANI_LOG_INFO("[ViewManager] Registered view type: %s with ID: %u",
+            name.c_str(), (unsigned)typeId);
     }
 
     template <typename T>

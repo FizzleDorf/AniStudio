@@ -44,6 +44,7 @@ namespace Plugins {
         void SetPluginDirectory(const std::string& dir);
 
         void LoadStagingPlugins(bool overrideExisting);
+        void PrepareProjectPlugins();
 
     protected:
         void OnPluginEnabled(const std::string& pluginName) override;

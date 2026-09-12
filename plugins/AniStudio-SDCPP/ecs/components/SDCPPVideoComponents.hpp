@@ -8,10 +8,15 @@
 namespace ECS {
 
     struct RefVideoComponent : public BaseComponent {
-        RefVideoComponent() {
-            compName = "RefVideo";
+        std::vector<std::string> videoPaths;
 
-            schema = {
+        RefVideoComponent() = default;
+
+        const char* GetCompName() const override { return "RefVideo"; }
+        const char* GetCompCategory() const override { return ""; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Reference Videos"},
                 {"type", "object"},
                 {"properties", {
@@ -36,30 +41,43 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::vector<std::string> videoPaths;
+        RefVideoComponent(const RefVideoComponent& other)
+            : BaseComponent(other)
+            , videoPaths(other.videoPaths) {
+        }
+
+        RefVideoComponent& operator=(const RefVideoComponent& other) {
+            if (this != &other) {
+                videoPaths = other.videoPaths;
+            }
+            return *this;
+        }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {}; // vector cannot be mapped via simple pointer
+            return {};
         }
 
         nlohmann::json Serialize() const override {
             nlohmann::json j;
-            j[compName]["videoPaths"] = videoPaths;
+            j[GetCompName()] = {
+                {"videoPaths", videoPaths}
+            };
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
 
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else {
                 for (auto it = j.begin(); it != j.end(); ++it) {
-                    if (it.key() == compName) {
+                    if (it.key() == key) {
                         componentData = it.value();
                         break;
                     }
@@ -72,13 +90,6 @@ namespace ECS {
             if (componentData.contains("videoPaths") && componentData["videoPaths"].is_array()) {
                 videoPaths = componentData["videoPaths"].get<std::vector<std::string>>();
             }
-        }
-
-        RefVideoComponent& operator=(const RefVideoComponent& other) {
-            if (this != &other) {
-                videoPaths = other.videoPaths;
-            }
-            return *this;
         }
     };
 

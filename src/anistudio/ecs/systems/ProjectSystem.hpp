@@ -73,6 +73,23 @@ namespace ECS {
         bool SaveViewState();
         bool LoadViewState();
 
+        void SetSuppressViewStateSave(bool s) { m_suppressViewStateSave = s; }
+        bool IsSuppressViewStateSave() const { return m_suppressViewStateSave; }
+
+        std::string GetCaptureDirectory() const;
+        std::string GetQuicksaveDirectory() const;
+        std::string GetCapturePath(const std::string& viewName, GUI::WorkspaceID workspaceID) const;
+        std::string GetQuicksavePath(const std::string& viewName, GUI::WorkspaceID workspaceID) const;
+
+        void HandleViewClosing(GUI::WorkspaceID workspaceID, GUI::ViewTypeID viewType,
+            const std::string& viewName, const nlohmann::json& state);
+        void HandleViewClosed(GUI::WorkspaceID workspaceID, GUI::ViewTypeID viewType,
+            const std::string& viewName);
+        void HandleViewOpening(GUI::WorkspaceID workspaceID, GUI::ViewTypeID viewType,
+            const std::string& viewName);
+        void HandleViewOpened(GUI::WorkspaceID workspaceID, GUI::ViewTypeID viewType,
+            const std::string& viewName);
+
     private:
         ECS::EntityID m_projectEntity;
         ECS::ComponentTypeID m_componentTypeId;
@@ -85,6 +102,9 @@ namespace ECS {
         float m_autoSaveTimer;
         bool m_autoSaveEnabled;
         int m_autoSaveIntervalMinutes;
+
+        bool m_suppressCaptureApply = false;
+        bool m_suppressViewStateSave = false;
 
         std::function<void(const std::string&)> m_onProjectLoadedCallback;
         std::function<void(const std::string&)> m_onProjectCreatedCallback;
@@ -106,6 +126,9 @@ namespace ECS {
         void AddToRecentProjects(const std::string& projectPath);
         std::string GenerateDefaultProjectName() const;
         void UpdateAutoSaveSettings();
+
+        bool WriteJsonFile(const std::string& path, const nlohmann::json& j) const;
+        bool ReadJsonFile(const std::string& path, nlohmann::json& out) const;
     };
 
 } // namespace ECS

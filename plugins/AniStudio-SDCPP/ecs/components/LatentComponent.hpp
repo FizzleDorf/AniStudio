@@ -1,4 +1,3 @@
-// LatentComponent.hpp
 #pragma once
 
 #include "stable-diffusion.h"
@@ -18,11 +17,13 @@ namespace ECS {
         bool circular_x = false;
         bool circular_y = false;
 
-        LatentComponent() {
-            compName = "Latent";
-            compCategory = "Sampling";
+        LatentComponent() = default;
 
-            schema = {
+        const char* GetCompName() const override { return "Latent"; }
+        const char* GetCompCategory() const override { return "Sampling"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
                 {"title", "Latent Settings"},
                 {"type", "object"},
                 {"propertyOrder", {"latentWidth", "latentHeight", "current_rng_type", "sampler_rng_type", "circular_x", "circular_y"}},
@@ -81,17 +82,16 @@ namespace ECS {
                     }}
                 }}
             };
+            return j;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"latentWidth", &latentWidth},
-                {"latentHeight", &latentHeight},
-                {"current_rng_type", &current_rng_type},
-                {"sampler_rng_type", &sampler_rng_type},
-                {"circular_x", &circular_x},
-                {"circular_y", &circular_y}
-            };
+        LatentComponent(const LatentComponent& other) : BaseComponent(other) {
+            latentWidth = other.latentWidth;
+            latentHeight = other.latentHeight;
+            current_rng_type = other.current_rng_type;
+            sampler_rng_type = other.sampler_rng_type;
+            circular_x = other.circular_x;
+            circular_y = other.circular_y;
         }
 
         LatentComponent& operator=(const LatentComponent& other) {
@@ -106,23 +106,36 @@ namespace ECS {
             return *this;
         }
 
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"latentWidth", &latentWidth},
+                {"latentHeight", &latentHeight},
+                {"current_rng_type", &current_rng_type},
+                {"sampler_rng_type", &sampler_rng_type},
+                {"circular_x", &circular_x},
+                {"circular_y", &circular_y}
+            };
+        }
+
         nlohmann::json Serialize() const override {
-            return { {compName, {
+            nlohmann::json j;
+            j[GetCompName()] = {
                 {"latentWidth", latentWidth},
                 {"latentHeight", latentHeight},
                 {"current_rng_type", current_rng_type},
                 {"sampler_rng_type", sampler_rng_type},
                 {"circular_x", circular_x},
                 {"circular_y", circular_y}
-            }} };
+            };
+            return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
-            BaseComponent::Deserialize(j);
+            const char* key = GetCompName();
 
             nlohmann::json componentData;
-            if (j.contains(compName)) {
-                componentData = j.at(compName);
+            if (j.contains(key)) {
+                componentData = j.at(key);
             }
             else if (j.is_object() && j.size() == 1) {
                 componentData = j.begin().value();
