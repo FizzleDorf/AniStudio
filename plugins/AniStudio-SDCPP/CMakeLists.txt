@@ -55,7 +55,7 @@ if(SD_CUDA)
     enable_language(CUDA)
     set(CMAKE_CUDA_STANDARD 17)
     set(CMAKE_CUDA_STANDARD_REQUIRED ON)
-    set(CMAKE_CUDA_ARCHITECTURES "89" CACHE STRING "CUDA architectures" FORCE)
+    set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89;90" CACHE STRING "CUDA architectures")
     add_definitions(-DSD_USE_CUDA)
     find_package(CUDAToolkit REQUIRED)
     if(NOT CUDAToolkit_FOUND)
@@ -162,8 +162,14 @@ else()
     set(ZEP_AVAILABLE FALSE)
 endif()
 
-set(MAIN_LIB_DIR "${ANISTUDIO_ROOT}/build/lib")
-set(MAIN_BIN_DIR "${ANISTUDIO_ROOT}/build/bin")
+# ------------------------------------------------------------
+# Core library locations ? overridable via CMake cache for CI
+# ------------------------------------------------------------
+set(MAIN_LIB_DIR "${ANISTUDIO_ROOT}/build/lib" CACHE PATH "Path to AniEngineCore libraries")
+set(MAIN_BIN_DIR "${ANISTUDIO_ROOT}/build/bin" CACHE PATH "Path to AniEngineCore binaries")
+
+message(STATUS "AniStudio-SDCPP: MAIN_LIB_DIR = ${MAIN_LIB_DIR}")
+message(STATUS "AniStudio-SDCPP: MAIN_BIN_DIR = ${MAIN_BIN_DIR}")
 
 if(WIN32)
     if(EXISTS "${MAIN_LIB_DIR}/AniEngineCore.lib")
