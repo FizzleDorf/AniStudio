@@ -16,9 +16,10 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Initialize nested submodules
+      - name: Initialize ALL nested submodules
         run: |
-          git submodule foreach --recursive git submodule update --init --recursive
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
 
       - name: Compute short hash
         id: ver
@@ -202,9 +203,10 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Initialize nested submodules
+      - name: Initialize ALL nested submodules
         run: |
-          git submodule foreach --recursive git submodule update --init --recursive
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
 
       - name: Compute short hash
         id: ver

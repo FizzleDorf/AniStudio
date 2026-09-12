@@ -127,7 +127,7 @@ private:
             auto* comp = m_entityManager.GetComponentByName(compName, m_entityId);
             if (comp && comp->compName != "Node_Component" && !comp->schema.is_null()) {
                 // Get UI schema
-                auto uiSchema = comp->getUISchema();
+                auto uiSchema = comp->GetSchema();
 
                 // Draw UI using ImJSchema
                 bool changed = ImJSchema::drawSchemaWidget(
