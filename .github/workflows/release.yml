@@ -2,229 +2,67 @@ name: Build and Release AniStudio
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  # ------------------------------------------------------------
-  # 1. Build Core Application
-  # ------------------------------------------------------------
   build-core:
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ---- Windows x64 ----
           - os: windows-latest
             variant: windows-x64
             artifact_name: AniStudio-Windows-x64
-            cmake_gen: ""                 # let CMake auto-detect the VS version
-            cmake_arch_flag: "-A x64"
-            cmake_target_arch: "x64"
-            use_qemu: false
+            cmake_gen: "Visual Studio 17 2022"
+            cmake_arch: "-A x64"
+            msvc_arch: "x64"
+            cross: false
 
-          # ---- Linux x64 ----
           - os: ubuntu-22.04
             variant: linux-x64
             artifact_name: AniStudio-Linux-x64
             cmake_gen: "Ninja"
-            cmake_arch_flag: ""
-            cmake_target_arch: ""
-            use_qemu: false
+            cmake_arch: ""
+            msvc_arch: ""
+            cross: false
 
-          # ---- Linux ARM64 (disabled for now ? needs a Conan aarch64 profile) ----
-          # - os: ubuntu-22.04
-          #   variant: linux-arm64
-          #   artifact_name: AniStudio-Linux-ARM64
-          #   cmake_gen: "Ninja"
-          #   cmake_arch_flag: ""
-          #   cmake_target_arch: ""
-          #   use_qemu: true
+          - os: ubuntu-22.04
+            variant: linux-arm64
+            artifact_name: AniStudio-Linux-ARM64
+            cmake_gen: "Ninja"
+            cmake_arch: "-DCMAKE_TOOLCHAIN_FILE=/tmp/aarch64-toolchain.cmake"
+            msvc_arch: ""
+            cross: true
 
     runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
-      # ----- QEMU (only used when ARM64 is enabled) -----
-      - name: Set up QEMU (ARM64 only)
-        if: matrix.use_qemu
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - name: Install ARM64 cross-compilation tools
-        if: matrix.variant == 'linux-arm64'
+      - name: Install ARM64 cross toolchain
+        if: matrix.cross
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake ninja-build
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          cat > /tmp/aarch64-toolchain.cmake <<'EOF'
+          set(CMAKE_SYSTEM_NAME Linux)
+          set(CMAKE_SYSTEM_PROCESSOR aarch64)
+          set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+          set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+          set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          EOF
 
-      # ----- Linux system dependencies -----
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libxkbcommon-dev libwayland-dev \
-            libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev \
-            ninja-build pkg-config \
-            build-essential
-
-      # ----- Windows MSVC environment -----
-      - name: Setup MSVC Developer Command Prompt (Windows)
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.cmake_target_arch }}
-
-      # ----- Conan -----
-      - name: Install Conan
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "conan>=2.0"
-          conan --version
-          conan profile detect --force
-
-      - name: Configure Conan2Center Index
-        run: |
-          conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
-          conan remote list
-          conan profile show
-
-      - name: Restore Conan Cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.conan2
-          key: ${{ runner.os }}-${{ matrix.variant }}-conan-${{ hashFiles('conanfile.txt', 'conanfile.py') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.variant }}-conan-
-
-      # ----- Explicit Conan install so errors are visible -----
-      - name: Run Conan Install
-        shell: bash
-        run: |
-          conan install . \
-            --output-folder=build \
-            --build=missing \
-            -s build_type=Release \
-            -c tools.system.package_manager:mode=install \
-            -c tools.system.package_manager:sudo=True
-
-      # ----- Configure -----
-      - name: Configure CMake
-        shell: bash
-        run: |
-          if [ -n "${{ matrix.cmake_gen }}" ]; then
-            cmake -B build -G "${{ matrix.cmake_gen }}" ${{ matrix.cmake_arch_flag }} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DBUILD_SHARED_LIBS=ON \
-              -DBUILD_APP_MODE=local
-          else
-            cmake -B build ${{ matrix.cmake_arch_flag }} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DBUILD_SHARED_LIBS=ON \
-              -DBUILD_APP_MODE=local
-          fi
-
-      # ----- Build -----
-      - name: Build Core Application
-        run: cmake --build build --config Release --parallel
-
-      # ----- Collect runtime DLLs on Windows -----
-      - name: Collect Conan DLLs (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          conan install . --output-folder=build --build=missing --deployer=runtime_deploy -s build_type=Release -c tools.system.package_manager:mode=install 2>$null
-          Get-ChildItem -Path build -Recurse -Filter "*.dll" |
-            ForEach-Object { Copy-Item $_.FullName -Destination build/ -Force }
-
-      # ----- Package -----
-      - name: Package Build Artifact
-        shell: bash
-        run: |
-          mkdir -p artifact-bundle
-          # Binaries at root
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            cp build/AniStudio.exe artifact-bundle/ 2>/dev/null || true
-            cp build/*.dll artifact-bundle/ 2>/dev/null || true
-          else
-            cp build/AniStudio artifact-bundle/ 2>/dev/null || true
-            cp build/*.so artifact-bundle/ 2>/dev/null || true
-          fi
-          # lib/ copy for the plugin CMake MAIN_LIB_DIR default
-          mkdir -p artifact-bundle/lib
-          cp build/lib/* artifact-bundle/lib/ 2>/dev/null || true
-          # bin/ copy for the plugin CMake MAIN_BIN_DIR default
-          mkdir -p artifact-bundle/bin
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            cp build/*.dll artifact-bundle/bin/ 2>/dev/null || true
-            cp build/AniStudio.exe artifact-bundle/bin/ 2>/dev/null || true
-          else
-            cp build/*.so artifact-bundle/bin/ 2>/dev/null || true
-            cp build/AniStudio artifact-bundle/bin/ 2>/dev/null || true
-          fi
-          # Data directories
-          cp -r build/data     artifact-bundle/ 2>/dev/null || true
-          cp -r build/shaders  artifact-bundle/ 2>/dev/null || true
-          cp -r build/assets   artifact-bundle/ 2>/dev/null || true
-
-          tar -czf ${{ matrix.artifact_name }}.tar.gz -C artifact-bundle .
-
-      - name: Upload Core Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}.tar.gz
-          retention-days: 7
-
-  # ------------------------------------------------------------
-  # 2. Build Plugins (reuses Core Build)
-  # ------------------------------------------------------------
-  build-plugin:
-    needs: build-core
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # CPU ? Windows x64 + Linux x64
-          - { variant: windows-x64, runner: windows-latest, backend: CPU,     cmake_gen: "",      cmake_arch_flag: "-A x64", cmake_target_arch: "x64" }
-          - { variant: linux-x64,   runner: ubuntu-22.04,   backend: CPU,     cmake_gen: "Ninja", cmake_arch_flag: "",       cmake_target_arch: "" }
-          # CUDA ? x64 only
-          - { variant: windows-x64, runner: windows-latest, backend: CUDA,    cmake_gen: "",      cmake_arch_flag: "-A x64", cmake_target_arch: "x64" }
-          - { variant: linux-x64,   runner: ubuntu-22.04,   backend: CUDA,    cmake_gen: "Ninja", cmake_arch_flag: "",       cmake_target_arch: "" }
-          # Vulkan ? x64
-          - { variant: windows-x64, runner: windows-latest, backend: VULKAN,  cmake_gen: "",      cmake_arch_flag: "-A x64", cmake_target_arch: "x64" }
-          - { variant: linux-x64,   runner: ubuntu-22.04,   backend: VULKAN,  cmake_gen: "Ninja", cmake_arch_flag: "",       cmake_target_arch: "" }
-          # OpenCL ? x64
-          - { variant: windows-x64, runner: windows-latest, backend: OPENCL,  cmake_gen: "",      cmake_arch_flag: "-A x64", cmake_target_arch: "x64" }
-          - { variant: linux-x64,   runner: ubuntu-22.04,   backend: OPENCL,  cmake_gen: "Ninja", cmake_arch_flag: "",       cmake_target_arch: "" }
-          # HipBLAS ? Linux x64 only
-          - { variant: linux-x64,   runner: ubuntu-22.04,   backend: HIPBLAS, cmake_gen: "Ninja", cmake_arch_flag: "",       cmake_target_arch: "" }
-          # SYCL ? Linux x64 only
-          - { variant: linux-x64,   runner: ubuntu-22.04,   backend: SYCL,    cmake_gen: "Ninja", cmake_arch_flag: "",       cmake_target_arch: "" }
-
-    runs-on: ${{ matrix.runner }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      # ----- Backend-specific toolchains -----
-      - name: Install Linux system dependencies
+      - name: Install Linux system deps
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -236,7 +74,162 @@ jobs:
             libudev-dev libdbus-1-dev \
             ninja-build pkg-config build-essential
 
-      - name: Install CUDA Toolkit
+      - name: Setup MSVC env
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Install Conan
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "conan>=2.0,<3"
+          conan --version
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+          conan remote list
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: ${{ runner.os }}-${{ matrix.variant }}-conan-${{ hashFiles('conanfile.py', 'conanfile.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.variant }}-conan-
+
+      # EXACT mirror of install.bat: --build=missing -s compiler.cppstd=17
+      - name: Conan install (core)
+        shell: bash
+        run: |
+          conan install . \
+            --build=missing \
+            -s compiler.cppstd=17 \
+            -s build_type=Release \
+            --output-folder=build
+
+      - name: Configure (CMake)
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cmake -B build -S . \
+              -G "Visual Studio 17 2022" -A x64 \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_CXX_STANDARD=17 \
+              -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+              -DCMAKE_CXX_EXTENSIONS=OFF \
+              -DBUILD_SHARED_LIBS=ON \
+              -DBUILD_APP_MODE=local
+          else
+            cmake -B build -S . \
+              -G Ninja ${{ matrix.cmake_arch }} \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_CXX_STANDARD=17 \
+              -DCMAKE_CXX_STANDARD_REQUIRED=ON \
+              -DCMAKE_CXX_EXTENSIONS=OFF \
+              -DBUILD_SHARED_LIBS=ON \
+              -DBUILD_APP_MODE=local
+          fi
+
+      - name: Build core
+        run: cmake --build build --config Release --parallel
+
+      - name: Collect Windows runtime DLLs
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path build -Recurse -Filter "*.dll" |
+            ForEach-Object { Copy-Item $_.FullName -Destination build/ -Force -ErrorAction SilentlyContinue }
+
+      - name: Package core
+        shell: bash
+        run: |
+          mkdir -p artifact-bundle/lib artifact-bundle/bin
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cp build/Release/AniStudio.exe artifact-bundle/ 2>/dev/null || cp build/AniStudio.exe artifact-bundle/ 2>/dev/null || true
+            cp build/Release/*.dll artifact-bundle/ 2>/dev/null || true
+            cp build/Release/*.dll artifact-bundle/bin/ 2>/dev/null || true
+            cp build/Release/*.lib artifact-bundle/lib/ 2>/dev/null || true
+          else
+            cp build/AniStudio artifact-bundle/ 2>/dev/null || true
+            cp build/*.so artifact-bundle/ 2>/dev/null || true
+            cp build/*.so artifact-bundle/lib/ 2>/dev/null || true
+            cp build/*.so artifact-bundle/bin/ 2>/dev/null || true
+          fi
+          cp -r build/data    artifact-bundle/ 2>/dev/null || true
+          cp -r build/shaders artifact-bundle/ 2>/dev/null || true
+          cp -r build/assets  artifact-bundle/ 2>/dev/null || true
+          tar -czf ${{ matrix.artifact_name }}.tar.gz -C artifact-bundle .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.tar.gz
+          retention-days: 7
+
+  build-plugin:
+    needs: build-core
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { variant: windows-x64, runner: windows-latest, backend: CPU,    gen: "Visual Studio 17 2022", arch: "-A x64", msvc_arch: "x64" }
+          - { variant: windows-x64, runner: windows-latest, backend: CUDA,   gen: "Visual Studio 17 2022", arch: "-A x64", msvc_arch: "x64" }
+          - { variant: windows-x64, runner: windows-latest, backend: VULKAN, gen: "Visual Studio 17 2022", arch: "-A x64", msvc_arch: "x64" }
+          - { variant: windows-x64, runner: windows-latest, backend: OPENCL, gen: "Visual Studio 17 2022", arch: "-A x64", msvc_arch: "x64" }
+          - { variant: windows-x64, runner: windows-latest, backend: HIPBLAS, gen: "Ninja", arch: "", msvc_arch: "", rocm: true }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: CPU,     gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: CUDA,    gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: VULKAN,  gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: OPENCL,  gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: HIPBLAS, gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: SYCL,    gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-x64, runner: ubuntu-22.04, backend: METAL,   gen: "Ninja", arch: "", msvc_arch: "" }
+          - { variant: linux-arm64, runner: ubuntu-22.04, backend: CPU, gen: "Ninja", arch: "-DCMAKE_TOOLCHAIN_FILE=/tmp/aarch64-toolchain.cmake", msvc_arch: "", cross: true }
+
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install ARM64 cross toolchain
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          cat > /tmp/aarch64-toolchain.cmake <<'EOF'
+          set(CMAKE_SYSTEM_NAME Linux)
+          set(CMAKE_SYSTEM_PROCESSOR aarch64)
+          set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
+          set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+          set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
+          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+          EOF
+
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev \
+            libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev \
+            ninja-build pkg-config build-essential
+
+      - name: Install CUDA
         if: matrix.backend == 'CUDA'
         uses: Jimver/cuda-toolkit@v0.2.16
         with:
@@ -244,202 +237,222 @@ jobs:
 
       - name: Install Vulkan SDK (Linux)
         if: matrix.backend == 'VULKAN' && runner.os == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y libvulkan-dev vulkan-tools glslang-tools
+        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev vulkan-tools glslang-tools
 
-      - name: Install OpenCL Headers (Linux)
+      - name: Install OpenCL (Linux)
         if: matrix.backend == 'OPENCL' && runner.os == 'Linux'
-        run: |
-          sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
+        run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
 
       - name: Install Intel oneAPI (SYCL)
         if: matrix.backend == 'SYCL'
         run: |
-          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo apt-key add -
-          echo "deb https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo gpg --dearmor -o /usr/share/keyrings/intel.gpg
+          echo "deb [signed-by=/usr/share/keyrings/intel.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
           sudo apt-get update
           sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
 
-      - name: Install ROCm (HipBLAS)
-        if: matrix.backend == 'HIPBLAS'
+      - name: Install ROCm (Linux HipBLAS)
+        if: matrix.backend == 'HIPBLAS' && runner.os == 'Linux'
         run: |
           wget https://repo.radeon.com/amdgpu-install/6.1/ubuntu/jammy/amdgpu-install_6.1.60100-1_all.deb
           sudo apt-get install -y ./amdgpu-install_6.1.60100-1_all.deb
           sudo amdgpu-install -y --usecase=hiplibsdk,rocm
 
-      - name: Setup MSVC Developer Command Prompt (Windows)
-        if: runner.os == 'Windows'
+      - name: Cache ROCm Installation (Windows)
+        if: matrix.rocm && runner.os == 'Windows'
+        id: cache-rocm
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\AMD\ROCm
+          key: rocm-6.4-${{ runner.os }}-v1
+          restore-keys: |
+            rocm-6.4-${{ runner.os }}-
+
+      - name: Install AMD HIP SDK (Windows)
+        if: matrix.rocm && runner.os == 'Windows' && steps.cache-rocm.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-Win10-Win11-For-HIP.exe" -OutFile "${env:RUNNER_TEMP}\rocm-install.exe"
+          $proc = Start-Process "${env:RUNNER_TEMP}\rocm-install.exe" -ArgumentList '-install' -NoNewWindow -PassThru
+          $completed = $proc.WaitForExit(600000)
+          if (-not $completed) {
+            Write-Error "ROCm installation timed out after 10 minutes"
+            $proc.Kill()
+            exit 1
+          }
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "ROCm installation failed with exit code $($proc.ExitCode)"
+            exit 1
+          }
+
+      - name: Configure ROCm Environment (Windows)
+        if: matrix.rocm && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $clangPath = Get-ChildItem 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Select-Object -First 1
+          if (-not $clangPath) { Write-Error "ROCm clang not found"; exit 1 }
+          $rocmBin = Split-Path $clangPath.FullName
+          $rocmRoot = Split-Path $rocmBin
+          echo "HIP_PATH=$rocmRoot" >> $env:GITHUB_ENV
+          echo "ROCM_PATH=$rocmRoot" >> $env:GITHUB_ENV
+          echo "CC=$($clangPath.FullName)" >> $env:GITHUB_ENV
+          echo "CXX=$(Join-Path $rocmBin 'clang++.exe')" >> $env:GITHUB_ENV
+          echo "$rocmBin" >> $env:GITHUB_PATH
+
+      - name: Setup MSVC env
+        if: runner.os == 'Windows' && !matrix.rocm
         uses: ilammy/msvc-dev-cmd@v1
         with:
-          arch: ${{ matrix.cmake_target_arch }}
+          arch: ${{ matrix.msvc_arch }}
 
-      # ----- Conan (plugin needs the toolchain file too) -----
       - name: Install Conan
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "conan>=2.0"
+          python -m pip install "conan>=2.0,<3"
           conan --version
-          conan profile detect --force
 
-      - name: Configure Conan2Center Index
+      - name: Configure Conan Center remote
+        shell: bash
         run: |
-          conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
           conan remote list
-          conan profile show
 
-      - name: Restore Conan Cache
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Restore Conan cache
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: ${{ runner.os }}-${{ matrix.variant }}-plugin-conan-${{ hashFiles('conanfile.txt', 'conanfile.py') }}
+          key: ${{ runner.os }}-${{ matrix.variant }}-plugin-conan-${{ hashFiles('conanfile.py', 'conanfile.txt') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.variant }}-conan-
 
-      - name: Run Conan Install (plugin)
+      # EXACT mirror of install.bat
+      - name: Conan install (plugin toolchain)
         shell: bash
         run: |
           conan install . \
-            --output-folder=build \
             --build=missing \
+            -s compiler.cppstd=17 \
             -s build_type=Release \
-            -c tools.system.package_manager:mode=install \
-            -c tools.system.package_manager:sudo=True
+            --output-folder=build
 
-      # ----- Get the pre-built Core -----
-      - name: Download Core Build
+      - name: Download core artifact
         uses: actions/download-artifact@v4
         with:
           name: AniStudio-${{ matrix.variant }}
           path: core-build
 
-      - name: Extract Core Build
+      - name: Extract core
+        shell: bash
+        run: tar -xzf core-build/*.tar.gz -C core-build
+
+      - name: Configure plugin (HIPBLAS Windows)
+        if: matrix.backend == 'HIPBLAS' && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER="$env:CC" `
+            -DCMAKE_CXX_COMPILER="$env:CXX" `
+            -DCMAKE_CXX_STANDARD=17 `
+            -DMAIN_LIB_DIR="${{ github.workspace }}/core-build/lib" `
+            -DMAIN_BIN_DIR="${{ github.workspace }}/core-build/bin" `
+            -DSD_HIPBLAS=ON `
+            -DAMDGPU_TARGETS="gfx1100;gfx1101;gfx1102;gfx1200;gfx1201" `
+            -DGGML_OPENMP=OFF `
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Configure plugin (all other)
+        if: matrix.backend != 'HIPBLAS' || runner.os != 'Windows'
         shell: bash
         run: |
-          cd core-build
-          tar -xzf *.tar.gz
-          cd ..
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -G "${{ matrix.gen }}" ${{ matrix.arch }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-build/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-build/bin \
+            -DSD_${{ matrix.backend }}=ON \
+            -DSD_USE_SYSTEM_GGML=OFF
 
-      - name: Show Core Build Layout (debug)
-        shell: bash
-        run: |
-          echo "=== core-build ==="
-          find core-build -maxdepth 2 -type f | sort
-
-      # ----- Configure plugin against the extracted Core -----
-      - name: Configure Plugin
-        shell: bash
-        run: |
-          if [ -n "${{ matrix.cmake_gen }}" ]; then
-            cmake -B plugin-build -G "${{ matrix.cmake_gen }}" ${{ matrix.cmake_arch_flag }} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DMAIN_LIB_DIR=${{ github.workspace }}/core-build/lib \
-              -DMAIN_BIN_DIR=${{ github.workspace }}/core-build/bin \
-              -DSD_${{ matrix.backend }}=ON \
-              -DSD_USE_SYSTEM_GGML=OFF
-          else
-            cmake -B plugin-build ${{ matrix.cmake_arch_flag }} \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DMAIN_LIB_DIR=${{ github.workspace }}/core-build/lib \
-              -DMAIN_BIN_DIR=${{ github.workspace }}/core-build/bin \
-              -DSD_${{ matrix.backend }}=ON \
-              -DSD_USE_SYSTEM_GGML=OFF
-          fi
-
-      - name: Build Plugin
+      - name: Build plugin
         run: cmake --build plugin-build --config Release --parallel
 
-      - name: Package Plugin
+      - name: Package plugin
         shell: bash
         run: |
           mkdir -p plugin-artifact
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            find plugin-build -name "*.dll" -exec cp {} plugin-artifact/ \; 2>/dev/null || true
-          else
-            find plugin-build -name "*.so" -exec cp {} plugin-artifact/ \; 2>/dev/null || true
-          fi
+          find plugin-build \( -name "*.dll" -o -name "*.so" \) -exec cp {} plugin-artifact/ \; 2>/dev/null || true
           tar -czf AniStudio-SDCPP-${{ matrix.backend }}-${{ matrix.variant }}.tar.gz -C plugin-artifact .
 
-      - name: Upload Plugin
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Plugin-${{ matrix.variant }}-${{ matrix.backend }}
           path: AniStudio-SDCPP-*.tar.gz
           retention-days: 7
 
-  # ------------------------------------------------------------
-  # 3. Full Bundles (Core + Plugins)
-  # ------------------------------------------------------------
   bundle-full:
     needs: [build-core, build-plugin]
     strategy:
       matrix:
         include:
-          - { os: windows-latest, variant: windows-x64, plugins: "CPU CUDA VULKAN OPENCL" }
-          - { os: ubuntu-22.04,   variant: linux-x64,   plugins: "CPU CUDA VULKAN OPENCL HIPBLAS SYCL" }
+          - { os: windows-latest, variant: windows-x64 }
+          - { os: ubuntu-22.04,   variant: linux-x64 }
+          - { os: ubuntu-22.04,   variant: linux-arm64 }
 
     runs-on: ${{ matrix.os }}
-
     steps:
-      - name: Download Core Build
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: AniStudio-${{ matrix.variant }}
           path: core
 
-      - name: Download All Compatible Plugins
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: plugins
           pattern: Plugin-${{ matrix.variant }}-*
 
-      - name: Assemble Full Bundle
+      - name: Assemble bundle
         shell: bash
         run: |
           mkdir -p full
           tar -xzf core/*.tar.gz -C full
-
           mkdir -p full/plugins
           for plugin_tar in plugins/*/*.tar.gz; do
             [ -f "$plugin_tar" ] || continue
-            plugin_name=$(basename "$plugin_tar" .tar.gz)
-            plugin_name=${plugin_name#AniStudio-SDCPP-}
-            dest_dir="full/plugins/$plugin_name"
-            mkdir -p "$dest_dir"
-            tar -xzf "$plugin_tar" -C "$dest_dir"
+            name=$(basename "$plugin_tar" .tar.gz)
+            name=${name#AniStudio-SDCPP-}
+            mkdir -p "full/plugins/$name"
+            tar -xzf "$plugin_tar" -C "full/plugins/$name"
           done
-
           tar -czf AniStudio-Full-${{ matrix.variant }}.tar.gz -C full .
 
-      - name: Upload Full Bundle
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Full-${{ matrix.variant }}
           path: AniStudio-Full-${{ matrix.variant }}.tar.gz
           retention-days: 7
 
-  # ------------------------------------------------------------
-  # 4. Release
-  # ------------------------------------------------------------
   create-release:
     needs: [build-core, build-plugin, bundle-full]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - name: List artifacts
-        run: find artifacts -type f -name "*.tar.gz" | sort
+      - run: find artifacts -type f -name "*.tar.gz" | sort
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*.tar.gz
-          draft: false
-          prerelease: false
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
