@@ -1,0 +1,375 @@
+name: Release Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-core-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule foreach --recursive git submodule update --init --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+
+      - name: Restore Conan package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-core-windows-x64-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-core-windows-x64-
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -B build -S . \
+            -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+            -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package core
+        shell: bash
+        run: |
+          mkdir -p artifact-bundle/lib artifact-bundle/bin
+          cp build/Release/AniStudio.exe artifact-bundle/ 2>/dev/null || cp build/AniStudio.exe artifact-bundle/ 2>/dev/null || true
+          find build -name "*.dll" -exec cp {} artifact-bundle/ \; 2>/dev/null || true
+          find build -name "*.dll" -exec cp {} artifact-bundle/bin/ \; 2>/dev/null || true
+          find build -name "*.lib" -exec cp {} artifact-bundle/lib/ \; 2>/dev/null || true
+          cp -r build/data    artifact-bundle/ 2>/dev/null || true
+          cp -r build/shaders artifact-bundle/ 2>/dev/null || true
+          cp -r build/assets  artifact-bundle/ 2>/dev/null || true
+          cp build/README.md              artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+          tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: AniStudio-Windows-x64.tar.gz
+          retention-days: 7
+
+  build-plugins-windows:
+    needs: build-core-windows
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { backend: CPU,     msvc_arch: "x64", rocm: false }
+          - { backend: CUDA,    msvc_arch: "x64", rocm: false }
+          - { backend: VULKAN,  msvc_arch: "x64", rocm: false }
+          - { backend: OPENCL,  msvc_arch: "x64", rocm: false }
+          - { backend: HIPBLAS, msvc_arch: "",    rocm: true  }
+
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule foreach --recursive git submodule update --init --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Map backend to target suffix
+        id: suffix
+        shell: bash
+        run: |
+          case "${{ matrix.backend }}" in
+            CPU)     S="_CPU" ;;
+            CUDA)    S="_CUDA" ;;
+            VULKAN)  S="_VULKAN" ;;
+            OPENCL)  S="_OPENCL" ;;
+            HIPBLAS) S="_HIP" ;;
+            *) echo "unknown backend"; exit 1 ;;
+          esac
+          echo "suffix=$S" >> "$GITHUB_OUTPUT"
+          echo "name=AniStudio-SDCPP$S" >> "$GITHUB_OUTPUT"
+
+      - name: Install CUDA
+        if: matrix.backend == 'CUDA'
+        uses: Jimver/cuda-toolkit@v0.2.16
+        with:
+          cuda: '12.3.0'
+
+      - name: Cache ROCm Installation (Windows)
+        if: matrix.rocm
+        id: cache-rocm
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\AMD\ROCm
+          key: rocm-6.4-windows-v1
+          restore-keys: |
+            rocm-6.4-windows-
+
+      - name: Install AMD HIP SDK (Windows)
+        if: matrix.rocm && steps.cache-rocm.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-Win10-Win11-For-HIP.exe" -OutFile "${env:RUNNER_TEMP}\rocm-install.exe"
+          $proc = Start-Process "${env:RUNNER_TEMP}\rocm-install.exe" -ArgumentList '-install' -NoNewWindow -PassThru
+          if (-not $proc.WaitForExit(600000)) { $proc.Kill(); exit 1 }
+          if ($proc.ExitCode -ne 0) { exit $proc.ExitCode }
+
+      - name: Configure ROCm Environment (Windows)
+        if: matrix.rocm
+        shell: pwsh
+        run: |
+          $clang = Get-ChildItem 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | Select-Object -First 1
+          if (-not $clang) { Write-Error "ROCm clang not found"; exit 1 }
+          $bin = Split-Path $clang.FullName
+          $root = Split-Path $bin
+          echo "HIP_PATH=$root" >> $env:GITHUB_ENV
+          echo "ROCM_PATH=$root" >> $env:GITHUB_ENV
+          echo "CC=$($clang.FullName)" >> $env:GITHUB_ENV
+          echo "CXX=$(Join-Path $bin 'clang++.exe')" >> $env:GITHUB_ENV
+          echo "$bin" >> $env:GITHUB_PATH
+
+      - name: Setup MSVC env
+        if: '!matrix.rocm'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.msvc_arch }}
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+
+      - name: Restore Conan package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-plugin-windows-x64-${{ matrix.backend }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-plugin-windows-x64-${{ matrix.backend }}-
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install (plugin toolchain)
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+
+      - name: Extract core
+        shell: bash
+        run: tar -xzf core-build/*.tar.gz -C core-build
+
+      - name: Configure plugin (HIPBLAS Windows)
+        if: matrix.backend == 'HIPBLAS'
+        shell: pwsh
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_C_COMPILER="$env:CC" `
+            -DCMAKE_CXX_COMPILER="$env:CXX" `
+            -DCMAKE_CXX_STANDARD=17 `
+            -DMAIN_LIB_DIR="${{ github.workspace }}/core-build/lib" `
+            -DMAIN_BIN_DIR="${{ github.workspace }}/core-build/bin" `
+            -DSD_HIPBLAS=ON `
+            -DAMDGPU_TARGETS="gfx1100;gfx1101;gfx1102;gfx1200;gfx1201" `
+            -DGGML_OPENMP=OFF `
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Configure plugin (all other)
+        if: matrix.backend != 'HIPBLAS'
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-build/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-build/bin \
+            -DSD_${{ matrix.backend }}=ON \
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="${{ steps.suffix.outputs.name }}"
+          SHORT_HASH="${{ steps.ver.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          if [ ! -d "$STAGE" ]; then
+            echo "Plugin staging dir not found: $STAGE"
+            ls -la "${{ github.workspace }}/build/plugins" || true
+            exit 1
+          fi
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-${{ matrix.backend }}
+          path: AniStudio-SDCPP-*.tar.gz
+          retention-days: 7
+
+  bundle-windows:
+    needs: [build-core-windows, build-plugins-windows]
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: plugins
+          pattern: Plugin-windows-x64-*
+
+      - name: Assemble bundle
+        shell: bash
+        run: |
+          mkdir -p full
+          tar -xzf core/*.tar.gz -C full
+          mkdir -p full/plugins
+          for plugin_tar in plugins/*/*.tar.gz; do
+            [ -f "$plugin_tar" ] || continue
+            tar -xzf "$plugin_tar" -C full/plugins
+          done
+          tar -czf AniStudio-Full-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Full-windows-x64
+          path: AniStudio-Full-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          retention-days: 7
+
+  release-windows:
+    needs: [build-core-windows, build-plugins-windows, bundle-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "Release tag will be: ${HASH}-windows"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - run: |
+          find artifacts -type f -name "*.tar.gz" | sort
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.hash }}-windows
+          tag_name: ${{ steps.ver.outputs.hash }}-windows
+          target_commitish: ${{ github.sha }}
+          files: |
+            artifacts/**/*.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
