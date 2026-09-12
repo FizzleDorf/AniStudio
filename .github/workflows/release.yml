@@ -2,7 +2,7 @@ name: Build and Release AniStudio
 
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -564,7 +564,7 @@ jobs:
   create-release:
     needs: [build-core, build-plugin, bundle-full]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -586,7 +586,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ steps.ver.outputs.hash }}
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.AppImage
