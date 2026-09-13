@@ -415,7 +415,8 @@ jobs:
             -DHIP_PATH="%HIP_PATH%" ^
             -DGPU_TARGETS="%GPU_TARGETS%" ^
             -DGGML_OPENMP=OFF ^
-            -DSD_USE_SYSTEM_GGML=OFF
+            -DSD_USE_SYSTEM_GGML=OFF ^
+            -DLIBWEBM_HAVE_CXX_FLAG=1
 
       - name: Build plugin
         run: cmake --build plugin-build --config Release --parallel
