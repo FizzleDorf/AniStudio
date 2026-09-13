@@ -141,10 +141,10 @@ jobs:
 
       - name: Install CUDA
         if: matrix.backend == 'CUDA'
-        uses: Jimver/cuda-toolkit@v0.2.36
+        uses: Jimver/cuda-toolkit@v0.2.22
         with:
-          cuda: '13.3.1'
-          method: 'network'
+          cuda: "12.8.1"
+          method: "network"
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
 
       - name: Install Vulkan SDK
@@ -152,7 +152,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $VULKAN_VERSION = "1.4.357.0"
+          $VULKAN_VERSION = "1.4.328.1"
           curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/windows/vulkansdk-windows-X64-$VULKAN_VERSION.exe"
           & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
           Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$VULKAN_VERSION"
@@ -361,7 +361,7 @@ jobs:
         shell: pwsh
         run: |
           cmake -B plugin-build -S plugins/AniStudio-SDCPP `
-            -A x64 `
+            -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang++.exe" `
