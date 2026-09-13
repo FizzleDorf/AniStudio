@@ -14,3 +14,6 @@
 	path = external/ImGuiColorTextEdit
 	url = https://github.com/goossens/ImGuiColorTextEdit.git
 	branch = future
+[submodule "external/nativefiledialog-extended"]
+	path = external/nativefiledialog-extended
+	url = https://github.com/btzy/nativefiledialog-extended
