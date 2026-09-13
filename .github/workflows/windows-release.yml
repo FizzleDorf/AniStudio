@@ -232,6 +232,7 @@ jobs:
           cmake -B plugin-build -S plugins/AniStudio-SDCPP \
             -G "Visual Studio 18 2026" \
             -A x64 \
+            -T version=14.44 \
             -T "cuda=$CUDA_PATH" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_STANDARD=17 \
