@@ -232,7 +232,6 @@ jobs:
           cmake -B plugin-build -S plugins/AniStudio-SDCPP \
             -G "Visual Studio 18 2026" \
             -A x64 \
-            -T version=14.44 \
             -T "cuda=$CUDA_PATH" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_STANDARD=17 \
@@ -394,9 +393,9 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
-          set Platform=
+          set "Platform="
           cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
-            -G "Unix Makefiles" ^
+            -G "Ninja" ^
             -DCMAKE_C_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
             -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
             -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
