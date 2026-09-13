@@ -386,35 +386,6 @@ jobs:
         shell: bash
         run: tar -xzf core-build/*.tar.gz -C core-build
 
-      - name: Patch libwebm cxx_flags.cmake
-        shell: bash
-        run: |
-          FILE="plugins/AniStudio-SDCPP/external/stable-diffusion.cpp/thirdparty/libwebm/build/cxx_flags.cmake"
-          if [ ! -f "$FILE" ]; then
-            echo "::error::libwebm cxx_flags.cmake not found at $FILE"
-            exit 1
-          fi
-          cat > "$FILE" <<'EOF'
-          # Patched by CI: bypass libwebm's compiler-flag probing, which cannot
-          # pass under ROCm clang on Windows. The flags are still applied by the
-          # build itself via the normal CMake flags; only the support test is
-          # skipped.
-          function(require_cxx_flag_nomsvc FLAG)
-            message(STATUS "libwebm: assuming support for CXX flag: ${FLAG}")
-          endfunction()
-          function(require_cxx_flag FLAG)
-            message(STATUS "libwebm: assuming support for CXX flag: ${FLAG}")
-          endfunction()
-          function(require_c_flag_nomsvc FLAG)
-            message(STATUS "libwebm: assuming support for C flag: ${FLAG}")
-          endfunction()
-          function(require_c_flag FLAG)
-            message(STATUS "libwebm: assuming support for C flag: ${FLAG}")
-          endfunction()
-          EOF
-          echo "Patched $FILE"
-          cat "$FILE"
-
       - name: Configure plugin (HIPBLAS Windows)
         shell: cmd
         run: |
@@ -426,6 +397,7 @@ jobs:
             -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
             -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
             -DCMAKE_CXX_STANDARD=17 ^
+            -DCMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES=TRUE ^
             -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-build/lib" ^
             -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-build/bin" ^
             -DSD_HIPBLAS=ON ^
