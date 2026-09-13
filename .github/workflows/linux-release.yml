@@ -182,11 +182,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { backend: CPU,    vulkan_deps: false, cuda: false, opencl: false, sycl: false }
-          - { backend: CUDA,   vulkan_deps: false, cuda: true,  opencl: false, sycl: false }
-          - { backend: VULKAN, vulkan_deps: true,  cuda: false, opencl: false, sycl: false }
-          - { backend: OPENCL, vulkan_deps: false, cuda: false, opencl: true,  sycl: false }
-          - { backend: SYCL,   vulkan_deps: false, cuda: false, opencl: false, sycl: true  }
+          - { backend: CPU,    vulkan_deps: false, cuda: false, sycl: false }
+          - { backend: CUDA,   vulkan_deps: false, cuda: true,  sycl: false }
+          - { backend: VULKAN, vulkan_deps: true,  cuda: false, sycl: false }
+          - { backend: SYCL,   vulkan_deps: false, cuda: false, sycl: true  }
 
     runs-on: ubuntu-22.04
 
@@ -214,7 +213,6 @@ jobs:
             CPU)     S="_CPU" ;;
             CUDA)    S="_CUDA" ;;
             VULKAN)  S="_VULKAN" ;;
-            OPENCL)  S="_OPENCL" ;;
             SYCL)    S="_SYCL" ;;
             *) echo "unknown backend"; exit 1 ;;
           esac
@@ -238,7 +236,7 @@ jobs:
         if: matrix.cuda
         uses: Jimver/cuda-toolkit@v0.2.36
         with:
-          cuda: '13.4.1'
+          cuda: '13.3.1'
           method: 'network'
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust"]'
 
@@ -246,15 +244,11 @@ jobs:
         if: matrix.vulkan_deps
         run: sudo apt-get update && sudo apt-get install -y libvulkan-dev vulkan-tools glslang-tools
 
-      - name: Install OpenCL
-        if: matrix.opencl
-        run: sudo apt-get update && sudo apt-get install -y ocl-icd-opencl-dev opencl-headers
-
       - name: Install Intel oneAPI (SYCL)
         if: matrix.sycl
         run: |
           wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo gpg --dearmor -o /usr/share/keyrings/intel.gpg
-          echo "deb [signed-by=/usr/share/intel.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          echo "deb [signed-by=/usr/share/keyrings/intel.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
           sudo apt-get update
           sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
 

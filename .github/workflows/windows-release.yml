@@ -106,7 +106,6 @@ jobs:
           - { backend: CPU,    msvc_arch: "x64" }
           - { backend: CUDA,   msvc_arch: "x64" }
           - { backend: VULKAN, msvc_arch: "x64" }
-          - { backend: OPENCL, msvc_arch: "x64" }
 
     runs-on: windows-latest
 
@@ -135,7 +134,6 @@ jobs:
             CPU)     S="_CPU" ;;
             CUDA)    S="_CUDA" ;;
             VULKAN)  S="_VULKAN" ;;
-            OPENCL)  S="_OPENCL" ;;
             *) echo "unknown backend"; exit 1 ;;
           esac
           echo "suffix=$S" >> "$GITHUB_OUTPUT"
@@ -145,7 +143,7 @@ jobs:
         if: matrix.backend == 'CUDA'
         uses: Jimver/cuda-toolkit@v0.2.36
         with:
-          cuda: '13.4.1'
+          cuda: '13.3.1'
           method: 'network'
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
 
@@ -159,24 +157,6 @@ jobs:
           & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
           Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$VULKAN_VERSION"
           Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$VULKAN_VERSION\bin"
-
-      - name: Install OpenCL headers + ICD loader
-        if: matrix.backend == 'OPENCL'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $dst = "C:\OpenCL"
-          New-Item -ItemType Directory -Force -Path "$dst\include\CL" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$dst\lib" | Out-Null
-          curl.exe -L -o "$env:RUNNER_TEMP\OpenCL-Headers.zip" "https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/heads/main.zip"
-          Expand-Archive "$env:RUNNER_TEMP\OpenCL-Headers.zip" -DestinationPath "$env:RUNNER_TEMP\OpenCL-Headers" -Force
-          Copy-Item "$env:RUNNER_TEMP\OpenCL-Headers\OpenCL-Headers-main\CL\*" "$dst\include\CL\" -Recurse -Force
-          curl.exe -L -o "$env:RUNNER_TEMP\OpenCL-ICD.zip" "https://github.com/KhronosGroup/OpenCL-ICD-Loader/archive/refs/heads/main.zip"
-          Expand-Archive "$env:RUNNER_TEMP\OpenCL-ICD.zip" -DestinationPath "$env:RUNNER_TEMP\OpenCL-ICD" -Force
-          Copy-Item "$env:RUNNER_TEMP\OpenCL-ICD\OpenCL-ICD-Loader-main\loader\*" "$dst\lib\" -Recurse -Force
-          Add-Content $env:GITHUB_ENV "OpenCL_INCLUDE_DIR=$dst\include"
-          Add-Content $env:GITHUB_ENV "OpenCL_LIBRARY=$dst\lib\OpenCL.lib"
-          Add-Content $env:GITHUB_PATH "$dst\lib"
 
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
@@ -380,9 +360,8 @@ jobs:
       - name: Configure plugin (HIPBLAS Windows)
         shell: pwsh
         run: |
-          $env:Platform = ""
           cmake -B plugin-build -S plugins/AniStudio-SDCPP `
-            -G Ninja `
+            -A x64 `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_C_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang.exe" `
             -DCMAKE_CXX_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang++.exe" `
