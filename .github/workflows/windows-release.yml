@@ -148,7 +148,7 @@ jobs:
         with:
           cuda: "12.8.1"
           method: "network"
-          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "cufft", "cufft_dev", "cusparse", "cusparse_dev", "cusolver", "cusolver_dev", "nvrtc", "nvrtc_dev", "thrust", "visual_studio_integration"]'
 
       - name: Install Vulkan SDK
         if: matrix.backend == 'VULKAN'
@@ -367,6 +367,26 @@ jobs:
             echo "::error::build/conan/conan_toolchain.cmake missing"
             exit 1
           }
+
+      - name: Strip VS-only generator settings from Conan toolchain
+        shell: bash
+        run: |
+          # This build uses -G Ninja, but Conan's CMakeToolchain still writes
+          # CMAKE_GENERATOR_PLATFORM / _TOOLSET / _INSTANCE (Visual-Studio-only
+          # settings) into conan_toolchain.cmake. Once those cache variables
+          # exist at all, CMake's try_compile() unconditionally forwards them
+          # to every scratch sub-build it runs (this is built into CMake and
+          # can't be turned off via a conf flag) - which is what breaks
+          # pybind11's compiler-flag checks under Ninja ("Generator Ninja does
+          # not support platform specification"). Removing the lines outright
+          # is the only reliable fix.
+          sed -i \
+            -e '/CMAKE_GENERATOR_PLATFORM/d' \
+            -e '/CMAKE_GENERATOR_TOOLSET/d' \
+            -e '/CMAKE_GENERATOR_INSTANCE/d' \
+            build/conan/conan_toolchain.cmake
+          echo "Remaining CMAKE_GENERATOR references (should be none):"
+          grep -n "CMAKE_GENERATOR" build/conan/conan_toolchain.cmake || echo "  (none)"
 
       - name: Download core artifact
         uses: actions/download-artifact@v4
