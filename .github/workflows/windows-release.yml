@@ -107,7 +107,10 @@ jobs:
           - { backend: CUDA,   msvc_arch: "x64" }
           - { backend: VULKAN, msvc_arch: "x64" }
 
-    runs-on: windows-latest
+    # Pinned (not windows-latest): CUDA 12.8's nvcc/cudafe++ is not compatible
+    # with the VS 2026 toolset that windows-latest now ships. VS2022 (v143)
+    # is the supported combo for CUDA 12.8.
+    runs-on: windows-2022
 
     steps:
       - uses: actions/checkout@v4
@@ -146,21 +149,6 @@ jobs:
           cuda: "12.8.1"
           method: "network"
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
-
-      - name: Fix CUDA toolset for VS 2026
-        if: matrix.backend == 'CUDA'
-        shell: pwsh
-        run: |
-          $cudaPath = $env:CUDA_PATH
-          if (-not $cudaPath) { $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" }
-          $src = "$cudaPath\extras\visual_studio_integration\MSBuildExtensions"
-          $dst = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\BuildCustomizations"
-          Write-Host "Copying CUDA MSBuild integration from $src to $dst"
-          if (-not (Test-Path $src)) { Write-Error "CUDA MSBuildExtensions not found at $src"; exit 1 }
-          New-Item -ItemType Directory -Force -Path $dst | Out-Null
-          Copy-Item "$src\*" $dst -Recurse -Force
-          Write-Host "Files copied:"
-          Get-ChildItem $dst | Where-Object { $_.Name -like "CUDA*" } | Select-Object Name
 
       - name: Install Vulkan SDK
         if: matrix.backend == 'VULKAN'
@@ -230,7 +218,7 @@ jobs:
         shell: bash
         run: |
           cmake -B plugin-build -S plugins/AniStudio-SDCPP \
-            -G "Visual Studio 18 2026" \
+            -G "Visual Studio 17 2022" \
             -A x64 \
             -T "cuda=$CUDA_PATH" \
             -DCMAKE_BUILD_TYPE=Release \
@@ -369,7 +357,8 @@ jobs:
           conan install . --build=missing \
             -s compiler.cppstd=17 -s build_type=Release \
             -c tools.system.package_manager:mode=install \
-            -c tools.system.package_manager:sudo=True
+            -c tools.system.package_manager:sudo=True \
+            -c tools.cmake.cmaketoolchain:generator=Ninja
 
       - name: Verify Conan toolchain
         shell: bash
