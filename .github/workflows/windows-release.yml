@@ -147,6 +147,21 @@ jobs:
           method: "network"
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
 
+      - name: Fix CUDA toolset for VS 2026
+        if: matrix.backend == 'CUDA'
+        shell: pwsh
+        run: |
+          $cudaPath = $env:CUDA_PATH
+          if (-not $cudaPath) { $cudaPath = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" }
+          $src = "$cudaPath\extras\visual_studio_integration\MSBuildExtensions"
+          $dst = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Microsoft\VC\v180\BuildCustomizations"
+          Write-Host "Copying CUDA MSBuild integration from $src to $dst"
+          if (-not (Test-Path $src)) { Write-Error "CUDA MSBuildExtensions not found at $src"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $dst | Out-Null
+          Copy-Item "$src\*" $dst -Recurse -Force
+          Write-Host "Files copied:"
+          Get-ChildItem $dst | Where-Object { $_.Name -like "CUDA*" } | Select-Object Name
+
       - name: Install Vulkan SDK
         if: matrix.backend == 'VULKAN'
         shell: pwsh
@@ -210,7 +225,24 @@ jobs:
         shell: bash
         run: tar -xzf core-build/*.tar.gz -C core-build
 
-      - name: Configure plugin
+      - name: Configure plugin (CUDA)
+        if: matrix.backend == 'CUDA'
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -G "Visual Studio 18 2026" \
+            -A x64 \
+            -T "cuda=$CUDA_PATH" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler" \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-build/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-build/bin \
+            -DSD_CUDA=ON \
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Configure plugin (CPU/Vulkan)
+        if: matrix.backend != 'CUDA'
         shell: bash
         run: |
           cmake -B plugin-build -S plugins/AniStudio-SDCPP \
