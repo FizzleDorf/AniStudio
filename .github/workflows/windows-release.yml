@@ -107,9 +107,6 @@ jobs:
           - { backend: CUDA,   msvc_arch: "x64" }
           - { backend: VULKAN, msvc_arch: "x64" }
 
-    # Pinned (not windows-latest): CUDA 12.8's nvcc/cudafe++ is not compatible
-    # with the VS 2026 toolset that windows-latest now ships. VS2022 (v143)
-    # is the supported combo for CUDA 12.8.
     runs-on: windows-2022
 
     steps:
@@ -371,15 +368,6 @@ jobs:
       - name: Strip VS-only generator settings from Conan toolchain
         shell: bash
         run: |
-          # This build uses -G Ninja, but Conan's CMakeToolchain still writes
-          # CMAKE_GENERATOR_PLATFORM / _TOOLSET / _INSTANCE (Visual-Studio-only
-          # settings) into conan_toolchain.cmake. Once those cache variables
-          # exist at all, CMake's try_compile() unconditionally forwards them
-          # to every scratch sub-build it runs (this is built into CMake and
-          # can't be turned off via a conf flag) - which is what breaks
-          # pybind11's compiler-flag checks under Ninja ("Generator Ninja does
-          # not support platform specification"). Removing the lines outright
-          # is the only reliable fix.
           sed -i \
             -e '/CMAKE_GENERATOR_PLATFORM/d' \
             -e '/CMAKE_GENERATOR_TOOLSET/d' \
@@ -409,14 +397,24 @@ jobs:
             -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
             -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
             -DCMAKE_CXX_STANDARD=17 ^
+            -DCMAKE_REQUIRED_FLAGS="-std=gnu++11" ^
             -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-build/lib" ^
             -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-build/bin" ^
             -DSD_HIPBLAS=ON ^
             -DHIP_PATH="%HIP_PATH%" ^
             -DGPU_TARGETS="%GPU_TARGETS%" ^
             -DGGML_OPENMP=OFF ^
-            -DSD_USE_SYSTEM_GGML=OFF ^
-            -DLIBWEBM_HAVE_CXX_FLAG=1
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Dump CMake error log on failure
+        if: failure()
+        shell: bash
+        run: |
+          echo "===== plugin-build/CMakeFiles/CMakeError.log ====="
+          cat plugin-build/CMakeFiles/CMakeError.log 2>/dev/null || echo "(not found)"
+          echo
+          echo "===== plugin-build/CMakeFiles/CMakeOutput.log (tail) ====="
+          tail -n 200 plugin-build/CMakeFiles/CMakeOutput.log 2>/dev/null || echo "(not found)"
 
       - name: Build plugin
         run: cmake --build plugin-build --config Release --parallel
