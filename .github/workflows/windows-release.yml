@@ -358,21 +358,21 @@ jobs:
         run: tar -xzf core-build/*.tar.gz -C core-build
 
       - name: Configure plugin (HIPBLAS Windows)
-        shell: pwsh
+        shell: cmd
         run: |
-          cmake -B plugin-build -S plugins/AniStudio-SDCPP `
-            -G Ninja `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_C_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang.exe" `
-            -DCMAKE_CXX_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang++.exe" `
-            -DCMAKE_HIP_COMPILER="$env:HIP_PATH\lib\llvm\bin\clang.exe" `
-            -DCMAKE_CXX_STANDARD=17 `
-            -DMAIN_LIB_DIR="$env:GITHUB_WORKSPACE/core-build/lib" `
-            -DMAIN_BIN_DIR="$env:GITHUB_WORKSPACE/core-build/bin" `
-            -DSD_HIPBLAS=ON `
-            -DHIP_PATH="$env:HIP_PATH" `
-            -DGPU_TARGETS="${{ env.GPU_TARGETS }}" `
-            -DGGML_OPENMP=OFF `
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
+            -G "Unix Makefiles" ^
+            -DCMAKE_C_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
+            -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
+            -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
+            -DCMAKE_CXX_STANDARD=17 ^
+            -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-build/lib" ^
+            -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-build/bin" ^
+            -DSD_HIPBLAS=ON ^
+            -DHIP_PATH="%HIP_PATH%" ^
+            -DGPU_TARGETS="%GPU_TARGETS%" ^
+            -DGGML_OPENMP=OFF ^
             -DSD_USE_SYSTEM_GGML=OFF
 
       - name: Build plugin
