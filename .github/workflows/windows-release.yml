@@ -393,6 +393,7 @@ jobs:
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          set Platform=
           cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
             -G "Unix Makefiles" ^
             -DCMAKE_C_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
