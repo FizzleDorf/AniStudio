@@ -1,4 +1,4 @@
-name: Release Windows HIP
+name: Release Windows Intel
 
 on:
   workflow_dispatch:
@@ -8,12 +8,12 @@ permissions:
   actions: read
 
 jobs:
-  build-plugin-hip-windows:
+  build-plugin-sycl-windows:
     runs-on: windows-2022
 
     env:
-      ROCM_VERSION: "7.14.0"
-      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102;gfx1200;gfx1201"
+      ONEAPI_VERSION: "2025.3.2.0"
+      ONEAPI_INSTALLER_URL: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d5a6b34-6b2a-4e0a-9f3b-1234567890ab/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
 
     steps:
       - uses: actions/checkout@v4
@@ -67,47 +67,51 @@ jobs:
           test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
           test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
 
-      - name: Cache ROCm Installation
-        id: cache-rocm
+      - name: Cache oneAPI installer
+        id: cache-oneapi
         uses: actions/cache@v4
         with:
-          path: C:\TheRock\build
-          key: rocm-wheels-${{ env.ROCM_VERSION }}-${{ runner.os }}
+          path: C:\oneAPI-installer.exe
+          key: oneapi-${{ env.ONEAPI_VERSION }}-windows
+
+      - name: Download oneAPI installer
+        if: steps.cache-oneapi.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri "$env:ONEAPI_INSTALLER_URL" -OutFile "C:\oneAPI-installer.exe"
+
+      - name: Install oneAPI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $proc = Start-Process "C:\oneAPI-installer.exe" `
+            -ArgumentList '-s', '-a', '--action', 'install', '--eula', 'accept', '--components', 'intel.oneapi.win.compiler, intel.oneapi.win.dpcpp_debugger, intel.oneapi.win.mkl.devel, intel.oneapi.win.tbb.devel' `
+            -NoNewWindow -PassThru
+          if (-not $proc.WaitForExit(600000)) { $proc.Kill(); exit 1 }
+          if ($proc.ExitCode -ne 0) { exit $proc.ExitCode }
+
+      - name: Setup oneAPI environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $setvars = "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
+          if (-not (Test-Path $setvars)) { Write-Error "oneAPI setvars.bat not found"; exit 1 }
+          $envDump = cmd /c "`"$setvars`" intel64 > nul 2>&1 && set"
+          foreach ($line in $envDump) {
+            if ($line -match '^([^=]+)=(.*)$') {
+              $name = $Matches[1]
+              $value = $Matches[2]
+              if ($name -in @('PROMPT', 'PS1', 'TEMP', 'TMP')) { continue }
+              Add-Content -Path $env:GITHUB_ENV -Value "$name=$value"
+            }
+          }
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.16
         with:
-          key: windows-rocm-${{ env.ROCM_VERSION }}-x64
+          key: windows-sycl-${{ env.ONEAPI_VERSION }}-x64
           evict-old-files: 1d
-
-      - name: Install ROCm with Wheels
-        if: steps.cache-rocm.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -Path "C:\TheRock\build" -ItemType Directory -Force | Out-Null
-          python -m venv C:\TheRock\build\.venv
-          & C:\TheRock\build\.venv\Scripts\Activate.ps1
-          python -m pip install --upgrade pip
-          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{env.ROCM_VERSION}}"
-          rocm-sdk init
-
-      - name: Setup ROCm Environment
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          & C:\TheRock\build\.venv\Scripts\Activate.ps1
-          rocm-sdk init
-          $rocmPath = (rocm-sdk path --root).Trim()
-          $cmakePath = (rocm-sdk path --cmake).Trim()
-          $binPath = (rocm-sdk path --bin).Trim()
-          echo "HIP_PATH=$rocmPath" >> $env:GITHUB_ENV
-          echo "CMAKE_PREFIX_PATH=$cmakePath" >> $env:GITHUB_ENV
-          echo "HIP_DEVICE_LIB_PATH=$rocmPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
-          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
-          echo "LLVM_PATH=$rocmPath\lib\llvm" >> $env:GITHUB_ENV
-          echo "$binPath" >> $env:GITHUB_PATH
-          echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
 
       - name: Setup Conan
         uses: conan-io/setup-conan@v1
@@ -151,23 +155,22 @@ jobs:
             build/conan/conan_toolchain.cmake
           grep -n "CMAKE_GENERATOR" build/conan/conan_toolchain.cmake || echo "  (none)"
 
-      - name: Configure plugin (HIPBLAS Windows)
+      - name: Configure plugin (SYCL Windows)
         shell: cmd
         run: |
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
           set "Platform="
           cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
             -G "Ninja" ^
-            -DCMAKE_C_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
-            -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
-            -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
+            -DCMAKE_C_COMPILER=icx ^
+            -DCMAKE_CXX_COMPILER=icpx ^
             -DCMAKE_CXX_STANDARD=17 ^
             -DCMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES=TRUE ^
             -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-extracted/lib" ^
             -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-extracted/bin" ^
-            -DSD_HIPBLAS=ON ^
-            -DHIP_PATH="%HIP_PATH%" ^
-            -DGPU_TARGETS="%GPU_TARGETS%" ^
+            -DSD_SYCL=ON ^
+            -DGGML_SYCL_F16=ON ^
+            -DGGML_SYCL_DNN=ON ^
             -DGGML_OPENMP=OFF ^
             -DSD_USE_SYSTEM_GGML=OFF
 
@@ -180,7 +183,7 @@ jobs:
       - name: Package plugin
         shell: bash
         run: |
-          PLUGIN_NAME="AniStudio-SDCPP_HIP"
+          PLUGIN_NAME="AniStudio-SDCPP_SYCL"
           STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
           if [ ! -d "$STAGE" ]; then
             echo "Plugin staging dir not found: $STAGE"
@@ -189,17 +192,41 @@ jobs:
           fi
           mkdir -p pkg/plugins
           cp -r "$STAGE" pkg/plugins/
+
+          declare -A seen
+          copy_dlls() {
+            local src="$1"
+            [ -d "$src" ] || return 0
+            while IFS= read -r dll; do
+              base="$(basename "$dll")"
+              if [ -z "${seen[$base]:-}" ]; then
+                cp "$dll" pkg/
+                seen[$base]=1
+              fi
+            done < <(find "$src" -maxdepth 2 -iname "*.dll" 2>/dev/null | sort)
+          }
+
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/compiler/latest/bin"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/compiler/latest/bin/compiler"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/mkl/latest/redist/intel64"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/tbb/latest/redist/intel64/vc_mt"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/level_zero/latest/bin"
+
+          if [ -f "C:/Program Files (x86)/Intel/oneAPI/licensing/license.txt" ]; then
+            cp "C:/Program Files (x86)/Intel/oneAPI/licensing/license.txt" pkg/INTEL-LICENSE.txt
+          fi
+
           tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
-          tar -tzf "${PLUGIN_NAME}-windows-x64.tar.gz" | head -40
+          tar -tzf "${PLUGIN_NAME}-windows-x64.tar.gz" | head -80
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Plugin-windows-x64-HIPBLAS
+          name: Plugin-windows-x64-SYCL
           path: AniStudio-SDCPP_*.tar.gz
           retention-days: 90
 
-  bundle-amd-windows:
-    needs: build-plugin-hip-windows
+  bundle-intel-windows:
+    needs: build-plugin-sycl-windows
     runs-on: windows-latest
 
     steps:
@@ -245,8 +272,15 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: Plugin-windows-x64-HIPBLAS
-          path: plugins/HIP
+          name: Plugin-windows-x64-VULKAN
+          path: plugins/VULKAN
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-core.outputs.run-id }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Plugin-windows-x64-SYCL
+          path: plugins/SYCL
 
       - name: Verify plugin inputs
         shell: bash
@@ -254,29 +288,51 @@ jobs:
           find core plugins -type f -name "*.tar.gz" | sort
           test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
           test -f plugins/CPU/*.tar.gz || { echo "::error::CPU plugin tarball missing"; exit 1; }
-          test -f plugins/HIP/*.tar.gz || { echo "::error::HIP plugin tarball missing"; exit 1; }
+          test -f plugins/VULKAN/*.tar.gz || { echo "::error::Vulkan plugin tarball missing"; exit 1; }
+          test -f plugins/SYCL/*.tar.gz || { echo "::error::SYCL plugin tarball missing"; exit 1; }
 
-      - name: Assemble AMD bundle
+      - name: Assemble Intel bundle
         shell: bash
         run: |
           mkdir -p full
           tar -xzf core/*.tar.gz -C full
-          mkdir -p full/plugins
+
           for plugin_tar in plugins/*/*.tar.gz; do
             [ -f "$plugin_tar" ] || continue
-            tar -xzf "$plugin_tar" -C full/plugins
+            scratch="$(mktemp -d)"
+            tar -xzf "$plugin_tar" -C "$scratch"
+
+            if [ -d "$scratch/plugins" ]; then
+              mkdir -p full/plugins
+              cp -r "$scratch/plugins/." full/plugins/
+            fi
+
+            while IFS= read -r f; do
+              rel="${f#$scratch/}"
+              case "$rel" in
+                plugins|plugins/*) continue ;;
+              esac
+              base="$(basename "$f")"
+              if [ ! -e "full/$base" ]; then
+                cp "$f" "full/$base"
+              fi
+            done < <(find "$scratch" -maxdepth 1 -type f)
+
+            rm -rf "$scratch"
           done
-          find full/plugins -maxdepth 3 -type f | sort
-          tar -czf AniStudio-AMD-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
+
+          find full -maxdepth 1 -type f | sort
+          find full/plugins -maxdepth 4 -type f | sort
+          tar -czf AniStudio-Intel-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AniStudio-AMD-Bundle-windows-x64
-          path: AniStudio-AMD-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          name: AniStudio-Intel-Bundle-windows-x64
+          path: AniStudio-Intel-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
           retention-days: 90
 
-  release-hip-windows:
-    needs: [build-plugin-hip-windows, bundle-amd-windows]
+  release-intel-windows:
+    needs: [build-plugin-sycl-windows, bundle-intel-windows]
     runs-on: ubuntu-latest
 
     steps:
@@ -291,20 +347,20 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: Plugin-windows-x64-HIPBLAS
-          path: hip-plugin
+          name: Plugin-windows-x64-SYCL
+          path: sycl-plugin
 
       - uses: actions/download-artifact@v4
         with:
-          name: AniStudio-AMD-Bundle-windows-x64
-          path: amd-bundle
+          name: AniStudio-Intel-Bundle-windows-x64
+          path: intel-bundle
 
       - name: Verify artifacts
         shell: bash
         run: |
-          find hip-plugin amd-bundle -type f -name "*.tar.gz" | sort
-          test -f hip-plugin/*.tar.gz || { echo "::error::HIP plugin tarball missing"; exit 1; }
-          test -f amd-bundle/*.tar.gz || { echo "::error::AMD bundle tarball missing"; exit 1; }
+          find sycl-plugin intel-bundle -type f -name "*.tar.gz" | sort
+          test -f sycl-plugin/*.tar.gz || { echo "::error::SYCL plugin tarball missing"; exit 1; }
+          test -f intel-bundle/*.tar.gz || { echo "::error::Intel bundle tarball missing"; exit 1; }
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -312,8 +368,8 @@ jobs:
           tag_name: ${{ steps.ver.outputs.hash }}
           target_commitish: ${{ github.sha }}
           files: |
-            hip-plugin/**/*.tar.gz
-            amd-bundle/**/*.tar.gz
+            sycl-plugin/**/*.tar.gz
+            intel-bundle/**/*.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

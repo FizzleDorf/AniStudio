@@ -32,6 +32,12 @@ jobs:
         with:
           arch: x64
 
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with:
+          key: windows-core-x64
+          evict-old-files: 1d
+
       - name: Setup Conan
         uses: conan-io/setup-conan@v1
         with:
@@ -78,24 +84,53 @@ jobs:
       - name: Package core
         shell: bash
         run: |
-          mkdir -p artifact-bundle/lib artifact-bundle/bin
-          cp build/Release/AniStudio.exe artifact-bundle/ 2>/dev/null || cp build/AniStudio.exe artifact-bundle/ 2>/dev/null || true
-          find build -name "*.dll" -exec cp {} artifact-bundle/ \; 2>/dev/null || true
-          find build -name "*.dll" -exec cp {} artifact-bundle/bin/ \; 2>/dev/null || true
-          find build -name "*.lib" -exec cp {} artifact-bundle/lib/ \; 2>/dev/null || true
+          rm -rf artifact-bundle
+          mkdir -p artifact-bundle/lib
+
+          if [ -f build/Release/AniStudio.exe ]; then
+            cp build/Release/AniStudio.exe artifact-bundle/
+          elif [ -f build/AniStudio.exe ]; then
+            cp build/AniStudio.exe artifact-bundle/
+          fi
+
+          find build -name "*.lib" -exec cp -n {} artifact-bundle/lib/ \; 2>/dev/null || true
+
+          declare -A seen
+          while IFS= read -r dll; do
+            base="$(basename "$dll")"
+            if [ -z "${seen[$base]:-}" ]; then
+              cp "$dll" artifact-bundle/
+              seen[$base]=1
+            fi
+          done < <(find build -iname "*.dll" 2>/dev/null | sort)
+
           cp -r build/data    artifact-bundle/ 2>/dev/null || true
           cp -r build/shaders artifact-bundle/ 2>/dev/null || true
           cp -r build/assets  artifact-bundle/ 2>/dev/null || true
+          cp -r build/docs    artifact-bundle/ 2>/dev/null || true
           cp build/README.md              artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+
+          find artifact-bundle -maxdepth 1 -type f | sort
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
+
+      - name: Save Conan cache
+        shell: bash
+        run: |
+          conan cache save "*" --file=conan-cache.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Windows-x64
           path: AniStudio-Windows-x64.tar.gz
-          retention-days: 7
+          retention-days: 90
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache.tar.gz
+          retention-days: 90
 
   build-plugins-windows:
     needs: build-core-windows
@@ -246,7 +281,6 @@ jobs:
         shell: bash
         run: |
           PLUGIN_NAME="${{ steps.suffix.outputs.name }}"
-          SHORT_HASH="${{ steps.ver.outputs.hash }}"
           STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
           if [ ! -d "$STAGE" ]; then
             echo "Plugin staging dir not found: $STAGE"
@@ -255,18 +289,15 @@ jobs:
           fi
           mkdir -p pkg/plugins
           cp -r "$STAGE" pkg/plugins/
-          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
-            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
-          fi
           tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
 
       - uses: actions/upload-artifact@v4
         with:
           name: Plugin-windows-x64-${{ matrix.backend }}
-          path: AniStudio-SDCPP-*.tar.gz
-          retention-days: 7
+          path: AniStudio-SDCPP_*.tar.gz
+          retention-days: 90
 
-  bundle-windows:
+  bundle-nvidia-windows:
     needs: [build-core-windows, build-plugins-windows]
     runs-on: windows-latest
 
@@ -290,7 +321,18 @@ jobs:
           path: plugins
           pattern: Plugin-windows-x64-*
 
-      - name: Assemble bundle
+      - name: Fail if plugins missing
+        shell: bash
+        run: |
+          count=$(find plugins -name "*.tar.gz" | wc -l)
+          echo "Found $count plugin tarball(s)"
+          find plugins -name "*.tar.gz" | sort
+          if [ "$count" -lt 3 ]; then
+            echo "::error::Expected 3 plugin tarballs, found $count"
+            exit 1
+          fi
+
+      - name: Assemble NVIDIA bundle
         shell: bash
         run: |
           mkdir -p full
@@ -300,16 +342,77 @@ jobs:
             [ -f "$plugin_tar" ] || continue
             tar -xzf "$plugin_tar" -C full/plugins
           done
-          tar -czf AniStudio-Full-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
+          tar -czf AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AniStudio-Full-windows-x64
-          path: AniStudio-Full-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
-          retention-days: 7
+          name: AniStudio-Nvidia-Bundle-windows-x64
+          path: AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          retention-days: 90
+
+  build-conan-cache-windows:
+    needs: [build-core-windows]
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Assemble contributor Conan cache
+        shell: bash
+        run: |
+          rm -rf pkg
+          mkdir -p pkg
+          cp conan-cache/conan-cache.tar.gz pkg/conan-cache.tar.gz
+          cat > pkg/README.md <<'EOF'
+          # AniStudio Conan Cache (Windows x64, MSVC)
+
+          Restores the Conan 2 package cache from CI. Run
+          `conan cache restore conan-cache.tar.gz` before `conan install` to
+          skip downloading and compiling dependencies.
+
+          Requirements: Conan 2.x, Visual Studio 2022 x64, matching MSVC toolset.
+
+          Usage:
+            git clone https://github.com/<you>/AniStudio.git
+            cd AniStudio
+            tar -xzf <this-tarball>.tar.gz
+            conan cache restore conan-cache.tar.gz
+            conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
+            cmake -B build -S . -A x64 -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
+            cmake --build build --config Release --parallel
+
+          The cache was created with compiler.cppstd=17 and build_type=Release.
+          If your Conan profile produces different package IDs, the cache will
+          not help and Conan will rebuild from source.
+
+          This cache is specific to MSVC on Windows x64 and is not portable to
+          GCC, Clang, or MinGW.
+
+          Cleanup: conan cache clean "*" --build --source --temp
+          EOF
+          tar -czf AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Contrib-Conan-Cache-Windows-x64
+          path: AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          retention-days: 90
 
   release-windows:
-    needs: [build-core-windows, build-plugins-windows, bundle-windows]
+    needs: [build-core-windows, build-plugins-windows, build-conan-cache-windows, bundle-nvidia-windows]
     runs-on: ubuntu-latest
 
     steps:
@@ -320,25 +423,46 @@ jobs:
       - name: Compute short hash
         id: ver
         shell: bash
-        run: |
-          HASH=$(git rev-parse --short HEAD)
-          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
-          echo "Release tag will be: ${HASH}-windows"
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
 
-      - run: |
-          find artifacts -type f -name "*.tar.gz" | sort
+      - name: Verify all required artifacts are present
+        shell: bash
+        run: |
+          required=(
+            "artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz"
+            "artifacts/Plugin-windows-x64-CPU/AniStudio-SDCPP_CPU-windows-x64.tar.gz"
+            "artifacts/Plugin-windows-x64-CUDA/AniStudio-SDCPP_CUDA-windows-x64.tar.gz"
+            "artifacts/Plugin-windows-x64-VULKAN/AniStudio-SDCPP_VULKAN-windows-x64.tar.gz"
+            "artifacts/AniStudio-Nvidia-Bundle-windows-x64/AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz"
+            "artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz"
+          )
+          fail=0
+          for f in "${required[@]}"; do
+            if [ -f "$f" ]; then
+              echo "OK      $f"
+            else
+              echo "MISSING $f"
+              fail=1
+            fi
+          done
+          exit $fail
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: ${{ steps.ver.outputs.hash }}-windows
-          tag_name: ${{ steps.ver.outputs.hash }}-windows
+          name: AniStudio ${{ steps.ver.outputs.hash }}
+          tag_name: ${{ steps.ver.outputs.hash }}
           target_commitish: ${{ github.sha }}
           files: |
-            artifacts/**/*.tar.gz
+            artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz
+            artifacts/Plugin-windows-x64-CPU/AniStudio-SDCPP_CPU-windows-x64.tar.gz
+            artifacts/Plugin-windows-x64-CUDA/AniStudio-SDCPP_CUDA-windows-x64.tar.gz
+            artifacts/Plugin-windows-x64-VULKAN/AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
+            artifacts/AniStudio-Nvidia-Bundle-windows-x64/AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+            artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

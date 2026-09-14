@@ -1,4 +1,4 @@
-name: Release Windows HIP
+name: Release Linux HIP
 
 on:
   workflow_dispatch:
@@ -8,12 +8,12 @@ permissions:
   actions: read
 
 jobs:
-  build-plugin-hip-windows:
-    runs-on: windows-2022
+  build-plugin-hip-linux:
+    runs-on: ubuntu-24.04
 
     env:
       ROCM_VERSION: "7.14.0"
-      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102;gfx1200;gfx1201"
+      GPU_TARGETS: "gfx900;gfx906;gfx908;gfx90a;gfx90c;gfx942;gfx950;gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
 
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +22,6 @@ jobs:
           fetch-depth: 0
 
       - name: Initialize nested submodules
-        shell: bash
         run: |
           git submodule sync --recursive
           git submodule update --init --force --recursive
@@ -32,7 +31,7 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Find latest successful Release Windows run
+      - name: Find latest successful Release Linux run
         id: find-core
         uses: actions/github-script@v7
         with:
@@ -40,19 +39,19 @@ jobs:
             const runs = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'windows-release.yml',
+              workflow_id: 'linux-release.yml',
               status: 'success',
               per_page: 1
             });
             if (runs.data.workflow_runs.length === 0) {
-              core.setFailed('No successful Release Windows run found. Run windows-release.yml first.');
+              core.setFailed('No successful Release Linux run found. Run linux-release.yml first.');
             }
             core.setOutput('run-id', runs.data.workflow_runs[0].id);
 
       - name: Download core artifact
         uses: actions/download-artifact@v4
         with:
-          name: AniStudio-Windows-x64
+          name: AniStudio-Linux-x64
           path: core-build
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-core.outputs.run-id }}
@@ -64,50 +63,48 @@ jobs:
           test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
           mkdir -p core-extracted
           tar -xzf core-build/*.tar.gz -C core-extracted
-          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
-          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
-
-      - name: Cache ROCm Installation
-        id: cache-rocm
-        uses: actions/cache@v4
-        with:
-          path: C:\TheRock\build
-          key: rocm-wheels-${{ env.ROCM_VERSION }}-${{ runner.os }}
+          test -f core-extracted/lib/libAniEngineCore.so || test -f core-extracted/lib/AniEngineCore.so || {
+            echo "::error::AniEngineCore.so missing"
+            exit 1
+          }
+          test -f core-extracted/lib/libAniStudioCore.so || test -f core-extracted/lib/AniStudioCore.so || {
+            echo "::error::AniStudioCore.so missing"
+            exit 1
+          }
 
       - name: ccache
         uses: ggml-org/ccache-action@v1.2.16
         with:
-          key: windows-rocm-${{ env.ROCM_VERSION }}-x64
+          key: ubuntu-rocm-${{ env.ROCM_VERSION }}-x64
           evict-old-files: 1d
 
-      - name: Install ROCm with Wheels
-        if: steps.cache-rocm.outputs.cache-hit != 'true'
-        shell: pwsh
+      - name: Free disk space
         run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -Path "C:\TheRock\build" -ItemType Directory -Force | Out-Null
-          python -m venv C:\TheRock\build\.venv
-          & C:\TheRock\build\.venv\Scripts\Activate.ps1
-          python -m pip install --upgrade pip
-          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{env.ROCM_VERSION}}"
-          rocm-sdk init
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/local/share/boost || true
+          docker system prune -af || true
+          sudo apt clean
 
-      - name: Setup ROCm Environment
-        shell: pwsh
+      - name: Setup TheRock with Wheels
         run: |
-          $ErrorActionPreference = "Stop"
-          & C:\TheRock\build\.venv\Scripts\Activate.ps1
-          rocm-sdk init
-          $rocmPath = (rocm-sdk path --root).Trim()
-          $cmakePath = (rocm-sdk path --cmake).Trim()
-          $binPath = (rocm-sdk path --bin).Trim()
-          echo "HIP_PATH=$rocmPath" >> $env:GITHUB_ENV
-          echo "CMAKE_PREFIX_PATH=$cmakePath" >> $env:GITHUB_ENV
-          echo "HIP_DEVICE_LIB_PATH=$rocmPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
-          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
-          echo "LLVM_PATH=$rocmPath\lib\llvm" >> $env:GITHUB_ENV
-          echo "$binPath" >> $env:GITHUB_PATH
-          echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{matrix.ROCM_VERSION}}"
+          ROCM_PATH=$(rocm-sdk path --root)
+          CMAKE_PATH=$(rocm-sdk path --cmake)
+          BIN_PATH=$(rocm-sdk path --bin)
+          echo "ROCM_PATH=$ROCM_PATH" >> $GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$CMAKE_PATH" >> $GITHUB_ENV
+          echo "HIP_PATH=$ROCM_PATH" >> $GITHUB_ENV
+          echo "PATH=$BIN_PATH:${PATH}" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$ROCM_PATH/lib:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+          echo "$(pwd)/.venv/bin" >> $GITHUB_PATH
 
       - name: Setup Conan
         uses: conan-io/setup-conan@v1
@@ -130,8 +127,7 @@ jobs:
           conan install . --build=missing \
             -s compiler.cppstd=17 -s build_type=Release \
             -c tools.system.package_manager:mode=install \
-            -c tools.system.package_manager:sudo=True \
-            -c tools.cmake.cmaketoolchain:generator=Ninja
+            -c tools.system.package_manager:sudo=True
 
       - name: Verify Conan toolchain
         shell: bash
@@ -141,41 +137,27 @@ jobs:
             exit 1
           }
 
-      - name: Strip VS-only generator settings from Conan toolchain
+      - name: Configure plugin (HIPBLAS Linux)
         shell: bash
         run: |
-          sed -i \
-            -e '/CMAKE_GENERATOR_PLATFORM/d' \
-            -e '/CMAKE_GENERATOR_TOOLSET/d' \
-            -e '/CMAKE_GENERATOR_INSTANCE/d' \
-            build/conan/conan_toolchain.cmake
-          grep -n "CMAKE_GENERATOR" build/conan/conan_toolchain.cmake || echo "  (none)"
-
-      - name: Configure plugin (HIPBLAS Windows)
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
-          set "Platform="
-          cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
-            -G "Ninja" ^
-            -DCMAKE_C_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
-            -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
-            -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
-            -DCMAKE_CXX_STANDARD=17 ^
-            -DCMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES=TRUE ^
-            -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-extracted/lib" ^
-            -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-extracted/bin" ^
-            -DSD_HIPBLAS=ON ^
-            -DHIP_PATH="%HIP_PATH%" ^
-            -DGPU_TARGETS="%GPU_TARGETS%" ^
-            -DGGML_OPENMP=OFF ^
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -G Ninja \
+            -DCMAKE_HIP_COMPILER="$(hipconfig -l)/clang" \
+            -DCMAKE_HIP_FLAGS="-mllvm --amdgpu-unroll-threshold-local=600" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSD_HIPBLAS=ON \
+            -DHIP_PLATFORM=amd \
+            -DGPU_TARGETS="${{ env.GPU_TARGETS }}" \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' \
+            -DGGML_NATIVE=OFF \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-extracted/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-extracted/bin \
             -DSD_USE_SYSTEM_GGML=OFF
 
       - name: Build plugin
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
-          cmake --build plugin-build --config Release --parallel 4
+        run: cmake --build plugin-build --config Release --parallel
 
       - name: Package plugin
         shell: bash
@@ -189,18 +171,18 @@ jobs:
           fi
           mkdir -p pkg/plugins
           cp -r "$STAGE" pkg/plugins/
-          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
-          tar -tzf "${PLUGIN_NAME}-windows-x64.tar.gz" | head -40
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+          tar -tzf "${PLUGIN_NAME}-linux-x64.tar.gz" | head -40
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Plugin-windows-x64-HIPBLAS
+          name: Plugin-linux-x64-HIPBLAS
           path: AniStudio-SDCPP_*.tar.gz
           retention-days: 90
 
-  bundle-amd-windows:
-    needs: build-plugin-hip-windows
-    runs-on: windows-latest
+  bundle-amd-linux:
+    needs: build-plugin-hip-linux
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -212,7 +194,7 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Find latest successful Release Windows run
+      - name: Find latest successful Release Linux run
         id: find-core
         uses: actions/github-script@v7
         with:
@@ -220,32 +202,32 @@ jobs:
             const runs = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: 'windows-release.yml',
+              workflow_id: 'linux-release.yml',
               status: 'success',
               per_page: 1
             });
             if (runs.data.workflow_runs.length === 0) {
-              core.setFailed('No successful Release Windows run found.');
+              core.setFailed('No successful Release Linux run found.');
             }
             core.setOutput('run-id', runs.data.workflow_runs[0].id);
 
       - uses: actions/download-artifact@v4
         with:
-          name: AniStudio-Windows-x64
+          name: AniStudio-Linux-x64
           path: core
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-core.outputs.run-id }}
 
       - uses: actions/download-artifact@v4
         with:
-          name: Plugin-windows-x64-CPU
+          name: Plugin-linux-x64-CPU
           path: plugins/CPU
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-core.outputs.run-id }}
 
       - uses: actions/download-artifact@v4
         with:
-          name: Plugin-windows-x64-HIPBLAS
+          name: Plugin-linux-x64-HIPBLAS
           path: plugins/HIP
 
       - name: Verify plugin inputs
@@ -267,16 +249,16 @@ jobs:
             tar -xzf "$plugin_tar" -C full/plugins
           done
           find full/plugins -maxdepth 3 -type f | sort
-          tar -czf AniStudio-AMD-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
+          tar -czf AniStudio-AMD-Bundle-linux-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AniStudio-AMD-Bundle-windows-x64
-          path: AniStudio-AMD-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          name: AniStudio-AMD-Bundle-linux-x64
+          path: AniStudio-AMD-Bundle-linux-x64-${{ steps.ver.outputs.hash }}.tar.gz
           retention-days: 90
 
-  release-hip-windows:
-    needs: [build-plugin-hip-windows, bundle-amd-windows]
+  release-hip-linux:
+    needs: [build-plugin-hip-linux, bundle-amd-linux]
     runs-on: ubuntu-latest
 
     steps:
@@ -291,12 +273,12 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: Plugin-windows-x64-HIPBLAS
+          name: Plugin-linux-x64-HIPBLAS
           path: hip-plugin
 
       - uses: actions/download-artifact@v4
         with:
-          name: AniStudio-AMD-Bundle-windows-x64
+          name: AniStudio-AMD-Bundle-linux-x64
           path: amd-bundle
 
       - name: Verify artifacts

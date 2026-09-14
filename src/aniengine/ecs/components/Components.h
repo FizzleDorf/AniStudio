@@ -6,6 +6,6 @@
 #include "MeshComponent.hpp"
 #include "CameraComponent.hpp"
 #include "TransformComponent.hpp"
-#include "FilepathComponent.hpp"
+#include "FilePathComponent.hpp"
 #include "VideoAudioComponent.hpp"
 #include "PlaybackStateComponent.hpp"
