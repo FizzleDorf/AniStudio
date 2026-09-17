@@ -4,47 +4,23 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include "VideoUtils.hpp"
+#include "VideoMetadataUtils.hpp"
 
 namespace ECS {
 
-    SDCPPSystem::TaskData::TaskData(TaskData&& other) noexcept
-        : entityID(other.entityID), processing(other.processing), cancelled(other.cancelled),
-        taskType(other.taskType), metadata(std::move(other.metadata)),
-        fullPath(std::move(other.fullPath)), result(std::move(other.result)),
-        sdContext(other.sdContext), contextKey(std::move(other.contextKey)),
-        enqueueTime(other.enqueueTime), startTime(other.startTime), cancelTime(other.cancelTime) {
-        other.sdContext = nullptr;
-    }
-
-    SDCPPSystem::TaskData& SDCPPSystem::TaskData::operator=(TaskData&& other) noexcept {
-        if (this != &other) {
-            entityID = other.entityID;
-            processing = other.processing;
-            cancelled = other.cancelled;
-            taskType = other.taskType;
-            metadata = std::move(other.metadata);
-            fullPath = std::move(other.fullPath);
-            result = std::move(other.result);
-            sdContext = other.sdContext;
-            contextKey = std::move(other.contextKey);
-            enqueueTime = other.enqueueTime;
-            startTime = other.startTime;
-            cancelTime = other.cancelTime;
-            other.sdContext = nullptr;
-        }
-        return *this;
-    }
-
-    SDCPPSystem::TaskData::~TaskData() {
-        sdContext = nullptr;
-    }
-
+    // ---------------------------------------------------------------------
+    // TaskData
+    // ---------------------------------------------------------------------
     void SDCPPSystem::TaskData::Cancel() {
         cancelled = true;
         cancelTime = std::chrono::steady_clock::now();
-        if (sdContext) sd_cancel_generation(sdContext, SD_CANCEL_ALL);
+        if (ctxHandle && ctxHandle->get())
+            sd_cancel_generation(ctxHandle->get(), SD_CANCEL_ALL);
     }
 
+    // ---------------------------------------------------------------------
+    // Lifecycle
+    // ---------------------------------------------------------------------
     SDCPPSystem::SDCPPSystem(EntityManager& entityMgr)
         : BaseSystem(entityMgr), pauseWorker(false), hasActiveTask(false), clearRequested(false) {
         sysName = "SDCPPSystem";
@@ -67,9 +43,8 @@ namespace ECS {
             m_threadPool->terminateAll();
             m_threadPool.reset();
         }
-        for (auto& task : taskQueue) {
-            task.sdContext = nullptr;
-        }
+        std::lock_guard<std::mutex> lock(queueMutex);
+        taskQueue.clear();
     }
 
     void SDCPPSystem::TerminateImmediately() {
@@ -82,56 +57,139 @@ namespace ECS {
         if (m_threadPool) m_threadPool->terminateAll();
     }
 
+    void SDCPPSystem::Start() {
+        m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
+        m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
+        if (!m_threadPool)
+            std::cerr << "[SDCPPSystem] ThreadPoolSystem not available\n";
+        workerThread = std::thread([this]() { WorkerThread(); });
+    }
+
+    void SDCPPSystem::Destroy() {
+        Shutdown();
+        BaseSystem::Destroy();
+    }
+
+    // ---------------------------------------------------------------------
+    // Queue
+    // ---------------------------------------------------------------------
     void SDCPPSystem::QueueTask(EntityID entityID, TaskType taskType) {
         if (!mgr.IsEntityValid(entityID)) {
             std::cerr << "[QueueTask] Invalid entity\n";
             return;
         }
 
+        // Copy global SDCPP settings onto the task entity.
         auto settingsSys = mgr.GetSystem<SettingsSystem>();
         if (settingsSys) {
             EntityID settingsEntity = settingsSys->GetSettingsEntity();
-            if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<SDCPPSettingsComponent>(settingsEntity)) {
+            if (mgr.IsEntityValid(settingsEntity) &&
+                mgr.HasComponent<SDCPPSettingsComponent>(settingsEntity)) {
                 auto& globalSettings = mgr.GetComponent<SDCPPSettingsComponent>(settingsEntity);
-                if (!mgr.HasComponent<SDCPPSettingsComponent>(entityID)) {
+                if (!mgr.HasComponent<SDCPPSettingsComponent>(entityID))
                     mgr.AddComponent<SDCPPSettingsComponent>(entityID);
-                }
                 auto& taskSettings = mgr.GetComponent<SDCPPSettingsComponent>(entityID);
-                nlohmann::json globalData = globalSettings.Serialize();
-                taskSettings.Deserialize(globalData);
+                taskSettings.Deserialize(globalSettings.Serialize());
             }
         }
 
-        std::lock_guard<std::mutex> lock(queueMutex);
-        if (shuttingDown) return;
-
-        TaskData taskData;
-        taskData.entityID = entityID;
-        taskData.processing = false;
-        taskData.cancelled = false;
-        taskData.taskType = taskType;
-        taskData.enqueueTime = std::chrono::steady_clock::now();
-
+        // Seed generation.
         if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
             taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
             if (mgr.HasComponent<SamplerComponent>(entityID)) {
                 auto& sampler = mgr.GetComponent<SamplerComponent>(entityID);
                 if (sampler.seed < 0) {
-                    sampler.seed = static_cast<int64_t>(STDDefaultRNG::generate_seed());
+                    sampler.seed = (int64_t)STDDefaultRNG::generate_seed();
                     if (sampler.seed == 0) sampler.seed = 31337;
                 }
             }
         }
 
+        TaskData task;
+        task.entityID = entityID;
+        task.taskType = taskType;
+        task.enqueueTime = std::chrono::steady_clock::now();
+        task.genRes = std::make_shared<SDCPP::ResourceManager>();
+
+        // Fill per-task params into genRes.
+        switch (taskType) {
+        case TaskType::Inference:
+        case TaskType::Img2Img:
+        case TaskType::Edit:
+            SDCPP::FillImageParams(mgr, entityID, task.imgParams, *task.genRes);
+            break;
+        case TaskType::Img2Vid:
+            SDCPP::FillVideoParams(mgr, entityID, task.vidParams, *task.genRes);
+            break;
+        case TaskType::Upscaling:
+        case TaskType::Conversion:
+            break;
+        }
+
+        // Metadata for writing at the end.
         try {
-            taskData.metadata = mgr.SerializeEntity(entityID);
+            task.metadataForWrite = mgr.SerializeEntity(entityID);
         }
         catch (...) {
-            std::cerr << "Serialization failed\n";
+            std::cerr << "[QueueTask] Serialization failed\n";
             return;
         }
 
-        taskQueue.push_back(std::move(taskData));
+        // ---- Context acquisition -------------------------------------------------
+        // ctx params are built in a LOCAL ResourceManager. On a hit, the cache
+        // hands back a shared_ptr to the entry's manager. On a miss, ownership
+        // moves into the new entry. Either way, the handle keeps that manager
+        // alive for the task's lifetime, so nothing outside the cache entry
+        // ever points at strings the entry might free.
+        if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
+            taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
+            if (!m_cacheSystem) m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
+            if (!m_cacheSystem) {
+                std::cerr << "[QueueTask] ModelCacheSystem not available\n";
+                return;
+            }
+
+            auto localCtxRes = std::make_shared<SDCPP::ResourceManager>();
+            sd_ctx_params_t localCtxParams{};
+            SDCPP::FillContextParams(mgr, entityID, localCtxParams, *localCtxRes);
+
+            auto handle = m_cacheSystem->acquireOrCreateContext(localCtxParams, localCtxRes);
+            if (!handle) {
+                std::cerr << "[QueueTask] Failed to acquire context: "
+                    << m_cacheSystem->getLastError() << "\n";
+                return;
+            }
+            task.ctxHandle = std::make_shared<SDCPP::SDContextHandle>(std::move(*handle));
+        }
+        else if (taskType == TaskType::Upscaling) {
+            if (!m_cacheSystem) m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
+            if (!m_cacheSystem) {
+                std::cerr << "[QueueTask] ModelCacheSystem not available\n";
+                return;
+            }
+
+            auto localCtxRes = std::make_shared<SDCPP::ResourceManager>();
+            sd_ctx_params_t localCtxParams{};
+            SDCPP::FillContextParams(mgr, entityID, localCtxParams, *localCtxRes);
+
+            auto handle = m_cacheSystem->acquireOrCreateUpscaler(localCtxParams, localCtxRes);
+            if (!handle) {
+                std::cerr << "[QueueTask] Failed to acquire upscaler: "
+                    << m_cacheSystem->getLastError() << "\n";
+                return;
+            }
+            task.upscalerHandle = std::make_shared<SDCPP::UpscalerHandle>(std::move(*handle));
+        }
+        else if (taskType == TaskType::Conversion) {
+            // Conversion doesn't need a cache entry. Build the params into a
+            // ResourceManager that lives with the task, and keep a reference
+            // to it via genRes so the strings outlive the task.
+            SDCPP::FillContextParams(mgr, entityID, task.convParams, *task.genRes);
+        }
+
+        std::lock_guard<std::mutex> lock(queueMutex);
+        if (shuttingDown) return;
+        taskQueue.push_back(std::move(task));
     }
 
     void SDCPPSystem::Update(float deltaT) {
@@ -140,17 +198,17 @@ namespace ECS {
             HandleClearRequest();
             clearRequested = false;
         }
-
         ProcessQueues();
-
         CheckTaskCompletion();
     }
 
+    // ---------------------------------------------------------------------
+    // Queue manipulation
+    // ---------------------------------------------------------------------
     void SDCPPSystem::RemoveFromQueue(size_t index) {
         std::lock_guard<std::mutex> lock(queueMutex);
-        if (index < taskQueue.size() && !taskQueue[index].processing) {
+        if (index < taskQueue.size() && !taskQueue[index].processing)
             taskQueue.erase(taskQueue.begin() + index);
-        }
     }
 
     void SDCPPSystem::MoveInQueue(size_t fromIndex, size_t toIndex) {
@@ -166,35 +224,25 @@ namespace ECS {
         std::lock_guard<std::mutex> lock(queueMutex);
         std::vector<QueueItem> result;
         result.reserve(taskQueue.size());
-        for (const auto& task : taskQueue) {
-            QueueItem item;
-            item.entityID = task.entityID;
-            item.processing = task.processing;
-            item.taskType = task.taskType;
-            result.push_back(item);
+        for (const auto& t : taskQueue) {
+            QueueItem q;
+            q.entityID = t.entityID;
+            q.processing = t.processing;
+            q.taskType = t.taskType;
+            result.push_back(q);
         }
         return result;
     }
 
     void SDCPPSystem::StopCurrentTask() {
         std::lock_guard<std::mutex> lock(queueMutex);
-        for (auto& task : taskQueue) {
-            if (task.processing) {
-                task.Cancel();
-                break;
-            }
-        }
+        for (auto& t : taskQueue) if (t.processing) { t.Cancel(); break; }
         pauseWorker = true;
     }
 
     void SDCPPSystem::CancelCurrentTask() {
         std::lock_guard<std::mutex> lock(queueMutex);
-        for (auto& task : taskQueue) {
-            if (task.processing) {
-                task.Cancel();
-                break;
-            }
-        }
+        for (auto& t : taskQueue) if (t.processing) { t.Cancel(); break; }
         pauseWorker = false;
     }
 
@@ -202,72 +250,38 @@ namespace ECS {
         std::lock_guard<std::mutex> lock(queueMutex);
         taskQueue.erase(std::remove_if(taskQueue.begin(), taskQueue.end(),
             [](const TaskData& t) { return !t.processing; }), taskQueue.end());
-        if (taskQueue.empty()) {
-            hasActiveTask = false;
-        }
+        if (taskQueue.empty()) hasActiveTask = false;
     }
 
     void SDCPPSystem::ClearAllTasks() {
         std::lock_guard<std::mutex> lock(queueMutex);
-        for (auto& task : taskQueue) {
-            if (task.processing) {
-                task.Cancel();
-            }
-        }
+        for (auto& t : taskQueue) if (t.processing) t.Cancel();
         taskQueue.clear();
         hasActiveTask = false;
         clearRequested = false;
     }
 
-    void SDCPPSystem::PauseWorker() {
-        std::lock_guard<std::mutex> lock(queueMutex);
-        pauseWorker = true;
-    }
+    void SDCPPSystem::PauseWorker() { std::lock_guard<std::mutex> l(queueMutex); pauseWorker = true; }
+    void SDCPPSystem::ResumeWorker() { std::lock_guard<std::mutex> l(queueMutex); pauseWorker = false; }
+    bool SDCPPSystem::IsPaused() const { std::lock_guard<std::mutex> l(queueMutex); return pauseWorker; }
 
-    void SDCPPSystem::ResumeWorker() {
-        std::lock_guard<std::mutex> lock(queueMutex);
-        pauseWorker = false;
-    }
-
-    bool SDCPPSystem::IsPaused() const {
-        std::lock_guard<std::mutex> lock(queueMutex);
-        return pauseWorker;
-    }
-
+    // ---------------------------------------------------------------------
+    // Introspection
+    // ---------------------------------------------------------------------
     size_t SDCPPSystem::GetNumThreads() const {
         return m_threadPool ? m_threadPool->getDiffusionPool().size() : 0;
     }
-
     size_t SDCPPSystem::GetQueuedTaskCount() const {
         return m_threadPool ? m_threadPool->getDiffusionPool().queueSize() : 0;
     }
-
     size_t SDCPPSystem::GetActiveTaskCount() const {
         return m_threadPool ? m_threadPool->getDiffusionPool().activeCount() : 0;
     }
-
     bool SDCPPSystem::HasActiveTask() const {
-        std::lock_guard<std::mutex> lock(queueMutex);
-        return hasActiveTask;
+        std::lock_guard<std::mutex> l(queueMutex); return hasActiveTask;
     }
-
     size_t SDCPPSystem::GetQueueSize() const {
-        std::lock_guard<std::mutex> lock(queueMutex);
-        return taskQueue.size();
-    }
-
-    void SDCPPSystem::Start() {
-        m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
-        m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
-        if (!m_threadPool) {
-            std::cerr << "[SDCPPSystem] ThreadPoolSystem not available\n";
-        }
-        workerThread = std::thread([this]() { WorkerThread(); });
-    }
-
-    void SDCPPSystem::Destroy() {
-        Shutdown();
-        BaseSystem::Destroy();
+        std::lock_guard<std::mutex> l(queueMutex); return taskQueue.size();
     }
 
     std::vector<std::pair<SDCPPSystem::TaskType, nlohmann::json>>
@@ -275,9 +289,8 @@ namespace ECS {
         std::lock_guard<std::mutex> lock(queueMutex);
         std::vector<std::pair<TaskType, nlohmann::json>> result;
         result.reserve(taskQueue.size());
-        for (const auto& task : taskQueue) {
-            result.emplace_back(task.taskType, task.metadata);
-        }
+        for (const auto& t : taskQueue)
+            result.emplace_back(t.taskType, t.metadataForWrite);
         return result;
     }
 
@@ -290,37 +303,85 @@ namespace ECS {
         QueueTask(newEntity, taskType);
     }
 
-    upscaler_ctx_t* SDCPPSystem::CreateUpscalerContext(const nlohmann::json& metadata) {
-        std::string esrganPath;
-        bool direct = false;
-        int n_threads = 4, tile_size = 64;
-        std::string backend, params_backend;
-        if (metadata.contains("components") && metadata["components"].is_array()) {
-            for (const auto& comp : metadata["components"]) {
-                if (comp.contains("Esrgan")) {
-                    auto esrgan = comp["Esrgan"];
-                    if (esrgan.contains("modelPath") && !esrgan["modelPath"].is_null())
-                        esrganPath = esrgan["modelPath"].get<std::string>();
-                    if (esrgan.contains("direct")) direct = esrgan["direct"].get<bool>();
-                    if (esrgan.contains("n_threads")) n_threads = esrgan["n_threads"].get<int>();
-                    if (esrgan.contains("tile_size")) tile_size = esrgan["tile_size"].get<int>();
-                    if (esrgan.contains("backend") && !esrgan["backend"].is_null())
-                        backend = esrgan["backend"].get<std::string>();
-                    if (esrgan.contains("params_backend") && !esrgan["params_backend"].is_null())
-                        params_backend = esrgan["params_backend"].get<std::string>();
-                }
-                if (comp.contains("Sampler")) {
-                    auto sampler = comp["Sampler"];
-                    if (sampler.contains("n_threads")) n_threads = sampler["n_threads"].get<int>();
-                }
+    // ---------------------------------------------------------------------
+    // Path resolution
+    // ---------------------------------------------------------------------
+    std::string SDCPPSystem::ResolveOutputDirectory(const std::string& raw) {
+        std::string dir = raw;
+
+        // If the user gave us a full filename, take its parent.
+        if (!dir.empty() && std::filesystem::path(dir).has_extension())
+            dir = std::filesystem::path(dir).parent_path().string();
+
+        // If it's not absolute, it may be a FilePathSystem key.
+        if (!dir.empty() && !std::filesystem::path(dir).is_absolute() && m_filePathSystem) {
+            std::string resolved = m_filePathSystem->GetPath(dir);
+            if (!resolved.empty())
+                dir = resolved;
+        }
+
+        // Fall back to DefaultProject.
+        if (dir.empty() || !std::filesystem::path(dir).is_absolute()) {
+            if (m_filePathSystem) {
+                std::string def = m_filePathSystem->GetPath("DefaultProject");
+                if (!def.empty())
+                    dir = def;
             }
         }
-        if (esrganPath.empty()) return nullptr;
-        return new_upscaler_ctx(esrganPath.c_str(), direct, n_threads, tile_size,
-            backend.empty() ? nullptr : backend.c_str(),
-            params_backend.empty() ? nullptr : params_backend.c_str());
+
+        // Last resort: CWD.
+        if (dir.empty())
+            dir = std::filesystem::current_path().string();
+
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+
+        return dir;
     }
 
+    std::string SDCPPSystem::ResolveFullPathForTask(const TaskData& task) {
+        bool isVideo = IsVideoTask(task.taskType);
+
+        // Pick a base name + extension from whichever Output*Component exists.
+        // If neither exists, fall back to defaults rather than dropping the task.
+        std::string baseName = "AniStudio";
+        std::string extension = isVideo ? ".mp4" : ".png";
+        std::string rawDir;
+
+        if (isVideo && mgr.HasComponent<OutputVideoComponent>(task.entityID)) {
+            auto& output = mgr.GetComponent<OutputVideoComponent>(task.entityID);
+            if (!output.fileName.empty()) baseName = output.fileName;
+            extension = GetOutputExtension(task.taskType, task.entityID);
+            rawDir = output.filePath;
+        }
+        else if (!isVideo && mgr.HasComponent<OutputImageComponent>(task.entityID)) {
+            auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
+            if (!output.fileName.empty()) baseName = output.fileName;
+            extension = GetOutputExtension(task.taskType, task.entityID);
+            rawDir = output.filePath;
+        }
+        else {
+            std::cerr << "[SDCPPSystem] entity=" << task.entityID
+                << " missing Output*Component, using default output dir\n";
+        }
+
+        size_t lastDot = baseName.find_last_of('.');
+        if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
+        std::string fullFileName = baseName + extension;
+
+        std::string outputDir = ResolveOutputDirectory(rawDir);
+        std::string full = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
+
+        std::cerr << "[SDCPPSystem] entity=" << task.entityID
+            << " rawDir='" << rawDir
+            << "' dir='" << outputDir
+            << "' full='" << full << "'\n";
+        return full;
+    }
+
+    // ---------------------------------------------------------------------
+    // Load helpers
+    // ---------------------------------------------------------------------
     void SDCPPSystem::LoadImageViaImageSystem(EntityID targetEntity, const std::string& filePath) {
         if (auto imgSys = mgr.GetSystem<ImageSystem>()) {
             if (!mgr.HasComponent<ImageComponent>(targetEntity))
@@ -329,15 +390,22 @@ namespace ECS {
         }
     }
 
-    void SDCPPSystem::LoadVideoViaVideoSystem(const std::string& filePath) {
+    void SDCPPSystem::LoadVideoViaVideoSystem(EntityID targetEntity, const std::string& filePath) {
         if (auto vidSys = mgr.GetSystem<VideoSystem>()) {
-            EntityID videoEntity = mgr.AddNewEntity();
-            mgr.AddComponent<OutputVideoComponent>(videoEntity);
-            auto& vidComp = mgr.GetComponent<OutputVideoComponent>(videoEntity);
-            vidComp.filePath = filePath;
-            vidComp.fileName = std::filesystem::path(filePath).filename().string();
-            vidSys->SetVideo(videoEntity, filePath);
+            if (!mgr.HasComponent<VideoComponent>(targetEntity))
+                mgr.AddComponent<VideoComponent>(targetEntity);
+            auto& vc = mgr.GetComponent<VideoComponent>(targetEntity);
+            vc.filePath = filePath;
+            vc.fileName = std::filesystem::path(filePath).filename().string();
+            vidSys->SetVideo(targetEntity, filePath);
         }
+    }
+
+    EntityID SDCPPSystem::LoadVideoWithAudio(const std::string& filePath) {
+        if (auto vaSys = mgr.GetSystem<VideoAudioSystem>()) {
+            return vaSys->LoadVideoWithAudio(filePath);
+        }
+        return 0;
     }
 
     void SDCPPSystem::HandleClearRequest() {
@@ -345,167 +413,165 @@ namespace ECS {
         ClearQueuedTasks();
     }
 
-    bool SDCPPSystem::RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-        if (context) {
-            sd_cancel_generation(context, SD_CANCEL_RESET);
-        }
-        SDCPP::ResourceManager res;
-        sd_img_gen_params_t params;
-        sd_img_gen_params_init(&params);
-        if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
+    // ---------------------------------------------------------------------
+    // Static task runners
+    // ---------------------------------------------------------------------
+    bool SDCPPSystem::RunInference(const sd_img_gen_params_t& params,
+        const nlohmann::json& metadataForWrite,
+        const std::string& fullPath,
+        sd_ctx_t* context)
+    {
+        if (context) sd_cancel_generation(context, SD_CANCEL_RESET);
         sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
         if (ok && count > 0 && images && images[0].data) {
-            Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height, images[0].channel, images[0].data);
-            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadata, true, false);
+            Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height,
+                images[0].channel, images[0].data);
+            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadataForWrite, true, false);
             free_sd_images(images, count);
-            return true;
+            return std::filesystem::exists(fullPath);
         }
         if (images) free_sd_images(images, count);
         return false;
     }
 
-    bool SDCPPSystem::RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-        if (context) {
-            sd_cancel_generation(context, SD_CANCEL_RESET);
-        }
-
-        SDCPP::ResourceManager res;
-        sd_img_gen_params_t params;
-        sd_img_gen_params_init(&params);
-        if (!SDCPP::parseImageGenParams(metadata, params, res)) return false;
-        sd_image_t* images = nullptr;
-        int count = 0;
-        bool ok = generate_image(context, &params, &images, &count);
-        if (ok && count > 0 && images && images[0].data) {
-            Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height, images[0].channel, images[0].data);
-            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadata, true, false);
-            free_sd_images(images, count);
-            return true;
-        }
-        if (images) free_sd_images(images, count);
-        return false;
+    bool SDCPPSystem::RunImg2Img(const sd_img_gen_params_t& params,
+        const nlohmann::json& metadataForWrite,
+        const std::string& fullPath,
+        sd_ctx_t* context) {
+        return RunInference(params, metadataForWrite, fullPath, context);
     }
 
-    bool SDCPPSystem::RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-        if (context) {
-            sd_cancel_generation(context, SD_CANCEL_RESET);
-        }
+    bool SDCPPSystem::RunEdit(const sd_img_gen_params_t& params,
+        const nlohmann::json& metadataForWrite,
+        const std::string& fullPath,
+        sd_ctx_t* context) {
+        return RunInference(params, metadataForWrite, fullPath, context);
+    }
 
-        SDCPP::ResourceManager res;
-        sd_vid_gen_params_t params;
-        sd_vid_gen_params_init(&params);
-        if (!SDCPP::parseVideoGenParams(metadata, params, res)) return false;
+    bool SDCPPSystem::RunImg2Vid(const sd_vid_gen_params_t& params,
+        const nlohmann::json& metadataForWrite,
+        const std::string& fullPath,
+        sd_ctx_t* context)
+    {
+        if (context) sd_cancel_generation(context, SD_CANCEL_RESET);
+
         sd_image_t* frames = nullptr;
         int frameCount = 0;
         sd_audio_t* audio = nullptr;
-        bool ok = generate_video(context, &params, &frames, &frameCount, &audio);
+        int fps_out = params.fps;
+        bool ok = generate_video(context, &params, &frames, &frameCount, &audio, &fps_out);
 
-        if (ok && frameCount > 0 && frames) {
-            std::vector<Utils::VideoFrame> videoFrames;
-            videoFrames.reserve(frameCount);
-            for (int i = 0; i < frameCount; ++i) {
-                Utils::VideoFrame vf;
-                vf.width = frames[i].width;
-                vf.height = frames[i].height;
-                vf.channels = frames[i].channel;
-                vf.data = frames[i].data;
-                videoFrames.push_back(vf);
-            }
-
-            bool encoded = Utils::VideoUtils::EncodeFramesToVideo(videoFrames, fullPath, params.fps, metadata);
-            if (encoded) {
-                if (audio) free_sd_audio(audio);
-                free(frames);
-                return true;
-            }
+        if (!ok || frameCount <= 0 || !frames) {
+            if (frames) free(frames);
+            if (audio)  free_sd_audio(audio);
+            std::cerr << "[RunImg2Vid] generate_video failed\n";
+            return false;
         }
+
+        std::vector<Utils::VideoFrame> videoFrames;
+        videoFrames.reserve(frameCount);
+        for (int i = 0; i < frameCount; ++i) {
+            Utils::VideoFrame vf;
+            vf.width = frames[i].width;
+            vf.height = frames[i].height;
+            vf.channels = frames[i].channel;
+            vf.data = frames[i].data;
+            videoFrames.push_back(vf);
+        }
+
+        Utils::AudioData audioData;
+        bool haveAudio = false;
+        if (audio && audio->data && audio->sample_count > 0 && audio->channels > 0) {
+            audioData = Utils::AudioData::FromInterleavedFloat(
+                audio->data,
+                audio->sample_count,
+                static_cast<int>(audio->channels),
+                static_cast<int>(audio->sample_rate));
+            haveAudio = !audioData.pcmData.empty();
+
+            std::cerr << "[RunImg2Vid] audio: " << audioData.channels << "ch @ "
+                << audioData.sampleRate << "Hz, "
+                << audioData.duration << "s, "
+                << audioData.pcmData.size() << " floats\n";
+        }
+        else {
+            std::cerr << "[RunImg2Vid] no audio returned by generate_video\n";
+        }
+
+        int outFps = fps_out > 0 ? fps_out : params.fps;
+
+        bool encoded = Utils::VideoUtils::EncodeFramesToVideo(
+            videoFrames,
+            fullPath,
+            outFps,
+            metadataForWrite,
+            haveAudio ? &audioData : nullptr);
+
+        if (audio)  free_sd_audio(audio);
         if (frames) free(frames);
-        if (audio) free_sd_audio(audio);
-        return false;
-    }
 
-    bool SDCPPSystem::RunEdit(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context) {
-        return RunImg2Img(metadata, fullPath, context);
-    }
+        if (!encoded) {
+            std::cerr << "[RunImg2Vid] EncodeFramesToVideo failed for " << fullPath << "\n";
+            return false;
+        }
 
-    bool SDCPPSystem::RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, upscaler_ctx_t* upscaler) {
-        SDCPP::ResourceManager res;
-        sd_ctx_params_t ctxParams;
-        sd_ctx_params_init(&ctxParams);
-        if (!SDCPP::parseContextParams(metadata, ctxParams, res)) return false;
-        std::string esrganPath = ctxParams.control_net_path ? ctxParams.control_net_path : "";
-        if (esrganPath.empty()) return false;
-        int n_threads = ctxParams.n_threads > 0 ? ctxParams.n_threads : 4;
-        int tile_size = 64;
-        bool direct = false;
-        const char* backend = ctxParams.backend;
-        const char* paramsBackend = ctxParams.params_backend;
-        upscaler_ctx_t* ctx = new_upscaler_ctx(esrganPath.c_str(), direct, n_threads, tile_size, backend, paramsBackend);
-        if (!ctx) return false;
-        sd_image_t input = { 0,0,0,nullptr };
-        if (metadata.contains("components") && metadata["components"].is_array()) {
-            for (const auto& comp : metadata["components"]) {
-                if (comp.contains("InputImage") && comp["InputImage"].contains("filePath")) {
-                    std::string path = comp["InputImage"]["filePath"].get<std::string>();
-                    int w, h, c;
-                    unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, 0);
-                    if (data) { input.width = w; input.height = h; input.channel = c; input.data = data; }
-                    break;
-                }
+        if (!std::filesystem::exists(fullPath)) {
+            std::cerr << "[RunImg2Vid] encoder returned true but file missing: " << fullPath << "\n";
+            return false;
+        }
+
+        if (!metadataForWrite.is_null() && !metadataForWrite.empty()) {
+            if (!Utils::VideoMetadataUtils::WriteMetadataToVideo(fullPath, metadataForWrite, false)) {
+                std::cerr << "[RunImg2Vid] Warning: metadata rewrite failed\n";
             }
         }
-        if (!input.data) { free_upscaler_ctx(ctx); return false; }
-        uint32_t factor = 2;
-        if (metadata.contains("components")) {
-            for (const auto& comp : metadata["components"]) {
-                if (comp.contains("Esrgan") && comp["Esrgan"].contains("upscaleFactor")) {
-                    factor = comp["Esrgan"]["upscaleFactor"].get<uint32_t>();
-                    break;
-                }
-            }
-        }
+
+        std::cerr << "[RunImg2Vid] saved='" << fullPath
+            << "' frames=" << frameCount
+            << " hasAudio=" << haveAudio
+            << " fps=" << outFps
+            << " size=" << std::filesystem::file_size(fullPath) << "\n";
+        return true;
+    }
+
+    bool SDCPPSystem::RunUpscaling(const nlohmann::json& metadataForWrite,
+        const std::string& fullPath,
+        upscaler_ctx_t* upscaler,
+        const std::string& inputImagePath,
+        uint32_t upscaleFactor)
+    {
+        if (!upscaler || inputImagePath.empty()) return false;
+
+        int w = 0, h = 0, c = 0;
+        unsigned char* data = stbi_load(inputImagePath.c_str(), &w, &h, &c, 0);
+        if (!data) return false;
+
+        sd_image_t input{ (uint32_t)w, (uint32_t)h, (uint32_t)c, data };
         sd_image_t* out = nullptr;
         int count = 0;
-        bool ok = upscale(ctx, input, factor, &out, &count);
+        bool ok = upscale(upscaler, input, upscaleFactor, &out, &count);
+        stbi_image_free(data);
+
         if (ok && count > 0 && out && out[0].data) {
-            Utils::ImageUtils::SaveImage(fullPath, out[0].width, out[0].height, out[0].channel, out[0].data);
-            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadata, true, false);
+            Utils::ImageUtils::SaveImage(fullPath, out[0].width, out[0].height,
+                out[0].channel, out[0].data);
+            Utils::ImageUtils::WriteMetadataToImage(fullPath, metadataForWrite, true, false);
             free_sd_images(out, count);
-            stbi_image_free(input.data);
-            free_upscaler_ctx(ctx);
-            return true;
+            return std::filesystem::exists(fullPath);
         }
         if (out) free_sd_images(out, count);
-        stbi_image_free(input.data);
-        free_upscaler_ctx(ctx);
         return false;
     }
 
-    bool SDCPPSystem::RunConversion(const nlohmann::json& metadata) {
-
-        SDCPP::ResourceManager res;
-        sd_ctx_params_t ctxParams;
-        sd_ctx_params_init(&ctxParams);
-        if (!SDCPP::parseContextParams(metadata, ctxParams, res)) return false;
-        std::string input = ctxParams.model_path ? ctxParams.model_path : "";
-        std::string vae = ctxParams.vae_path ? ctxParams.vae_path : "";
-        std::string output = input;
-        if (!output.empty()) {
-            output = std::filesystem::path(output).stem().string() + "_converted.gguf";
-        }
-        enum sd_type_t type = ctxParams.wtype;
-        const char* rules = ctxParams.tensor_type_rules;
-        bool convertName = true;
-        if (metadata.contains("components")) {
-            for (const auto& comp : metadata["components"]) {
-                if (comp.contains("Conversion") && comp["Conversion"].contains("convertName")) {
-                    convertName = comp["Conversion"]["convertName"].get<bool>();
-                }
-            }
-        }
-        return convert(input.c_str(), vae.c_str(), output.c_str(), type, rules, convertName);
+    bool SDCPPSystem::RunConversion(const sd_ctx_params_t& ctx) {
+        std::string input = ctx.model_path ? ctx.model_path : "";
+        std::string vae = ctx.vae_path ? ctx.vae_path : "";
+        if (input.empty()) return false;
+        std::string output = std::filesystem::path(input).stem().string() + "_converted.gguf";
+        return convert(input.c_str(), vae.c_str(), output.c_str(),
+            ctx.wtype, ctx.tensor_type_rules, true);
     }
 
     bool SDCPPSystem::IsVideoTask(TaskType taskType) const {
@@ -515,56 +581,41 @@ namespace ECS {
     std::string SDCPPSystem::GetOutputExtension(TaskType taskType, EntityID entityID) const {
         if (IsVideoTask(taskType)) {
             if (mgr.IsEntityValid(entityID) && mgr.HasComponent<OutputVideoComponent>(entityID)) {
-                auto& outComp = mgr.GetComponent<OutputVideoComponent>(entityID);
-                if (!outComp.fileExtension.empty()) {
-                    std::string ext = outComp.fileExtension;
+                auto& out = mgr.GetComponent<OutputVideoComponent>(entityID);
+                if (!out.fileExtension.empty()) {
+                    std::string ext = out.fileExtension;
                     if (ext[0] != '.') ext = "." + ext;
                     return ext;
                 }
             }
             return ".mp4";
         }
-        else {
-            if (mgr.IsEntityValid(entityID) && mgr.HasComponent<OutputImageComponent>(entityID)) {
-                auto& outComp = mgr.GetComponent<OutputImageComponent>(entityID);
-                if (!outComp.fileExtension.empty()) {
-                    std::string ext = outComp.fileExtension;
-                    if (ext[0] != '.') ext = "." + ext;
-                    return ext;
-                }
-            }
-            return ".png";
-        }
-    }
-
-    int SDCPPSystem::CountPendingTasksForContext(const std::string& contextKey) {
-        int count = 0;
-        for (const auto& task : taskQueue) {
-            if (task.contextKey == contextKey && !task.processing) {
-                count++;
+        if (mgr.IsEntityValid(entityID) && mgr.HasComponent<OutputImageComponent>(entityID)) {
+            auto& out = mgr.GetComponent<OutputImageComponent>(entityID);
+            if (!out.fileExtension.empty()) {
+                std::string ext = out.fileExtension;
+                if (ext[0] != '.') ext = "." + ext;
+                return ext;
             }
         }
-        return count;
+        return ".png";
     }
 
+    // ---------------------------------------------------------------------
+    // Dispatch
+    // ---------------------------------------------------------------------
     void SDCPPSystem::ProcessQueues() {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (pauseWorker || shuttingDown) return;
         if (taskQueue.empty() || hasActiveTask) return;
+
         if (!m_threadPool) {
             m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
-            if (!m_threadPool) {
-                std::cerr << "[SDCPPSystem] ThreadPoolSystem not available!\n";
-                return;
-            }
+            if (!m_threadPool) { std::cerr << "[SDCPPSystem] ThreadPoolSystem missing!\n"; return; }
         }
-
         if (!m_cacheSystem) {
             m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
-            if (!m_cacheSystem) {
-                std::cerr << "[SDCPPSystem] ModelCacheSystem not available!\n";
-                return;
-            }
+            if (!m_cacheSystem) { std::cerr << "[SDCPPSystem] ModelCacheSystem missing!\n"; return; }
         }
 
         auto& diffusionPool = m_threadPool->getDiffusionPool();
@@ -574,148 +625,67 @@ namespace ECS {
             if (task.processing) continue;
 
             if (task.fullPath.empty()) {
-                bool isVideo = IsVideoTask(task.taskType);
-                if (isVideo && mgr.HasComponent<OutputVideoComponent>(task.entityID)) {
-                    auto& output = mgr.GetComponent<OutputVideoComponent>(task.entityID);
-                    std::string baseName = output.fileName;
-                    std::string extension = GetOutputExtension(task.taskType, task.entityID);
-                    size_t lastDot = baseName.find_last_of('.');
-                    if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
-                    std::string fullFileName = baseName + extension;
-                    std::string outputDir = output.filePath;
-                    if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension())
-                        outputDir = std::filesystem::path(outputDir).parent_path().string();
-                    if (outputDir.empty()) {
-                        if (m_filePathSystem) {
-                            outputDir = m_filePathSystem->GetPath("DefaultProject");
-                        }
-                        if (outputDir.empty()) {
-                            outputDir = std::filesystem::current_path().string();
-                        }
-                    }
-                    task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
-                }
-                else if (!isVideo && mgr.HasComponent<OutputImageComponent>(task.entityID)) {
-                    auto& output = mgr.GetComponent<OutputImageComponent>(task.entityID);
-                    std::string baseName = output.fileName;
-                    std::string extension = GetOutputExtension(task.taskType, task.entityID);
-                    size_t lastDot = baseName.find_last_of('.');
-                    if (lastDot != std::string::npos) baseName = baseName.substr(0, lastDot);
-                    std::string fullFileName = baseName + extension;
-                    std::string outputDir = output.filePath;
-                    if (!outputDir.empty() && std::filesystem::path(outputDir).has_extension())
-                        outputDir = std::filesystem::path(outputDir).parent_path().string();
-                    if (outputDir.empty()) {
-                        if (m_filePathSystem) {
-                            outputDir = m_filePathSystem->GetPath("DefaultProject");
-                        }
-                        if (outputDir.empty()) {
-                            outputDir = std::filesystem::current_path().string();
-                        }
-                    }
-                    task.fullPath = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
-                }
-            }
-
-            if (task.taskType == TaskType::Inference || task.taskType == TaskType::Img2Img ||
-                task.taskType == TaskType::Img2Vid || task.taskType == TaskType::Edit) {
-
-                if (!task.sdContext) {
-                    std::string key = m_cacheSystem->computeKey(task.metadata);
-                    task.contextKey = key;
-
-                    int pendingCount = CountPendingTasksForContext(key);
-
-                    sd_ctx_t* ctx = m_cacheSystem->acquireContext(key);
-                    if (!ctx) {
-                        ctx = m_cacheSystem->getOrCreateContext(task.metadata);
-                        if (ctx) {
-                            ctx = m_cacheSystem->acquireContext(key);
-                        }
-                    }
-                    if (!ctx) {
-                        std::cerr << "[SDCPPSystem] Failed to create context for task, removing it\n";
-                        it = taskQueue.erase(it);
-                        continue;
-                    }
-                    task.sdContext = ctx;
-                }
-            }
-            else if (task.taskType == TaskType::Upscaling) {
-                if (!task.sdContext) {
-                    task.sdContext = reinterpret_cast<sd_ctx_t*>(CreateUpscalerContext(task.metadata));
-                    if (!task.sdContext) {
-                        std::cerr << "[SDCPPSystem] Failed to create upscaler context, removing task\n";
-                        it = taskQueue.erase(it);
-                        continue;
-                    }
+                task.fullPath = ResolveFullPathForTask(task);
+                if (task.fullPath.empty()) {
+                    std::cerr << "[SDCPPSystem] Cannot resolve output path for entity "
+                        << task.entityID << ", removing task\n";
+                    it = taskQueue.erase(it);
+                    continue;
                 }
             }
 
             try {
                 switch (task.taskType) {
-                case TaskType::Inference: {
-                    nlohmann::json metadata = task.metadata;
-                    std::string fullPath = task.fullPath;
-                    sd_ctx_t* sdContext = task.sdContext;
+                case TaskType::Inference:
+                case TaskType::Img2Img:
+                case TaskType::Edit: {
+                    auto params = task.imgParams;
+                    auto meta = task.metadataForWrite;
+                    auto path = task.fullPath;
+                    auto handle = task.ctxHandle;
+                    auto genRes = task.genRes;
                     task.result = diffusionPool.submit(
-                        [metadata, fullPath, sdContext]() -> bool {
-                            return RunInference(metadata, fullPath, sdContext);
-                        }
-                    );
-                    break;
-                }
-                case TaskType::Conversion: {
-                    nlohmann::json metadata = task.metadata;
-                    task.result = diffusionPool.submit(
-                        [metadata]() -> bool {
-                            return RunConversion(metadata);
-                        }
-                    );
-                    break;
-                }
-                case TaskType::Img2Img: {
-                    nlohmann::json metadata = task.metadata;
-                    std::string fullPath = task.fullPath;
-                    sd_ctx_t* sdContext = task.sdContext;
-                    task.result = diffusionPool.submit(
-                        [metadata, fullPath, sdContext]() -> bool {
-                            return RunImg2Img(metadata, fullPath, sdContext);
-                        }
-                    );
+                        [params, meta, path, handle, genRes]() -> bool {
+                            return RunInference(params, meta, path, handle->get());
+                        });
                     break;
                 }
                 case TaskType::Img2Vid: {
-                    nlohmann::json metadata = task.metadata;
-                    std::string fullPath = task.fullPath;
-                    sd_ctx_t* sdContext = task.sdContext;
+                    auto params = task.vidParams;
+                    auto meta = task.metadataForWrite;
+                    auto path = task.fullPath;
+                    auto handle = task.ctxHandle;
+                    auto genRes = task.genRes;
                     task.result = diffusionPool.submit(
-                        [metadata, fullPath, sdContext]() -> bool {
-                            return RunImg2Vid(metadata, fullPath, sdContext);
-                        }
-                    );
-                    break;
-                }
-                case TaskType::Edit: {
-                    nlohmann::json metadata = task.metadata;
-                    std::string fullPath = task.fullPath;
-                    sd_ctx_t* sdContext = task.sdContext;
-                    task.result = diffusionPool.submit(
-                        [metadata, fullPath, sdContext]() -> bool {
-                            return RunEdit(metadata, fullPath, sdContext);
-                        }
-                    );
+                        [params, meta, path, handle, genRes]() -> bool {
+                            return RunImg2Vid(params, meta, path, handle->get());
+                        });
                     break;
                 }
                 case TaskType::Upscaling: {
-                    nlohmann::json metadata = task.metadata;
-                    std::string fullPath = task.fullPath;
-                    upscaler_ctx_t* sdContext = reinterpret_cast<upscaler_ctx_t*>(task.sdContext);
+                    auto meta = task.metadataForWrite;
+                    auto path = task.fullPath;
+                    auto handle = task.upscalerHandle;
+                    auto genRes = task.genRes;
+                    std::string inputPath;
+                    if (mgr.HasComponent<InputImageComponent>(task.entityID))
+                        inputPath = mgr.GetComponent<InputImageComponent>(task.entityID).filePath;
+                    uint32_t factor = 2;
+                    if (mgr.HasComponent<EsrganComponent>(task.entityID))
+                        factor = mgr.GetComponent<EsrganComponent>(task.entityID).upscaleFactor;
                     task.result = diffusionPool.submit(
-                        [metadata, fullPath, sdContext]() -> bool {
-                            return RunUpscaling(metadata, fullPath, sdContext);
-                        }
-                    );
+                        [meta, path, handle, inputPath, factor, genRes]() -> bool {
+                            return RunUpscaling(meta, path, handle->get(), inputPath, factor);
+                        });
+                    break;
+                }
+                case TaskType::Conversion: {
+                    auto params = task.convParams;
+                    auto genRes = task.genRes;   // keeps the strings alive
+                    task.result = diffusionPool.submit(
+                        [params, genRes]() -> bool {
+                            return RunConversion(params);
+                        });
                     break;
                 }
                 default:
@@ -728,15 +698,15 @@ namespace ECS {
                 break;
             }
             catch (...) {
-                if (!task.contextKey.empty() && m_cacheSystem) {
-                    m_cacheSystem->releaseContext(task.contextKey);
-                }
                 it = taskQueue.erase(it);
                 break;
             }
         }
     }
 
+    // ---------------------------------------------------------------------
+    // Completion
+    // ---------------------------------------------------------------------
     void SDCPPSystem::CheckTaskCompletion() {
         if (taskQueue.empty()) return;
         std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;
@@ -744,102 +714,87 @@ namespace ECS {
             std::unique_lock<std::mutex> lock(queueMutex);
             const auto now = std::chrono::steady_clock::now();
             for (auto it = taskQueue.begin(); it != taskQueue.end();) {
-                if (it->processing) {
-                    if (it->cancelled) {
-                        // If cancelled, check if future is ready or if timeout exceeded
-                        bool shouldRemove = false;
-                        if (it->result.valid()) {
-                            auto status = it->result.wait_for(std::chrono::milliseconds(0));
-                            if (status == std::future_status::ready) {
-                                shouldRemove = true;
-                                try { it->result.get(); }
-                                catch (...) {}
-                            }
-                            else {
-                                // Check timeout (10 seconds)
-                                auto elapsed = now - it->cancelTime;
-                                if (elapsed > std::chrono::seconds(10)) {
-                                    std::cerr << "[SDCPPSystem] Cancelled task timed out, forcing removal and releasing context.\n";
-                                    shouldRemove = true;
-                                    // We cannot safely get the result, but we can discard it.
-                                    // The thread pool task will finish later, but we ignore it.
-                                }
-                            }
-                        }
-                        else {
-                            shouldRemove = true;
-                        }
+                if (!it->processing) { ++it; continue; }
 
-                        if (shouldRemove) {
-                            if (!it->contextKey.empty() && m_cacheSystem) {
-                                m_cacheSystem->releaseContext(it->contextKey);
-                            }
-                            it = taskQueue.erase(it);
-                            hasActiveTask = false;
-                            continue;
-                        }
-                        ++it;
-                        continue;
+                bool remove = false;
+                bool success = false;
+
+                if (it->cancelled) {
+                    if (it->result.valid() &&
+                        it->result.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                        try { it->result.get(); }
+                        catch (...) {}
+                        remove = true;
                     }
+                    else if (now - it->cancelTime > std::chrono::seconds(10)) {
+                        remove = true;
+                    }
+                }
+                else if (it->result.valid() &&
+                    it->result.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                    try { success = it->result.get(); }
+                    catch (...) {}
+                    remove = true;
+                }
 
-                    // Non-cancelled completion check
-                    if (it->result.valid()) {
-                        auto status = it->result.wait_for(std::chrono::milliseconds(0));
-                        if (status == std::future_status::ready) {
-                            EntityID entityID = it->entityID;
-                            std::string fullPath = it->fullPath;
-                            TaskType taskType = it->taskType;
-                            bool success = false;
-                            try {
-                                success = it->result.get();
-                            }
-                            catch (...) {}
-                            if (!shuttingDown && success && std::filesystem::exists(fullPath)) {
-                                completedTasks.emplace_back(fullPath, taskType, entityID);
-                            }
-                            else {
-                                if (std::filesystem::exists(fullPath))
-                                    std::filesystem::remove(fullPath);
-                            }
-                            if (!it->contextKey.empty() && m_cacheSystem) {
-                                m_cacheSystem->releaseContext(it->contextKey);
-                            }
-                            it = taskQueue.erase(it);
-                            hasActiveTask = false;
-                        }
-                        else {
-                            ++it;
-                        }
+                if (remove) {
+                    if (success && std::filesystem::exists(it->fullPath)) {
+                        completedTasks.emplace_back(it->fullPath, it->taskType, it->entityID);
                     }
                     else {
-                        ++it;
+                        std::cerr << "[SDCPPSystem] task finished but not delivering: success="
+                            << success << " exists="
+                            << std::filesystem::exists(it->fullPath)
+                            << " path='" << it->fullPath << "'\n";
+                        if (std::filesystem::exists(it->fullPath))
+                            std::filesystem::remove(it->fullPath);
                     }
+                    it = taskQueue.erase(it);
+                    hasActiveTask = false;
                 }
                 else {
                     ++it;
                 }
             }
-            if (taskQueue.empty() && !hasActiveTask) {
+            if (taskQueue.empty() && !hasActiveTask)
                 activeThreadId = std::thread::id{};
-            }
         }
         if (!shuttingDown) {
-            for (const auto& [path, type, id] : completedTasks) {
+            for (const auto& [path, type, id] : completedTasks)
                 ProcessCompletedTask(path, type, id);
-            }
         }
     }
 
-    void SDCPPSystem::ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID entityID) {
+    void SDCPPSystem::ProcessCompletedTask(const std::string& fullPath,
+        TaskType taskType,
+        EntityID entityID)
+    {
         try {
             if (shuttingDown || !std::filesystem::exists(fullPath)) return;
+
             if (IsVideoTask(taskType)) {
-                LoadVideoViaVideoSystem(fullPath);
+                EntityID vaEntity = LoadVideoWithAudio(fullPath);
+                if (vaEntity == 0) {
+                    std::cerr << "[SDCPPSystem] VideoAudioSystem missing or failed, "
+                        "falling back to silent VideoSystem load\n";
+                    if (mgr.IsEntityValid(entityID))
+                        LoadVideoViaVideoSystem(entityID, fullPath);
+                    else {
+                        EntityID newEntity = mgr.AddNewEntity();
+                        LoadVideoViaVideoSystem(newEntity, fullPath);
+                    }
+                }
+                return;
+            }
+
+            if (mgr.IsEntityValid(entityID)) {
+                LoadImageViaImageSystem(entityID, fullPath);
             }
             else {
-                EntityID newImageEntity = mgr.AddNewEntity();
-                mgr.AddComponent<ImageComponent>(newImageEntity);
-                LoadImageViaImageSystem(newImageEntity, fullPath);
+                std::cerr << "[SDCPPSystem] entity " << entityID
+                    << " invalid, loading result into a new entity\n";
+                EntityID newEntity = mgr.AddNewEntity();
+                LoadImageViaImageSystem(newEntity, fullPath);
             }
         }
         catch (...) {
@@ -849,9 +804,8 @@ namespace ECS {
     }
 
     void SDCPPSystem::WorkerThread() {
-        while (!shuttingDown) {
+        while (!shuttingDown)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
     }
 
-}
+} // namespace ECS

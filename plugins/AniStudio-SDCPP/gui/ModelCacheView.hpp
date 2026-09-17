@@ -2,6 +2,7 @@
 
 #include "BaseView.hpp"
 #include "ModelCacheSystem.hpp"
+#include "SDCPPParamFill.hpp"
 #include <imgui.h>
 #include <string>
 #include <vector>
@@ -14,11 +15,11 @@ namespace GUI {
         ModelCacheView(ECS::EntityManager& m_entityManager, ViewManager& vm)
             : BaseView(m_entityManager, vm)
             , selectedContextKey("")
+            , selectedUpscalerKey("")
             , showConfirmDialog(false)
             , confirmAction(ConfirmAction::None)
             , m_loadEntityId(0)
-            , showMemoryErrorDialog(false)
-            , memoryErrorRetryPending(false) {
+            , showDetailsDialog(false) {
             viewName = "Model Cache";
         }
 
@@ -26,19 +27,19 @@ namespace GUI {
             return R"({
             "displayName": "Model Cache",
             "category": "Diffusion",
-            "description": "View loaded model contexts and their memory usage."
+            "description": "View loaded model contexts and upscalers as a tree."
         })";
         }
 
         void Init() override {
-            RefreshContextList();
+            RefreshLists();
         }
 
         void Update(float deltaT) override {
             static float refreshTimer = 0.0f;
             refreshTimer += deltaT;
             if (refreshTimer >= 2.0f) {
-                RefreshContextList();
+                RefreshLists();
                 refreshTimer = 0.0f;
             }
         }
@@ -49,78 +50,70 @@ namespace GUI {
             }
             ImGui::End();
 
-            if (showConfirmDialog) {
-                RenderConfirmationDialog();
-            }
-
-            if (showMemoryErrorDialog) {
-                RenderMemoryErrorDialog();
-            }
+            if (showConfirmDialog) RenderConfirmationDialog();
+            if (showDetailsDialog) RenderDetailsDialog();
         }
 
         nlohmann::json Serialize() const override {
             auto j = BaseView::Serialize();
             j["selectedContextKey"] = selectedContextKey;
+            j["selectedUpscalerKey"] = selectedUpscalerKey;
             j["loadEntityId"] = m_loadEntityId;
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
             BaseView::Deserialize(j);
-            if (j.contains("selectedContextKey")) {
+            if (j.contains("selectedContextKey"))
                 selectedContextKey = j["selectedContextKey"].get<std::string>();
-            }
-            if (j.contains("loadEntityId")) {
+            if (j.contains("selectedUpscalerKey"))
+                selectedUpscalerKey = j["selectedUpscalerKey"].get<std::string>();
+            if (j.contains("loadEntityId"))
                 m_loadEntityId = j["loadEntityId"];
-            }
         }
 
     private:
         enum class ConfirmAction {
             None,
             ClearAll,
-            ClearSelected,
-            UnloadAll
+            UnloadAll,
+            UnloadSelectedContext,
+            UnloadSelectedUpscaler
         };
 
-        std::vector<ECS::ContextDetail> contextDetails;
+        std::vector<ECS::ContextDetail>  contextDetails;
+        std::vector<ECS::UpscalerDetail> upscalerDetails;
+
         std::string selectedContextKey;
+        std::string selectedUpscalerKey;
+
         bool showConfirmDialog;
         ConfirmAction confirmAction;
         std::string confirmMessage;
+
         ECS::EntityID m_loadEntityId = 0;
 
-        bool showMemoryErrorDialog = false;
-        std::string memoryErrorMessage;
-        bool memoryErrorRetryPending = false;
-        std::string memoryErrorFailedKey;
+        // Details dialog state
+        bool showDetailsDialog = false;
+        std::string detailsTitle;
+        std::vector<std::pair<std::string, std::string>> detailsRows;
 
-        void RefreshContextList() {
-            auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
-            if (cacheSystem) {
-                contextDetails = cacheSystem->GetContextDetails();
-                if (!selectedContextKey.empty()) {
-                    auto it = std::find_if(contextDetails.begin(), contextDetails.end(),
-                        [this](const ECS::ContextDetail& d) { return d.key == selectedContextKey; });
-                    if (it == contextDetails.end()) {
-                        selectedContextKey.clear();
-                    }
-                }
-            }
-        }
-
+        void RefreshLists();
         void RenderContent();
-        void RenderLoadFromEntity();
-        void RenderContextTable();
-        void RenderCacheActions();
+        void RenderTree();
+        void RenderContextLeaf(const ECS::ContextDetail& d);
+        void RenderUpscalerLeaf(const ECS::UpscalerDetail& d);
+        void RenderControls();
         void RenderConfirmationDialog();
-        void RenderMemoryErrorDialog();
-        void ShowMemoryErrorDialog(const std::string& error, const std::string& failedKey = "");
-        void ShowConfirmationDialog(ConfirmAction action, const std::string& message);
+        void RenderDetailsDialog();
+        void ShowConfirm(ConfirmAction a, const std::string& msg);
         void ExecuteConfirmedAction();
+        void ShowDetailsForContext(const std::string& key);
+        void ShowDetailsForUpscaler(const std::string& key);
+
         std::string ExtractDisplayName(const std::string& key) const;
         std::string FormatMemory(size_t bytes) const;
-        std::string GetModelType(const ECS::ContextDetail& detail) const;
+        std::string GetModelType(const ECS::ContextDetail& d) const;
         void HelpMarker(const char* desc);
     };
 

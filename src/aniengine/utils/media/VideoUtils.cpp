@@ -14,9 +14,11 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
-#include <libswscale/swscale.h>
 #include <libavutil/opt.h>
 #include <libavutil/dict.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/samplefmt.h>
+#include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
 }
 
@@ -274,6 +276,7 @@ namespace Utils {
             return false;
         }
 
+        // ---------------- Video encoder setup ----------------
         const AVCodec* videoCodec = avcodec_find_encoder(videoCodecId);
         if (!videoCodec) {
             if (videoCodecId == AV_CODEC_ID_VP9) {
@@ -347,71 +350,65 @@ namespace Utils {
         avcodec_parameters_from_context(videoStream->codecpar, videoCodecCtx);
         videoStream->time_base = videoCodecCtx->time_base;
 
+        // ---------------- Audio encoder setup ----------------
         AVStream* audioStream = nullptr;
         AVCodecContext* audioCodecCtx = nullptr;
         bool hasAudio = false;
 
-        if (audio && !audio->pcmData.empty()) {
+        if (audio && !audio->pcmData.empty() && audio->channels > 0 && audio->sampleRate > 0) {
             hasAudio = true;
             std::cout << "VideoUtils: Encoding with audio: " << audio->channels << "ch, "
                 << audio->sampleRate << "Hz, " << audio->duration << "s" << std::endl;
 
             const AVCodec* audioCodec = avcodec_find_encoder(audioCodecId);
-            if (!audioCodec) {
-                audioCodec = avcodec_find_encoder(AV_CODEC_ID_AAC);
-            }
-            if (!audioCodec) {
-                audioCodec = avcodec_find_encoder(AV_CODEC_ID_MP3);
-            }
+            if (!audioCodec) audioCodec = avcodec_find_encoder(AV_CODEC_ID_AAC);
+            if (!audioCodec) audioCodec = avcodec_find_encoder(AV_CODEC_ID_MP3);
+
             if (!audioCodec) {
                 std::cerr << "Could not find audio encoder" << std::endl;
                 hasAudio = false;
             }
             else {
                 audioStream = avformat_new_stream(fmtCtx, nullptr);
-                if (!audioStream) {
-                    std::cerr << "Failed to create audio stream" << std::endl;
+                audioCodecCtx = audioStream ? avcodec_alloc_context3(audioCodec) : nullptr;
+
+                if (!audioStream || !audioCodecCtx) {
+                    std::cerr << "Failed to allocate audio stream/codec" << std::endl;
+                    if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
                     hasAudio = false;
                 }
                 else {
-                    audioCodecCtx = avcodec_alloc_context3(audioCodec);
-                    if (!audioCodecCtx) {
-                        std::cerr << "Failed to allocate audio codec context" << std::endl;
+                    AVChannelLayout chLayout;
+                    av_channel_layout_default(&chLayout, audio->channels);
+                    av_channel_layout_copy(&audioCodecCtx->ch_layout, &chLayout);
+
+                    audioCodecCtx->sample_rate = targetAudioSampleRate;
+                    audioCodecCtx->sample_fmt =
+                        audioCodec->sample_fmts ? audioCodec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
+                    audioCodecCtx->bit_rate = 128000;
+                    audioCodecCtx->time_base = AVRational{ 1, audioCodecCtx->sample_rate };
+
+                    if (fmtCtx->oformat->flags & AVFMT_GLOBALHEADER)
+                        audioCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+
+                    if (avcodec_open2(audioCodecCtx, audioCodec, nullptr) < 0) {
+                        std::cerr << "Failed to open audio encoder" << std::endl;
+                        avcodec_free_context(&audioCodecCtx);
+                        audioCodecCtx = nullptr;
                         hasAudio = false;
                     }
                     else {
-                        // --- 8.x: set channel layout ---
-                        AVChannelLayout chLayout;
-                        av_channel_layout_default(&chLayout, audio->channels);
-                        av_channel_layout_copy(&audioCodecCtx->ch_layout, &chLayout);
-                        audioCodecCtx->sample_rate = targetAudioSampleRate;
-                        audioCodecCtx->sample_fmt = audioCodec->sample_fmts ? audioCodec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
-                        audioCodecCtx->bit_rate = 128000;
-                        audioCodecCtx->time_base = AVRational{ 1, audioCodecCtx->sample_rate };
-
-                        if (fmtCtx->oformat->flags & AVFMT_GLOBALHEADER) {
-                            audioCodecCtx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-                        }
-
-                        if (avcodec_open2(audioCodecCtx, audioCodec, nullptr) < 0) {
-                            std::cerr << "Failed to open audio encoder" << std::endl;
-                            avcodec_free_context(&audioCodecCtx);
-                            hasAudio = false;
-                        }
-                        else {
-                            avcodec_parameters_from_context(audioStream->codecpar, audioCodecCtx);
-                            audioStream->time_base = audioCodecCtx->time_base;
-                            std::cout << "Audio encoder opened: " << audioCodecCtx->sample_rate << "Hz" << std::endl;
-                        }
+                        avcodec_parameters_from_context(audioStream->codecpar, audioCodecCtx);
+                        audioStream->time_base = audioCodecCtx->time_base;
+                        std::cout << "Audio encoder opened: " << audioCodecCtx->sample_rate
+                            << "Hz, fmt=" << av_get_sample_fmt_name(audioCodecCtx->sample_fmt)
+                            << std::endl;
                     }
                 }
             }
-
-            if (!hasAudio) {
-                std::cerr << "Warning: Audio encoding failed, continuing without audio" << std::endl;
-            }
         }
 
+        // ---------------- Header metadata ----------------
         if (!metadata.is_null() && !metadata.empty()) {
             std::string jsonStr = metadata.dump();
             av_dict_set(&fmtCtx->metadata, "comment", jsonStr.c_str(), 0);
@@ -422,7 +419,7 @@ namespace Utils {
         if (ret < 0) {
             std::cerr << "Failed to open output file " << outputPath << std::endl;
             avcodec_free_context(&videoCodecCtx);
-            if (hasAudio) avcodec_free_context(&audioCodecCtx);
+            if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
             avformat_free_context(fmtCtx);
             return false;
         }
@@ -432,11 +429,12 @@ namespace Utils {
             std::cerr << "Failed to write header" << std::endl;
             avio_close(fmtCtx->pb);
             avcodec_free_context(&videoCodecCtx);
-            if (hasAudio) avcodec_free_context(&audioCodecCtx);
+            if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
             avformat_free_context(fmtCtx);
             return false;
         }
 
+        // ---------------- Video-only helper buffers ----------------
         SwsContext* swsCtx = sws_getContext(width, height, inputPixFmt,
             width, height, AV_PIX_FMT_YUV420P,
             SWS_BILINEAR, nullptr, nullptr, nullptr);
@@ -444,40 +442,9 @@ namespace Utils {
             std::cerr << "Failed to create sws context" << std::endl;
             avio_close(fmtCtx->pb);
             avcodec_free_context(&videoCodecCtx);
-            if (hasAudio) avcodec_free_context(&audioCodecCtx);
+            if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
             avformat_free_context(fmtCtx);
             return false;
-        }
-
-        SwrContext* audioSwrCtx = nullptr;
-        if (hasAudio && audioCodecCtx) {
-            if (audio->sampleRate != targetAudioSampleRate) {
-                audioSwrCtx = swr_alloc();
-                if (audioSwrCtx) {
-                    AVChannelLayout inLayout, outLayout;
-                    av_channel_layout_default(&inLayout, audio->channels);
-                    av_channel_layout_copy(&outLayout, &audioCodecCtx->ch_layout);
-                    av_opt_set_chlayout(audioSwrCtx, "in_chlayout", &inLayout, 0);
-                    av_opt_set_chlayout(audioSwrCtx, "out_chlayout", &outLayout, 0);
-                    av_opt_set_int(audioSwrCtx, "in_sample_rate", audio->sampleRate, 0);
-                    av_opt_set_int(audioSwrCtx, "out_sample_rate", audioCodecCtx->sample_rate, 0);
-                    av_opt_set_sample_fmt(audioSwrCtx, "in_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
-                    av_opt_set_sample_fmt(audioSwrCtx, "out_sample_fmt", audioCodecCtx->sample_fmt, 0);
-
-                    if (swr_init(audioSwrCtx) < 0) {
-                        std::cerr << "Failed to initialize audio resampler" << std::endl;
-                        swr_free(&audioSwrCtx);
-                        audioSwrCtx = nullptr;
-                    }
-                    else {
-                        std::cout << "Audio resampler initialized: " << audio->sampleRate << "Hz -> "
-                            << audioCodecCtx->sample_rate << "Hz" << std::endl;
-                    }
-                }
-            }
-            else {
-                std::cout << "No resampling needed, sample rates match." << std::endl;
-            }
         }
 
         AVFrame* frame = av_frame_alloc();
@@ -486,10 +453,9 @@ namespace Utils {
             av_frame_free(&frame);
             av_frame_free(&yuvFrame);
             sws_freeContext(swsCtx);
-            if (audioSwrCtx) swr_free(&audioSwrCtx);
             avio_close(fmtCtx->pb);
             avcodec_free_context(&videoCodecCtx);
-            if (hasAudio) avcodec_free_context(&audioCodecCtx);
+            if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
             avformat_free_context(fmtCtx);
             return false;
         }
@@ -506,7 +472,8 @@ namespace Utils {
         yuvFrame->format = AV_PIX_FMT_YUV420P;
         int yuvBufferSize = av_image_get_buffer_size(AV_PIX_FMT_YUV420P, width, height, 1);
         uint8_t* yuvBuffer = (uint8_t*)av_malloc(yuvBufferSize);
-        av_image_fill_arrays(yuvFrame->data, yuvFrame->linesize, yuvBuffer, AV_PIX_FMT_YUV420P, width, height, 1);
+        av_image_fill_arrays(yuvFrame->data, yuvFrame->linesize, yuvBuffer,
+            AV_PIX_FMT_YUV420P, width, height, 1);
 
         AVPacket* videoPkt = av_packet_alloc();
         AVPacket* audioPkt = av_packet_alloc();
@@ -516,249 +483,333 @@ namespace Utils {
             av_frame_free(&frame);
             av_frame_free(&yuvFrame);
             sws_freeContext(swsCtx);
-            if (audioSwrCtx) swr_free(&audioSwrCtx);
             avio_close(fmtCtx->pb);
             avcodec_free_context(&videoCodecCtx);
-            if (hasAudio) avcodec_free_context(&audioCodecCtx);
+            if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
             avformat_free_context(fmtCtx);
             return false;
         }
 
-        int64_t pts = 0;
-        size_t totalFrames = frames.size();
-        size_t progressStep = totalFrames / 10;
-        if (progressStep == 0) progressStep = 1;
-        std::cout << "Encoding " << totalFrames << " video frames..." << std::endl;
-
         bool encodingFailed = false;
 
-        for (size_t i = 0; i < frames.size(); ++i) {
-            const auto& vf = frames[i];
-            if (vf.width != width || vf.height != height || vf.channels != inputChannels || !vf.data) {
-                std::cerr << "Frame size mismatch or invalid data" << std::endl;
-                continue;
-            }
-            size_t dataSize = width * height * inputChannels;
-            memcpy(frame->data[0], vf.data, dataSize);
+        // ---------------- Video pass ----------------
+        {
+            int64_t pts = 0;
+            const size_t totalFrames = frames.size();
+            size_t progressStep = totalFrames / 10;
+            if (progressStep == 0) progressStep = 1;
+            std::cout << "Encoding " << totalFrames << " video frames..." << std::endl;
 
-            sws_scale(swsCtx, frame->data, frame->linesize, 0, height,
-                yuvFrame->data, yuvFrame->linesize);
+            for (size_t i = 0; i < frames.size(); ++i) {
+                const auto& vf = frames[i];
+                if (vf.width != width || vf.height != height ||
+                    vf.channels != inputChannels || !vf.data) {
+                    std::cerr << "Frame size mismatch or invalid data" << std::endl;
+                    continue;
+                }
+                size_t dataSize = (size_t)width * height * inputChannels;
+                memcpy(frame->data[0], vf.data, dataSize);
 
-            yuvFrame->pts = pts++;
+                sws_scale(swsCtx, frame->data, frame->linesize, 0, height,
+                    yuvFrame->data, yuvFrame->linesize);
 
-            ret = avcodec_send_frame(videoCodecCtx, yuvFrame);
-            if (ret < 0) {
-                std::cerr << "Error sending video frame: " << ret << std::endl;
-                encodingFailed = true;
-                break;
-            }
+                yuvFrame->pts = pts++;
 
-            while (ret >= 0) {
-                ret = avcodec_receive_packet(videoCodecCtx, videoPkt);
-                if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-                    break;
+                ret = avcodec_send_frame(videoCodecCtx, yuvFrame);
                 if (ret < 0) {
-                    std::cerr << "Error receiving video packet: " << ret << std::endl;
-                    encodingFailed = true;
-                    break;
-                }
-                av_packet_rescale_ts(videoPkt, videoCodecCtx->time_base, videoStream->time_base);
-                videoPkt->stream_index = videoStream->index;
-                ret = av_interleaved_write_frame(fmtCtx, videoPkt);
-                if (ret < 0) {
-                    std::cerr << "Error writing video frame: " << ret << std::endl;
-                    encodingFailed = true;
-                    break;
-                }
-                av_packet_unref(videoPkt);
-            }
-            if (encodingFailed) break;
-
-            if ((i + 1) % progressStep == 0 || i == totalFrames - 1) {
-                int percent = (int)((i + 1) * 100 / totalFrames);
-                std::cout << "Encoding video: " << percent << "% (" << (i + 1) << "/" << totalFrames << " frames)" << std::endl;
-            }
-        }
-
-        // --- Encode all audio samples separately (FFmpeg 8.x) ---
-        if (hasAudio && audioCodecCtx) {
-            std::cout << "Encoding audio..." << std::endl;
-            size_t audioSamplePos = 0;
-            size_t totalAudioSamples = audio->pcmData.size() / audio->channels;
-            int samplesPerFrame = audioCodecCtx->frame_size > 0 ? audioCodecCtx->frame_size : 1024;
-            int dstCh = audioCodecCtx->ch_layout.nb_channels;  // direct member
-
-            while (audioSamplePos < totalAudioSamples) {
-                size_t samplesToRead = std::min(static_cast<size_t>(samplesPerFrame),
-                    totalAudioSamples - audioSamplePos);
-
-                std::vector<float> audioSamples(samplesToRead * audio->channels);
-                std::memcpy(audioSamples.data(),
-                    audio->pcmData.data() + audioSamplePos * audio->channels,
-                    samplesToRead * audio->channels * sizeof(float));
-
-                AVFrame* audioFrame = av_frame_alloc();
-                if (!audioFrame) {
-                    std::cerr << "Failed to allocate audio frame" << std::endl;
-                    encodingFailed = true;
-                    break;
-                }
-
-                int convertedSamples = static_cast<int>(samplesToRead);
-                if (audioSwrCtx) {
-                    int maxOutSamples = static_cast<int>(samplesToRead * 2);
-                    int bytesPerSample = av_get_bytes_per_sample(audioCodecCtx->sample_fmt);
-                    uint8_t* outBuffer = (uint8_t*)av_malloc(maxOutSamples * dstCh * bytesPerSample);
-                    if (!outBuffer) {
-                        av_frame_free(&audioFrame);
-                        std::cerr << "Failed to allocate audio buffer" << std::endl;
-                        encodingFailed = true;
-                        break;
-                    }
-                    const uint8_t* inData = reinterpret_cast<const uint8_t*>(audioSamples.data());
-                    convertedSamples = swr_convert(audioSwrCtx, &outBuffer, maxOutSamples,
-                        &inData, static_cast<int>(samplesToRead));
-                    if (convertedSamples <= 0) {
-                        av_free(outBuffer);
-                        av_frame_free(&audioFrame);
-                        std::cerr << "Audio resampling failed" << std::endl;
-                        continue;
-                    }
-                    audioFrame->nb_samples = convertedSamples;
-                    audioFrame->format = audioCodecCtx->sample_fmt;
-                    av_channel_layout_copy(&audioFrame->ch_layout, &audioCodecCtx->ch_layout);
-                    audioFrame->sample_rate = audioCodecCtx->sample_rate;
-                    ret = av_frame_get_buffer(audioFrame, 0);
-                    if (ret < 0) {
-                        av_free(outBuffer);
-                        av_frame_free(&audioFrame);
-                        std::cerr << "Failed to get audio frame buffer" << std::endl;
-                        encodingFailed = true;
-                        break;
-                    }
-                    int bytesPerSampleOut = av_get_bytes_per_sample(audioCodecCtx->sample_fmt);
-                    for (int ch = 0; ch < dstCh; ch++) {
-                        std::memcpy(audioFrame->data[ch],
-                            outBuffer + ch * convertedSamples * bytesPerSampleOut,
-                            convertedSamples * bytesPerSampleOut);
-                    }
-                    av_free(outBuffer);
-                }
-                else {
-                    audioFrame->nb_samples = static_cast<int>(samplesToRead);
-                    audioFrame->format = audioCodecCtx->sample_fmt;
-                    av_channel_layout_copy(&audioFrame->ch_layout, &audioCodecCtx->ch_layout);
-                    audioFrame->sample_rate = audioCodecCtx->sample_rate;
-                    ret = av_frame_get_buffer(audioFrame, 0);
-                    if (ret < 0) {
-                        av_frame_free(&audioFrame);
-                        std::cerr << "Failed to get audio frame buffer" << std::endl;
-                        encodingFailed = true;
-                        break;
-                    }
-                    if (audioCodecCtx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
-                        for (int ch = 0; ch < dstCh; ch++) {
-                            float* out = (float*)audioFrame->data[ch];
-                            for (int j = 0; j < convertedSamples; j++) {
-                                out[j] = audioSamples[j * dstCh + ch];
-                            }
-                        }
-                    }
-                    else {
-                        std::memcpy(audioFrame->data[0], audioSamples.data(),
-                            convertedSamples * dstCh * sizeof(float));
-                    }
-                }
-
-                audioFrame->pts = static_cast<int64_t>(audioSamplePos);
-
-                ret = avcodec_send_frame(audioCodecCtx, audioFrame);
-                av_frame_free(&audioFrame);
-                if (ret < 0) {
-                    std::cerr << "Error sending audio frame: " << ret << std::endl;
+                    std::cerr << "Error sending video frame: " << ret << std::endl;
                     encodingFailed = true;
                     break;
                 }
 
                 while (ret >= 0) {
-                    ret = avcodec_receive_packet(audioCodecCtx, audioPkt);
-                    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
-                        break;
+                    ret = avcodec_receive_packet(videoCodecCtx, videoPkt);
+                    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
                     if (ret < 0) {
-                        std::cerr << "Error receiving audio packet: " << ret << std::endl;
+                        std::cerr << "Error receiving video packet: " << ret << std::endl;
+                        encodingFailed = true;
+                        break;
+                    }
+                    av_packet_rescale_ts(videoPkt, videoCodecCtx->time_base, videoStream->time_base);
+                    videoPkt->stream_index = videoStream->index;
+                    ret = av_interleaved_write_frame(fmtCtx, videoPkt);
+                    av_packet_unref(videoPkt);
+                    if (ret < 0) {
+                        std::cerr << "Error writing video frame: " << ret << std::endl;
+                        encodingFailed = true;
+                        break;
+                    }
+                }
+                if (encodingFailed) break;
+
+                if ((i + 1) % progressStep == 0 || i == totalFrames - 1) {
+                    int percent = (int)((i + 1) * 100 / totalFrames);
+                    std::cout << "Encoding video: " << percent << "% ("
+                        << (i + 1) << "/" << totalFrames << " frames)" << std::endl;
+                }
+            }
+        }
+
+        // ---------------- Audio pass ----------------
+        if (hasAudio && audioCodecCtx && !encodingFailed) {
+            std::cout << "Encoding audio..." << std::endl;
+
+            const int srcCh = audio->channels;
+            const int dstCh = audioCodecCtx->ch_layout.nb_channels;
+            const int dstRate = audioCodecCtx->sample_rate;
+            const size_t totalSrcFrames = audio->pcmData.size() / srcCh;
+
+            // Encoder frame size (AAC typically 1024).
+            const int dstFrameSize = audioCodecCtx->frame_size > 0
+                ? audioCodecCtx->frame_size
+                : 1024;
+
+            // Build a resampler when either rate or channel layout differs.
+            // Input is interleaved float (AV_SAMPLE_FMT_FLT, one plane).
+            SwrContext* swr = nullptr;
+            {
+                AVChannelLayout inLayout, outLayout;
+                av_channel_layout_default(&inLayout, srcCh);
+                av_channel_layout_copy(&outLayout, &audioCodecCtx->ch_layout);
+
+                swr_alloc_set_opts2(&swr,
+                    &outLayout,
+                    audioCodecCtx->sample_fmt,
+                    dstRate,
+                    &inLayout,
+                    AV_SAMPLE_FMT_FLT,
+                    audio->sampleRate,
+                    0, nullptr);
+
+                if (!swr || swr_init(swr) < 0) {
+                    std::cerr << "Failed to init audio resampler" << std::endl;
+                    if (swr) swr_free(&swr);
+                    swr = nullptr;
+                    encodingFailed = true;
+                }
+            }
+
+            int64_t audioPts = 0;
+            size_t srcFramePos = 0;
+
+            while (!encodingFailed && srcFramePos < totalSrcFrames) {
+                // Feed enough source samples to produce one encoder frame.
+                // With rate conversion, the required input count differs;
+                // let swr figure it out per iteration by handing it a chunk
+                // and letting it buffer. We always ask for dstFrameSize out.
+                size_t srcFramesThis = std::min<size_t>(dstFrameSize, totalSrcFrames - srcFramePos);
+
+                const uint8_t* inPlanes[1] = {
+                    reinterpret_cast<const uint8_t*>(
+                        audio->pcmData.data() + srcFramePos * srcCh)
+                };
+
+                AVFrame* audioFrame = av_frame_alloc();
+                if (!audioFrame) { encodingFailed = true; break; }
+
+                audioFrame->format = audioCodecCtx->sample_fmt;
+                audioFrame->sample_rate = dstRate;
+                av_channel_layout_copy(&audioFrame->ch_layout, &audioCodecCtx->ch_layout);
+                audioFrame->nb_samples = dstFrameSize;
+
+                ret = av_frame_get_buffer(audioFrame, 0);
+                if (ret < 0) {
+                    std::cerr << "av_frame_get_buffer(audio) failed: " << ret << std::endl;
+                    av_frame_free(&audioFrame);
+                    encodingFailed = true;
+                    break;
+                }
+
+                if (swr) {
+                    // audioFrame->data[] is already a correct plane pointer
+                    // array for the encoder sample format. swr_convert writes
+                    // directly into it, one plane per channel for planar
+                    // formats, packed for interleaved formats.
+                    int converted = swr_convert(swr,
+                        audioFrame->data,
+                        dstFrameSize,
+                        inPlanes,
+                        static_cast<int>(srcFramesThis));
+
+                    if (converted <= 0) {
+                        av_frame_free(&audioFrame);
+                        srcFramePos += srcFramesThis;
+                        continue;
+                    }
+                    audioFrame->nb_samples = converted;
+                }
+                else {
+                    // No resampler: same rate, same channel count as encoder.
+                    // Encoder wants FLTP (planar) most of the time.
+                    if (audioCodecCtx->sample_fmt == AV_SAMPLE_FMT_FLTP) {
+                        for (int ch = 0; ch < dstCh; ch++) {
+                            float* out = reinterpret_cast<float*>(audioFrame->data[ch]);
+                            for (size_t j = 0; j < srcFramesThis; j++) {
+                                out[j] = audio->pcmData[(srcFramePos + j) * srcCh + ch];
+                            }
+                        }
+                    }
+                    else if (audioCodecCtx->sample_fmt == AV_SAMPLE_FMT_FLT) {
+                        float* out = reinterpret_cast<float*>(audioFrame->data[0]);
+                        for (size_t j = 0; j < srcFramesThis; j++) {
+                            for (int ch = 0; ch < dstCh; ch++) {
+                                out[j * dstCh + ch] =
+                                    audio->pcmData[(srcFramePos + j) * srcCh + ch];
+                            }
+                        }
+                    }
+                    else if (audioCodecCtx->sample_fmt == AV_SAMPLE_FMT_S16) {
+                        int16_t* out = reinterpret_cast<int16_t*>(audioFrame->data[0]);
+                        for (size_t j = 0; j < srcFramesThis; j++) {
+                            for (int ch = 0; ch < dstCh; ch++) {
+                                float f = audio->pcmData[(srcFramePos + j) * srcCh + ch];
+                                if (f < -1.0f) f = -1.0f;
+                                if (f > 1.0f) f = 1.0f;
+                                out[j * dstCh + ch] = (int16_t)(f * 32767.0f);
+                            }
+                        }
+                    }
+                    else if (audioCodecCtx->sample_fmt == AV_SAMPLE_FMT_S16P) {
+                        for (int ch = 0; ch < dstCh; ch++) {
+                            int16_t* out = reinterpret_cast<int16_t*>(audioFrame->data[ch]);
+                            for (size_t j = 0; j < srcFramesThis; j++) {
+                                float f = audio->pcmData[(srcFramePos + j) * srcCh + ch];
+                                if (f < -1.0f) f = -1.0f;
+                                if (f > 1.0f) f = 1.0f;
+                                out[j] = (int16_t)(f * 32767.0f);
+                            }
+                        }
+                    }
+                    else {
+                        std::cerr << "Unsupported no-resampler sample fmt; forcing resampler path"
+                            << std::endl;
+                        encodingFailed = true;
+                        av_frame_free(&audioFrame);
+                        break;
+                    }
+                    audioFrame->nb_samples = static_cast<int>(srcFramesThis);
+                }
+
+                audioFrame->pts = audioPts;
+                audioPts += audioFrame->nb_samples;
+
+                ret = avcodec_send_frame(audioCodecCtx, audioFrame);
+                av_frame_free(&audioFrame);
+                if (ret < 0) {
+                    std::cerr << "avcodec_send_frame(audio) failed: " << ret << std::endl;
+                    encodingFailed = true;
+                    break;
+                }
+
+                while (true) {
+                    ret = avcodec_receive_packet(audioCodecCtx, audioPkt);
+                    if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
+                    if (ret < 0) {
+                        std::cerr << "avcodec_receive_packet(audio) failed: " << ret << std::endl;
                         encodingFailed = true;
                         break;
                     }
                     av_packet_rescale_ts(audioPkt, audioCodecCtx->time_base, audioStream->time_base);
                     audioPkt->stream_index = audioStream->index;
                     ret = av_interleaved_write_frame(fmtCtx, audioPkt);
+                    av_packet_unref(audioPkt);
                     if (ret < 0) {
-                        std::cerr << "Error writing audio frame: " << ret << std::endl;
+                        std::cerr << "av_interleaved_write_frame(audio) failed: " << ret << std::endl;
                         encodingFailed = true;
                         break;
                     }
-                    av_packet_unref(audioPkt);
                 }
-                if (encodingFailed) break;
 
-                audioSamplePos += samplesToRead;
+                srcFramePos += srcFramesThis;
             }
+
+            // Drain resampler
+            if (swr && !encodingFailed) {
+                for (;;) {
+                    AVFrame* audioFrame = av_frame_alloc();
+                    if (!audioFrame) break;
+                    audioFrame->format = audioCodecCtx->sample_fmt;
+                    audioFrame->sample_rate = dstRate;
+                    av_channel_layout_copy(&audioFrame->ch_layout, &audioCodecCtx->ch_layout);
+                    audioFrame->nb_samples = dstFrameSize;
+                    if (av_frame_get_buffer(audioFrame, 0) < 0) {
+                        av_frame_free(&audioFrame);
+                        break;
+                    }
+                    int converted = swr_convert(swr, audioFrame->data, dstFrameSize, nullptr, 0);
+                    if (converted <= 0) {
+                        av_frame_free(&audioFrame);
+                        break;
+                    }
+                    audioFrame->nb_samples = converted;
+                    audioFrame->pts = audioPts;
+                    audioPts += converted;
+
+                    if (avcodec_send_frame(audioCodecCtx, audioFrame) < 0) {
+                        av_frame_free(&audioFrame);
+                        break;
+                    }
+                    av_frame_free(&audioFrame);
+
+                    while (true) {
+                        int r = avcodec_receive_packet(audioCodecCtx, audioPkt);
+                        if (r == AVERROR(EAGAIN) || r == AVERROR_EOF) break;
+                        if (r < 0) { encodingFailed = true; break; }
+                        av_packet_rescale_ts(audioPkt, audioCodecCtx->time_base, audioStream->time_base);
+                        audioPkt->stream_index = audioStream->index;
+                        av_interleaved_write_frame(fmtCtx, audioPkt);
+                        av_packet_unref(audioPkt);
+                    }
+                }
+            }
+
+            if (swr) swr_free(&swr);
             std::cout << "Audio encoding complete." << std::endl;
         }
 
-        // Flush encoders
+        // ---------------- Flush video ----------------
         if (!encodingFailed) {
             avcodec_send_frame(videoCodecCtx, nullptr);
-            while (1) {
+            while (true) {
                 ret = avcodec_receive_packet(videoCodecCtx, videoPkt);
-                if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN))
-                    break;
-                if (ret < 0) {
-                    std::cerr << "Error flushing video: " << ret << std::endl;
-                    encodingFailed = true;
-                    break;
-                }
+                if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN)) break;
+                if (ret < 0) { encodingFailed = true; break; }
                 av_packet_rescale_ts(videoPkt, videoCodecCtx->time_base, videoStream->time_base);
                 videoPkt->stream_index = videoStream->index;
                 av_interleaved_write_frame(fmtCtx, videoPkt);
                 av_packet_unref(videoPkt);
             }
+        }
 
-            if (hasAudio && audioCodecCtx && !encodingFailed) {
-                avcodec_send_frame(audioCodecCtx, nullptr);
-                while (1) {
-                    ret = avcodec_receive_packet(audioCodecCtx, audioPkt);
-                    if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN))
-                        break;
-                    if (ret < 0) {
-                        std::cerr << "Error flushing audio: " << ret << std::endl;
-                        encodingFailed = true;
-                        break;
-                    }
-                    av_packet_rescale_ts(audioPkt, audioCodecCtx->time_base, audioStream->time_base);
-                    audioPkt->stream_index = audioStream->index;
-                    av_interleaved_write_frame(fmtCtx, audioPkt);
-                    av_packet_unref(audioPkt);
-                }
-            }
-
-            if (!encodingFailed) {
-                av_write_trailer(fmtCtx);
-                std::cout << "Encoding complete!" << std::endl;
+        // ---------------- Flush audio ----------------
+        if (hasAudio && audioCodecCtx && !encodingFailed) {
+            avcodec_send_frame(audioCodecCtx, nullptr);
+            while (true) {
+                ret = avcodec_receive_packet(audioCodecCtx, audioPkt);
+                if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN)) break;
+                if (ret < 0) { encodingFailed = true; break; }
+                av_packet_rescale_ts(audioPkt, audioCodecCtx->time_base, audioStream->time_base);
+                audioPkt->stream_index = audioStream->index;
+                av_interleaved_write_frame(fmtCtx, audioPkt);
+                av_packet_unref(audioPkt);
             }
         }
 
-        // Cleanup
+        if (!encodingFailed) {
+            av_write_trailer(fmtCtx);
+            std::cout << "Encoding complete!" << std::endl;
+        }
+
+        // ---------------- Cleanup ----------------
         av_packet_free(&videoPkt);
         av_packet_free(&audioPkt);
         av_frame_free(&frame);
         av_frame_free(&yuvFrame);
         sws_freeContext(swsCtx);
-        if (audioSwrCtx) swr_free(&audioSwrCtx);
         av_free(buffer);
         av_free(yuvBuffer);
         avcodec_free_context(&videoCodecCtx);
-        if (hasAudio) avcodec_free_context(&audioCodecCtx);
+        if (audioCodecCtx) avcodec_free_context(&audioCodecCtx);
         avio_close(fmtCtx->pb);
         avformat_free_context(fmtCtx);
 
@@ -795,17 +846,13 @@ namespace Utils {
         meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
         std::vector<std::string> stealthKeys = { "LSB", "Stealth", "Hidden", "steganography", "lsb" };
         for (const auto& key : stealthKeys) {
-            if (meta.contains(key)) {
-                return true;
-            }
+            if (meta.contains(key)) return true;
         }
         if (meta.contains("components") && meta["components"].is_array()) {
             for (const auto& comp : meta["components"]) {
                 if (comp.is_object()) {
                     for (const auto& key : stealthKeys) {
-                        if (comp.contains(key)) {
-                            return true;
-                        }
+                        if (comp.contains(key)) return true;
                     }
                 }
             }

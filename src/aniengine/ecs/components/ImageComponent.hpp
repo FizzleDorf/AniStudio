@@ -515,4 +515,83 @@ namespace ECS {
             if (componentData.contains("maskFilePath")) maskFilePath = componentData["maskFilePath"];
         }
     };
+
+    struct EndImageComponent : public ImageComponent {
+        EndImageComponent() {
+            fileName = "";
+            filePath = "";
+            width = 0;
+            height = 0;
+            channels = 0;
+        }
+
+        const char* GetCompName() const override { return "EndImage"; }
+        const char* GetCompCategory() const override { return "Image"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = {
+                {"title", "End Image"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "End Image File"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "file"},
+                            {"filters", ".png,.jpg,.jpeg,.bmp,.tga"},
+                            {"filterName", "Image Files"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Clear"},
+                            {"browseTooltip", "Browse for the end-frame image"}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "fileName", "width", "height", "channels"}}
+            };
+            return j;
+        }
+
+        EndImageComponent(const EndImageComponent& other) : ImageComponent(other) {}
+
+        EndImageComponent& operator=(const EndImageComponent& other) {
+            if (this != &other) ImageComponent::operator=(other);
+            return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"fileName", &fileName},
+                {"filePath", &filePath},
+                {"width", &width},
+                {"height", &height},
+                {"channels", &channels}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"fileName", fileName},
+                {"filePath", filePath},
+                {"width", width},
+                {"height", height},
+                {"channels", channels}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) componentData = j.at(key);
+            else componentData = j;
+
+            if (componentData.contains("fileName")) fileName = componentData["fileName"];
+            if (componentData.contains("filePath")) filePath = componentData["filePath"];
+            if (componentData.contains("width")) width = componentData["width"];
+            if (componentData.contains("height")) height = componentData["height"];
+            if (componentData.contains("channels")) channels = componentData["channels"];
+        }
+    };
 } // namespace ECS

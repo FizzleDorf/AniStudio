@@ -9,11 +9,10 @@
     "force_sdxl_vae_conv_scale": false,
     "log_level": 3,
     "lora_apply_mode": "LORA_APPLY_AUTO",
-    "max_vram": "18",
+    "max_vram": "0",
     "model_args": "",
     "params_backend": "--backend cuda0 --params-backend cpu",
     "rpc_servers": "",
     "split_mode": "",
-    "stream_layers": true,
     "vae_conv_direct": false
 }

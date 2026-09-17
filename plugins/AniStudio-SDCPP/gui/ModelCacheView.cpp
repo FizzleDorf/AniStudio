@@ -1,8 +1,35 @@
 #include "ModelCacheView.hpp"
 #include "ModelCacheSystem.hpp"
+#include "SDCPPParamFill.hpp"
 
 namespace GUI {
 
+    // =========================================================================
+    // Refresh
+    // =========================================================================
+    void ModelCacheView::RefreshLists() {
+        auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+        if (!cacheSystem) return;
+
+        contextDetails = cacheSystem->GetContextDetails();
+        upscalerDetails = cacheSystem->GetUpscalerDetails();
+
+        // Drop selections that no longer exist.
+        if (!selectedContextKey.empty()) {
+            auto it = std::find_if(contextDetails.begin(), contextDetails.end(),
+                [this](const ECS::ContextDetail& d) { return d.key == selectedContextKey; });
+            if (it == contextDetails.end()) selectedContextKey.clear();
+        }
+        if (!selectedUpscalerKey.empty()) {
+            auto it = std::find_if(upscalerDetails.begin(), upscalerDetails.end(),
+                [this](const ECS::UpscalerDetail& d) { return d.key == selectedUpscalerKey; });
+            if (it == upscalerDetails.end()) selectedUpscalerKey.clear();
+        }
+    }
+
+    // =========================================================================
+    // Layout
+    // =========================================================================
     void ModelCacheView::RenderContent() {
         auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
         if (!cacheSystem) {
@@ -10,153 +37,281 @@ namespace GUI {
             return;
         }
 
+        // Tree takes the top portion, controls below. Use a fixed split via
+        // BeginChild so the controls always sit at the bottom.
+        const float controlsHeight = 90.0f;
+        float treeHeight = ImGui::GetContentRegionAvail().y - controlsHeight;
+        if (treeHeight < 100.0f) treeHeight = 100.0f;
+
+        ImGui::BeginChild("##CacheTree", ImVec2(0, treeHeight), true);
+        RenderTree();
+        ImGui::EndChild();
+
         ImGui::Separator();
-        RenderLoadFromEntity();
-        ImGui::Separator();
-        RenderContextTable();
-        ImGui::Separator();
-        RenderCacheActions();
+        RenderControls();
     }
 
-    void ModelCacheView::RenderLoadFromEntity() {
+    // =========================================================================
+    // Tree
+    // =========================================================================
+    void ModelCacheView::RenderTree() {
+        size_t ctxMem = 0;
+        for (const auto& d : contextDetails) ctxMem += d.memoryBytes;
+        size_t upMem = 0;
+        for (const auto& d : upscalerDetails) upMem += d.memoryBytes;
+
+        ImGuiTreeNodeFlags groupFlags =
+            ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+
+        // ---- Generation Contexts ----
+        std::string ctxLabel = "Generation Contexts (" + std::to_string(contextDetails.size()) + ")";
+        if (ImGui::TreeNodeEx("##ctxGroup", groupFlags, "%s", ctxLabel.c_str())) {
+            if (contextDetails.empty()) {
+                ImGui::TextDisabled("  (none)");
+            }
+            else {
+                ImGui::TextDisabled("  Total memory: %s", FormatMemory(ctxMem).c_str());
+                for (const auto& d : contextDetails) RenderContextLeaf(d);
+            }
+            ImGui::TreePop();
+        }
+
+        ImGui::Spacing();
+
+        // ---- Upscalers ----
+        std::string upLabel = "Upscalers (" + std::to_string(upscalerDetails.size()) + ")";
+        if (ImGui::TreeNodeEx("##upGroup", groupFlags, "%s", upLabel.c_str())) {
+            if (upscalerDetails.empty()) {
+                ImGui::TextDisabled("  (none)");
+            }
+            else {
+                ImGui::TextDisabled("  Total memory: %s", FormatMemory(upMem).c_str());
+                for (const auto& d : upscalerDetails) RenderUpscalerLeaf(d);
+            }
+            ImGui::TreePop();
+        }
+    }
+
+    void ModelCacheView::RenderContextLeaf(const ECS::ContextDetail& d) {
+        ImGui::PushID(d.key.c_str());
+
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+            | ImGuiTreeNodeFlags_NoTreePushOnOpen
+            | ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (selectedContextKey == d.key) flags |= ImGuiTreeNodeFlags_Selected;
+
+        std::string label = ExtractDisplayName(d.key)
+            + "  [" + GetModelType(d) + "]"
+            + "  " + FormatMemory(d.memoryBytes);
+
+        bool opened = ImGui::TreeNodeEx("##leaf", flags, "%s", label.c_str());
+        (void)opened;
+
+        if (ImGui::IsItemClicked()) {
+            selectedContextKey = d.key;
+            selectedUpscalerKey.clear();
+        }
+
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Key: %s", d.key.c_str());
+            ImGui::Text("Type: %s", GetModelType(d).c_str());
+            ImGui::Text("Memory: %s", FormatMemory(d.memoryBytes).c_str());
+            if (d.activeCount > 0)
+                ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f),
+                    "Status: In Use (%d)", d.activeCount);
+            else
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Status: Loaded");
+            ImGui::EndTooltip();
+        }
+
+        // Right-click context menu
+        if (ImGui::BeginPopupContextItem("##ctxMenu")) {
+            selectedContextKey = d.key;
+            selectedUpscalerKey.clear();
+
+            if (ImGui::MenuItem("Reload", nullptr, false, d.activeCount == 0)) {
+                auto cache = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+                if (cache) cache->reloadModel(d.key);
+                RefreshLists();
+            }
+            if (ImGui::MenuItem("Unload", nullptr, false, d.activeCount == 0)) {
+                auto cache = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+                if (cache) cache->UnloadModel(d.key);
+                RefreshLists();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Copy Key")) {
+                ImGui::SetClipboardText(d.key.c_str());
+            }
+            if (ImGui::MenuItem("Details...")) {
+                ShowDetailsForContext(d.key);
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopID();
+    }
+
+    void ModelCacheView::RenderUpscalerLeaf(const ECS::UpscalerDetail& d) {
+        ImGui::PushID(d.key.c_str());
+
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_Leaf
+            | ImGuiTreeNodeFlags_NoTreePushOnOpen
+            | ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (selectedUpscalerKey == d.key) flags |= ImGuiTreeNodeFlags_Selected;
+
+        std::string label = ExtractDisplayName(d.key)
+            + "  " + FormatMemory(d.memoryBytes);
+
+        bool opened = ImGui::TreeNodeEx("##leaf", flags, "%s", label.c_str());
+        (void)opened;
+
+        if (ImGui::IsItemClicked()) {
+            selectedUpscalerKey = d.key;
+            selectedContextKey.clear();
+        }
+
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Key: %s", d.key.c_str());
+            ImGui::Text("Memory: %s", FormatMemory(d.memoryBytes).c_str());
+            if (d.activeCount > 0)
+                ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f),
+                    "Status: In Use (%d)", d.activeCount);
+            else
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Status: Loaded");
+            ImGui::EndTooltip();
+        }
+
+        if (ImGui::BeginPopupContextItem("##upMenu")) {
+            selectedUpscalerKey = d.key;
+            selectedContextKey.clear();
+
+            if (ImGui::MenuItem("Reload", nullptr, false, d.activeCount == 0)) {
+                auto cache = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+                if (cache) cache->reloadUpscaler(d.key);
+                RefreshLists();
+            }
+            if (ImGui::MenuItem("Unload", nullptr, false, d.activeCount == 0)) {
+                auto cache = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+                if (cache) cache->UnloadUpscaler(d.key);
+                RefreshLists();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Copy Key")) {
+                ImGui::SetClipboardText(d.key.c_str());
+            }
+            if (ImGui::MenuItem("Details...")) {
+                ShowDetailsForUpscaler(d.key);
+            }
+            ImGui::EndPopup();
+        }
+
+        ImGui::PopID();
+    }
+
+    // =========================================================================
+    // Controls
+    // =========================================================================
+    void ModelCacheView::RenderControls() {
+        auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+        if (!cacheSystem) return;
+
+        // ---- Row 1: Load from entity ----
         ImGui::Text("Load Model from Entity");
-        ImGui::InputInt("Entity ID", reinterpret_cast<int*>(&m_loadEntityId));
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::InputInt("##entityId", reinterpret_cast<int*>(&m_loadEntityId));
         ImGui::SameLine();
         if (ImGui::Button("Load")) {
             if (m_loadEntityId != 0 && m_entityManager.IsEntityValid(m_loadEntityId)) {
-                nlohmann::json metadata = m_entityManager.SerializeEntity(m_loadEntityId);
-                auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
-                if (cacheSystem) {
-                    bool ok = cacheSystem->loadModelFromMetadata(metadata);
-                    if (!ok) {
-                        std::string error = cacheSystem->getLastError();
-                        if (error.find("Insufficient") != std::string::npos) {
-                            ShowMemoryErrorDialog(error, cacheSystem->computeKey(metadata));
-                        }
-                        else {
-                            ImGui::OpenPopup("LoadError");
-                        }
-                    }
-                    RefreshContextList();
+                bool ok = SDCPP::PreloadEntity(m_entityManager, m_loadEntityId, *cacheSystem);
+                if (!ok) {
+                    ImGui::OpenPopup("LoadError");
                 }
+                RefreshLists();
             }
         }
         ImGui::SameLine();
-        HelpMarker("Enter the Entity ID of a Diffusion view or any entity with model components, then click Load.");
-    }
+        HelpMarker("Enter an Entity ID that has model components, then click Load to preload it into the cache.");
 
-    void ModelCacheView::RenderContextTable() {
-        auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
-        if (!cacheSystem) return;
-
-        if (contextDetails.empty()) {
-            ImGui::Text("No contexts currently loaded.");
-            return;
+        if (ImGui::BeginPopup("LoadError")) {
+            ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "Load failed");
+            ImGui::Separator();
+            ImGui::TextWrapped("%s", cacheSystem->getLastError().c_str());
+            ImGui::EndPopup();
         }
 
-        size_t totalMemory = 0;
-        int activeCount = 0;
-        for (const auto& d : contextDetails) {
-            totalMemory += d.memoryBytes;
-            if (d.activeCount > 0) activeCount++;
+        ImGui::Spacing();
+
+        // ---- Row 2: Actions ----
+        bool hasCtxSel = !selectedContextKey.empty();
+        bool hasUpSel = !selectedUpscalerKey.empty();
+        bool hasSel = hasCtxSel || hasUpSel;
+
+        if (!hasSel) ImGui::BeginDisabled();
+        if (ImGui::Button("Unload Selected")) {
+            ShowConfirm(hasCtxSel ? ConfirmAction::UnloadSelectedContext
+                : ConfirmAction::UnloadSelectedUpscaler,
+                "Unload the selected entry? If it is currently in use, "
+                "it will be marked for unload and freed when the last "
+                "handle releases.");
         }
-
-        ImGui::Text("Total Contexts: %zu, Active: %d, Total Memory: %s",
-            contextDetails.size(), activeCount, FormatMemory(totalMemory).c_str());
-
-        if (ImGui::BeginTable("ContextTable", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
-            ImGui::TableSetupColumn("Model", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Memory", ImGuiTableColumnFlags_WidthFixed, 100.0f);
-            ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, 80.0f);
-            ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-            ImGui::TableHeadersRow();
-
-            for (auto& detail : contextDetails) {
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn();
-
-                bool isSelected = (selectedContextKey == detail.key);
-                std::string displayName = ExtractDisplayName(detail.key);
-                if (ImGui::Selectable(displayName.c_str(), isSelected, ImGuiSelectableFlags_SpanAllColumns)) {
-                    selectedContextKey = detail.key;
-                }
-                if (ImGui::IsItemHovered()) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("Full key: %s", detail.key.c_str());
-                    ImGui::EndTooltip();
-                }
-
-                ImGui::TableNextColumn();
-                ImGui::Text("%s", GetModelType(detail).c_str());
-
-                ImGui::TableNextColumn();
-                ImGui::Text("%s", FormatMemory(detail.memoryBytes).c_str());
-
-                ImGui::TableNextColumn();
-                if (detail.activeCount > 0) {
-                    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "In Use (%d)", detail.activeCount);
-                }
-                else {
-                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Loaded");
-                }
-
-                ImGui::TableNextColumn();
-                if (ImGui::SmallButton(("Unload##" + detail.key).c_str())) {
-                    cacheSystem->UnloadModel(detail.key);
-                    RefreshContextList();
-                }
-                ImGui::SameLine();
-                if (ImGui::SmallButton(("Reload##" + detail.key).c_str())) {
-                    cacheSystem->reloadModel(detail.key);
-                    RefreshContextList();
-                }
-            }
-            ImGui::EndTable();
-        }
-    }
-
-    void ModelCacheView::RenderCacheActions() {
-        auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
-        if (!cacheSystem) return;
-
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Cache Actions");
-
-        if (ImGui::Button("Unload Selected Context")) {
-            if (!selectedContextKey.empty()) {
-                cacheSystem->UnloadModel(selectedContextKey);
-                RefreshContextList();
-                selectedContextKey.clear();
-            }
-        }
-        ImGui::SameLine(); HelpMarker("Unloads the selected context if not active.");
+        if (!hasSel) ImGui::EndDisabled();
+        ImGui::SameLine();
 
         if (ImGui::Button("Unload All Inactive")) {
-            ShowConfirmationDialog(ConfirmAction::UnloadAll,
-                "Are you sure you want to unload all inactive contexts?\n"
-                "Active contexts (in use) will be preserved.");
+            ShowConfirm(ConfirmAction::UnloadAll,
+                "Unload all inactive contexts and upscalers?\n"
+                "Entries currently in use will be preserved.");
         }
-        ImGui::SameLine(); HelpMarker("Unloads all contexts that are not currently in use.");
+        ImGui::SameLine();
 
         if (ImGui::Button("Force Unload All")) {
-            ShowConfirmationDialog(ConfirmAction::ClearAll,
-                "Are you sure you want to force unload ALL contexts?\n"
-                "This will remove all contexts, even those in use.\n"
+            ShowConfirm(ConfirmAction::ClearAll,
+                "Force unload ALL contexts and upscalers?\n"
+                "This includes entries currently in use.\n"
                 "Use with caution!");
         }
-        ImGui::SameLine(); HelpMarker("Forcefully unloads all contexts, regardless of active state.");
+        ImGui::SameLine();
 
-        if (ImGui::Button("Refresh List")) {
-            RefreshContextList();
+        if (ImGui::Button("Refresh")) {
+            RefreshLists();
         }
+        ImGui::SameLine();
+        HelpMarker("Refresh the cache list. Also refreshes automatically every 2s.");
+
+        // ---- Row 3: summary ----
+        size_t ctxMem = 0;
+        for (const auto& d : contextDetails) ctxMem += d.memoryBytes;
+        size_t upMem = 0;
+        for (const auto& d : upscalerDetails) upMem += d.memoryBytes;
+
+        int ctxActive = 0;
+        for (const auto& d : contextDetails) if (d.activeCount > 0) ctxActive++;
+
+        ImGui::Spacing();
+        ImGui::TextDisabled(
+            "Contexts: %zu (%d active, %s) | Upscalers: %zu (%s)",
+            contextDetails.size(), ctxActive, FormatMemory(ctxMem).c_str(),
+            upscalerDetails.size(), FormatMemory(upMem).c_str());
+    }
+
+    // =========================================================================
+    // Confirmation dialog
+    // =========================================================================
+    void ModelCacheView::ShowConfirm(ConfirmAction a, const std::string& msg) {
+        confirmAction = a;
+        confirmMessage = msg;
+        showConfirmDialog = true;
     }
 
     void ModelCacheView::RenderConfirmationDialog() {
-        if (!showConfirmDialog) return;
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(400, 0), ImGuiCond_Appearing);
-        if (ImGui::Begin("Confirm Action", &showConfirmDialog, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
+        ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_Appearing);
+        if (ImGui::Begin("Confirm Action", &showConfirmDialog,
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
             ImGui::TextWrapped("%s", confirmMessage.c_str());
             ImGui::Spacing();
             ImGui::Separator();
@@ -174,99 +329,139 @@ namespace GUI {
         }
     }
 
-    void ModelCacheView::RenderMemoryErrorDialog() {
-        if (!showMemoryErrorDialog) return;
+    void ModelCacheView::ExecuteConfirmedAction() {
+        auto cache = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+        if (!cache) return;
+
+        switch (confirmAction) {
+        case ConfirmAction::ClearAll:
+            cache->UnloadAllModels();
+            break;
+        case ConfirmAction::UnloadAll:
+            cache->UnloadInactiveModels();
+            break;
+        case ConfirmAction::UnloadSelectedContext:
+            if (!selectedContextKey.empty())
+                cache->UnloadModel(selectedContextKey);
+            break;
+        case ConfirmAction::UnloadSelectedUpscaler:
+            if (!selectedUpscalerKey.empty())
+                cache->UnloadUpscaler(selectedUpscalerKey);
+            break;
+        case ConfirmAction::None:
+        default:
+            break;
+        }
+        RefreshLists();
+    }
+
+    // =========================================================================
+    // Details dialog
+    // =========================================================================
+    void ModelCacheView::ShowDetailsForContext(const std::string& key) {
+        auto cache = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
+        if (!cache) return;
+
+        detailsTitle = "Context Details";
+        detailsRows.clear();
+        detailsRows.emplace_back("Key", key);
+
+        for (const auto& d : contextDetails) {
+            if (d.key == key) {
+                detailsRows.emplace_back("Display Name", d.displayName);
+                detailsRows.emplace_back("Model Type", d.modelType);
+                detailsRows.emplace_back("Memory", FormatMemory(d.memoryBytes));
+                detailsRows.emplace_back("Active Count", std::to_string(d.activeCount));
+                detailsRows.emplace_back("In Use", d.isInUse ? "yes" : "no");
+                break;
+            }
+        }
+
+        showDetailsDialog = true;
+    }
+
+    void ModelCacheView::ShowDetailsForUpscaler(const std::string& key) {
+        detailsTitle = "Upscaler Details";
+        detailsRows.clear();
+        detailsRows.emplace_back("Key", key);
+
+        for (const auto& d : upscalerDetails) {
+            if (d.key == key) {
+                detailsRows.emplace_back("Display Name", d.displayName);
+                detailsRows.emplace_back("Memory", FormatMemory(d.memoryBytes));
+                detailsRows.emplace_back("Active Count", std::to_string(d.activeCount));
+                detailsRows.emplace_back("In Use", d.isInUse ? "yes" : "no");
+                break;
+            }
+        }
+
+        showDetailsDialog = true;
+    }
+
+    void ModelCacheView::RenderDetailsDialog() {
         ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(450, 0), ImGuiCond_Appearing);
-        if (ImGui::Begin("Insufficient Memory", &showMemoryErrorDialog,
-            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize)) {
-            ImGui::TextWrapped("Not enough available memory to load the model.");
-            ImGui::TextWrapped("Error: %s", memoryErrorMessage.c_str());
-            ImGui::Spacing();
-            ImGui::TextWrapped("You can try unloading inactive models to free up memory and retry.");
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::SetCursorPosX(ImGui::GetWindowWidth() * 0.5f - 160);
-            if (ImGui::Button("Unload Inactive and Retry", ImVec2(150, 0))) {
-                auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
-                if (cacheSystem) {
-                    cacheSystem->UnloadInactiveModels();
-                    RefreshContextList();
-                    // Retry loading the failed model
-                    if (!memoryErrorFailedKey.empty()) {
-                        // Find the entity that originally triggered the load; we can't easily get it here.
-                        // We'll just refresh the list and let the user retry manually.
-                        // Alternatively, we can call loadModelFromMetadata again if we stored the metadata.
-                        // Since we don't store it, we'll just close the dialog and let user click Load again.
-                        showMemoryErrorDialog = false;
-                        memoryErrorRetryPending = false;
-                        // Optionally, we could attempt to reload the same metadata if we had it.
-                    }
+        ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_Appearing);
+        if (ImGui::Begin(detailsTitle.c_str(), &showDetailsDialog,
+            ImGuiWindowFlags_NoCollapse)) {
+
+            if (ImGui::BeginTable("##details", 2,
+                ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthFixed, 140.0f);
+                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableHeadersRow();
+
+                for (const auto& [k, v] : detailsRows) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    ImGui::TextUnformatted(k.c_str());
+                    ImGui::TableNextColumn();
+                    ImGui::TextWrapped("%s", v.c_str());
                 }
-                showMemoryErrorDialog = false;
-                memoryErrorRetryPending = false;
+                ImGui::EndTable();
+            }
+
+            ImGui::Spacing();
+            if (ImGui::Button("Copy All")) {
+                std::string all;
+                for (const auto& [k, v] : detailsRows) {
+                    all += k + ": " + v + "\n";
+                }
+                ImGui::SetClipboardText(all.c_str());
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(100, 0))) {
-                showMemoryErrorDialog = false;
-                memoryErrorRetryPending = false;
+            if (ImGui::Button("Close")) {
+                showDetailsDialog = false;
             }
             ImGui::End();
         }
     }
 
-    void ModelCacheView::ShowMemoryErrorDialog(const std::string& error, const std::string& failedKey) {
-        memoryErrorMessage = error;
-        memoryErrorFailedKey = failedKey;
-        showMemoryErrorDialog = true;
-        memoryErrorRetryPending = false;
-    }
-
-    void ModelCacheView::ShowConfirmationDialog(ConfirmAction action, const std::string& message) {
-        confirmAction = action;
-        confirmMessage = message;
-        showConfirmDialog = true;
-    }
-
-    void ModelCacheView::ExecuteConfirmedAction() {
-        auto cacheSystem = m_entityManager.GetSystem<ECS::ModelCacheSystem>();
-        if (!cacheSystem) return;
-        switch (confirmAction) {
-        case ConfirmAction::ClearAll:
-            cacheSystem->UnloadAllModels();
-            break;
-        case ConfirmAction::UnloadAll:
-            cacheSystem->UnloadInactiveModels();
-            break;
-        case ConfirmAction::ClearSelected:
-            if (!selectedContextKey.empty()) {
-                cacheSystem->UnloadModel(selectedContextKey);
-            }
-            break;
-        default: break;
-        }
-        RefreshContextList();
-        if (selectedContextKey.empty()) {
-        }
-    }
-
+    // =========================================================================
+    // Helpers
+    // =========================================================================
     std::string ModelCacheView::ExtractDisplayName(const std::string& key) const {
-        size_t pos = key.find('|');
-        if (pos != std::string::npos) {
-            std::string first = key.substr(0, pos);
+        // Keys look like "model=C:\foo\bar.safetensors|vae=...|". Extract
+        // the first "name=value" pair's value, then take the filename.
+        size_t eq = key.find('=');
+        size_t pipe = key.find('|');
+        if (eq != std::string::npos && pipe != std::string::npos && pipe > eq) {
+            std::string first = key.substr(eq + 1, pipe - eq - 1);
             std::filesystem::path p(first);
+            return p.filename().string();
+        }
+        if (eq != std::string::npos) {
+            std::filesystem::path p(key.substr(eq + 1));
             return p.filename().string();
         }
         return key;
     }
 
     std::string ModelCacheView::FormatMemory(size_t bytes) const {
-        const char* units[] = { "B", "KB", "MB", "GB" };
+        const char* units[] = { "B", "KB", "MB", "GB", "TB" };
         int unitIdx = 0;
         double size = static_cast<double>(bytes);
-        while (size >= 1024.0 && unitIdx < 3) {
+        while (size >= 1024.0 && unitIdx < 4) {
             size /= 1024.0;
             unitIdx++;
         }
@@ -275,8 +470,8 @@ namespace GUI {
         return std::string(buf);
     }
 
-    std::string ModelCacheView::GetModelType(const ECS::ContextDetail& detail) const {
-        return detail.modelType.empty() ? "Unknown" : detail.modelType;
+    std::string ModelCacheView::GetModelType(const ECS::ContextDetail& d) const {
+        return d.modelType.empty() ? "Unknown" : d.modelType;
     }
 
     void ModelCacheView::HelpMarker(const char* desc) {

@@ -11,6 +11,7 @@
 #include <atomic>
 #include <shared_mutex>
 #include <memory>
+#include <mutex>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -325,6 +326,8 @@ namespace ECS {
 
     struct OutputVideoComponent : public VideoComponent {
         std::string fileExtension = ".mp4";
+        int video_frames = 25;
+        int output_fps = 24;
 
         OutputVideoComponent() = default;
 
@@ -368,22 +371,50 @@ namespace ECS {
                         {"ui:options", {
                             {"resetButtonText", "Reset to MP4"}
                         }}
+                    }},
+                    {"video_frames", {
+                        {"type", "integer"},
+                        {"title", "Video Frames"},
+                        {"description", "Number of frames to generate. More frames = longer video but slower generation."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {
+                            {"step", 1},
+                            {"step_fast", 8},
+                            {"min", 1},
+                            {"max", 99999}
+                        }}
+                    }},
+                    {"output_fps", {
+                        {"type", "integer"},
+                        {"title", "Output FPS"},
+                        {"description", "Frame rate for the generated video. Standard values: 6, 12, 16, 24, 30."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {
+                            {"step", 1},
+                            {"step_fast", 6},
+                            {"min", 1},
+                            {"max", 120}
+                        }}
                     }}
                 }},
-                {"propertyOrder", {"filePath", "fileName", "fileExtension"}}
+                {"propertyOrder", {"filePath", "fileName", "fileExtension", "video_frames", "output_fps"}}
             };
             return j;
         }
 
         OutputVideoComponent(const OutputVideoComponent& other)
             : VideoComponent(other)
-            , fileExtension(other.fileExtension) {
+            , fileExtension(other.fileExtension)
+            , video_frames(other.video_frames)
+            , output_fps(other.output_fps) {
         }
 
         OutputVideoComponent& operator=(const OutputVideoComponent& other) {
             if (this != &other) {
                 VideoComponent::operator=(other);
                 fileExtension = other.fileExtension;
+                video_frames = other.video_frames;
+                output_fps = other.output_fps;
             }
             return *this;
         }
@@ -392,7 +423,9 @@ namespace ECS {
             return {
                 {"fileName", &fileName},
                 {"filePath", &filePath},
-                {"fileExtension", &fileExtension}
+                {"fileExtension", &fileExtension},
+                {"video_frames", &video_frames},
+                {"output_fps", &output_fps}
             };
         }
 
@@ -401,7 +434,9 @@ namespace ECS {
             j[GetCompName()] = {
                 {"fileName", fileName},
                 {"filePath", filePath},
-                {"fileExtension", fileExtension}
+                {"fileExtension", fileExtension},
+                {"video_frames", video_frames},
+                {"output_fps", output_fps}
             };
             return j;
         }
@@ -415,7 +450,9 @@ namespace ECS {
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
+            if (componentData.contains("video_frames")) video_frames = componentData["video_frames"];
+            if (componentData.contains("output_fps")) output_fps = componentData["output_fps"];
         }
     };
 
-}
+} // namespace ECS

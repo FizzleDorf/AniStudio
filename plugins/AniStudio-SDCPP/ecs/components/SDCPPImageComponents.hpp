@@ -10,8 +10,6 @@ namespace ECS {
     struct ControlNetImageComponent : public InputImageComponent {
         std::string controlType = "canny";
         float strength = 1.0f;
-        float startStep = 0.0f;
-        float endStep = 1.0f;
 
         ControlNetImageComponent() : InputImageComponent() {}
 
@@ -56,25 +54,9 @@ namespace ECS {
                         {"minimum", 0.0},
                         {"maximum", 2.0},
                         {"ui:options", {{"step", 0.05}, {"format", "%.2f"}}}
-                    }},
-                    {"startStep", {
-                        {"type", "number"},
-                        {"title", "Start Step"},
-                        {"ui:widget", "slider_float"},
-                        {"minimum", 0.0},
-                        {"maximum", 1.0},
-                        {"ui:options", {{"step", 0.05}, {"format", "%.2f"}}}
-                    }},
-                    {"endStep", {
-                        {"type", "number"},
-                        {"title", "End Step"},
-                        {"ui:widget", "slider_float"},
-                        {"minimum", 0.0},
-                        {"maximum", 1.0},
-                        {"ui:options", {{"step", 0.05}, {"format", "%.2f"}}}
                     }}
                 }},
-                {"propertyOrder", {"filePath", "controlType", "strength", "startStep", "endStep"}}
+                {"propertyOrder", {"filePath", "controlType", "strength"}}
             };
             return j;
         }
@@ -82,9 +64,7 @@ namespace ECS {
         ControlNetImageComponent(const ControlNetImageComponent& other)
             : InputImageComponent(other)
             , controlType(other.controlType)
-            , strength(other.strength)
-            , startStep(other.startStep)
-            , endStep(other.endStep) {
+            , strength(other.strength) {
         }
 
         ControlNetImageComponent& operator=(const ControlNetImageComponent& other) {
@@ -92,8 +72,6 @@ namespace ECS {
                 InputImageComponent::operator=(other);
                 controlType = other.controlType;
                 strength = other.strength;
-                startStep = other.startStep;
-                endStep = other.endStep;
             }
             return *this;
         }
@@ -102,8 +80,6 @@ namespace ECS {
             auto properties = InputImageComponent::GetPropertyMap();
             properties["controlType"] = &controlType;
             properties["strength"] = &strength;
-            properties["startStep"] = &startStep;
-            properties["endStep"] = &endStep;
             return properties;
         }
 
@@ -111,8 +87,6 @@ namespace ECS {
             auto j = InputImageComponent::Serialize();
             j[GetCompName()]["controlType"] = controlType;
             j[GetCompName()]["strength"] = strength;
-            j[GetCompName()]["startStep"] = startStep;
-            j[GetCompName()]["endStep"] = endStep;
             return j;
         }
 
@@ -130,10 +104,6 @@ namespace ECS {
                 controlType = componentData["controlType"];
             if (componentData.contains("strength"))
                 strength = componentData["strength"];
-            if (componentData.contains("startStep"))
-                startStep = componentData["startStep"];
-            if (componentData.contains("endStep"))
-                endStep = componentData["endStep"];
         }
     };
 

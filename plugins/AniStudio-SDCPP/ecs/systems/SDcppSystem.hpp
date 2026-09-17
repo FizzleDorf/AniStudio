@@ -7,15 +7,19 @@
 #include "SDCPPComponents.h"
 #include "Components.h"
 #include "SDCPPUtils.hpp"
+#include "SDCPPParamFill.hpp"
+#include "SDContextHandle.hpp"
 #include "PngMetadataUtils.hpp"
 #include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
+#include "VideoAudioSystem.hpp"
 #include "pch.h"
 #include "stable-diffusion.h"
 #include "ThreadPoolSystem.hpp"
 #include "SettingsSystem.hpp"
 #include "FilePathSystem.hpp"
 #include "ModelCacheSystem.hpp"
+
 #include <filesystem>
 #include <iostream>
 #include <chrono>
@@ -45,38 +49,52 @@ namespace ECS {
         struct QueueItem {
             EntityID entityID = 0;
             bool processing = false;
-            TaskType taskType;
-            QueueItem() = default;
-            QueueItem(const QueueItem&) = default;
-            QueueItem& operator=(const QueueItem&) = default;
+            TaskType taskType = TaskType::Inference;
         };
 
         struct TaskData {
             EntityID entityID = 0;
             bool processing = false;
             bool cancelled = false;
-            TaskType taskType;
-            nlohmann::json metadata;
+            TaskType taskType = TaskType::Inference;
+
+            // Per-task: dies with the task. Holds prompt, images, LoRA paths,
+            // and (for Conversion) the params the conversion call uses.
+            std::shared_ptr<SDCPP::ResourceManager> genRes;
+            sd_img_gen_params_t imgParams{};
+            sd_vid_gen_params_t vidParams{};
+
+            // For Conversion only. Same lifetime as the task.
+            sd_ctx_params_t convParams{};
+
+            // Write-only. Populated once at QueueTask, used only by
+            // WriteMetadataToImage.
+            nlohmann::json metadataForWrite;
+
             std::string fullPath;
             std::future<bool> result;
-            sd_ctx_t* sdContext = nullptr;
-            std::string contextKey;
+
+            // Keeps the cache entry (and therefore its ResourceManager and
+            // sd_ctx_params_t) alive for the lifetime of this task.
+            std::shared_ptr<SDCPP::SDContextHandle> ctxHandle;
+            std::shared_ptr<SDCPP::UpscalerHandle>  upscalerHandle;
+
             std::chrono::steady_clock::time_point enqueueTime;
             std::chrono::steady_clock::time_point startTime;
-            std::chrono::steady_clock::time_point cancelTime; // when cancellation was requested
+            std::chrono::steady_clock::time_point cancelTime;
 
             TaskData() = default;
-            TaskData(TaskData&& other) noexcept;
-            TaskData& operator=(TaskData&& other) noexcept;
+            TaskData(TaskData&&) noexcept = default;
+            TaskData& operator=(TaskData&&) noexcept = default;
             TaskData(const TaskData&) = delete;
             TaskData& operator=(const TaskData&) = delete;
-            ~TaskData();
+            ~TaskData() = default;
 
             void Cancel();
         };
 
         explicit SDCPPSystem(EntityManager& entityMgr);
-        ~SDCPPSystem();
+        ~SDCPPSystem() override;
 
         void Shutdown();
         void TerminateImmediately();
@@ -107,7 +125,6 @@ namespace ECS {
         void Destroy() override;
 
         std::vector<std::pair<TaskType, nlohmann::json>> GetQueueTasksWithMetadata() const;
-
         void QueueTaskFromSerialized(const nlohmann::json& entityData, TaskType taskType);
 
     private:
@@ -115,7 +132,6 @@ namespace ECS {
         std::atomic<bool> pauseWorker{ false };
         std::atomic<bool> shuttingDown{ false };
         std::atomic<bool> clearRequested{ false };
-        std::vector<EntityID> entitiesNeedingCleanup;
         mutable std::mutex queueMutex;
         std::thread workerThread;
         bool hasActiveTask{ false };
@@ -124,17 +140,36 @@ namespace ECS {
         std::shared_ptr<FilePathSystem> m_filePathSystem;
         std::shared_ptr<ModelCacheSystem> m_cacheSystem;
 
-        upscaler_ctx_t* CreateUpscalerContext(const nlohmann::json& metadata);
+        std::string ResolveOutputDirectory(const std::string& raw);
+        std::string ResolveFullPathForTask(const TaskData& task);
+
         void LoadImageViaImageSystem(EntityID targetEntity, const std::string& filePath);
-        void LoadVideoViaVideoSystem(const std::string& filePath);
+        void LoadVideoViaVideoSystem(EntityID targetEntity, const std::string& filePath);
+        EntityID LoadVideoWithAudio(const std::string& filePath);
         void HandleClearRequest();
 
-        static bool RunInference(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context);
-        static bool RunImg2Img(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context);
-        static bool RunImg2Vid(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context);
-        static bool RunEdit(const nlohmann::json& metadata, const std::string& fullPath, sd_ctx_t* context);
-        static bool RunUpscaling(const nlohmann::json& metadata, const std::string& fullPath, upscaler_ctx_t* upscaler);
-        static bool RunConversion(const nlohmann::json& metadata);
+        static bool RunInference(const sd_img_gen_params_t& params,
+            const nlohmann::json& metadataForWrite,
+            const std::string& fullPath,
+            sd_ctx_t* context);
+        static bool RunImg2Img(const sd_img_gen_params_t& params,
+            const nlohmann::json& metadataForWrite,
+            const std::string& fullPath,
+            sd_ctx_t* context);
+        static bool RunImg2Vid(const sd_vid_gen_params_t& params,
+            const nlohmann::json& metadataForWrite,
+            const std::string& fullPath,
+            sd_ctx_t* context);
+        static bool RunEdit(const sd_img_gen_params_t& params,
+            const nlohmann::json& metadataForWrite,
+            const std::string& fullPath,
+            sd_ctx_t* context);
+        static bool RunUpscaling(const nlohmann::json& metadataForWrite,
+            const std::string& fullPath,
+            upscaler_ctx_t* upscaler,
+            const std::string& inputImagePath,
+            uint32_t upscaleFactor);
+        static bool RunConversion(const sd_ctx_params_t& ctx);
 
         bool IsVideoTask(TaskType taskType) const;
         std::string GetOutputExtension(TaskType taskType, EntityID entityID) const;
@@ -143,7 +178,6 @@ namespace ECS {
         void CheckTaskCompletion();
         void ProcessCompletedTask(const std::string& fullPath, TaskType taskType, EntityID entityID);
         void WorkerThread();
-        int CountPendingTasksForContext(const std::string& contextKey);
     };
 
-}
+} // namespace ECS

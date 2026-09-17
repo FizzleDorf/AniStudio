@@ -1,8 +1,12 @@
+// DiffusionCallbackUtils.hpp
 #pragma once
 #include "stable-diffusion.h"
 #include <iostream>
 #include <mutex>
 #include <atomic>
+#include <memory>
+#include <vector>
+#include <cstring>
 
 namespace GUI {
     struct ProgressData {
@@ -10,6 +14,16 @@ namespace GUI {
         std::atomic<int> totalSteps{ 0 };
         std::atomic<float> currentTime{ 0.0f };
         std::atomic<bool> isProcessing{ false };
+    };
+
+    // One decoded preview frame. Owned by DiffusionCallbackUtils.
+    struct PreviewFrame {
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        std::shared_ptr<unsigned char[]> data;   // RGBA or RGB depending on library
+        uint64_t sequence = 0;                    // monotonically increasing
+        bool valid() const { return data && width > 0 && height > 0 && channels > 0; }
     };
 
     class DiffusionCallbackUtils {
@@ -23,9 +37,28 @@ namespace GUI {
         static void SetLogLevel(int level);
         static int GetLogLevel();
 
+        // ---- Preview API ----
+        // Called by stable-diffusion.cpp during denoising. The image pointer is
+        // only valid for the duration of the call, so we copy the pixels.
+        static void PreviewCallback(int step, int steps, sd_image_t* image, void* data);
+
+        // Thread-safe accessor. Returns a copy of the latest preview.
+        static PreviewFrame GetLatestPreview();
+
+        // Increments every time a new preview frame is stored. Poll this to
+        // avoid re-uploading the same texture every frame.
+        static uint64_t GetPreviewSequence();
+
+        // Clear the preview (call when starting a new generation).
+        static void ClearPreview();
+
     private:
         static ProgressData progressData;
         static std::mutex mutex;
         static int m_logLevel;
+
+        static PreviewFrame previewFrame;
+        static std::mutex previewMutex;
+        static std::atomic<uint64_t> previewSequence;
     };
 }

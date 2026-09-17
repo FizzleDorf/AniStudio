@@ -90,7 +90,6 @@ namespace GUI {
         m_componentAdders["Esrgan"] = [this](EntityID e) { this->m_entityManager.AddComponent<EsrganComponent>(e); };
         m_componentAdders["HighNoiseDiffusionModel"] = [this](EntityID e) { this->m_entityManager.AddComponent<HighNoiseDiffusionModelComponent>(e); };
         m_componentAdders["HighNoiseSampler"] = [this](EntityID e) { this->m_entityManager.AddComponent<HighNoiseSamplerComponent>(e); };
-        m_componentAdders["VideoParams"] = [this](EntityID e) { this->m_entityManager.AddComponent<VideoParamsComponent>(e); };
         m_componentAdders["EasyCache"] = [this](EntityID e) { this->m_entityManager.AddComponent<EasyCacheComponent>(e); };
     }
 

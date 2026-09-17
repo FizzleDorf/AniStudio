@@ -88,7 +88,6 @@ namespace GUI {
 	protected:
 		ECS::EntityManager& m_entityManager;
 		bool windowOpen = true;
-		bool isHidden = true;
 
 		virtual std::string GetWindowTitle() const {
 			return viewName + "##" + std::to_string(workspaceID);

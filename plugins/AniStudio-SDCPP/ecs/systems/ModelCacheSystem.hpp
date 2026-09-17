@@ -1,17 +1,22 @@
+// ModelCacheSystem.hpp
 #pragma once
 
 #include "BaseSystem.hpp"
 #include "stable-diffusion.h"
 #include "SDCPPUtils.hpp"
+#include "SDContextHandle.hpp"
+
 #include <unordered_map>
 #include <deque>
 #include <mutex>
 #include <string>
 #include <vector>
+#include <memory>
 #include <iostream>
 #include <algorithm>
 #include <filesystem>
 #include <chrono>
+#include <optional>
 
 namespace ECS {
 
@@ -24,69 +29,119 @@ namespace ECS {
         bool isInUse;
     };
 
+    struct UpscalerDetail {
+        std::string key;
+        std::string displayName;
+        size_t memoryBytes;
+        int activeCount;
+        bool isInUse;
+    };
+
     class ModelCacheSystem : public BaseSystem {
     public:
-        ModelCacheSystem(EntityManager& mgr) : BaseSystem(mgr) {
+        explicit ModelCacheSystem(EntityManager& mgr)
+            : BaseSystem(mgr) {
             sysName = "ModelCacheSystem";
         }
 
-        ~ModelCacheSystem() {
-            std::cout << "[ModelCacheSystem] DESTRUCTOR CALLED - Cache size: " << m_cache.size() << std::endl;
-        }
+        ~ModelCacheSystem() override;
 
-        sd_ctx_t* getOrCreateContext(const nlohmann::json& metadata);
-        bool loadModelFromMetadata(const nlohmann::json& metadata);
-        void reloadModel(const std::string& key);
+        // ----------------------------------------------------------------
+        // Acquisition
+        //
+        // ctxRes is passed by reference. On a cache hit the entry's own
+        // ResourceManager is assigned back into ctxRes, so the caller gets
+        // a shared_ptr to whichever manager actually owns the strings the
+        // cached sd_ctx_params_t points at. On a miss, ctxRes is moved into
+        // the new entry.
+        //
+        // No pre-flight memory gate. sdcpp's memory manager decides
+        // placement, segmented execution, and eviction; if the model can't
+        // fit at all, new_sd_ctx returns null and we report that.
+        // ----------------------------------------------------------------
+        std::optional<SDCPP::SDContextHandle>
+            acquireOrCreateContext(const sd_ctx_params_t& params,
+                std::shared_ptr<SDCPP::ResourceManager>& ctxRes);
+
+        std::optional<SDCPP::UpscalerHandle>
+            acquireOrCreateUpscaler(const sd_ctx_params_t& params,
+                std::shared_ptr<SDCPP::ResourceManager>& ctxRes);
+
+        // ----------------------------------------------------------------
+        // Release (called by handles)
+        // ----------------------------------------------------------------
+        void releaseContext(const std::string& key);
+        void releaseUpscaler(const std::string& key);
+
+        // ----------------------------------------------------------------
+        // GUI / management
+        //
+        // Unload refuses to touch entries with activeCount > 0. Callers
+        // that want to unload an in-use entry must first cancel every task
+        // referencing it (SDCPPSystem::ClearAllTasks / CancelCurrentTask),
+        // which drops the handles and brings activeCount to zero.
+        // ----------------------------------------------------------------
         void UnloadModel(const std::string& key);
         void UnloadAllModels();
         void UnloadInactiveModels();
-        void ForceUnloadIdleModels() { UnloadAllModels(); }
 
-        std::vector<std::string> GetLoadedModels() const;
+        void UnloadUpscaler(const std::string& key);
+        void UnloadAllUpscalers();
+
+        bool reloadModel(const std::string& key);
+        bool reloadUpscaler(const std::string& key);
+
         std::vector<ContextDetail> GetContextDetails() const;
-        void ListSDContexts() const;
+        std::vector<UpscalerDetail> GetUpscalerDetails() const;
 
-        sd_ctx_t* acquireContext(const std::string& key);
-        void releaseContext(const std::string& key);
+        size_t GetCacheSize() const;
+        size_t GetUpscalerCacheSize() const;
 
-        std::string computeKey(const nlohmann::json& metadata) const;
+        std::string getLastError() const;
+
+        std::string computeKey(const sd_ctx_params_t& params) const;
+        std::string computeUpscalerKey(const sd_ctx_params_t& params) const;
 
         void Destroy() override;
 
-        size_t GetCacheSize() const {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            return m_cache.size();
-        }
-
-        std::string getLastError() const {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            return m_lastError;
-        }
-
     private:
         struct ContextInfo {
-            sd_ctx_t* ctx;
-            nlohmann::json metadata;
-            size_t memoryBytes;
-            int activeCount;
+            sd_ctx_t* ctx = nullptr;
+            sd_ctx_params_t params{};
+            std::shared_ptr<SDCPP::ResourceManager> ctxRes;
+            std::string key;
+            size_t memoryBytes = 0;
+            int activeCount = 0;
             std::string modelType;
-            bool isInUse;
+            std::chrono::steady_clock::time_point lastUsed;
+        };
+
+        struct UpscalerInfo {
+            upscaler_ctx_t* ctx = nullptr;
+            sd_ctx_params_t params{};
+            std::shared_ptr<SDCPP::ResourceManager> ctxRes;
+            std::string key;
+            size_t memoryBytes = 0;
+            int activeCount = 0;
             std::chrono::steady_clock::time_point lastUsed;
         };
 
         std::unordered_map<std::string, ContextInfo> m_cache;
         std::deque<std::string> m_order;
+
+        std::unordered_map<std::string, UpscalerInfo> m_upscalers;
+        std::deque<std::string> m_upscalerOrder;
+
         size_t m_maxCacheSize = 10;
         mutable std::mutex m_mutex;
         mutable std::string m_lastError;
 
         void promote(const std::string& key);
         void evictIfNeeded();
-        size_t computeMemory(const nlohmann::json& metadata) const;
-        std::string detectModelType(const nlohmann::json& metadata) const;
+        void removeFromOrder(const std::string& key);
 
-        bool hasEnoughMemory(size_t requiredBytes) const;
-        size_t getAvailableMemory() const;
+        size_t computeMemory(const sd_ctx_params_t& params) const;
+        std::string detectModelType(const sd_ctx_params_t& params) const;
     };
 
-}
+} // namespace ECS

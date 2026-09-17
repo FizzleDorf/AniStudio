@@ -23,6 +23,10 @@ namespace ECS {
 
         std::string extra_sample_args;
 
+        // Video sampling parameters
+        float vace_strength = 0.0f;
+        float moe_boundary = 0.0f;
+
         SamplerComponent() = default;
 
         const char* GetCompName() const override { return "Sampler"; }
@@ -33,9 +37,10 @@ namespace ECS {
                 {"title", "Sampler Settings"},
                 {"type", "object"},
                 {"propertyOrder", {
-                    "current_sample_method", "current_scheduler_method", "current_type_method",
-                    "current_prediction_type",
-                    "seed", "steps", "denoise", "n_threads", "free_params_immediately",
+                    "current_sample_method", "current_scheduler_method",
+                    "seed", "steps", "denoise",
+                    "vace_strength", "moe_boundary",
+                    "n_threads", "free_params_immediately",
                     "offload_params_to_cpu", "keep_clip_on_cpu", "keep_control_net_on_cpu",
                     "extra_sample_args"
                 }},
@@ -75,6 +80,32 @@ namespace ECS {
                         {"description", "Denoising strength (0.0-1.0). Controls how much to change the image."},
                         {"ui:widget", "input_float"},
                         {"ui:options", {{"step", 0.01f}, {"min", 0.0f}, {"max", 1.0f}}}
+                    }},
+                    {"vace_strength", {
+                        {"type", "number"},
+                        {"title", "VACE Strength"},
+                        {"description", "Video Auto-Conditioning Enhancement strength. Controls temporal consistency between frames. 0.0 = disabled, higher values = stronger consistency."},
+                        {"ui:widget", "input_float"},
+                        {"ui:options", {
+                            {"step", 0.05f},
+                            {"step_fast", 0.1f},
+                            {"format", "%.2f"},
+                            {"min", 0.0f},
+                            {"max", 1.0f}
+                        }}
+                    }},
+                    {"moe_boundary", {
+                        {"type", "number"},
+                        {"title", "MoE Boundary"},
+                        {"description", "Mixture of Experts boundary for Wan 2.2 models. Controls which expert is used during sampling."},
+                        {"ui:widget", "input_float"},
+                        {"ui:options", {
+                            {"step", 0.1f},
+                            {"step_fast", 0.5f},
+                            {"format", "%.2f"},
+                            {"min", 0.0f},
+                            {"max", 1.0f}
+                        }}
                     }},
                     {"n_threads", {
                         {"type", "integer"},
@@ -130,6 +161,8 @@ namespace ECS {
             current_sample_method = other.current_sample_method;
             current_scheduler_method = other.current_scheduler_method;
             extra_sample_args = other.extra_sample_args;
+            vace_strength = other.vace_strength;
+            moe_boundary = other.moe_boundary;
         }
 
         SamplerComponent& operator=(const SamplerComponent& other) {
@@ -145,6 +178,8 @@ namespace ECS {
                 current_sample_method = other.current_sample_method;
                 current_scheduler_method = other.current_scheduler_method;
                 extra_sample_args = other.extra_sample_args;
+                vace_strength = other.vace_strength;
+                moe_boundary = other.moe_boundary;
             }
             return *this;
         }
@@ -154,6 +189,8 @@ namespace ECS {
                 {"seed", reinterpret_cast<void*>(&seed)},
                 {"steps", &steps},
                 {"denoise", &denoise},
+                {"vace_strength", &vace_strength},
+                {"moe_boundary", &moe_boundary},
                 {"n_threads", &n_threads},
                 {"free_params_immediately", &free_params_immediately},
                 {"offload_params_to_cpu", &offload_params_to_cpu},
@@ -171,6 +208,8 @@ namespace ECS {
                 {"seed", seed},
                 {"steps", steps},
                 {"denoise", denoise},
+                {"vace_strength", vace_strength},
+                {"moe_boundary", moe_boundary},
                 {"n_threads", n_threads},
                 {"free_params_immediately", free_params_immediately},
                 {"offload_params_to_cpu", offload_params_to_cpu},
@@ -204,6 +243,8 @@ namespace ECS {
             if (componentData.contains("seed")) seed = componentData["seed"];
             if (componentData.contains("steps")) steps = componentData["steps"];
             if (componentData.contains("denoise")) denoise = componentData["denoise"];
+            if (componentData.contains("vace_strength")) vace_strength = componentData["vace_strength"];
+            if (componentData.contains("moe_boundary")) moe_boundary = componentData["moe_boundary"];
             if (componentData.contains("n_threads")) n_threads = componentData["n_threads"];
             if (componentData.contains("free_params_immediately"))
                 free_params_immediately = componentData["free_params_immediately"].get<bool>();
@@ -219,7 +260,6 @@ namespace ECS {
                     current_sample_method = val.get<std::string>();
                 }
             }
-
             if (componentData.contains("current_scheduler_method")) {
                 const auto& val = componentData["current_scheduler_method"];
                 if (val.is_string()) {

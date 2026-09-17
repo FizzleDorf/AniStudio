@@ -16,10 +16,28 @@ namespace Utils {
     };
 
     struct AudioData {
-        std::vector<float> pcmData;
+        std::vector<float> pcmData;   // interleaved float PCM (frames * channels)
         int channels = 2;
         int sampleRate = 44100;
         double duration = 0.0;
+
+        // Build from a raw interleaved float buffer (e.g. sd_audio_t from sdcpp).
+        // Copies the data into pcmData so the caller can free its buffer immediately.
+        // `sampleCount` is frames (per-channel), matching sd_audio_t::sample_count.
+        static AudioData FromInterleavedFloat(const float* data,
+            uint64_t sampleCount,
+            int channels,
+            int sampleRate) {
+            AudioData out;
+            out.channels = channels > 0 ? channels : 1;
+            out.sampleRate = sampleRate > 0 ? sampleRate : 44100;
+            if (data && sampleCount > 0 && out.channels > 0) {
+                size_t total = static_cast<size_t>(sampleCount) * out.channels;
+                out.pcmData.assign(data, data + total);
+                out.duration = static_cast<double>(sampleCount) / out.sampleRate;
+            }
+            return out;
+        }
     };
 
     class VideoUtils {

@@ -13,7 +13,6 @@ namespace ECS {
         bool enable_mmap = true;
         bool flash_attn = true;
         std::string max_vram = "-1";
-        bool stream_layers = false;
         bool eager_load = false;
         std::string backend;
         std::string params_backend;
@@ -38,7 +37,7 @@ namespace ECS {
                 {"title", "Global SDCPP Settings"},
                 {"type", "object"},
                 {"propertyOrder", {
-                    "enable_mmap", "max_vram", "stream_layers", "eager_load",
+                    "enable_mmap", "max_vram", "eager_load",
                     "backend", "params_backend", "split_mode", "auto_fit",
                     "rpc_servers", "lora_apply_mode", "diffusion_flash_attn",
                     "diffusion_conv_direct", "vae_conv_direct", "force_sdxl_vae_conv_scale",
@@ -56,12 +55,6 @@ namespace ECS {
                         {"title", "Max VRAM"},
                         {"description", "Maximum VRAM to use (e.g., '4GB', '8GB', '-1' for unlimited)."},
                         {"ui:widget", "text"}
-                    }},
-                    {"stream_layers", {
-                        {"type", "boolean"},
-                        {"title", "Stream Layers"},
-                        {"description", "Stream layers from disk during inference (reduces VRAM usage)."},
-                        {"ui:widget", "checkbox"}
                     }},
                     {"eager_load", {
                         {"type", "boolean"},
@@ -161,7 +154,6 @@ namespace ECS {
             , enable_mmap(other.enable_mmap)
             , flash_attn(other.flash_attn)
             , max_vram(other.max_vram)
-            , stream_layers(other.stream_layers)
             , eager_load(other.eager_load)
             , backend(other.backend)
             , params_backend(other.params_backend)
@@ -183,7 +175,6 @@ namespace ECS {
                 enable_mmap = other.enable_mmap;
                 flash_attn = other.flash_attn;
                 max_vram = other.max_vram;
-                stream_layers = other.stream_layers;
                 eager_load = other.eager_load;
                 backend = other.backend;
                 params_backend = other.params_backend;
@@ -245,7 +236,6 @@ namespace ECS {
                 {"enable_mmap", enable_mmap},
                 {"max_vram", max_vram},
                 {"flash_attn", flash_attn},
-                {"stream_layers", stream_layers},
                 {"eager_load", eager_load},
                 {"backend", backend},
                 {"params_backend", params_backend},
@@ -266,7 +256,6 @@ namespace ECS {
             if (j.contains("enable_mmap")) enable_mmap = j["enable_mmap"].get<bool>();
             if (j.contains("max_vram")) max_vram = j["max_vram"].get<std::string>();
             if (j.contains("flash_attn")) flash_attn = j["flash_attn"].get<bool>();
-            if (j.contains("stream_layers")) stream_layers = j["stream_layers"].get<bool>();
             if (j.contains("eager_load")) eager_load = j["eager_load"].get<bool>();
             if (j.contains("backend")) backend = j["backend"].get<std::string>();
             if (j.contains("params_backend")) params_backend = j["params_backend"].get<std::string>();
@@ -292,7 +281,6 @@ namespace ECS {
                 {"enable_mmap", &enable_mmap},
                 {"max_vram", &max_vram},
                 {"flash_attn", &flash_attn},
-                {"stream_layers", &stream_layers},
                 {"eager_load", &eager_load},
                 {"backend", &backend},
                 {"params_backend", &params_backend},

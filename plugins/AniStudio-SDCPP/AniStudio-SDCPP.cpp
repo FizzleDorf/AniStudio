@@ -172,7 +172,6 @@ public:
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ControlNetComponent>("ControlNet"));
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::LoraComponent>("Lora"));
 
-        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::VideoParamsComponent>("VideoParams"));
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::HighNoiseSamplerComponent>("HighNoiseSampler"));
 
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ADetailerComponent>("ADetailer"));
