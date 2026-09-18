@@ -26,6 +26,8 @@ namespace ECS {
         bool force_sdxl_vae_conv_scale = false;
         int log_level = 1;
         std::string model_args;
+        int preview_mode = 2;       // 0=None, 1=Proj, 2=TAE, 3=VAE
+        int preview_interval = 1;   // positive = every Nth step; negative = completed step only; 0 = final step
 
         SDCPPSettingsComponent() = default;
 
@@ -39,9 +41,11 @@ namespace ECS {
                 {"propertyOrder", {
                     "enable_mmap", "max_vram", "eager_load",
                     "backend", "params_backend", "split_mode", "auto_fit",
-                    "rpc_servers", "lora_apply_mode", "diffusion_flash_attn",
+                    "rpc_servers", "lora_apply_mode",
+                    "flash_attn", "diffusion_flash_attn",
                     "diffusion_conv_direct", "vae_conv_direct", "force_sdxl_vae_conv_scale",
-                    "log_level", "model_args"
+                    "log_level", "model_args",
+                    "preview_mode", "preview_interval"
                 }},
                 {"properties", {
                     {"enable_mmap", {
@@ -53,37 +57,37 @@ namespace ECS {
                     {"max_vram", {
                         {"type", "string"},
                         {"title", "Max VRAM"},
-                        {"description", "Maximum VRAM to use (e.g., '4GB', '8GB', '-1' for unlimited)."},
+                        {"description", "Per-device GiB budget for managed weights and runner buffers. A positive value is a fixed budget; 0 uses live free VRAM; negative snapshots free memory at startup while reserving that many GiB (-1 reserves about 1 GiB)."},
                         {"ui:widget", "text"}
                     }},
                     {"eager_load", {
                         {"type", "boolean"},
                         {"title", "Eager Load"},
-                        {"description", "Load all models eagerly at startup (faster inference, higher VRAM usage)."},
+                        {"description", "Load all params into the params backend at model-load time instead of lazily on first use."},
                         {"ui:widget", "checkbox"}
                     }},
                     {"backend", {
                         {"type", "string"},
                         {"title", "Backend"},
-                        {"description", "Computation backend (e.g., 'cuda', 'cpu', 'auto')."},
+                        {"description", "Runtime compute backend (e.g. 'cuda0', 'cpu')."},
                         {"ui:widget", "text"}
                     }},
                     {"params_backend", {
                         {"type", "string"},
                         {"title", "Params Backend"},
-                        {"description", "Backend for parameter storage (e.g., 'cuda', 'cpu')."},
+                        {"description", "Where source parameters live. Accepts a single device ('cuda0', 'cpu', 'disk') or a comma-separated per-module list, e.g. 'diffusion=disk,te=cpu,vae=gpu'. '--offload-to-cpu' in the CLI is equivalent to '*=cpu' here."},
                         {"ui:widget", "text"}
                     }},
                     {"split_mode", {
                         {"type", "string"},
                         {"title", "Split Mode"},
-                        {"description", "Model splitting mode for multi-GPU (e.g., 'none', 'layer', 'tensor')."},
+                        {"description", "Weight distribution for multi-device modules: 'layer' (default) or 'row', or per-module assignments like 'diffusion=row'."},
                         {"ui:widget", "text"}
                     }},
                     {"auto_fit", {
                         {"type", "boolean"},
                         {"title", "Auto Fit"},
-                        {"description", "Automatically fit model to available VRAM when loading."},
+                        {"description", "Automatically choose parameter placement while preserving the runtime backend."},
                         {"ui:widget", "checkbox"}
                     }},
                     {"rpc_servers", {
@@ -141,8 +145,23 @@ namespace ECS {
                     {"model_args", {
                         {"type", "string"},
                         {"title", "Model Args"},
-                        {"description", "Additional command-line style arguments for the model backend (e.g., --disable-async-offload --disable-pinned-memory)."},
+                        {"description", "Additional command-line style arguments for the model backend."},
                         {"ui:widget", "text"}
+                    }},
+                    {"preview_mode", {
+                        {"type", "integer"},
+                        {"title", "Preview Mode"},
+                        {"description", "Live preview during generation. None disables previews; Proj is the fastest (latent preview); TAE uses the fast VAE decoder; VAE runs the full decoder."},
+                        {"ui:widget", "combo"},
+                        {"items", {"None","Proj","TAE","VAE"}},
+                        {"itemCount", 4}
+                    }},
+                    {"preview_interval", {
+                        {"type", "integer"},
+                        {"title", "Preview Interval"},
+                        {"description", "Positive: preview every Nth denoiser step. Negative: preview only completed logical step -interval. Zero: preview the final completed step of the first sampling pass."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"min", -100}, {"max", 100}}}
                     }}
                 }}
             };
@@ -167,6 +186,8 @@ namespace ECS {
             , force_sdxl_vae_conv_scale(other.force_sdxl_vae_conv_scale)
             , log_level(other.log_level)
             , model_args(other.model_args)
+            , preview_mode(other.preview_mode)
+            , preview_interval(other.preview_interval)
             , backupJson(other.backupJson) {
         }
 
@@ -188,6 +209,8 @@ namespace ECS {
                 force_sdxl_vae_conv_scale = other.force_sdxl_vae_conv_scale;
                 log_level = other.log_level;
                 model_args = other.model_args;
+                preview_mode = other.preview_mode;
+                preview_interval = other.preview_interval;
                 backupJson = other.backupJson;
             }
             return *this;
@@ -248,7 +271,9 @@ namespace ECS {
                 {"vae_conv_direct", vae_conv_direct},
                 {"force_sdxl_vae_conv_scale", force_sdxl_vae_conv_scale},
                 {"log_level", log_level},
-                {"model_args", model_args}
+                {"model_args", model_args},
+                {"preview_mode", preview_mode},
+                {"preview_interval", preview_interval}
             };
         }
 
@@ -274,6 +299,8 @@ namespace ECS {
             if (j.contains("force_sdxl_vae_conv_scale")) force_sdxl_vae_conv_scale = j["force_sdxl_vae_conv_scale"].get<bool>();
             if (j.contains("log_level")) log_level = j["log_level"].get<int>();
             if (j.contains("model_args")) model_args = j["model_args"].get<std::string>();
+            if (j.contains("preview_mode")) preview_mode = j["preview_mode"].get<int>();
+            if (j.contains("preview_interval")) preview_interval = j["preview_interval"].get<int>();
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -293,7 +320,9 @@ namespace ECS {
                 {"vae_conv_direct", &vae_conv_direct},
                 {"force_sdxl_vae_conv_scale", &force_sdxl_vae_conv_scale},
                 {"log_level", &log_level},
-                {"model_args", &model_args}
+                {"model_args", &model_args},
+                {"preview_mode", &preview_mode},
+                {"preview_interval", &preview_interval}
             };
         }
 

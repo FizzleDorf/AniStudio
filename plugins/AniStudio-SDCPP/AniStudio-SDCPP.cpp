@@ -14,6 +14,7 @@
 #include "SDcppSystem.hpp"
 #include "ModelCacheSystem.hpp"
 #include "SDCPPViews.h"
+#include "PreviewView.hpp"
 #include "ProjectSystem.hpp"
 
 #include <iostream>
@@ -207,6 +208,18 @@ public:
             }
             if (entityMgr.IsEntityValid(settingsEntity) && entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
                 auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+
+                // SettingsSystem::Start already ran LoadAllSettings() before
+                // this component existed, so nothing has read sdcpp.json yet.
+                // Load it now so the entity carries real values, not defaults.
+                if (sdcppComp.LoadSettings()) {
+                    LogInfo("Loaded SDCPP settings from sdcpp.json");
+                }
+                else {
+                    LogInfo("No sdcpp.json found, using defaults");
+                    sdcppComp.CreateBackup();
+                }
+
                 GUI::DiffusionCallbackUtils::SetLogLevel(sdcppComp.log_level);
             }
         }
@@ -253,8 +266,19 @@ public:
             EntityID settingsEntity = settingsSys->GetSettingsEntity();
             if (entityMgr.IsEntityValid(settingsEntity) && entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
                 auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+
+                // Reload in case the file changed since OnEngineInit.
+                sdcppComp.LoadSettings();
+
                 auto sdcppTab = std::make_unique<ECS::SDCPPSettingsTab>(sdcppComp);
+                auto* rawTab = sdcppTab.get();
                 settingsSys->RegisterTab(std::move(sdcppTab));
+
+                // SettingsSystem::Start's LoadAllSettings already ran before
+                // this tab existed. Seed its backup so the tab's dirty-state
+                // tracking doesn't fire on the first render.
+                rawTab->CreateBackup();
+
                 LogInfo("Registered SDCPP settings tab");
             }
             else {
@@ -272,6 +296,7 @@ public:
         m_viewTypeNames.push_back("ModelCacheView");
         m_viewTypeNames.push_back("QueueView");
         m_viewTypeNames.push_back("Txt2VidView");
+        m_viewTypeNames.push_back("PreviewView");
 
         viewMgr.RegisterView<GUI::Txt2ImgView>("Txt2ImgView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::Img2ImgView>("Img2ImgView", "DiffusionAddon");
@@ -282,6 +307,7 @@ public:
         viewMgr.RegisterView<GUI::ModelCacheView>("ModelCacheView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::QueueView>("QueueView", "DiffusionAddon");
         viewMgr.RegisterView<GUI::Txt2VidView>("Txt2VidView", "DiffusionAddon");
+        viewMgr.RegisterView<GUI::PreviewView>("PreviewView", "DiffusionAddon");
 
         LogInfo("Views registered via direct ViewManager");
         return true;

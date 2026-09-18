@@ -8,9 +8,6 @@
 
 namespace ECS {
 
-    // ---------------------------------------------------------------------
-    // TaskData
-    // ---------------------------------------------------------------------
     void SDCPPSystem::TaskData::Cancel() {
         cancelled = true;
         cancelTime = std::chrono::steady_clock::now();
@@ -18,9 +15,6 @@ namespace ECS {
             sd_cancel_generation(ctxHandle->get(), SD_CANCEL_ALL);
     }
 
-    // ---------------------------------------------------------------------
-    // Lifecycle
-    // ---------------------------------------------------------------------
     SDCPPSystem::SDCPPSystem(EntityManager& entityMgr)
         : BaseSystem(entityMgr), pauseWorker(false), hasActiveTask(false), clearRequested(false) {
         sysName = "SDCPPSystem";
@@ -79,7 +73,6 @@ namespace ECS {
             return;
         }
 
-        // Copy global SDCPP settings onto the task entity.
         auto settingsSys = mgr.GetSystem<SettingsSystem>();
         if (settingsSys) {
             EntityID settingsEntity = settingsSys->GetSettingsEntity();
@@ -93,7 +86,6 @@ namespace ECS {
             }
         }
 
-        // Seed generation.
         if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
             taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
             if (mgr.HasComponent<SamplerComponent>(entityID)) {
@@ -111,7 +103,6 @@ namespace ECS {
         task.enqueueTime = std::chrono::steady_clock::now();
         task.genRes = std::make_shared<SDCPP::ResourceManager>();
 
-        // Fill per-task params into genRes.
         switch (taskType) {
         case TaskType::Inference:
         case TaskType::Img2Img:
@@ -126,7 +117,6 @@ namespace ECS {
             break;
         }
 
-        // Metadata for writing at the end.
         try {
             task.metadataForWrite = mgr.SerializeEntity(entityID);
         }
@@ -135,12 +125,6 @@ namespace ECS {
             return;
         }
 
-        // ---- Context acquisition -------------------------------------------------
-        // ctx params are built in a LOCAL ResourceManager. On a hit, the cache
-        // hands back a shared_ptr to the entry's manager. On a miss, ownership
-        // moves into the new entry. Either way, the handle keeps that manager
-        // alive for the task's lifetime, so nothing outside the cache entry
-        // ever points at strings the entry might free.
         if (taskType == TaskType::Inference || taskType == TaskType::Img2Img ||
             taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
             if (!m_cacheSystem) m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
@@ -181,9 +165,6 @@ namespace ECS {
             task.upscalerHandle = std::make_shared<SDCPP::UpscalerHandle>(std::move(*handle));
         }
         else if (taskType == TaskType::Conversion) {
-            // Conversion doesn't need a cache entry. Build the params into a
-            // ResourceManager that lives with the task, and keep a reference
-            // to it via genRes so the strings outlive the task.
             SDCPP::FillContextParams(mgr, entityID, task.convParams, *task.genRes);
         }
 
@@ -309,18 +290,15 @@ namespace ECS {
     std::string SDCPPSystem::ResolveOutputDirectory(const std::string& raw) {
         std::string dir = raw;
 
-        // If the user gave us a full filename, take its parent.
         if (!dir.empty() && std::filesystem::path(dir).has_extension())
             dir = std::filesystem::path(dir).parent_path().string();
 
-        // If it's not absolute, it may be a FilePathSystem key.
         if (!dir.empty() && !std::filesystem::path(dir).is_absolute() && m_filePathSystem) {
             std::string resolved = m_filePathSystem->GetPath(dir);
             if (!resolved.empty())
                 dir = resolved;
         }
 
-        // Fall back to DefaultProject.
         if (dir.empty() || !std::filesystem::path(dir).is_absolute()) {
             if (m_filePathSystem) {
                 std::string def = m_filePathSystem->GetPath("DefaultProject");
@@ -329,7 +307,6 @@ namespace ECS {
             }
         }
 
-        // Last resort: CWD.
         if (dir.empty())
             dir = std::filesystem::current_path().string();
 
@@ -342,8 +319,6 @@ namespace ECS {
     std::string SDCPPSystem::ResolveFullPathForTask(const TaskData& task) {
         bool isVideo = IsVideoTask(task.taskType);
 
-        // Pick a base name + extension from whichever Output*Component exists.
-        // If neither exists, fall back to defaults rather than dropping the task.
         std::string baseName = "AniStudio";
         std::string extension = isVideo ? ".mp4" : ".png";
         std::string rawDir;
@@ -681,7 +656,7 @@ namespace ECS {
                 }
                 case TaskType::Conversion: {
                     auto params = task.convParams;
-                    auto genRes = task.genRes;   // keeps the strings alive
+                    auto genRes = task.genRes;
                     task.result = diffusionPool.submit(
                         [params, genRes]() -> bool {
                             return RunConversion(params);

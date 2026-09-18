@@ -58,24 +58,17 @@ namespace ECS {
             bool cancelled = false;
             TaskType taskType = TaskType::Inference;
 
-            // Per-task: dies with the task. Holds prompt, images, LoRA paths,
-            // and (for Conversion) the params the conversion call uses.
             std::shared_ptr<SDCPP::ResourceManager> genRes;
             sd_img_gen_params_t imgParams{};
             sd_vid_gen_params_t vidParams{};
 
-            // For Conversion only. Same lifetime as the task.
             sd_ctx_params_t convParams{};
 
-            // Write-only. Populated once at QueueTask, used only by
-            // WriteMetadataToImage.
             nlohmann::json metadataForWrite;
 
             std::string fullPath;
             std::future<bool> result;
 
-            // Keeps the cache entry (and therefore its ResourceManager and
-            // sd_ctx_params_t) alive for the lifetime of this task.
             std::shared_ptr<SDCPP::SDContextHandle> ctxHandle;
             std::shared_ptr<SDCPP::UpscalerHandle>  upscalerHandle;
 

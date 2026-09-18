@@ -16,13 +16,12 @@ namespace GUI {
         std::atomic<bool> isProcessing{ false };
     };
 
-    // One decoded preview frame. Owned by DiffusionCallbackUtils.
     struct PreviewFrame {
         int width = 0;
         int height = 0;
         int channels = 0;
-        std::shared_ptr<unsigned char[]> data;   // RGBA or RGB depending on library
-        uint64_t sequence = 0;                    // monotonically increasing
+        std::shared_ptr<unsigned char[]> data;
+        uint64_t sequence = 0;
         bool valid() const { return data && width > 0 && height > 0 && channels > 0; }
     };
 
@@ -37,19 +36,13 @@ namespace GUI {
         static void SetLogLevel(int level);
         static int GetLogLevel();
 
-        // ---- Preview API ----
-        // Called by stable-diffusion.cpp during denoising. The image pointer is
-        // only valid for the duration of the call, so we copy the pixels.
-        static void PreviewCallback(int step, int steps, sd_image_t* image, void* data);
+        static void SetPreviewMode(int previewMode, int previewInterval);
 
-        // Thread-safe accessor. Returns a copy of the latest preview.
+        static void PreviewCallback(int step, int frame_count, sd_image_t* frames,
+            bool is_noisy, void* data);
+
         static PreviewFrame GetLatestPreview();
-
-        // Increments every time a new preview frame is stored. Poll this to
-        // avoid re-uploading the same texture every frame.
         static uint64_t GetPreviewSequence();
-
-        // Clear the preview (call when starting a new generation).
         static void ClearPreview();
 
     private:

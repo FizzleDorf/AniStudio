@@ -9,7 +9,7 @@
 namespace GUI {
     ProgressData DiffusionCallbackUtils::progressData;
     std::mutex DiffusionCallbackUtils::mutex;
-    int DiffusionCallbackUtils::m_logLevel = 1; // default INFO
+    int DiffusionCallbackUtils::m_logLevel = 1;
 
     PreviewFrame DiffusionCallbackUtils::previewFrame;
     std::mutex DiffusionCallbackUtils::previewMutex;
@@ -25,18 +25,7 @@ namespace GUI {
 
         sd_set_log_callback(LogCallback, nullptr);
         sd_set_progress_callback(ProgressCallback, nullptr);
-
-        // stable-diffusion.cpp exposes the preview via an extended progress
-        // callback. Its exact name/signature depends on your build. The CLI
-        // uses sd_set_progress_callback_ex() (or sd_set_preview_callback()).
-        // Whichever your header declares, register PreviewCallback here.
-        //
-        // Example (adjust to match your stable-diffusion.h):
-        // sd_set_progress_callback_ex(PreviewCallback, nullptr);
-        //
-        // If your build does NOT expose a preview callback, you can instead
-        // poll the library's internal preview buffer, or hook the step
-        // callback inside the library's own code path.
+        sd_set_preview_callback(PreviewCallback, PREVIEW_NONE, 0, true, false, nullptr);
 
         std::cout << "[DEBUG] SD callbacks set successfully" << std::endl;
     }
@@ -67,23 +56,48 @@ namespace GUI {
         std::cout.flush();
     }
 
-    void DiffusionCallbackUtils::PreviewCallback(int step, int steps, sd_image_t* image, void* data) {
-        if (!image || !image->data || image->width == 0 || image->height == 0 || image->channel == 0) {
+    void DiffusionCallbackUtils::SetPreviewMode(int previewMode, int previewInterval) {
+        preview_t mode = PREVIEW_NONE;
+        switch (previewMode) {
+        case 1: mode = PREVIEW_PROJ; break;
+        case 2: mode = PREVIEW_TAE;  break;
+        case 3: mode = PREVIEW_VAE;  break;
+        default: mode = PREVIEW_NONE; break;
+        }
+
+        if (mode == PREVIEW_NONE) {
+            sd_set_preview_callback(PreviewCallback, PREVIEW_NONE, 0,
+                true, false, nullptr);
             return;
         }
 
-        // Copy pixels ? the library owns `image->data` and may free/reuse it
-        // immediately after this callback returns.
-        const size_t pixelCount = static_cast<size_t>(image->width) * image->height;
-        const size_t byteCount = pixelCount * image->channel;
+        sd_set_preview_callback(PreviewCallback, mode, previewInterval,
+            true, false, nullptr);
+
+        std::cout << "[PREVIEW] mode=" << (int)mode
+            << " interval=" << previewInterval << std::endl;
+    }
+
+    void DiffusionCallbackUtils::PreviewCallback(int step, int frame_count,
+        sd_image_t* frames, bool is_noisy,
+        void* data) {
+        if (!frames || frame_count <= 0) return;
+        sd_image_t& image = frames[0];
+        if (!image.data || image.width == 0 || image.height == 0) return;
+        if (image.channel != 1 && image.channel != 3 && image.channel != 4) return;
+
+        const size_t byteCount =
+            static_cast<size_t>(image.width) *
+            static_cast<size_t>(image.height) *
+            static_cast<size_t>(image.channel);
 
         auto copy = std::shared_ptr<unsigned char[]>(new unsigned char[byteCount]);
-        std::memcpy(copy.get(), image->data, byteCount);
+        std::memcpy(copy.get(), image.data, byteCount);
 
         PreviewFrame frame;
-        frame.width = static_cast<int>(image->width);
-        frame.height = static_cast<int>(image->height);
-        frame.channels = static_cast<int>(image->channel);
+        frame.width = static_cast<int>(image.width);
+        frame.height = static_cast<int>(image.height);
+        frame.channels = static_cast<int>(image.channel);
         frame.data = std::move(copy);
         frame.sequence = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
 
@@ -91,16 +105,10 @@ namespace GUI {
             std::lock_guard<std::mutex> lock(previewMutex);
             previewFrame = std::move(frame);
         }
-
-        // Optional log ? useful while wiring this up.
-        // std::cerr << "[PREVIEW] step " << step << "/" << steps
-        //           << " " << image->width << "x" << image->height
-        //           << " ch=" << image->channel << "\n";
     }
 
     PreviewFrame DiffusionCallbackUtils::GetLatestPreview() {
         std::lock_guard<std::mutex> lock(previewMutex);
-        // Return a copy ? the caller gets its own shared_ptr reference.
         return previewFrame;
     }
 
@@ -111,8 +119,6 @@ namespace GUI {
     void DiffusionCallbackUtils::ClearPreview() {
         std::lock_guard<std::mutex> lock(previewMutex);
         previewFrame = PreviewFrame{};
-        // Do NOT reset previewSequence to 0 ? a poller comparing last-seen
-        // vs. current would then think a new frame arrived. Just bump it.
         previewSequence.fetch_add(1, std::memory_order_relaxed);
     }
 
