@@ -6,9 +6,10 @@
 #include "SettingsSystem.hpp"
 #include "ImageSystem.hpp"
 #include "ImageUtils.hpp"
+#include "TextureSystem.hpp"
+#include "Log.hpp"
 #include "ECS.h"
 #include "OpenGLWrapper.hpp"
-#include <iostream>
 #include <filesystem>
 #include <cstdint>
 #include <cfloat>
@@ -105,9 +106,9 @@ namespace GUI {
         std::string mutablePath = tmp;
         if (!Utils::ImageUtils::SaveImage(mutablePath, frame.width, frame.height,
             frame.channels, frame.data.get())) {
-            std::cerr << "[PreviewView] SaveImage failed for preview frame seq="
-                << frame.sequence << " size=" << frame.width << "x" << frame.height
-                << " ch=" << frame.channels << "\n";
+            ANI_LOG_ERROR("[PreviewView] SaveImage failed for preview frame seq=%llu size=%dx%d ch=%d",
+                static_cast<unsigned long long>(frame.sequence),
+                frame.width, frame.height, frame.channels);
             return;
         }
 
@@ -177,11 +178,12 @@ namespace GUI {
                 m_entityManager.HasComponent<ECS::ImageComponent>(m_previewEntity)) {
                 auto& c = m_entityManager.GetComponent<ECS::ImageComponent>(m_previewEntity);
                 c.ClearImageData();
-                if (c.textureID != 0) {
-                    if (glfwGetCurrentContext()) {
-                        Utils::OpenGLUtils::DeleteTexture(c.textureID);
-                    }
-                    c.textureID = 0;
+            }
+            if (m_previewEntityHasComponent &&
+                m_entityManager.IsEntityValid(m_previewEntity) &&
+                m_entityManager.HasComponent<ECS::TextureComponent>(m_previewEntity)) {
+                if (auto texSys = m_entityManager.GetSystem<ECS::TextureSystem>()) {
+                    texSys->RemoveTexture(m_previewEntity);
                 }
             }
             DeleteLastTempFile();
@@ -249,12 +251,15 @@ namespace GUI {
         int th = 0;
 
         if (m_previewEntityHasComponent &&
-            m_entityManager.IsEntityValid(m_previewEntity) &&
-            m_entityManager.HasComponent<ECS::ImageComponent>(m_previewEntity)) {
-            auto& c = m_entityManager.GetComponent<ECS::ImageComponent>(m_previewEntity);
-            tex = c.textureID;
-            tw = c.width;
-            th = c.height;
+            m_entityManager.IsEntityValid(m_previewEntity)) {
+            if (m_entityManager.HasComponent<ECS::TextureComponent>(m_previewEntity)) {
+                tex = m_entityManager.GetComponent<ECS::TextureComponent>(m_previewEntity).textureID;
+            }
+            if (m_entityManager.HasComponent<ECS::ImageComponent>(m_previewEntity)) {
+                auto& c = m_entityManager.GetComponent<ECS::ImageComponent>(m_previewEntity);
+                tw = c.width;
+                th = c.height;
+            }
         }
 
         if (tex == 0 || tw <= 0 || th <= 0) {

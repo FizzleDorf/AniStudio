@@ -9,6 +9,7 @@
 #include "WaveformUtils.hpp"
 #include "RepeatButtonUtils.hpp"
 #include <vector>
+#include <memory>
 #include <imgui.h>
 
 namespace GUI {
@@ -24,7 +25,7 @@ namespace GUI {
         }
 
         VideoView(ECS::EntityManager& mgr, ViewManager& vm);
-        ~VideoView() = default;
+        ~VideoView() override;
 
         void Init() override;
         void Update(float deltaT) override;
@@ -113,6 +114,7 @@ namespace GUI {
         ECS::PlaybackMode m_playbackMode = ECS::PlaybackMode::Cached;
         std::shared_ptr<ECS::MediaEngineSystem> m_mediaEngine;
         std::shared_ptr<ECS::AudioSystem> m_audioSystem;
+        std::shared_ptr<ECS::VideoSystem> m_videoSystem;
     };
 
 }

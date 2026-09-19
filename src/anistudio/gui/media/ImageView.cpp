@@ -11,6 +11,7 @@
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
 #include "IconFonts.hpp"
+#include "Log.hpp"
 #include <algorithm>
 
 namespace GUI {
@@ -20,6 +21,12 @@ namespace GUI {
         viewName = "ImageView";
     }
 
+    ImageView::~ImageView() {
+        if (imageSystem) {
+            imageSystem->UnregisterCallbacksForOwner(this);
+        }
+    }
+
     void ImageView::Init() {
         imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
         if (!imageSystem) {
@@ -27,10 +34,10 @@ namespace GUI {
             imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
         }
         if (imageSystem) {
-            imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entityID) {
+            imageSystem->RegisterImageAddedCallback(this, [this](ECS::EntityID entityID) {
                 OnMediaAdded(entityID);
                 });
-            imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entityID) {
+            imageSystem->RegisterImageRemovedCallback(this, [this](ECS::EntityID entityID) {
                 OnMediaRemoved(entityID);
                 });
         }
@@ -60,7 +67,7 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[ImageView] SelectMediaEntity event error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[ImageView] SelectMediaEntity event error: %s", e.what());
             }
             });
     }
@@ -199,7 +206,6 @@ namespace GUI {
     void ImageView::RenderToolbar() {
         ImGui::PushID(100);
 
-        // Load button
         ImGui::PushID(101);
         if (ImGui::Button((Icon::Image() + " Load").c_str())) {
             auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
@@ -212,7 +218,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Save button
         ImGui::PushID(102);
         if (ImGui::Button((Icon::Save() + " Save").c_str())) {
             SaveSelectedMedia();
@@ -220,7 +225,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Save As button
         ImGui::PushID(103);
         if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
             auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
@@ -237,7 +241,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Remove button
         ImGui::PushID(104);
         if (ImGui::Button((Icon::Trash() + " Remove").c_str())) {
             RemoveSelectedMedia();
@@ -245,7 +248,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Refresh button
         ImGui::PushID(105);
         if (ImGui::Button(Icon::Refresh().c_str())) {
             RefreshEntities();
@@ -379,7 +381,11 @@ namespace GUI {
         try {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
 
-            GLuint texID = imageComp.textureID;
+            GLuint texID = 0;
+            if (m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
+                texID = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID).textureID;
+            }
+
             if (texID == 0 || !glIsTexture(texID) || imageComp.width <= 0 || imageComp.height <= 0) {
                 ImGui::Text("Image loading... (Texture ID: %u, Size: %dx%d)", texID, imageComp.width, imageComp.height);
                 HandleFileDropTarget();
@@ -442,7 +448,7 @@ namespace GUI {
 
     void ImageView::LoadMedia(const std::vector<std::string>& filePaths) {
         if (!imageSystem) {
-            std::cerr << "[ImageView] ImageSystem not available!" << std::endl;
+            ANI_LOG_ERROR("[ImageView] ImageSystem not available!");
             return;
         }
         try {
@@ -453,11 +459,12 @@ namespace GUI {
                 imageComp.filePath = filePath;
                 imageComp.fileName = std::filesystem::path(filePath).filename().string();
                 imageSystem->SetImage(entity, filePath);
-                std::cout << "[ImageView] Started loading: " << filePath << " (Entity: " << entity << ")" << std::endl;
+                ANI_LOG_INFO("[ImageView] Started loading: %s (Entity: %llu)",
+                    filePath.c_str(), static_cast<unsigned long long>(entity));
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[ImageView] Exception loading images: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ImageView] Exception loading images: %s", e.what());
         }
     }
 
@@ -467,14 +474,14 @@ namespace GUI {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
             if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
                 Utils::ImageUtils::SaveImage(imageComp.filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-                std::cout << "[ImageView] Saved image: " << imageComp.filePath << std::endl;
+                ANI_LOG_INFO("[ImageView] Saved image: %s", imageComp.filePath.c_str());
             }
             else {
-                std::cerr << "[ImageView] No image data available to save" << std::endl;
+                ANI_LOG_WARN("[ImageView] No image data available to save");
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[ImageView] Exception saving image: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ImageView] Exception saving image: %s", e.what());
         }
     }
 
@@ -484,26 +491,33 @@ namespace GUI {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
             if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
                 Utils::ImageUtils::SaveImage(filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-                std::cout << "[ImageView] Saved image as: " << filePath << std::endl;
+                ANI_LOG_INFO("[ImageView] Saved image as: %s", filePath.c_str());
             }
             else {
-                std::cerr << "[ImageView] No image data available to save" << std::endl;
+                ANI_LOG_WARN("[ImageView] No image data available to save");
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[ImageView] Exception saving image: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ImageView] Exception saving image: %s", e.what());
         }
     }
 
     void ImageView::RemoveSelectedMedia() {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
         try {
-            if (imageSystem) imageSystem->RemoveImage(selectedEntityID);
-            else m_entityManager.DestroyEntity(selectedEntityID);
-            OnMediaRemoved(selectedEntityID);
+            if (imageSystem) {
+                imageSystem->RemoveImage(selectedEntityID);
+            }
+
+            if (m_entityManager.IsEntityValid(selectedEntityID)) {
+                if (auto texSys = m_entityManager.GetSystem<ECS::TextureSystem>()) {
+                    texSys->RemoveTexture(selectedEntityID);
+                }
+                m_entityManager.DestroyEntity(selectedEntityID);
+            }
         }
         catch (const std::exception& e) {
-            std::cerr << "[ImageView] Exception removing image: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[ImageView] Exception removing image: %s", e.what());
         }
     }
 

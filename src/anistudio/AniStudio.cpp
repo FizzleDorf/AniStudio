@@ -31,6 +31,8 @@
 #include "SettingsSystem.hpp"
 #include "ProjectManagerView.hpp"
 #include "Log.hpp"
+#include "ImageSystem.hpp"
+#include "TextureSystem.hpp"
 
 #ifdef _WIN32
 #include <GLFW/glfw3native.h>
@@ -581,12 +583,6 @@ namespace ANI {
             std::filesystem::create_directories(projectPath + "/output");
         }
 
-        // NOTE: Plugin project context (SetProjectContext / PrepareProjectPlugins)
-        // is handled inside ProjectSystem::LoadProject *before* the viewstate
-        // is loaded, so plugin view types are registered by the time
-        // ViewManager::DeserializeViewLists runs. Do not call SetProjectContext
-        // here ? doing so would re-run LoadPluginsFromState after viewstate load.
-
         m_showProjectManagerView = false;
         Utils::ImGuiStateUtils::OnProjectLoaded(projectPath);
         Events::Ref().QueueEventWithData("ProjectOpened", projectPath);
@@ -605,9 +601,6 @@ namespace ANI {
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
         }
-
-        // Plugin project context is handled inside ProjectSystem::CreateNewProject
-        // now, mirroring LoadProject.
 
         m_showProjectManagerView = false;
         Utils::ImGuiStateUtils::OnProjectCreated(projectPath);
@@ -688,6 +681,10 @@ namespace ANI {
 
             if (projectSystem) {
                 projectSystem->SetSuppressViewStateSave(true);
+            }
+
+            if (auto imgSys = GetEntityManager().GetSystem<ImageSystem>()) {
+                imgSys->UnregisterCallbacksForOwner(this);
             }
 
             m_menuBar.reset();
@@ -809,40 +806,35 @@ namespace ANI {
         ANI_LOG_INFO("[StudioCore] Setting up core system callbacks...");
 
         auto& entityMgr = GetEntityManager();
-        auto textureSystem = entityMgr.GetSystem<TextureSystem>();
         auto imageSystem = entityMgr.GetSystem<ImageSystem>();
         auto videoSystem = entityMgr.GetSystem<ECS::VideoSystem>();
 
-        if (!textureSystem || !imageSystem) {
-            ANI_LOG_ERROR("[StudioCore] Required systems missing.");
+        if (!imageSystem) {
+            ANI_LOG_ERROR("[StudioCore] ImageSystem missing.");
             return;
         }
 
-        imageSystem->RegisterImageAddedCallback(
-            [this, textureSystem](EntityID entityID) {
-                auto& mgr = GetEntityManager();
-                if (mgr.HasComponent<ImageComponent>(entityID)) {
-                    auto& img = mgr.GetComponent<ImageComponent>(entityID);
-                    textureSystem->QueueTextureCreation(entityID, img.imageData,
-                        img.width, img.height, img.channels);
-                    ANI::Events::Ref().QueueEventWithData("ImageLoaded", entityID);
-                }
+        imageSystem->RegisterImageAddedCallback(this,
+            [this](EntityID entityID) {
+                ANI::Events::Ref().QueueEventWithData("ImageLoaded", entityID);
             });
 
-        imageSystem->RegisterImageRemovedCallback(
-            [this, textureSystem](EntityID entityID) {
-                textureSystem->RemoveTexture(entityID);
+        imageSystem->RegisterImageRemovedCallback(this,
+            [this](EntityID entityID) {
                 ANI::Events::Ref().QueueEventWithData("ImageRemoved", entityID);
             });
 
         if (videoSystem) {
-            videoSystem->SetVideoTextureCallback(
-                [textureSystem](ECS::EntityID entityID, unsigned char* data,
-                    int width, int height, int channels,
-                    GLuint* targetTexture) {
-                        textureSystem->QueueVideoTextureCreation(
-                            entityID, data, width, height, channels, targetTexture);
-                });
+            auto textureSystem = entityMgr.GetSystem<TextureSystem>();
+            if (textureSystem) {
+                videoSystem->SetVideoTextureCallback(
+                    [textureSystem](ECS::EntityID entityID, unsigned char* data,
+                        int width, int height, int channels,
+                        GLuint* targetTexture) {
+                            textureSystem->QueueVideoTextureCreation(
+                                entityID, data, width, height, channels, targetTexture);
+                    });
+            }
         }
     }
 

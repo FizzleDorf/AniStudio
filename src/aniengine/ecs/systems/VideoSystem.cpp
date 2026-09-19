@@ -337,20 +337,39 @@ namespace ECS {
         return result;
     }
 
-    void VideoSystem::RegisterVideoAddedCallback(const VideoCallback& cb) {
-        videoAddedCallbacks.push_back(cb);
+    void VideoSystem::RegisterVideoAddedCallback(void* owner, const VideoCallback& cb) {
+        videoAddedCallbacks.emplace_back(owner, cb);
     }
 
-    void VideoSystem::RegisterVideoRemovedCallback(const VideoCallback& cb) {
-        videoRemovedCallbacks.push_back(cb);
+    void VideoSystem::RegisterVideoRemovedCallback(void* owner, const VideoCallback& cb) {
+        videoRemovedCallbacks.emplace_back(owner, cb);
     }
 
-    void VideoSystem::RegisterSaveCallback(const SaveCallback& cb) {
-        saveCallbacks.push_back(cb);
+    void VideoSystem::RegisterSaveCallback(void* owner, const SaveCallback& cb) {
+        saveCallbacks.emplace_back(owner, cb);
     }
 
-    void VideoSystem::RegisterLoadCallback(const LoadCallback& cb) {
-        loadCallbacks.push_back(cb);
+    void VideoSystem::RegisterLoadCallback(void* owner, const LoadCallback& cb) {
+        loadCallbacks.emplace_back(owner, cb);
+    }
+
+    void VideoSystem::UnregisterCallbacksForOwner(void* owner) {
+        videoAddedCallbacks.erase(
+            std::remove_if(videoAddedCallbacks.begin(), videoAddedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            videoAddedCallbacks.end());
+        videoRemovedCallbacks.erase(
+            std::remove_if(videoRemovedCallbacks.begin(), videoRemovedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            videoRemovedCallbacks.end());
+        saveCallbacks.erase(
+            std::remove_if(saveCallbacks.begin(), saveCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            saveCallbacks.end());
+        loadCallbacks.erase(
+            std::remove_if(loadCallbacks.begin(), loadCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            loadCallbacks.end());
     }
 
     void VideoSystem::SetVideoTextureCallback(const VideoTextureCallback& callback) {
@@ -619,21 +638,24 @@ namespace ECS {
     }
 
     void VideoSystem::NotifyVideoAdded(EntityID entity) {
-        for (const auto& cb : videoAddedCallbacks) {
+        for (const auto& [owner, cb] : videoAddedCallbacks) {
+            (void)owner;
             try { cb(entity); }
             catch (...) {}
         }
     }
 
     void VideoSystem::NotifyVideoRemoved(EntityID entity) {
-        for (const auto& cb : videoRemovedCallbacks) {
+        for (const auto& [owner, cb] : videoRemovedCallbacks) {
+            (void)owner;
             try { cb(entity); }
             catch (...) {}
         }
     }
 
     void VideoSystem::NotifySaveComplete(EntityID entity, bool success, const std::string& path) {
-        for (const auto& cb : saveCallbacks) {
+        for (const auto& [owner, cb] : saveCallbacks) {
+            (void)owner;
             try { cb(entity, success, path); }
             catch (...) {}
         }
@@ -642,7 +664,8 @@ namespace ECS {
     void VideoSystem::NotifyLoadComplete(EntityID entity, bool success) {
         std::lock_guard<std::recursive_mutex> lock(m_loadMutex);
         m_loadingStatus[entity] = false;
-        for (const auto& cb : loadCallbacks) {
+        for (const auto& [owner, cb] : loadCallbacks) {
+            (void)owner;
             try { cb(entity, success); }
             catch (...) {}
         }

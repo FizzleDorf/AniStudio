@@ -18,7 +18,6 @@ namespace ECS {
         int width = 0;
         int height = 0;
         int channels = 0;
-        GLuint textureID = 0;
         bool hasExifData = false;
         bool hasLSBData = false;
         bool hasAniStudioMetadata = false;
@@ -69,7 +68,6 @@ namespace ECS {
             height = other.height;
             channels = other.channels;
             imageData = nullptr;
-            textureID = 0;
             fileSize = other.fileSize;
             fileDate = other.fileDate;
             fileTime = other.fileTime;
@@ -117,10 +115,6 @@ namespace ECS {
         }
 
         virtual ~ImageComponent() {
-            if (textureID != 0) {
-                glDeleteTextures(1, &textureID);
-                textureID = 0;
-            }
             imageDataPtr.reset();
             imageData = nullptr;
         }

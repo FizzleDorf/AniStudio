@@ -13,6 +13,7 @@
 #include <future>
 #include <mutex>
 #include <shared_mutex>
+#include <utility>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -42,10 +43,11 @@ namespace ECS {
         void ClearCache(EntityID entity);
         std::vector<EntityID> GetAllVideoEntities() const;
 
-        void RegisterVideoAddedCallback(const VideoCallback& cb);
-        void RegisterVideoRemovedCallback(const VideoCallback& cb);
-        void RegisterSaveCallback(const SaveCallback& cb);
-        void RegisterLoadCallback(const LoadCallback& cb);
+        void RegisterVideoAddedCallback(void* owner, const VideoCallback& cb);
+        void RegisterVideoRemovedCallback(void* owner, const VideoCallback& cb);
+        void RegisterSaveCallback(void* owner, const SaveCallback& cb);
+        void RegisterLoadCallback(void* owner, const LoadCallback& cb);
+        void UnregisterCallbacksForOwner(void* owner);
 
         void SetVideoTextureCallback(const VideoTextureCallback& callback);
 
@@ -167,10 +169,10 @@ namespace ECS {
             LoadingTask& operator=(const LoadingTask&) = delete;
         };
 
-        std::vector<VideoCallback> videoAddedCallbacks;
-        std::vector<VideoCallback> videoRemovedCallbacks;
-        std::vector<SaveCallback> saveCallbacks;
-        std::vector<LoadCallback> loadCallbacks;
+        std::vector<std::pair<void*, VideoCallback>> videoAddedCallbacks;
+        std::vector<std::pair<void*, VideoCallback>> videoRemovedCallbacks;
+        std::vector<std::pair<void*, SaveCallback>> saveCallbacks;
+        std::vector<std::pair<void*, LoadCallback>> loadCallbacks;
         VideoTextureCallback m_textureCallback;
 
         std::unordered_map<EntityID, std::future<bool>> m_saveFutures;

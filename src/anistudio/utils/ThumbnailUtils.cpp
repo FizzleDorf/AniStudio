@@ -85,7 +85,7 @@ namespace GUI {
             return aud != nullptr && !aud->pcmData.empty();
         }
 
-        static GLuint GetVideoTextureID(ECS::EntityManager* entityManager, ECS::EntityID entityID) {
+        static GLuint GetEntityTextureID(ECS::EntityManager* entityManager, ECS::EntityID entityID) {
             if (!entityManager) return 0;
             if (!entityManager->IsEntityValid(entityID)) return 0;
             if (!entityManager->HasComponent<ECS::TextureComponent>(entityID)) return 0;
@@ -192,7 +192,7 @@ namespace GUI {
                 filePath = img->filePath;
                 fileName = img->fileName;
                 entityID = img->GetID();
-                textureID = img->textureID;
+                textureID = GetEntityTextureID(entityManager, entityID);
                 width = img->width;
                 height = img->height;
                 channels = img->channels;
@@ -207,7 +207,7 @@ namespace GUI {
                 filePath = vid->filePath;
                 fileName = vid->fileName;
                 entityID = vid->GetID();
-                textureID = GetVideoTextureID(entityManager, entityID);
+                textureID = GetEntityTextureID(entityManager, entityID);
                 width = vid->width;
                 height = vid->height;
                 channels = 4;
@@ -520,7 +520,7 @@ namespace GUI {
                 filePath = img->filePath;
                 fileName = img->fileName;
                 entityID = img->GetID();
-                textureID = img->textureID;
+                textureID = GetEntityTextureID(entityManager, entityID);
                 width = img->width;
                 height = img->height;
                 channels = img->channels;
@@ -535,7 +535,7 @@ namespace GUI {
                 filePath = vid->filePath;
                 fileName = vid->fileName;
                 entityID = vid->GetID();
-                textureID = GetVideoTextureID(entityManager, entityID);
+                textureID = GetEntityTextureID(entityManager, entityID);
                 width = vid->width;
                 height = vid->height;
                 channels = 4;

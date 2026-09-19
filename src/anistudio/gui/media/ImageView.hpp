@@ -18,7 +18,7 @@ namespace GUI {
         }
 
         ImageView(ECS::EntityManager& mgr, ViewManager& vm);
-        ~ImageView() = default;
+        ~ImageView() override;
 
         void Init() override;
         void Update(float deltaT) override;

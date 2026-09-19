@@ -23,7 +23,7 @@ namespace GUI {
         }
 
         AudioView(ECS::EntityManager& mgr, ViewManager& vm);
-        ~AudioView() = default;
+        ~AudioView() override;
 
         void Init() override;
         void Update(float deltaT) override;
@@ -74,6 +74,8 @@ namespace GUI {
 
         ECS::PlaybackMode m_playbackMode = ECS::PlaybackMode::Cached;
         std::shared_ptr<ECS::MediaEngineSystem> m_mediaEngine;
+        std::shared_ptr<ECS::AudioSystem> m_audioSystem;
+        std::shared_ptr<ECS::AudioPlaybackSystem> m_playbackSystem;
     };
 
 }

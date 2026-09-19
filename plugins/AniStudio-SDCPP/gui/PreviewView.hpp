@@ -4,6 +4,7 @@
 #include "BaseView.hpp"
 #include "DiffusionCallbackUtils.hpp"
 #include "ImageComponent.hpp"
+#include "TextureComponent.hpp"
 #include "ECS.h"
 #include <imgui.h>
 #include <string>

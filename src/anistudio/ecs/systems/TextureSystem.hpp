@@ -4,17 +4,19 @@
 #include "EntityManager.hpp"
 #include "ImageComponent.hpp"
 #include "TextureComponent.hpp"
+#include "ImageSystem.hpp"
 #include "VideoSystem.hpp"
 #include "ImageUtils.hpp"
 #include "OpenGLUtils.hpp"
 #include "DragDropUtils.hpp"
+#include "Log.hpp"
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <iostream>
 #include <queue>
 #include <mutex>
 #include <functional>
 #include <cstdlib>
+#include <cstring>
 
 namespace ECS {
 
@@ -41,22 +43,46 @@ namespace ECS {
 
         ~TextureSystem() override {
             for (auto entity : entities) {
-                if (mgr.HasComponent<ImageComponent>(entity)) {
-                    auto& imgComp = mgr.GetComponent<ImageComponent>(entity);
-                    DeleteTexture(imgComp);
-                }
                 if (mgr.HasComponent<TextureComponent>(entity)) {
                     auto& texComp = mgr.GetComponent<TextureComponent>(entity);
                     DeleteTexture(texComp);
                 }
+            }
+            while (!textureQueue.empty()) {
+                TextureCreationRequest& req = textureQueue.front();
+                if (req.imageData) {
+                    if (req.isVideo) free(req.imageData);
+                    else Utils::ImageUtils::FreeImageData(req.imageData);
+                }
+                textureQueue.pop();
             }
         }
 
         void Start() override {
             auto videoSystem = mgr.GetSystem<VideoSystem>();
             if (videoSystem) {
-                videoSystem->RegisterVideoRemovedCallback([this](EntityID entity) {
+                videoSystem->RegisterVideoRemovedCallback(this, [this](EntityID entity) {
                     RemoveTexture(entity);
+                    });
+            }
+
+            auto imageSystem = mgr.GetSystem<ImageSystem>();
+            if (imageSystem) {
+                imageSystem->RegisterImageRemovedCallback(this, [this](EntityID entity) {
+                    RemoveTexture(entity);
+                    });
+
+                imageSystem->RegisterImageReadyCallback(this,
+                    [this](EntityID entity, unsigned char* data, int w, int h, int ch) {
+                        if (!data || w <= 0 || h <= 0 || ch <= 0) return;
+                        size_t size = static_cast<size_t>(w) * h * ch;
+                        unsigned char* copy = static_cast<unsigned char*>(malloc(size));
+                        if (!copy) {
+                            ANI_LOG_ERROR("[TextureSystem] malloc failed for image texture copy (%zu bytes)", size);
+                            return;
+                        }
+                        memcpy(copy, data, size);
+                        QueueTextureCreation(entity, copy, w, h, ch);
                     });
             }
         }
@@ -193,23 +219,23 @@ namespace ECS {
                     }
                 }
                 else {
-                    if (!mgr.HasComponent<ImageComponent>(request.entityID)) {
-                        if (request.imageData) {
-                            Utils::ImageUtils::FreeImageData(request.imageData);
-                        }
-                        continue;
+                    if (!mgr.HasComponent<TextureComponent>(request.entityID)) {
+                        mgr.AddComponent<TextureComponent>(request.entityID);
                     }
-                    auto& imgComp = mgr.GetComponent<ImageComponent>(request.entityID);
-                    if (imgComp.textureID != 0) {
-                        DeleteTexture(imgComp);
+                    auto& texComp = mgr.GetComponent<TextureComponent>(request.entityID);
+
+                    if (texComp.textureID != 0) {
+                        Utils::OpenGLUtils::DeleteTexture(texComp.textureID);
+                        texComp.textureID = 0;
                     }
-                    imgComp.textureID = Utils::OpenGLUtils::GenerateTexture(
+
+                    texComp.textureID = Utils::OpenGLUtils::GenerateTexture(
                         request.width, request.height, request.channels, request.imageData
                     );
-                    if (imgComp.textureID != 0) {
-                        imgComp.width = request.width;
-                        imgComp.height = request.height;
-                        imgComp.channels = request.channels;
+                    if (texComp.textureID != 0) {
+                        texComp.width = request.width;
+                        texComp.height = request.height;
+                        texComp.channels = request.channels;
                     }
                     if (request.imageData) {
                         Utils::ImageUtils::FreeImageData(request.imageData);
@@ -220,10 +246,6 @@ namespace ECS {
         }
 
         void RemoveTexture(EntityID entityID) {
-            if (mgr.HasComponent<ImageComponent>(entityID)) {
-                auto& imgComp = mgr.GetComponent<ImageComponent>(entityID);
-                DeleteTexture(imgComp);
-            }
             if (mgr.HasComponent<TextureComponent>(entityID)) {
                 auto& texComp = mgr.GetComponent<TextureComponent>(entityID);
                 DeleteTexture(texComp);
@@ -232,9 +254,6 @@ namespace ECS {
         }
 
         GLuint GetTextureID(EntityID entityID) const {
-            if (mgr.HasComponent<ImageComponent>(entityID)) {
-                return mgr.GetComponent<ImageComponent>(entityID).textureID;
-            }
             if (mgr.HasComponent<TextureComponent>(entityID)) {
                 return mgr.GetComponent<TextureComponent>(entityID).textureID;
             }
@@ -266,19 +285,6 @@ namespace ECS {
         std::mutex queueMutex;
         bool m_needsTextureCreation;
         VideoTextureCallback m_videoTextureCallback;
-
-        void DeleteTexture(ImageComponent& imgComp) {
-            if (imgComp.textureID != 0) {
-                GLFWwindow* currentContext = glfwGetCurrentContext();
-                if (currentContext) {
-                    Utils::OpenGLUtils::DeleteTexture(imgComp.textureID);
-                }
-                imgComp.textureID = 0;
-                imgComp.width = 0;
-                imgComp.height = 0;
-                imgComp.channels = 0;
-            }
-        }
 
         void DeleteTexture(TextureComponent& texComp) {
             if (texComp.textureID != 0) {

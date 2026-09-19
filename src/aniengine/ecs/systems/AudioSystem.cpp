@@ -84,16 +84,31 @@ namespace ECS {
         }
     }
 
-    void AudioSystem::RegisterAudioAddedCallback(const AudioCallback& callback) {
-        audioAddedCallbacks.push_back(callback);
+    void AudioSystem::RegisterAudioAddedCallback(void* owner, const AudioCallback& callback) {
+        audioAddedCallbacks.emplace_back(owner, callback);
     }
 
-    void AudioSystem::RegisterAudioRemovedCallback(const AudioCallback& callback) {
-        audioRemovedCallbacks.push_back(callback);
+    void AudioSystem::RegisterAudioRemovedCallback(void* owner, const AudioCallback& callback) {
+        audioRemovedCallbacks.emplace_back(owner, callback);
     }
 
-    void AudioSystem::RegisterAudioDataCallback(const AudioDataCallback& callback) {
-        audioDataCallbacks.push_back(callback);
+    void AudioSystem::RegisterAudioDataCallback(void* owner, const AudioDataCallback& callback) {
+        audioDataCallbacks.emplace_back(owner, callback);
+    }
+
+    void AudioSystem::UnregisterCallbacksForOwner(void* owner) {
+        audioAddedCallbacks.erase(
+            std::remove_if(audioAddedCallbacks.begin(), audioAddedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            audioAddedCallbacks.end());
+        audioRemovedCallbacks.erase(
+            std::remove_if(audioRemovedCallbacks.begin(), audioRemovedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            audioRemovedCallbacks.end());
+        audioDataCallbacks.erase(
+            std::remove_if(audioDataCallbacks.begin(), audioDataCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            audioDataCallbacks.end());
     }
 
     void AudioSystem::SetAudio(EntityID entity, const std::string& filePath) {
@@ -627,7 +642,8 @@ namespace ECS {
     }
 
     void AudioSystem::NotifyAudioAdded(EntityID entity) {
-        for (const auto& cb : audioAddedCallbacks) {
+        for (const auto& [owner, cb] : audioAddedCallbacks) {
+            (void)owner;
             try { cb(entity); }
             catch (const std::exception& e) {
                 std::cerr << "[AudioSystem] Exception in audio added callback: " << e.what() << std::endl;
@@ -636,7 +652,8 @@ namespace ECS {
     }
 
     void AudioSystem::NotifyAudioRemoved(EntityID entity) {
-        for (const auto& cb : audioRemovedCallbacks) {
+        for (const auto& [owner, cb] : audioRemovedCallbacks) {
+            (void)owner;
             try { cb(entity); }
             catch (const std::exception& e) {
                 std::cerr << "[AudioSystem] Exception in audio removed callback: " << e.what() << std::endl;
@@ -645,7 +662,8 @@ namespace ECS {
     }
 
     void AudioSystem::NotifyAudioData(EntityID entity, const float* data, size_t size, int channels, int sampleRate) {
-        for (const auto& cb : audioDataCallbacks) {
+        for (const auto& [owner, cb] : audioDataCallbacks) {
+            (void)owner;
             try { cb(entity, data, size, channels, sampleRate); }
             catch (const std::exception& e) {
                 std::cerr << "[AudioSystem] Exception in audio data callback: " << e.what() << std::endl;

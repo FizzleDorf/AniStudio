@@ -13,6 +13,7 @@
 #include <vector>
 #include <unordered_map>
 #include <limits>
+#include <memory>
 
 namespace GUI {
 
@@ -27,7 +28,7 @@ namespace GUI {
         }
 
         MediaHistoryView(ECS::EntityManager& mgr, ViewManager& vm);
-        ~MediaHistoryView() = default;
+        ~MediaHistoryView() override;
 
         void Init() override;
         void Update(float deltaT) override;

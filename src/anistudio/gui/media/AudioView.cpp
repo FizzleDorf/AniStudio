@@ -28,6 +28,15 @@ namespace GUI {
         m_waveformRenderer.SetConfig(wfConfig);
     }
 
+    AudioView::~AudioView() {
+        if (m_audioSystem) {
+            m_audioSystem->UnregisterCallbacksForOwner(this);
+        }
+        if (m_playbackSystem) {
+            m_playbackSystem->UnregisterCallbacksForOwner(this);
+        }
+    }
+
     void AudioView::Init() {
         std::cout << "[AudioView] Initializing..." << std::endl;
 
@@ -136,15 +145,17 @@ namespace GUI {
             m_entityManager.RegisterSystem<ECS::AudioSystem>();
             audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
         }
+        m_audioSystem = audioSystem;
 
         auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
         if (!playbackSystem) {
             m_entityManager.RegisterSystem<ECS::AudioPlaybackSystem>();
             playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
         }
+        m_playbackSystem = playbackSystem;
 
         if (audioSystem) {
-            audioSystem->RegisterAudioAddedCallback([this](ECS::EntityID entity) {
+            audioSystem->RegisterAudioAddedCallback(this, [this](ECS::EntityID entity) {
                 OnMediaAdded(entity);
                 if (!mediaEntities.empty()) {
                     auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
@@ -156,12 +167,13 @@ namespace GUI {
                 }
                 });
 
-            audioSystem->RegisterAudioRemovedCallback([this](ECS::EntityID entity) {
+            audioSystem->RegisterAudioRemovedCallback(this, [this](ECS::EntityID entity) {
                 OnMediaRemoved(entity);
                 });
 
-            audioSystem->RegisterAudioDataCallback([this](ECS::EntityID entity, const float* data,
-                size_t size, int channels, int sampleRate) {
+            audioSystem->RegisterAudioDataCallback(this,
+                [this](ECS::EntityID entity, const float* data, size_t size, int channels, int sampleRate) {
+                    (void)data; (void)size; (void)channels; (void)sampleRate;
                     if (entity == selectedEntityID) {
                         UpdateWaveformData();
                     }
@@ -169,8 +181,8 @@ namespace GUI {
         }
 
         if (playbackSystem) {
-            playbackSystem->RegisterPlaybackCallback([this](ECS::EntityID entity, const float* data,
-                size_t size, int channels) {
+            playbackSystem->RegisterPlaybackCallback(this,
+                [this](ECS::EntityID entity, const float* data, size_t size, int channels) {
                     (void)entity; (void)data; (void)size; (void)channels;
                 });
         }

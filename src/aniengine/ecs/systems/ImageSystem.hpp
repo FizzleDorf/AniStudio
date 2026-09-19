@@ -14,12 +14,15 @@
 #include <future>
 #include <chrono>
 #include <filesystem>
+#include <vector>
+#include <utility>
 
 namespace ECS {
 
     class ImageSystem : public BaseSystem {
     public:
         using ImageCallback = std::function<void(EntityID)>;
+        using ImageReadyCallback = std::function<void(EntityID, unsigned char*, int, int, int)>;
 
         struct LoadResult {
             bool success = false;
@@ -37,6 +40,11 @@ namespace ECS {
             bool hasLSB = false;
             bool hasAniStudio = false;
 
+            LoadResult() = default;
+            LoadResult(const LoadResult&) = delete;
+            LoadResult& operator=(const LoadResult&) = delete;
+            LoadResult(LoadResult&& other) noexcept;
+            LoadResult& operator=(LoadResult&& other) noexcept;
             ~LoadResult();
         };
 
@@ -58,16 +66,19 @@ namespace ECS {
         void Start() override;
         void Update(const float deltaT) override;
 
-        void RegisterImageAddedCallback(const ImageCallback& callback);
-        void RegisterImageRemovedCallback(const ImageCallback& callback);
+        void RegisterImageAddedCallback(void* owner, const ImageCallback& callback);
+        void RegisterImageRemovedCallback(void* owner, const ImageCallback& callback);
+        void RegisterImageReadyCallback(void* owner, const ImageReadyCallback& callback);
+        void UnregisterCallbacksForOwner(void* owner);
 
         void SetImage(const EntityID entity, const std::string& filePath);
         void RemoveImage(const EntityID entity);
         std::vector<EntityID> GetAllImageEntities() const;
 
     private:
-        std::vector<ImageCallback> imageAddedCallbacks;
-        std::vector<ImageCallback> imageRemovedCallbacks;
+        std::vector<std::pair<void*, ImageCallback>> imageAddedCallbacks;
+        std::vector<std::pair<void*, ImageCallback>> imageRemovedCallbacks;
+        std::vector<std::pair<void*, ImageReadyCallback>> imageReadyCallbacks;
         std::vector<LoadingTask> pendingLoads;
         mutable std::mutex loadMutex;
 
@@ -75,6 +86,7 @@ namespace ECS {
         void ProcessCompletedLoads();
         void NotifyImageAdded(EntityID entity);
         void NotifyImageRemoved(EntityID entity);
+        void NotifyImageReady(EntityID entity, unsigned char* data, int w, int h, int ch);
     };
 
 } // namespace ECS

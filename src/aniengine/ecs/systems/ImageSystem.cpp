@@ -1,13 +1,59 @@
 #include "ImageSystem.hpp"
 #include "ThreadPoolSystem.hpp"
 #include "ImageUtils.hpp"
-#include <iostream>
+#include "Log.hpp"
 #include <stb_image.h>
+#include <algorithm>
 
 namespace ECS {
 
+    ImageSystem::LoadResult::LoadResult(LoadResult&& other) noexcept
+        : success(other.success)
+        , data(other.data)
+        , width(other.width)
+        , height(other.height)
+        , channels(other.channels)
+        , fileName(std::move(other.fileName))
+        , filePath(std::move(other.filePath))
+        , entityID(other.entityID)
+        , fileSize(other.fileSize)
+        , fileDate(std::move(other.fileDate))
+        , fileTime(std::move(other.fileTime))
+        , hasExif(other.hasExif)
+        , hasLSB(other.hasLSB)
+        , hasAniStudio(other.hasAniStudio) {
+        other.data = nullptr;
+    }
+
+    ImageSystem::LoadResult& ImageSystem::LoadResult::operator=(LoadResult&& other) noexcept {
+        if (this != &other) {
+            if (data) {
+                stbi_image_free(data);
+            }
+            success = other.success;
+            data = other.data;
+            width = other.width;
+            height = other.height;
+            channels = other.channels;
+            fileName = std::move(other.fileName);
+            filePath = std::move(other.filePath);
+            entityID = other.entityID;
+            fileSize = other.fileSize;
+            fileDate = std::move(other.fileDate);
+            fileTime = std::move(other.fileTime);
+            hasExif = other.hasExif;
+            hasLSB = other.hasLSB;
+            hasAniStudio = other.hasAniStudio;
+            other.data = nullptr;
+        }
+        return *this;
+    }
+
     ImageSystem::LoadResult::~LoadResult() {
-        data = nullptr;
+        if (data) {
+            stbi_image_free(data);
+            data = nullptr;
+        }
     }
 
     ImageSystem::LoadingTask::LoadingTask(LoadingTask&& other) noexcept
@@ -32,7 +78,7 @@ namespace ECS {
     }
 
     ImageSystem::~ImageSystem() {
-        std::cout << "[ImageSystem] Destructor - cleaning up" << std::endl;
+        ANI_LOG_DEBUG("[ImageSystem] Destructor - cleaning up");
         std::lock_guard<std::mutex> lock(loadMutex);
         for (auto& task : pendingLoads) {
             if (task.future.valid()) {
@@ -45,10 +91,13 @@ namespace ECS {
             }
         }
         pendingLoads.clear();
+        imageAddedCallbacks.clear();
+        imageRemovedCallbacks.clear();
+        imageReadyCallbacks.clear();
     }
 
     void ImageSystem::Start() {
-        std::cout << "[ImageSystem] Started" << std::endl;
+        ANI_LOG_INFO("[ImageSystem] Started");
         for (auto entity : entities) {
             if (mgr.HasComponent<ImageComponent>(entity)) {
                 auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
@@ -63,12 +112,31 @@ namespace ECS {
         ProcessCompletedLoads();
     }
 
-    void ImageSystem::RegisterImageAddedCallback(const ImageCallback& callback) {
-        imageAddedCallbacks.push_back(callback);
+    void ImageSystem::RegisterImageAddedCallback(void* owner, const ImageCallback& callback) {
+        imageAddedCallbacks.emplace_back(owner, callback);
     }
 
-    void ImageSystem::RegisterImageRemovedCallback(const ImageCallback& callback) {
-        imageRemovedCallbacks.push_back(callback);
+    void ImageSystem::RegisterImageRemovedCallback(void* owner, const ImageCallback& callback) {
+        imageRemovedCallbacks.emplace_back(owner, callback);
+    }
+
+    void ImageSystem::RegisterImageReadyCallback(void* owner, const ImageReadyCallback& callback) {
+        imageReadyCallbacks.emplace_back(owner, callback);
+    }
+
+    void ImageSystem::UnregisterCallbacksForOwner(void* owner) {
+        imageAddedCallbacks.erase(
+            std::remove_if(imageAddedCallbacks.begin(), imageAddedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            imageAddedCallbacks.end());
+        imageRemovedCallbacks.erase(
+            std::remove_if(imageRemovedCallbacks.begin(), imageRemovedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            imageRemovedCallbacks.end());
+        imageReadyCallbacks.erase(
+            std::remove_if(imageReadyCallbacks.begin(), imageReadyCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            imageReadyCallbacks.end());
     }
 
     void ImageSystem::SetImage(const EntityID entity, const std::string& filePath) {
@@ -85,18 +153,14 @@ namespace ECS {
     }
 
     void ImageSystem::RemoveImage(const EntityID entity) {
-        if (mgr.HasComponent<ImageComponent>(entity)) {
-            if (mgr.HasComponent<InputImageComponent>(entity)) {
-                auto& inputComp = mgr.GetComponent<InputImageComponent>(entity);
-                inputComp.ClearImageData();
-            }
-            else {
-                auto& imageComp = mgr.GetComponent<ImageComponent>(entity);
-                imageComp.ClearImageData();
-            }
-            NotifyImageRemoved(entity);
-            mgr.DestroyEntity(entity);
+        if (!mgr.HasComponent<ImageComponent>(entity)) return;
+
+        NotifyImageRemoved(entity);
+
+        if (mgr.HasComponent<InputImageComponent>(entity)) {
+            mgr.GetComponent<InputImageComponent>(entity).ClearImageData();
         }
+        mgr.GetComponent<ImageComponent>(entity).ClearImageData();
     }
 
     std::vector<EntityID> ImageSystem::GetAllImageEntities() const {
@@ -112,7 +176,7 @@ namespace ECS {
     void ImageSystem::LoadImageAsync(EntityID entity, const std::string& filePath) {
         auto threadPoolSys = mgr.GetSystem<ThreadPoolSystem>();
         if (!threadPoolSys) {
-            std::cerr << "[ImageSystem] ThreadPoolSystem not available!" << std::endl;
+            ANI_LOG_ERROR("[ImageSystem] ThreadPoolSystem not available!");
             return;
         }
 
@@ -177,6 +241,7 @@ namespace ECS {
 
                         if (result.success) {
                             imageComp.SetImageData(result.data, result.width, result.height, result.channels);
+                            result.data = nullptr;
                             imageComp.fileName = result.fileName;
                             imageComp.filePath = result.filePath;
                             imageComp.fileSize = result.fileSize;
@@ -188,7 +253,7 @@ namespace ECS {
 
                             if (mgr.HasComponent<InputImageComponent>(result.entityID)) {
                                 auto& inputComp = mgr.GetComponent<InputImageComponent>(result.entityID);
-                                inputComp.SetImageData(result.data, result.width, result.height, result.channels);
+                                inputComp.SetImageData(imageComp.imageData, result.width, result.height, result.channels);
                                 inputComp.fileName = result.fileName;
                                 inputComp.filePath = result.filePath;
                                 inputComp.fileSize = result.fileSize;
@@ -199,22 +264,21 @@ namespace ECS {
                                 inputComp.hasAniStudioMetadata = result.hasAniStudio;
                             }
 
+                            NotifyImageReady(result.entityID, imageComp.imageData,
+                                imageComp.width, imageComp.height, imageComp.channels);
                             NotifyImageAdded(result.entityID);
                         }
                         else {
-                            std::cerr << "[ImageSystem] Failed to load image: " << result.filePath << std::endl;
+                            ANI_LOG_ERROR("[ImageSystem] Failed to load image: %s", result.filePath.c_str());
                         }
                     }
                     else {
-                        if (result.data) {
-                            stbi_image_free(result.data);
-                            result.data = nullptr;
-                        }
-                        std::cout << "[ImageSystem] Entity " << result.entityID << " no longer has ImageComponent, freed data" << std::endl;
+                        ANI_LOG_DEBUG("[ImageSystem] Entity %llu no longer has ImageComponent, freed data",
+                            static_cast<unsigned long long>(result.entityID));
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[ImageSystem] Exception in ProcessCompletedLoads: " << e.what() << std::endl;
+                    ANI_LOG_ERROR("[ImageSystem] Exception in ProcessCompletedLoads: %s", e.what());
                 }
 
                 it = pendingLoads.erase(it);
@@ -226,23 +290,37 @@ namespace ECS {
     }
 
     void ImageSystem::NotifyImageAdded(EntityID entity) {
-        for (const auto& cb : imageAddedCallbacks) {
+        for (const auto& [owner, cb] : imageAddedCallbacks) {
+            (void)owner;
             try {
                 cb(entity);
             }
             catch (const std::exception& e) {
-                std::cerr << "[ImageSystem] Exception in image added callback: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[ImageSystem] Exception in image added callback: %s", e.what());
             }
         }
     }
 
     void ImageSystem::NotifyImageRemoved(EntityID entity) {
-        for (const auto& cb : imageRemovedCallbacks) {
+        for (const auto& [owner, cb] : imageRemovedCallbacks) {
+            (void)owner;
             try {
                 cb(entity);
             }
             catch (const std::exception& e) {
-                std::cerr << "[ImageSystem] Exception in image removed callback: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[ImageSystem] Exception in image removed callback: %s", e.what());
+            }
+        }
+    }
+
+    void ImageSystem::NotifyImageReady(EntityID entity, unsigned char* data, int w, int h, int ch) {
+        for (const auto& [owner, cb] : imageReadyCallbacks) {
+            (void)owner;
+            try {
+                cb(entity, data, w, h, ch);
+            }
+            catch (const std::exception& e) {
+                ANI_LOG_ERROR("[ImageSystem] Exception in image ready callback: %s", e.what());
             }
         }
     }

@@ -9,6 +9,7 @@
 #include "AudioSystem.hpp"
 #include "ImageUtils.hpp"
 #include "ThumbnailFilters.hpp"
+#include "Log.hpp"
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -21,6 +22,18 @@ namespace GUI {
         contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
     }
 
+    MediaHistoryView::~MediaHistoryView() {
+        if (imageSystem) {
+            imageSystem->UnregisterCallbacksForOwner(this);
+        }
+        if (videoSystem) {
+            videoSystem->UnregisterCallbacksForOwner(this);
+        }
+        if (audioSystem) {
+            audioSystem->UnregisterCallbacksForOwner(this);
+        }
+    }
+
     void MediaHistoryView::Init() {
         imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
         if (!imageSystem) {
@@ -28,8 +41,8 @@ namespace GUI {
             imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
         }
         if (imageSystem) {
-            imageSystem->RegisterImageAddedCallback([this](ECS::EntityID entity) { OnMediaAdded(entity); });
-            imageSystem->RegisterImageRemovedCallback([this](ECS::EntityID entity) { OnMediaRemoved(entity); });
+            imageSystem->RegisterImageAddedCallback(this, [this](ECS::EntityID entity) { OnMediaAdded(entity); });
+            imageSystem->RegisterImageRemovedCallback(this, [this](ECS::EntityID entity) { OnMediaRemoved(entity); });
         }
 
         videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
@@ -38,8 +51,8 @@ namespace GUI {
             videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         }
         if (videoSystem) {
-            videoSystem->RegisterVideoAddedCallback([this](ECS::EntityID entity) { OnMediaAdded(entity); });
-            videoSystem->RegisterVideoRemovedCallback([this](ECS::EntityID entity) { OnMediaRemoved(entity); });
+            videoSystem->RegisterVideoAddedCallback(this, [this](ECS::EntityID entity) { OnMediaAdded(entity); });
+            videoSystem->RegisterVideoRemovedCallback(this, [this](ECS::EntityID entity) { OnMediaRemoved(entity); });
         }
 
         audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
@@ -48,8 +61,8 @@ namespace GUI {
             audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
         }
         if (audioSystem) {
-            audioSystem->RegisterAudioAddedCallback([this](ECS::EntityID entity) { OnMediaAdded(entity); });
-            audioSystem->RegisterAudioRemovedCallback([this](ECS::EntityID entity) { OnMediaRemoved(entity); });
+            audioSystem->RegisterAudioAddedCallback(this, [this](ECS::EntityID entity) { OnMediaAdded(entity); });
+            audioSystem->RegisterAudioRemovedCallback(this, [this](ECS::EntityID entity) { OnMediaRemoved(entity); });
         }
 
         RefreshEntities();
@@ -72,7 +85,7 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[MediaHistoryView] SelectMediaEntity event error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[MediaHistoryView] SelectMediaEntity event error: %s", e.what());
             }
             });
     }
@@ -264,7 +277,8 @@ namespace GUI {
                     [this](ECS::EntityID id) { SelectMedia(id); },
                     contextMenuUtils.get(),
                     true,
-                    selectedEntityID
+                    selectedEntityID,
+                    &m_entityManager
                 );
             }
             else {
@@ -276,7 +290,8 @@ namespace GUI {
                     [this](ECS::EntityID id) { SelectMedia(id); },
                     contextMenuUtils.get(),
                     true,
-                    selectedEntityID
+                    selectedEntityID,
+                    &m_entityManager
                 );
             }
 

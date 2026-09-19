@@ -13,6 +13,7 @@
 #include <future>
 #include <chrono>
 #include <filesystem>
+#include <utility>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -64,9 +65,10 @@ namespace ECS {
         void Update(float deltaT) override;
         void Destroy() override;
 
-        void RegisterAudioAddedCallback(const AudioCallback& callback);
-        void RegisterAudioRemovedCallback(const AudioCallback& callback);
-        void RegisterAudioDataCallback(const AudioDataCallback& callback);
+        void RegisterAudioAddedCallback(void* owner, const AudioCallback& callback);
+        void RegisterAudioRemovedCallback(void* owner, const AudioCallback& callback);
+        void RegisterAudioDataCallback(void* owner, const AudioDataCallback& callback);
+        void UnregisterCallbacksForOwner(void* owner);
 
         void SetAudio(EntityID entity, const std::string& filePath);
         void RemoveAudio(EntityID entity);
@@ -80,9 +82,9 @@ namespace ECS {
         static LoadResult ExtractAudioFromVideoFile(const std::string& filePath, EntityID entity);
 
     private:
-        std::vector<AudioCallback> audioAddedCallbacks;
-        std::vector<AudioCallback> audioRemovedCallbacks;
-        std::vector<AudioDataCallback> audioDataCallbacks;
+        std::vector<std::pair<void*, AudioCallback>> audioAddedCallbacks;
+        std::vector<std::pair<void*, AudioCallback>> audioRemovedCallbacks;
+        std::vector<std::pair<void*, AudioDataCallback>> audioDataCallbacks;
         std::vector<LoadingTask> pendingLoads;
         mutable std::mutex loadMutex;
 

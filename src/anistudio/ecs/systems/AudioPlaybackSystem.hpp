@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <vector>
+#include <utility>
 
 namespace ECS {
 
@@ -26,8 +27,9 @@ namespace ECS {
         void Update(float deltaT) override;
         void Destroy() override;
 
-        void RegisterPlaybackCallback(const AudioPlaybackCallback& cb);
-        void RegisterEndCallback(const AudioEndCallback& cb);
+        void RegisterPlaybackCallback(void* owner, const AudioPlaybackCallback& cb);
+        void RegisterEndCallback(void* owner, const AudioEndCallback& cb);
+        void UnregisterCallbacksForOwner(void* owner);
 
         void Play(EntityID entity, bool loop = false);
         void Pause(EntityID entity);
@@ -76,8 +78,8 @@ namespace ECS {
         mutable std::mutex m_trackMutex;
         std::unique_ptr<AudioStreamState> m_streamState;
 
-        std::vector<AudioPlaybackCallback> m_callbacks;
-        std::vector<AudioEndCallback> m_endCallbacks;
+        std::vector<std::pair<void*, AudioPlaybackCallback>> m_callbacks;
+        std::vector<std::pair<void*, AudioEndCallback>> m_endCallbacks;
 
         std::atomic<bool> m_destroying{ false };
 

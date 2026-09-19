@@ -745,36 +745,31 @@ namespace ECS {
         EntityID entityID)
     {
         try {
-            if (shuttingDown || !std::filesystem::exists(fullPath)) return;
+            bool exists = std::filesystem::exists(fullPath);
 
-            if (IsVideoTask(taskType)) {
-                EntityID vaEntity = LoadVideoWithAudio(fullPath);
-                if (vaEntity == 0) {
-                    std::cerr << "[SDCPPSystem] VideoAudioSystem missing or failed, "
-                        "falling back to silent VideoSystem load\n";
-                    if (mgr.IsEntityValid(entityID))
-                        LoadVideoViaVideoSystem(entityID, fullPath);
-                    else {
-                        EntityID newEntity = mgr.AddNewEntity();
-                        LoadVideoViaVideoSystem(newEntity, fullPath);
+            if (!shuttingDown && exists) {
+                if (IsVideoTask(taskType)) {
+                    if (LoadVideoWithAudio(fullPath) == 0) {
+                        EntityID e = mgr.AddNewEntity();
+                        LoadVideoViaVideoSystem(e, fullPath);
                     }
                 }
-                return;
+                else {
+                    EntityID e = mgr.AddNewEntity();
+                    LoadImageViaImageSystem(e, fullPath);
+                }
             }
-
-            if (mgr.IsEntityValid(entityID)) {
-                LoadImageViaImageSystem(entityID, fullPath);
-            }
-            else {
-                std::cerr << "[SDCPPSystem] entity " << entityID
-                    << " invalid, loading result into a new entity\n";
-                EntityID newEntity = mgr.AddNewEntity();
-                LoadImageViaImageSystem(newEntity, fullPath);
+            else if (exists) {
+                std::filesystem::remove(fullPath);
             }
         }
         catch (...) {
             if (std::filesystem::exists(fullPath))
                 std::filesystem::remove(fullPath);
+        }
+
+        if (mgr.IsEntityValid(entityID)) {
+            mgr.DestroyEntity(entityID);
         }
     }
 

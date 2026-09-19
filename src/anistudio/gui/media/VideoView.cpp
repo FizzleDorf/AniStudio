@@ -33,6 +33,12 @@ namespace GUI {
         m_waveformRenderer.SetConfig(wfConfig);
     }
 
+    VideoView::~VideoView() {
+        if (m_videoSystem) {
+            m_videoSystem->UnregisterCallbacksForOwner(this);
+        }
+    }
+
     void VideoView::Init() {
         std::cout << "[VideoView] Initializing..." << std::endl;
         if (!ImGui::GetCurrentContext()) {
@@ -145,6 +151,8 @@ namespace GUI {
 
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (videoSystem) {
+            m_videoSystem = videoSystem;
+
             auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
             if (textureSystem) {
                 videoSystem->SetVideoTextureCallback(
@@ -154,10 +162,10 @@ namespace GUI {
                     }
                 );
             }
-            videoSystem->RegisterVideoAddedCallback([this](ECS::EntityID entity) {
+            videoSystem->RegisterVideoAddedCallback(this, [this](ECS::EntityID entity) {
                 OnMediaAdded(entity);
                 });
-            videoSystem->RegisterVideoRemovedCallback([this](ECS::EntityID entity) {
+            videoSystem->RegisterVideoRemovedCallback(this, [this](ECS::EntityID entity) {
                 OnMediaRemoved(entity);
                 });
         }

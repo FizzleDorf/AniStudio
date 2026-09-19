@@ -210,12 +210,23 @@ namespace ECS {
         return paContinue;
     }
 
-    void AudioPlaybackSystem::RegisterPlaybackCallback(const AudioPlaybackCallback& cb) {
-        m_callbacks.push_back(cb);
+    void AudioPlaybackSystem::RegisterPlaybackCallback(void* owner, const AudioPlaybackCallback& cb) {
+        m_callbacks.emplace_back(owner, cb);
     }
 
-    void AudioPlaybackSystem::RegisterEndCallback(const AudioEndCallback& cb) {
-        m_endCallbacks.push_back(cb);
+    void AudioPlaybackSystem::RegisterEndCallback(void* owner, const AudioEndCallback& cb) {
+        m_endCallbacks.emplace_back(owner, cb);
+    }
+
+    void AudioPlaybackSystem::UnregisterCallbacksForOwner(void* owner) {
+        m_callbacks.erase(
+            std::remove_if(m_callbacks.begin(), m_callbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            m_callbacks.end());
+        m_endCallbacks.erase(
+            std::remove_if(m_endCallbacks.begin(), m_endCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            m_endCallbacks.end());
     }
 
     void AudioPlaybackSystem::Play(EntityID entity, bool loop) {
@@ -490,7 +501,8 @@ namespace ECS {
     }
 
     void AudioPlaybackSystem::NotifyPlaybackEnd(EntityID entity) {
-        for (const auto& cb : m_endCallbacks) {
+        for (const auto& [owner, cb] : m_endCallbacks) {
+            (void)owner;
             try {
                 cb(entity);
             }
