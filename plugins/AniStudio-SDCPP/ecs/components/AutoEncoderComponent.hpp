@@ -328,6 +328,8 @@ namespace ECS {
     };
 
     struct TaesdComponent : public BaseModelComponent {
+        bool tae_preview_only = false;
+
         TaesdComponent() = default;
 
         const char* GetCompName() const override { return "Taesd"; }
@@ -337,7 +339,7 @@ namespace ECS {
             static const nlohmann::json j = {
                 {"title", "TAESD Fast VAE"},
                 {"type", "object"},
-                {"propertyOrder", {"modelPath"}},
+                {"propertyOrder", {"modelPath", "tae_preview_only"}},
                 {"properties", {
                     {"modelPath", {
                         {"type", "string"},
@@ -352,21 +354,71 @@ namespace ECS {
                             {"resetButtonText", "Clear"},
                             {"browseTooltip", "Browse for TAESD fast VAE files"}
                         }}
+                    }},
+                    {"tae_preview_only", {
+                        {"type", "boolean"},
+                        {"title", "TAE Preview Only"},
+                        {"description", "Use the TAESD model only for live previews and keep the full VAE for final decoding."},
+                        {"ui:widget", "checkbox"}
                     }}
                 }}
             };
             return j;
         }
 
-        TaesdComponent(const TaesdComponent& other) : BaseModelComponent(other) {}
+        TaesdComponent(const TaesdComponent& other) : BaseModelComponent(other) {
+            tae_preview_only = other.tae_preview_only;
+        }
 
         TaesdComponent& operator=(const TaesdComponent& other) {
             if (this != &other) {
                 modelPath = other.modelPath;
                 modelName = other.modelName;
                 isModelLoaded = other.isModelLoaded;
+                tae_preview_only = other.tae_preview_only;
             }
             return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"modelPath", &modelPath},
+                {"modelName", &modelName},
+                {"tae_preview_only", &tae_preview_only}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"modelName", modelName},
+                {"modelPath", modelPath},
+                {"tae_preview_only", tae_preview_only}
+            };
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json componentData;
+            if (j.contains(key)) {
+                componentData = j.at(key);
+            }
+            else {
+                for (auto it = j.begin(); it != j.end(); ++it) {
+                    if (it.key() == key) {
+                        componentData = it.value();
+                        break;
+                    }
+                }
+                if (componentData.empty()) {
+                    componentData = j;
+                }
+            }
+
+            if (componentData.contains("modelName")) modelName = componentData["modelName"];
+            if (componentData.contains("modelPath")) modelPath = componentData["modelPath"];
+            if (componentData.contains("tae_preview_only")) tae_preview_only = componentData["tae_preview_only"].get<bool>();
         }
     };
 

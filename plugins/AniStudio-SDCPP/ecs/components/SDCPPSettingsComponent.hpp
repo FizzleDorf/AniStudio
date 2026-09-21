@@ -26,8 +26,13 @@ namespace ECS {
         bool force_sdxl_vae_conv_scale = false;
         int log_level = 1;
         std::string model_args;
-        int preview_mode = 2;       // 0=None, 1=Proj, 2=TAE, 3=VAE
-        int preview_interval = 1;   // positive = every Nth step; negative = completed step only; 0 = final step
+        int preview_mode = 2;
+        int preview_interval = 1;
+        bool disable_prefetch = false;
+        bool disable_segmented_compute = false;
+        float linear_scale = 0.0f;
+        float attn_scale = 0.0f;
+        bool sage_attn = false;
 
         SDCPPSettingsComponent() = default;
 
@@ -44,8 +49,11 @@ namespace ECS {
                     "rpc_servers", "lora_apply_mode",
                     "flash_attn", "diffusion_flash_attn",
                     "diffusion_conv_direct", "vae_conv_direct", "force_sdxl_vae_conv_scale",
+                    "sage_attn",
                     "log_level", "model_args",
-                    "preview_mode", "preview_interval"
+                    "preview_mode", "preview_interval",
+                    "disable_prefetch", "disable_segmented_compute",
+                    "linear_scale", "attn_scale"
                 }},
                 {"properties", {
                     {"enable_mmap", {
@@ -134,6 +142,12 @@ namespace ECS {
                         {"description", "Force SDXL VAE convolution scaling (fixes some compatibility issues)."},
                         {"ui:widget", "checkbox"}
                     }},
+                    {"sage_attn", {
+                        {"type", "boolean"},
+                        {"title", "Sage Attention"},
+                        {"description", "Enable SageAttention for supported attention layers."},
+                        {"ui:widget", "checkbox"}
+                    }},
                     {"log_level", {
                         {"type", "integer"},
                         {"title", "Log Level"},
@@ -162,6 +176,32 @@ namespace ECS {
                         {"description", "Positive: preview every Nth denoiser step. Negative: preview only completed logical step -interval. Zero: preview the final completed step of the first sampling pass."},
                         {"ui:widget", "input_int"},
                         {"ui:options", {{"min", -100}, {"max", 100}}}
+                    }},
+                    {"disable_prefetch", {
+                        {"type", "boolean"},
+                        {"title", "Disable Prefetch"},
+                        {"description", "Disable asynchronous next-segment weight prefetch."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"disable_segmented_compute", {
+                        {"type", "boolean"},
+                        {"title", "Disable Segmented Compute"},
+                        {"description", "Force monolithic graph execution even when automatic graph cutting would fit memory better."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"linear_scale", {
+                        {"type", "number"},
+                        {"title", "Linear Scale"},
+                        {"description", "Override linear input scaling. 0 keeps the model default."},
+                        {"ui:widget", "input_float"},
+                        {"ui:options", {{"step", 0.01f}, {"step_fast", 0.1f}, {"min", 0.0f}, {"max", 10.0f}}}
+                    }},
+                    {"attn_scale", {
+                        {"type", "number"},
+                        {"title", "Attention Scale"},
+                        {"description", "Override flash-attention K/V scaling. 0 keeps the model default."},
+                        {"ui:widget", "input_float"},
+                        {"ui:options", {{"step", 0.01f}, {"step_fast", 0.1f}, {"min", 0.0f}, {"max", 10.0f}}}
                     }}
                 }}
             };
@@ -188,6 +228,11 @@ namespace ECS {
             , model_args(other.model_args)
             , preview_mode(other.preview_mode)
             , preview_interval(other.preview_interval)
+            , disable_prefetch(other.disable_prefetch)
+            , disable_segmented_compute(other.disable_segmented_compute)
+            , linear_scale(other.linear_scale)
+            , attn_scale(other.attn_scale)
+            , sage_attn(other.sage_attn)
             , backupJson(other.backupJson) {
         }
 
@@ -211,6 +256,11 @@ namespace ECS {
                 model_args = other.model_args;
                 preview_mode = other.preview_mode;
                 preview_interval = other.preview_interval;
+                disable_prefetch = other.disable_prefetch;
+                disable_segmented_compute = other.disable_segmented_compute;
+                linear_scale = other.linear_scale;
+                attn_scale = other.attn_scale;
+                sage_attn = other.sage_attn;
                 backupJson = other.backupJson;
             }
             return *this;
@@ -273,7 +323,12 @@ namespace ECS {
                 {"log_level", log_level},
                 {"model_args", model_args},
                 {"preview_mode", preview_mode},
-                {"preview_interval", preview_interval}
+                {"preview_interval", preview_interval},
+                {"disable_prefetch", disable_prefetch},
+                {"disable_segmented_compute", disable_segmented_compute},
+                {"linear_scale", linear_scale},
+                {"attn_scale", attn_scale},
+                {"sage_attn", sage_attn}
             };
         }
 
@@ -301,6 +356,11 @@ namespace ECS {
             if (j.contains("model_args")) model_args = j["model_args"].get<std::string>();
             if (j.contains("preview_mode")) preview_mode = j["preview_mode"].get<int>();
             if (j.contains("preview_interval")) preview_interval = j["preview_interval"].get<int>();
+            if (j.contains("disable_prefetch")) disable_prefetch = j["disable_prefetch"].get<bool>();
+            if (j.contains("disable_segmented_compute")) disable_segmented_compute = j["disable_segmented_compute"].get<bool>();
+            if (j.contains("linear_scale")) linear_scale = j["linear_scale"].get<float>();
+            if (j.contains("attn_scale")) attn_scale = j["attn_scale"].get<float>();
+            if (j.contains("sage_attn")) sage_attn = j["sage_attn"].get<bool>();
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -322,7 +382,12 @@ namespace ECS {
                 {"log_level", &log_level},
                 {"model_args", &model_args},
                 {"preview_mode", &preview_mode},
-                {"preview_interval", &preview_interval}
+                {"preview_interval", &preview_interval},
+                {"disable_prefetch", &disable_prefetch},
+                {"disable_segmented_compute", &disable_segmented_compute},
+                {"linear_scale", &linear_scale},
+                {"attn_scale", &attn_scale},
+                {"sage_attn", &sage_attn}
             };
         }
 

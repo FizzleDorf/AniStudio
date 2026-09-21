@@ -177,4 +177,49 @@ namespace ECS {
 			return *this;
 		}
 	};
+
+	struct TokenizerComponent : public BaseModelComponent {
+		TokenizerComponent() = default;
+
+		const char* GetCompName() const override { return "Tokenizer"; }
+		const char* GetCompCategory() const override { return "Models"; }
+
+		const nlohmann::json& GetSchema() const override {
+			static const nlohmann::json j = {
+				{"title", "Tokenizer"},
+				{"type", "object"},
+				{"propertyOrder", {"modelPath"}},
+				{"properties", {
+					{"modelPath", {
+						{"type", "string"},
+						{"title", "Tokenizer"},
+						{"description", "Tokenizer JSON path or main=FILE,clip-l=FILE,clip-g=FILE assignments. Required for PiD and Lens."},
+						{"ui:widget", "file_selector"},
+						{"ui:options", {
+							{"mode", "file"},
+							{"filters", ".json"},
+							{"filterName", "Tokenizer Files"},
+							{"dialogDefaultPath", "encoder"},
+							{"buttonText", "Browse..."},
+							{"resetButtonText", "Clear"},
+							{"browseTooltip", "Browse for tokenizer JSON files"}
+						}}
+					}}
+				}}
+			};
+			return j;
+		}
+
+		TokenizerComponent(const TokenizerComponent& other) : BaseModelComponent(other) {}
+
+		TokenizerComponent& operator=(const TokenizerComponent& other) {
+			if (this != &other) {
+				modelPath = other.modelPath;
+				modelName = other.modelName;
+				isModelLoaded = other.isModelLoaded;
+			}
+			return *this;
+		}
+	};
+
 }

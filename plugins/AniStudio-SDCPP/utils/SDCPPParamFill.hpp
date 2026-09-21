@@ -115,11 +115,17 @@ namespace SDCPP {
         if (mgr.HasComponent<ECS::LlmVisionComponent>(e))
             set(mgr.GetComponent<ECS::LlmVisionComponent>(e).modelPath, ctx.llm_vision_path);
 
+        if (mgr.HasComponent<ECS::TokenizerComponent>(e))
+            set(mgr.GetComponent<ECS::TokenizerComponent>(e).modelPath, ctx.tokenizer);
+
         if (mgr.HasComponent<ECS::AudioVaeComponent>(e))
             set(mgr.GetComponent<ECS::AudioVaeComponent>(e).modelPath, ctx.audio_vae_path);
 
-        if (mgr.HasComponent<ECS::TaesdComponent>(e))
-            set(mgr.GetComponent<ECS::TaesdComponent>(e).modelPath, ctx.taesd_path);
+        if (mgr.HasComponent<ECS::TaesdComponent>(e)) {
+            auto& t = mgr.GetComponent<ECS::TaesdComponent>(e);
+            set(t.modelPath, ctx.taesd_path);
+            ctx.tae_preview_only = t.tae_preview_only;
+        }
 
         if (mgr.HasComponent<ECS::ControlNetComponent>(e))
             set(mgr.GetComponent<ECS::ControlNetComponent>(e).modelPath, ctx.control_net_path);
@@ -188,6 +194,11 @@ namespace SDCPP {
             ctx.diffusion_conv_direct = g.diffusion_conv_direct;
             ctx.vae_conv_direct = g.vae_conv_direct;
             ctx.force_sdxl_vae_conv_scale = g.force_sdxl_vae_conv_scale;
+            ctx.disable_prefetch = g.disable_prefetch;
+            ctx.disable_segmented_compute = g.disable_segmented_compute;
+            ctx.linear_scale = g.linear_scale;
+            ctx.attn_scale = g.attn_scale;
+            ctx.sage_attn = g.sage_attn;
             set(g.max_vram, ctx.max_vram);
             set(g.backend, ctx.backend);
             set(g.split_mode, ctx.split_mode);

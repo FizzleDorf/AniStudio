@@ -1,12 +1,16 @@
 {
+    "attn_scale": 0.0,
     "auto_fit": true,
     "backend": "cuda0",
     "diffusion_conv_direct": false,
     "diffusion_flash_attn": true,
+    "disable_prefetch": false,
+    "disable_segmented_compute": false,
     "eager_load": false,
     "enable_mmap": true,
     "flash_attn": true,
     "force_sdxl_vae_conv_scale": false,
+    "linear_scale": 0.0,
     "log_level": 1,
     "lora_apply_mode": "LORA_APPLY_AUTO",
     "max_vram": "18",
@@ -15,6 +19,7 @@
     "preview_interval": 1,
     "preview_mode": 1,
     "rpc_servers": "",
+    "sage_attn": true,
     "split_mode": "",
     "vae_conv_direct": false
 }
