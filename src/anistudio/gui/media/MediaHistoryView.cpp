@@ -310,10 +310,10 @@ namespace GUI {
 
         if (imageSystem) {
             for (auto id : imageSystem->GetAllImageEntities()) {
-                if (m_entityManager.IsEntityValid(id)) {
-                    if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
-                        mediaEntities.push_back(id);
-                    }
+                if (!m_entityManager.IsEntityValid(id)) continue;
+                if (m_entityManager.HasComponent<ECS::PreviewImageComponent>(id)) continue;
+                if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
+                    mediaEntities.push_back(id);
                 }
             }
         }

@@ -4,6 +4,7 @@
 #include <deque>
 #include <cassert>
 #include <algorithm>
+#include <iostream>
 
 namespace ECS {
 
@@ -21,24 +22,24 @@ namespace ECS {
 		CompList() = default;
 		~CompList() = default;
 
-		void Insert(const T &component) {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == component.GetID(); });
+		void Insert(const T& component) {
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == component.GetID(); });
 			if (comp == data.end()) {
 				data.push_back(component);
 			}
 			else {
-				std::cout << "Component already exists for entity: " << component.GetID() << std::endl;
+				*comp = component;
 			}
 		}
 
-		T &Get(const EntityID entity) {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
+		T& Get(const EntityID entity) {
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == entity; });
 			assert(comp != data.end() && "Component doesn't exist!");
 			return *comp;
 		}
 
 		void Erase(const EntityID entity) override final {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T &c) { return c.GetID() == entity; });
+			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == entity; });
 			if (comp != data.end()) {
 				data.erase(comp);
 			}

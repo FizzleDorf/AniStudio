@@ -11,7 +11,7 @@
     "lora_apply_mode": "LORA_APPLY_AUTO",
     "max_vram": "18",
     "model_args": "",
-    "params_backend": "diffusion=gpu,te=cpu,vae=cpu",
+    "params_backend": "diffusion=cpu,te=cpu,vae=cpu",
     "preview_interval": 1,
     "preview_mode": 1,
     "rpc_servers": "",

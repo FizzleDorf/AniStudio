@@ -555,7 +555,8 @@ namespace GUI {
         if (!m_entityManager.IsEntityValid(entityId)) return false;
         return m_entityManager.HasComponent<ECS::ImageComponent>(entityId) &&
             !m_entityManager.HasComponent<ECS::InputImageComponent>(entityId) &&
-            !m_entityManager.HasComponent<ECS::OutputImageComponent>(entityId);
+            !m_entityManager.HasComponent<ECS::OutputImageComponent>(entityId) &&
+            !m_entityManager.HasComponent<ECS::PreviewImageComponent>(entityId);
     }
 
     bool ImageView::IsHistoryVisible() const {

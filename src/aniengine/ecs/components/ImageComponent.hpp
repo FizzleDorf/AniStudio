@@ -196,6 +196,63 @@ namespace ECS {
         }
     };
 
+    // ------------------------------------------------------------------
+    // PreviewImageComponent
+    //
+    // Used by any view that shows transient, non-user-authored image data
+    // (diffusion previews, hover-scrub previews, mask overlays, timeline
+    // thumbnails, etc.). It shares the same pixel-data representation as
+    // ImageComponent so it plugs into TextureSystem the same way, but it is
+    // registered as a *distinct* ECS component type. That means:
+    //
+    //   - ImageSystem does not process preview entities (no ImageComponent).
+    //   - ImageView / MediaHistoryView never see preview entities.
+    //   - Preview owners are responsible for calling
+    //     TextureSystem::RemoveTexture before destroying the entity.
+    // ------------------------------------------------------------------
+    struct PreviewImageComponent : public ImageComponent {
+        // Free-form label shown in debug tooltips: "diffusion", "video scrub", ...
+        std::string sourceName = "preview";
+
+        PreviewImageComponent() {
+            fileName = "";
+            filePath = "";
+        }
+
+        const char* GetCompName() const override { return "PreviewImage"; }
+        const char* GetCompCategory() const override { return "Image"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        PreviewImageComponent(const PreviewImageComponent& other)
+            : ImageComponent(other)
+            , sourceName(other.sourceName) {
+        }
+
+        PreviewImageComponent& operator=(const PreviewImageComponent& other) {
+            if (this != &other) {
+                ImageComponent::operator=(other);
+                sourceName = other.sourceName;
+            }
+            return *this;
+        }
+
+        virtual ~PreviewImageComponent() {}
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {};
+        }
+
+        nlohmann::json Serialize() const override {
+            return nlohmann::json::object();
+        }
+
+        void Deserialize(const nlohmann::json&) override {}
+    };
+
     struct InputImageComponent : public ImageComponent {
         InputImageComponent() {
             fileName = "";

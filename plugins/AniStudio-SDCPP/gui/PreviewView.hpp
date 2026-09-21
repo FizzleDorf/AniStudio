@@ -5,10 +5,12 @@
 #include "DiffusionCallbackUtils.hpp"
 #include "ImageComponent.hpp"
 #include "TextureComponent.hpp"
+#include "TextureSystem.hpp"
 #include "ECS.h"
 #include <imgui.h>
 #include <string>
 #include <cstdint>
+#include <memory>
 
 namespace GUI {
 
@@ -39,7 +41,6 @@ namespace GUI {
 
         void RefreshTextureIfNeeded();
         void PushPreviewFrameToComponent(const PreviewFrame& frame);
-        void DeleteLastTempFile();
         void DrawMenuBar();
         void LoadModeFromSettings();
         void SaveModeToSettings();
@@ -47,7 +48,8 @@ namespace GUI {
         ECS::EntityID m_previewEntity = 0;
         bool          m_previewEntityHasComponent = false;
         uint64_t      m_lastSequence = 0;
-        std::string   m_lastTempPath;
+
+        std::shared_ptr<ECS::TextureSystem> m_textureSystem;
 
         PreviewMode m_mode = PreviewMode::Tae;
         int         m_interval = 1;
