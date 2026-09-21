@@ -31,6 +31,7 @@
 #include "WindowState.hpp"
 #include "AniStudioSystems.hpp"
 #include "StudioPluginManager.hpp"
+#include "ErrorBus.hpp"
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -176,11 +177,9 @@ namespace ANI {
 
         Utils::WindowState m_windowState;
 
-        // ---------------------------------------------------------------------
-        // Initialization helpers
-        //   (Registration of components / systems / views lives in
-        //    StudioRegistration.cpp ? see ANI::Registration namespace.)
-        // ---------------------------------------------------------------------
+        // ErrorBus members for Popups
+        std::vector<ANI::ErrorBus::Entry> m_pendingErrors;
+        bool m_showErrorPopup = false;
 
         // Seeds / repairs all core FilePathSystem keys.
         void EnsureCorePaths();

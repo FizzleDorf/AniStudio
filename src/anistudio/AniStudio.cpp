@@ -11,11 +11,12 @@
 #include "AniStudioSystems.hpp"
 #include "MenuBar.hpp"
 #include "DragDropUtils.hpp"
-#include "StudioRegistration.hpp"
+#include "AniStudioRegistration.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <filesystem>
+#include <cfloat>
 #include <imgui.h>
 #include "GuiStyleHelpers.hpp"
 #include "MissingPathsPopup.hpp"
@@ -31,6 +32,7 @@
 #include "SettingsSystem.hpp"
 #include "ProjectManagerView.hpp"
 #include "Log.hpp"
+#include "ErrorBus.hpp"          // <-- NEW
 #include "ImageSystem.hpp"
 #include "TextureSystem.hpp"
 
@@ -39,6 +41,80 @@
 #endif
 
 namespace ANI {
+
+    namespace {
+
+        // Collapses runs of identical (source, message) pairs into a single
+        // entry with a count, so a broken model that emits 200 identical
+        // errors doesn't bury the user in near-duplicate lines.
+        std::vector<ErrorBus::Entry> DeduplicateErrors(
+            std::vector<ErrorBus::Entry> errors) {
+            std::vector<ErrorBus::Entry> out;
+            out.reserve(errors.size());
+            for (auto& e : errors) {
+                if (!out.empty() &&
+                    out.back().source == e.source &&
+                    out.back().message == e.message) {
+                    // Same error again. Bump the visible count instead of
+                    // pushing another identical entry.
+                    out.back().line = out.back().line;  // keep first location
+                    if (out.back().file.empty() && !e.file.empty()) {
+                        out.back().file = e.file;
+                        out.back().line = e.line;
+                    }
+                    // Append a marker the user can see in the popup.
+                    if (out.back().message.find("\n(+") == std::string::npos) {
+                        out.back().message += "\n(+duplicate)";
+                    }
+                    else {
+                        // Cheap repeated-marker increment.
+                        auto pos = out.back().message.rfind("(+");
+                        auto end = out.back().message.find(')', pos);
+                        if (pos != std::string::npos && end != std::string::npos) {
+                            int n = 1;
+                            std::sscanf(out.back().message.c_str() + pos,
+                                "(+%d", &n);
+                            out.back().message.erase(pos, end - pos + 1);
+                            out.back().message += "(+" + std::to_string(n + 1) + ")";
+                        }
+                    }
+                    continue;
+                }
+                out.push_back(std::move(e));
+            }
+            return out;
+        }
+
+        // Builds a copy-paste friendly block for GitHub issues. Includes
+        // source, file:line (when available), the message, and the session
+        // log path so the user can attach the full trace.
+        std::string BuildErrorReport(
+            const std::vector<ErrorBus::Entry>& errors) {
+            std::string out;
+            out.reserve(1024);
+            out += "AniStudio error report\n";
+            out += "======================\n";
+            for (const auto& e : errors) {
+                out += "\n[";
+                out += e.source;
+                out += "] ";
+                if (!e.file.empty()) {
+                    out += e.file;
+                    out += ":";
+                    out += std::to_string(e.line);
+                    out += " ";
+                }
+                out += "\n";
+                out += e.message;
+                if (out.empty() || out.back() != '\n') out += "\n";
+            }
+            out += "\nSession log: ";
+            out += Log::SessionPath();
+            out += "\n";
+            return out;
+        }
+
+    } // anonymous namespace
 
     StudioCore::StudioCore()
         : initialized(false), running(false), windowHandle(nullptr), imguiContext(nullptr),
@@ -796,6 +872,62 @@ namespace ANI {
             }
 
             Utils::RenderMissingPathsPopup();
+
+            {
+                for (auto& e : ErrorBus::Drain()) {
+                    m_pendingErrors.push_back(std::move(e));
+                }
+
+                if (!m_pendingErrors.empty()) {
+                    m_showErrorPopup = true;
+                }
+
+                if (m_showErrorPopup) {
+                    m_pendingErrors = DeduplicateErrors(std::move(m_pendingErrors));
+
+                    ImGui::SetNextWindowSize(ImVec2(640, 440), ImGuiCond_Appearing);
+                    ImGui::OpenPopup("AniStudio Errors");
+
+                    if (ImGui::BeginPopupModal("AniStudio Errors", nullptr,
+                        ImGuiWindowFlags_NoSavedSettings)) {
+                        ImGui::Text("%zu error%s occurred.",
+                            m_pendingErrors.size(),
+                            m_pendingErrors.size() == 1 ? "" : "s");
+                        ImGui::Separator();
+
+                        std::string report = BuildErrorReport(m_pendingErrors);
+
+                        static std::vector<char> copyBuf;
+                        copyBuf.assign(report.begin(), report.end());
+                        copyBuf.push_back('\0');
+
+                        ImGui::PushTextWrapPos(0.0f);
+                        ImGui::InputTextMultiline(
+                            "##error_text",
+                            copyBuf.data(),
+                            copyBuf.size(),
+                            ImVec2(-FLT_MIN, ImGui::GetTextLineHeight() * 14),
+                            ImGuiInputTextFlags_ReadOnly);
+                        ImGui::PopTextWrapPos();
+
+                        if (ImGui::Button("Copy all")) {
+                            ImGui::SetClipboardText(report.c_str());
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Copy session log path")) {
+                            ImGui::SetClipboardText(Log::SessionPath());
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Dismiss")) {
+                            m_pendingErrors.clear();
+                            m_showErrorPopup = false;
+                            ImGui::CloseCurrentPopup();
+                        }
+
+                        ImGui::EndPopup();
+                    }
+                }
+            }
         }
         catch (const std::exception& e) {
             ANI_LOG_ERROR("[StudioCore] Render error: %s", e.what());

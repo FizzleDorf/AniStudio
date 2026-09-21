@@ -1,4 +1,5 @@
 #include "Log.hpp"
+#include "ErrorBus.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -12,7 +13,6 @@
 #include <mutex>
 #include <condition_variable>
 #include <vector>
-#include <deque>
 
 #ifdef _WIN32
 #include <io.h>
@@ -45,6 +45,7 @@ namespace ANI::Log {
         SinkFn g_sink = nullptr;
         void* g_sinkUser = nullptr;
 
+        // Session file + redirect plumbing.
         std::FILE* g_file = nullptr;
         int         g_savedStderrFd = -1;
         int         g_savedStdoutFd = -1;
@@ -66,8 +67,7 @@ namespace ANI::Log {
             auto now = system_clock::now();
             auto t = system_clock::to_time_t(now);
             auto ms = static_cast<int>(
-                (duration_cast<milliseconds>(now.time_since_epoch()) % 1000).count()
-                );
+                (duration_cast<milliseconds>(now.time_since_epoch()) % 1000).count());
 
             std::tm tm{};
 #ifdef _WIN32
@@ -110,6 +110,8 @@ namespace ANI::Log {
             return last;
         }
 
+        // Drains the pipe and mirrors to the saved stderr fd and the file.
+        // Runs on a dedicated thread for the whole lifetime of the session.
         void PumpLoop() {
             std::vector<char> buf(8192);
 
@@ -131,6 +133,7 @@ namespace ANI::Log {
                 }
             }
 
+            // Final flush of whatever is still in the pipe.
             for (;;) {
                 int n = ANI_LOG_READ(g_pipeReadFd, buf.data(),
                     static_cast<int>(buf.size()));
@@ -201,12 +204,8 @@ namespace ANI::Log {
                 ANI_LOG_CLOSE(savedErr);
                 if (savedOut >= 0) ANI_LOG_CLOSE(savedOut);
                 std::fclose(f);
-                g_file = nullptr;
-                g_pipeReadFd = -1;
-                g_pipeWriteFd = -1;
-                g_savedStderrFd = -1;
-                g_savedStdoutFd = -1;
-                g_path.clear();
+                g_file = nullptr; g_pipeReadFd = -1; g_pipeWriteFd = -1;
+                g_savedStderrFd = -1; g_savedStdoutFd = -1; g_path.clear();
                 return false;
             }
 
@@ -217,12 +216,8 @@ namespace ANI::Log {
                 ANI_LOG_CLOSE(savedErr);
                 ANI_LOG_CLOSE(savedOut);
                 std::fclose(f);
-                g_file = nullptr;
-                g_pipeReadFd = -1;
-                g_pipeWriteFd = -1;
-                g_savedStderrFd = -1;
-                g_savedStdoutFd = -1;
-                g_path.clear();
+                g_file = nullptr; g_pipeReadFd = -1; g_pipeWriteFd = -1;
+                g_savedStderrFd = -1; g_savedStdoutFd = -1; g_path.clear();
                 return false;
             }
 
@@ -254,6 +249,7 @@ namespace ANI::Log {
                 g_pumpCv.notify_all();
             }
 
+            // Closing the write end unblocks the pump's read().
             if (g_pipeWriteFd >= 0) {
                 ANI_LOG_CLOSE(g_pipeWriteFd);
                 g_pipeWriteFd = -1;
@@ -267,7 +263,6 @@ namespace ANI::Log {
                 ANI_LOG_CLOSE(g_pipeReadFd);
                 g_pipeReadFd = -1;
             }
-
             if (g_savedStderrFd >= 0) {
                 ANI_LOG_CLOSE(g_savedStderrFd);
                 g_savedStderrFd = -1;
@@ -324,12 +319,7 @@ namespace ANI::Log {
         return g_pathBuf;
     }
 
-    void Emit(Level lvl,
-        const char* file,
-        int line,
-        const char* fmt, ...)
-    {
-        if (static_cast<int>(lvl) < g_level.load(std::memory_order_relaxed)) return;
+    void Emit(Level lvl, const char* file, int line, const char* fmt, ...) {
         if (lvl == Level::Off) return;
 
         char msg[2048];
@@ -337,6 +327,14 @@ namespace ANI::Log {
         va_start(args, fmt);
         std::vsnprintf(msg, sizeof(msg), fmt, args);
         va_end(args);
+
+        // Errors always reach the bus regardless of the console verbosity
+        // setting. This is what drives the gui popups.
+        if (lvl == Level::Error) {
+            ANI::ErrorBus::Push("AniStudio", msg, file, line);
+        }
+
+        if (static_cast<int>(lvl) < g_level.load(std::memory_order_relaxed)) return;
 
         char timeBuf[32];
         FormatTimePrefix(timeBuf, sizeof(timeBuf));

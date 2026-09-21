@@ -45,7 +45,7 @@ namespace SDCPP {
 
     // Merge a user-provided `params_backend` string with per-module CPU pins
     // derived from the SamplerComponent booleans. sdcpp applies per-module
-    // assignments as "last one wins", so we append our derived pins after the
+    // assignments as "last one wins", so append derived pins after the
     // user's existing string and let sdcpp resolve duplicates.
     inline std::string BuildParamsBackend(const std::string& existing,
         bool clipOnCpu,

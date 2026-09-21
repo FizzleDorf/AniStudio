@@ -196,20 +196,6 @@ namespace ECS {
         }
     };
 
-    // ------------------------------------------------------------------
-    // PreviewImageComponent
-    //
-    // Used by any view that shows transient, non-user-authored image data
-    // (diffusion previews, hover-scrub previews, mask overlays, timeline
-    // thumbnails, etc.). It shares the same pixel-data representation as
-    // ImageComponent so it plugs into TextureSystem the same way, but it is
-    // registered as a *distinct* ECS component type. That means:
-    //
-    //   - ImageSystem does not process preview entities (no ImageComponent).
-    //   - ImageView / MediaHistoryView never see preview entities.
-    //   - Preview owners are responsible for calling
-    //     TextureSystem::RemoveTexture before destroying the entity.
-    // ------------------------------------------------------------------
     struct PreviewImageComponent : public ImageComponent {
         // Free-form label shown in debug tooltips: "diffusion", "video scrub", ...
         std::string sourceName = "preview";

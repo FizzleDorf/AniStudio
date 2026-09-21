@@ -1,4 +1,4 @@
-#include "StudioRegistration.hpp"
+#include "AniStudioRegistration.hpp"
 
 #include "EntityManager.hpp"
 #include "ViewManager.hpp"
