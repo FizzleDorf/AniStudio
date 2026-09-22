@@ -1,5 +1,6 @@
 #include "AudioPlaybackSystem.hpp"
-#include <iostream>
+#include "Log.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -21,8 +22,8 @@ namespace ECS {
 
         PaError err = Pa_Initialize();
         if (err != paNoError) {
-            std::cerr << "[AudioPlaybackSystem] Failed to initialize PortAudio: "
-                << Pa_GetErrorText(err) << std::endl;
+            ANI_LOG_ERROR("[AudioPlaybackSystem] Failed to initialize PortAudio: %s",
+                Pa_GetErrorText(err));
         }
     }
 
@@ -60,7 +61,7 @@ namespace ECS {
         PaStreamParameters outputParams;
         outputParams.device = Pa_GetDefaultOutputDevice();
         if (outputParams.device == paNoDevice) {
-            std::cerr << "[AudioPlaybackSystem] No audio output device available" << std::endl;
+            ANI_LOG_WARN("[AudioPlaybackSystem] No audio output device available");
             return false;
         }
 
@@ -81,8 +82,8 @@ namespace ECS {
         );
 
         if (err != paNoError) {
-            std::cerr << "[AudioPlaybackSystem] Failed to open stream: "
-                << Pa_GetErrorText(err) << std::endl;
+            ANI_LOG_WARN("[AudioPlaybackSystem] Failed to open stream: %s",
+                Pa_GetErrorText(err));
             return false;
         }
 
@@ -91,8 +92,8 @@ namespace ECS {
 
         err = Pa_StartStream(m_streamState->stream);
         if (err != paNoError) {
-            std::cerr << "[AudioPlaybackSystem] Failed to start stream: "
-                << Pa_GetErrorText(err) << std::endl;
+            ANI_LOG_WARN("[AudioPlaybackSystem] Failed to start stream: %s",
+                Pa_GetErrorText(err));
             CloseStream();
             return false;
         }
@@ -447,7 +448,7 @@ namespace ECS {
     }
 
     void AudioPlaybackSystem::PlayTestTone() {
-        std::cout << "[AudioPlaybackSystem] Playing test tone..." << std::endl;
+        ANI_LOG_INFO("[AudioPlaybackSystem] Playing test tone...");
 
         if (!m_streamState->streamOpen) {
             if (!OpenStream()) {

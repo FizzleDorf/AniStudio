@@ -67,7 +67,7 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                ANI_LOG_ERROR("[ImageView] SelectMediaEntity event error: %s", e.what());
+                ANI_LOG_ERROR("SelectMediaEntity event error: %s", e.what());
             }
             });
     }
@@ -448,7 +448,7 @@ namespace GUI {
 
     void ImageView::LoadMedia(const std::vector<std::string>& filePaths) {
         if (!imageSystem) {
-            ANI_LOG_ERROR("[ImageView] ImageSystem not available!");
+            ANI_LOG_ERROR("ImageSystem not available!");
             return;
         }
         try {
@@ -459,12 +459,12 @@ namespace GUI {
                 imageComp.filePath = filePath;
                 imageComp.fileName = std::filesystem::path(filePath).filename().string();
                 imageSystem->SetImage(entity, filePath);
-                ANI_LOG_INFO("[ImageView] Started loading: %s (Entity: %llu)",
+                ANI_LOG_INFO("Started loading: %s (Entity: %llu)",
                     filePath.c_str(), static_cast<unsigned long long>(entity));
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[ImageView] Exception loading images: %s", e.what());
+            ANI_LOG_ERROR("Exception loading images: %s", e.what());
         }
     }
 
@@ -474,14 +474,14 @@ namespace GUI {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
             if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
                 Utils::ImageUtils::SaveImage(imageComp.filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-                ANI_LOG_INFO("[ImageView] Saved image: %s", imageComp.filePath.c_str());
+                ANI_LOG_INFO("Saved image: %s", imageComp.filePath.c_str());
             }
             else {
-                ANI_LOG_WARN("[ImageView] No image data available to save");
+                ANI_LOG_WARN("No image data available to save");
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[ImageView] Exception saving image: %s", e.what());
+            ANI_LOG_ERROR("Exception saving image: %s", e.what());
         }
     }
 
@@ -491,14 +491,14 @@ namespace GUI {
             const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
             if (imageComp.imageData && imageComp.width > 0 && imageComp.height > 0) {
                 Utils::ImageUtils::SaveImage(filePath, imageComp.width, imageComp.height, imageComp.channels, imageComp.imageData);
-                ANI_LOG_INFO("[ImageView] Saved image as: %s", filePath.c_str());
+                ANI_LOG_INFO("Saved image as: %s", filePath.c_str());
             }
             else {
-                ANI_LOG_WARN("[ImageView] No image data available to save");
+                ANI_LOG_WARN("No image data available to save");
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[ImageView] Exception saving image: %s", e.what());
+            ANI_LOG_ERROR("Exception saving image: %s", e.what());
         }
     }
 
@@ -517,7 +517,7 @@ namespace GUI {
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[ImageView] Exception removing image: %s", e.what());
+            ANI_LOG_ERROR("Exception removing image: %s", e.what());
         }
     }
 

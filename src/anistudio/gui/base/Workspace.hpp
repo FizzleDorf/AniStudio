@@ -1,10 +1,10 @@
 #pragma once
 
 #include "ViewTypes.hpp"
+#include "Log.hpp"
 #include <memory>
 #include <vector>
 #include <string>
-#include <iostream>
 #include <algorithm>
 #include <functional>
 #include <stdexcept>
@@ -30,32 +30,35 @@ namespace GUI {
 	public:
 		Workspace() {
 			data.reserve(16);
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Created with initial capacity: " << data.capacity() << std::endl;
+			ANI_LOG_DEBUG("[ViewList<%s>] Created with initial capacity: %zu",
+				typeid(T).name(), data.capacity());
 		}
 
 		~Workspace() {
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Destructor called, size: " << data.size() << std::endl;
+			ANI_LOG_DEBUG("[ViewList<%s>] Destructor called, size: %zu",
+				typeid(T).name(), data.size());
 		}
 
-		void Insert(T &&view) {
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Insert START - ViewID: " << view.GetID()
-				<< ", Current size: " << data.size()
-				<< ", Capacity: " << data.capacity() << std::endl;
+		void Insert(T&& view) {
+			ANI_LOG_TRACE("[ViewList<%s>] Insert START - ViewID: %zu, Current size: %zu, Capacity: %zu",
+				typeid(T).name(), (size_t)view.GetID(), data.size(), data.capacity());
 
 			if (data.capacity() <= data.size()) {
 				size_t newCapacity = std::max(data.size() * 2, size_t(16));
 				data.reserve(newCapacity);
-				std::cout << "[ViewList<" << typeid(T).name() << ">] Reserved capacity: " << newCapacity << std::endl;
+				ANI_LOG_TRACE("[ViewList<%s>] Reserved capacity: %zu",
+					typeid(T).name(), newCapacity);
 			}
 
 			WorkspaceID id = view.GetID();
 
 			if (id == 0) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] ERROR: Invalid ViewID (0)" << std::endl;
+				ANI_LOG_WARN("[ViewList<%s>] Invalid ViewID (0), skipping insert",
+					typeid(T).name());
 				return;
 			}
 
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Processing ViewID: " << id << std::endl;
+			ANI_LOG_TRACE("[ViewList<%s>] Processing ViewID: %zu", typeid(T).name(), (size_t)id);
 
 			bool thisTypeExists = false;
 			for (const auto& existingView : data) {
@@ -66,13 +69,14 @@ namespace GUI {
 			}
 
 			if (thisTypeExists) {
-				std::cout << "[ViewList<" << typeid(T).name() << ">] Component type " << typeid(T).name()
-					<< " already exists on ViewListID: " << id << " - REPLACING" << std::endl;
+				ANI_LOG_TRACE("[ViewList<%s>] Type %s already exists at ViewListID: %zu - REPLACING",
+					typeid(T).name(), typeid(T).name(), (size_t)id);
 
 				for (auto& existingView : data) {
 					if (existingView && existingView->GetID() == id) {
 						existingView = std::make_shared<T>(std::forward<T>(view));
-						std::cout << "[ViewList<" << typeid(T).name() << ">] Replaced existing component" << std::endl;
+						ANI_LOG_TRACE("[ViewList<%s>] Replaced existing view",
+							typeid(T).name());
 						return;
 					}
 				}
@@ -82,50 +86,57 @@ namespace GUI {
 				auto newView = std::make_shared<T>(std::forward<T>(view));
 
 				if (!newView) {
-					std::cerr << "[ViewList<" << typeid(T).name() << ">] ERROR: Failed to create shared_ptr" << std::endl;
+					ANI_LOG_ERROR("[ViewList<%s>] Failed to create shared_ptr",
+						typeid(T).name());
 					return;
 				}
 
 				if (newView->GetID() != id) {
-					std::cerr << "[ViewList<" << typeid(T).name() << ">] ERROR: ViewID changed during shared_ptr creation!" << std::endl;
+					ANI_LOG_ERROR("[ViewList<%s>] ViewID changed during shared_ptr creation!",
+						typeid(T).name());
 					return;
 				}
 
 				data.push_back(newView);
-				std::cout << "[ViewList<" << typeid(T).name() << ">] NEW COMPONENT ADDED! ViewListID: " << id
-					<< ", Type: " << typeid(T).name()
-					<< ", Total components of this type: " << data.size()
-					<< ", New capacity: " << data.capacity() << std::endl;
+				ANI_LOG_DEBUG("[ViewList<%s>] NEW VIEW ADDED! ViewListID: %zu, Total views of this type: %zu, New capacity: %zu",
+					typeid(T).name(), (size_t)id, data.size(), data.capacity());
 			}
 			catch (const std::exception& e) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception creating shared_ptr: " << e.what() << std::endl;
+				ANI_LOG_ERROR("[ViewList<%s>] Exception creating shared_ptr: %s",
+					typeid(T).name(), e.what());
 				throw;
 			}
 			catch (...) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] Unknown exception creating shared_ptr" << std::endl;
+				ANI_LOG_ERROR("[ViewList<%s>] Unknown exception creating shared_ptr",
+					typeid(T).name());
 				throw;
 			}
 		}
 
-		T &Get(const WorkspaceID id) {
+		T& Get(const WorkspaceID id) {
 			if (id == 0) {
 				throw std::runtime_error("[ViewList<" + std::string(typeid(T).name()) + ">] Invalid ViewID (0)");
 			}
 
 			auto view = std::find_if(data.begin(), data.end(),
-				[id](const std::shared_ptr<T> &v) {
-				return v && v->GetID() == id;
-			});
+				[id](const std::shared_ptr<T>& v) {
+					return v && v->GetID() == id;
+				});
 
 			if (view == data.end()) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] View not found with ID: " << id << std::endl;
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] Available views: ";
+				ANI_LOG_WARN("[ViewList<%s>] View not found with ID: %zu",
+					typeid(T).name(), (size_t)id);
+
+				// Build the list of available IDs into a string for one clean log line
+				std::string availableIds;
 				for (const auto& v : data) {
 					if (v) {
-						std::cerr << v->GetID() << " ";
+						if (!availableIds.empty()) availableIds += " ";
+						availableIds += std::to_string(v->GetID());
 					}
 				}
-				std::cerr << std::endl;
+				ANI_LOG_WARN("[ViewList<%s>] Available view IDs: [%s]",
+					typeid(T).name(), availableIds.c_str());
 
 				throw std::runtime_error("[ViewList<" + std::string(typeid(T).name()) + ">] View doesn't exist with ID: " + std::to_string(id));
 			}
@@ -135,34 +146,36 @@ namespace GUI {
 
 		void Erase(const WorkspaceID id) override final {
 			if (id == 0) {
-				std::cout << "[ViewList<" << typeid(T).name() << ">] Ignoring erase of invalid ViewID (0)" << std::endl;
+				ANI_LOG_TRACE("[ViewList<%s>] Ignoring erase of invalid ViewID (0)",
+					typeid(T).name());
 				return;
 			}
 
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Attempting to erase ViewID: " << id << std::endl;
+			ANI_LOG_TRACE("[ViewList<%s>] Attempting to erase ViewID: %zu",
+				typeid(T).name(), (size_t)id);
 
 			auto view = std::find_if(data.begin(), data.end(),
-				[id](const std::shared_ptr<T> &v) {
-				return v && v->GetID() == id;
-			});
+				[id](const std::shared_ptr<T>& v) {
+					return v && v->GetID() == id;
+				});
 
 			if (view != data.end()) {
 				try {
-					std::cout << "[ViewList<" << typeid(T).name() << ">] Found view to erase, removing..." << std::endl;
+					ANI_LOG_TRACE("[ViewList<%s>] Found view to erase, removing...",
+						typeid(T).name());
 					data.erase(view);
-					std::cout << "[ViewList<" << typeid(T).name() 
-						<< ">] View erased! ID: " << id
-						<< ", Type ID: " << ViewType<T>()
-						<< ", Remaining views: " << data.size() << std::endl;
+					ANI_LOG_DEBUG("[ViewList<%s>] View erased! ID: %zu, Type ID: %zu, Remaining views: %zu",
+						typeid(T).name(), (size_t)id, (size_t)ViewType<T>(), data.size());
 				}
 				catch (const std::exception& e) {
-					std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception during erase: " << e.what() << std::endl;
+					ANI_LOG_ERROR("[ViewList<%s>] Exception during erase: %s",
+						typeid(T).name(), e.what());
 					throw;
 				}
 			}
 			else {
-				std::cout << "[ViewList<" << typeid(T).name() << ">] No view found with ID: " << id
-					<< ", Type ID: " << ViewType<T>() << std::endl;
+				ANI_LOG_TRACE("[ViewList<%s>] No view found with ID: %zu, Type ID: %zu",
+					typeid(T).name(), (size_t)id, (size_t)ViewType<T>());
 			}
 		}
 
@@ -175,7 +188,8 @@ namespace GUI {
 				viewsCopy = data;
 			}
 			catch (const std::exception& e) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception copying views for update: " << e.what() << std::endl;
+				ANI_LOG_ERROR("[ViewList<%s>] Exception copying views for update: %s",
+					typeid(T).name(), e.what());
 				return;
 			}
 
@@ -186,7 +200,8 @@ namespace GUI {
 						view->Update(deltaT);
 					}
 					catch (const std::exception& e) {
-						std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception in view Update(): " << e.what() << std::endl;
+						ANI_LOG_ERROR("[ViewList<%s>] Exception in view Update(): %s",
+							typeid(T).name(), e.what());
 					}
 				}
 			}
@@ -199,27 +214,30 @@ namespace GUI {
 				viewsCopy = data;
 			}
 			catch (const std::exception& e) {
-				std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception copying views for render: " << e.what() << std::endl;
+				ANI_LOG_ERROR("[ViewList<%s>] Exception copying views for render: %s",
+					typeid(T).name(), e.what());
 				return;
 			}
 
-			for (auto &view : viewsCopy) {
+			for (auto& view : viewsCopy) {
 				if (view) {
 					try {
 						view->Render();
 					}
 					catch (const std::exception& e) {
-						std::cerr << "[ViewList<" << typeid(T).name() << ">] Exception in RenderViews: " << e.what() << ": " << e.what() << std::endl;
-
+						ANI_LOG_ERROR("[ViewList<%s>] Exception in RenderViews: %s",
+							typeid(T).name(), e.what());
 						continue;
 					}
 					catch (...) {
-						std::cerr << "[ViewList<" << typeid(T).name() << ">] Unknown exception in RenderViews" << std::endl;
+						ANI_LOG_ERROR("[ViewList<%s>] Unknown exception in RenderViews",
+							typeid(T).name());
 						continue;
 					}
 				}
 				else {
-					std::cerr << "[ViewList<" << typeid(T).name() << ">] WARNING: Null view found in list" << std::endl;
+					ANI_LOG_WARN("[ViewList<%s>] Null view found in list",
+						typeid(T).name());
 				}
 			}
 		}
@@ -230,7 +248,8 @@ namespace GUI {
 		}
 
 		void Clear() override {
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Clearing all views (count: " << data.size() << ")" << std::endl;
+			ANI_LOG_DEBUG("[ViewList<%s>] Clearing all views (count: %zu)",
+				typeid(T).name(), data.size());
 			data.clear();
 		}
 
@@ -264,20 +283,21 @@ namespace GUI {
 			);
 
 			if (data.size() != originalSize) {
-				std::cout << "[ViewList<" << typeid(T).name() << ">] Compacted: removed "
-					<< (originalSize - data.size()) << " null views" << std::endl;
+				ANI_LOG_DEBUG("[ViewList<%s>] Compacted: removed %zu null views",
+					typeid(T).name(), originalSize - data.size());
 			}
 		}
 
 		void DebugPrint() const {
-			std::cout << "[ViewList<" << typeid(T).name() << ">] Debug - Total views: " << data.size() << std::endl;
+			ANI_LOG_DEBUG("[ViewList<%s>] Debug - Total views: %zu",
+				typeid(T).name(), data.size());
 			for (size_t i = 0; i < data.size(); ++i) {
 				if (data[i]) {
-					std::cout << "  [" << i << "] ViewID: " << data[i]->GetID()
-						<< ", ViewName: " << data[i]->viewName << std::endl;
+					ANI_LOG_TRACE("  [%zu] ViewID: %zu, ViewName: %s",
+						i, (size_t)data[i]->GetID(), data[i]->viewName.c_str());
 				}
 				else {
-					std::cout << "  [" << i << "] NULL VIEW" << std::endl;
+					ANI_LOG_TRACE("  [%zu] NULL VIEW", i);
 				}
 			}
 		}

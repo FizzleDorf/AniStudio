@@ -2,6 +2,7 @@
 #ifndef ASSETSVIEW_HPP
 #define ASSETSVIEW_HPP
 
+#include "Log.hpp"
 #include "BaseView.hpp"
 #include "ContextMenuUtils.hpp"
 #include "ThumbnailUtils.hpp"

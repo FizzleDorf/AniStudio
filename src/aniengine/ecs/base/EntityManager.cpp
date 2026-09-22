@@ -1,5 +1,6 @@
 #include "EntityManager.hpp"
-#include <iostream>
+#include "Log.hpp"
+
 #include <cassert>
 
 namespace ECS {
@@ -15,10 +16,11 @@ namespace ECS {
 		PluginComponentArray(size_t componentSize,
 			std::function<void(void*, EntityID)> constructor,
 			std::function<void(void*)> destructor)
-			: m_componentSize(componentSize), m_constructor(constructor), m_destructor(destructor) {}
+			: m_componentSize(componentSize), m_constructor(constructor), m_destructor(destructor) {
+		}
 
 		~PluginComponentArray() {
-			for (auto&[entityId, ptr] : m_components) {
+			for (auto& [entityId, ptr] : m_components) {
 				if (ptr) {
 					m_destructor(ptr);
 					std::free(ptr);
@@ -68,9 +70,9 @@ namespace ECS {
 	}
 
 	EntityManager::~EntityManager() {
-		for (auto&[systemId, systemInfo] : pluginSystems) {
+		for (auto& [systemId, systemInfo] : pluginSystems) {
 			if (systemInfo.instance && systemInfo.destructor) {
-				std::cout << "[EntityManager] Destroying plugin system ID: " << systemId << std::endl;
+				ANI_LOG_DEBUG("Destroying plugin system ID: %u", systemId);
 				systemInfo.destructor(systemInfo.instance);
 			}
 		}
@@ -92,7 +94,7 @@ namespace ECS {
 	}
 
 	void EntityManager::Reset() {
-		std::cout << "Resetting EntityManager..." << std::endl;
+		ANI_LOG_INFO("Resetting EntityManager...");
 
 		for (auto& system : registeredSystems) {
 			if (system.second) {
@@ -103,7 +105,7 @@ namespace ECS {
 		entitiesSignatures.clear();
 		registeredSystems.clear();
 
-		for (auto&[systemId, systemInfo] : pluginSystems) {
+		for (auto& [systemId, systemInfo] : pluginSystems) {
 			if (systemInfo.instance && systemInfo.destructor) {
 				systemInfo.destructor(systemInfo.instance);
 			}
@@ -121,7 +123,7 @@ namespace ECS {
 
 		entityCount = 0;
 
-		std::cout << "EntityManager reset complete. Registered components preserved." << std::endl;
+		ANI_LOG_INFO("EntityManager reset complete. Registered components preserved.");
 	}
 
 	const EntityID EntityManager::AddNewEntity() {
@@ -149,13 +151,13 @@ namespace ECS {
 			system.second->RemoveEntity(entity);
 		}
 
-		for (auto&[systemId, systemInfo] : pluginSystems) {
+		for (auto& [systemId, systemInfo] : pluginSystems) {
 			systemInfo.entities.erase(entity);
 		}
 
 		entityCount--;
 		availableEntities.push(entity);
-		std::cout << "Removed Entity: " << entity << "\n";
+		ANI_LOG_TRACE("Removed Entity: %u", entity);
 	}
 
 	bool EntityManager::IsEntityValid(EntityID entity) const {
@@ -186,12 +188,12 @@ namespace ECS {
 		PluginSystemInfo& systemInfo = it->second;
 
 		if (systemInfo.instance && systemInfo.destructor) {
-			std::cout << "[EntityManager] Destroying plugin system ID: " << systemId << std::endl;
+			ANI_LOG_DEBUG("Destroying plugin system ID: %u", systemId);
 			systemInfo.destructor(systemInfo.instance);
 		}
 
 		pluginSystems.erase(it);
-		std::cout << "[EntityManager] Unregistered plugin system ID: " << systemId << std::endl;
+		ANI_LOG_INFO("Unregistered plugin system ID: %u", systemId);
 	}
 
 	void EntityManager::UnregisterPluginComponent(ComponentTypeID componentId) {
@@ -203,7 +205,7 @@ namespace ECS {
 		componentCreators.erase(componentId);
 		componentGetters.erase(componentId);
 
-		std::cout << "[EntityManager] Unregistered plugin component ID: " << componentId << std::endl;
+		ANI_LOG_INFO("Unregistered plugin component ID: %u", componentId);
 	}
 
 	bool EntityManager::HasComponentById(const EntityID entity, ComponentTypeID componentId) {
@@ -265,7 +267,6 @@ namespace ECS {
 		auto componentTypes = GetEntityComponents(entity);
 
 		for (const auto& componentId : componentTypes) {
-			// Use non-const version instead of GetComponentByIdConst
 			BaseComponent* baseComponent = const_cast<EntityManager*>(this)->GetComponentById(entity, componentId);
 
 			if (baseComponent) {
@@ -292,7 +293,7 @@ namespace ECS {
 
 	EntityID EntityManager::CloneEntity(const EntityID sourceEntity) {
 		if (!IsEntityValid(sourceEntity)) {
-			std::cerr << "Error: Cannot clone invalid entity " << sourceEntity << std::endl;
+			ANI_LOG_ERROR("Error: Cannot clone invalid entity %u", sourceEntity);
 			return 0;
 		}
 
@@ -304,10 +305,8 @@ namespace ECS {
 			for (const auto& componentId : componentTypes) {
 				auto creator = componentCreators.find(componentId);
 				if (creator != componentCreators.end()) {
-					// Create the component on the new entity
 					creator->second(newEntity);
 
-					// Copy the data from source to destination
 					if (auto* sourceComponent = GetComponentById(sourceEntity, componentId)) {
 						if (auto* destComponent = GetComponentById(newEntity, componentId)) {
 							nlohmann::json componentData = sourceComponent->Serialize();
@@ -318,11 +317,11 @@ namespace ECS {
 				}
 			}
 
-			std::cout << "Successfully cloned entity " << sourceEntity << " to " << newEntity << std::endl;
+			ANI_LOG_INFO("Successfully cloned entity %u to %u", sourceEntity, newEntity);
 			return newEntity;
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Error cloning entity " << sourceEntity << ": " << e.what() << std::endl;
+			ANI_LOG_ERROR("Error cloning entity %u: %s", sourceEntity, e.what());
 			DestroyEntity(newEntity);
 			return 0;
 		}
@@ -330,7 +329,7 @@ namespace ECS {
 
 	EntityID EntityManager::DeserializeEntity(const nlohmann::json& json) {
 		if (!json.contains("components") || !json["components"].is_array()) {
-			std::cerr << "Error: Invalid entity data format in JSON" << std::endl;
+			ANI_LOG_ERROR("Error: Invalid entity data format in JSON");
 			return 0;
 		}
 
@@ -342,10 +341,8 @@ namespace ECS {
 					std::string componentName = it.key();
 					ComponentTypeID typeId = GetComponentTypeIdByName(componentName);
 
-					std::cout << "[Deserialize] key='" << componentName
-						<< "' -> typeId=" << typeId
-						<< " -> registeredName='" << GetComponentNameById(typeId) << "'"
-						<< std::endl;
+					ANI_LOG_TRACE("[Deserialize] key='%s' -> typeId=%u -> registeredName='%s'",
+						componentName.c_str(), typeId, GetComponentNameById(typeId).c_str());
 
 					if (typeId != MAX_COMPONENT_COUNT) {
 						auto creator = componentCreators.find(typeId);
@@ -355,39 +352,34 @@ namespace ECS {
 							BaseComponent* component = GetComponentById(entity, typeId);
 
 							if (component) {
-								std::cout << "[Deserialize] constructed component for key='"
-									<< componentName
-									<< "', GetCompName()='"
-									<< component->GetCompName()
-									<< "', schema empty="
-									<< (component->GetSchema().empty() ? "yes" : "no")
-									<< std::endl;
+								ANI_LOG_TRACE("[Deserialize] constructed component for key='%s', GetCompName()='%s', schema empty=%s",
+									componentName.c_str(),
+									component->GetCompName(),
+									component->GetSchema().empty() ? "yes" : "no");
 
 								component->Deserialize(componentJson[componentName]);
 
-								std::cout << "[Deserialize] after Deserialize, GetCompName()='"
-									<< component->GetCompName()
-									<< "', schema empty="
-									<< (component->GetSchema().empty() ? "yes" : "no")
-									<< std::endl;
+								ANI_LOG_TRACE("[Deserialize] after Deserialize, GetCompName()='%s', schema empty=%s",
+									component->GetCompName(),
+									component->GetSchema().empty() ? "yes" : "no");
 							}
 							else {
-								std::cerr << "[Deserialize] ERROR: Component " << componentName << " was not created!" << std::endl;
+								ANI_LOG_ERROR("[Deserialize] ERROR: Component %s was not created!", componentName.c_str());
 							}
 						}
 						else {
-							std::cerr << "[Deserialize] No creator for component: " << componentName << std::endl;
+							ANI_LOG_WARN("[Deserialize] No creator for component: %s", componentName.c_str());
 						}
 					}
 					else {
-						std::cerr << "[Deserialize] Component not found: " << componentName << std::endl;
+						ANI_LOG_WARN("[Deserialize] Component not found: %s", componentName.c_str());
 					}
 				}
 			}
 			return entity;
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Error deserializing entity: " << e.what() << std::endl;
+			ANI_LOG_ERROR("Error deserializing entity: %s", e.what());
 			DestroyEntity(entity);
 			return 0;
 		}
@@ -395,12 +387,12 @@ namespace ECS {
 
 	void EntityManager::DeserializeEntity(const nlohmann::json& json, const EntityID entity) {
 		if (!IsEntityValid(entity)) {
-			std::cerr << "Error: Cannot deserialize to invalid entity " << entity << std::endl;
+			ANI_LOG_ERROR("Error: Cannot deserialize to invalid entity %u", entity);
 			return;
 		}
 
 		if (!json.contains("components") || !json["components"].is_array()) {
-			std::cerr << "Error: Invalid entity data format in JSON" << std::endl;
+			ANI_LOG_ERROR("Error: Invalid entity data format in JSON");
 			return;
 		}
 
@@ -425,7 +417,7 @@ namespace ECS {
 			}
 		}
 		catch (const std::exception& e) {
-			std::cerr << "Error deserializing to entity " << entity << ": " << e.what() << std::endl;
+			ANI_LOG_ERROR("Error deserializing to entity %u: %s", entity, e.what());
 		}
 	}
 
@@ -445,17 +437,17 @@ namespace ECS {
 		RegisterComponentType(
 			typeId,
 			[this, typeId, pluginArray](EntityID entity) {
-			GetEntitySignature(entity)->insert(typeId);
-			pluginArray->Insert(entity);
-			UpdateEntityTargetSystem(entity);
-		},
+				GetEntitySignature(entity)->insert(typeId);
+				pluginArray->Insert(entity);
+				UpdateEntityTargetSystem(entity);
+			},
 			[pluginArray](EntityID entity) -> BaseComponent* {
-			return nullptr;
-		}
+				return nullptr;
+			}
 		);
 
-		std::cout << "[EntityManager] Registered plugin component with ID: " << typeId
-			<< " (size: " << componentSize << " bytes)" << std::endl;
+		ANI_LOG_INFO("Registered plugin component with ID: %u (size: %zu bytes)",
+			typeId, componentSize);
 	}
 
 	template<typename T>
@@ -463,7 +455,7 @@ namespace ECS {
 		std::type_index typeIdx = std::type_index(typeid(T));
 		auto it = m_componentTypeToID.find(typeIdx);
 		if (it == m_componentTypeToID.end()) {
-			std::cout << "[EntityManager] Component type not registered: " << typeid(T).name() << std::endl;
+			ANI_LOG_WARN("Component type not registered: %s", typeid(T).name());
 			return;
 		}
 
@@ -477,12 +469,12 @@ namespace ECS {
 			UnregisterComponentById(typeId);
 		}
 		else {
-			std::cerr << "[EntityManager] Component name not found: " << name << std::endl;
+			ANI_LOG_WARN("Component name not found: %s", name.c_str());
 		}
 	}
 
 	void EntityManager::UnregisterComponentById(ComponentTypeID typeId) {
-		std::cout << "[EntityManager] Unregistering component ID: " << typeId << std::endl;
+		ANI_LOG_INFO("Unregistering component ID: %u", typeId);
 
 		RemoveComponentFromAllEntities(typeId);
 
@@ -515,16 +507,14 @@ namespace ECS {
 			}
 		}
 
-		std::cout << "[EntityManager] Successfully unregistered component ID: " << typeId << std::endl;
+		ANI_LOG_INFO("Successfully unregistered component ID: %u", typeId);
 	}
 
 	void EntityManager::RemoveComponentFromAllEntities(ComponentTypeID typeId) {
-		// Remove this component type from all entity signatures
-		for (auto&[entityId, signature] : entitiesSignatures) {
+		for (auto& [entityId, signature] : entitiesSignatures) {
 			if (signature->count(typeId) > 0) {
 				signature->erase(typeId);
 
-				// Remove the actual component data
 				auto arrayIt = componentsArrays.find(typeId);
 				if (arrayIt != componentsArrays.end()) {
 					arrayIt->second->Erase(entityId);
@@ -553,8 +543,8 @@ namespace ECS {
 				void* component = pluginArray->Insert(entity);
 				UpdateEntityTargetSystem(entity);
 
-				std::cout << "[EntityManager] Added plugin component to entity " << entity
-					<< " with type ID: " << typeId << std::endl;
+				ANI_LOG_TRACE("Added plugin component to entity %u with type ID: %u",
+					entity, typeId);
 				return component;
 			}
 		}
@@ -573,8 +563,8 @@ namespace ECS {
 
 			UpdateEntityTargetSystem(entity);
 
-			std::cout << "[EntityManager] Removed plugin component from entity " << entity
-				<< " with type ID: " << typeId << std::endl;
+			ANI_LOG_TRACE("Removed plugin component from entity %u with type ID: %u",
+				entity, typeId);
 		}
 	}
 
@@ -583,22 +573,22 @@ namespace ECS {
 	}
 
 	void EntityManager::RegisterPluginSystem(SystemTypeID typeId,
-		std::function<void*(EntityManager*)> creator,
+		std::function<void* (EntityManager*)> creator,
 		std::function<void(void*)> destructor,
 		std::function<void(void*, float)> updater,
 		std::function<void(void*)> starter,
 		const std::vector<ComponentTypeID>& requiredComponents) {
 
-		std::cout << "[EntityManager] Registering plugin system ID: " << typeId
-			<< " with " << requiredComponents.size() << " required components" << std::endl;
+		ANI_LOG_INFO("Registering plugin system ID: %u with %zu required components",
+			typeId, requiredComponents.size());
 
 		void* systemInstance = creator(this);
 		if (!systemInstance) {
-			std::cerr << "[EntityManager] Failed to create plugin system with ID: " << typeId << std::endl;
+			ANI_LOG_ERROR("Failed to create plugin system with ID: %u", typeId);
 			return;
 		}
 
-		std::cout << "[EntityManager] Plugin system instance created successfully" << std::endl;
+		ANI_LOG_DEBUG("Plugin system instance created successfully");
 
 		PluginSystemInfo systemInfo;
 		systemInfo.instance = systemInstance;
@@ -607,7 +597,7 @@ namespace ECS {
 		systemInfo.requiredComponents = requiredComponents;
 
 		int matchingEntities = 0;
-		for (const auto&[entityId, entitySignature] : entitiesSignatures) {
+		for (const auto& [entityId, entitySignature] : entitiesSignatures) {
 			bool matches = true;
 			for (ComponentTypeID compType : requiredComponents) {
 				if (entitySignature->count(compType) == 0) {
@@ -623,16 +613,15 @@ namespace ECS {
 
 		pluginSystems[typeId] = std::move(systemInfo);
 
-		std::cout << "[EntityManager] Plugin system stored with ID: " << typeId << std::endl;
+		ANI_LOG_DEBUG("Plugin system stored with ID: %u", typeId);
 
 		if (starter) {
-			std::cout << "[EntityManager] Starting plugin system..." << std::endl;
+			ANI_LOG_DEBUG("Starting plugin system...");
 			starter(systemInstance);
 		}
 
-		std::cout << "[EntityManager] Registered plugin system with ID: " << typeId
-			<< " requiring " << requiredComponents.size() << " components"
-			<< " with " << matchingEntities << " initial entities" << std::endl;
+		ANI_LOG_INFO("Registered plugin system with ID: %u requiring %zu components with %d initial entities",
+			typeId, requiredComponents.size(), matchingEntities);
 	}
 
 	void* EntityManager::GetPluginSystem(SystemTypeID typeId) {
@@ -641,7 +630,7 @@ namespace ECS {
 	}
 
 	void EntityManager::UpdatePluginSystems(float deltaTime) {
-		for (auto&[systemId, systemInfo] : pluginSystems) {
+		for (auto& [systemId, systemInfo] : pluginSystems) {
 			if (systemInfo.instance && systemInfo.updater) {
 				systemInfo.updater(systemInfo.instance, deltaTime);
 			}
@@ -669,39 +658,39 @@ namespace ECS {
 	}
 
 	void EntityManager::DebugPrintRegisteredComponents() const {
-		std::cout << "Registered Component Types:" << std::endl;
+		ANI_LOG_DEBUG("Registered Component Types:");
 		auto names = GetAllRegisteredComponentNames();
 		for (const auto& name : names) {
 			ComponentTypeID id = GetComponentTypeIdByName(name);
-			std::cout << "  - " << name << " (ID: " << id << ")" << std::endl;
+			ANI_LOG_DEBUG("  - %s (ID: %u)", name.c_str(), id);
 		}
 	}
 
 	void EntityManager::DebugPrintEntityComponents(EntityID entity) const {
-		std::cout << "Entity " << entity << " raw components (" << GetEntityComponents(entity).size() << "):" << std::endl;
+		ANI_LOG_DEBUG("Entity %u raw components (%zu):", entity, GetEntityComponents(entity).size());
 		for (const auto& compId : GetEntityComponents(entity)) {
 			std::string name = GetComponentNameById(compId);
-			std::cout << "  - ID: " << compId << " (" << name << ")" << std::endl;
+			ANI_LOG_DEBUG("  - ID: %u (%s)", compId, name.c_str());
 		}
 	}
 
 	void EntityManager::DebugPrintPluginSystems() const {
-		std::cout << "=== PLUGIN SYSTEMS DEBUG ===" << std::endl;
-		std::cout << "Total plugin systems registered: " << pluginSystems.size() << std::endl;
+		ANI_LOG_DEBUG("=== PLUGIN SYSTEMS DEBUG ===");
+		ANI_LOG_DEBUG("Total plugin systems registered: %zu", pluginSystems.size());
 
-		for (const auto&[systemId, systemInfo] : pluginSystems) {
+		for (const auto& [systemId, systemInfo] : pluginSystems) {
 			auto nameIt = m_systemIDToName.find(systemId);
 			std::string systemName = (nameIt != m_systemIDToName.end()) ? nameIt->second : "Unknown";
-			std::cout << "\nPlugin System ID: " << systemId << " (" << systemName << ")" << std::endl;
-			std::cout << "  Instance: " << systemInfo.instance << std::endl;
-			std::cout << "  Required components: " << systemInfo.requiredComponents.size() << std::endl;
+			ANI_LOG_DEBUG("\nPlugin System ID: %u (%s)", systemId, systemName.c_str());
+			ANI_LOG_DEBUG("  Instance: %p", systemInfo.instance);
+			ANI_LOG_DEBUG("  Required components: %zu", systemInfo.requiredComponents.size());
 			for (ComponentTypeID compId : systemInfo.requiredComponents) {
-				std::cout << "    - " << GetComponentNameById(compId)
-					<< " (ID: " << compId << ")" << std::endl;
+				ANI_LOG_DEBUG("    - %s (ID: %u)",
+					GetComponentNameById(compId).c_str(), compId);
 			}
-			std::cout << "  Entities: " << systemInfo.entities.size() << std::endl;
+			ANI_LOG_DEBUG("  Entities: %zu", systemInfo.entities.size());
 		}
-		std::cout << "=========================" << std::endl;
+		ANI_LOG_DEBUG("=========================");
 	}
 
 	void EntityManager::AddEntitySignature(const EntityID entity) {
@@ -733,7 +722,7 @@ namespace ECS {
 		}
 
 		auto entitySignature = GetEntitySignature(entity);
-		for (auto&[systemId, systemInfo] : pluginSystems) {
+		for (auto& [systemId, systemInfo] : pluginSystems) {
 			bool matches = true;
 			for (ComponentTypeID compType : systemInfo.requiredComponents) {
 				if (entitySignature->count(compType) == 0) {
@@ -744,8 +733,8 @@ namespace ECS {
 
 			if (matches) {
 				if (systemInfo.entities.insert(entity).second) {
-					std::cout << "[EntityManager] Added entity " << entity
-						<< " to plugin system " << systemId << std::endl;
+					ANI_LOG_TRACE("Added entity %u to plugin system %u",
+						entity, systemId);
 				}
 			}
 			else {
@@ -790,10 +779,6 @@ namespace ECS {
 		if (componentName == "InputImage" || componentName == "Image") {
 			auto sourceComp = GetComponentById(sourceEntity, componentId);
 			auto destComp = GetComponentById(destEntity, componentId);
-
-			if (sourceComp && destComp) {
-				// Component-specific resource copying logic here
-			}
 		}
 	}
 

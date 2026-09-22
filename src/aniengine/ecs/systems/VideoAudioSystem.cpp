@@ -1,6 +1,6 @@
 #include "VideoAudioSystem.hpp"
 #include "ThreadPoolSystem.hpp"
-#include <iostream>
+#include "Log.hpp"
 
 namespace ECS {
 
@@ -34,7 +34,7 @@ namespace ECS {
         auto audioSystem = mgr.GetSystem<AudioSystem>().get();
 
         if (!videoSystem || !audioSystem) {
-            std::cerr << "[VideoAudioSystem] Required systems missing." << std::endl;
+            ANI_LOG_ERROR("[VideoAudioSystem] Required systems missing.");
             return 0;
         }
 

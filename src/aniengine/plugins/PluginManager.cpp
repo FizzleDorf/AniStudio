@@ -4,13 +4,15 @@
 #include "PluginState.hpp"
 #include "EngineContext.hpp"
 #include "FilePathSystem.hpp"
-#include <iostream>
+#include "Log.hpp"
+
 #include <filesystem>
 #include <vector>
 #include <fstream>
 #include <thread>
 #include <chrono>
 #include <regex>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -22,16 +24,16 @@ namespace Plugins {
 
     PluginManager::PluginManager(ECS::EntityManager& entityMgr)
         : entityManager(entityMgr) {
-        std::cout << "[PluginManager] Constructor - simplified manager created" << std::endl;
+        ANI_LOG_INFO("[PluginManager] Constructor - simplified manager created");
         stagingDirectory = "";
         InitializePluginStateManager();
         hotReloadEnabled = false;
         hotReloadForced = false;
-        std::cout << "[PluginManager] Hot reload disabled by default" << std::endl;
+        ANI_LOG_INFO("[PluginManager] Hot reload disabled by default");
     }
 
     PluginManager::~PluginManager() {
-        std::cout << "[PluginManager] Destructor - cleaning up plugins..." << std::endl;
+        ANI_LOG_INFO("[PluginManager] Destructor - cleaning up plugins...");
         hotReloadEnabled = false;
 
         std::vector<std::string> pluginNames;
@@ -50,122 +52,138 @@ namespace Plugins {
     void PluginManager::InitializePluginStateManager() {
         pluginState = std::make_unique<PluginState>();
         pluginState->SetEntityManager(&entityManager);
-        std::cout << "[PluginManager] Plugin state manager created" << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Plugin state manager created");
     }
 
     void PluginManager::SetGlobalDataPath(const std::string& dataPath) {
-        std::cout << "[PluginManager] SetGlobalDataPath called (ignored - using project state only)" << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] SetGlobalDataPath called (ignored - using project state only)");
     }
 
     void PluginManager::LoadGlobalPluginState() {
-        std::cout << "[PluginManager] LoadGlobalPluginState called (ignored - using project state only)" << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] LoadGlobalPluginState called (ignored - using project state only)");
     }
 
     void PluginManager::SaveGlobalPluginState() {
-        std::cout << "[PluginManager] SaveGlobalPluginState called (ignored - using project state only)" << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] SaveGlobalPluginState called (ignored - using project state only)");
     }
 
     void PluginManager::UseGlobalPluginState() {
-        std::cout << "[PluginManager] UseGlobalPluginState called (ignored - using project state only)" << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] UseGlobalPluginState called (ignored - using project state only)");
     }
 
     void PluginManager::SetProjectContext(const std::string& projectPath) {
-        if (!pluginState) return;
-        std::cout << "[PluginManager] Setting project context: " << projectPath << std::endl;
+        if (!pluginState) {
+            ANI_LOG_WARN("[PluginManager] SetProjectContext: pluginState not initialized");
+            return;
+        }
+        ANI_LOG_INFO("[PluginManager] Setting project context: %s", projectPath.c_str());
         SaveCurrentPluginState();
         pluginState->SetCurrentProjectPath(projectPath);
         pluginState->LoadProjectPluginState();
         LoadPluginsFromState();
-        std::cout << "[PluginManager] Project plugin context applied" << std::endl;
+        ANI_LOG_INFO("[PluginManager] Project plugin context applied");
     }
 
     void PluginManager::SaveProjectPluginState() {
-        if (!pluginState) return;
-        std::cout << "[PluginManager] Saving project plugin state..." << std::endl;
+        if (!pluginState) {
+            ANI_LOG_WARN("[PluginManager] SaveProjectPluginState: pluginState not initialized");
+            return;
+        }
+        ANI_LOG_INFO("[PluginManager] Saving project plugin state...");
         SaveCurrentPluginState();
         pluginState->SaveProjectPluginState();
-        std::cout << "[PluginManager] Project plugin state saved" << std::endl;
+        ANI_LOG_INFO("[PluginManager] Project plugin state saved");
     }
 
     void PluginManager::LoadPluginsFromState() {
-        if (!pluginState) return;
+        if (!pluginState) {
+            ANI_LOG_WARN("[PluginManager] LoadPluginsFromState: pluginState not initialized");
+            return;
+        }
         auto allPluginStates = pluginState->GetAllPluginStates();
-        std::cout << "[PluginManager] Loading plugins from state (" << allPluginStates.size() << " plugins)" << std::endl;
+        ANI_LOG_INFO("[PluginManager] Loading plugins from state (%zu plugins)", allPluginStates.size());
 
         for (const auto& [pluginName, state] : allPluginStates) {
-            std::cout << "[PluginManager] Processing plugin from state: " << pluginName
-                << " (loaded: " << state.loaded << ", enabled: " << state.enabled << ")" << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Processing plugin from state: %s (loaded: %s, enabled: %s)",
+                pluginName.c_str(),
+                state.loaded ? "true" : "false",
+                state.enabled ? "true" : "false");
 
             if (state.loaded) {
                 if (plugins.find(pluginName) != plugins.end() && plugins[pluginName].loaded) {
-                    std::cout << "[PluginManager] Plugin already loaded: " << pluginName << std::endl;
+                    ANI_LOG_TRACE("[PluginManager] Plugin already loaded: %s", pluginName.c_str());
                 }
                 else {
                     std::string pluginPath = state.path;
                     if (pluginPath.empty()) {
-                        std::cerr << "[PluginManager] No path in state for plugin: " << pluginName << std::endl;
+                        ANI_LOG_WARN("[PluginManager] No path in state for plugin: %s", pluginName.c_str());
                         continue;
                     }
-                    std::cout << "[PluginManager] Loading plugin: " << pluginName << " from " << pluginPath << std::endl;
+                    ANI_LOG_INFO("[PluginManager] Loading plugin: %s from %s",
+                        pluginName.c_str(), pluginPath.c_str());
                     if (loadPlugin(pluginPath)) {
-                        std::cout << "[PluginManager] Successfully loaded plugin: " << pluginName << std::endl;
+                        ANI_LOG_INFO("[PluginManager] Successfully loaded plugin: %s", pluginName.c_str());
                     }
                     else {
-                        std::cerr << "[PluginManager] Failed to load plugin: " << pluginName << std::endl;
+                        ANI_LOG_ERROR("[PluginManager] Failed to load plugin: %s", pluginName.c_str());
                         continue;
                     }
                 }
 
                 if (state.enabled) {
                     if (plugins[pluginName].enabled) {
-                        std::cout << "[PluginManager] Plugin already enabled: " << pluginName << std::endl;
+                        ANI_LOG_TRACE("[PluginManager] Plugin already enabled: %s", pluginName.c_str());
                     }
                     else {
-                        std::cout << "[PluginManager] Enabling plugin: " << pluginName << std::endl;
+                        ANI_LOG_INFO("[PluginManager] Enabling plugin: %s", pluginName.c_str());
                         if (!enablePlugin(pluginName)) {
-                            std::cerr << "[PluginManager] Failed to enable plugin: " << pluginName << std::endl;
+                            ANI_LOG_ERROR("[PluginManager] Failed to enable plugin: %s", pluginName.c_str());
                         }
                     }
                 }
             }
         }
-        std::cout << "[PluginManager] Plugin loading from state complete" << std::endl;
+        ANI_LOG_INFO("[PluginManager] Plugin loading from state complete");
     }
 
     void PluginManager::SaveCurrentPluginState() {
-        if (!pluginState) return;
-        std::cout << "[PluginManager] Saving current plugin state..." << std::endl;
+        if (!pluginState) {
+            ANI_LOG_WARN("[PluginManager] SaveCurrentPluginState: pluginState not initialized");
+            return;
+        }
+        ANI_LOG_DEBUG("[PluginManager] Saving current plugin state...");
         for (const auto& [pluginName, info] : plugins) {
             pluginState->SetPluginState(pluginName, info.loaded, info.enabled, info.path, info.currentVersion);
         }
-        std::cout << "[PluginManager] Current plugin state saved to memory" << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Current plugin state saved to memory");
     }
 
     void PluginManager::setStagingDirectory(const std::string& basePluginsDir) {
         stagingDirectory = basePluginsDir;
-        std::cout << "[PluginManager] Staging directory reference set to: " << stagingDirectory << std::endl;
+        ANI_LOG_INFO("[PluginManager] Staging directory reference set to: %s", stagingDirectory.c_str());
     }
 
     void PluginManager::enableHotReload(bool enable) {
         hotReloadEnabled = enable;
-        std::cout << "[PluginManager] Hot reload " << (enable ? "enabled" : "disabled") << std::endl;
+        ANI_LOG_INFO("[PluginManager] Hot reload %s", enable ? "enabled" : "disabled");
     }
 
     void PluginManager::setHotReloadForce(bool force) {
         hotReloadForced = force;
         if (force) {
             hotReloadEnabled = true;
-            std::cout << "[PluginManager] Hot reload FORCE ENABLED (for development)" << std::endl;
+            ANI_LOG_INFO("[PluginManager] Hot reload FORCE ENABLED (for development)");
         }
         else {
-            std::cout << "[PluginManager] Hot reload force disabled" << std::endl;
+            ANI_LOG_INFO("[PluginManager] Hot reload force disabled");
         }
     }
 
     void PluginManager::setupPluginDirectories(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end()) {
-            std::cerr << "[PluginManager] Cannot setup directories - plugin not in registry: " << pluginName << std::endl;
+            ANI_LOG_WARN("[PluginManager] Cannot setup directories - plugin not in registry: %s",
+                pluginName.c_str());
             return;
         }
 
@@ -174,22 +192,23 @@ namespace Plugins {
 
         if (!std::filesystem::exists(pluginStagingDir)) {
             std::filesystem::create_directories(pluginStagingDir);
-            std::cout << "[PluginManager] Created staging directory: " << pluginStagingDir << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Created staging directory: %s", pluginStagingDir.c_str());
         }
 
-        std::cout << "[PluginManager] Setup directories for plugin: " << pluginName << std::endl;
-        std::cout << "  Main: " << pluginMainDir << std::endl;
-        std::cout << "  Staging: " << pluginStagingDir << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Setup directories for plugin: %s", pluginName.c_str());
+        ANI_LOG_DEBUG("  Main: %s", pluginMainDir.c_str());
+        ANI_LOG_DEBUG("  Staging: %s", pluginStagingDir.c_str());
     }
 
     bool PluginManager::moveFile(const std::string& source, const std::string& destination) {
         try {
             std::filesystem::rename(source, destination);
-            std::cout << "[PluginManager] File moved successfully from " << source << " to " << destination << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] File moved: %s -> %s",
+                source.c_str(), destination.c_str());
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[PluginManager] File move failed: " << e.what() << std::endl;
+            ANI_LOG_WARN("[PluginManager] File move failed: %s", e.what());
             return false;
         }
     }
@@ -204,12 +223,13 @@ namespace Plugins {
         for (const auto& dllName : possibleNames) {
             std::string fullPath = pluginDir + "/" + dllName;
             if (std::filesystem::exists(fullPath)) {
-                std::cout << "[PluginManager] Found plugin DLL: " << fullPath << std::endl;
+                ANI_LOG_DEBUG("[PluginManager] Found plugin DLL: %s", fullPath.c_str());
                 return fullPath;
             }
         }
 
-        std::cout << "[PluginManager] No DLL found for plugin: " << pluginName << " in " << pluginDir << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] No DLL found for plugin: %s in %s",
+            pluginName.c_str(), pluginDir.c_str());
         return "";
     }
 
@@ -226,6 +246,8 @@ namespace Plugins {
         std::string newestDll;
 
         if (!std::filesystem::exists(pluginDir)) {
+            ANI_LOG_DEBUG("[PluginManager] findNewestVersionedDll: directory does not exist: %s",
+                pluginDir.c_str());
             return "";
         }
 
@@ -247,8 +269,11 @@ namespace Plugins {
         }
 
         if (!newestDll.empty()) {
-            std::cout << "[PluginManager] Found newest versioned DLL for " << pluginName
-                << ": v" << highestVersion << " at " << newestDll << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Found newest versioned DLL for %s: v%u at %s",
+                pluginName.c_str(), highestVersion, newestDll.c_str());
+        }
+        else {
+            ANI_LOG_DEBUG("[PluginManager] No versioned DLL found for: %s", pluginName.c_str());
         }
 
         return newestDll;
@@ -264,17 +289,23 @@ namespace Plugins {
             return std::stoul(matches[1].str());
         }
 
+        ANI_LOG_DEBUG("[PluginManager] extractVersionFromDllName: no version pattern in '%s'",
+            filename.c_str());
         return 0;
     }
 
     void PluginManager::cleanupOldVersionedDlls(const std::string& pluginName, uint32_t keepVersionsCount) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end()) {
+            ANI_LOG_TRACE("[PluginManager] cleanupOldVersionedDlls: plugin not in registry: %s",
+                pluginName.c_str());
             return;
         }
 
         std::string pluginMainDir = it->second.path;
         if (!std::filesystem::exists(pluginMainDir)) {
+            ANI_LOG_TRACE("[PluginManager] cleanupOldVersionedDlls: dir does not exist: %s",
+                pluginMainDir.c_str());
             return;
         }
 
@@ -301,7 +332,7 @@ namespace Plugins {
             [](const auto& a, const auto& b) { return a.first > b.first; });
 
         for (size_t i = keepVersionsCount; i < versionedDlls.size(); ++i) {
-            std::cout << "[PluginManager] Cleaning up old DLL: v" << versionedDlls[i].first << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Cleaning up old DLL: v%u", versionedDlls[i].first);
             std::filesystem::remove(versionedDlls[i].second);
         }
     }
@@ -334,19 +365,20 @@ namespace Plugins {
             auto fileAge = std::chrono::duration_cast<std::chrono::seconds>(now - currentWriteTime).count();
 
             if (fileAge < 2) {
-                std::cout << "[PluginManager] Staging DLL is too new (" << fileAge << "s), waiting for build to complete..." << std::endl;
+                ANI_LOG_TRACE("[PluginManager] Staging DLL is too new (%llds), waiting for build to complete...",
+                    static_cast<long long>(fileAge));
                 return false;
             }
 
             if (currentWriteTime > info.stagingWriteTime) {
                 info.stagingWriteTime = currentWriteTime;
-                std::cout << "[PluginManager] Staging DLL updated for: " << pluginName << std::endl;
-                std::cout << "[PluginManager] File age: " << fileAge << " seconds" << std::endl;
+                ANI_LOG_DEBUG("[PluginManager] Staging DLL updated for: %s", pluginName.c_str());
+                ANI_LOG_DEBUG("[PluginManager] File age: %lld seconds", static_cast<long long>(fileAge));
                 return true;
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[PluginManager] Error checking staging updates: " << e.what() << std::endl;
+            ANI_LOG_WARN("[PluginManager] Error checking staging updates: %s", e.what());
         }
 
         return false;
@@ -355,12 +387,14 @@ namespace Plugins {
     bool PluginManager::createVersionedDllFromStaging(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end()) {
+            ANI_LOG_WARN("[PluginManager] createVersionedDllFromStaging: plugin not in registry: %s",
+                pluginName.c_str());
             return false;
         }
 
         PluginInfo& info = it->second;
         if (info.stagingPath.empty()) {
-            std::cerr << "[PluginManager] No staging path configured for: " << pluginName << std::endl;
+            ANI_LOG_ERROR("[PluginManager] No staging path configured for: %s", pluginName.c_str());
             return false;
         }
 
@@ -372,7 +406,7 @@ namespace Plugins {
 #endif
 
         if (!std::filesystem::exists(stagingDllPath)) {
-            std::cerr << "[PluginManager] No staging DLL found for: " << pluginName << std::endl;
+            ANI_LOG_ERROR("[PluginManager] No staging DLL found for: %s", pluginName.c_str());
             return false;
         }
 
@@ -384,7 +418,7 @@ namespace Plugins {
             auto currentTime = std::filesystem::last_write_time(currentVersionDll);
 
             if (stagingSize == currentSize && stagingTime <= currentTime) {
-                std::cout << "[PluginManager] Staging DLL is identical to current version, skipping" << std::endl;
+                ANI_LOG_DEBUG("[PluginManager] Staging DLL is identical to current version, skipping");
                 return false;
             }
         }
@@ -393,9 +427,9 @@ namespace Plugins {
         std::string versionedDllName = getVersionedDllName(pluginName, info.nextVersion);
         std::string newDllPath = pluginMainDir + "/" + versionedDllName;
 
-        std::cout << "[PluginManager] Creating new versioned DLL v" << info.nextVersion << std::endl;
-        std::cout << "  Source: " << stagingDllPath << std::endl;
-        std::cout << "  Destination: " << newDllPath << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Creating new versioned DLL v%u", info.nextVersion);
+        ANI_LOG_DEBUG("  Source: %s", stagingDllPath.c_str());
+        ANI_LOG_DEBUG("  Destination: %s", newDllPath.c_str());
 
         try {
             if (std::filesystem::exists(newDllPath)) {
@@ -406,7 +440,7 @@ namespace Plugins {
                 std::filesystem::copy_options::overwrite_existing);
 
             if (!std::filesystem::exists(newDllPath)) {
-                std::cerr << "[PluginManager] Destination file not created: " << newDllPath << std::endl;
+                ANI_LOG_ERROR("[PluginManager] Destination file not created: %s", newDllPath.c_str());
                 return false;
             }
 
@@ -414,28 +448,29 @@ namespace Plugins {
             auto dstSize = std::filesystem::file_size(newDllPath);
 
             if (srcSize != dstSize) {
-                std::cerr << "[PluginManager] File size mismatch after copy: src="
-                    << srcSize << ", dst=" << dstSize << std::endl;
+                ANI_LOG_ERROR("[PluginManager] File size mismatch after copy: src=%llu, dst=%llu",
+                    static_cast<unsigned long long>(srcSize),
+                    static_cast<unsigned long long>(dstSize));
                 return false;
             }
 
-            std::cout << "[PluginManager] Successfully created versioned DLL v"
-                << info.nextVersion << " (" << dstSize << " bytes)" << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Successfully created versioned DLL v%u (%llu bytes)",
+                info.nextVersion, static_cast<unsigned long long>(dstSize));
 
             info.stagingWriteTime = std::filesystem::last_write_time(stagingDllPath);
 
             try {
                 std::filesystem::remove(stagingDllPath);
-                std::cout << "[PluginManager] Removed staging DLL: " << stagingDllPath << std::endl;
+                ANI_LOG_DEBUG("[PluginManager] Removed staging DLL: %s", stagingDllPath.c_str());
             }
             catch (const std::exception& e) {
-                std::cerr << "[PluginManager] Failed to remove staging DLL: " << e.what() << std::endl;
+                ANI_LOG_WARN("[PluginManager] Failed to remove staging DLL: %s", e.what());
             }
 
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[PluginManager] Failed to copy staging DLL: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to copy staging DLL: %s", e.what());
             return false;
         }
     }
@@ -443,53 +478,53 @@ namespace Plugins {
     bool PluginManager::safeReloadPlugin(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end() || !it->second.loaded) {
-            std::cerr << "[PluginManager] Plugin not loaded: " << pluginName << std::endl;
+            ANI_LOG_ERROR("[PluginManager] safeReloadPlugin: plugin not loaded: %s", pluginName.c_str());
             return false;
         }
 
         PluginInfo& info = it->second;
         bool wasEnabled = info.enabled;
 
-        std::cout << "[PluginManager] Starting safe reload for: " << pluginName << std::endl;
-        std::cout << "[PluginManager] Current version: v" << info.currentVersion << std::endl;
-        std::cout << "[PluginManager] Next version: v" << info.nextVersion << std::endl;
+        ANI_LOG_INFO("[PluginManager] Starting safe reload for: %s", pluginName.c_str());
+        ANI_LOG_DEBUG("[PluginManager] Current version: v%u", info.currentVersion);
+        ANI_LOG_DEBUG("[PluginManager] Next version: v%u", info.nextVersion);
 
         if (wasEnabled) {
-            std::cout << "[PluginManager] Disabling plugin for reload..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Disabling plugin for reload...");
             if (!disablePlugin(pluginName)) {
-                std::cerr << "[PluginManager] Failed to disable plugin for reload" << std::endl;
+                ANI_LOG_ERROR("[PluginManager] Failed to disable plugin for reload");
                 return false;
             }
         }
 
         if (info.destroyFunc && info.instance) {
-            std::cout << "[PluginManager] Destroying plugin instance..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Destroying plugin instance...");
             info.destroyFunc(info.instance);
             info.instance = nullptr;
         }
 
         if (info.handle) {
-            std::cout << "[PluginManager] Unloading old DLL..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Unloading old DLL...");
             unloadLibrary(info.handle);
             info.handle = nullptr;
         }
 
-        std::cout << "[PluginManager] Waiting for DLL to be released..." << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Waiting for DLL to be released...");
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
         std::string versionedDllName = getVersionedDllName(pluginName, info.nextVersion);
         std::string newDllPath = info.path + "/" + versionedDllName;
 
         if (!std::filesystem::exists(newDllPath)) {
-            std::cerr << "[PluginManager] New DLL not found: " << newDllPath << std::endl;
+            ANI_LOG_ERROR("[PluginManager] New DLL not found: %s", newDllPath.c_str());
             return false;
         }
 
-        std::cout << "[PluginManager] Loading new DLL: " << newDllPath << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Loading new DLL: %s", newDllPath.c_str());
 
         void* newHandle = loadDynamicLibrary(newDllPath);
         if (!newHandle) {
-            std::cerr << "[PluginManager] Failed to load new DLL" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to load new DLL");
             return false;
         }
 
@@ -497,14 +532,14 @@ namespace Plugins {
         auto newDestroyFunc = reinterpret_cast<void(*)(BasePlugin*)>(getFunction(newHandle, "DestroyPlugin"));
 
         if (!newCreateFunc || !newDestroyFunc) {
-            std::cerr << "[PluginManager] Failed to load plugin functions from new DLL" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to load plugin functions from new DLL");
             unloadLibrary(newHandle);
             return false;
         }
 
         BasePlugin* newInstance = newCreateFunc();
         if (!newInstance) {
-            std::cerr << "[PluginManager] Failed to create plugin instance from new DLL" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to create plugin instance from new DLL");
             unloadLibrary(newHandle);
             return false;
         }
@@ -519,13 +554,13 @@ namespace Plugins {
         info.loaded = true;
         info.version = newInstance->GetVersion();
 
-        std::cout << "[PluginManager] SUCCESS: Plugin reloaded: " << pluginName << std::endl;
-        std::cout << "[PluginManager] New version: v" << info.currentVersion << std::endl;
+        ANI_LOG_INFO("[PluginManager] SUCCESS: Plugin reloaded: %s", pluginName.c_str());
+        ANI_LOG_DEBUG("[PluginManager] New version: v%u", info.currentVersion);
 
         if (wasEnabled) {
-            std::cout << "[PluginManager] Re-enabling plugin..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Re-enabling plugin...");
             if (!enablePlugin(pluginName)) {
-                std::cerr << "[PluginManager] Warning: Plugin reloaded but failed to re-enable" << std::endl;
+                ANI_LOG_WARN("[PluginManager] Warning: Plugin reloaded but failed to re-enable");
             }
         }
 
@@ -546,15 +581,15 @@ namespace Plugins {
             bool hasUpdate = checkStagingForUpdates(pluginName);
 
             if (hasUpdate) {
-                std::cout << "[PluginManager] Update detected for: " << pluginName << std::endl;
+                ANI_LOG_INFO("[PluginManager] Update detected for: %s", pluginName.c_str());
 
                 if (createVersionedDllFromStaging(pluginName)) {
                     info.hotReloadPending = true;
-                    std::cout << "[PluginManager] Hot reload pending for: " << pluginName
-                        << " (will reload to v" << info.nextVersion << " on next update cycle)" << std::endl;
+                    ANI_LOG_INFO("[PluginManager] Hot reload pending for: %s (will reload to v%u on next update cycle)",
+                        pluginName.c_str(), info.nextVersion);
                 }
                 else {
-                    std::cerr << "[PluginManager] Failed to prepare hot reload for: " << pluginName << std::endl;
+                    ANI_LOG_ERROR("[PluginManager] Failed to prepare hot reload for: %s", pluginName.c_str());
                 }
             }
         }
@@ -570,12 +605,12 @@ namespace Plugins {
         }
 
         for (const std::string& pluginName : pluginsToReload) {
-            std::cout << "[PluginManager] Processing pending reload for: " << pluginName << std::endl;
+            ANI_LOG_INFO("[PluginManager] Processing pending reload for: %s", pluginName.c_str());
             if (safeReloadPlugin(pluginName)) {
-                std::cout << "[PluginManager] Successfully completed hot reload for: " << pluginName << std::endl;
+                ANI_LOG_INFO("[PluginManager] Successfully completed hot reload for: %s", pluginName.c_str());
             }
             else {
-                std::cerr << "[PluginManager] Failed to complete hot reload for: " << pluginName << std::endl;
+                ANI_LOG_ERROR("[PluginManager] Failed to complete hot reload for: %s", pluginName.c_str());
                 plugins[pluginName].hotReloadPending = false;
             }
         }
@@ -603,19 +638,19 @@ namespace Plugins {
         std::filesystem::path path(pluginPath);
         std::string pluginName = path.filename().string();
 
-        std::cout << "[PluginManager] ======================================" << std::endl;
-        std::cout << "[PluginManager] Loading plugin: " << pluginName << std::endl;
-        std::cout << "[PluginManager] From path: " << pluginPath << std::endl;
-        std::cout << "[PluginManager] ======================================" << std::endl;
+        ANI_LOG_INFO("[PluginManager] ======================================");
+        ANI_LOG_INFO("[PluginManager] Loading plugin: %s", pluginName.c_str());
+        ANI_LOG_INFO("[PluginManager] From path: %s", pluginPath.c_str());
+        ANI_LOG_INFO("[PluginManager] ======================================");
 
         auto it = plugins.find(pluginName);
         if (it != plugins.end() && it->second.loaded) {
-            std::cout << "[PluginManager] Plugin already loaded: " << pluginName << std::endl;
+            ANI_LOG_TRACE("[PluginManager] Plugin already loaded: %s", pluginName.c_str());
             return true;
         }
 
         if (!std::filesystem::exists(pluginPath)) {
-            std::cerr << "[PluginManager] ERROR: Plugin path does not exist: " << pluginPath << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Plugin path does not exist: %s", pluginPath.c_str());
             return false;
         }
 
@@ -623,7 +658,7 @@ namespace Plugins {
         info.name = pluginName;
         info.path = pluginPath;
 
-        std::cout << "[PluginManager] Plugin info initialized with path: " << info.path << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Plugin info initialized with path: %s", info.path.c_str());
 
         setupPluginDirectories(pluginName);
 
@@ -640,11 +675,12 @@ namespace Plugins {
 #endif
                 if (std::filesystem::exists(stagingDll)) {
                     info.stagingWriteTime = std::filesystem::last_write_time(stagingDll);
-                    std::cout << "[PluginManager] Staging directory found and tracked: " << pluginStagingDir << std::endl;
+                    ANI_LOG_DEBUG("[PluginManager] Staging directory found and tracked: %s",
+                        pluginStagingDir.c_str());
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[PluginManager] Error setting up staging tracking: " << e.what() << std::endl;
+                ANI_LOG_WARN("[PluginManager] Error setting up staging tracking: %s", e.what());
             }
         }
 
@@ -653,7 +689,7 @@ namespace Plugins {
 
         if (!newestVersionedDll.empty()) {
             loadedVersion = extractVersionFromDllName(newestVersionedDll, pluginName);
-            std::cout << "[PluginManager] Found existing versioned DLL v" << loadedVersion << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Found existing versioned DLL v%u", loadedVersion);
         }
         else {
             std::string stagingDll = pluginStagingDir + "/" + pluginName;
@@ -664,7 +700,7 @@ namespace Plugins {
 #endif
 
             if (!std::filesystem::exists(stagingDll)) {
-                std::cerr << "[PluginManager] ERROR: No DLL found in plugin directory: " << pluginPath << std::endl;
+                ANI_LOG_ERROR("[PluginManager] No DLL found in plugin directory: %s", pluginPath.c_str());
                 plugins.erase(pluginName);
                 return false;
             }
@@ -673,23 +709,23 @@ namespace Plugins {
             std::string versionedDllName = getVersionedDllName(pluginName, loadedVersion);
             std::string newDllPath = pluginPath + "/" + versionedDllName;
 
-            std::cout << "[PluginManager] Creating initial versioned DLL v1..." << std::endl;
-            std::cout << "  Source: " << stagingDll << std::endl;
-            std::cout << "  Destination: " << newDllPath << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Creating initial versioned DLL v1...");
+            ANI_LOG_DEBUG("  Source: %s", stagingDll.c_str());
+            ANI_LOG_DEBUG("  Destination: %s", newDllPath.c_str());
 
             if (!copyFile(stagingDll, newDllPath)) {
-                std::cerr << "[PluginManager] ERROR: Failed to create initial versioned DLL" << std::endl;
+                ANI_LOG_ERROR("[PluginManager] Failed to create initial versioned DLL");
                 plugins.erase(pluginName);
                 return false;
             }
             newestVersionedDll = newDllPath;
         }
 
-        std::cout << "[PluginManager] Loading DLL: " << newestVersionedDll << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Loading DLL: %s", newestVersionedDll.c_str());
 
         info.handle = loadDynamicLibrary(newestVersionedDll);
         if (!info.handle) {
-            std::cerr << "[PluginManager] ERROR: Failed to load plugin DLL" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to load plugin DLL: %s", newestVersionedDll.c_str());
             plugins.erase(pluginName);
             return false;
         }
@@ -698,7 +734,7 @@ namespace Plugins {
         info.destroyFunc = reinterpret_cast<void(*)(BasePlugin*)>(getFunction(info.handle, "DestroyPlugin"));
 
         if (!info.createFunc || !info.destroyFunc) {
-            std::cerr << "[PluginManager] ERROR: Failed to load plugin functions" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to load plugin functions from DLL");
             unloadLibrary(info.handle);
             plugins.erase(pluginName);
             return false;
@@ -706,7 +742,7 @@ namespace Plugins {
 
         info.instance = info.createFunc();
         if (!info.instance) {
-            std::cerr << "[PluginManager] ERROR: Failed to create plugin instance" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Failed to create plugin instance");
             unloadLibrary(info.handle);
             plugins.erase(pluginName);
             return false;
@@ -726,11 +762,11 @@ namespace Plugins {
         info.loaded = true;
         info.enabled = false;
 
-        std::cout << "[PluginManager] ======================================" << std::endl;
-        std::cout << "[PluginManager] SUCCESS: Plugin loaded: " << pluginName << std::endl;
-        std::cout << "[PluginManager] Version: " << info.version << " (DLL v" << info.currentVersion << ")" << std::endl;
-        std::cout << "[PluginManager] Path: " << info.path << std::endl;
-        std::cout << "[PluginManager] ======================================" << std::endl;
+        ANI_LOG_INFO("[PluginManager] ======================================");
+        ANI_LOG_INFO("[PluginManager] SUCCESS: Plugin loaded: %s", pluginName.c_str());
+        ANI_LOG_INFO("[PluginManager] Version: %u (DLL v%u)", info.version, info.currentVersion);
+        ANI_LOG_INFO("[PluginManager] Path: %s", info.path.c_str());
+        ANI_LOG_INFO("[PluginManager] ======================================");
 
         return true;
     }
@@ -738,21 +774,21 @@ namespace Plugins {
     bool PluginManager::enablePlugin(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end() || !it->second.loaded) {
-            std::cerr << "[PluginManager] Plugin not loaded: " << pluginName << std::endl;
+            ANI_LOG_WARN("[PluginManager] enablePlugin: plugin not loaded: %s", pluginName.c_str());
             return false;
         }
 
         PluginInfo& info = it->second;
 
         if (info.enabled) {
-            std::cout << "[PluginManager] Plugin already enabled: " << pluginName << std::endl;
+            ANI_LOG_TRACE("[PluginManager] Plugin already enabled: %s", pluginName.c_str());
             return true;
         }
 
-        std::cout << "[PluginManager] Enabling plugin: " << pluginName << std::endl;
+        ANI_LOG_INFO("[PluginManager] Enabling plugin: %s", pluginName.c_str());
 
         if (!info.instance) {
-            std::cerr << "[PluginManager] No plugin instance to enable" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] No plugin instance to enable");
             return false;
         }
 
@@ -764,7 +800,7 @@ namespace Plugins {
         }
 
         if (!info.instance->OnEngineInit(entityManager)) {
-            std::cerr << "[PluginManager] Plugin OnEngineInit() returned false" << std::endl;
+            ANI_LOG_ERROR("[PluginManager] Plugin OnEngineInit() returned false: %s", pluginName.c_str());
             return false;
         }
 
@@ -773,7 +809,7 @@ namespace Plugins {
 
         OnPluginEnabled(pluginName);
 
-        std::cout << "[PluginManager] Plugin enabled: " << pluginName << std::endl;
+        ANI_LOG_INFO("[PluginManager] Plugin enabled: %s", pluginName.c_str());
 
         return true;
     }
@@ -781,18 +817,18 @@ namespace Plugins {
     bool PluginManager::disablePlugin(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end() || !it->second.loaded) {
-            std::cerr << "[PluginManager] Plugin not loaded: " << pluginName << std::endl;
+            ANI_LOG_WARN("[PluginManager] disablePlugin: plugin not loaded: %s", pluginName.c_str());
             return false;
         }
 
         PluginInfo& info = it->second;
 
         if (!info.enabled) {
-            std::cout << "[PluginManager] Plugin already disabled: " << pluginName << std::endl;
+            ANI_LOG_TRACE("[PluginManager] Plugin already disabled: %s", pluginName.c_str());
             return true;
         }
 
-        std::cout << "[PluginManager] Disabling plugin: " << pluginName << std::endl;
+        ANI_LOG_INFO("[PluginManager] Disabling plugin: %s", pluginName.c_str());
 
         if (info.instance) {
             info.instance->OnShutdown();
@@ -803,7 +839,7 @@ namespace Plugins {
 
         OnPluginDisabled(pluginName);
 
-        std::cout << "[PluginManager] Plugin disabled: " << pluginName << std::endl;
+        ANI_LOG_INFO("[PluginManager] Plugin disabled: %s", pluginName.c_str());
 
         return true;
     }
@@ -811,14 +847,14 @@ namespace Plugins {
     bool PluginManager::unloadPlugin(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
         if (it == plugins.end()) {
-            std::cerr << "[PluginManager] Plugin not found: " << pluginName << std::endl;
+            ANI_LOG_WARN("[PluginManager] unloadPlugin: plugin not found: %s", pluginName.c_str());
             return false;
         }
 
         PluginInfo& info = it->second;
 
         if (info.enabled) {
-            std::cout << "[PluginManager] Force-disabling plugin before unload..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Force-disabling plugin before unload...");
             if (info.instance) {
                 info.instance->OnShutdown();
                 info.instance->SetInitialized(false);
@@ -827,13 +863,13 @@ namespace Plugins {
         }
 
         if (info.destroyFunc && info.instance) {
-            std::cout << "[PluginManager] Destroying plugin instance..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Destroying plugin instance...");
             info.destroyFunc(info.instance);
             info.instance = nullptr;
         }
 
         if (info.handle) {
-            std::cout << "[PluginManager] Unloading plugin DLL..." << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] Unloading plugin DLL...");
             unloadLibrary(info.handle);
             info.handle = nullptr;
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -845,37 +881,45 @@ namespace Plugins {
 
         plugins.erase(pluginName);
 
-        std::cout << "[PluginManager] Plugin unloaded: " << pluginName << std::endl;
+        ANI_LOG_INFO("[PluginManager] Plugin unloaded: %s", pluginName.c_str());
         return true;
     }
 
     bool PluginManager::reloadPlugin(const std::string& pluginName) {
         auto it = plugins.find(pluginName);
-        if (it == plugins.end()) return false;
+        if (it == plugins.end()) {
+            ANI_LOG_WARN("[PluginManager] reloadPlugin: plugin not found: %s", pluginName.c_str());
+            return false;
+        }
 
         bool wasEnabled = it->second.enabled;
         std::string path = it->second.path;
+
+        ANI_LOG_INFO("[PluginManager] Reloading plugin: %s", pluginName.c_str());
 
         if (!unloadPlugin(pluginName)) return false;
         if (!loadPlugin(path)) return false;
         if (wasEnabled && !enablePlugin(pluginName)) return false;
 
+        ANI_LOG_INFO("[PluginManager] Plugin reload complete: %s", pluginName.c_str());
         return true;
     }
 
     void PluginManager::scanPluginDirectory(const std::string& directory) {
         if (!std::filesystem::exists(directory)) {
+            ANI_LOG_DEBUG("[PluginManager] scanPluginDirectory: directory does not exist: %s",
+                directory.c_str());
             return;
         }
 
-        std::cout << "[PluginManager] Scanning plugin directory (discovery only): " << directory << std::endl;
+        ANI_LOG_DEBUG("[PluginManager] Scanning plugin directory (discovery only): %s", directory.c_str());
 
         for (const auto& entry : std::filesystem::directory_iterator(directory)) {
             if (entry.is_directory()) {
                 std::string pluginName = entry.path().filename().string();
                 if (pluginName == "staging") continue;
 
-                std::cout << "[PluginManager] Found plugin directory: " << pluginName << std::endl;
+                ANI_LOG_DEBUG("[PluginManager] Found plugin directory: %s", pluginName.c_str());
             }
         }
     }
@@ -924,11 +968,12 @@ namespace Plugins {
         try {
             std::filesystem::copy_file(source, destination,
                 std::filesystem::copy_options::overwrite_existing);
-            std::cout << "[PluginManager] File copied successfully" << std::endl;
+            ANI_LOG_DEBUG("[PluginManager] File copied: %s -> %s",
+                source.c_str(), destination.c_str());
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[PluginManager] File copy failed: " << e.what() << std::endl;
+            ANI_LOG_WARN("[PluginManager] File copy failed: %s", e.what());
             return false;
         }
     }

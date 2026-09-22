@@ -8,7 +8,7 @@
 #include "TextEditorSettingsComponent.hpp"
 #include "BaseSettingsTab.hpp"
 #include "FilePathTab.hpp"
-#include <iostream>
+#include "Log.hpp"
 
 namespace ECS {
 
@@ -17,6 +17,8 @@ namespace ECS {
     }
 
     void SettingsSystem::Start() {
+        ANI_LOG_INFO("[SettingsSystem] Starting");
+
         filePathSystem = mgr.GetSystem<FilePathSystem>().get();
         settingsEntity = mgr.AddNewEntity();
 
@@ -32,12 +34,20 @@ namespace ECS {
             auto fileTab = std::make_unique<FilePathTab>(*filePathSystem);
             RegisterTab(std::move(fileTab));
         }
+        else {
+            ANI_LOG_WARN("[SettingsSystem] FilePathSystem not available; FilePath settings tab not registered");
+        }
+
+        ANI_LOG_INFO("[SettingsSystem] Registered %zu settings components, %zu tabs",
+            settingsComponentTypes.size(), m_tabs.size());
 
         LoadAllSettings();
         for (auto& tab : m_tabs) tab->CreateBackup();
     }
 
     void SettingsSystem::Destroy() {
+        ANI_LOG_INFO("[SettingsSystem] Destroying");
+
         if (mgr.IsEntityValid(settingsEntity)) {
             mgr.DestroyEntity(settingsEntity);
             settingsEntity = 0;
@@ -65,6 +75,7 @@ namespace ECS {
     void SettingsSystem::RegisterTab(std::unique_ptr<BaseSettingsTab> tab) {
         if (imguiContext) tab->SetImGuiContext(imguiContext);
         m_tabs.push_back(std::move(tab));
+        ANI_LOG_DEBUG("[SettingsSystem] Registered tab (total=%zu)", m_tabs.size());
     }
 
     void SettingsSystem::SetImGuiContext(ImGuiContext* context) {
@@ -76,29 +87,57 @@ namespace ECS {
 
     bool SettingsSystem::SaveAllSettings() {
         bool success = true;
-        for (auto& tab : m_tabs) {
-            if (!tab->SaveSettings()) success = false;
+        for (size_t i = 0; i < m_tabs.size(); ++i) {
+            if (!m_tabs[i]->SaveSettings()) {
+                ANI_LOG_WARN("[SettingsSystem] SaveSettings failed for tab %zu", i);
+                success = false;
+            }
+        }
+        if (success) {
+            ANI_LOG_INFO("[SettingsSystem] Saved %zu tabs", m_tabs.size());
+        }
+        else {
+            ANI_LOG_WARN("[SettingsSystem] SaveAllSettings completed with failures");
         }
         return success;
     }
 
     bool SettingsSystem::LoadAllSettings() {
         bool success = true;
-        for (auto& tab : m_tabs) {
-            if (!tab->LoadSettings()) success = false;
+        for (size_t i = 0; i < m_tabs.size(); ++i) {
+            if (!m_tabs[i]->LoadSettings()) {
+                ANI_LOG_WARN("[SettingsSystem] LoadSettings failed for tab %zu", i);
+                success = false;
+            }
+        }
+        if (success) {
+            ANI_LOG_INFO("[SettingsSystem] Loaded %zu tabs", m_tabs.size());
+        }
+        else {
+            ANI_LOG_WARN("[SettingsSystem] LoadAllSettings completed with failures");
         }
         return success;
     }
 
     void SettingsSystem::ResetAllToDefaults() {
-        for (auto& tab : m_tabs) {
-            tab->ResetToDefaults();
+        for (size_t i = 0; i < m_tabs.size(); ++i) {
+            try {
+                m_tabs[i]->ResetToDefaults();
+            }
+            catch (const std::exception& e) {
+                ANI_LOG_ERROR("[SettingsSystem] Exception resetting tab %zu: %s", i, e.what());
+            }
         }
     }
 
     void SettingsSystem::RestoreAllFromBackups() {
-        for (auto& tab : m_tabs) {
-            tab->RestoreFromBackup();
+        for (size_t i = 0; i < m_tabs.size(); ++i) {
+            try {
+                m_tabs[i]->RestoreFromBackup();
+            }
+            catch (const std::exception& e) {
+                ANI_LOG_ERROR("[SettingsSystem] Exception restoring tab %zu: %s", i, e.what());
+            }
         }
     }
 

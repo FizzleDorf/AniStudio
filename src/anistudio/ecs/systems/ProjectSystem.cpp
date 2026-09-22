@@ -17,6 +17,7 @@
 #include <sstream>
 #include <set>
 #include <algorithm>
+#include <stdexcept>
 
 namespace ECS {
 
@@ -51,6 +52,12 @@ namespace ECS {
         , m_autoSaveEnabled(true)
         , m_autoSaveIntervalMinutes(5) {
         sysName = "ProjectSystem";
+    }
+
+    bool ProjectSystem::FailProject(const std::string& msg) {
+        m_lastError = msg;
+        ANI_LOG_WARN("[ProjectSystem] %s", msg.c_str());
+        return false;
     }
 
     void ProjectSystem::Start() {
@@ -385,7 +392,7 @@ namespace ECS {
         std::vector<std::string> recentProjects;
         std::string defaultPath = GetDefaultProjectPath();
         if (defaultPath.empty()) {
-            ANI_LOG_ERROR("[ProjectSystem] DefaultProject path is empty!");
+            ANI_LOG_WARN("[ProjectSystem] DefaultProject path is empty!");
             return recentProjects;
         }
 
@@ -400,7 +407,7 @@ namespace ECS {
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[ProjectSystem] Error scanning for projects: %s", e.what());
+            ANI_LOG_WARN("[ProjectSystem] Error scanning for projects: %s", e.what());
         }
 
         return recentProjects;
@@ -432,8 +439,7 @@ namespace ECS {
         try {
             std::filesystem::path projPath(projectPath);
             if (std::filesystem::exists(projPath)) {
-                m_lastError = "Project directory already exists: " + projectPath;
-                return false;
+                return FailProject("Project directory already exists: " + projectPath);
             }
 
             std::filesystem::create_directories(projPath);
@@ -445,7 +451,9 @@ namespace ECS {
             std::filesystem::create_directories(projPath / "settings");
 
             auto* comp = GetProjectComponent();
-            if (!comp) return false;
+            if (!comp) {
+                return FailProject("ProjectComponent not available");
+            }
 
             comp->isOpen = true;
             comp->currentProjectPath = projectPath;
@@ -476,10 +484,9 @@ namespace ECS {
             }
 
             if (!SaveProject()) {
-                m_lastError = "Failed to save new project";
                 comp->isOpen = false;
                 comp->currentProjectPath.clear();
-                return false;
+                return FailProject("Failed to save new project");
             }
 
             AddToRecentProjects(projectPath);
@@ -515,14 +522,12 @@ namespace ECS {
         try {
             std::filesystem::path projPath(projectPath);
             if (!std::filesystem::exists(projPath)) {
-                m_lastError = "Project directory does not exist: " + projectPath;
-                return false;
+                return FailProject("Project directory does not exist: " + projectPath);
             }
 
             std::filesystem::path projectFile = projPath / "project.ani";
             if (!std::filesystem::exists(projectFile)) {
-                m_lastError = "Project file not found: " + projectFile.string();
-                return false;
+                return FailProject("Project file not found: " + projectFile.string());
             }
 
             if (IsProjectOpen()) {
@@ -531,23 +536,28 @@ namespace ECS {
 
             std::ifstream file(projectFile);
             if (!file.is_open()) {
-                m_lastError = "Failed to open project file: " + projectFile.string();
-                return false;
+                return FailProject("Failed to open project file: " + projectFile.string());
             }
 
             nlohmann::json projectJson;
-            file >> projectJson;
+            try {
+                file >> projectJson;
+            }
+            catch (const std::exception& e) {
+                return FailProject("Project file is not valid JSON: " + std::string(e.what()));
+            }
             file.close();
 
             auto* comp = GetProjectComponent();
-            if (!comp) return false;
+            if (!comp) {
+                return FailProject("ProjectComponent not available");
+            }
 
             if (projectJson.contains("settings")) {
                 comp->settings.Deserialize(projectJson["settings"]);
             }
             else {
-                m_lastError = "Invalid project file format: missing settings";
-                return false;
+                return FailProject("Invalid project file format: missing settings");
             }
 
             comp->isOpen = true;
@@ -572,16 +582,13 @@ namespace ECS {
                 ANI_LOG_INFO("  - OutputFolder: %s", fileSys->GetPath("OutputFolder").c_str());
             }
 
-            // -----------------------------------------------------------------
-            // 1) Plugins FIRST.
-            //    - LoadStagingPlugins moves any staged DLLs into versioned slots.
-            //    - SetProjectContext loads the project's plugin_state.json and
-            //      enables the plugins that were enabled in that project. Enabling
-            //      a plugin calls OnStudioInit, which registers its view types with
-            //      the ViewManager.
-            //    - PrepareProjectPlugins sweeps any remaining enabled-but-not-yet-
-            //      enabled plugins (idempotent).
-            // -----------------------------------------------------------------
+            // LoadStagingPlugins moves any staged DLLs into versioned slots.
+            // SetProjectContext loads the project's plugin_state.json and
+            // enables the plugins that were enabled in that project last. Enabling
+            // a plugin calls OnStudioInit, which registers its view types with
+            // the ViewManager.
+            // PrepareProjectPlugins sweeps any remaining enabled-but-not-yet-
+            // enabled plugins (idempotent).
             if (m_pluginManager) {
                 m_pluginManager->LoadStagingPlugins(true);
                 m_pluginManager->SetProjectContext(projectPath);
@@ -589,10 +596,8 @@ namespace ECS {
                 ANI_LOG_INFO("[ProjectSystem] Plugins prepared before viewstate load");
             }
 
-            // -----------------------------------------------------------------
-            // 2) ViewState SECOND ? all view types (including plugin views) are
-            //    now registered, so DeserializeViewLists can resolve them.
-            // -----------------------------------------------------------------
+            // all view types (including plugin views) are
+            // now registered, so DeserializeViewLists can resolve them.
             LoadViewState();
 
             if (m_viewManager) {
@@ -609,15 +614,13 @@ namespace ECS {
                 }
             }
 
-            // -----------------------------------------------------------------
-            // 3) Layout / window state / paths.
-            // -----------------------------------------------------------------
+            // Layout / window state / paths.
             LoadImGuiLayout();
             LoadAndApplyProjectWindowState();
 
             UpdateProjectSpecificPaths();
 
-            // 4) Pure notification callback last.
+            // Pure notification callback last.
             if (m_onProjectLoadedCallback) {
                 m_onProjectLoadedCallback(projectPath);
             }
@@ -637,8 +640,7 @@ namespace ECS {
     bool ProjectSystem::SaveProject() {
         auto* comp = GetProjectComponent();
         if (!comp || !comp->isOpen) {
-            m_lastError = "No project is currently open";
-            return false;
+            return FailProject("No project is currently open");
         }
 
         m_lastError.clear();
@@ -652,8 +654,7 @@ namespace ECS {
             std::filesystem::path projectFile = std::filesystem::path(comp->currentProjectPath) / "project.ani";
             std::ofstream file(projectFile);
             if (!file.is_open()) {
-                m_lastError = "Failed to open project file for writing: " + projectFile.string();
-                return false;
+                return FailProject("Failed to open project file for writing: " + projectFile.string());
             }
 
             nlohmann::json projectJson;
@@ -718,8 +719,7 @@ namespace ECS {
     bool ProjectSystem::ApplyProjectTemplate(const GUI::ProjectTemplate& template_) {
         auto* comp = GetProjectComponent();
         if (!comp || !comp->isOpen) {
-            m_lastError = "No project is currently open";
-            return false;
+            return FailProject("No project is currently open");
         }
 
         try {
@@ -740,7 +740,7 @@ namespace ECS {
                         ANI_LOG_INFO("[ProjectSystem] Successfully added view: %s", viewTypeName.c_str());
                     }
                     catch (const std::exception& e) {
-                        ANI_LOG_ERROR("[ProjectSystem] Failed to add view %s: %s",
+                        ANI_LOG_WARN("[ProjectSystem] Failed to add view %s: %s",
                             viewTypeName.c_str(), e.what());
                     }
                 }
@@ -935,10 +935,10 @@ namespace ECS {
             fileSys->SetPath("ProjectDataPath", dataPath);
         }
 
-        ANI_LOG_INFO("[ProjectSystem] Updated project-specific paths:");
-        ANI_LOG_INFO("  - AssetsFolder: %s", assetsPath.c_str());
-        ANI_LOG_INFO("  - OutputFolder: %s", outputPath.c_str());
-        ANI_LOG_INFO("  - ProjectDataPath: %s", dataPath.c_str());
+        ANI_LOG_DEBUG("[ProjectSystem] Updated project-specific paths:");
+        ANI_LOG_DEBUG("  - AssetsFolder: %s", assetsPath.c_str());
+        ANI_LOG_DEBUG("  - OutputFolder: %s", outputPath.c_str());
+        ANI_LOG_DEBUG("  - ProjectDataPath: %s", dataPath.c_str());
     }
 
     void ProjectSystem::ClearProjectSpecificPaths() {

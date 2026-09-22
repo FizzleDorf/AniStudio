@@ -1,8 +1,10 @@
 #include "FilePathSystem.hpp"
 #include "EntityManager.hpp"
 #include "FilePathComponent.hpp"
+#include "Log.hpp"
+
 #include <fstream>
-#include <iostream>
+#include <stdexcept>
 
 namespace ECS {
     FilePathSystem::FilePathSystem(EntityManager& mgr)
@@ -14,7 +16,7 @@ namespace ECS {
         m_componentTypeId = mgr.RegisterComponent<FilePathComponent>("FilePathComponent");
         m_filePathEntity = mgr.AddNewEntity();
         mgr.AddComponent<FilePathComponent>(m_filePathEntity);
-        std::cout << "[FilePathSystem] Started with entity " << m_filePathEntity << std::endl;
+        ANI_LOG_INFO("[FilePathSystem] Started with entity %u", m_filePathEntity);
     }
 
     void FilePathSystem::Destroy() {
@@ -58,7 +60,10 @@ namespace ECS {
 
     void FilePathSystem::SaveToFile(const std::string& filepath) const {
         auto* comp = GetComponent();
-        if (!comp) return;
+        if (!comp) {
+            ANI_LOG_WARN("[FilePathSystem] SaveToFile: component not available");
+            return;
+        }
 
         nlohmann::json j;
         j["compName"] = comp->GetCompName();
@@ -74,17 +79,33 @@ namespace ECS {
         j["paths"] = pathsJson;
 
         std::ofstream file(filepath);
-        if (file.is_open()) {
-            file << j.dump(4);
+        if (!file.is_open()) {
+            ANI_LOG_WARN("[FilePathSystem] SaveToFile: failed to open %s for writing", filepath.c_str());
+            return;
         }
+        file << j.dump(4);
+        ANI_LOG_DEBUG("[FilePathSystem] Saved %s", filepath.c_str());
     }
 
     void FilePathSystem::LoadFromFile(const std::string& filepath) {
-        if (!std::filesystem::exists(filepath)) return;
+        if (!std::filesystem::exists(filepath)) {
+            ANI_LOG_DEBUG("[FilePathSystem] LoadFromFile: %s not found", filepath.c_str());
+            return;
+        }
         std::ifstream file(filepath);
-        if (!file.is_open()) return;
+        if (!file.is_open()) {
+            ANI_LOG_WARN("[FilePathSystem] LoadFromFile: failed to open %s", filepath.c_str());
+            return;
+        }
         nlohmann::json j;
-        file >> j;
+        try {
+            file >> j;
+        }
+        catch (const std::exception& e) {
+            ANI_LOG_WARN("[FilePathSystem] LoadFromFile: parse error in %s: %s",
+                filepath.c_str(), e.what());
+            return;
+        }
         auto* comp = GetComponent();
         if (comp) comp->Deserialize(j);
     }
@@ -95,7 +116,10 @@ namespace ECS {
 
     void FilePathSystem::CheckAndPromptMissingPaths() {
         auto* comp = GetComponent();
-        if (!comp) return;
+        if (!comp) {
+            ANI_LOG_WARN("[FilePathSystem] CheckAndPromptMissingPaths: component not available");
+            return;
+        }
         std::vector<std::string> missing;
         for (const auto& key : comp->GetAllKeys()) {
             if (IsPathHidden(key)) continue;
@@ -103,8 +127,13 @@ namespace ECS {
                 missing.push_back(key);
             }
         }
-        if (!missing.empty() && m_missingPathsCallback) {
+        if (missing.empty()) return;
+        ANI_LOG_INFO("[FilePathSystem] %zu required paths are unset", missing.size());
+        if (m_missingPathsCallback) {
             m_missingPathsCallback(missing);
+        }
+        else {
+            ANI_LOG_DEBUG("[FilePathSystem] No missing-paths callback registered");
         }
     }
 }

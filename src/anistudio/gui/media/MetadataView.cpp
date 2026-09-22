@@ -10,8 +10,11 @@
 #include "WebPMetadataUtils.hpp"
 #include "VideoMetadataUtils.hpp"
 #include "MetadataUtils.hpp"
+#include "SteganographyUtils.hpp"
+#include "Log.hpp"
+
 #include <imgui.h>
-#include <iostream>
+#include <stb_image.h>
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
@@ -25,6 +28,7 @@ namespace GUI {
         metadata = nlohmann::json::object();
         currentFile = "";
         filterText = "";
+        ANI_LOG_DEBUG("Constructed");
     }
 
     void MetadataView::Init() {
@@ -418,11 +422,14 @@ namespace GUI {
             str = value.dump();
         }
         ImGui::SetClipboardText(str.c_str());
-        std::cout << "[MetadataView] Copied value to clipboard" << std::endl;
+        ANI_LOG_TRACE("Copied value to clipboard");
     }
 
     void MetadataView::CopyEntireEntityToClipboard() {
-        if (metadata.empty()) return;
+        if (metadata.empty()) {
+            ANI_LOG_TRACE("CopyEntireEntityToClipboard: no metadata");
+            return;
+        }
 
         nlohmann::json clipboardData;
         clipboardData["dataType"] = "entity";
@@ -431,35 +438,38 @@ namespace GUI {
 
         std::string jsonStr = clipboardData.dump(2);
         ImGui::SetClipboardText(jsonStr.c_str());
-        std::cout << "[MetadataView] Copied entire entity to clipboard" << std::endl;
+        ANI_LOG_DEBUG("Copied entire entity to clipboard (%zu bytes)", jsonStr.size());
     }
 
     void MetadataView::ClearMetadata() {
         metadata = nlohmann::json::object();
         currentFile = "";
-        std::cout << "[MetadataView] Cleared metadata" << std::endl;
+        ANI_LOG_DEBUG("Cleared metadata");
     }
 
     void MetadataView::PasteFromClipboard() {
         const char* clipboardText = ImGui::GetClipboardText();
-        if (clipboardText) {
-            try {
-                nlohmann::json jsonData = nlohmann::json::parse(clipboardText);
+        if (!clipboardText) {
+            ANI_LOG_TRACE("PasteFromClipboard: no clipboard text");
+            return;
+        }
 
-                if (jsonData.contains("dataType") && jsonData.contains("data")) {
-                    metadata = jsonData["data"];
-                    currentFile = "Clipboard (Entity)";
-                }
-                else {
-                    metadata = jsonData;
-                    currentFile = "Clipboard";
-                }
+        try {
+            nlohmann::json jsonData = nlohmann::json::parse(clipboardText);
 
-                std::cout << "[MetadataView] Pasted from clipboard" << std::endl;
+            if (jsonData.contains("dataType") && jsonData.contains("data")) {
+                metadata = jsonData["data"];
+                currentFile = "Clipboard (Entity)";
             }
-            catch (const std::exception& e) {
-                std::cerr << "[MetadataView] Failed to parse clipboard JSON: " << e.what() << std::endl;
+            else {
+                metadata = jsonData;
+                currentFile = "Clipboard";
             }
+
+            ANI_LOG_DEBUG("Pasted from clipboard");
+        }
+        catch (const std::exception& e) {
+            ANI_LOG_WARN("Failed to parse clipboard JSON: %s", e.what());
         }
     }
 
@@ -476,6 +486,9 @@ namespace GUI {
                     file >> rawMetadata;
                     file.close();
                 }
+                else {
+                    ANI_LOG_WARN("Failed to open JSON file: %s", filePath.c_str());
+                }
             }
             else if (ext == ".png") {
                 rawMetadata = Utils::PngMetadata::ReadMetadataFromPNG(filePath);
@@ -489,6 +502,8 @@ namespace GUI {
             else if (ext == ".tiff") {
 #ifdef USE_EXIV2
                 rawMetadata = Utils::MetadataUtils::ReadMetadataFromTIFF(filePath);
+#else
+                ANI_LOG_WARN("TIFF support disabled (USE_EXIV2 not defined): %s", filePath.c_str());
 #endif
             }
             else if (ext == ".mp4" || ext == ".webm" || ext == ".mkv" || ext == ".avi" ||
@@ -504,7 +519,6 @@ namespace GUI {
                     rawMetadata = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
                 }
                 else {
-                    // Try to read as text
                     std::ifstream file(filePath);
                     if (file.is_open()) {
                         std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -516,19 +530,70 @@ namespace GUI {
                             // Not valid JSON
                         }
                     }
+                    else {
+                        ANI_LOG_WARN("Could not open file for metadata read: %s", filePath.c_str());
+                    }
                 }
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[MetadataView] Error reading metadata: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Error reading metadata from %s: %s", filePath.c_str(), e.what());
             return nlohmann::json::object();
         }
 
+        // ---------------------------------------------------------------------
+        // LSB fallback for images: only if the primary reader found nothing.
+        // Reads the alpha-channel LSB payload and tries to parse it as JSON.
+        //
+        // Note: ExtractFromAlpha() takes an optional signature argument. If
+        // your embedder uses a signature (recommended), pass it here so that
+        // images without LSB data return an empty payload instead of random
+        // bytes read from their alpha channel.
+        // ---------------------------------------------------------------------
+        const bool isImageExt = (ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+            || ext == ".webp" || ext == ".tiff");
+        if (isImageExt && (rawMetadata.is_null() || rawMetadata.empty())) {
+            try {
+                int w = 0, h = 0, ch = 0;
+                unsigned char* pixels = stbi_load(filePath.c_str(), &w, &h, &ch, 4);
+                if (pixels) {
+                    std::vector<unsigned char> payload =
+                        Utils::SteganographyUtils::ExtractFromAlpha(pixels, w, h);
+                    stbi_image_free(pixels);
+
+                    if (!payload.empty()) {
+                        try {
+                            std::string text(payload.begin(), payload.end());
+                            nlohmann::json parsed = nlohmann::json::parse(text);
+                            if (parsed.is_object() || parsed.is_array()) {
+                                rawMetadata = parsed;
+                                rawMetadata["_source"] = "lsb";
+                                ANI_LOG_DEBUG("Read LSB metadata from: %s", filePath.c_str());
+                            }
+                        }
+                        catch (const std::exception& e) {
+                            ANI_LOG_TRACE("LSB payload from %s is not valid JSON: %s",
+                                filePath.c_str(), e.what());
+                        }
+                    }
+                }
+            }
+            catch (const std::exception& e) {
+                ANI_LOG_WARN("LSB metadata read failed for %s: %s", filePath.c_str(), e.what());
+            }
+        }
+
+        // Sidecar JSON fallback
         if (rawMetadata.is_null() || rawMetadata.empty()) {
             std::string jsonPath = filePath + ".json";
             if (std::filesystem::exists(jsonPath)) {
+                ANI_LOG_TRACE("Trying sidecar JSON: %s", jsonPath.c_str());
                 rawMetadata = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
             }
+        }
+
+        if (rawMetadata.is_null() || rawMetadata.empty()) {
+            ANI_LOG_DEBUG("No metadata found for: %s", filePath.c_str());
         }
 
         return rawMetadata;
@@ -540,36 +605,44 @@ namespace GUI {
 
         if (metadata.is_null() || metadata.empty()) {
             metadata = nlohmann::json::object();
+            ANI_LOG_WARN("Loaded file but no metadata found: %s", filePath.c_str());
         }
-
-        std::cout << "[MetadataView] Loaded metadata from: " << filePath << std::endl;
+        else {
+            ANI_LOG_INFO("Loaded metadata from: %s", filePath.c_str());
+        }
     }
 
     void MetadataView::LoadFromClipboard() {
         const char* clipboardText = ImGui::GetClipboardText();
-        if (clipboardText) {
-            try {
-                nlohmann::json jsonData = nlohmann::json::parse(clipboardText);
+        if (!clipboardText) {
+            ANI_LOG_TRACE("LoadFromClipboard: no clipboard text");
+            return;
+        }
 
-                if (jsonData.contains("dataType") && jsonData.contains("data")) {
-                    metadata = jsonData["data"];
-                    currentFile = "Clipboard (Entity)";
-                }
-                else {
-                    metadata = jsonData;
-                    currentFile = "Clipboard";
-                }
+        try {
+            nlohmann::json jsonData = nlohmann::json::parse(clipboardText);
 
-                std::cout << "[MetadataView] Loaded metadata from clipboard" << std::endl;
+            if (jsonData.contains("dataType") && jsonData.contains("data")) {
+                metadata = jsonData["data"];
+                currentFile = "Clipboard (Entity)";
             }
-            catch (const std::exception& e) {
-                std::cerr << "[MetadataView] Failed to parse clipboard JSON: " << e.what() << std::endl;
+            else {
+                metadata = jsonData;
+                currentFile = "Clipboard";
             }
+
+            ANI_LOG_DEBUG("Loaded metadata from clipboard");
+        }
+        catch (const std::exception& e) {
+            ANI_LOG_WARN("Failed to parse clipboard JSON: %s", e.what());
         }
     }
 
     void MetadataView::SaveMetadataToFile() {
-        if (metadata.empty()) return;
+        if (metadata.empty()) {
+            ANI_LOG_TRACE("SaveMetadataToFile: no metadata");
+            return;
+        }
 
         std::string filePath;
         if (FileDialog::SaveFile("Save Metadata As", FileDialog::FilterType::METADATA_FILE, "metadata.json", filePath)) {
@@ -577,7 +650,10 @@ namespace GUI {
             if (file.is_open()) {
                 file << metadata.dump(2);
                 file.close();
-                std::cout << "[MetadataView] Saved metadata to: " << filePath << std::endl;
+                ANI_LOG_INFO("Saved metadata to: %s", filePath.c_str());
+            }
+            else {
+                ANI_LOG_ERROR("Failed to open file for writing: %s", filePath.c_str());
             }
         }
     }
@@ -585,7 +661,7 @@ namespace GUI {
     void MetadataView::SetMetadata(const nlohmann::json& metadata, const std::string& source) {
         this->metadata = metadata;
         currentFile = source;
-        std::cout << "[MetadataView] Metadata set from: " << source << std::endl;
+        ANI_LOG_DEBUG("Metadata set from: %s", source.c_str());
     }
 
-}
+} // namespace GUI

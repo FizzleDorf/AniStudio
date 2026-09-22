@@ -1,4 +1,5 @@
 // MediaHistoryView.cpp
+#include "Log.hpp"
 #include "MediaHistoryView.hpp"
 #include "Events.hpp"
 #include "DragDropUtils.hpp"
@@ -10,6 +11,7 @@
 #include "ImageUtils.hpp"
 #include "ThumbnailFilters.hpp"
 #include "Log.hpp"
+
 #include <imgui.h>
 #include <algorithm>
 #include <chrono>
@@ -20,6 +22,7 @@ namespace GUI {
         : BaseView(mgr, vm) {
         viewName = "MediaHistoryView";
         contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
+        ANI_LOG_DEBUG("Constructed");
     }
 
     MediaHistoryView::~MediaHistoryView() {
@@ -32,6 +35,7 @@ namespace GUI {
         if (audioSystem) {
             audioSystem->UnregisterCallbacksForOwner(this);
         }
+        ANI_LOG_DEBUG("Destroyed");
     }
 
     void MediaHistoryView::Init() {
@@ -39,6 +43,12 @@ namespace GUI {
         if (!imageSystem) {
             m_entityManager.RegisterSystem<ECS::ImageSystem>();
             imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
+            if (imageSystem) {
+                ANI_LOG_DEBUG("Registered ImageSystem");
+            }
+            else {
+                ANI_LOG_ERROR("Failed to register ImageSystem");
+            }
         }
         if (imageSystem) {
             imageSystem->RegisterImageAddedCallback(this, [this](ECS::EntityID entity) { OnMediaAdded(entity); });
@@ -49,6 +59,12 @@ namespace GUI {
         if (!videoSystem) {
             m_entityManager.RegisterSystem<ECS::VideoSystem>();
             videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
+            if (videoSystem) {
+                ANI_LOG_DEBUG("Registered VideoSystem");
+            }
+            else {
+                ANI_LOG_ERROR("Failed to register VideoSystem");
+            }
         }
         if (videoSystem) {
             videoSystem->RegisterVideoAddedCallback(this, [this](ECS::EntityID entity) { OnMediaAdded(entity); });
@@ -59,6 +75,12 @@ namespace GUI {
         if (!audioSystem) {
             m_entityManager.RegisterSystem<ECS::AudioSystem>();
             audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+            if (audioSystem) {
+                ANI_LOG_DEBUG("Registered AudioSystem");
+            }
+            else {
+                ANI_LOG_ERROR("Failed to register AudioSystem");
+            }
         }
         if (audioSystem) {
             audioSystem->RegisterAudioAddedCallback(this, [this](ECS::EntityID entity) { OnMediaAdded(entity); });
@@ -85,9 +107,11 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                ANI_LOG_ERROR("[MediaHistoryView] SelectMediaEntity event error: %s", e.what());
+                ANI_LOG_ERROR("SelectMediaEntity event error: %s", e.what());
             }
             });
+
+        ANI_LOG_DEBUG("Initialized");
     }
 
     void MediaHistoryView::Update(float deltaT) {
@@ -153,12 +177,14 @@ namespace GUI {
             info.entityID = eid;
 
             if (!m_entityManager.IsEntityValid(eid)) {
+                ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u invalid", eid);
                 return info;
             }
 
             if (m_entityManager.HasComponent<ECS::ImageComponent>(eid)) {
                 const auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(eid);
                 if (comp.width <= 0 || comp.height <= 0 || comp.imageData == nullptr) {
+                    ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u image has no dimensions or data", eid);
                     return info;
                 }
                 info.fileName = comp.fileName;
@@ -174,6 +200,7 @@ namespace GUI {
             else if (m_entityManager.HasComponent<ECS::VideoComponent>(eid)) {
                 const auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(eid);
                 if (comp.width <= 0 || comp.height <= 0) {
+                    ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u video has no dimensions", eid);
                     return info;
                 }
                 info.fileName = comp.fileName;
@@ -191,6 +218,7 @@ namespace GUI {
             else if (m_entityManager.HasComponent<ECS::AudioComponent>(eid)) {
                 const auto& comp = m_entityManager.GetComponent<ECS::AudioComponent>(eid);
                 if (comp.pcmData.empty()) {
+                    ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u audio has no PCM data", eid);
                     return info;
                 }
                 info.fileName = comp.fileName;
@@ -340,15 +368,20 @@ namespace GUI {
 
         if (selectedEntityID != 0 && !m_entityManager.IsEntityValid(selectedEntityID)) {
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
+            ANI_LOG_TRACE("RefreshEntities: selection reset to %u", selectedEntityID);
         }
         needsSort = true;
+
+        ANI_LOG_TRACE("RefreshEntities: %zu media entities", mediaEntities.size());
     }
 
     void MediaHistoryView::OnMediaAdded(ECS::EntityID entity) {
+        ANI_LOG_TRACE("Media added: entity %u", entity);
         RefreshEntities();
     }
 
     void MediaHistoryView::OnMediaRemoved(ECS::EntityID entity) {
+        ANI_LOG_TRACE("Media removed: entity %u", entity);
         RefreshEntities();
         UpdateSelectedAfterRemoval(entity);
     }
@@ -356,17 +389,24 @@ namespace GUI {
     void MediaHistoryView::UpdateSelectedAfterRemoval(ECS::EntityID removedEntity) {
         if (selectedEntityID == removedEntity) {
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
+            ANI_LOG_TRACE("Selection moved to %u after removal of %u",
+                selectedEntityID, removedEntity);
         }
     }
 
     void MediaHistoryView::SelectMedia(ECS::EntityID entityID) {
-        if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) return;
+        if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) {
+            ANI_LOG_TRACE("SelectMedia: invalid entity %u", entityID);
+            return;
+        }
         selectedEntityID = entityID;
 
         std::unordered_map<std::string, std::any> eventData;
         eventData["workspaceID"] = GetID();
         eventData["entityID"] = entityID;
         ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
+
+        ANI_LOG_TRACE("Selected entity %u", entityID);
     }
 
     nlohmann::json MediaHistoryView::Serialize() const {
@@ -400,4 +440,4 @@ namespace GUI {
         }
     }
 
-}
+} // namespace GUI

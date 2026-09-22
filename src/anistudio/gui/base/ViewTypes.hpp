@@ -1,11 +1,12 @@
 #pragma once
+#include "Log.hpp"
 #include <set>
 #include <typeindex>
 #include <unordered_map>
 #include <string>
-#include <iostream>
 #include <atomic>
 #include <mutex>
+#include <cstdint>
 
 namespace GUI {
 	class BaseView;
@@ -42,7 +43,8 @@ namespace GUI {
 				// Add name as an alias if not already registered
 				if (nameToID.find(name) == nameToID.end()) {
 					nameToID[name] = existingId;
-					std::cout << "Added alias '" << name << "' for existing view type ID: " << existingId << std::endl;
+					ANI_LOG_DEBUG("[ViewTypeRegistry] Added alias '%s' for existing view type ID: %u",
+						name.c_str(), (unsigned)existingId);
 				}
 
 				return existingId;
@@ -51,8 +53,8 @@ namespace GUI {
 			// Check if name is already used for a different type
 			auto nameIt = nameToID.find(name);
 			if (nameIt != nameToID.end()) {
-				std::cerr << "Warning: Name '" << name << "' already used for view ID: "
-					<< nameIt->second << ". Using existing ID." << std::endl;
+				ANI_LOG_WARN("[ViewTypeRegistry] Name '%s' already used for view ID %u. Using existing ID.",
+					name.c_str(), (unsigned)nameIt->second);
 				typeToID[typeIdx] = nameIt->second;
 				return nameIt->second;
 			}
@@ -63,7 +65,8 @@ namespace GUI {
 			idToName[newId] = name;
 			typeToID[typeIdx] = newId;
 
-			std::cout << "Registered view: " << name << " with ID: " << newId << std::endl;
+			ANI_LOG_DEBUG("[ViewTypeRegistry] Registered view: %s with ID: %u",
+				name.c_str(), (unsigned)newId);
 			return newId;
 		}
 
@@ -82,7 +85,8 @@ namespace GUI {
 			nameToID[name] = newId;
 			idToName[newId] = name;
 
-			std::cout << "[ViewTypeRegistry] Registered view by name: " << name << " with ID: " << newId << std::endl;
+			ANI_LOG_DEBUG("[ViewTypeRegistry] Registered view by name: %s with ID: %u",
+				name.c_str(), (unsigned)newId);
 			return newId;
 		}
 
@@ -129,6 +133,7 @@ namespace GUI {
 			std::lock_guard<std::mutex> lock(mutex);
 			auto nameIt = nameToID.find(name);
 			if (nameIt == nameToID.end()) {
+				ANI_LOG_TRACE("[ViewTypeRegistry] UnregisterType: name not registered: %s", name.c_str());
 				return false;
 			}
 
@@ -148,13 +153,16 @@ namespace GUI {
 				}
 			}
 
-			std::cout << "[ViewTypeRegistry] Unregistered view: " << name << " with ID: " << id << std::endl;
+			ANI_LOG_DEBUG("[ViewTypeRegistry] Unregistered view: %s with ID: %u",
+				name.c_str(), (unsigned)id);
 			return true;
 		}
 
 		// Reset registry
 		static void Reset() {
 			std::lock_guard<std::mutex> lock(mutex);
+			ANI_LOG_INFO("[ViewTypeRegistry] Resetting registry (%zu views registered)",
+				typeToID.size());
 			nextTypeID = 0;
 			nameToID.clear();
 			idToName.clear();
@@ -164,10 +172,11 @@ namespace GUI {
 		// Debug print
 		static void DebugPrint() {
 			std::lock_guard<std::mutex> lock(mutex);
-			std::cout << "View Type Registry State:" << std::endl;
-			std::cout << "Total registered views: " << typeToID.size() << std::endl;
+			ANI_LOG_DEBUG("View Type Registry State:");
+			ANI_LOG_DEBUG("Total registered views: %zu", typeToID.size());
 			for (const auto& pair : idToName) {
-				std::cout << "ID: " << pair.first << " -> Name: " << pair.second << std::endl;
+				ANI_LOG_TRACE("ID: %u -> Name: %s",
+					(unsigned)pair.first, pair.second.c_str());
 			}
 		}
 	};

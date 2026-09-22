@@ -1,6 +1,7 @@
 #include "AudioSystem.hpp"
 #include "AudioUtils.hpp"
-#include <iostream>
+#include "Log.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -12,11 +13,11 @@ namespace ECS {
         sysName = "AudioSystem";
         AddComponentSignature<AudioComponent>();
 
-        std::cout << "[AudioSystem] Initialized (data loading only)" << std::endl;
+        ANI_LOG_INFO("[AudioSystem] Initialized (data loading only)");
     }
 
     AudioSystem::~AudioSystem() {
-        std::cout << "[AudioSystem] Destructor - cleaning up" << std::endl;
+        ANI_LOG_INFO("[AudioSystem] Destructor - cleaning up");
 
         std::lock_guard<std::mutex> lock(loadMutex);
         for (auto& task : pendingLoads) {
@@ -55,7 +56,7 @@ namespace ECS {
     }
 
     void AudioSystem::Start() {
-        std::cout << "[AudioSystem] Started" << std::endl;
+        ANI_LOG_INFO("[AudioSystem] Started");
 
         auto allEntities = mgr.GetAllEntities();
         for (auto entity : allEntities) {
@@ -74,7 +75,7 @@ namespace ECS {
     }
 
     void AudioSystem::Destroy() {
-        std::cout << "[AudioSystem] Destroying" << std::endl;
+        ANI_LOG_INFO("[AudioSystem] Destroying");
 
         for (auto entity : entities) {
             if (mgr.HasComponent<AudioComponent>(entity)) {
@@ -113,7 +114,7 @@ namespace ECS {
 
     void AudioSystem::SetAudio(EntityID entity, const std::string& filePath) {
         if (!mgr.HasComponent<AudioComponent>(entity)) {
-            std::cerr << "[AudioSystem] Entity " << entity << " does not have AudioComponent" << std::endl;
+            ANI_LOG_WARN("[AudioSystem] Entity %u does not have AudioComponent", entity);
             return;
         }
 
@@ -360,7 +361,7 @@ namespace ECS {
     void AudioSystem::LoadAudioAsync(EntityID entity, const std::string& filePath) {
         auto threadPoolSys = mgr.GetSystem<ThreadPoolSystem>();
         if (!threadPoolSys) {
-            std::cerr << "[AudioSystem] ThreadPoolSystem not available!" << std::endl;
+            ANI_LOG_WARN("[AudioSystem] ThreadPoolSystem not available!");
             return;
         }
 
@@ -391,12 +392,12 @@ namespace ECS {
 
         AVFormatContext* fmtCtx = nullptr;
         if (avformat_open_input(&fmtCtx, filePath.c_str(), nullptr, nullptr) < 0) {
-            std::cerr << "[AudioSystem] Failed to open audio file: " << filePath << std::endl;
+            ANI_LOG_WARN("[AudioSystem] Failed to open audio file: %s", filePath.c_str());
             return result;
         }
 
         if (avformat_find_stream_info(fmtCtx, nullptr) < 0) {
-            std::cerr << "[AudioSystem] Failed to find stream info: " << filePath << std::endl;
+            ANI_LOG_WARN("[AudioSystem] Failed to find stream info: %s", filePath.c_str());
             avformat_close_input(&fmtCtx);
             return result;
         }
@@ -410,7 +411,7 @@ namespace ECS {
         }
 
         if (audioStream == -1) {
-            std::cerr << "[AudioSystem] No audio stream found: " << filePath << std::endl;
+            ANI_LOG_WARN("[AudioSystem] No audio stream found: %s", filePath.c_str());
             avformat_close_input(&fmtCtx);
             return result;
         }
@@ -418,7 +419,7 @@ namespace ECS {
         AVCodecParameters* codecPar = fmtCtx->streams[audioStream]->codecpar;
         const AVCodec* codec = avcodec_find_decoder(codecPar->codec_id);
         if (!codec) {
-            std::cerr << "[AudioSystem] Codec not found: " << filePath << std::endl;
+            ANI_LOG_WARN("[AudioSystem] Codec not found: %s", filePath.c_str());
             avformat_close_input(&fmtCtx);
             return result;
         }
@@ -489,7 +490,7 @@ namespace ECS {
         av_opt_set_int(swrCtx, "phase_shift", 10, 0);
 
         if (swr_init(swrCtx) < 0) {
-            std::cerr << "[AudioSystem] Failed to initialize swr context" << std::endl;
+            ANI_LOG_WARN("[AudioSystem] Failed to initialize swr context");
             swr_free(&swrCtx);
             av_frame_free(&frame);
             av_packet_free(&pkt);
@@ -565,7 +566,7 @@ namespace ECS {
         avformat_close_input(&fmtCtx);
 
         if (allPcmData.empty()) {
-            std::cerr << "[AudioSystem] No PCM data decoded for: " << filePath << std::endl;
+            ANI_LOG_WARN("[AudioSystem] No PCM data decoded for: %s", filePath.c_str());
             return result;
         }
 
@@ -583,9 +584,9 @@ namespace ECS {
         }
         catch (...) {}
 
-        std::cout << "[AudioSystem] Decoded audio: " << filePath
-            << " (" << result.channels << "ch, " << result.sampleRate << "Hz, "
-            << result.duration << "s, " << result.pcmData.size() / 1024 / 1024 << "MB)" << std::endl;
+        ANI_LOG_INFO("[AudioSystem] Decoded audio: %s (%dch, %dHz, %fs, %zuMB)",
+            filePath.c_str(), result.channels, result.sampleRate,
+            result.duration, result.pcmData.size() / 1024 / 1024);
 
         return result;
     }
@@ -625,12 +626,12 @@ namespace ECS {
                         }
                         else {
                             audioComp.isLoading = false;
-                            std::cerr << "[AudioSystem] Failed to load audio: " << result.filePath << std::endl;
+                            ANI_LOG_WARN("[AudioSystem] Failed to load audio: %s", result.filePath.c_str());
                         }
                     }
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[AudioSystem] Exception in ProcessCompletedLoads: " << e.what() << std::endl;
+                    ANI_LOG_ERROR("[AudioSystem] Exception in ProcessCompletedLoads: %s", e.what());
                 }
 
                 it = pendingLoads.erase(it);
@@ -646,7 +647,7 @@ namespace ECS {
             (void)owner;
             try { cb(entity); }
             catch (const std::exception& e) {
-                std::cerr << "[AudioSystem] Exception in audio added callback: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[AudioSystem] Exception in audio added callback: %s", e.what());
             }
         }
     }
@@ -656,7 +657,7 @@ namespace ECS {
             (void)owner;
             try { cb(entity); }
             catch (const std::exception& e) {
-                std::cerr << "[AudioSystem] Exception in audio removed callback: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[AudioSystem] Exception in audio removed callback: %s", e.what());
             }
         }
     }
@@ -666,7 +667,7 @@ namespace ECS {
             (void)owner;
             try { cb(entity, data, size, channels, sampleRate); }
             catch (const std::exception& e) {
-                std::cerr << "[AudioSystem] Exception in audio data callback: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[AudioSystem] Exception in audio data callback: %s", e.what());
             }
         }
     }

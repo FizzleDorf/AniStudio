@@ -1,7 +1,8 @@
 #pragma once
 
+#include "Log.hpp"
+
 #include <string>
-#include <iostream>
 #include <nlohmann/json.hpp>
 
 #ifdef USE_EXIV2
@@ -17,7 +18,7 @@ namespace Utils {
             try {
                 auto image = Exiv2::ImageFactory::open(imagePath);
                 if (!image) {
-                    std::cerr << "Failed to open TIFF with Exiv2: " << imagePath << std::endl;
+                    ANI_LOG_WARN("Failed to open TIFF with Exiv2: %s", imagePath.c_str());
                     return false;
                 }
 
@@ -30,11 +31,11 @@ namespace Utils {
                 exifData["Exif.Image.ImageDescription"] = *value;
 
                 image->writeMetadata();
-                std::cout << "Successfully wrote EXIF metadata to TIFF: " << imagePath << std::endl;
+                ANI_LOG_DEBUG("Wrote EXIF metadata to TIFF: %s", imagePath.c_str());
                 return true;
             }
             catch (const Exiv2::Error& e) {
-                std::cerr << "Exiv2 error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("Exiv2 error writing TIFF %s: %s", imagePath.c_str(), e.what());
                 return false;
             }
 #else
@@ -49,7 +50,7 @@ namespace Utils {
             try {
                 auto image = Exiv2::ImageFactory::open(imagePath);
                 if (!image) {
-                    std::cerr << "Failed to open TIFF with Exiv2: " << imagePath << std::endl;
+                    ANI_LOG_WARN("Failed to open TIFF with Exiv2: %s", imagePath.c_str());
                     return result;
                 }
 
@@ -59,15 +60,16 @@ namespace Utils {
                 if (it != exifData.end()) {
                     try {
                         result = nlohmann::json::parse(it->toString());
-                        std::cout << "Successfully loaded EXIF metadata from TIFF" << std::endl;
+                        ANI_LOG_DEBUG("Loaded EXIF metadata from TIFF: %s", imagePath.c_str());
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "Error parsing JSON from EXIF: " << e.what() << std::endl;
+                        ANI_LOG_WARN("Failed to parse JSON from TIFF EXIF %s: %s",
+                            imagePath.c_str(), e.what());
                     }
                 }
             }
             catch (const Exiv2::Error& e) {
-                std::cerr << "Exiv2 error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("Exiv2 error reading TIFF %s: %s", imagePath.c_str(), e.what());
             }
             return result;
 #else

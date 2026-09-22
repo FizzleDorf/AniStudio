@@ -11,7 +11,7 @@
 #include "ProjectSystem.hpp"
 #include "ImageUtils.hpp"
 #include "Log.hpp"
-#include <iostream>
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -29,6 +29,7 @@ namespace GUI {
         RegisterAllComponentAdders();
         m_quickLoaded = false;
         m_hasRestoredState = false;
+        ANI_LOG_DEBUG("Constructed (view='%s')", viewName.c_str());
     }
 
     BaseDiffusionView::~BaseDiffusionView() {
@@ -36,18 +37,19 @@ namespace GUI {
         if (projSys && !projSys->IsProjectOpen()) {
             auto sdcpp = m_entityManager.GetSystem<ECS::SDCPPSystem>();
             if (sdcpp) {
+                ANI_LOG_DEBUG("Destructor: project not open, shutting down SDCPPSystem");
                 sdcpp->Shutdown();
             }
         }
     }
 
     void BaseDiffusionView::Init() {
-        ANI_LOG_INFO("[BaseDiffusionView::Init] view='%s' hasRestoredState=%d",
+        ANI_LOG_INFO("Init: view='%s' hasRestoredState=%d",
             viewName.c_str(), m_hasRestoredState ? 1 : 0);
 
         if (activeEntity == 0) {
             activeEntity = m_entityManager.AddNewEntity();
-            ANI_LOG_INFO("[BaseDiffusionView::Init] created placeholder activeEntity=%u", (unsigned)activeEntity);
+            ANI_LOG_DEBUG("Init: created placeholder activeEntity=%u", (unsigned)activeEntity);
         }
 
         // NOTE: Do NOT call ResetToDefaults() here.
@@ -94,7 +96,7 @@ namespace GUI {
     }
 
     void BaseDiffusionView::ResetToDefaults() {
-        ANI_LOG_INFO("[ResetToDefaults] view='%s' old activeEntity=%u",
+        ANI_LOG_INFO("ResetToDefaults: view='%s' old activeEntity=%u",
             viewName.c_str(), (unsigned)activeEntity);
 
         if (activeEntity != 0) {
@@ -104,7 +106,7 @@ namespace GUI {
 
         activeEntity = m_entityManager.AddNewEntity();
 
-        ANI_LOG_INFO("[ResetToDefaults] new activeEntity=%u", (unsigned)activeEntity);
+        ANI_LOG_DEBUG("ResetToDefaults: new activeEntity=%u", (unsigned)activeEntity);
 
         auto filteredComponents = GetFilteredComponents();
         std::string defaultModel = GetDefaultModelComponent();
@@ -124,24 +126,26 @@ namespace GUI {
 
             auto it = m_componentAdders.find(name);
             if (it != m_componentAdders.end()) {
-                ANI_LOG_TRACE("[ResetToDefaults] adding '%s' to activeEntity %u",
+                ANI_LOG_TRACE("ResetToDefaults: adding '%s' to activeEntity %u",
                     name.c_str(), (unsigned)activeEntity);
                 it->second(activeEntity);
             }
             else {
-                ANI_LOG_WARN("[ResetToDefaults] no adder for '%s'", name.c_str());
+                ANI_LOG_WARN("ResetToDefaults: no adder registered for '%s'", name.c_str());
             }
         }
 
         m_hasRestoredState = true;
 
-        ANI_LOG_INFO("[ResetToDefaults] done. activeEntity=%u", (unsigned)activeEntity);
+        ANI_LOG_INFO("ResetToDefaults: done. activeEntity=%u", (unsigned)activeEntity);
     }
 
     void BaseDiffusionView::RemoveComponentFromActive(const std::string& name) {
         auto compId = m_entityManager.GetComponentTypeIdByName(name);
         if (compId != 0 && m_entityManager.HasComponentById(activeEntity, compId)) {
             m_entityManager.RemoveComponentById(activeEntity, compId);
+            ANI_LOG_DEBUG("RemoveComponentFromActive: removed '%s' from entity %u",
+                name.c_str(), (unsigned)activeEntity);
         }
     }
 
@@ -164,6 +168,7 @@ namespace GUI {
             withoutSuffix = withoutSuffix.substr(0, withoutSuffix.size() - 9);
             auto itShort = m_componentAdders.find(withoutSuffix);
             if (itShort != m_componentAdders.end()) {
+                ANI_LOG_TRACE("AddComponentByName: resolved '%s' via suffix strip", name.c_str());
                 itShort->second(entity);
                 return;
             }
@@ -171,10 +176,11 @@ namespace GUI {
         std::string withSuffix = name + "Component";
         auto itWith = m_componentAdders.find(withSuffix);
         if (itWith != m_componentAdders.end()) {
+            ANI_LOG_TRACE("AddComponentByName: resolved '%s' via suffix append", name.c_str());
             itWith->second(entity);
             return;
         }
-        ANI_LOG_ERROR("[BaseDiffusionView] No adder found for component: %s", name.c_str());
+        ANI_LOG_ERROR("No adder found for component: %s", name.c_str());
     }
 
     bool BaseDiffusionView::IsComponentFiltered(const std::string& name) const {
@@ -520,7 +526,8 @@ namespace GUI {
     void BaseDiffusionView::Render() {
         // If no saved state was restored and the active entity is empty, populate defaults now.
         if (!m_hasRestoredState && m_entityManager.GetEntityComponents(activeEntity).empty()) {
-            ANI_LOG_INFO("[Render] view='%s' no restored state, resetting to defaults", viewName.c_str());
+            ANI_LOG_INFO("Render: view='%s' no restored state, resetting to defaults",
+                viewName.c_str());
             ResetToDefaults();
         }
 
@@ -542,7 +549,7 @@ namespace GUI {
             eventData["workspaceID"] = GetID();
             eventData["viewTypeName"] = viewName;
             eventData["serializedState"] = Serialize();
-            ANI_LOG_INFO("[Render] view='%s' queuing RemoveView with serializedState",
+            ANI_LOG_DEBUG("Render: view='%s' queuing RemoveView with serializedState",
                 viewName.c_str());
             ANI::Events::Ref().QueueEventWithData("RemoveView", eventData);
         }
@@ -555,7 +562,7 @@ namespace GUI {
     }
 
     void BaseDiffusionView::Deserialize(const nlohmann::json& j) {
-        ANI_LOG_INFO("[Deserialize] view='%s'", viewName.c_str());
+        ANI_LOG_INFO("Deserialize: view='%s'", viewName.c_str());
 
         try {
             // Destroy the placeholder created by Init().
@@ -568,65 +575,102 @@ namespace GUI {
                 activeEntity = m_entityManager.DeserializeEntity(j["activeEntity"]);
                 m_hasRestoredState = true;
                 m_quickLoaded = true;
-                ANI_LOG_INFO("[Deserialize] view='%s' restored activeEntity=%u",
+                ANI_LOG_INFO("Deserialize: view='%s' restored activeEntity=%u",
                     viewName.c_str(), (unsigned)activeEntity);
             }
             else {
                 activeEntity = m_entityManager.AddNewEntity();
-                ANI_LOG_INFO("[Deserialize] view='%s' created fresh activeEntity=%u (no data)",
+                ANI_LOG_DEBUG("Deserialize: view='%s' created fresh activeEntity=%u (no data)",
                     viewName.c_str(), (unsigned)activeEntity);
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[Deserialize] view='%s' exception: %s", viewName.c_str(), e.what());
+            ANI_LOG_ERROR("Deserialize: view='%s' exception: %s", viewName.c_str(), e.what());
             ResetToDefaults();
         }
         catch (...) {
-            ANI_LOG_ERROR("[Deserialize] view='%s' unknown exception", viewName.c_str());
+            ANI_LOG_ERROR("Deserialize: view='%s' unknown exception", viewName.c_str());
             ResetToDefaults();
         }
     }
 
     void BaseDiffusionView::QuickSave() {
-        if (!m_quickLoaded) return;
+        if (!m_quickLoaded) {
+            ANI_LOG_TRACE("QuickSave: skipped, not yet quick-loaded");
+            return;
+        }
         try {
             auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) return;
+            if (!filePathSys) {
+                ANI_LOG_WARN("QuickSave: FilePathSystem unavailable");
+                return;
+            }
             std::string dataPath = filePathSys->GetPath("ProjectDataPath");
             if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
-            if (dataPath.empty()) return;
+            if (dataPath.empty()) {
+                ANI_LOG_WARN("QuickSave: no data path available");
+                return;
+            }
             std::filesystem::create_directories(dataPath);
             std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
             SaveMetadataToJson(filepath);
+            ANI_LOG_DEBUG("QuickSave: saved to %s", filepath.c_str());
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            ANI_LOG_WARN("QuickSave: exception: %s", e.what());
+        }
     }
 
     void BaseDiffusionView::QuickLoad() {
-        if (m_quickLoaded) return;
+        if (m_quickLoaded) {
+            ANI_LOG_TRACE("QuickLoad: skipped, already loaded");
+            return;
+        }
         try {
             auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) return;
+            if (!filePathSys) {
+                ANI_LOG_WARN("QuickLoad: FilePathSystem unavailable");
+                return;
+            }
             std::string dataPath = filePathSys->GetPath("ProjectDataPath");
             if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
-            if (dataPath.empty()) return;
+            if (dataPath.empty()) {
+                ANI_LOG_WARN("QuickLoad: no data path available");
+                return;
+            }
             std::string filename = viewName + ".json";
             std::string filepath = (std::filesystem::path(dataPath) / filename).string();
-            if (!std::filesystem::exists(filepath)) return;
+            if (!std::filesystem::exists(filepath)) {
+                ANI_LOG_TRACE("QuickLoad: no saved file at %s", filepath.c_str());
+                return;
+            }
             LoadMetadataFromJson(filepath);
             m_quickLoaded = true;
+            ANI_LOG_DEBUG("QuickLoad: loaded from %s", filepath.c_str());
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            ANI_LOG_WARN("QuickLoad: exception: %s", e.what());
+        }
     }
 
     void BaseDiffusionView::SaveMetadataToJson(const std::string& filepath) {
         try {
             nlohmann::json meta = Serialize();
             std::ofstream file(filepath);
-            if (file.is_open()) file << meta.dump(4);
+            if (file.is_open()) {
+                file << meta.dump(4);
+                ANI_LOG_DEBUG("SaveMetadataToJson: wrote %s", filepath.c_str());
+            }
+            else {
+                ANI_LOG_WARN("SaveMetadataToJson: failed to open %s for writing",
+                    filepath.c_str());
+            }
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("SaveMetadataToJson: exception writing %s: %s",
+                filepath.c_str(), e.what());
+        }
     }
 
     void BaseDiffusionView::LoadMetadataFromJson(const std::string& filepath) {
@@ -637,17 +681,25 @@ namespace GUI {
                 file >> meta;
                 Deserialize(meta);
                 m_quickLoaded = true;
+                ANI_LOG_DEBUG("LoadMetadataFromJson: loaded %s", filepath.c_str());
+            }
+            else {
+                ANI_LOG_WARN("LoadMetadataFromJson: failed to open %s for reading",
+                    filepath.c_str());
             }
         }
-        catch (...) {}
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("LoadMetadataFromJson: exception reading %s: %s",
+                filepath.c_str(), e.what());
+        }
     }
 
     void BaseDiffusionView::LoadMetadataFromMedia(const std::string& filePath) {
-        ANI_LOG_INFO("[LoadMetadataFromMedia] %s", filePath.c_str());
+        ANI_LOG_INFO("LoadMetadataFromMedia: %s", filePath.c_str());
         try {
             nlohmann::json metadata = Utils::ImageUtils::ReadMetadataFromImage(filePath);
             if (metadata.is_null() || metadata.empty()) {
-                ANI_LOG_INFO("[LoadMetadataFromMedia] no metadata in: %s", filePath.c_str());
+                ANI_LOG_DEBUG("LoadMetadataFromMedia: no metadata in %s", filePath.c_str());
                 return;
             }
 
@@ -663,11 +715,11 @@ namespace GUI {
                     }
                 }
                 entityData = wrapped;
-                ANI_LOG_INFO("[LoadMetadataFromMedia] wrapped metadata into entity format");
+                ANI_LOG_DEBUG("LoadMetadataFromMedia: wrapped metadata into entity format");
             }
 
             if (!entityData.contains("components") || !entityData["components"].is_array()) {
-                ANI_LOG_WARN("[LoadMetadataFromMedia] missing 'components' array after wrapping");
+                ANI_LOG_WARN("LoadMetadataFromMedia: missing 'components' array after wrapping");
                 return;
             }
 
@@ -680,11 +732,11 @@ namespace GUI {
             }
 
             if (!validComponents) {
-                ANI_LOG_WARN("[LoadMetadataFromMedia] no valid components, skipping");
+                ANI_LOG_WARN("LoadMetadataFromMedia: no valid components, skipping");
                 return;
             }
 
-            ANI_LOG_INFO("[LoadMetadataFromMedia] loading metadata");
+            ANI_LOG_DEBUG("LoadMetadataFromMedia: loading metadata for entity");
 
             if (activeEntity != 0) {
                 m_entityManager.DestroyEntity(activeEntity);
@@ -693,14 +745,14 @@ namespace GUI {
             m_hasRestoredState = true;
             m_quickLoaded = true;
 
-            ANI_LOG_INFO("[LoadMetadataFromMedia] success. activeEntity=%u",
+            ANI_LOG_INFO("LoadMetadataFromMedia: success. activeEntity=%u",
                 (unsigned)activeEntity);
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("[LoadMetadataFromMedia] exception: %s", e.what());
+            ANI_LOG_ERROR("LoadMetadataFromMedia: exception: %s", e.what());
         }
         catch (...) {
-            ANI_LOG_ERROR("[LoadMetadataFromMedia] unknown exception");
+            ANI_LOG_ERROR("LoadMetadataFromMedia: unknown exception");
         }
     }
 

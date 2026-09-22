@@ -1,6 +1,7 @@
 #include "AVStreamingSystem.hpp"
+#include "Log.hpp"
+
 #include <chrono>
-#include <iostream>
 #include <cmath>
 
 namespace ECS {
@@ -233,7 +234,7 @@ namespace ECS {
 
     void AVStreamingSystem::Start() {
         if (!init_audio()) {
-            std::cerr << "[AVStreamingSystem] Failed to initialize audio output." << std::endl;
+            ANI_LOG_WARN("[AVStreamingSystem] Failed to initialize audio output.");
         }
     }
 
@@ -356,11 +357,11 @@ namespace ECS {
                 ctx->texture_callback = m_textureCallback;
 
                 if (avformat_open_input(&ctx->fmt_ctx, cmd.filePath.c_str(), nullptr, nullptr) < 0) {
-                    std::cerr << "[AVStreaming] Failed to open " << cmd.filePath << std::endl;
+                    ANI_LOG_WARN("[AVStreaming] Failed to open %s", cmd.filePath.c_str());
                     break;
                 }
                 if (avformat_find_stream_info(ctx->fmt_ctx, nullptr) < 0) {
-                    std::cerr << "[AVStreaming] Failed to find stream info" << std::endl;
+                    ANI_LOG_WARN("[AVStreaming] Failed to find stream info");
                     avformat_close_input(&ctx->fmt_ctx);
                     break;
                 }
@@ -407,7 +408,7 @@ namespace ECS {
                 }
 
                 if (ctx->video_stream_idx == -1 && ctx->audio_stream_idx == -1) {
-                    std::cerr << "[AVStreaming] No video or audio stream found." << std::endl;
+                    ANI_LOG_WARN("[AVStreaming] No video or audio stream found.");
                     break;
                 }
 
@@ -640,13 +641,13 @@ namespace ECS {
         if (audio_stream) return true;
         PaError err = Pa_Initialize();
         if (err != paNoError) {
-            std::cerr << "[AVStreaming] PortAudio init failed: " << Pa_GetErrorText(err) << std::endl;
+            ANI_LOG_WARN("[AVStreaming] PortAudio init failed: %s", Pa_GetErrorText(err));
             return false;
         }
         PaStreamParameters outputParams;
         outputParams.device = Pa_GetDefaultOutputDevice();
         if (outputParams.device == paNoDevice) {
-            std::cerr << "[AVStreaming] No audio output device" << std::endl;
+            ANI_LOG_WARN("[AVStreaming] No audio output device");
             return false;
         }
         outputParams.channelCount = 2;
@@ -657,12 +658,12 @@ namespace ECS {
         err = Pa_OpenStream(&audio_stream, nullptr, &outputParams,
             44100, 256, paNoFlag, pa_callback, this);
         if (err != paNoError) {
-            std::cerr << "[AVStreaming] Failed to open audio stream: " << Pa_GetErrorText(err) << std::endl;
+            ANI_LOG_WARN("[AVStreaming] Failed to open audio stream: %s", Pa_GetErrorText(err));
             return false;
         }
         err = Pa_StartStream(audio_stream);
         if (err != paNoError) {
-            std::cerr << "[AVStreaming] Failed to start audio stream: " << Pa_GetErrorText(err) << std::endl;
+            ANI_LOG_WARN("[AVStreaming] Failed to start audio stream: %s", Pa_GetErrorText(err));
             Pa_CloseStream(audio_stream);
             audio_stream = nullptr;
             return false;

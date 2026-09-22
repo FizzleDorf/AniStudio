@@ -13,9 +13,9 @@
 #include "VideoMetadataUtils.hpp"
 #include "ThumbnailFilters.hpp"
 #include "AudioComponent.hpp"
+#include "Log.hpp"
 #include <imgui.h>
 #include <filesystem>
-#include <iostream>
 #include <algorithm>
 #include <chrono>
 #include <fstream>
@@ -26,6 +26,7 @@ namespace GUI {
         : BaseView(mgr, vm), needsRefresh(true) {
         viewName = "AssetsView";
         contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
+        ANI_LOG_DEBUG("Constructed");
     }
 
     void AssetsView::Init() {
@@ -33,10 +34,15 @@ namespace GUI {
         if (fileSys) {
             assetsPath = fileSys->GetPath("ProjectAssets");
             if (assetsPath.empty()) {
+                ANI_LOG_DEBUG("ProjectAssets path empty, falling back to ./assets");
                 assetsPath = "./assets";
+            }
+            else {
+                ANI_LOG_DEBUG("Assets path from FilePathSystem: %s", assetsPath.c_str());
             }
         }
         else {
+            ANI_LOG_WARN("FilePathSystem not available, falling back to ./assets");
             assetsPath = "./assets";
         }
         RefreshAssets();
@@ -59,7 +65,7 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[AssetsView] SelectMediaEntity event error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("SelectMediaEntity event error: %s", e.what());
             }
             });
     }
@@ -123,7 +129,7 @@ namespace GUI {
     void AssetsView::RefreshAssets() {
         assetFiles.clear();
         if (assetsPath.empty() || !std::filesystem::exists(assetsPath)) {
-            std::cerr << "[AssetsView] Assets path does not exist: " << assetsPath << std::endl;
+            ANI_LOG_WARN("Assets path does not exist: %s", assetsPath.c_str());
             return;
         }
         try {
@@ -137,11 +143,13 @@ namespace GUI {
                     }
                 }
             }
+            ANI_LOG_DEBUG("Found %zu asset file(s) in %s",
+                assetFiles.size(), assetsPath.c_str());
             LoadNewAssets();
             needsSort = true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[AssetsView] Error scanning assets: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Error scanning assets: %s", e.what());
         }
     }
 
@@ -219,6 +227,7 @@ namespace GUI {
         for (const auto& path : assetFiles) {
             std::string pathStr = path.string();
             if (loadedPaths.find(pathStr) == loadedPaths.end()) {
+                ANI_LOG_TRACE("Loading new asset: %s", pathStr.c_str());
                 LoadAsset(path);
             }
         }
@@ -367,7 +376,7 @@ namespace GUI {
         const auto& formats = FileFormats::GetAllFormats();
         auto it = formats.find(ext);
         if (it == formats.end()) {
-            std::cout << "[AssetsView] Unsupported file type: " << ext << std::endl;
+            ANI_LOG_WARN("Unsupported file type: %s", ext.c_str());
             return;
         }
 
@@ -386,7 +395,12 @@ namespace GUI {
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
-                    std::cout << "[AssetsView] Loaded image: " << filePath << " (Entity: " << entity << ")" << std::endl;
+                    ANI_LOG_INFO("Loaded image: %s (Entity: %u)",
+                        filePath.c_str(), entity);
+                }
+                else {
+                    ANI_LOG_WARN("ImageSystem unavailable, skipping image: %s",
+                        filePath.c_str());
                 }
             }
             else if (it->second.isVideo) {
@@ -413,7 +427,12 @@ namespace GUI {
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
-                    std::cout << "[AssetsView] Loaded video: " << filePath << " (Entity: " << entity << ")" << std::endl;
+                    ANI_LOG_INFO("Loaded video: %s (Entity: %u)",
+                        filePath.c_str(), entity);
+                }
+                else {
+                    ANI_LOG_WARN("VideoSystem unavailable, skipping video: %s",
+                        filePath.c_str());
                 }
             }
             else if (it->second.isAudio) {
@@ -430,19 +449,26 @@ namespace GUI {
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
-                    std::cout << "[AssetsView] Loaded audio: " << filePath << " (Entity: " << entity << ")" << std::endl;
+                    ANI_LOG_INFO("Loaded audio: %s (Entity: %u)",
+                        filePath.c_str(), entity);
+                }
+                else {
+                    ANI_LOG_WARN("AudioSystem unavailable, skipping audio: %s",
+                        filePath.c_str());
                 }
             }
             else {
-                std::cout << "[AssetsView] Unsupported file type: " << ext << std::endl;
+                ANI_LOG_WARN("Unsupported file type: %s", ext.c_str());
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[AssetsView] Error loading asset: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Error loading asset %s: %s",
+                filePath.c_str(), e.what());
         }
     }
 
     void AssetsView::ClearLoadedAssets() {
+        size_t clearedCount = 0;
         for (ECS::EntityID entity : loadedEntities) {
             if (m_entityManager.IsEntityValid(entity)) {
                 if (m_entityManager.HasComponent<ECS::ImageComponent>(entity)) {
@@ -466,12 +492,13 @@ namespace GUI {
                 else {
                     m_entityManager.DestroyEntity(entity);
                 }
+                clearedCount++;
             }
         }
         loadedEntities.clear();
         pathToEntity.clear();
         loadedPaths.clear();
-        std::cout << "[AssetsView] Cleared all loaded assets" << std::endl;
+        ANI_LOG_INFO("Cleared %zu loaded asset(s)", clearedCount);
         needsRefresh = true;
     }
 
@@ -479,16 +506,17 @@ namespace GUI {
         std::filesystem::path src(sourcePath);
         std::filesystem::path dst = std::filesystem::path(assetsPath) / src.filename();
         if (std::filesystem::exists(dst)) {
-            std::cerr << "[AssetsView] File already exists in assets: " << dst << std::endl;
+            ANI_LOG_WARN("File already exists in assets: %s", dst.string().c_str());
             return false;
         }
         try {
             std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);
-            std::cout << "[AssetsView] Copied " << sourcePath << " to " << dst << std::endl;
+            ANI_LOG_DEBUG("Copied %s to %s",
+                sourcePath.c_str(), dst.string().c_str());
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[AssetsView] Failed to copy file: " << e.what() << std::endl;
+            ANI_LOG_WARN("Failed to copy file: %s", e.what());
             return false;
         }
     }
@@ -506,7 +534,7 @@ namespace GUI {
         }
 
         if (metadata.is_null() || metadata.empty()) {
-            std::cerr << "[AssetsView] No metadata found in " << filePath << std::endl;
+            ANI_LOG_WARN("No metadata found in %s", filePath.c_str());
             return;
         }
 
@@ -516,16 +544,20 @@ namespace GUI {
         wrapped["source"] = "metadata";
         std::string jsonStr = wrapped.dump();
         ImGui::SetClipboardText(jsonStr.c_str());
-        std::cout << "[AssetsView] Copied metadata from " << filePath << std::endl;
+        ANI_LOG_DEBUG(" Copied metadata from %s", filePath.c_str());
     }
 
     void AssetsView::SelectAssetEntity(ECS::EntityID entityID) {
-        if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) return;
+        if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) {
+            ANI_LOG_TRACE("SelectAssetEntity: invalid entity %u", entityID);
+            return;
+        }
         selectedEntityID = entityID;
         std::unordered_map<std::string, std::any> eventData;
         eventData["workspaceID"] = GetID();
         eventData["entityID"] = entityID;
         ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
+        ANI_LOG_TRACE("Selected entity %u", entityID);
     }
 
     nlohmann::json AssetsView::Serialize() const {
@@ -559,4 +591,4 @@ namespace GUI {
         }
     }
 
-}
+} // namespace GUI

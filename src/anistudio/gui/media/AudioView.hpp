@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Log.hpp"
 #include "BaseMediaView.hpp"
 #include "AudioComponent.hpp"
 #include "AudioSystem.hpp"

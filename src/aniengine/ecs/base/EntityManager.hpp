@@ -1,9 +1,11 @@
 #pragma once
+#include "Log.hpp"
 #include <queue>
 #include <functional>
 #include <unordered_map>
 #include <memory>
 #include <typeindex>
+#include <stdexcept>
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"
@@ -31,12 +33,12 @@ namespace ECS {
 
 			if (it == m_componentTypeToID.end()) {
 				std::string typeName = typeid(T).name();
-				std::cerr << "[EntityManager] Component type '" << typeName
-					<< "' not registered! Entity: " << entity << std::endl;
+				ANI_LOG_ERROR("Component type '%s' not registered! Entity: %u",
+					typeName.c_str(), entity);
 
-				std::cerr << "[EntityManager] Registered components:" << std::endl;
-				for (const auto&[name, id] : m_componentNameToID) {
-					std::cerr << "  - " << name << " -> " << id << std::endl;
+				ANI_LOG_ERROR("Registered components:");
+				for (const auto& [name, id] : m_componentNameToID) {
+					ANI_LOG_ERROR("  - %s -> %u", name.c_str(), id);
 				}
 
 				throw std::runtime_error("Component type not registered: " + typeName);
@@ -112,7 +114,6 @@ namespace ECS {
 			assert(registeredSystems.count(systemType) == 0 && "System already registered!");
 			auto system = std::make_shared<T>(*this);
 
-			// FIXED: Now uses public IsEntityInSystem method
 			for (const auto& entitySig : entitiesSignatures) {
 				if (IsEntityInSystem(entitySig.first, system->signature)) {
 					system->entities.insert(entitySig.first);
@@ -121,7 +122,7 @@ namespace ECS {
 
 			system->Start();
 			registeredSystems[systemType] = std::move(system);
-			std::cout << "Registered system: " << typeid(T).name() << " with ID: " << systemType << std::endl;
+			ANI_LOG_INFO("Registered system: %s with ID: %u", typeid(T).name(), systemType);
 		}
 
 		template<typename T>
@@ -135,7 +136,7 @@ namespace ECS {
 					registeredSystems.erase(sysIt);
 				}
 			}
-			std::cout << "Unregistered system: " << typeid(T).name() << std::endl;
+			ANI_LOG_INFO("Unregistered system: %s", typeid(T).name());
 		}
 
 		template <typename T>
@@ -180,45 +181,48 @@ namespace ECS {
 			// Create component array
 			AddCompList<T>();
 
-			// Register creators WITH DEBUG
+			// Register creators
 			RegisterComponentType(
 				typeId,
 				[this, typeId, name](EntityID entity) {
-				GetEntitySignature(entity)->insert(typeId);
+					GetEntitySignature(entity)->insert(typeId);
 
-				// Debug the component list
-				auto compList = GetCompList<T>();
-
-				T componentInstance{};
-				componentInstance.entityID = entity;
-				compList->Insert(componentInstance);
-
-				// Check if component was actually created
-				try {
-					BaseComponent* comp = &compList->Get(entity);
-				}
-				catch (const std::exception& e) {
-					std::cerr << "[ComponentCreator] ERROR: Failed to get component after creation: " << e.what() << std::endl;
-				}
-
-				UpdateEntityTargetSystem(entity);
-			},
-				[this, typeId, name](EntityID entity) -> BaseComponent* {
-				if (!HasComponentById(entity, typeId)) {
-					std::cout << "[ComponentGetter] DEBUG: Entity " << entity << " doesn't have component " << name << " in signature" << std::endl;
-					return nullptr;
-				}
-
-				try {
+					// Debug the component list
 					auto compList = GetCompList<T>();
-					BaseComponent* comp = &compList->Get(entity);
-					return comp;
+
+					T componentInstance{};
+					componentInstance.entityID = entity;
+					compList->Insert(componentInstance);
+
+					// Check if component was actually created
+					try {
+						BaseComponent* comp = &compList->Get(entity);
+					}
+					catch (const std::exception& e) {
+						ANI_LOG_ERROR("[ComponentCreator] ERROR: Failed to get component after creation: %s",
+							e.what());
+					}
+
+					UpdateEntityTargetSystem(entity);
+				},
+				[this, typeId, name](EntityID entity) -> BaseComponent* {
+					if (!HasComponentById(entity, typeId)) {
+						ANI_LOG_DEBUG("[ComponentGetter] DEBUG: Entity %u doesn't have component %s in signature",
+							entity, name.c_str());
+						return nullptr;
+					}
+
+					try {
+						auto compList = GetCompList<T>();
+						BaseComponent* comp = &compList->Get(entity);
+						return comp;
+					}
+					catch (const std::exception& e) {
+						ANI_LOG_ERROR("[ComponentGetter] ERROR: Failed to get component %s: %s",
+							name.c_str(), e.what());
+						return nullptr;
+					}
 				}
-				catch (const std::exception& e) {
-					std::cerr << "[ComponentGetter] ERROR: Failed to get component " << name << ": " << e.what() << std::endl;
-					return nullptr;
-				}
-			}
 			);
 
 			return typeId;
@@ -293,7 +297,7 @@ namespace ECS {
 		bool HasPluginComponent(EntityID entity, ComponentTypeID typeId);
 
 		void RegisterPluginSystem(SystemTypeID typeId,
-			std::function<void*(EntityManager*)> creator,
+			std::function<void* (EntityManager*)> creator,
 			std::function<void(void*)> destructor,
 			std::function<void(void*, float)> updater,
 			std::function<void(void*)> starter,
@@ -303,7 +307,7 @@ namespace ECS {
 		void UpdatePluginSystems(float deltaTime);
 
 		std::shared_ptr<EntitySignature> GetEntitySignature(const EntityID entity);
-		
+
 		void RemoveComponentFromAllEntities(ComponentTypeID typeId);
 		BaseComponent* GetComponentById(EntityID entity, ComponentTypeID typeId);
 		const BaseComponent* GetComponentByIdConst(EntityID entity, ComponentTypeID typeId) const;

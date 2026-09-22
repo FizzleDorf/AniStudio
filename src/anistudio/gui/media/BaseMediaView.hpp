@@ -1,6 +1,7 @@
 #ifndef BASEMEDIAVIEW_HPP
 #define BASEMEDIAVIEW_HPP
 
+#include "Log.hpp"
 #include "GUI.h"
 #include "BaseView.hpp"
 #include "ContextMenuUtils.hpp"

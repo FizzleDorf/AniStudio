@@ -129,6 +129,7 @@ namespace ECS {
 
         bool WriteJsonFile(const std::string& path, const nlohmann::json& j) const;
         bool ReadJsonFile(const std::string& path, nlohmann::json& out) const;
+        bool FailProject(const std::string& msg);
     };
 
 } // namespace ECS

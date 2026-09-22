@@ -1,7 +1,8 @@
 #include "Core.hpp"
 #include "Events.hpp"
 #include "AniStudioSystems.hpp"
-#include <iostream>
+#include "Log.hpp"
+
 #include <sstream>
 #include <chrono>
 #include <filesystem>
@@ -15,152 +16,155 @@ namespace ANI {
     Core::Core() : m_isRunning(true), m_window(nullptr),
         m_videoWidth(SCREEN_WIDTH), m_videoHeight(SCREEN_HEIGHT),
         m_fpsSum(0.0), m_frameCount(0), m_timeElapsed(0.0) {
-        std::cout << "[Core] Constructor called" << '\n';
+        ANI_LOG_DEBUG("Core constructed");
     }
 
     Core::~Core() {
-        std::cout << "[Core] Destructor - calling StudioCore shutdown..." << '\n';
+        ANI_LOG_INFO("Core destructor - shutting down StudioCore");
         try {
             m_studioCore.Shutdown();
         }
         catch (const std::exception& e) {
-            std::cerr << "[Core] Exception during StudioCore shutdown: " << e.what() << '\n';
+            ANI_LOG_ERROR("Exception during StudioCore shutdown: %s", e.what());
         }
         CleanupWindow();
     }
 
     void Core::Quit() {
-        std::cout << "[Core] Quit called - setting run to false" << '\n';
+        ANI_LOG_INFO("Quit requested");
         m_isRunning = false;
         m_studioCore.SetRunning(false);
     }
 
     void Core::Init() {
-        std::cout << "[Core] Initializing..." << '\n';
+        ANI_LOG_INFO("Initializing Core");
 
         if (!InitializeWindow()) {
             throw std::runtime_error("Failed to initialize window");
         }
-        std::cout << "[Core] Window and ImGui fully initialized" << '\n';
+        ANI_LOG_INFO("Window and ImGui fully initialized");
 
         m_studioCore.SetImGuiContext(GetImGuiContext());
-        std::cout << "[Core] ImGui context set" << '\n';
+        ANI_LOG_DEBUG("ImGui context set");
 
         if (!m_studioCore.Initialize()) {
             throw std::runtime_error("Failed to initialize StudioCore");
         }
-        std::cout << "[Core] StudioCore fully initialized" << '\n';
+        ANI_LOG_INFO("StudioCore fully initialized");
 
         m_studioCore.SetWindowHandle(m_window);
-        std::cout << "[Core] Window handle set" << '\n';
+        ANI_LOG_DEBUG("Window handle set");
 
         RegisterEventHandlers();
-        std::cout << "[Core] Initialization complete!" << '\n';
+        ANI_LOG_INFO("Core initialization complete");
     }
 
     void Core::RegisterEventHandlers() {
         Events::Ref().RegisterEvent("Quit", [this]() {
-            std::cout << "[Core] Quit event triggered" << '\n';
+            ANI_LOG_DEBUG("Quit event triggered");
             this->Quit();
             });
 
-        std::cout << "[Core] All event handlers registered successfully" << '\n';
+        ANI_LOG_DEBUG("All event handlers registered");
     }
 
     bool Core::InitializeWindow() {
-        std::cout << "[Core] Initializing GLFW..." << '\n';
+        ANI_LOG_DEBUG("Initializing GLFW");
         if (!glfwInit()) {
-            std::cerr << "[Core] Failed to initialize GLFW" << '\n';
+            ANI_LOG_ERROR("Failed to initialize GLFW");
             return false;
         }
-        std::cout << "[Core] GLFW initialized successfully" << '\n';
+        ANI_LOG_DEBUG("GLFW initialized");
 
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
-        std::cout << "[Core] Creating window..." << '\n';
+        ANI_LOG_DEBUG("Creating window (%dx%d)", m_videoWidth, m_videoHeight);
         m_window = glfwCreateWindow(m_videoWidth, m_videoHeight, "AniStudio", nullptr, nullptr);
 #ifdef _WIN32
         HWND testHwnd = glfwGetWin32Window(m_window);
-        std::cout << "[Core] Immediate HWND check: " << testHwnd << '\n';
+        ANI_LOG_TRACE("Immediate HWND check: %p", static_cast<void*>(testHwnd));
 #endif
 
         if (!m_window) {
-            std::cerr << "[Core] Failed to create GLFW window" << '\n';
+            ANI_LOG_ERROR("Failed to create GLFW window");
             glfwTerminate();
             return false;
         }
-        std::cout << "[Core] Window created successfully, pointer: " << m_window << '\n';
+        ANI_LOG_DEBUG("Window created successfully (ptr=%p)", static_cast<void*>(m_window));
 
         glfwMakeContextCurrent(m_window);
         glfwSetWindowCloseCallback(m_window, WindowCloseCallback);
         glfwSwapInterval(1);
-        std::cout << "[Core] Window context set" << '\n';
+        ANI_LOG_TRACE("Window context set");
 
-        std::cout << "[Core] Initializing GLEW..." << '\n';
+        ANI_LOG_DEBUG("Initializing GLEW");
         GLenum err = glewInit();
         if (err != GLEW_OK) {
-            std::cerr << "[Core] Failed to initialize GLEW: " << glewGetErrorString(err) << '\n';
+            ANI_LOG_ERROR("Failed to initialize GLEW: %s", glewGetErrorString(err));
             return false;
         }
-        std::cout << "[Core] GLEW initialized successfully" << '\n';
+        ANI_LOG_DEBUG("GLEW initialized");
 
         glViewport(0, 0, m_videoWidth, m_videoHeight);
-        std::cout << "[Core] Viewport set" << '\n';
+        ANI_LOG_TRACE("Viewport set");
 
-        std::cout << "[Core] Calling IMGUI_CHECKVERSION()..." << '\n';
+        ANI_LOG_TRACE("IMGUI_CHECKVERSION()");
         IMGUI_CHECKVERSION();
-        std::cout << "[Core] Version check passed" << '\n';
 
-        std::cout << "[Core] Calling ImGui::CreateContext()..." << '\n';
+        ANI_LOG_DEBUG("Creating ImGui context");
         ImGuiContext* ctx = ImGui::CreateContext();
-        std::cout << "[Core] ImGui context created: " << ctx << '\n';
+        ANI_LOG_DEBUG("ImGui context created: %p", static_cast<void*>(ctx));
 
         if (!ctx) {
-            std::cerr << "[Core] ERROR: ImGui context is NULL!" << '\n';
+            ANI_LOG_ERROR("ImGui context is null");
             return false;
         }
 
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        std::cout << "[Core] Enabled docking by default" << '\n';
+        ANI_LOG_TRACE("Enabled docking by default");
 
-        std::cout << "[Core] Setting temporary INI file path..." << '\n';
         std::string iniFilePath = "imgui.ini";
 
         try {
             std::filesystem::path iniDir = std::filesystem::path(iniFilePath).parent_path();
             if (!iniDir.empty() && !std::filesystem::exists(iniDir)) {
                 std::filesystem::create_directories(iniDir);
-                std::cout << "[Core] Created directory for temporary INI file" << '\n';
+                ANI_LOG_TRACE("Created directory for INI file: %s", iniDir.string().c_str());
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[Core] Warning: Could not create INI directory: " << e.what() << '\n';
+            ANI_LOG_WARN("Could not create INI directory: %s", e.what());
         }
 
         static std::string tempIniPath = iniFilePath;
         io.IniFilename = tempIniPath.c_str();
-        std::cout << "[Core] Temporary INI file path set to: " << io.IniFilename << '\n';
+        ANI_LOG_TRACE("INI file path set to: %s", io.IniFilename);
 
-        std::cout << "[Core] Initializing GLFW backend..." << '\n';
+        ANI_LOG_DEBUG("Initializing GLFW backend");
         bool glfwOk = ImGui_ImplGlfw_InitForOpenGL(m_window, true);
-        std::cout << "[Core] GLFW backend result: " << (glfwOk ? "SUCCESS" : "FAILED") << '\n';
-        if (!glfwOk) return false;
+        if (!glfwOk) {
+            ANI_LOG_ERROR("ImGui GLFW backend initialization failed");
+            return false;
+        }
+        ANI_LOG_DEBUG("GLFW backend initialized");
 
-        std::cout << "[Core] Initializing OpenGL3 backend..." << '\n';
+        ANI_LOG_DEBUG("Initializing OpenGL3 backend");
         bool gl3Ok = ImGui_ImplOpenGL3_Init("#version 330");
-        std::cout << "[Core] OpenGL3 backend result: " << (gl3Ok ? "SUCCESS" : "FAILED") << '\n';
-        if (!gl3Ok) return false;
+        if (!gl3Ok) {
+            ANI_LOG_ERROR("ImGui OpenGL3 backend initialization failed");
+            return false;
+        }
+        ANI_LOG_DEBUG("OpenGL3 backend initialized");
 
-        std::cout << "[Core] Adding default font..." << '\n';
         if (io.Fonts->Fonts.Size == 0) {
             io.Fonts->AddFontDefault();
-            std::cout << "[Core] Default font added" << '\n';
+            ANI_LOG_TRACE("Default font added");
         }
-        std::cout << "[Core] Font count: " << io.Fonts->Fonts.Size << '\n';
+        ANI_LOG_TRACE("Font count: %d", io.Fonts->Fonts.Size);
 
         const char* iconPath = "assets/favicom.jpg";
         if (std::filesystem::exists(iconPath)) {
@@ -173,19 +177,21 @@ namespace ANI {
                 icon.pixels = data;
                 glfwSetWindowIcon(m_window, 1, &icon);
                 stbi_image_free(data);
+                ANI_LOG_TRACE("Window icon set from %s", iconPath);
             }
             else {
-                std::cerr << "[Core] Failed to load window icon: " << stbi_failure_reason() << std::endl;
+                ANI_LOG_WARN("Failed to load window icon '%s': %s",
+                    iconPath, stbi_failure_reason());
             }
         }
 
-        std::cout << "[Core] Window initialization COMPLETE" << '\n';
+        ANI_LOG_INFO("Window initialization complete");
         return true;
     }
 
     void Core::CleanupWindow() {
         if (m_window) {
-            std::cout << "[Core] Cleaning up ImGui and GLFW..." << '\n';
+            ANI_LOG_DEBUG("Cleaning up ImGui and GLFW");
             try {
                 ImGui_ImplOpenGL3_Shutdown();
                 ImGui_ImplGlfw_Shutdown();
@@ -194,11 +200,11 @@ namespace ANI {
                 m_window = nullptr;
             }
             catch (const std::exception& e) {
-                std::cerr << "[Core] Exception during window cleanup: " << e.what() << '\n';
+                ANI_LOG_ERROR("Exception during window cleanup: %s", e.what());
             }
         }
         glfwTerminate();
-        std::cout << "[Core] Window cleanup complete" << '\n';
+        ANI_LOG_DEBUG("Window cleanup complete");
     }
 
     void Core::Update(const float deltaT) {
@@ -211,6 +217,7 @@ namespace ANI {
             std::ostringstream titleStream;
             titleStream << "AniStudio - FPS: " << static_cast<int>(fps);
             glfwSetWindowTitle(m_window, titleStream.str().c_str());
+            ANI_LOG_TRACE("FPS: %.1f", fps);
             m_frameCount = 0;
             m_timeElapsed = 0.0;
         }
@@ -218,7 +225,7 @@ namespace ANI {
         glfwMakeContextCurrent(m_window);
 
         if (!ANI::OpenGLContextHelper::VerifyContext()) {
-            std::cerr << "[Core] ERROR: OpenGL context lost before update!" << '\n';
+            ANI_LOG_ERROR("OpenGL context lost before update");
             return;
         }
 
@@ -226,7 +233,7 @@ namespace ANI {
             m_studioCore.Update(deltaT);
         }
         catch (const std::exception& e) {
-            std::cerr << "[Core] Update error: " << e.what() << '\n';
+            ANI_LOG_ERROR("Update error: %s", e.what());
         }
     }
 
@@ -239,7 +246,7 @@ namespace ANI {
             glfwMakeContextCurrent(m_window);
 
             if (!ANI::OpenGLContextHelper::VerifyContext()) {
-                std::cerr << "[Core] ERROR: OpenGL context lost before render!" << '\n';
+                ANI_LOG_ERROR("OpenGL context lost before render");
                 return;
             }
 
@@ -264,7 +271,7 @@ namespace ANI {
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[Core] Render error: " << e.what() << '\n';
+            ANI_LOG_ERROR("Render error: %s", e.what());
         }
 
         glfwSwapBuffers(m_window);

@@ -1,3 +1,4 @@
+#include "Log.hpp"
 #include "VideoView.hpp"
 #include "TextureSystem.hpp"
 #include "TextureComponent.hpp"
@@ -15,8 +16,8 @@
 #include "PlaybackEvents.hpp"
 #include "IconFonts.hpp"
 #include "ClipboardUtilities.hpp"
+
 #include <algorithm>
-#include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
@@ -31,18 +32,22 @@ namespace GUI {
         WaveformRenderer::Config wfConfig;
         wfConfig.height = 64.0f;
         m_waveformRenderer.SetConfig(wfConfig);
+
+        ANI_LOG_DEBUG("Constructed");
     }
 
     VideoView::~VideoView() {
         if (m_videoSystem) {
             m_videoSystem->UnregisterCallbacksForOwner(this);
         }
+        ANI_LOG_DEBUG("Destroyed");
     }
 
     void VideoView::Init() {
-        std::cout << "[VideoView] Initializing..." << std::endl;
+        ANI_LOG_INFO("Initializing...");
+
         if (!ImGui::GetCurrentContext()) {
-            std::cerr << "[VideoView] No ImGui context in Init()!" << std::endl;
+            ANI_LOG_ERROR("No ImGui context in Init()!");
             return;
         }
 
@@ -52,7 +57,13 @@ namespace GUI {
         if (!m_mediaEngine) {
             m_entityManager.RegisterSystem<ECS::MediaEngineSystem>();
             m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
-            m_mediaEngine->Start();
+            if (m_mediaEngine) {
+                m_mediaEngine->Start();
+                ANI_LOG_INFO("Registered and started MediaEngineSystem");
+            }
+            else {
+                ANI_LOG_ERROR("Failed to register MediaEngineSystem");
+            }
         }
 
         auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
@@ -62,6 +73,9 @@ namespace GUI {
                     textureSystem->QueueVideoTextureCreation(entity, data, w, h, ch, target);
                 }
             );
+        }
+        else if (!textureSystem) {
+            ANI_LOG_WARN("TextureSystem unavailable; video textures will not be created");
         }
 
         auto& events = ANI::Events::Ref();
@@ -111,7 +125,7 @@ namespace GUI {
                 if (m_mediaEngine) m_mediaEngine->onSetMode(data);
             });
 
-        std::cout << "[VideoView] Registered playback events" << std::endl;
+        ANI_LOG_DEBUG("Registered playback events");
 
         if (m_mediaEngine) {
             m_mediaEngine->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
@@ -169,6 +183,9 @@ namespace GUI {
                 OnMediaRemoved(entity);
                 });
         }
+        else {
+            ANI_LOG_WARN("VideoSystem unavailable");
+        }
 
         RefreshEntities();
         if (!mediaEntities.empty() && selectedEntityID == 0) {
@@ -197,14 +214,19 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[VideoView] SelectMediaEntity event error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("SelectMediaEntity event error: %s", e.what());
             }
             });
+
+        ANI_LOG_INFO("Initialization complete");
     }
 
     void VideoView::SetPlaybackMode(ECS::PlaybackMode mode) {
         if (mode == m_playbackMode) return;
         m_playbackMode = mode;
+
+        ANI_LOG_DEBUG("Playback mode set to %s",
+            mode == ECS::PlaybackMode::Streaming ? "Streaming" : "Cached");
 
         for (auto entity : mediaEntities) {
             if (m_entityManager.IsEntityValid(entity) &&
@@ -269,6 +291,7 @@ namespace GUI {
                     if (!videoComp.frameDataRGBA.empty()) {
                         if (!m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
                             m_entityManager.AddComponent<ECS::TextureComponent>(selectedEntityID);
+                            ANI_LOG_TRACE("Added TextureComponent to entity %u", selectedEntityID);
                         }
                         auto& texComp = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID);
                         unsigned char* copyData = (unsigned char*)malloc(videoComp.frameDataRGBA.size());
@@ -282,6 +305,10 @@ namespace GUI {
                                 4,
                                 &texComp.textureID
                             );
+                        }
+                        else {
+                            ANI_LOG_ERROR("malloc failed for texture copy (entity %u, %zu bytes)",
+                                selectedEntityID, videoComp.frameDataRGBA.size());
                         }
                         videoComp.needsTextureUpdate = false;
                     }
@@ -301,7 +328,7 @@ namespace GUI {
 
     void VideoView::Render() {
         if (!ImGui::GetCurrentContext()) {
-            std::cerr << "[VideoView] ERROR: No ImGui context!" << std::endl;
+            ANI_LOG_ERROR("No ImGui context in Render()!");
             return;
         }
 
@@ -359,7 +386,7 @@ namespace GUI {
             HandleClipboardPaste();
         }
         catch (const std::exception& e) {
-            std::cerr << "[VideoView] Exception in Render: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exception in Render: %s", e.what());
             ImGui::Text("Error rendering VideoView: %s", e.what());
         }
 
@@ -569,6 +596,7 @@ namespace GUI {
             HandleEntityDropTarget();
         }
         catch (const std::exception& e) {
+            ANI_LOG_ERROR("Exception in RenderMediaContent: %s", e.what());
             const char* text = "Error rendering video";
             float textWidth = ImGui::CalcTextSize(text).x;
             float textHeight = ImGui::GetTextLineHeight();
@@ -776,13 +804,19 @@ namespace GUI {
 
         ImGui::PushID(103);
         if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
-            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
-            std::string outPath;
-            const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-            std::string defaultName = videoComp.fileName;
-            if (FileDialog::SaveFile("Save Video As", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
-                if (!outPath.empty()) SaveSelectedMediaAs(outPath);
+            if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
+                !m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
+                ANI_LOG_WARN("Save As: no valid video selected");
+            }
+            else {
+                auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
+                std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                std::string outPath;
+                const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
+                std::string defaultName = videoComp.fileName;
+                if (FileDialog::SaveFile("Save Video As", FileDialog::FilterType::VIDEO_FILE, defaultName, outPath, defaultPath)) {
+                    if (!outPath.empty()) SaveSelectedMediaAs(outPath);
+                }
             }
         }
         ImGui::PopID();
@@ -825,7 +859,7 @@ namespace GUI {
                     duration = state.duration;
                 }
 
-                ImGui::Text("File: %s | %dx%d | %.2f FPS | %d frames | Time: %s / %s | Frame: %d/%d | Entity: %zu",
+                ImGui::Text("File: %s | %dx%d | %.2f FPS | %d frames | Time: %s / %s | Frame: %d/%d | Entity: %u",
                     videoComp.fileName.c_str(),
                     videoComp.width, videoComp.height,
                     videoComp.fps,
@@ -849,6 +883,7 @@ namespace GUI {
                 RenderMediaContextMenu(selectedEntityID);
             }
             catch (const std::exception& e) {
+                ANI_LOG_ERROR("Exception in RenderMediaInfo: %s", e.what());
                 ImGui::Text("Error reading video info: %s", e.what());
             }
         }
@@ -1089,6 +1124,7 @@ namespace GUI {
 
         }
         catch (const std::exception& e) {
+            ANI_LOG_ERROR("Exception in RenderControls: %s", e.what());
             ImGui::Text("Error with playback controls: %s", e.what());
         }
 
@@ -1257,22 +1293,26 @@ namespace GUI {
                 }
             }
             lastEntityCount = mediaEntities.size();
-            std::cout << "[VideoView] Refreshed entities, found " << mediaEntities.size() << " videos" << std::endl;
+            ANI_LOG_DEBUG("Refreshed entities, found %zu video(s)", mediaEntities.size());
         }
         catch (const std::exception& e) {
-            std::cerr << "[VideoView] Exception refreshing entities: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exception refreshing entities: %s", e.what());
             mediaEntities.clear();
             lastEntityCount = 0;
         }
     }
 
     void VideoView::SeekVideo(ECS::EntityID entity, double time) {
-        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return;
+        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("SeekVideo: invalid entity %u", entity);
+            return;
+        }
 
         if (m_isSeeking) {
             m_pendingSeek = true;
             m_pendingSeekTime = time;
             m_pendingSeekEntity = entity;
+            ANI_LOG_TRACE("SeekVideo: queued pending seek for entity %u to %.3f", entity, time);
             return;
         }
 
@@ -1286,9 +1326,11 @@ namespace GUI {
 
             auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
             ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK, eventData);
+
+            ANI_LOG_TRACE("SeekVideo: entity %u to %.3f", entity, time);
         }
         catch (const std::exception& e) {
-            std::cerr << "[VideoView] Seek error: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Seek error: %s", e.what());
         }
 
         m_isSeeking = false;
@@ -1300,59 +1342,99 @@ namespace GUI {
     }
 
     void VideoView::PlayVideo(ECS::EntityID entity) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("PlayVideo: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("PlayVideo: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.state = ECS::PlaybackState::Playing;
         state.isPaused = false;
+
+        ANI_LOG_TRACE("PlayVideo: entity %u", entity);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, eventData);
     }
 
     void VideoView::PauseVideo(ECS::EntityID entity) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("PauseVideo: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("PauseVideo: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.state = ECS::PlaybackState::Paused;
         state.isPaused = true;
+
+        ANI_LOG_TRACE("PauseVideo: entity %u", entity);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE, eventData);
     }
 
     void VideoView::StopVideo(ECS::EntityID entity) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("StopVideo: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("StopVideo: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.state = ECS::PlaybackState::Stopped;
         state.isPaused = false;
         state.currentTime = 0.0;
 
+        ANI_LOG_TRACE("StopVideo: entity %u", entity);
+
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP, eventData);
     }
 
     void VideoView::SetVideoSpeed(ECS::EntityID entity, float speed) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("SetVideoSpeed: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("SetVideoSpeed: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.speed = speed;
+
+        ANI_LOG_TRACE("SetVideoSpeed: entity %u speed=%.2f", entity, speed);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED, eventData);
     }
 
     void VideoView::SetVideoVolume(ECS::EntityID entity, float volume) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("SetVideoVolume: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("SetVideoVolume: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.volume = volume;
+
+        ANI_LOG_TRACE("SetVideoVolume: entity %u volume=%.2f", entity, volume);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME, eventData);
@@ -1468,10 +1550,14 @@ namespace GUI {
 
     void VideoView::ToggleFullscreen() {
         m_isFullscreen = !m_isFullscreen;
+        ANI_LOG_DEBUG("Fullscreen %s", m_isFullscreen ? "enabled" : "disabled");
     }
 
     void VideoView::NextVideo() {
-        if (mediaEntities.empty()) return;
+        if (mediaEntities.empty()) {
+            ANI_LOG_TRACE("NextVideo: no media entities");
+            return;
+        }
         int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
         if (newIndex != index) {
             if (m_mediaEngine) {
@@ -1485,7 +1571,10 @@ namespace GUI {
     }
 
     void VideoView::PreviousVideo() {
-        if (mediaEntities.empty()) return;
+        if (mediaEntities.empty()) {
+            ANI_LOG_TRACE("PreviousVideo: no media entities");
+            return;
+        }
         int newIndex = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
         if (newIndex != index) {
             if (m_mediaEngine) {
@@ -1499,10 +1588,10 @@ namespace GUI {
     }
 
     void VideoView::LoadMedia(const std::vector<std::string>& filePaths) {
-        std::cout << "[VideoView] LoadMedia called with " << filePaths.size() << " files" << std::endl;
+        ANI_LOG_INFO("LoadMedia called with %zu file(s)", filePaths.size());
 
         if (!m_mediaEngine) {
-            std::cerr << "[VideoView] MediaEngineSystem is null!" << std::endl;
+            ANI_LOG_ERROR("MediaEngineSystem is null!");
             return;
         }
 
@@ -1511,17 +1600,19 @@ namespace GUI {
                 if (filePath.empty()) continue;
 
                 ECS::EntityID entity = m_mediaEngine->LoadMedia(filePath, ECS::TrackType::Both, m_playbackMode);
-                if (entity == 0) continue;
+                if (entity == 0) {
+                    ANI_LOG_WARN("Failed to load video: %s", filePath.c_str());
+                    continue;
+                }
 
-                std::cout << "[VideoView] Created entity " << entity
-                    << " for: " << filePath << std::endl;
+                ANI_LOG_INFO("Created entity %u for: %s", entity, filePath.c_str());
 
                 auto playEvent = ANI::PlaybackEvents::MakeEntityEvent(entity);
                 ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, playEvent);
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[VideoView] Exception loading videos: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exception loading videos: %s", e.what());
         }
     }
 
@@ -1530,19 +1621,34 @@ namespace GUI {
     }
 
     void VideoView::SaveSelectedMedia() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+            ANI_LOG_WARN("SaveSelectedMedia: no valid video selected");
+            return;
+        }
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (videoSystem) {
             videoSystem->SaveVideoAsync(selectedEntityID);
         }
+        else {
+            ANI_LOG_WARN("SaveSelectedMedia: VideoSystem unavailable");
+        }
     }
 
     void VideoView::SaveSelectedMediaAs(const std::string& filePath) {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
-        if (filePath.empty()) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+            ANI_LOG_WARN("SaveSelectedMediaAs: no valid video selected");
+            return;
+        }
+        if (filePath.empty()) {
+            ANI_LOG_WARN("SaveSelectedMediaAs: empty file path");
+            return;
+        }
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (videoSystem) {
             videoSystem->SaveVideoAsync(selectedEntityID, filePath);
+        }
+        else {
+            ANI_LOG_WARN("SaveSelectedMediaAs: VideoSystem unavailable");
         }
     }
 
@@ -1551,7 +1657,10 @@ namespace GUI {
     }
 
     void VideoView::SaveSelectedMediaAsWithAudio() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+            ANI_LOG_WARN("SaveSelectedMediaAsWithAudio: no valid video selected");
+            return;
+        }
 
         auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
         std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
@@ -1566,7 +1675,10 @@ namespace GUI {
     }
 
     void VideoView::SaveSelectedMediaAsNoAudio() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+            ANI_LOG_WARN("SaveSelectedMediaAsNoAudio: no valid video selected");
+            return;
+        }
 
         auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
         std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
@@ -1581,20 +1693,32 @@ namespace GUI {
     }
 
     void VideoView::SaveVideoWithAudio(ECS::EntityID entity, const std::string& filePath) {
-        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return;
+        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_WARN("SaveVideoWithAudio: invalid entity %u", entity);
+            return;
+        }
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (videoSystem) {
             videoSystem->SaveVideoAsync(entity, filePath);
         }
+        else {
+            ANI_LOG_WARN("SaveVideoWithAudio: VideoSystem unavailable");
+        }
     }
 
     void VideoView::SaveVideoNoAudio(ECS::EntityID entity, const std::string& filePath) {
-        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::VideoComponent>(entity)) return;
+        if (entity == 0 || !m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_WARN("SaveVideoNoAudio: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
+            ANI_LOG_WARN("SaveVideoNoAudio: entity %u has no VideoComponent", entity);
+            return;
+        }
 
         auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
         if (videoComp.filePath.empty() || !videoComp.fmtCtx) {
-            std::cerr << "[VideoView] Video not loaded or invalid" << std::endl;
+            ANI_LOG_WARN("SaveVideoNoAudio: video not loaded or invalid (entity %u)", entity);
             return;
         }
 
@@ -1604,11 +1728,14 @@ namespace GUI {
         long long originalFrame = videoComp.currentFrame;
 
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-        if (!videoSystem) return;
+        if (!videoSystem) {
+            ANI_LOG_WARN("SaveVideoNoAudio: VideoSystem unavailable");
+            return;
+        }
 
         bool isNewFrame = false;
         if (!videoSystem->DecodeFrameForSave(videoComp, 0, isNewFrame)) {
-            std::cerr << "[VideoView] Failed to seek to beginning" << std::endl;
+            ANI_LOG_ERROR("SaveVideoNoAudio: failed to seek to beginning");
             return;
         }
         videoComp.currentFrame = 0;
@@ -1622,6 +1749,8 @@ namespace GUI {
             std::shared_lock lock(videoComp.dataMutex);
             unsigned char* data = (unsigned char*)malloc(videoComp.frameDataRGBA.size());
             if (!data) {
+                ANI_LOG_WARN("SaveVideoNoAudio: malloc failed, aborting at frame %lld",
+                    videoComp.currentFrame);
                 break;
             }
             std::memcpy(data, videoComp.frameDataRGBA.data(), videoComp.frameDataRGBA.size());
@@ -1667,15 +1796,18 @@ namespace GUI {
             }
 
             if (result) {
-                std::cout << "[VideoView] Saved video without audio to: " << outputPath << std::endl;
+                ANI_LOG_INFO("Saved video without audio to: %s", outputPath.c_str());
                 if (filePath.empty()) {
                     videoComp.filePath = outputPath;
                     videoComp.fileName = std::filesystem::path(outputPath).filename().string();
                 }
             }
             else {
-                std::cerr << "[VideoView] Failed to save video without audio" << std::endl;
+                ANI_LOG_ERROR("Failed to save video without audio: %s", outputPath.c_str());
             }
+        }
+        else {
+            ANI_LOG_WARN("SaveVideoNoAudio: no frames collected");
         }
 
         videoSystem->DecodeFrameForSave(videoComp, originalFrame, isNewFrame);
@@ -1685,7 +1817,10 @@ namespace GUI {
     }
 
     void VideoView::RemoveSelectedMedia() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+            ANI_LOG_WARN("RemoveSelectedMedia: no valid video selected");
+            return;
+        }
 
         if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
             auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
@@ -1694,6 +1829,8 @@ namespace GUI {
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(selectedEntityID);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE, eventData);
+
+        ANI_LOG_DEBUG("Removed entity %u", selectedEntityID);
 
         selectedEntityID = 0;
         index = 0;
@@ -1714,6 +1851,7 @@ namespace GUI {
     }
 
     void VideoView::OnMediaAdded(ECS::EntityID entity) {
+        ANI_LOG_TRACE("Media added: entity %u", entity);
         RefreshEntities();
         UpdateWaveformData();
         if (entity == selectedEntityID) {
@@ -1726,6 +1864,7 @@ namespace GUI {
     }
 
     void VideoView::OnMediaRemoved(ECS::EntityID entity) {
+        ANI_LOG_TRACE("Media removed: entity %u", entity);
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
         if (selectedEntityID == 0) {
@@ -1752,4 +1891,4 @@ namespace GUI {
         return "";
     }
 
-}
+} // namespace GUI

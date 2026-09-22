@@ -1,6 +1,7 @@
 #ifndef IMAGEVIEW_HPP
 #define IMAGEVIEW_HPP
 
+#include "Log.hpp"
 #include "BaseMediaView.hpp"
 #include "ImageComponent.hpp"
 #include "ImageSystem.hpp"

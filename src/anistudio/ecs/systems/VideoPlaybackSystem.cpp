@@ -1,8 +1,10 @@
 #include "VideoPlaybackSystem.hpp"
+#include "Log.hpp"
+
 #include <algorithm>
 #include <limits>
-#include <iostream>
 #include <cmath>
+#include <cstdlib>
 
 namespace ECS {
 
@@ -57,7 +59,7 @@ namespace ECS {
         bool hasAudio, double duration, double fps)
         : entity(entity), hasAudio(hasAudio), duration(duration), fps(fps > 0.0 ? fps : 30.0),
         m_owner(owner), m_mgr(mgr) {
-        std::cout << "[VideoTrack] Created for entity " << entity << std::endl;
+        ANI_LOG_DEBUG("[VideoTrack] Created for entity %u", entity);
 
         const char* hwDev = std::getenv("ANI_VIDEO_HW_ACCEL");
         if (hwDev) {
@@ -66,7 +68,7 @@ namespace ECS {
             for (const auto& supported : s_hwAccelDevices) {
                 if (dev == supported) {
                     hwAccelEnabled = true;
-                    std::cout << "[VideoTrack] HW acceleration enabled: " << dev << std::endl;
+                    ANI_LOG_INFO("[VideoTrack] HW acceleration enabled: %s", dev.c_str());
                     break;
                 }
             }
@@ -74,7 +76,7 @@ namespace ECS {
     }
 
     VideoPlaybackSystem::VideoTrack::~VideoTrack() {
-        std::cout << "[VideoTrack] Destroying for entity " << entity << std::endl;
+        ANI_LOG_DEBUG("[VideoTrack] Destroying for entity %u", entity);
         if (hwDeviceCtx) {
             av_buffer_unref(&hwDeviceCtx);
             hwDeviceCtx = nullptr;
@@ -88,7 +90,7 @@ namespace ECS {
     }
 
     void VideoPlaybackSystem::VideoTrack::StartThread() {
-        std::cout << "[VideoTrack] Starting thread for entity " << entity << std::endl;
+        ANI_LOG_DEBUG("[VideoTrack] Starting thread for entity %u", entity);
         m_thread = std::thread(&VideoTrack::WorkerLoop, this);
     }
 
@@ -164,11 +166,15 @@ namespace ECS {
         {
             std::lock_guard<std::mutex> lock(m_tracksMutex);
             auto it = m_tracks.find(entity);
-            if (it == m_tracks.end()) return;
+            if (it == m_tracks.end()) {
+                ANI_LOG_TRACE("[VideoPlaybackSystem] ClearCache: no track for entity %u", entity);
+                return;
+            }
             track = std::move(it->second);
             m_tracks.erase(it);
         }
         track.reset();
+        ANI_LOG_DEBUG("[VideoPlaybackSystem] Cleared track for entity %u", entity);
     }
 
     bool VideoPlaybackSystem::VideoTrack::InitHWAccel(AVCodecContext* codecCtx) {
@@ -188,7 +194,7 @@ namespace ECS {
         }
 
         if (hwType == AV_HWDEVICE_TYPE_NONE) {
-            std::cout << "[VideoTrack] No compatible HW acceleration found" << std::endl;
+            ANI_LOG_WARN("[VideoTrack] No compatible HW acceleration found, falling back to CPU");
             hwAccelEnabled = false;
             return false;
         }
@@ -197,19 +203,19 @@ namespace ECS {
         if (ret < 0) {
             char errbuf[AV_ERROR_MAX_STRING_SIZE] = { 0 };
             av_strerror(ret, errbuf, sizeof(errbuf));
-            std::cout << "[VideoTrack] Failed to create HW device context: " << errbuf << std::endl;
+            ANI_LOG_WARN("[VideoTrack] Failed to create HW device context: %s", errbuf);
             hwAccelEnabled = false;
             return false;
         }
 
         codecCtx->hw_device_ctx = av_buffer_ref(hwDeviceCtx);
         if (!codecCtx->hw_device_ctx) {
-            std::cout << "[VideoTrack] Failed to ref HW device context" << std::endl;
+            ANI_LOG_WARN("[VideoTrack] Failed to ref HW device context");
             hwAccelEnabled = false;
             return false;
         }
 
-        std::cout << "[VideoTrack] HW acceleration initialized: " << deviceName << std::endl;
+        ANI_LOG_INFO("[VideoTrack] HW acceleration initialized: %s", deviceName);
         return true;
     }
 
@@ -313,11 +319,13 @@ namespace ECS {
         m_indexing.store(true);
 
         if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
+            ANI_LOG_WARN("[BuildFrameIndex] Invalid entity %u", entity);
             m_indexing.store(false);
             return;
         }
         auto& videoComp = m_mgr.GetComponent<VideoComponent>(entity);
         if (!videoComp.fmtCtx || videoComp.videoStreamIndex < 0) {
+            ANI_LOG_WARN("[BuildFrameIndex] No fmtCtx/video stream for entity %u", entity);
             m_indexing.store(false);
             return;
         }
@@ -327,13 +335,14 @@ namespace ECS {
         AVStream* stream = fmtCtx->streams[streamIndex];
         streamTimeBase = stream->time_base;
 
-        std::cout << "[BuildFrameIndex] Building index for entity " << entity << std::endl;
+        ANI_LOG_DEBUG("[BuildFrameIndex] Building index for entity %u", entity);
 
         av_seek_frame(fmtCtx, streamIndex, 0, AVSEEK_FLAG_BACKWARD);
         avcodec_flush_buffers(videoComp.codecCtx.get());
 
         AVPacket* pkt = av_packet_alloc();
         if (!pkt) {
+            ANI_LOG_WARN("[BuildFrameIndex] av_packet_alloc failed for entity %u", entity);
             m_indexing.store(false);
             return;
         }
@@ -363,7 +372,8 @@ namespace ECS {
         av_packet_free(&pkt);
         indexReady = true;
         m_indexing.store(false);
-        std::cout << "[BuildFrameIndex] Index built: " << frameIndex.size() << " frames" << std::endl;
+        ANI_LOG_DEBUG("[BuildFrameIndex] Index built: %zu frames for entity %u",
+            frameIndex.size(), entity);
     }
 
     bool VideoPlaybackSystem::VideoTrack::DecodeFrameAt(int64_t targetPts, RingFrame& out) {
@@ -398,6 +408,8 @@ namespace ECS {
             ret = av_seek_frame(videoComp.fmtCtx.get(), videoComp.videoStreamIndex,
                 keyframePts, AVSEEK_FLAG_BACKWARD);
             if (ret < 0) {
+                ANI_LOG_WARN("[DecodeFrameAt] Seek failed for entity %u (target pts %lld)",
+                    entity, static_cast<long long>(targetPts));
                 return false;
             }
         }
@@ -417,26 +429,35 @@ namespace ECS {
                 return true;
             }
         }
+
+        ANI_LOG_WARN("[DecodeFrameAt] Failed to reach target pts %lld for entity %u",
+            static_cast<long long>(targetPts), entity);
         return false;
     }
 
     void VideoPlaybackSystem::VideoTrack::PerformSeek(double time) {
         if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
+            ANI_LOG_WARN("[PerformSeek] Invalid entity %u", entity);
             return;
         }
         auto& videoComp = m_mgr.GetComponent<VideoComponent>(entity);
         if (!videoComp.fmtCtx || videoComp.frameCount <= 0 || videoComp.videoStreamIndex < 0) {
+            ANI_LOG_WARN("[PerformSeek] No loaded video for entity %u", entity);
             return;
         }
 
         if (!indexReady && !m_indexing.load()) {
             pendingSeekTimeStore = time;
             RequestBuildIndex();
+            ANI_LOG_DEBUG("[PerformSeek] Index not ready for entity %u, requested build (pending seek to %.3f)",
+                entity, time);
             return;
         }
 
         if (m_indexing.load()) {
             pendingSeekTimeStore = time;
+            ANI_LOG_TRACE("[PerformSeek] Indexing in progress for entity %u, deferred seek to %.3f",
+                entity, time);
             return;
         }
 
@@ -451,8 +472,10 @@ namespace ECS {
             m_buffer.clear();
             m_buffer.push_back(std::move(frame));
             m_bufferCV.notify_all();
+            ANI_LOG_DEBUG("[PerformSeek] Seeked entity %u to %.3fs", entity, time);
         }
         else {
+            ANI_LOG_WARN("[PerformSeek] Decode at target failed for entity %u, resetting flags", entity);
             if (m_owner) {
                 std::lock_guard<std::mutex> lock(m_owner->m_tracksMutex);
                 auto it = m_owner->m_tracks.find(entity);
@@ -465,7 +488,7 @@ namespace ECS {
     }
 
     void VideoPlaybackSystem::VideoTrack::WorkerLoop() {
-        std::cout << "[WorkerLoop] Started for entity " << entity << std::endl;
+        ANI_LOG_DEBUG("[WorkerLoop] Started for entity %u", entity);
 
         if (hwAccelEnabled) {
             if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
@@ -481,7 +504,7 @@ namespace ECS {
 
         while (m_running.load()) {
             if (!m_mgr.IsEntityValid(entity) || !m_mgr.HasComponent<VideoComponent>(entity)) {
-                std::cout << "[WorkerLoop] Entity invalid, exiting" << std::endl;
+                ANI_LOG_DEBUG("[WorkerLoop] Entity %u invalid, exiting", entity);
                 m_running.store(false);
                 break;
             }
@@ -582,7 +605,7 @@ namespace ECS {
                 }
             }
         }
-        std::cout << "[WorkerLoop] Exited for entity " << entity << std::endl;
+        ANI_LOG_DEBUG("[WorkerLoop] Exited for entity %u", entity);
     }
 
     VideoPlaybackSystem::VideoPlaybackSystem(EntityManager& entityMgr)
@@ -597,6 +620,12 @@ namespace ECS {
 
     void VideoPlaybackSystem::Start() {
         m_audioPlayback = mgr.GetSystem<AudioPlaybackSystem>().get();
+        if (!m_audioPlayback) {
+            ANI_LOG_WARN("[VideoPlaybackSystem] AudioPlaybackSystem not available; video will play without audio sync");
+        }
+        else {
+            ANI_LOG_INFO("[VideoPlaybackSystem] Started");
+        }
     }
 
     void VideoPlaybackSystem::Update(float deltaT) {
@@ -688,9 +717,11 @@ namespace ECS {
                             cb(entity, videoComp.frameDataRGBA.data(), videoComp.width, videoComp.height);
                         }
                         catch (const std::exception& e) {
-                            std::cerr << "[VideoPlaybackSystem] callback exception: " << e.what() << std::endl;
+                            ANI_LOG_ERROR("[VideoPlaybackSystem] callback exception: %s", e.what());
                         }
-                        catch (...) {}
+                        catch (...) {
+                            ANI_LOG_ERROR("[VideoPlaybackSystem] Unknown callback exception");
+                        }
                     }
                 }
             }
@@ -707,6 +738,7 @@ namespace ECS {
 
     void VideoPlaybackSystem::HandleEndOfStream(EntityID entity, VideoTrack& track) {
         if (track.loop) {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] Looping entity %u", entity);
             track.reachedEnd = false;
             track.stopped = false;
             track.paused = false;
@@ -715,6 +747,7 @@ namespace ECS {
             track.restartPending = true;
         }
         else {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] End of stream for entity %u", entity);
             track.paused = true;
             track.reachedEnd = true;
             track.stopped = true;
@@ -732,7 +765,12 @@ namespace ECS {
     void VideoPlaybackSystem::NotifyPlaybackEnd(EntityID entity) {
         for (const auto& cb : m_endCallbacks) {
             try { cb(entity); }
-            catch (...) {}
+            catch (const std::exception& e) {
+                ANI_LOG_ERROR("[VideoPlaybackSystem] Exception in playback-end callback: %s", e.what());
+            }
+            catch (...) {
+                ANI_LOG_ERROR("[VideoPlaybackSystem] Unknown exception in playback-end callback");
+            }
         }
     }
 
@@ -741,10 +779,14 @@ namespace ECS {
         {
             std::lock_guard<std::mutex> lock(m_tracksMutex);
             auto it = m_tracks.find(entity);
-            if (it == m_tracks.end()) return;
+            if (it == m_tracks.end()) {
+                ANI_LOG_TRACE("[VideoPlaybackSystem] RemoveTrack: no track for entity %u", entity);
+                return;
+            }
             track = std::move(it->second);
             m_tracks.erase(it);
         }
+        ANI_LOG_DEBUG("[VideoPlaybackSystem] Removed track for entity %u", entity);
     }
 
     void VideoPlaybackSystem::RegisterVideoPlaybackCallback(const VideoPlaybackCallback& cb) {
@@ -756,12 +798,16 @@ namespace ECS {
     }
 
     void VideoPlaybackSystem::Play(EntityID entity, bool loop) {
-        std::cout << "[Play] entity=" << entity << " loop=" << loop << std::endl;
+        ANI_LOG_INFO("[VideoPlaybackSystem] Play entity=%u loop=%s",
+            entity, loop ? "true" : "false");
+
         if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<VideoComponent>(entity)) {
+            ANI_LOG_WARN("[VideoPlaybackSystem] Play: entity %u is invalid or lacks VideoComponent", entity);
             return;
         }
         auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
         if (!videoComp.fmtCtx || videoComp.frameCount <= 0) {
+            ANI_LOG_WARN("[VideoPlaybackSystem] Play: entity %u has no loaded video", entity);
             return;
         }
 
@@ -771,6 +817,7 @@ namespace ECS {
         if (it != m_tracks.end()) {
             VideoTrack& track = *it->second;
             if (track.stopped || track.reachedEnd) {
+                ANI_LOG_DEBUG("[VideoPlaybackSystem] Play: restarting stopped/ended track for entity %u", entity);
                 track.stopped = false;
                 track.reachedEnd = false;
                 track.paused = false;
@@ -790,6 +837,7 @@ namespace ECS {
                 return;
             }
             if (track.paused) {
+                ANI_LOG_DEBUG("[VideoPlaybackSystem] Play: resuming paused track for entity %u", entity);
                 track.paused = false;
                 track.reachedEnd = false;
                 track.seeking = false;
@@ -802,6 +850,7 @@ namespace ECS {
                 }
                 return;
             }
+            ANI_LOG_TRACE("[VideoPlaybackSystem] Play: track already playing for entity %u", entity);
             return;
         }
 
@@ -837,10 +886,18 @@ namespace ECS {
     void VideoPlaybackSystem::Pause(EntityID entity) {
         std::lock_guard<std::mutex> lock(m_tracksMutex);
         auto it = m_tracks.find(entity);
-        if (it == m_tracks.end()) return;
+        if (it == m_tracks.end()) {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] Pause: no track for entity %u", entity);
+            return;
+        }
 
         VideoTrack& track = *it->second;
-        if (track.paused || track.stopped || track.reachedEnd) return;
+        if (track.paused || track.stopped || track.reachedEnd) {
+            ANI_LOG_TRACE("[VideoPlaybackSystem] Pause: track not active for entity %u", entity);
+            return;
+        }
+
+        ANI_LOG_DEBUG("[VideoPlaybackSystem] Pausing entity %u", entity);
 
         track.paused = true;
         track.clock.Pause();
@@ -854,10 +911,18 @@ namespace ECS {
     void VideoPlaybackSystem::Resume(EntityID entity) {
         std::lock_guard<std::mutex> lock(m_tracksMutex);
         auto it = m_tracks.find(entity);
-        if (it == m_tracks.end()) return;
+        if (it == m_tracks.end()) {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] Resume: no track for entity %u", entity);
+            return;
+        }
 
         VideoTrack& track = *it->second;
-        if (!track.paused || track.stopped || track.reachedEnd) return;
+        if (!track.paused || track.stopped || track.reachedEnd) {
+            ANI_LOG_TRACE("[VideoPlaybackSystem] Resume: track not paused for entity %u", entity);
+            return;
+        }
+
+        ANI_LOG_DEBUG("[VideoPlaybackSystem] Resuming entity %u", entity);
 
         track.paused = false;
         track.clock.Play();
@@ -871,7 +936,12 @@ namespace ECS {
     void VideoPlaybackSystem::Stop(EntityID entity) {
         std::lock_guard<std::mutex> lock(m_tracksMutex);
         auto it = m_tracks.find(entity);
-        if (it == m_tracks.end()) return;
+        if (it == m_tracks.end()) {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] Stop: no track for entity %u", entity);
+            return;
+        }
+
+        ANI_LOG_DEBUG("[VideoPlaybackSystem] Stopping entity %u", entity);
 
         VideoTrack& track = *it->second;
         track.stopped = true;
@@ -898,12 +968,15 @@ namespace ECS {
     }
 
     void VideoPlaybackSystem::Seek(EntityID entity, double time) {
-        std::cout << "[Seek] entity=" << entity << " time=" << time << std::endl;
+        ANI_LOG_INFO("[VideoPlaybackSystem] Seek entity=%u time=%.3f", entity, time);
+
         if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<VideoComponent>(entity)) {
+            ANI_LOG_WARN("[VideoPlaybackSystem] Seek: entity %u is invalid or lacks VideoComponent", entity);
             return;
         }
         auto& videoComp = mgr.GetComponent<VideoComponent>(entity);
         if (!videoComp.fmtCtx || videoComp.frameCount <= 0) {
+            ANI_LOG_WARN("[VideoPlaybackSystem] Seek: entity %u has no loaded video", entity);
             return;
         }
 
@@ -943,6 +1016,7 @@ namespace ECS {
             track.RequestSeek(time, !wasPlaying);
         }
         else {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] Seek: creating paused track for entity %u", entity);
             bool hasAudio = mgr.HasComponent<AudioComponent>(entity);
             auto track = std::make_unique<VideoTrack>(this, mgr, entity, hasAudio, duration, videoComp.fps);
             track->paused = true;
@@ -973,7 +1047,12 @@ namespace ECS {
         speed = std::clamp(speed, 0.1f, 4.0f);
         std::lock_guard<std::mutex> lock(m_tracksMutex);
         auto it = m_tracks.find(entity);
-        if (it == m_tracks.end()) return;
+        if (it == m_tracks.end()) {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] SetSpeed: no track for entity %u", entity);
+            return;
+        }
+
+        ANI_LOG_DEBUG("[VideoPlaybackSystem] SetSpeed entity=%u speed=%.2f", entity, speed);
 
         VideoTrack& track = *it->second;
         track.clock.SetSpeed(speed);
@@ -985,6 +1064,7 @@ namespace ECS {
     void VideoPlaybackSystem::SetVolume(EntityID entity, float volume) {
         volume = std::clamp(volume, 0.0f, 1.0f);
         if (mgr.HasComponent<AudioComponent>(entity) && m_audioPlayback) {
+            ANI_LOG_DEBUG("[VideoPlaybackSystem] SetVolume entity=%u volume=%.2f", entity, volume);
             m_audioPlayback->SetVolume(entity, volume);
         }
     }
@@ -1022,6 +1102,7 @@ namespace ECS {
     }
 
     void VideoPlaybackSystem::Destroy() {
+        ANI_LOG_INFO("[VideoPlaybackSystem] Destroying");
         m_destroying.store(true);
 
         std::unordered_map<EntityID, std::unique_ptr<VideoTrack>> tracks;
@@ -1039,4 +1120,4 @@ namespace ECS {
         tracks.clear();
     }
 
-}
+} // namespace ECS

@@ -11,6 +11,7 @@ namespace GUI {
         for (WorkspaceID view = 0u; view < MAX_VIEW_COUNT; view++) {
             availableWorkspaces.push(view);
         }
+        ANI_LOG_DEBUG("[ViewManager] Constructed");
     }
 
     void ViewManager::Init() {
@@ -106,6 +107,12 @@ namespace GUI {
     }
 
     const WorkspaceID ViewManager::CreateView() {
+        if (availableWorkspaces.empty()) {
+            ANI_LOG_ERROR("[ViewManager] CreateView: no available workspace slots (max %u)",
+                (unsigned)MAX_VIEW_COUNT);
+            return 0;
+        }
+
         const WorkspaceID viewList = availableWorkspaces.front();
         AddViewSignature(viewList);
         availableWorkspaces.pop();
@@ -126,6 +133,11 @@ namespace GUI {
 
     void ViewManager::DestroyView(const WorkspaceID viewList) {
         assert(viewList < MAX_VIEW_COUNT && "WorkspaceID out of range!");
+
+        if (workspaceSignatures.find(viewList) == workspaceSignatures.end()) {
+            ANI_LOG_WARN("[ViewManager] DestroyView: workspace %u not found", (unsigned)viewList);
+            return;
+        }
 
         if (viewList == m_activeWorkspaceID) {
             auto allWorkspaces = GetAllWorkspaces();
@@ -153,6 +165,8 @@ namespace GUI {
         availableWorkspaces.push(viewList);
 
         EnsureValidActiveWorkspace();
+
+        ANI_LOG_DEBUG("[ViewManager] Destroyed workspace %u", (unsigned)viewList);
     }
 
     void ViewManager::RegisterViewWithFactory(const std::string& name, const std::string& source,
@@ -164,6 +178,8 @@ namespace GUI {
         ViewTypeID typeId;
         if (nameIt != m_viewNameToID.end()) {
             typeId = nameIt->second;
+            ANI_LOG_TRACE("[ViewManager] Re-registering view type '%s' (ID: %u)",
+                name.c_str(), (unsigned)typeId);
         }
         else {
             typeId = m_nextViewID++;
@@ -189,6 +205,10 @@ namespace GUI {
 
         try {
             WorkspaceID id = CreateView();
+            if (id == 0) {
+                ANI_LOG_ERROR("[ViewManager] CreateViewByName: failed to allocate workspace");
+                return 0;
+            }
 
             ImGuiContext* previousContext = nullptr;
             bool contextSwitched = false;
@@ -205,6 +225,7 @@ namespace GUI {
             auto view = factoryIt->second(entityMgr, *this);
 
             if (!view) {
+                ANI_LOG_ERROR("[ViewManager] Factory returned nullptr for %s", viewTypeName.c_str());
                 if (contextSwitched && previousContext) {
                     ImGui::SetCurrentContext(previousContext);
                 }
@@ -243,7 +264,7 @@ namespace GUI {
             viewType = GetViewType(name);
         }
         catch (const std::exception&) {
-            ANI_LOG_ERROR("[ViewManager] View type not registered: %s", name.c_str());
+            ANI_LOG_WARN("[ViewManager] UnregisterView: view type not registered: %s", name.c_str());
             return;
         }
 
@@ -333,6 +354,7 @@ namespace GUI {
 
     void ViewManager::UnregisterViewSource(const std::string& source) {
         auto it = viewSources.begin();
+        size_t removed = 0;
         while (it != viewSources.end()) {
             if (it->second == source) {
                 const std::string& viewName = it->first;
@@ -343,10 +365,20 @@ namespace GUI {
                 viewMetadata.erase(viewName);
                 viewFactories.erase(viewName);
                 it = viewSources.erase(it);
+                removed++;
             }
             else {
                 ++it;
             }
+        }
+
+        if (removed == 0) {
+            ANI_LOG_DEBUG("[ViewManager] UnregisterViewSource: no views found from source: %s",
+                source.c_str());
+        }
+        else {
+            ANI_LOG_INFO("[ViewManager] UnregisterViewSource: removed %zu views from source: %s",
+                removed, source.c_str());
         }
     }
 
@@ -361,6 +393,9 @@ namespace GUI {
 
         if (removed) {
             ANI_LOG_INFO("[ViewManager] Unregistered view type: %s", viewName.c_str());
+        }
+        else {
+            ANI_LOG_WARN("[ViewManager] UnregisterViewType: view type not found: %s", viewName.c_str());
         }
 
         return removed;
@@ -382,7 +417,7 @@ namespace GUI {
             viewTypeID = GetViewType(viewName);
         }
         catch (const std::exception&) {
-            ANI_LOG_INFO("[ViewManager] View type not found: %s", viewName.c_str());
+            ANI_LOG_INFO("[ViewManager] CloseAllViewsOfType: view type not found: %s", viewName.c_str());
             return;
         }
 
@@ -563,10 +598,6 @@ namespace GUI {
         return workspaceSignatures;
     }
 
-    // -------------------------------------------------------------------------
-    // LookupViewName: exact same behavior as the old inline scan of
-    // registeredViews. No m_viewIDToName fallback. This is what worked before.
-    // -------------------------------------------------------------------------
     std::string ViewManager::LookupViewName(ViewTypeID viewType) const {
         for (const auto& [name, id] : registeredViews) {
             if (id == viewType) return name;
@@ -711,7 +742,12 @@ namespace GUI {
 
     void ViewManager::SetImGuiContext(void* context) {
         m_imguiContext = context;
-        ANI_LOG_INFO("[ViewManager] Set ImGui context: %p", m_imguiContext);
+        if (!context) {
+            ANI_LOG_WARN("[ViewManager] SetImGuiContext: null context");
+        }
+        else {
+            ANI_LOG_DEBUG("[ViewManager] Set ImGui context: %p", context);
+        }
     }
 
     void* ViewManager::GetImGuiContext() const {
@@ -720,7 +756,12 @@ namespace GUI {
 
     void ViewManager::SetWindowHandle(void* handle) {
         m_windowHandle = handle;
-        ANI_LOG_INFO("[ViewManager] Set window handle: %p", m_windowHandle);
+        if (!handle) {
+            ANI_LOG_WARN("[ViewManager] SetWindowHandle: null handle");
+        }
+        else {
+            ANI_LOG_DEBUG("[ViewManager] Set window handle: %p", handle);
+        }
     }
 
     void* ViewManager::GetWindowHandle() {
@@ -729,12 +770,13 @@ namespace GUI {
 
     void ViewManager::SetWorkspaceName(WorkspaceID workspaceID, const std::string& name) {
         if (name.empty()) {
-            ANI_LOG_ERROR("[ViewManager] Cannot set empty workspace name");
+            ANI_LOG_WARN("[ViewManager] Cannot set empty workspace name (workspace %u)",
+                (unsigned)workspaceID);
             return;
         }
 
         if (IsWorkspaceNameTaken(name, workspaceID)) {
-            ANI_LOG_ERROR("[ViewManager] Workspace name '%s' is already taken", name.c_str());
+            ANI_LOG_WARN("[ViewManager] Workspace name '%s' is already taken", name.c_str());
             return;
         }
 

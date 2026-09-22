@@ -22,9 +22,6 @@ namespace ECS {
     }
 
     std::future<bool> ThreadPoolSystem::submitDiffusionTask(std::function<bool()> job) {
-        // Instantiated exactly once, here, inside AniEngineCore - never inside a
-        // plugin DLL. Keeps Pool::submit<F,Args...>()'s template instantiation
-        // confined to the binary that owns m_diffusionPool.
         return m_diffusionPool->submit(std::move(job));
     }
 

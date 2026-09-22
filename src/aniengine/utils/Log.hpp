@@ -1,5 +1,11 @@
 #pragma once
 
+#define ANI_LOG_TRACE(...) ::ANI::Log::Emit(::ANI::Log::Level::Trace, __FILE__, __LINE__, __VA_ARGS__)
+#define ANI_LOG_DEBUG(...) ::ANI::Log::Emit(::ANI::Log::Level::Debug, __FILE__, __LINE__, __VA_ARGS__)
+#define ANI_LOG_INFO(...)  ::ANI::Log::Emit(::ANI::Log::Level::Info,  __FILE__, __LINE__, __VA_ARGS__)
+#define ANI_LOG_WARN(...)  ::ANI::Log::Emit(::ANI::Log::Level::Warn,  __FILE__, __LINE__, __VA_ARGS__)
+#define ANI_LOG_ERROR(...) ::ANI::Log::Emit(::ANI::Log::Level::Error, __FILE__, __LINE__, __VA_ARGS__)
+
 #include "AniEngine.hpp"
 #include <cstdarg>
 
@@ -49,9 +55,3 @@ namespace ANI::Log {
         const char* fmt, ...);
 
 } // namespace ANI::Log
-
-#define ANI_LOG_TRACE(...) ::ANI::Log::Emit(::ANI::Log::Level::Trace, __FILE__, __LINE__, __VA_ARGS__)
-#define ANI_LOG_DEBUG(...) ::ANI::Log::Emit(::ANI::Log::Level::Debug, __FILE__, __LINE__, __VA_ARGS__)
-#define ANI_LOG_INFO(...)  ::ANI::Log::Emit(::ANI::Log::Level::Info,  __FILE__, __LINE__, __VA_ARGS__)
-#define ANI_LOG_WARN(...)  ::ANI::Log::Emit(::ANI::Log::Level::Warn,  __FILE__, __LINE__, __VA_ARGS__)
-#define ANI_LOG_ERROR(...) ::ANI::Log::Emit(::ANI::Log::Level::Error, __FILE__, __LINE__, __VA_ARGS__)

@@ -5,9 +5,10 @@
 #include "DragDropUtils.hpp"
 #include "ViewManager.hpp"
 #include "IconFonts.hpp"
+#include "Log.hpp"
+
 #include <imgui.h>
 #include <algorithm>
-#include <iostream>
 
 namespace GUI {
 
@@ -15,6 +16,7 @@ namespace GUI {
         : BaseView(mgr, vm), selectedEntityID(0), index(0), zoom(1.0f), offsetX(0.0f), offsetY(0.0f),
         lastEntityCount(0), contextMenuUtils(std::make_unique<Utils::ContextMenuUtils>(mgr)),
         isDragging(false) {
+        ANI_LOG_DEBUG("Constructed");
     }
 
     BaseMediaView::~BaseMediaView() {
@@ -66,10 +68,18 @@ namespace GUI {
         auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
         if (it != mediaEntities.end()) {
             index = static_cast<int>(std::distance(mediaEntities.begin(), it));
+            ANI_LOG_TRACE("Selected entity %u at index %d", entity, index);
         }
         else {
             index = 0;
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
+            if (selectedEntityID == 0) {
+                ANI_LOG_TRACE("SetSelectedEntity: entity %u not found, list empty", entity);
+            }
+            else {
+                ANI_LOG_TRACE("SetSelectedEntity: entity %u not in list, fell back to %u",
+                    entity, selectedEntityID);
+            }
         }
     }
 
@@ -80,10 +90,13 @@ namespace GUI {
                 if (newIndex < 0) newIndex = 0;
                 selectedEntityID = mediaEntities[newIndex];
                 index = newIndex;
+                ANI_LOG_TRACE("Selection moved to entity %u after removal of %u",
+                    selectedEntityID, removedEntity);
             }
             else {
                 selectedEntityID = 0;
                 index = 0;
+                ANI_LOG_TRACE("Selection cleared after removal of %u", removedEntity);
             }
         }
     }
@@ -91,7 +104,10 @@ namespace GUI {
     void BaseMediaView::ToggleHistoryView(bool show) {
         auto& vm = GetViewManager();
         std::string viewType = GetHistoryViewTypeName();
-        if (viewType.empty()) return;
+        if (viewType.empty()) {
+            ANI_LOG_WARN("ToggleHistoryView: empty history view type name");
+            return;
+        }
 
         bool exists = IsHistoryVisible();
 
@@ -99,18 +115,20 @@ namespace GUI {
             try {
                 ViewTypeID histType = vm.GetViewType(viewType);
                 vm.AddViewByType(GetID(), histType);
+                ANI_LOG_DEBUG("Added history view: %s", viewType.c_str());
             }
             catch (const std::exception& e) {
-                std::cerr << "[BaseMediaView] Failed to add history view: " << e.what() << std::endl;
+                ANI_LOG_ERROR("Failed to add history view: %s", e.what());
             }
         }
         else if (!show && exists) {
             try {
                 ViewTypeID histType = vm.GetViewType(viewType);
                 vm.RemoveViewByType(GetID(), histType);
+                ANI_LOG_DEBUG("Removed history view: %s", viewType.c_str());
             }
             catch (const std::exception& e) {
-                std::cerr << "[BaseMediaView] Failed to remove history view: " << e.what() << std::endl;
+                ANI_LOG_ERROR("Failed to remove history view: %s", e.what());
             }
         }
     }
@@ -136,6 +154,7 @@ namespace GUI {
         std::vector<std::string> files;
         if (GUI::DragDrop::AcceptFileDrop(files)) {
             if (!files.empty()) {
+                ANI_LOG_DEBUG("File drop accepted (%zu file(s))", files.size());
                 LoadMedia(files);
             }
         }
@@ -148,6 +167,7 @@ namespace GUI {
                 if (m_entityManager.HasComponent<ECS::ImageComponent>(droppedEntity) ||
                     m_entityManager.HasComponent<ECS::VideoComponent>(droppedEntity)) {
                     SetSelectedEntity(droppedEntity);
+                    ANI_LOG_TRACE("Entity drop selected entity %u", droppedEntity);
                 }
             }
         }
@@ -160,6 +180,7 @@ namespace GUI {
             std::vector<std::string> filePaths;
             if (Clipboard::PasteMediaFromClipboard(filePaths)) {
                 if (!filePaths.empty()) {
+                    ANI_LOG_DEBUG("Pasted %zu file path(s) from clipboard", filePaths.size());
                     LoadMedia(filePaths);
                     return;
                 }
@@ -170,12 +191,14 @@ namespace GUI {
                     if (m_entityManager.HasComponent<ECS::ImageComponent>(entity)) {
                         auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(entity);
                         if (!comp.filePath.empty()) {
+                            ANI_LOG_DEBUG("Pasted image entity %u", entity);
                             LoadMedia({ comp.filePath });
                         }
                     }
                     else if (m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
                         auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
                         if (!comp.filePath.empty()) {
+                            ANI_LOG_DEBUG("Pasted video entity %u", entity);
                             LoadMedia({ comp.filePath });
                         }
                     }
@@ -191,7 +214,10 @@ namespace GUI {
 
     void BaseMediaView::SendSelectedToMetadataView() {
         std::string filePath = GetSelectedFilePath();
-        if (filePath.empty()) return;
+        if (filePath.empty()) {
+            ANI_LOG_WARN("SendSelectedToMetadataView: no file selected");
+            return;
+        }
 
         auto& vm = GetViewManager();
         WorkspaceID currentWorkspace = GetID();
@@ -213,9 +239,10 @@ namespace GUI {
             try {
                 ViewTypeID metaType = vm.GetViewType("MetadataView");
                 vm.AddViewByType(currentWorkspace, metaType);
+                ANI_LOG_DEBUG("Added MetadataView to workspace %zu", currentWorkspace);
             }
             catch (const std::exception& e) {
-                std::cerr << "[BaseMediaView] Failed to add MetadataView: " << e.what() << std::endl;
+                ANI_LOG_ERROR("Failed to add MetadataView: %s", e.what());
                 return;
             }
         }
@@ -227,16 +254,17 @@ namespace GUI {
                 if (auto* metaView = dynamic_cast<MetadataView*>(viewPtr.get())) {
                     try {
                         metaView->LoadFromFile(filePath);
-                        std::cout << "[BaseMediaView] Sent file to MetadataView: " << filePath << std::endl;
+                        ANI_LOG_DEBUG("Sent file to MetadataView: %s", filePath.c_str());
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[BaseMediaView] Failed to load metadata: " << e.what() << std::endl;
+                        ANI_LOG_ERROR("Failed to load metadata for %s: %s",
+                            filePath.c_str(), e.what());
                     }
                     return;
                 }
             }
         }
-        std::cerr << "[BaseMediaView] MetadataView not found in workspace after adding." << std::endl;
+        ANI_LOG_WARN("MetadataView not found in workspace after adding");
     }
 
     void BaseMediaView::RenderToolbar() {
@@ -248,4 +276,4 @@ namespace GUI {
     void BaseMediaView::RenderSelector() {
     }
 
-}
+} // namespace GUI

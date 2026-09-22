@@ -1,6 +1,7 @@
 #include "WebPMetadataUtils.hpp"
 #include "MetadataUtils.hpp"
-#include <iostream>
+#include "Log.hpp"
+
 #include <memory>
 
 #ifdef USE_EXIV2
@@ -14,7 +15,7 @@ namespace Utils {
         try {
             auto image = Exiv2::ImageFactory::open(imagePath);
             if (!image) {
-                std::cerr << "Failed to open WebP with Exiv2: " << imagePath << std::endl;
+                ANI_LOG_WARN("Failed to open WebP with Exiv2: %s", imagePath.c_str());
                 return false;
             }
             image->readMetadata();
@@ -24,11 +25,11 @@ namespace Utils {
             value->read(jsonStr);
             xmpData["Xmp.aniStudio.params"] = *value;
             image->writeMetadata();
-            std::cout << "WebP metadata written: " << imagePath << std::endl;
+            ANI_LOG_DEBUG("Wrote WebP metadata: %s", imagePath.c_str());
             return true;
         }
         catch (const Exiv2::Error& e) {
-            std::cerr << "Exiv2 error: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exiv2 error writing WebP %s: %s", imagePath.c_str(), e.what());
             return false;
         }
 #else
@@ -43,7 +44,7 @@ namespace Utils {
         try {
             auto image = Exiv2::ImageFactory::open(imagePath);
             if (!image) {
-                std::cerr << "Failed to open WebP with Exiv2: " << imagePath << std::endl;
+                ANI_LOG_WARN("Failed to open WebP with Exiv2: %s", imagePath.c_str());
                 return result;
             }
 
@@ -86,7 +87,7 @@ namespace Utils {
             }
         }
         catch (const Exiv2::Error& e) {
-            std::cerr << "Exiv2 error: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exiv2 error reading WebP %s: %s", imagePath.c_str(), e.what());
         }
         return result;
 #else
@@ -95,4 +96,4 @@ namespace Utils {
 #endif
     }
 
-}
+} // namespace Utils

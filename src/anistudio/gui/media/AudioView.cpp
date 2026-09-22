@@ -12,8 +12,9 @@
 #include "PlaybackEvents.hpp"
 #include "ClipboardUtilities.hpp"
 #include "IconFonts.hpp"
+#include "Log.hpp"
+
 #include <algorithm>
-#include <iostream>
 #include <cmath>
 #include <imgui.h>
 
@@ -26,6 +27,8 @@ namespace GUI {
         WaveformRenderer::Config wfConfig;
         wfConfig.height = 120.0f;
         m_waveformRenderer.SetConfig(wfConfig);
+
+        ANI_LOG_DEBUG("[AudioView] Constructed");
     }
 
     AudioView::~AudioView() {
@@ -35,13 +38,14 @@ namespace GUI {
         if (m_playbackSystem) {
             m_playbackSystem->UnregisterCallbacksForOwner(this);
         }
+        ANI_LOG_DEBUG("[AudioView] Destroyed");
     }
 
     void AudioView::Init() {
-        std::cout << "[AudioView] Initializing..." << std::endl;
+        ANI_LOG_INFO("[AudioView] Initializing...");
 
         if (!ImGui::GetCurrentContext()) {
-            std::cerr << "[AudioView] No ImGui context in Init()!" << std::endl;
+            ANI_LOG_ERROR("[AudioView] No ImGui context in Init()!");
             return;
         }
 
@@ -49,7 +53,13 @@ namespace GUI {
         if (!m_mediaEngine) {
             m_entityManager.RegisterSystem<ECS::MediaEngineSystem>();
             m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
-            m_mediaEngine->Start();
+            if (m_mediaEngine) {
+                m_mediaEngine->Start();
+                ANI_LOG_INFO("[AudioView] Registered and started MediaEngineSystem");
+            }
+            else {
+                ANI_LOG_ERROR("[AudioView] Failed to register MediaEngineSystem");
+            }
         }
 
         auto& events = ANI::Events::Ref();
@@ -99,7 +109,7 @@ namespace GUI {
                 if (m_mediaEngine) m_mediaEngine->onSetMode(data);
             });
 
-        std::cout << "[AudioView] Registered playback events" << std::endl;
+        ANI_LOG_DEBUG("[AudioView] Registered playback events");
 
         if (m_mediaEngine) {
             m_mediaEngine->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
@@ -144,6 +154,12 @@ namespace GUI {
         if (!audioSystem) {
             m_entityManager.RegisterSystem<ECS::AudioSystem>();
             audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+            if (!audioSystem) {
+                ANI_LOG_ERROR("[AudioView] Failed to register AudioSystem");
+            }
+            else {
+                ANI_LOG_DEBUG("[AudioView] Registered AudioSystem");
+            }
         }
         m_audioSystem = audioSystem;
 
@@ -151,6 +167,12 @@ namespace GUI {
         if (!playbackSystem) {
             m_entityManager.RegisterSystem<ECS::AudioPlaybackSystem>();
             playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
+            if (!playbackSystem) {
+                ANI_LOG_ERROR("[AudioView] Failed to register AudioPlaybackSystem");
+            }
+            else {
+                ANI_LOG_DEBUG("[AudioView] Registered AudioPlaybackSystem");
+            }
         }
         m_playbackSystem = playbackSystem;
 
@@ -215,16 +237,19 @@ namespace GUI {
                 }
             }
             catch (const std::exception& e) {
-                std::cerr << "[AudioView] SelectMediaEntity event error: " << e.what() << std::endl;
+                ANI_LOG_ERROR("[AudioView] SelectMediaEntity event error: %s", e.what());
             }
             });
 
-        std::cout << "[AudioView] Initialization complete" << std::endl;
+        ANI_LOG_INFO("[AudioView] Initialization complete");
     }
 
     void AudioView::SetPlaybackMode(ECS::PlaybackMode mode) {
         if (mode == m_playbackMode) return;
         m_playbackMode = mode;
+
+        ANI_LOG_DEBUG("[AudioView] Playback mode set to %s",
+            mode == ECS::PlaybackMode::Streaming ? "Streaming" : "Cached");
 
         for (auto entity : mediaEntities) {
             if (m_entityManager.IsEntityValid(entity) &&
@@ -292,7 +317,7 @@ namespace GUI {
 
     void AudioView::Render() {
         if (!ImGui::GetCurrentContext()) {
-            std::cerr << "[AudioView] ERROR: No ImGui context!" << std::endl;
+            ANI_LOG_ERROR("[AudioView] No ImGui context in Render()!");
             return;
         }
 
@@ -320,7 +345,7 @@ namespace GUI {
             HandleClipboardPaste();
         }
         catch (const std::exception& e) {
-            std::cerr << "[AudioView] Exception in Render: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[AudioView] Exception in Render: %s", e.what());
             ImGui::Text("Error rendering AudioView: %s", e.what());
         }
 
@@ -500,7 +525,11 @@ namespace GUI {
         if (ImGui::Button((Icon::Music() + " Test Tone").c_str())) {
             auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
             if (playbackSystem) {
+                ANI_LOG_DEBUG("[AudioView] Playing test tone");
                 playbackSystem->PlayTestTone();
+            }
+            else {
+                ANI_LOG_WARN("[AudioView] AudioPlaybackSystem unavailable, cannot play test tone");
             }
         }
         ImGui::PopID();
@@ -559,7 +588,7 @@ namespace GUI {
                 }
 
                 ImGui::SameLine();
-                ImGui::Text("| Entity ID: %zu", selectedEntityID);
+                ImGui::Text("| Entity ID: %u", selectedEntityID);
 
                 RenderMediaContextMenu(selectedEntityID);
             }
@@ -618,6 +647,7 @@ namespace GUI {
                 auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
                 audioComp.looping = loopState;
             }
+            ANI_LOG_DEBUG("[AudioView] Loop %s", loopState ? "enabled" : "disabled");
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Loop current audio");
@@ -627,6 +657,7 @@ namespace GUI {
         ImGui::SameLine();
         ImGui::PushID(301);
         if (ImGui::Checkbox((Icon::Play() + " Autoplay").c_str(), &m_autoplay)) {
+            ANI_LOG_DEBUG("[AudioView] Autoplay %s", m_autoplay ? "enabled" : "disabled");
         }
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("Auto play next audio when current ends");
@@ -751,10 +782,11 @@ namespace GUI {
                 }
             }
             lastEntityCount = mediaEntities.size();
-            std::cout << "[AudioView] Refreshed entities, found " << mediaEntities.size() << " audio files" << std::endl;
+            ANI_LOG_DEBUG("[AudioView] Refreshed entities, found %zu audio file(s)",
+                mediaEntities.size());
         }
         catch (const std::exception& e) {
-            std::cerr << "[AudioView] Exception refreshing entities: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[AudioView] Exception refreshing entities: %s", e.what());
             mediaEntities.clear();
             lastEntityCount = 0;
         }
@@ -845,6 +877,7 @@ namespace GUI {
             ImGui::Separator();
         }
         catch (const std::exception& e) {
+            ANI_LOG_ERROR("[AudioView] Exception in RenderPlaybackControls: %s", e.what());
             ImGui::Text("Error with playback controls: %s", e.what());
         }
     }
@@ -916,10 +949,10 @@ namespace GUI {
     }
 
     void AudioView::LoadMedia(const std::vector<std::string>& filePaths) {
-        std::cout << "[AudioView] LoadMedia called with " << filePaths.size() << " files" << std::endl;
+        ANI_LOG_INFO("[AudioView] LoadMedia called with %zu file(s)", filePaths.size());
 
         if (!m_mediaEngine) {
-            std::cerr << "[AudioView] MediaEngineSystem is null!" << std::endl;
+            ANI_LOG_ERROR("[AudioView] MediaEngineSystem is null!");
             return;
         }
 
@@ -931,31 +964,32 @@ namespace GUI {
                     filePath, ECS::TrackType::Audio, m_playbackMode);
 
                 if (entity == 0) {
-                    std::cerr << "[AudioView] Failed to load audio: " << filePath << std::endl;
+                    ANI_LOG_WARN("[AudioView] Failed to load audio: %s", filePath.c_str());
                     continue;
                 }
 
-                std::cout << "[AudioView] Created entity " << entity
-                    << " for: " << filePath << std::endl;
+                ANI_LOG_INFO("[AudioView] Created entity %u for: %s",
+                    entity, filePath.c_str());
 
                 auto playEvent = ANI::PlaybackEvents::MakeEntityEvent(entity);
                 ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, playEvent);
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[AudioView] Exception loading audio: " << e.what() << std::endl;
+            ANI_LOG_ERROR("[AudioView] Exception loading audio: %s", e.what());
         }
     }
 
     void AudioView::SaveSelectedMedia() {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
+            ANI_LOG_WARN("[AudioView] SaveSelectedMedia: no valid audio selected");
             return;
         }
 
         auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
         if (audioComp.pcmData.empty()) {
-            std::cerr << "[AudioView] No audio data to save." << std::endl;
+            ANI_LOG_WARN("[AudioView] No audio data to save.");
             return;
         }
 
@@ -977,11 +1011,13 @@ namespace GUI {
     void AudioView::SaveSelectedMediaAs(const std::string& filePath) {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID) ||
             !m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
+            ANI_LOG_WARN("[AudioView] SaveSelectedMediaAs: no valid audio selected");
             return;
         }
 
         auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
         if (audioComp.pcmData.empty()) {
+            ANI_LOG_WARN("[AudioView] SaveSelectedMediaAs: no audio data");
             return;
         }
 
@@ -992,7 +1028,7 @@ namespace GUI {
 
         FILE* f = fopen(filePath.c_str(), "wb");
         if (!f) {
-            std::cerr << "[AudioView] Failed to open file for writing: " << filePath << std::endl;
+            ANI_LOG_ERROR("[AudioView] Failed to open file for writing: %s", filePath.c_str());
             return;
         }
 
@@ -1028,11 +1064,14 @@ namespace GUI {
         }
 
         fclose(f);
-        std::cout << "[AudioView] Saved audio to: " << filePath << std::endl;
+        ANI_LOG_INFO("[AudioView] Saved audio to: %s", filePath.c_str());
     }
 
     void AudioView::RemoveSelectedMedia() {
-        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
+        if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) {
+            ANI_LOG_WARN("[AudioView] RemoveSelectedMedia: no valid entity selected");
+            return;
+        }
 
         if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
             auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
@@ -1041,6 +1080,8 @@ namespace GUI {
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(selectedEntityID);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE, eventData);
+
+        ANI_LOG_DEBUG("[AudioView] Removed entity %u", selectedEntityID);
 
         selectedEntityID = 0;
         index = 0;
@@ -1063,10 +1104,12 @@ namespace GUI {
     }
 
     void AudioView::OnMediaAdded(ECS::EntityID entity) {
+        ANI_LOG_TRACE("[AudioView] Media added: entity %u", entity);
         RefreshEntities();
     }
 
     void AudioView::OnMediaRemoved(ECS::EntityID entity) {
+        ANI_LOG_TRACE("[AudioView] Media removed: entity %u", entity);
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
         if (selectedEntityID == 0) {
@@ -1094,62 +1137,102 @@ namespace GUI {
     }
 
     void AudioView::PlayAudio(ECS::EntityID entity) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("[AudioView] PlayAudio: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("[AudioView] PlayAudio: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.state = ECS::PlaybackState::Playing;
         state.isPaused = false;
+
+        ANI_LOG_TRACE("[AudioView] PlayAudio: entity %u", entity);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY, eventData);
     }
 
     void AudioView::PauseAudio(ECS::EntityID entity) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("[AudioView] PauseAudio: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("[AudioView] PauseAudio: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.state = ECS::PlaybackState::Paused;
         state.isPaused = true;
+
+        ANI_LOG_TRACE("[AudioView] PauseAudio: entity %u", entity);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE, eventData);
     }
 
     void AudioView::StopAudio(ECS::EntityID entity) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("[AudioView] StopAudio: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("[AudioView] StopAudio: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.state = ECS::PlaybackState::Stopped;
         state.isPaused = false;
         state.currentTime = 0.0;
 
+        ANI_LOG_TRACE("[AudioView] StopAudio: entity %u", entity);
+
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP, eventData);
     }
 
     void AudioView::SeekAudio(ECS::EntityID entity, double time) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("[AudioView] SeekAudio: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("[AudioView] SeekAudio: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.currentTime = time;
+
+        ANI_LOG_TRACE("[AudioView] SeekAudio: entity %u to %.3f", entity, time);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK, eventData);
     }
 
     void AudioView::SetAudioVolume(ECS::EntityID entity, float volume) {
-        if (!m_entityManager.IsEntityValid(entity)) return;
-        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) return;
+        if (!m_entityManager.IsEntityValid(entity)) {
+            ANI_LOG_TRACE("[AudioView] SetAudioVolume: invalid entity %u", entity);
+            return;
+        }
+        if (!m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            ANI_LOG_TRACE("[AudioView] SetAudioVolume: entity %u has no PlaybackStateComponent", entity);
+            return;
+        }
 
         auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
         state.volume = volume;
+
+        ANI_LOG_TRACE("[AudioView] SetAudioVolume: entity %u volume=%.2f", entity, volume);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME, eventData);
     }
 
-}
+} // namespace GUI

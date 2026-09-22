@@ -46,19 +46,14 @@ namespace ECS {
 
         ~ModelCacheSystem() override;
 
-        // ----------------------------------------------------------------
-        // Acquisition
-        //
         // ctxRes is passed by reference. On a cache hit the entry's own
         // ResourceManager is assigned back into ctxRes, so the caller gets
         // a shared_ptr to whichever manager actually owns the strings the
         // cached sd_ctx_params_t points at. On a miss, ctxRes is moved into
         // the new entry.
-        //
         // No pre-flight memory gate. sdcpp's memory manager decides
         // placement, segmented execution, and eviction; if the model can't
         // fit at all, new_sd_ctx returns null and we report that.
-        // ----------------------------------------------------------------
         std::optional<SDCPP::SDContextHandle>
             acquireOrCreateContext(const sd_ctx_params_t& params,
                 std::shared_ptr<SDCPP::ResourceManager>& ctxRes);
@@ -67,20 +62,14 @@ namespace ECS {
             acquireOrCreateUpscaler(const sd_ctx_params_t& params,
                 std::shared_ptr<SDCPP::ResourceManager>& ctxRes);
 
-        // ----------------------------------------------------------------
         // Release (called by handles)
-        // ----------------------------------------------------------------
         void releaseContext(const std::string& key);
         void releaseUpscaler(const std::string& key);
 
-        // ----------------------------------------------------------------
-        // GUI / management
-        //
         // Unload refuses to touch entries with activeCount > 0. Callers
         // that want to unload an in-use entry must first cancel every task
         // referencing it (SDCPPSystem::ClearAllTasks / CancelCurrentTask),
         // which drops the handles and brings activeCount to zero.
-        // ----------------------------------------------------------------
         void UnloadModel(const std::string& key);
         void UnloadAllModels();
         void UnloadInactiveModels();

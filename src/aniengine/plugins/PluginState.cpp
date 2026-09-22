@@ -1,9 +1,10 @@
 #include "PluginState.hpp"
 #include "FilePathSystem.hpp"
 #include "EntityManager.hpp"
+#include "Log.hpp"
+
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 
 namespace Plugins {
 
@@ -24,7 +25,7 @@ namespace Plugins {
     }
 
     PluginState::PluginState() {
-        std::cout << "[PluginState] Created" << std::endl;
+        ANI_LOG_DEBUG("[PluginState] Created");
     }
 
     void PluginState::SetEntityManager(ECS::EntityManager* mgr) {
@@ -33,12 +34,12 @@ namespace Plugins {
 
     void PluginState::SetCurrentProjectPath(const std::string& projectPath) {
         m_currentProjectPath = projectPath;
-        std::cout << "[PluginState] Current project path set to: " << projectPath << std::endl;
+        ANI_LOG_INFO("[PluginState] Current project path set to: %s", projectPath.c_str());
     }
 
     std::string PluginState::GetProjectPluginStatePath() const {
         if (m_currentProjectPath.empty()) {
-            std::cerr << "[PluginState] No project path set" << std::endl;
+            ANI_LOG_WARN("[PluginState] No project path set");
             return "";
         }
 
@@ -58,14 +59,15 @@ namespace Plugins {
         std::string filePath = GetProjectPluginStatePath();
 
         if (filePath.empty() || !std::filesystem::exists(filePath)) {
-            std::cout << "[PluginState] No project plugin state file found, starting fresh" << std::endl;
+            ANI_LOG_DEBUG("[PluginState] No project plugin state file found, starting fresh");
             m_projectPluginState.clear();
             return true;
         }
 
         bool success = LoadStateFromFile(filePath, m_projectPluginState);
         if (success) {
-            std::cout << "[PluginState] Project plugin state loaded: " << m_projectPluginState.size() << " plugins" << std::endl;
+            ANI_LOG_INFO("[PluginState] Project plugin state loaded: %zu plugins",
+                m_projectPluginState.size());
         }
         return success;
     }
@@ -74,7 +76,7 @@ namespace Plugins {
         std::string filePath = GetProjectPluginStatePath();
 
         if (filePath.empty()) {
-            std::cerr << "[PluginState] Cannot save project state - no project path set" << std::endl;
+            ANI_LOG_WARN("[PluginState] Cannot save project state - no project path set");
             return false;
         }
 
@@ -82,7 +84,8 @@ namespace Plugins {
 
         bool success = SaveStateToFile(filePath, m_projectPluginState);
         if (success) {
-            std::cout << "[PluginState] Project plugin state saved: " << m_projectPluginState.size() << " plugins" << std::endl;
+            ANI_LOG_INFO("[PluginState] Project plugin state saved: %zu plugins",
+                m_projectPluginState.size());
         }
         return success;
     }
@@ -99,7 +102,7 @@ namespace Plugins {
 
             std::ofstream file(filepath);
             if (!file.is_open()) {
-                std::cerr << "[PluginState] Failed to open file for writing: " << filepath << std::endl;
+                ANI_LOG_WARN("[PluginState] Failed to open file for writing: %s", filepath.c_str());
                 return false;
             }
 
@@ -107,7 +110,7 @@ namespace Plugins {
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[PluginState] Failed to save plugin state: " << e.what() << std::endl;
+            ANI_LOG_WARN("[PluginState] Failed to save plugin state: %s", e.what());
             return false;
         }
     }
@@ -116,7 +119,7 @@ namespace Plugins {
         try {
             std::ifstream file(filepath);
             if (!file.is_open()) {
-                std::cerr << "[PluginState] Failed to open file for reading: " << filepath << std::endl;
+                ANI_LOG_WARN("[PluginState] Failed to open file for reading: %s", filepath.c_str());
                 return false;
             }
 
@@ -136,7 +139,7 @@ namespace Plugins {
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[PluginState] Failed to load plugin state: " << e.what() << std::endl;
+            ANI_LOG_WARN("[PluginState] Failed to load plugin state: %s", e.what());
             return false;
         }
     }
@@ -190,23 +193,27 @@ namespace Plugins {
         if (!path.empty()) state.path = path;
         if (version > 0) state.version = version;
 
-        std::cout << "[PluginState] Updated state for " << pluginName
-            << " - loaded: " << loaded << ", enabled: " << enabled << ", path: " << path << std::endl;
+        ANI_LOG_TRACE("[PluginState] Updated state for %s - loaded: %s, enabled: %s, path: %s",
+            pluginName.c_str(),
+            loaded ? "true" : "false",
+            enabled ? "true" : "false",
+            path.c_str());
     }
 
     void PluginState::RemovePluginState(const std::string& pluginName) {
         m_projectPluginState.erase(pluginName);
-        std::cout << "[PluginState] Removed state for " << pluginName << std::endl;
+        ANI_LOG_DEBUG("[PluginState] Removed state for %s", pluginName.c_str());
     }
 
     void PluginState::DebugPrintState() const {
-        std::cout << "[PluginState] Current project plugin state:" << std::endl;
+        ANI_LOG_DEBUG("[PluginState] Current project plugin state:");
         for (const auto& [pluginName, state] : m_projectPluginState) {
-            std::cout << "  " << pluginName
-                << " - loaded: " << state.loaded
-                << ", enabled: " << state.enabled
-                << ", path: " << state.path
-                << ", version: " << state.version << std::endl;
+            ANI_LOG_DEBUG("  %s - loaded: %s, enabled: %s, path: %s, version: %u",
+                pluginName.c_str(),
+                state.loaded ? "true" : "false",
+                state.enabled ? "true" : "false",
+                state.path.c_str(),
+                state.version);
         }
     }
 
