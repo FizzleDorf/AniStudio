@@ -5,6 +5,7 @@
 
 namespace ECS { class EntityManager; }
 namespace GUI { class ViewManager; }
+namespace Plugins { class PluginManager; }
 
 namespace ANI {
 

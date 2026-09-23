@@ -1,6 +1,7 @@
 #pragma once
 #include "PluginManager.hpp"
 #include "WindowState.hpp"
+#include "Log.hpp"
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -31,7 +32,7 @@ namespace Plugins {
 
         void SetStudioContext(std::shared_ptr<ANI::StudioContext> context) {
             studioContext = context;
-            std::cout << "[StudioPluginManager] Studio context set" << std::endl;
+            ANI_LOG_DEBUG("Studio context set");
         }
 
         std::shared_ptr<ANI::StudioContext> GetStudioContext() const { return studioContext; }

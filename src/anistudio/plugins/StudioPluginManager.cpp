@@ -5,8 +5,9 @@
 #include "FilePathSystem.hpp"
 #include "FilePathComponent.hpp"
 #include "ProjectSystem.hpp"
+#include "Log.hpp"
+
 #include <imgui.h>
-#include <iostream>
 #include <thread>
 #include <filesystem>
 #include <regex>
@@ -19,8 +20,8 @@ namespace Plugins {
         GUI::ViewManager& viewMgr,
         ImGuiContext* mainContext
     ) : PluginManager(entityMgr), viewManager(viewMgr), mainImGuiContext(mainContext), m_viewStateSaved(false) {
-        std::cout << "[StudioPluginManager] Constructor - studio manager created with ImGui context: "
-            << mainImGuiContext << std::endl;
+        ANI_LOG_INFO("StudioPluginManager constructor (ImGuiContext=%p)",
+            static_cast<void*>(mainImGuiContext));
 
         auto fs = entityMgr.GetSystem<ECS::FilePathSystem>();
         if (fs) {
@@ -28,31 +29,33 @@ namespace Plugins {
             if (m_pluginDirectory.empty()) {
                 m_pluginDirectory = (std::filesystem::current_path() / "plugins").string();
                 fs->SetPath("Plugins", m_pluginDirectory);
+                ANI_LOG_DEBUG("Plugin directory defaulted to: %s", m_pluginDirectory.c_str());
             }
-            std::cout << "[StudioPluginManager] Plugin directory: " << m_pluginDirectory << std::endl;
+            else {
+                ANI_LOG_DEBUG("Plugin directory from FilePathSystem: %s", m_pluginDirectory.c_str());
+            }
         }
         else {
             m_pluginDirectory = (std::filesystem::current_path() / "plugins").string();
+            ANI_LOG_WARN("FilePathSystem unavailable, plugin directory defaulted to: %s",
+                m_pluginDirectory.c_str());
         }
 
         setStagingDirectory(m_pluginDirectory);
     }
 
     bool StudioPluginManager::enablePlugin(const std::string& pluginName) {
-        std::cout << "[StudioPluginManager] Enabling plugin with studio support: "
-            << pluginName << std::endl;
+        ANI_LOG_INFO("Enabling plugin with studio support: %s", pluginName.c_str());
 
         auto it = plugins.find(pluginName);
         if (it == plugins.end() || !it->second.loaded) {
-            std::cerr << "[StudioPluginManager] Plugin not found or not loaded: "
-                << pluginName << std::endl;
+            ANI_LOG_WARN("Plugin not found or not loaded: %s", pluginName.c_str());
             return false;
         }
 
         PluginInfo& plugin = it->second;
         if (plugin.enabled) {
-            std::cout << "[StudioPluginManager] Plugin already enabled: "
-                << pluginName << std::endl;
+            ANI_LOG_TRACE("Plugin already enabled: %s", pluginName.c_str());
             return true;
         }
 
@@ -64,15 +67,16 @@ namespace Plugins {
 
             if (!engineContextPtr && studioContext) {
                 engineContextPtr = std::static_pointer_cast<ANI::EngineContext>(studioContext);
-                std::cout << "[StudioPluginManager] Using StudioContext as EngineContext for plugin" << std::endl;
+                ANI_LOG_DEBUG("Using StudioContext as EngineContext for plugin: %s",
+                    pluginName.c_str());
             }
 
             if (engineContextPtr) {
                 plugin.instance->SetEngineContext(engineContextPtr);
-                std::cout << "[StudioPluginManager] EngineContext set for plugin: " << pluginName << std::endl;
+                ANI_LOG_TRACE("EngineContext set for plugin: %s", pluginName.c_str());
             }
             else {
-                std::cerr << "[StudioPluginManager] WARNING: No EngineContext available for plugin!" << std::endl;
+                ANI_LOG_WARN("No EngineContext available for plugin: %s", pluginName.c_str());
             }
 
             if (studioContext) {
@@ -80,22 +84,20 @@ namespace Plugins {
             }
 
             if (mainImGuiContext) {
-                std::cout << "[StudioPluginManager] Setting ImGui context for plugin: "
-                    << mainImGuiContext << std::endl;
+                ANI_LOG_TRACE("Setting ImGui context (%p) for plugin: %s",
+                    static_cast<void*>(mainImGuiContext), pluginName.c_str());
                 plugin.instance->SetImGuiContext(mainImGuiContext);
             }
 
-            std::cout << "[StudioPluginManager] Calling OnEngineInit..." << std::endl;
+            ANI_LOG_DEBUG("Calling OnEngineInit for plugin: %s", pluginName.c_str());
             if (!plugin.instance->OnEngineInit(entityManager)) {
-                std::cerr << "[StudioPluginManager] Plugin engine initialization failed: "
-                    << pluginName << std::endl;
+                ANI_LOG_ERROR("Plugin engine initialization failed: %s", pluginName.c_str());
                 return false;
             }
 
-            std::cout << "[StudioPluginManager] Calling OnStudioInit..." << std::endl;
+            ANI_LOG_DEBUG("Calling OnStudioInit for plugin: %s", pluginName.c_str());
             if (!plugin.instance->OnStudioInit(entityManager, viewManager)) {
-                std::cerr << "[StudioPluginManager] Plugin studio initialization failed: "
-                    << pluginName << std::endl;
+                ANI_LOG_ERROR("Plugin studio initialization failed: %s", pluginName.c_str());
                 return false;
             }
 
@@ -108,12 +110,12 @@ namespace Plugins {
                     for (GUI::WorkspaceID wsID : allWorkspaces) {
                         try {
                             viewManager.AddViewByType(wsID, viewTypeID);
-                            std::cout << "[StudioPluginManager] Added view " << viewName
-                                << " to workspace " << wsID << std::endl;
+                            ANI_LOG_DEBUG("Added view '%s' to workspace %zu",
+                                viewName.c_str(), (size_t)wsID);
                         }
                         catch (const std::exception& e) {
-                            std::cerr << "[StudioPluginManager] Failed to add view " << viewName
-                                << " to workspace " << wsID << ": " << e.what() << std::endl;
+                            ANI_LOG_WARN("Failed to add view '%s' to workspace %zu: %s",
+                                viewName.c_str(), (size_t)wsID, e.what());
                         }
                     }
                 }
@@ -129,19 +131,17 @@ namespace Plugins {
             if (m_viewStateSaved) {
                 LoadViewState();
                 m_viewStateSaved = false;
-                std::cout << "[StudioPluginManager] Reloaded viewstate after plugin re-enable." << std::endl;
+                ANI_LOG_DEBUG("Reloaded viewstate after plugin re-enable");
             }
 
-            std::cout << "[StudioPluginManager] Plugin enabled with studio support: "
-                << pluginName << std::endl;
+            ANI_LOG_INFO("Plugin enabled with studio support: %s", pluginName.c_str());
 
-            std::cout << "[StudioPluginManager] === POST-ENABLE DEBUG ===" << std::endl;
+            ANI_LOG_TRACE("Post-enable component dump for plugin: %s", pluginName.c_str());
             entityManager.DebugPrintRegisteredComponents();
-            std::cout << "[StudioPluginManager] =======================\n" << std::endl;
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioPluginManager] Exception during plugin enable: "
-                << e.what() << std::endl;
+            ANI_LOG_ERROR("Exception during plugin enable '%s': %s",
+                pluginName.c_str(), e.what());
             return false;
         }
 
@@ -149,24 +149,24 @@ namespace Plugins {
     }
 
     bool StudioPluginManager::disablePlugin(const std::string& pluginName) {
-        std::cout << "[StudioPluginManager] Disabling plugin: " << pluginName << std::endl;
+        ANI_LOG_INFO("Disabling plugin: %s", pluginName.c_str());
 
         auto it = plugins.find(pluginName);
         if (it == plugins.end() || !it->second.loaded) {
-            std::cerr << "[StudioPluginManager] Plugin not loaded: " << pluginName << std::endl;
+            ANI_LOG_WARN("Plugin not loaded: %s", pluginName.c_str());
             return false;
         }
 
         PluginInfo& plugin = it->second;
         if (!plugin.enabled) {
-            std::cout << "[StudioPluginManager] Plugin already disabled: " << pluginName << std::endl;
+            ANI_LOG_TRACE("Plugin already disabled: %s", pluginName.c_str());
             return true;
         }
 
         try {
             SaveViewState();
             m_viewStateSaved = true;
-            std::cout << "[StudioPluginManager] Saved viewstate before plugin shutdown." << std::endl;
+            ANI_LOG_DEBUG("Saved viewstate before plugin shutdown");
 
             if (plugin.instance) {
                 plugin.instance->OnShutdown();
@@ -178,10 +178,11 @@ namespace Plugins {
                 for (const std::string& viewName : viewIt->second) {
                     try {
                         viewManager.CloseAllViewsOfType(viewName);
-                        std::cout << "[StudioPluginManager] Closed views of type: " << viewName << std::endl;
+                        ANI_LOG_DEBUG("Closed views of type: %s", viewName.c_str());
                     }
                     catch (const std::exception& e) {
-                        std::cerr << "[StudioPluginManager] Failed to close views of type " << viewName << ": " << e.what() << std::endl;
+                        ANI_LOG_WARN("Failed to close views of type '%s': %s",
+                            viewName.c_str(), e.what());
                     }
                 }
                 pluginViewNames.erase(viewIt);
@@ -189,27 +190,28 @@ namespace Plugins {
 
             plugin.enabled = false;
 
-            std::cout << "[StudioPluginManager] Plugin disabled: " << pluginName << std::endl;
+            ANI_LOG_INFO("Plugin disabled: %s", pluginName.c_str());
             return true;
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioPluginManager] Exception during disable: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exception during disable '%s': %s",
+                pluginName.c_str(), e.what());
             return false;
         }
     }
 
     void StudioPluginManager::OnPluginEnabled(const std::string& pluginName) {
-        std::cout << "[StudioPluginManager] Plugin enabled callback: " << pluginName << std::endl;
+        ANI_LOG_DEBUG("Plugin enabled callback: %s", pluginName.c_str());
     }
 
     void StudioPluginManager::OnPluginDisabled(const std::string& pluginName) {
-        std::cout << "[StudioPluginManager] Plugin disabled callback: " << pluginName << std::endl;
+        ANI_LOG_DEBUG("Plugin disabled callback: %s", pluginName.c_str());
     }
 
     void StudioPluginManager::SetProjectContext(const std::string& projectPath) {
         PluginManager::SetProjectContext(projectPath);
         m_viewStateSaved = false;
-        std::cout << "[StudioPluginManager] Loaded project plugin state from: " << projectPath << std::endl;
+        ANI_LOG_INFO("Loaded project plugin state from: %s", projectPath.c_str());
     }
 
     void StudioPluginManager::SetPluginDirectory(const std::string& dir) {
@@ -219,14 +221,14 @@ namespace Plugins {
             fs->SetPath("Plugins", dir);
         }
         setStagingDirectory(dir);
-        std::cout << "[StudioPluginManager] Plugin directory set: " << dir << std::endl;
+        ANI_LOG_INFO("Plugin directory set: %s", dir.c_str());
     }
 
     void StudioPluginManager::SaveViewState() {
         auto projSys = entityManager.GetSystem<ECS::ProjectSystem>();
         if (projSys && projSys->IsProjectOpen()) {
             projSys->SaveViewState();
-            std::cout << "[StudioPluginManager] Saved viewstate before plugin disable." << std::endl;
+            ANI_LOG_DEBUG("Saved viewstate before plugin disable");
         }
     }
 
@@ -234,13 +236,13 @@ namespace Plugins {
         auto projSys = entityManager.GetSystem<ECS::ProjectSystem>();
         if (projSys && projSys->IsProjectOpen()) {
             projSys->LoadViewState();
-            std::cout << "[StudioPluginManager] Reloaded viewstate after plugin enable." << std::endl;
+            ANI_LOG_DEBUG("Reloaded viewstate after plugin enable");
         }
     }
 
     void StudioPluginManager::LoadStagingPlugins(bool overrideExisting) {
         if (m_pluginDirectory.empty()) {
-            std::cerr << "[StudioPluginManager] Plugin directory not set, cannot load staging plugins." << std::endl;
+            ANI_LOG_ERROR("Plugin directory not set, cannot load staging plugins");
             return;
         }
 
@@ -256,8 +258,8 @@ namespace Plugins {
                     continue;
                 }
 
-                std::cout << "[StudioPluginManager] Checking staging for plugin: " << pluginName
-                    << " at " << pluginStagingDir << std::endl;
+                ANI_LOG_DEBUG("Checking staging for plugin '%s' at %s",
+                    pluginName.c_str(), pluginStagingDir.string().c_str());
 
                 std::string pluginDllPath = (pluginStagingDir / (pluginName + ".dll")).string();
                 if (!std::filesystem::exists(pluginDllPath)) {
@@ -271,16 +273,17 @@ namespace Plugins {
                         }
                     }
                     if (!found) {
-                        std::cout << "[StudioPluginManager] No DLL found in staging for: " << pluginName << std::endl;
+                        ANI_LOG_TRACE("No DLL found in staging for: %s", pluginName.c_str());
                         continue;
                     }
                 }
 
-                std::cout << "[StudioPluginManager] Found staging plugin: " << pluginName << " at " << pluginDllPath << std::endl;
+                ANI_LOG_DEBUG("Found staging plugin '%s' at %s",
+                    pluginName.c_str(), pluginDllPath.c_str());
 
                 auto it = plugins.find(pluginName);
                 if (it != plugins.end() && it->second.loaded) {
-                    std::cout << "[StudioPluginManager] Plugin already loaded, unloading first: " << pluginName << std::endl;
+                    ANI_LOG_DEBUG("Plugin already loaded, unloading first: %s", pluginName.c_str());
                     unloadPlugin(pluginName);
                     std::this_thread::sleep_for(std::chrono::milliseconds(200));
                 }
@@ -302,14 +305,16 @@ namespace Plugins {
                 std::string versionedDllName = pluginName + ".v" + std::to_string(newVersion) + ".dll";
                 std::string destDllPath = (pluginEntry.path() / versionedDllName).string();
 
-                std::cout << "[StudioPluginManager] Creating versioned DLL v" << newVersion << ": " << destDllPath << std::endl;
+                ANI_LOG_DEBUG("Creating versioned DLL v%d: %s",
+                    newVersion, destDllPath.c_str());
 
                 try {
                     std::filesystem::rename(pluginDllPath, destDllPath);
-                    std::cout << "[StudioPluginManager] Successfully moved staging DLL to versioned file: " << destDllPath << std::endl;
+                    ANI_LOG_DEBUG("Moved staging DLL to versioned file: %s", destDllPath.c_str());
                 }
                 catch (const std::exception& e) {
-                    std::cerr << "[StudioPluginManager] Failed to move DLL: " << e.what() << std::endl;
+                    ANI_LOG_ERROR("Failed to move DLL for plugin '%s': %s",
+                        pluginName.c_str(), e.what());
                     continue;
                 }
 
@@ -319,12 +324,12 @@ namespace Plugins {
                         try {
                             std::filesystem::copy_file(file.path(), destFile,
                                 std::filesystem::copy_options::overwrite_existing);
-                            std::cout << "[StudioPluginManager] Copied staging file: "
-                                << file.path().filename() << std::endl;
+                            ANI_LOG_TRACE("Copied staging file: %s",
+                                file.path().filename().string().c_str());
                         }
                         catch (const std::exception& e) {
-                            std::cerr << "[StudioPluginManager] Failed to copy staging file "
-                                << file.path().filename() << ": " << e.what() << std::endl;
+                            ANI_LOG_WARN("Failed to copy staging file '%s': %s",
+                                file.path().filename().string().c_str(), e.what());
                         }
                     }
                 }
@@ -334,27 +339,28 @@ namespace Plugins {
                         std::error_code ec;
                         std::filesystem::remove(file.path(), ec);
                         if (ec) {
-                            std::cerr << "[StudioPluginManager] Failed to delete staging file "
-                                << file.path().filename() << ": " << ec.message() << std::endl;
+                            ANI_LOG_WARN("Failed to delete staging file '%s': %s",
+                                file.path().filename().string().c_str(), ec.message().c_str());
                         }
                         else {
-                            std::cout << "[StudioPluginManager] Deleted staging file: "
-                                << file.path().filename() << std::endl;
+                            ANI_LOG_TRACE("Deleted staging file: %s",
+                                file.path().filename().string().c_str());
                         }
                     }
                 }
 
                 if (!loadPlugin(pluginEntry.path().string())) {
-                    std::cerr << "[StudioPluginManager] Failed to load plugin from: " << pluginEntry.path() << std::endl;
+                    ANI_LOG_ERROR("Failed to load plugin from: %s",
+                        pluginEntry.path().string().c_str());
                 }
                 else {
-                    std::cout << "[StudioPluginManager] Successfully loaded plugin " << pluginName
-                        << " version v" << newVersion << std::endl;
+                    ANI_LOG_INFO("Successfully loaded plugin '%s' version v%d",
+                        pluginName.c_str(), newVersion);
                 }
             }
         }
         catch (const std::exception& e) {
-            std::cerr << "[StudioPluginManager] Exception loading staging plugins: " << e.what() << std::endl;
+            ANI_LOG_ERROR("Exception loading staging plugins: %s", e.what());
         }
     }
 
@@ -362,7 +368,7 @@ namespace Plugins {
         LoadStagingPlugins(true);
 
         if (!pluginState) {
-            std::cout << "[StudioPluginManager] No plugin state, nothing to enable." << std::endl;
+            ANI_LOG_DEBUG("No plugin state, nothing to enable");
             return;
         }
 
@@ -372,8 +378,8 @@ namespace Plugins {
 
             auto it = plugins.find(pluginName);
             if (it == plugins.end() || !it->second.loaded) {
-                std::cout << "[StudioPluginManager] Plugin " << pluginName
-                    << " is enabled in project state but not loaded; skipping enable." << std::endl;
+                ANI_LOG_WARN("Plugin '%s' is enabled in project state but not loaded; skipping enable",
+                    pluginName.c_str());
                 continue;
             }
 
@@ -381,10 +387,9 @@ namespace Plugins {
                 continue;
             }
 
-            std::cout << "[StudioPluginManager] Enabling project plugin: " << pluginName << std::endl;
+            ANI_LOG_INFO("Enabling project plugin: %s", pluginName.c_str());
             if (!enablePlugin(pluginName)) {
-                std::cerr << "[StudioPluginManager] Failed to enable project plugin: "
-                    << pluginName << std::endl;
+                ANI_LOG_ERROR("Failed to enable project plugin: %s", pluginName.c_str());
             }
         }
     }

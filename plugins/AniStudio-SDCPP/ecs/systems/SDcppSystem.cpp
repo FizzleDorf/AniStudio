@@ -1,10 +1,15 @@
 // SDCPPSystem.cpp
 #include "SDCPPSystem.hpp"
 #include "rng.hpp"
+#include "Log.hpp"
+
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include "VideoUtils.hpp"
 #include "VideoMetadataUtils.hpp"
+
+#include <algorithm>
+#include <filesystem>
 
 namespace ECS {
 
@@ -19,13 +24,17 @@ namespace ECS {
         : BaseSystem(entityMgr), pauseWorker(false), hasActiveTask(false), clearRequested(false) {
         sysName = "SDCPPSystem";
         m_filePathSystem = mgr.GetSystem<FilePathSystem>();
+        ANI_LOG_DEBUG("Constructed");
     }
 
     SDCPPSystem::~SDCPPSystem() {
+        ANI_LOG_DEBUG("Destructor");
         Shutdown();
     }
 
     void SDCPPSystem::Shutdown() {
+        ANI_LOG_INFO("Shutting down SDCPPSystem");
+
         {
             std::lock_guard<std::mutex> lock(queueMutex);
             shuttingDown = true;
@@ -39,9 +48,13 @@ namespace ECS {
         }
         std::lock_guard<std::mutex> lock(queueMutex);
         taskQueue.clear();
+
+        ANI_LOG_INFO("SDCPPSystem shutdown complete");
     }
 
     void SDCPPSystem::TerminateImmediately() {
+        ANI_LOG_INFO("Terminating immediately");
+
         {
             std::lock_guard<std::mutex> lock(queueMutex);
             shuttingDown = true;
@@ -52,14 +65,19 @@ namespace ECS {
     }
 
     void SDCPPSystem::Start() {
+        ANI_LOG_DEBUG("Starting SDCPPSystem");
+
         m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
         m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
-        if (!m_threadPool)
-            std::cerr << "[SDCPPSystem] ThreadPoolSystem not available\n";
+        if (!m_threadPool) {
+            ANI_LOG_WARN("ThreadPoolSystem not available");
+        }
         workerThread = std::thread([this]() { WorkerThread(); });
+        ANI_LOG_DEBUG("Worker thread started");
     }
 
     void SDCPPSystem::Destroy() {
+        ANI_LOG_DEBUG("Destroying SDCPPSystem");
         Shutdown();
         BaseSystem::Destroy();
     }
@@ -69,7 +87,7 @@ namespace ECS {
     // ---------------------------------------------------------------------
     void SDCPPSystem::QueueTask(EntityID entityID, TaskType taskType) {
         if (!mgr.IsEntityValid(entityID)) {
-            std::cerr << "[QueueTask] Invalid entity\n";
+            ANI_LOG_WARN("QueueTask: invalid entity %u", entityID);
             return;
         }
 
@@ -93,6 +111,8 @@ namespace ECS {
                 if (sampler.seed < 0) {
                     sampler.seed = (int64_t)STDDefaultRNG::generate_seed();
                     if (sampler.seed == 0) sampler.seed = 31337;
+                    ANI_LOG_TRACE("Auto-generated seed %lld for entity %u",
+                        (long long)sampler.seed, entityID);
                 }
             }
         }
@@ -120,8 +140,9 @@ namespace ECS {
         try {
             task.metadataForWrite = mgr.SerializeEntity(entityID);
         }
-        catch (...) {
-            std::cerr << "[QueueTask] Serialization failed\n";
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("QueueTask: serialization failed for entity %u: %s",
+                entityID, e.what());
             return;
         }
 
@@ -129,7 +150,7 @@ namespace ECS {
             taskType == TaskType::Img2Vid || taskType == TaskType::Edit) {
             if (!m_cacheSystem) m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
             if (!m_cacheSystem) {
-                std::cerr << "[QueueTask] ModelCacheSystem not available\n";
+                ANI_LOG_ERROR("QueueTask: ModelCacheSystem not available");
                 return;
             }
 
@@ -139,8 +160,8 @@ namespace ECS {
 
             auto handle = m_cacheSystem->acquireOrCreateContext(localCtxParams, localCtxRes);
             if (!handle) {
-                std::cerr << "[QueueTask] Failed to acquire context: "
-                    << m_cacheSystem->getLastError() << "\n";
+                ANI_LOG_ERROR("QueueTask: failed to acquire context: %s",
+                    m_cacheSystem->getLastError().c_str());
                 return;
             }
             task.ctxHandle = std::make_shared<SDCPP::SDContextHandle>(std::move(*handle));
@@ -148,7 +169,7 @@ namespace ECS {
         else if (taskType == TaskType::Upscaling) {
             if (!m_cacheSystem) m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
             if (!m_cacheSystem) {
-                std::cerr << "[QueueTask] ModelCacheSystem not available\n";
+                ANI_LOG_ERROR("QueueTask: ModelCacheSystem not available");
                 return;
             }
 
@@ -158,8 +179,8 @@ namespace ECS {
 
             auto handle = m_cacheSystem->acquireOrCreateUpscaler(localCtxParams, localCtxRes);
             if (!handle) {
-                std::cerr << "[QueueTask] Failed to acquire upscaler: "
-                    << m_cacheSystem->getLastError() << "\n";
+                ANI_LOG_ERROR("QueueTask: failed to acquire upscaler: %s",
+                    m_cacheSystem->getLastError().c_str());
                 return;
             }
             task.upscalerHandle = std::make_shared<SDCPP::UpscalerHandle>(std::move(*handle));
@@ -169,8 +190,13 @@ namespace ECS {
         }
 
         std::lock_guard<std::mutex> lock(queueMutex);
-        if (shuttingDown) return;
+        if (shuttingDown) {
+            ANI_LOG_WARN("QueueTask: shutting down, dropping task for entity %u", entityID);
+            return;
+        }
         taskQueue.push_back(std::move(task));
+        ANI_LOG_DEBUG("QueueTask: enqueued task for entity %u (queue size: %zu)",
+            entityID, taskQueue.size());
     }
 
     void SDCPPSystem::Update(float deltaT) {
@@ -188,8 +214,13 @@ namespace ECS {
     // ---------------------------------------------------------------------
     void SDCPPSystem::RemoveFromQueue(size_t index) {
         std::lock_guard<std::mutex> lock(queueMutex);
-        if (index < taskQueue.size() && !taskQueue[index].processing)
+        if (index < taskQueue.size() && !taskQueue[index].processing) {
             taskQueue.erase(taskQueue.begin() + index);
+            ANI_LOG_TRACE("RemoveFromQueue: removed task at index %zu", index);
+        }
+        else if (index < taskQueue.size()) {
+            ANI_LOG_TRACE("RemoveFromQueue: index %zu is currently processing, skip", index);
+        }
     }
 
     void SDCPPSystem::MoveInQueue(size_t fromIndex, size_t toIndex) {
@@ -199,6 +230,7 @@ namespace ECS {
         TaskData task = std::move(taskQueue[fromIndex]);
         taskQueue.erase(taskQueue.begin() + fromIndex);
         taskQueue.insert(taskQueue.begin() + toIndex, std::move(task));
+        ANI_LOG_TRACE("MoveInQueue: moved task from %zu to %zu", fromIndex, toIndex);
     }
 
     std::vector<SDCPPSystem::QueueItem> SDCPPSystem::GetQueueSnapshot() {
@@ -219,32 +251,54 @@ namespace ECS {
         std::lock_guard<std::mutex> lock(queueMutex);
         for (auto& t : taskQueue) if (t.processing) { t.Cancel(); break; }
         pauseWorker = true;
+        ANI_LOG_DEBUG("StopCurrentTask: cancelled active task and paused worker");
     }
 
     void SDCPPSystem::CancelCurrentTask() {
         std::lock_guard<std::mutex> lock(queueMutex);
         for (auto& t : taskQueue) if (t.processing) { t.Cancel(); break; }
         pauseWorker = false;
+        ANI_LOG_DEBUG("CancelCurrentTask: cancelled active task, worker resumed");
     }
 
     void SDCPPSystem::ClearQueuedTasks() {
         std::lock_guard<std::mutex> lock(queueMutex);
+        size_t before = taskQueue.size();
         taskQueue.erase(std::remove_if(taskQueue.begin(), taskQueue.end(),
             [](const TaskData& t) { return !t.processing; }), taskQueue.end());
         if (taskQueue.empty()) hasActiveTask = false;
+        size_t removed = before - taskQueue.size();
+        if (removed > 0) {
+            ANI_LOG_DEBUG("ClearQueuedTasks: removed %zu queued task(s)", removed);
+        }
     }
 
     void SDCPPSystem::ClearAllTasks() {
         std::lock_guard<std::mutex> lock(queueMutex);
+        size_t count = taskQueue.size();
         for (auto& t : taskQueue) if (t.processing) t.Cancel();
         taskQueue.clear();
         hasActiveTask = false;
         clearRequested = false;
+        ANI_LOG_INFO("ClearAllTasks: cleared %zu task(s)", count);
     }
 
-    void SDCPPSystem::PauseWorker() { std::lock_guard<std::mutex> l(queueMutex); pauseWorker = true; }
-    void SDCPPSystem::ResumeWorker() { std::lock_guard<std::mutex> l(queueMutex); pauseWorker = false; }
-    bool SDCPPSystem::IsPaused() const { std::lock_guard<std::mutex> l(queueMutex); return pauseWorker; }
+    void SDCPPSystem::PauseWorker() {
+        std::lock_guard<std::mutex> l(queueMutex);
+        pauseWorker = true;
+        ANI_LOG_DEBUG("Worker paused");
+    }
+
+    void SDCPPSystem::ResumeWorker() {
+        std::lock_guard<std::mutex> l(queueMutex);
+        pauseWorker = false;
+        ANI_LOG_DEBUG("Worker resumed");
+    }
+
+    bool SDCPPSystem::IsPaused() const {
+        std::lock_guard<std::mutex> l(queueMutex);
+        return pauseWorker;
+    }
 
     // ---------------------------------------------------------------------
     // Introspection
@@ -259,10 +313,12 @@ namespace ECS {
         return m_threadPool ? m_threadPool->getDiffusionPool().activeCount() : 0;
     }
     bool SDCPPSystem::HasActiveTask() const {
-        std::lock_guard<std::mutex> l(queueMutex); return hasActiveTask;
+        std::lock_guard<std::mutex> l(queueMutex);
+        return hasActiveTask;
     }
     size_t SDCPPSystem::GetQueueSize() const {
-        std::lock_guard<std::mutex> l(queueMutex); return taskQueue.size();
+        std::lock_guard<std::mutex> l(queueMutex);
+        return taskQueue.size();
     }
 
     std::vector<std::pair<SDCPPSystem::TaskType, nlohmann::json>>
@@ -278,9 +334,10 @@ namespace ECS {
     void SDCPPSystem::QueueTaskFromSerialized(const nlohmann::json& entityData, TaskType taskType) {
         EntityID newEntity = mgr.DeserializeEntity(entityData);
         if (newEntity == 0) {
-            std::cerr << "[SDCPPSystem] Failed to deserialize entity from saved data.\n";
+            ANI_LOG_ERROR("QueueTaskFromSerialized: failed to deserialize entity");
             return;
         }
+        ANI_LOG_DEBUG("QueueTaskFromSerialized: deserialized to entity %u", newEntity);
         QueueTask(newEntity, taskType);
     }
 
@@ -302,13 +359,18 @@ namespace ECS {
         if (dir.empty() || !std::filesystem::path(dir).is_absolute()) {
             if (m_filePathSystem) {
                 std::string def = m_filePathSystem->GetPath("DefaultProject");
-                if (!def.empty())
+                if (!def.empty()) {
                     dir = def;
+                    ANI_LOG_TRACE("ResolveOutputDirectory: fell back to DefaultProject: %s",
+                        dir.c_str());
+                }
             }
         }
 
-        if (dir.empty())
+        if (dir.empty()) {
             dir = std::filesystem::current_path().string();
+            ANI_LOG_TRACE("ResolveOutputDirectory: fell back to cwd: %s", dir.c_str());
+        }
 
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
@@ -336,8 +398,8 @@ namespace ECS {
             rawDir = output.filePath;
         }
         else {
-            std::cerr << "[SDCPPSystem] entity=" << task.entityID
-                << " missing Output*Component, using default output dir\n";
+            ANI_LOG_WARN("ResolveFullPathForTask: entity %u missing Output*Component, using default output dir",
+                task.entityID);
         }
 
         size_t lastDot = baseName.find_last_of('.');
@@ -347,10 +409,8 @@ namespace ECS {
         std::string outputDir = ResolveOutputDirectory(rawDir);
         std::string full = Utils::PngMetadata::CreateUniqueFilename(fullFileName, outputDir);
 
-        std::cerr << "[SDCPPSystem] entity=" << task.entityID
-            << " rawDir='" << rawDir
-            << "' dir='" << outputDir
-            << "' full='" << full << "'\n";
+        ANI_LOG_DEBUG("ResolveFullPathForTask: entity %u rawDir='%s' dir='%s' full='%s'",
+            task.entityID, rawDir.c_str(), outputDir.c_str(), full.c_str());
         return full;
     }
 
@@ -363,6 +423,10 @@ namespace ECS {
                 mgr.AddComponent<ImageComponent>(targetEntity);
             imgSys->SetImage(targetEntity, filePath);
         }
+        else {
+            ANI_LOG_WARN("LoadImageViaImageSystem: ImageSystem unavailable for %s",
+                filePath.c_str());
+        }
     }
 
     void SDCPPSystem::LoadVideoViaVideoSystem(EntityID targetEntity, const std::string& filePath) {
@@ -374,12 +438,18 @@ namespace ECS {
             vc.fileName = std::filesystem::path(filePath).filename().string();
             vidSys->SetVideo(targetEntity, filePath);
         }
+        else {
+            ANI_LOG_WARN("LoadVideoViaVideoSystem: VideoSystem unavailable for %s",
+                filePath.c_str());
+        }
     }
 
     EntityID SDCPPSystem::LoadVideoWithAudio(const std::string& filePath) {
         if (auto vaSys = mgr.GetSystem<VideoAudioSystem>()) {
             return vaSys->LoadVideoWithAudio(filePath);
         }
+        ANI_LOG_WARN("LoadVideoWithAudio: VideoAudioSystem unavailable for %s",
+            filePath.c_str());
         return 0;
     }
 
@@ -408,6 +478,7 @@ namespace ECS {
             return std::filesystem::exists(fullPath);
         }
         if (images) free_sd_images(images, count);
+        ANI_LOG_WARN("RunInference: generate_image failed for %s", fullPath.c_str());
         return false;
     }
 
@@ -441,7 +512,7 @@ namespace ECS {
         if (!ok || frameCount <= 0 || !frames) {
             if (frames) free(frames);
             if (audio)  free_sd_audio(audio);
-            std::cerr << "[RunImg2Vid] generate_video failed\n";
+            ANI_LOG_ERROR("RunImg2Vid: generate_video failed for %s", fullPath.c_str());
             return false;
         }
 
@@ -466,13 +537,12 @@ namespace ECS {
                 static_cast<int>(audio->sample_rate));
             haveAudio = !audioData.pcmData.empty();
 
-            std::cerr << "[RunImg2Vid] audio: " << audioData.channels << "ch @ "
-                << audioData.sampleRate << "Hz, "
-                << audioData.duration << "s, "
-                << audioData.pcmData.size() << " floats\n";
+            ANI_LOG_DEBUG("RunImg2Vid: audio %d ch @ %d Hz, %.2fs, %zu floats",
+                audioData.channels, audioData.sampleRate,
+                audioData.duration, audioData.pcmData.size());
         }
         else {
-            std::cerr << "[RunImg2Vid] no audio returned by generate_video\n";
+            ANI_LOG_DEBUG("RunImg2Vid: no audio returned by generate_video");
         }
 
         int outFps = fps_out > 0 ? fps_out : params.fps;
@@ -488,26 +558,26 @@ namespace ECS {
         if (frames) free(frames);
 
         if (!encoded) {
-            std::cerr << "[RunImg2Vid] EncodeFramesToVideo failed for " << fullPath << "\n";
+            ANI_LOG_ERROR("RunImg2Vid: EncodeFramesToVideo failed for %s", fullPath.c_str());
             return false;
         }
 
         if (!std::filesystem::exists(fullPath)) {
-            std::cerr << "[RunImg2Vid] encoder returned true but file missing: " << fullPath << "\n";
+            ANI_LOG_ERROR("RunImg2Vid: encoder returned true but file missing: %s", fullPath.c_str());
             return false;
         }
 
         if (!metadataForWrite.is_null() && !metadataForWrite.empty()) {
             if (!Utils::VideoMetadataUtils::WriteMetadataToVideo(fullPath, metadataForWrite, false)) {
-                std::cerr << "[RunImg2Vid] Warning: metadata rewrite failed\n";
+                ANI_LOG_WARN("RunImg2Vid: metadata rewrite failed for %s", fullPath.c_str());
             }
         }
 
-        std::cerr << "[RunImg2Vid] saved='" << fullPath
-            << "' frames=" << frameCount
-            << " hasAudio=" << haveAudio
-            << " fps=" << outFps
-            << " size=" << std::filesystem::file_size(fullPath) << "\n";
+        std::error_code ec;
+        auto size = std::filesystem::file_size(fullPath, ec);
+        ANI_LOG_INFO("RunImg2Vid: saved '%s' frames=%d hasAudio=%s fps=%d size=%llu",
+            fullPath.c_str(), frameCount, haveAudio ? "true" : "false", outFps,
+            ec ? (unsigned long long)0 : (unsigned long long)size);
         return true;
     }
 
@@ -517,11 +587,18 @@ namespace ECS {
         const std::string& inputImagePath,
         uint32_t upscaleFactor)
     {
-        if (!upscaler || inputImagePath.empty()) return false;
+        if (!upscaler || inputImagePath.empty()) {
+            ANI_LOG_WARN("RunUpscaling: missing upscaler or input path (input='%s')",
+                inputImagePath.c_str());
+            return false;
+        }
 
         int w = 0, h = 0, c = 0;
         unsigned char* data = stbi_load(inputImagePath.c_str(), &w, &h, &c, 0);
-        if (!data) return false;
+        if (!data) {
+            ANI_LOG_WARN("RunUpscaling: stbi_load failed for %s", inputImagePath.c_str());
+            return false;
+        }
 
         sd_image_t input{ (uint32_t)w, (uint32_t)h, (uint32_t)c, data };
         sd_image_t* out = nullptr;
@@ -537,16 +614,27 @@ namespace ECS {
             return std::filesystem::exists(fullPath);
         }
         if (out) free_sd_images(out, count);
+        ANI_LOG_WARN("RunUpscaling: upscale failed for %s", inputImagePath.c_str());
         return false;
     }
 
     bool SDCPPSystem::RunConversion(const sd_ctx_params_t& ctx) {
         std::string input = ctx.model_path ? ctx.model_path : "";
         std::string vae = ctx.vae_path ? ctx.vae_path : "";
-        if (input.empty()) return false;
+        if (input.empty()) {
+            ANI_LOG_WARN("RunConversion: no model_path in context");
+            return false;
+        }
         std::string output = std::filesystem::path(input).stem().string() + "_converted.gguf";
-        return convert(input.c_str(), vae.c_str(), output.c_str(),
+        bool ok = convert(input.c_str(), vae.c_str(), output.c_str(),
             ctx.wtype, ctx.tensor_type_rules, true);
+        if (ok) {
+            ANI_LOG_INFO("RunConversion: converted %s -> %s", input.c_str(), output.c_str());
+        }
+        else {
+            ANI_LOG_WARN("RunConversion: convert() failed for %s", input.c_str());
+        }
+        return ok;
     }
 
     bool SDCPPSystem::IsVideoTask(TaskType taskType) const {
@@ -563,6 +651,7 @@ namespace ECS {
                     return ext;
                 }
             }
+            ANI_LOG_TRACE("GetOutputExtension: defaulting to .mp4 for entity %u", entityID);
             return ".mp4";
         }
         if (mgr.IsEntityValid(entityID) && mgr.HasComponent<OutputImageComponent>(entityID)) {
@@ -573,6 +662,7 @@ namespace ECS {
                 return ext;
             }
         }
+        ANI_LOG_TRACE("GetOutputExtension: defaulting to .png for entity %u", entityID);
         return ".png";
     }
 
@@ -586,11 +676,17 @@ namespace ECS {
 
         if (!m_threadPool) {
             m_threadPool = mgr.GetSystem<ThreadPoolSystem>();
-            if (!m_threadPool) { std::cerr << "[SDCPPSystem] ThreadPoolSystem missing!\n"; return; }
+            if (!m_threadPool) {
+                ANI_LOG_ERROR("ProcessQueues: ThreadPoolSystem missing");
+                return;
+            }
         }
         if (!m_cacheSystem) {
             m_cacheSystem = mgr.GetSystem<ModelCacheSystem>();
-            if (!m_cacheSystem) { std::cerr << "[SDCPPSystem] ModelCacheSystem missing!\n"; return; }
+            if (!m_cacheSystem) {
+                ANI_LOG_ERROR("ProcessQueues: ModelCacheSystem missing");
+                return;
+            }
         }
 
         auto& diffusionPool = m_threadPool->getDiffusionPool();
@@ -602,8 +698,8 @@ namespace ECS {
             if (task.fullPath.empty()) {
                 task.fullPath = ResolveFullPathForTask(task);
                 if (task.fullPath.empty()) {
-                    std::cerr << "[SDCPPSystem] Cannot resolve output path for entity "
-                        << task.entityID << ", removing task\n";
+                    ANI_LOG_ERROR("ProcessQueues: cannot resolve output path for entity %u, removing task",
+                        task.entityID);
                     it = taskQueue.erase(it);
                     continue;
                 }
@@ -670,9 +766,14 @@ namespace ECS {
                 task.startTime = std::chrono::steady_clock::now();
                 hasActiveTask = true;
                 activeThreadId = std::this_thread::get_id();
+
+                ANI_LOG_DEBUG("ProcessQueues: submitted task for entity %u (type %d)",
+                    task.entityID, (int)task.taskType);
                 break;
             }
-            catch (...) {
+            catch (const std::exception& e) {
+                ANI_LOG_ERROR("ProcessQueues: exception submitting task for entity %u: %s",
+                    task.entityID, e.what());
                 it = taskQueue.erase(it);
                 break;
             }
@@ -717,11 +818,13 @@ namespace ECS {
                         completedTasks.emplace_back(it->fullPath, it->taskType, it->entityID);
                     }
                     else {
-                        std::cerr << "[SDCPPSystem] task finished but not delivering: success="
-                            << success << " exists="
-                            << std::filesystem::exists(it->fullPath)
-                            << " path='" << it->fullPath << "'\n";
-                        if (std::filesystem::exists(it->fullPath))
+                        bool exists = std::filesystem::exists(it->fullPath);
+                        ANI_LOG_WARN("CheckTaskCompletion: task finished but not delivering "
+                            "(success=%s exists=%s path='%s')",
+                            success ? "true" : "false",
+                            exists ? "true" : "false",
+                            it->fullPath.c_str());
+                        if (exists)
                             std::filesystem::remove(it->fullPath);
                     }
                     it = taskQueue.erase(it);
@@ -763,9 +866,12 @@ namespace ECS {
                 std::filesystem::remove(fullPath);
             }
         }
-        catch (...) {
-            if (std::filesystem::exists(fullPath))
-                std::filesystem::remove(fullPath);
+        catch (const std::exception& e) {
+            ANI_LOG_WARN("ProcessCompletedTask: exception loading %s: %s",
+                fullPath.c_str(), e.what());
+            std::error_code ec;
+            if (std::filesystem::exists(fullPath, ec))
+                std::filesystem::remove(fullPath, ec);
         }
 
         if (mgr.IsEntityValid(entityID)) {

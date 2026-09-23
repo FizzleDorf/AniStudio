@@ -372,7 +372,7 @@ namespace GUI {
         }
         needsSort = true;
 
-        ANI_LOG_TRACE("RefreshEntities: %zu media entities", mediaEntities.size());
+       //  ANI_LOG_TRACE("RefreshEntities: %zu media entities", mediaEntities.size());
     }
 
     void MediaHistoryView::OnMediaAdded(ECS::EntityID entity) {

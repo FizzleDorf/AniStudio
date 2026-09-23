@@ -217,7 +217,6 @@ namespace ANI {
             std::ostringstream titleStream;
             titleStream << "AniStudio - FPS: " << static_cast<int>(fps);
             glfwSetWindowTitle(m_window, titleStream.str().c_str());
-            ANI_LOG_TRACE("FPS: %.1f", fps);
             m_frameCount = 0;
             m_timeElapsed = 0.0;
         }
