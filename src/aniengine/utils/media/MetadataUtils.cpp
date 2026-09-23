@@ -1,15 +1,19 @@
-// AudioUtils.cpp
-#include "AudioUtils.hpp"
 #include "MetadataUtils.hpp"
 #include "VideoMetadataUtils.hpp"
 
+#include <vector>
+
 namespace Utils {
 
-    bool AudioUtils::HasExifMetadata(const std::string& filePath) {
+    // These were moved here from the deleted AudioUtils class. They are the
+    // only functions in MetadataUtils that need a translation unit, since
+    // VideoMetadataUtils::ReadMetadataFromVideo is not header-only.
+
+    bool MetadataUtils::HasExifMetadata(const std::string& filePath) {
         try {
             nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
             if (meta.is_null() || meta.empty()) return false;
-            meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
+            meta = NormalizeAniStudioMetadata(meta);
 
             if (meta.contains("components") && meta["components"].is_array()) {
                 for (const auto& comp : meta["components"]) {
@@ -29,22 +33,23 @@ namespace Utils {
         }
     }
 
-    bool AudioUtils::HasLSBMetadata(const std::string& filePath) {
+    bool MetadataUtils::HasLSBMetadata(const std::string& filePath) {
         try {
             nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
             if (meta.is_null() || meta.empty()) return false;
-            meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
+            meta = NormalizeAniStudioMetadata(meta);
 
-            std::vector<std::string> stealthKeys = { "LSB", "Stealth", "Hidden", "steganography", "lsb" };
-            for (const auto& key : stealthKeys) {
-                if (meta.contains(key)) return true;
+            static const std::vector<std::string> stealthKeys = {
+                "LSB", "Stealth", "Hidden", "steganography", "lsb"
+            };
+            for (const auto& k : stealthKeys) {
+                if (meta.contains(k)) return true;
             }
-
             if (meta.contains("components") && meta["components"].is_array()) {
                 for (const auto& comp : meta["components"]) {
                     if (comp.is_object()) {
-                        for (const auto& key : stealthKeys) {
-                            if (comp.contains(key)) return true;
+                        for (const auto& k : stealthKeys) {
+                            if (comp.contains(k)) return true;
                         }
                     }
                 }
@@ -56,11 +61,11 @@ namespace Utils {
         }
     }
 
-    int AudioUtils::GetMetadataStatus(const std::string& filePath) {
+    int MetadataUtils::GetMetadataStatus(const std::string& filePath) {
         try {
             nlohmann::json meta = VideoMetadataUtils::ReadMetadataFromVideo(filePath);
             if (meta.is_null() || meta.empty()) return 0;
-            meta = MetadataUtils::NormalizeAniStudioMetadata(meta);
+            meta = NormalizeAniStudioMetadata(meta);
 
             if (meta.contains("components") && meta["components"].is_array()) {
                 for (const auto& comp : meta["components"]) {
@@ -73,8 +78,8 @@ namespace Utils {
                     }
                 }
             }
-
-            if (meta.contains("dataType") && meta["dataType"] == "entity" && meta.contains("data")) {
+            if (meta.contains("dataType") && meta["dataType"] == "entity" &&
+                meta.contains("data")) {
                 return 1;
             }
             return 0;

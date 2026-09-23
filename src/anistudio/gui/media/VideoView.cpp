@@ -8,19 +8,20 @@
 #include "DragDropUtils.hpp"
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
-#include "AudioPlaybackSystem.hpp"
 #include "AudioSystem.hpp"
 #include "FilePathSystem.hpp"
-#include "VideoPlaybackSystem.hpp"
-#include "VideoAudioSystem.hpp"
+#include "AVSystem.hpp"
 #include "PlaybackEvents.hpp"
 #include "IconFonts.hpp"
 #include "ClipboardUtilities.hpp"
+#include "VideoUtils.hpp"
 
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <cmath>
+#include <cstring>
+#include <cstdlib>
 #include <imgui.h>
 
 namespace GUI {
@@ -43,6 +44,31 @@ namespace GUI {
         ANI_LOG_DEBUG("Destroyed");
     }
 
+    void VideoView::OnVideoFrame(ECS::EntityID entity, const uint8_t* data,
+        int width, int height, int channels) {
+        if (!m_textureSystem || !data || width <= 0 || height <= 0) return;
+        if (!m_entityManager.IsEntityValid(entity)) return;
+
+        // Make sure the entity has a TextureComponent to hold the GL ID.
+        if (!m_entityManager.HasComponent<ECS::TextureComponent>(entity)) {
+            m_entityManager.AddComponent<ECS::TextureComponent>(entity);
+        }
+        auto& texComp = m_entityManager.GetComponent<ECS::TextureComponent>(entity);
+
+        // Copy the frame ? VideoSystem owns the source buffer and reuses it.
+        size_t sz = static_cast<size_t>(width) * height * channels;
+        unsigned char* copy = (unsigned char*)malloc(sz);
+        if (!copy) return;
+        memcpy(copy, data, sz);
+
+        // Hand it to TextureSystem with a pointer into the entity's
+        // TextureComponent. The component lives as long as the entity, and
+        // TextureSystem consumes the queue on the next Update() ? so the
+        // pointer stays valid.
+        m_textureSystem->QueueVideoTextureCreation(
+            entity, copy, width, height, channels, &texComp.textureID);
+    }
+
     void VideoView::Init() {
         ANI_LOG_INFO("Initializing...");
 
@@ -52,83 +78,72 @@ namespace GUI {
         }
 
         m_audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+        m_textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
 
-        m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
-        if (!m_mediaEngine) {
-            m_entityManager.RegisterSystem<ECS::MediaEngineSystem>();
-            m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
-            if (m_mediaEngine) {
-                m_mediaEngine->Start();
-                ANI_LOG_INFO("Registered and started MediaEngineSystem");
+        m_avSystem = m_entityManager.GetSystem<ECS::AVSystem>();
+        if (!m_avSystem) {
+            m_entityManager.RegisterSystem<ECS::AVSystem>();
+            m_avSystem = m_entityManager.GetSystem<ECS::AVSystem>();
+            if (m_avSystem) {
+                m_avSystem->Start();
+                ANI_LOG_INFO("Registered and started AVSystem");
             }
             else {
-                ANI_LOG_ERROR("Failed to register MediaEngineSystem");
+                ANI_LOG_ERROR("Failed to register AVSystem");
             }
-        }
-
-        auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
-        if (textureSystem && m_mediaEngine) {
-            m_mediaEngine->SetVideoTextureCallback(
-                [textureSystem](ECS::EntityID entity, unsigned char* data, int w, int h, int ch, GLuint* target) {
-                    textureSystem->QueueVideoTextureCreation(entity, data, w, h, ch, target);
-                }
-            );
-        }
-        else if (!textureSystem) {
-            ANI_LOG_WARN("TextureSystem unavailable; video textures will not be created");
         }
 
         auto& events = ANI::Events::Ref();
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_LOAD,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onLoad(data);
+                if (m_avSystem) m_avSystem->onLoad(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onPlay(data);
+                if (m_avSystem) m_avSystem->onPlay(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onPause(data);
+                if (m_avSystem) m_avSystem->onPause(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onStop(data);
+                if (m_avSystem) m_avSystem->onStop(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSeek(data);
+                if (m_avSystem) m_avSystem->onSeek(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSetSpeed(data);
+                if (m_avSystem) m_avSystem->onSetSpeed(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSetVolume(data);
+                if (m_avSystem) m_avSystem->onSetVolume(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onRemove(data);
+                if (m_avSystem) m_avSystem->onRemove(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSetMode(data);
+                if (m_avSystem) m_avSystem->onSetMode(data);
             });
 
         ANI_LOG_DEBUG("Registered playback events");
 
-        if (m_mediaEngine) {
-            m_mediaEngine->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
+        if (m_avSystem) {
+            m_avSystem->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
                 if (entity != selectedEntityID) return;
                 if (state == ECS::PlaybackState::EndOfStream) {
                     if (m_autoplay) {
@@ -167,15 +182,14 @@ namespace GUI {
         if (videoSystem) {
             m_videoSystem = videoSystem;
 
-            auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
-            if (textureSystem) {
-                videoSystem->SetVideoTextureCallback(
-                    [textureSystem](ECS::EntityID entityID, unsigned char* data,
-                        int width, int height, int channels, GLuint* targetTexture) {
-                            textureSystem->QueueVideoTextureCreation(entityID, data, width, height, channels, targetTexture);
-                    }
-                );
-            }
+            // Register the frame callback. Fires on the main thread once
+            // per displayed frame.
+            videoSystem->RegisterVideoTextureCallback(this,
+                [this](ECS::EntityID entityID, const uint8_t* data,
+                    int width, int height, int channels) {
+                        OnVideoFrame(entityID, data, width, height, channels);
+                });
+
             videoSystem->RegisterVideoAddedCallback(this, [this](ECS::EntityID entity) {
                 OnMediaAdded(entity);
                 });
@@ -234,7 +248,9 @@ namespace GUI {
                 auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity);
                 state.mode = mode;
                 auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
-                ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE, eventData);
+                eventData["mode"] = mode;
+                ANI::Events::Ref().QueueEventWithData(
+                    ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE, eventData);
             }
         }
     }
@@ -244,6 +260,8 @@ namespace GUI {
     }
 
     void VideoView::Update(float deltaT) {
+        (void)deltaT;
+
         size_t currentCount = 0;
         for (auto entityID : m_entityManager.GetAllEntities()) {
             if (m_entityManager.HasComponent<ECS::VideoComponent>(entityID)) {
@@ -282,39 +300,6 @@ namespace GUI {
 
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
             m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-
-            if (videoComp.needsTextureUpdate) {
-                auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
-                if (textureSystem) {
-                    std::shared_lock lock(videoComp.dataMutex);
-                    if (!videoComp.frameDataRGBA.empty()) {
-                        if (!m_entityManager.HasComponent<ECS::TextureComponent>(selectedEntityID)) {
-                            m_entityManager.AddComponent<ECS::TextureComponent>(selectedEntityID);
-                            ANI_LOG_TRACE("Added TextureComponent to entity %u", selectedEntityID);
-                        }
-                        auto& texComp = m_entityManager.GetComponent<ECS::TextureComponent>(selectedEntityID);
-                        unsigned char* copyData = (unsigned char*)malloc(videoComp.frameDataRGBA.size());
-                        if (copyData) {
-                            memcpy(copyData, videoComp.frameDataRGBA.data(), videoComp.frameDataRGBA.size());
-                            textureSystem->QueueVideoTextureCreation(
-                                selectedEntityID,
-                                copyData,
-                                videoComp.width,
-                                videoComp.height,
-                                4,
-                                &texComp.textureID
-                            );
-                        }
-                        else {
-                            ANI_LOG_ERROR("malloc failed for texture copy (entity %u, %zu bytes)",
-                                selectedEntityID, videoComp.frameDataRGBA.size());
-                        }
-                        videoComp.needsTextureUpdate = false;
-                    }
-                }
-            }
-
             if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
                 auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
                 if (state.duration > 0.0) {
@@ -638,7 +623,14 @@ namespace GUI {
         ImGui::PushItemWidth(sliderWidth);
         ImGui::PushID("TimelineSlider");
         if (ImGui::SliderFloat("##Timeline", &m_playbackProgress, 0.0f, 1.0f, "")) {
-            SeekVideo(selectedEntityID, m_playbackProgress * state.duration);
+            // Don't seek on every frame of the drag. The seek fires on release.
+            m_pendingSeek = true;
+            m_pendingSeekEntity = selectedEntityID;
+            m_pendingSeekTime = static_cast<double>(m_playbackProgress) * state.duration;
+        }
+        if (ImGui::IsItemDeactivatedAfterEdit() && m_pendingSeek) {
+            m_pendingSeek = false;
+            SeekVideo(m_pendingSeekEntity, m_pendingSeekTime);
         }
         if (ImGui::IsItemHovered()) {
             float hoverPos = ImGui::GetMousePos().x - ImGui::GetItemRectMin().x;
@@ -851,13 +843,10 @@ namespace GUI {
             try {
                 const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
 
-                double currentTime = 0.0;
-                double duration = 0.0;
-                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
-                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
-                    currentTime = state.currentTime;
-                    duration = state.duration;
-                }
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+
+                double currentTime = state.currentTime;
+                double duration = state.duration;
 
                 ImGui::Text("File: %s | %dx%d | %.2f FPS | %d frames | Time: %s / %s | Frame: %d/%d | Entity: %u",
                     videoComp.fileName.c_str(),
@@ -866,8 +855,8 @@ namespace GUI {
                     videoComp.frameCount,
                     FormatTimecode(currentTime).c_str(),
                     FormatTimecode(duration).c_str(),
-                    videoComp.currentFrame,
-                    videoComp.frameCount,
+                    static_cast<int>(state.currentFrame),
+                    static_cast<int>(state.totalFrames),
                     selectedEntityID);
 
                 if (HasAudioTrack(selectedEntityID)) {
@@ -957,16 +946,15 @@ namespace GUI {
 
         try {
             bool playing = false;
-            bool loopState = false;
-            float speed = videoComp.playbackSpeed;
+            float speed = 1.0f;
 
-            if (m_mediaEngine) {
-                playing = (m_mediaEngine->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
+            if (m_avSystem) {
+                playing = (m_avSystem->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
             }
 
             if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
                 auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
-                loopState = state.looping;
+                speed = state.speed;
             }
 
             ImGui::Text("%s", Icon::ClockRotateLeft().c_str());
@@ -978,7 +966,6 @@ namespace GUI {
             ImGui::PushID(305);
             if (ImGui::DragFloat("##Speed", &speed, 0.05f, 0.1f, 4.0f, "%.1fx")) {
                 speed = std::clamp(speed, 0.1f, 4.0f);
-                videoComp.playbackSpeed = speed;
                 SetVideoSpeed(selectedEntityID, speed);
             }
             if (ImGui::IsItemHovered()) {
@@ -1151,14 +1138,7 @@ namespace GUI {
             ImGui::SameLine();
             ImGui::PushID(310);
             if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
-                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
-                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
-                    state.looping = loopState;
-                }
-                if (m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-                    auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-                    videoComp.looping = loopState;
-                }
+                if (m_avSystem) m_avSystem->SetLooping(selectedEntityID, loopState);
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("Loop current video");
@@ -1191,10 +1171,10 @@ namespace GUI {
         int currentFrame = 0;
         int totalFrames = 0;
         if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
-            m_entityManager.HasComponent<ECS::VideoComponent>(selectedEntityID)) {
-            const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
-            currentFrame = videoComp.currentFrame;
-            totalFrames = videoComp.frameCount;
+            m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+            auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+            currentFrame = static_cast<int>(state.currentFrame);
+            totalFrames = static_cast<int>(state.totalFrames);
         }
 
         float totalWidth = 0.0f;
@@ -1325,6 +1305,7 @@ namespace GUI {
             }
 
             auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+            eventData["time"] = time;
             ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK, eventData);
 
             ANI_LOG_TRACE("SeekVideo: entity %u to %.3f", entity, time);
@@ -1418,6 +1399,7 @@ namespace GUI {
         ANI_LOG_TRACE("SetVideoSpeed: entity %u speed=%.2f", entity, speed);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        eventData["speed"] = speed;
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED, eventData);
     }
 
@@ -1437,6 +1419,7 @@ namespace GUI {
         ANI_LOG_TRACE("SetVideoVolume: entity %u volume=%.2f", entity, volume);
 
         auto eventData = ANI::PlaybackEvents::MakeEntityEvent(entity);
+        eventData["volume"] = volume;
         ANI::Events::Ref().QueueEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME, eventData);
     }
 
@@ -1474,14 +1457,17 @@ namespace GUI {
         std::string totalStr = FormatTimecode(duration);
 
         m_waveformRenderer.Render(m_waveformData, m_playbackProgress, currentStr, totalStr,
-            [this](double progress) {
-                double duration = 0.0;
-                if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
-                    auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
-                    duration = state.duration;
-                }
-                SeekVideo(selectedEntityID, progress * duration);
+            [this, duration](double progress) {
+                // Only seek when the user finishes dragging the waveform.
+                m_pendingSeek = true;
+                m_pendingSeekEntity = selectedEntityID;
+                m_pendingSeekTime = progress * duration;
             });
+
+        if (m_pendingSeek && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            m_pendingSeek = false;
+            SeekVideo(m_pendingSeekEntity, m_pendingSeekTime);
+        }
     }
 
     void VideoView::UpdateWaveformData() {
@@ -1509,16 +1495,18 @@ namespace GUI {
     void VideoView::RenderAudioControls(ECS::EntityID entity) {
         if (!HasAudioTrack(entity)) return;
 
-        auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(entity);
+        float volume = 1.0f;
+        if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entity)) {
+            volume = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(entity).volume;
+        }
 
-        float vol = audioComp.volume;
-        if (vol <= 0.0f) {
+        if (volume <= 0.0f) {
             ImGui::Text("%s", Icon::VolumeOff().c_str());
         }
-        else if (vol < 0.33f) {
+        else if (volume < 0.33f) {
             ImGui::Text("%s", Icon::VolumeLow().c_str());
         }
-        else if (vol < 0.66f) {
+        else if (volume < 0.66f) {
             ImGui::Text("%s", Icon::VolumeMedium().c_str());
         }
         else {
@@ -1526,23 +1514,21 @@ namespace GUI {
         }
         ImGui::SameLine();
 
-        bool audioEnabled = (audioComp.volume > 0.0f);
+        bool audioEnabled = (volume > 0.0f);
         ImGui::PushID(400);
         if (ImGui::Checkbox("##AudioEnabled", &audioEnabled)) {
             float newVolume = audioEnabled ? 1.0f : 0.0f;
             SetVideoVolume(entity, newVolume);
-            audioComp.volume = newVolume;
         }
         ImGui::PopID();
 
         ImGui::SameLine();
         ImGui::PushItemWidth(70.0f);
-        float volumePercent = audioComp.volume * 100.0f;
+        float volumePercent = volume * 100.0f;
         ImGui::PushID(401);
         if (ImGui::SliderFloat("##AudioVolume", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
             float newVolume = volumePercent / 100.0f;
             SetVideoVolume(entity, newVolume);
-            audioComp.volume = newVolume;
         }
         ImGui::PopID();
         ImGui::PopItemWidth();
@@ -1560,7 +1546,7 @@ namespace GUI {
         }
         int newIndex = (index + 1) % static_cast<int>(mediaEntities.size());
         if (newIndex != index) {
-            if (m_mediaEngine) {
+            if (m_avSystem) {
                 StopVideo(selectedEntityID);
             }
             index = newIndex;
@@ -1577,7 +1563,7 @@ namespace GUI {
         }
         int newIndex = (index - 1 + static_cast<int>(mediaEntities.size())) % static_cast<int>(mediaEntities.size());
         if (newIndex != index) {
-            if (m_mediaEngine) {
+            if (m_avSystem) {
                 StopVideo(selectedEntityID);
             }
             index = newIndex;
@@ -1590,8 +1576,8 @@ namespace GUI {
     void VideoView::LoadMedia(const std::vector<std::string>& filePaths) {
         ANI_LOG_INFO("LoadMedia called with %zu file(s)", filePaths.size());
 
-        if (!m_mediaEngine) {
-            ANI_LOG_ERROR("MediaEngineSystem is null!");
+        if (!m_avSystem) {
+            ANI_LOG_ERROR("AVSystem is null!");
             return;
         }
 
@@ -1599,7 +1585,7 @@ namespace GUI {
             for (const auto& filePath : filePaths) {
                 if (filePath.empty()) continue;
 
-                ECS::EntityID entity = m_mediaEngine->LoadMedia(filePath, ECS::TrackType::Both, m_playbackMode);
+                ECS::EntityID entity = m_avSystem->LoadMedia(filePath, ECS::TrackType::Both, m_playbackMode);
                 if (entity == 0) {
                     ANI_LOG_WARN("Failed to load video: %s", filePath.c_str());
                     continue;
@@ -1716,104 +1702,13 @@ namespace GUI {
             return;
         }
 
-        auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
-        if (videoComp.filePath.empty() || !videoComp.fmtCtx) {
-            ANI_LOG_WARN("SaveVideoNoAudio: video not loaded or invalid (entity %u)", entity);
-            return;
-        }
-
-        std::string outputPath = filePath.empty() ? videoComp.filePath : filePath;
-
-        std::vector<Utils::VideoFrame> frames;
-        long long originalFrame = videoComp.currentFrame;
-
         auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
         if (!videoSystem) {
             ANI_LOG_WARN("SaveVideoNoAudio: VideoSystem unavailable");
             return;
         }
 
-        bool isNewFrame = false;
-        if (!videoSystem->DecodeFrameForSave(videoComp, 0, isNewFrame)) {
-            ANI_LOG_ERROR("SaveVideoNoAudio: failed to seek to beginning");
-            return;
-        }
-        videoComp.currentFrame = 0;
-
-        while (videoComp.currentFrame < videoComp.frameCount) {
-            Utils::VideoFrame frame;
-            frame.width = videoComp.width;
-            frame.height = videoComp.height;
-            frame.channels = 4;
-
-            std::shared_lock lock(videoComp.dataMutex);
-            unsigned char* data = (unsigned char*)malloc(videoComp.frameDataRGBA.size());
-            if (!data) {
-                ANI_LOG_WARN("SaveVideoNoAudio: malloc failed, aborting at frame %lld",
-                    videoComp.currentFrame);
-                break;
-            }
-            std::memcpy(data, videoComp.frameDataRGBA.data(), videoComp.frameDataRGBA.size());
-            lock.unlock();
-            frame.data = data;
-            frames.push_back(frame);
-
-            long long nextFrame = videoComp.currentFrame + 1;
-            if (nextFrame >= videoComp.frameCount) break;
-
-            if (!videoSystem->DecodeFrameForSave(videoComp, nextFrame, isNewFrame)) {
-                break;
-            }
-            if (isNewFrame) {
-                videoComp.currentFrame = nextFrame;
-            }
-            else {
-                break;
-            }
-        }
-
-        if (!frames.empty()) {
-            nlohmann::json metadata;
-            metadata["fps"] = videoComp.fps;
-            metadata["width"] = videoComp.width;
-            metadata["height"] = videoComp.height;
-            metadata["frameCount"] = frames.size();
-            metadata["originalFile"] = videoComp.filePath;
-            metadata["hasAudio"] = false;
-
-            bool result = Utils::VideoUtils::EncodeFramesToVideo(
-                frames,
-                outputPath,
-                static_cast<int>(videoComp.fps),
-                metadata,
-                nullptr
-            );
-
-            for (auto& frame : frames) {
-                if (frame.data) {
-                    free((void*)frame.data);
-                }
-            }
-
-            if (result) {
-                ANI_LOG_INFO("Saved video without audio to: %s", outputPath.c_str());
-                if (filePath.empty()) {
-                    videoComp.filePath = outputPath;
-                    videoComp.fileName = std::filesystem::path(outputPath).filename().string();
-                }
-            }
-            else {
-                ANI_LOG_ERROR("Failed to save video without audio: %s", outputPath.c_str());
-            }
-        }
-        else {
-            ANI_LOG_WARN("SaveVideoNoAudio: no frames collected");
-        }
-
-        videoSystem->DecodeFrameForSave(videoComp, originalFrame, isNewFrame);
-        if (isNewFrame) {
-            videoComp.currentFrame = originalFrame;
-        }
+        videoSystem->SaveVideoAsync(entity, filePath);
     }
 
     void VideoView::RemoveSelectedMedia() {
@@ -1839,11 +1734,11 @@ namespace GUI {
     }
 
     void VideoView::PauseAllVideos() {
-        if (!m_mediaEngine) return;
+        if (!m_avSystem) return;
         for (auto entityID : mediaEntities) {
             if (m_entityManager.IsEntityValid(entityID) &&
                 m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entityID)) {
-                if (m_mediaEngine->GetState(entityID) == ECS::PlaybackState::Playing) {
+                if (m_avSystem->GetState(entityID) == ECS::PlaybackState::Playing) {
                     PauseVideo(entityID);
                 }
             }
@@ -1854,13 +1749,6 @@ namespace GUI {
         ANI_LOG_TRACE("Media added: entity %u", entity);
         RefreshEntities();
         UpdateWaveformData();
-        if (entity == selectedEntityID) {
-            if (m_entityManager.IsEntityValid(entity) &&
-                m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
-                auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(entity);
-                videoComp.needsTextureUpdate = true;
-            }
-        }
     }
 
     void VideoView::OnMediaRemoved(ECS::EntityID entity) {

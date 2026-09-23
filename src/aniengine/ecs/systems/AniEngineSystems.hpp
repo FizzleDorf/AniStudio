@@ -3,4 +3,6 @@
 #include "ImageSystem.hpp"
 #include "NodegraphSystem.hpp"
 #include "VideoSystem.hpp"
-#include "VideoAudioSystem.hpp"
+#include "AudioSystem.hpp"
+#include "FilePathSystem.hpp"
+#include "ThreadPoolSystem.hpp"

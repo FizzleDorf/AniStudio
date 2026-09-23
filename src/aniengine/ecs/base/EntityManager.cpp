@@ -140,6 +140,10 @@ namespace ECS {
 		if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
 			return;
 		}
+		
+		for (auto& [type, system] : registeredSystems) {
+			if (system) system->OnEntityDestroyed(entity);
+		}
 
 		entitiesSignatures.erase(entity);
 

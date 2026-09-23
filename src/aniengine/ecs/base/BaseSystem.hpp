@@ -28,6 +28,8 @@ public:
     virtual void Update(const float deltaT) {}
     virtual void Destroy() {}
 
+    virtual void OnEntityDestroyed(EntityID entity) { (void)entity; }
+
     std::string GetSystemName() { return sysName; }
 
 protected:

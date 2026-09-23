@@ -6,7 +6,7 @@
 #include "DragDropUtils.hpp"
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
-#include "AudioPlaybackSystem.hpp"
+#include "AVSystem.hpp"
 #include "AudioSystem.hpp"
 #include "FilePathSystem.hpp"
 #include "PlaybackEvents.hpp"
@@ -35,9 +35,6 @@ namespace GUI {
         if (m_audioSystem) {
             m_audioSystem->UnregisterCallbacksForOwner(this);
         }
-        if (m_playbackSystem) {
-            m_playbackSystem->UnregisterCallbacksForOwner(this);
-        }
         ANI_LOG_DEBUG("[AudioView] Destroyed");
     }
 
@@ -49,16 +46,16 @@ namespace GUI {
             return;
         }
 
-        m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
-        if (!m_mediaEngine) {
-            m_entityManager.RegisterSystem<ECS::MediaEngineSystem>();
-            m_mediaEngine = m_entityManager.GetSystem<ECS::MediaEngineSystem>();
-            if (m_mediaEngine) {
-                m_mediaEngine->Start();
-                ANI_LOG_INFO("[AudioView] Registered and started MediaEngineSystem");
+        m_avSystem = m_entityManager.GetSystem<ECS::AVSystem>();
+        if (!m_avSystem) {
+            m_entityManager.RegisterSystem<ECS::AVSystem>();
+            m_avSystem = m_entityManager.GetSystem<ECS::AVSystem>();
+            if (m_avSystem) {
+                m_avSystem->Start();
+                ANI_LOG_INFO("[AudioView] Registered and started AVSystem");
             }
             else {
-                ANI_LOG_ERROR("[AudioView] Failed to register MediaEngineSystem");
+                ANI_LOG_ERROR("[AudioView] Failed to register AVSystem");
             }
         }
 
@@ -66,53 +63,53 @@ namespace GUI {
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_LOAD,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onLoad(data);
+                if (m_avSystem) m_avSystem->onLoad(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PLAY,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onPlay(data);
+                if (m_avSystem) m_avSystem->onPlay(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_PAUSE,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onPause(data);
+                if (m_avSystem) m_avSystem->onPause(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_STOP,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onStop(data);
+                if (m_avSystem) m_avSystem->onStop(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SEEK,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSeek(data);
+                if (m_avSystem) m_avSystem->onSeek(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_SPEED,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSetSpeed(data);
+                if (m_avSystem) m_avSystem->onSetSpeed(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_VOLUME,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSetVolume(data);
+                if (m_avSystem) m_avSystem->onSetVolume(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_REMOVE,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onRemove(data);
+                if (m_avSystem) m_avSystem->onRemove(data);
             });
 
         events.RegisterEventWithData(ANI::PlaybackEvents::EVENT_PLAYBACK_SET_MODE,
             [this](const std::any& data) {
-                if (m_mediaEngine) m_mediaEngine->onSetMode(data);
+                if (m_avSystem) m_avSystem->onSetMode(data);
             });
 
         ANI_LOG_DEBUG("[AudioView] Registered playback events");
 
-        if (m_mediaEngine) {
-            m_mediaEngine->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
+        if (m_avSystem) {
+            m_avSystem->RegisterTrackStateCallback([this](ECS::EntityID entity, ECS::PlaybackState state) {
                 if (entity != selectedEntityID) return;
                 if (state == ECS::PlaybackState::EndOfStream) {
                     if (m_autoplay) {
@@ -163,19 +160,6 @@ namespace GUI {
         }
         m_audioSystem = audioSystem;
 
-        auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-        if (!playbackSystem) {
-            m_entityManager.RegisterSystem<ECS::AudioPlaybackSystem>();
-            playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (!playbackSystem) {
-                ANI_LOG_ERROR("[AudioView] Failed to register AudioPlaybackSystem");
-            }
-            else {
-                ANI_LOG_DEBUG("[AudioView] Registered AudioPlaybackSystem");
-            }
-        }
-        m_playbackSystem = playbackSystem;
-
         if (audioSystem) {
             audioSystem->RegisterAudioAddedCallback(this, [this](ECS::EntityID entity) {
                 OnMediaAdded(entity);
@@ -199,13 +183,6 @@ namespace GUI {
                     if (entity == selectedEntityID) {
                         UpdateWaveformData();
                     }
-                });
-        }
-
-        if (playbackSystem) {
-            playbackSystem->RegisterPlaybackCallback(this,
-                [this](ECS::EntityID entity, const float* data, size_t size, int channels) {
-                    (void)entity; (void)data; (void)size; (void)channels;
                 });
         }
 
@@ -523,13 +500,13 @@ namespace GUI {
         ImGui::SameLine();
         ImGui::PushID(107);
         if (ImGui::Button((Icon::Music() + " Test Tone").c_str())) {
-            auto playbackSystem = m_entityManager.GetSystem<ECS::AudioPlaybackSystem>();
-            if (playbackSystem) {
+            auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
+            if (audioSystem) {
                 ANI_LOG_DEBUG("[AudioView] Playing test tone");
-                playbackSystem->PlayTestTone();
+                audioSystem->PlayTestTone();
             }
             else {
-                ANI_LOG_WARN("[AudioView] AudioPlaybackSystem unavailable, cannot play test tone");
+                ANI_LOG_WARN("[AudioView] AudioSystem unavailable, cannot play test tone");
             }
         }
         ImGui::PopID();
@@ -554,10 +531,12 @@ namespace GUI {
 
                 double currentTime = 0.0;
                 double duration = 0.0;
+                bool loopEnabled = false;
                 if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
                     auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
                     currentTime = state.currentTime;
                     duration = state.duration;
+                    loopEnabled = state.looping;
                 }
 
                 int minutes = static_cast<int>(currentTime) / 60;
@@ -573,8 +552,8 @@ namespace GUI {
                 ImGui::Text("| Sample Rate: %d Hz", audioComp.sampleRate);
 
                 bool isPlaying = false;
-                if (m_mediaEngine) {
-                    isPlaying = (m_mediaEngine->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
+                if (m_avSystem) {
+                    isPlaying = (m_avSystem->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
                 }
 
                 if (isPlaying) {
@@ -582,7 +561,7 @@ namespace GUI {
                     ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "| %s", Icon::Play().c_str());
                 }
 
-                if (audioComp.looping) {
+                if (loopEnabled) {
                     ImGui::SameLine();
                     ImGui::TextColored(ImVec4(0.2f, 0.8f, 1.0f, 1.0f), "| %s", Icon::Loop().c_str());
                 }
@@ -637,15 +616,8 @@ namespace GUI {
         ImGui::SameLine();
         ImGui::PushID(300);
         if (ImGui::Checkbox((Icon::Loop() + " Loop").c_str(), &loopState)) {
-            if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
-                m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
-                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
-                state.looping = loopState;
-            }
-            if (selectedEntityID != 0 && m_entityManager.IsEntityValid(selectedEntityID) &&
-                m_entityManager.HasComponent<ECS::AudioComponent>(selectedEntityID)) {
-                auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
-                audioComp.looping = loopState;
+            if (m_avSystem && selectedEntityID != 0) {
+                m_avSystem->SetLooping(selectedEntityID, loopState);
             }
             ANI_LOG_DEBUG("[AudioView] Loop %s", loopState ? "enabled" : "disabled");
         }
@@ -802,11 +774,9 @@ namespace GUI {
         }
 
         try {
-            auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
-
             bool isPlaying = false;
-            if (m_mediaEngine) {
-                isPlaying = (m_mediaEngine->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
+            if (m_avSystem) {
+                isPlaying = (m_avSystem->GetState(selectedEntityID) == ECS::PlaybackState::Playing);
             }
 
             ImGui::PushID(400);
@@ -835,12 +805,16 @@ namespace GUI {
             ImGui::Text("Vol:");
             ImGui::SameLine();
 
-            float volumePercent = audioComp.volume * 100.0f;
+            float volumePercent = 0.0f;
+            if (m_entityManager.HasComponent<ECS::PlaybackStateComponent>(selectedEntityID)) {
+                auto& state = m_entityManager.GetComponent<ECS::PlaybackStateComponent>(selectedEntityID);
+                volumePercent = state.volume * 100.0f;
+            }
+
             ImGui::PushItemWidth(100.0f);
             if (ImGui::SliderFloat("##VolumeSlider", &volumePercent, 0.0f, 100.0f, "%.0f%%", ImGuiSliderFlags_AlwaysClamp)) {
                 float newVolume = volumePercent / 100.0f;
                 SetAudioVolume(selectedEntityID, newVolume);
-                audioComp.volume = newVolume;
             }
             ImGui::PopItemWidth();
 
@@ -951,8 +925,8 @@ namespace GUI {
     void AudioView::LoadMedia(const std::vector<std::string>& filePaths) {
         ANI_LOG_INFO("[AudioView] LoadMedia called with %zu file(s)", filePaths.size());
 
-        if (!m_mediaEngine) {
-            ANI_LOG_ERROR("[AudioView] MediaEngineSystem is null!");
+        if (!m_avSystem) {
+            ANI_LOG_ERROR("[AudioView] AVSystem is null!");
             return;
         }
 
@@ -960,7 +934,7 @@ namespace GUI {
             for (const auto& filePath : filePaths) {
                 if (filePath.empty()) continue;
 
-                ECS::EntityID entity = m_mediaEngine->LoadMedia(
+                ECS::EntityID entity = m_avSystem->LoadMedia(
                     filePath, ECS::TrackType::Audio, m_playbackMode);
 
                 if (entity == 0) {
@@ -1092,11 +1066,11 @@ namespace GUI {
     }
 
     void AudioView::PauseAllAudio() {
-        if (!m_mediaEngine) return;
+        if (!m_avSystem) return;
         for (auto entityID : mediaEntities) {
             if (m_entityManager.IsEntityValid(entityID) &&
                 m_entityManager.HasComponent<ECS::PlaybackStateComponent>(entityID)) {
-                if (m_mediaEngine->GetState(entityID) == ECS::PlaybackState::Playing) {
+                if (m_avSystem->GetState(entityID) == ECS::PlaybackState::Playing) {
                     PauseAudio(entityID);
                 }
             }

@@ -955,19 +955,6 @@ namespace ANI {
             [this](EntityID entityID) {
                 ANI::Events::Ref().QueueEventWithData("ImageRemoved", entityID);
             });
-
-        if (videoSystem) {
-            auto textureSystem = entityMgr.GetSystem<TextureSystem>();
-            if (textureSystem) {
-                videoSystem->SetVideoTextureCallback(
-                    [textureSystem](ECS::EntityID entityID, unsigned char* data,
-                        int width, int height, int channels,
-                        GLuint* targetTexture) {
-                            textureSystem->QueueVideoTextureCreation(
-                                entityID, data, width, height, channels, targetTexture);
-                    });
-            }
-        }
     }
 
     void StudioCore::SetCoreEvents() {

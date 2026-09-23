@@ -1,10 +1,10 @@
 #pragma once
 
-#include "base/BaseComponent.hpp"
-#include "base/BaseSystem.hpp"
-#include "base/CompList.hpp"
-#include "base/EntityManager.hpp"
-#include "base/Types.hpp"
-#include "base/Entity.hpp"
-#include "systems/systems.h"
-#include "components/Components.h"
+#include "BaseComponent.hpp"
+#include "BaseSystem.hpp"
+#include "CompList.hpp"
+#include "EntityManager.hpp"
+#include "Types.hpp"
+#include "Entity.hpp"
+#include "AniEngineSystems.hpp"
+#include "AniEngineComponents.hpp"

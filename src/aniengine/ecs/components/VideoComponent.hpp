@@ -6,8 +6,6 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include <chrono>
-#include <filesystem>
 #include <atomic>
 #include <shared_mutex>
 #include <memory>
@@ -47,13 +45,13 @@ namespace ECS {
 
     struct SwsContextDeleter {
         void operator()(SwsContext* ptr) const {
-            if (ptr) sws_freeContext(ptr);
+            if (ptr) sws_free_context(&ptr);
         }
     };
 
+    // Static asset info + decoder resources only.
+    // All runtime playback state lives in PlaybackStateComponent.
     struct VideoComponent : public BaseComponent {
-        mutable std::shared_mutex dataMutex;
-
         std::unique_ptr<AVFormatContext, AVFormatContextDeleter> fmtCtx;
         std::unique_ptr<AVCodecContext, AVCodecContextDeleter> codecCtx;
         std::unique_ptr<AVFrame, AVFrameDeleter> frame;
@@ -61,21 +59,12 @@ namespace ECS {
         std::unique_ptr<SwsContext, SwsContextDeleter> swsCtx;
         int videoStreamIndex = -1;
 
-        std::string fileName = "AniStudio";
-        std::string filePath = "";
+        std::string fileName;
+        std::string filePath;
         int width = 0;
         int height = 0;
         double fps = 30.0;
         long long frameCount = 0;
-        long long currentFrame = 0;
-        float playbackSpeed = 1.0f;
-        bool looping = true;
-        bool isPaused = false;
-        float frameAccumulator = 0.0f;
-        double currentTime = 0.0;
-
-        std::vector<uint8_t> frameDataRGBA;
-        bool needsTextureUpdate = false;
 
         bool hasExifData = false;
         bool hasLSBData = false;
@@ -100,10 +89,6 @@ namespace ECS {
                     {"height", {{"type", "integer"}, {"title", "Height"}}},
                     {"fps", {{"type", "number"}, {"title", "FPS"}}},
                     {"frameCount", {{"type", "integer"}, {"title", "Frame Count"}}},
-                    {"currentFrame", {{"type", "integer"}, {"title", "Current Frame"}}},
-                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}}},
-                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
-                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
                     {"fileSize", {{"type", "integer"}, {"title", "File Size (bytes)"}}},
                     {"fileDate", {{"type", "string"}, {"title", "Date Modified"}}},
                     {"fileTime", {{"type", "string"}, {"title", "Time Modified"}}}
@@ -113,19 +98,12 @@ namespace ECS {
         }
 
         VideoComponent(const VideoComponent& other) : BaseComponent(other) {
-            std::shared_lock otherLock(other.dataMutex);
             fileName = other.fileName;
             filePath = other.filePath;
             width = other.width;
             height = other.height;
             fps = other.fps;
             frameCount = other.frameCount;
-            currentFrame = other.currentFrame;
-            playbackSpeed = other.playbackSpeed;
-            looping = other.looping;
-            isPaused = other.isPaused;
-            frameAccumulator = other.frameAccumulator;
-            currentTime = other.currentTime;
             fileSize = other.fileSize;
             fileDate = other.fileDate;
             fileTime = other.fileTime;
@@ -136,20 +114,12 @@ namespace ECS {
 
         VideoComponent& operator=(const VideoComponent& other) {
             if (this != &other) {
-                std::unique_lock lock(dataMutex);
-                std::shared_lock otherLock(other.dataMutex);
                 fileName = other.fileName;
                 filePath = other.filePath;
                 width = other.width;
                 height = other.height;
                 fps = other.fps;
                 frameCount = other.frameCount;
-                currentFrame = other.currentFrame;
-                playbackSpeed = other.playbackSpeed;
-                looping = other.looping;
-                isPaused = other.isPaused;
-                frameAccumulator = other.frameAccumulator;
-                currentTime = other.currentTime;
                 fileSize = other.fileSize;
                 fileDate = other.fileDate;
                 fileTime = other.fileTime;
@@ -162,15 +132,19 @@ namespace ECS {
 
         virtual ~VideoComponent() = default;
 
-        void UpdateFrameData(std::vector<uint8_t>&& data, int w, int h, long long frame, double time = -1.0) {
-            std::unique_lock lock(dataMutex);
-            frameDataRGBA = std::move(data);
-            width = w;
-            height = h;
-            currentFrame = frame;
-            if (time >= 0.0) currentTime = time;
-            else currentTime = static_cast<double>(frame) / (fps > 0.0 ? fps : 30.0);
-            needsTextureUpdate = true;
+        bool IsLoaded() const { return fmtCtx != nullptr && frameCount > 0; }
+
+        void Unload() {
+            fmtCtx.reset();
+            codecCtx.reset();
+            frame.reset();
+            pkt.reset();
+            swsCtx.reset();
+            videoStreamIndex = -1;
+            width = 0;
+            height = 0;
+            fps = 30.0;
+            frameCount = 0;
         }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
@@ -181,10 +155,6 @@ namespace ECS {
                 {"height", &height},
                 {"fps", &fps},
                 {"frameCount", &frameCount},
-                {"currentFrame", &currentFrame},
-                {"playbackSpeed", &playbackSpeed},
-                {"looping", &looping},
-                {"currentTime", &currentTime},
                 {"fileSize", &fileSize},
                 {"fileDate", &fileDate},
                 {"fileTime", &fileTime}
@@ -200,9 +170,6 @@ namespace ECS {
                 {"frameCount", frameCount},
                 {"fileName", fileName},
                 {"filePath", filePath},
-                {"playbackSpeed", playbackSpeed},
-                {"looping", looping},
-                {"currentTime", currentTime},
                 {"fileSize", fileSize},
                 {"fileDate", fileDate},
                 {"fileTime", fileTime},
@@ -225,9 +192,6 @@ namespace ECS {
             if (componentData.contains("frameCount")) frameCount = componentData["frameCount"];
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
-            if (componentData.contains("looping")) looping = componentData["looping"];
-            if (componentData.contains("currentTime")) currentTime = componentData["currentTime"];
             if (componentData.contains("fileSize")) fileSize = componentData["fileSize"];
             if (componentData.contains("fileDate")) fileDate = componentData["fileDate"];
             if (componentData.contains("fileTime")) fileTime = componentData["fileTime"];
@@ -268,59 +232,9 @@ namespace ECS {
         }
 
         InputVideoComponent(const InputVideoComponent& other) : VideoComponent(other) {}
-
         InputVideoComponent& operator=(const InputVideoComponent& other) {
-            if (this != &other) {
-                VideoComponent::operator=(other);
-            }
+            if (this != &other) VideoComponent::operator=(other);
             return *this;
-        }
-
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"fileName", &fileName},
-                {"filePath", &filePath},
-                {"width", &width},
-                {"height", &height},
-                {"fps", &fps},
-                {"frameCount", &frameCount},
-                {"currentFrame", &currentFrame},
-                {"playbackSpeed", &playbackSpeed},
-                {"looping", &looping}
-            };
-        }
-
-        nlohmann::json Serialize() const override {
-            nlohmann::json j;
-            j[GetCompName()] = {
-                {"fileName", fileName},
-                {"filePath", filePath},
-                {"width", width},
-                {"height", height},
-                {"fps", fps},
-                {"frameCount", frameCount},
-                {"currentFrame", currentFrame},
-                {"playbackSpeed", playbackSpeed},
-                {"looping", looping}
-            };
-            return j;
-        }
-
-        void Deserialize(const nlohmann::json& j) override {
-            const char* key = GetCompName();
-            nlohmann::json componentData;
-            if (j.contains(key)) componentData = j.at(key);
-            else componentData = j;
-
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("width")) width = componentData["width"];
-            if (componentData.contains("height")) height = componentData["height"];
-            if (componentData.contains("fps")) fps = componentData["fps"];
-            if (componentData.contains("frameCount")) frameCount = componentData["frameCount"];
-            if (componentData.contains("currentFrame")) currentFrame = componentData["currentFrame"];
-            if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
-            if (componentData.contains("looping")) looping = componentData["looping"];
         }
     };
 
@@ -377,24 +291,14 @@ namespace ECS {
                         {"title", "Video Frames"},
                         {"description", "Number of frames to generate. More frames = longer video but slower generation."},
                         {"ui:widget", "input_int"},
-                        {"ui:options", {
-                            {"step", 1},
-                            {"step_fast", 8},
-                            {"min", 1},
-                            {"max", 99999}
-                        }}
+                        {"ui:options", {{"step", 1}, {"step_fast", 8}, {"min", 1}, {"max", 99999}}}
                     }},
                     {"output_fps", {
                         {"type", "integer"},
                         {"title", "Output FPS"},
                         {"description", "Frame rate for the generated video. Standard values: 6, 12, 16, 24, 30."},
                         {"ui:widget", "input_int"},
-                        {"ui:options", {
-                            {"step", 1},
-                            {"step_fast", 6},
-                            {"min", 1},
-                            {"max", 120}
-                        }}
+                        {"ui:options", {{"step", 1}, {"step_fast", 6}, {"min", 1}, {"max", 120}}}
                     }}
                 }},
                 {"propertyOrder", {"filePath", "fileName", "fileExtension", "video_frames", "output_fps"}}

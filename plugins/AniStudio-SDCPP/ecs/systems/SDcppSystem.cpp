@@ -445,10 +445,10 @@ namespace ECS {
     }
 
     EntityID SDCPPSystem::LoadVideoWithAudio(const std::string& filePath) {
-        if (auto vaSys = mgr.GetSystem<VideoAudioSystem>()) {
-            return vaSys->LoadVideoWithAudio(filePath);
+        if (auto avSys = mgr.GetSystem<AVSystem>()) {
+            return avSys->LoadMedia(filePath, TrackType::Both, PlaybackMode::Cached);
         }
-        ANI_LOG_WARN("LoadVideoWithAudio: VideoAudioSystem unavailable for %s",
+        ANI_LOG_WARN("LoadVideoWithAudio: AVSystem unavailable for %s",
             filePath.c_str());
         return 0;
     }

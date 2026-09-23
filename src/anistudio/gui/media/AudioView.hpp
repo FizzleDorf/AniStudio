@@ -3,7 +3,7 @@
 #include "BaseMediaView.hpp"
 #include "AudioComponent.hpp"
 #include "AudioSystem.hpp"
-#include "MediaEngineSystem.hpp"
+#include "AVSystem.hpp"
 #include "PlaybackStateComponent.hpp"
 #include "PlaybackEvents.hpp"
 #include "WaveformUtils.hpp"
@@ -73,9 +73,8 @@ namespace GUI {
         bool m_autoplay = true;
 
         ECS::PlaybackMode m_playbackMode = ECS::PlaybackMode::Cached;
-        std::shared_ptr<ECS::MediaEngineSystem> m_mediaEngine;
+        std::shared_ptr<ECS::AVSystem> m_avSystem;
         std::shared_ptr<ECS::AudioSystem> m_audioSystem;
-        std::shared_ptr<ECS::AudioPlaybackSystem> m_playbackSystem;
     };
 
 }

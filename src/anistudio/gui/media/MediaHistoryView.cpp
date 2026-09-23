@@ -336,33 +336,23 @@ namespace GUI {
     void MediaHistoryView::RefreshEntities() {
         mediaEntities.clear();
 
-        if (imageSystem) {
-            for (auto id : imageSystem->GetAllImageEntities()) {
-                if (!m_entityManager.IsEntityValid(id)) continue;
+        for (auto id : m_entityManager.GetAllEntities()) {
+            if (!m_entityManager.IsEntityValid(id)) continue;
+
+            if (m_entityManager.HasComponent<ECS::ImageComponent>(id)) {
                 if (m_entityManager.HasComponent<ECS::PreviewImageComponent>(id)) continue;
-                if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
-                    mediaEntities.push_back(id);
-                }
+                mediaEntities.push_back(id);
+                continue;
             }
-        }
 
-        if (videoSystem) {
-            for (auto id : videoSystem->GetAllVideoEntities()) {
-                if (m_entityManager.IsEntityValid(id)) {
-                    if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
-                        mediaEntities.push_back(id);
-                    }
-                }
+            if (m_entityManager.HasComponent<ECS::VideoComponent>(id)) {
+                mediaEntities.push_back(id);
+                continue;
             }
-        }
 
-        if (audioSystem) {
-            for (auto id : audioSystem->GetAllAudioEntities()) {
-                if (m_entityManager.IsEntityValid(id)) {
-                    if (std::find(mediaEntities.begin(), mediaEntities.end(), id) == mediaEntities.end()) {
-                        mediaEntities.push_back(id);
-                    }
-                }
+            if (m_entityManager.HasComponent<ECS::AudioComponent>(id)) {
+                mediaEntities.push_back(id);
+                continue;
             }
         }
 
@@ -371,8 +361,6 @@ namespace GUI {
             ANI_LOG_TRACE("RefreshEntities: selection reset to %u", selectedEntityID);
         }
         needsSort = true;
-
-       //  ANI_LOG_TRACE("RefreshEntities: %zu media entities", mediaEntities.size());
     }
 
     void MediaHistoryView::OnMediaAdded(ECS::EntityID entity) {

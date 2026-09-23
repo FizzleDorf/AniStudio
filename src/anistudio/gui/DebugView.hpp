@@ -1,8 +1,9 @@
 #pragma once
 
 #include "GUI.h"
-#include "Components.h"
-#include <systems.h>
+#include "AniStudioComponents.hpp"
+#include "AniEngineComponents.hpp"
+#include <AniEngineSystems.hpp>
 
 using namespace ECS;
 

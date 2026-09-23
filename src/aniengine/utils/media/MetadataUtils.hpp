@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <ctime>
 #include <nlohmann/json.hpp>
 #include <png.h>
 
@@ -284,6 +285,10 @@ namespace Utils {
 
             return metadata;
         }
+
+        static bool HasExifMetadata(const std::string& filePath);
+        static bool HasLSBMetadata(const std::string& filePath);
+        static int  GetMetadataStatus(const std::string& filePath);
     };
 
-}
+} // namespace Utils

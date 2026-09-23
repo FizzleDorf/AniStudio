@@ -2,8 +2,8 @@
 
 #include "AniEngine.hpp"
 #include "EngineContext.hpp"
-#include "Components.h"
-#include "systems.h"
+#include "AniEngineComponents.hpp"
+#include "AniEngineSystems.hpp"
 #include "FilePathSystem.hpp"
 #include "ThreadPoolSystem.hpp"
 #include "Log.hpp"
@@ -46,7 +46,6 @@ namespace ANI {
         entityManager.RegisterComponent<InputVideoComponent>("InputVideo");
         entityManager.RegisterComponent<OutputVideoComponent>("OutputVideo");
         entityManager.RegisterComponent<AudioComponent>("Audio");
-        entityManager.RegisterComponent<VideoAudioComponent>("VideoAudioComponent");
 
         entityManager.RegisterComponent<ECS::TransformComponent>("Transform");
         entityManager.RegisterComponent<ECS::MeshComponent>("Mesh");
@@ -68,7 +67,6 @@ namespace ANI {
         entityManager.RegisterSystem<ImageSystem>();
         entityManager.RegisterSystem<AudioSystem>();
         entityManager.RegisterSystem<VideoSystem>();
-        entityManager.RegisterSystem<VideoAudioSystem>();
 
         ANI_LOG_INFO("Core systems registered");
     }

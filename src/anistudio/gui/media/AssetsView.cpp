@@ -411,19 +411,9 @@ namespace GUI {
                 }
 
                 if (videoSystem) {
-                    auto textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
-                    if (textureSystem) {
-                        videoSystem->SetVideoTextureCallback(
-                            [textureSystem](ECS::EntityID entityID, unsigned char* data,
-                                int width, int height, int channels, GLuint* targetTexture) {
-                                    textureSystem->QueueVideoTextureCreation(entityID, data, width, height, channels, targetTexture);
-                            }
-                        );
-                    }
-
                     ECS::EntityID entity = m_entityManager.AddNewEntity();
                     m_entityManager.AddComponent<ECS::VideoComponent>(entity);
-                    videoSystem->SetVideo(entity, filePath);
+                    videoSystem->LoadVideo(entity, filePath);
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
@@ -445,7 +435,7 @@ namespace GUI {
                 if (audioSystem) {
                     ECS::EntityID entity = m_entityManager.AddNewEntity();
                     m_entityManager.AddComponent<ECS::AudioComponent>(entity);
-                    audioSystem->SetAudio(entity, filePath);
+                    audioSystem->LoadAudio(entity, filePath);
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);

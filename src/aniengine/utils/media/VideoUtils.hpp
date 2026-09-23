@@ -21,9 +21,6 @@ namespace Utils {
         int sampleRate = 44100;
         double duration = 0.0;
 
-        // Build from a raw interleaved float buffer (e.g. sd_audio_t from sdcpp).
-        // Copies the data into pcmData so the caller can free its buffer immediately.
-        // `sampleCount` is frames (per-channel), matching sd_audio_t::sample_count.
         static AudioData FromInterleavedFloat(const float* data,
             uint64_t sampleCount,
             int channels,
@@ -40,22 +37,28 @@ namespace Utils {
         }
     };
 
+    // Only the operations that VideoSystem/AVSystem actually need:
+    // thumbnail extraction and full encode-to-file for saving.
     class VideoUtils {
     public:
-        static unsigned char* LoadVideoFrame(const std::string& filePath, double timeInSeconds,
+        static unsigned char* LoadVideoFrame(const std::string& filePath,
+            double timeInSeconds,
             int& width, int& height, int& channels,
             double* actualTime = nullptr);
 
-        static bool GetVideoInfo(const std::string& filePath, int& width, int& height,
+        static bool GetVideoInfo(const std::string& filePath,
+            int& width, int& height,
             double& duration, double& frameRate);
 
-        static GLuint GenerateTextureFromVideoFrame(unsigned char* data, int width, int height);
+        static GLuint GenerateTextureFromVideoFrame(unsigned char* data,
+            int width, int height);
 
         static void DeleteTexture(GLuint& textureID);
 
         static void FreeVideoFrameData(unsigned char* data);
 
-        static bool SaveVideoFrameAsImage(const std::string& videoPath, const std::string& imagePath,
+        static bool SaveVideoFrameAsImage(const std::string& videoPath,
+            const std::string& imagePath,
             double timeInSeconds);
 
         static bool EncodeFramesToVideo(const std::vector<VideoFrame>& frames,
@@ -63,10 +66,6 @@ namespace Utils {
             int fps = 24,
             const nlohmann::json& metadata = nlohmann::json(),
             const AudioData* audio = nullptr);
-
-        static bool HasExifMetadata(const std::string& filePath);
-        static bool HasLSBMetadata(const std::string& filePath);
-        static int GetMetadataStatus(const std::string& filePath);
     };
 
-}
+} // namespace Utils

@@ -125,6 +125,44 @@ find_package(ZLIB REQUIRED)
 find_package(PNG REQUIRED)
 find_package(ffmpeg CONFIG REQUIRED COMPONENTS avcodec avformat avutil swscale swresample avdevice)
 
+# PortAudio is pulled in transitively through AudioSystem.hpp, which the
+# plugin's include chain reaches via AVSystem.hpp. The plugin does not call
+# PortAudio directly, but the header must be findable to parse AudioSystem.hpp.
+find_package(portaudio CONFIG QUIET)
+
+if(NOT portaudio_FOUND)
+    find_path(PORTAUDIO_INCLUDE_DIR
+        NAMES portaudio.h
+        PATHS
+            "${ANISTUDIO_ROOT}/build/conan/include"
+            "${ANISTUDIO_ROOT}/external/portaudio/include"
+            "${CMAKE_BINARY_DIR}/_deps/portaudio-src/include"
+        NO_DEFAULT_PATH
+    )
+    find_library(PORTAUDIO_LIBRARY
+        NAMES portaudio portaudio_x64 portaudio_static
+        PATHS
+            "${ANISTUDIO_ROOT}/build/conan/lib"
+            "${ANISTUDIO_ROOT}/build/lib"
+            "${ANISTUDIO_ROOT}/external/portaudio/lib"
+        NO_DEFAULT_PATH
+    )
+
+    if(PORTAUDIO_INCLUDE_DIR)
+        add_library(portaudio INTERFACE)
+        target_include_directories(portaudio INTERFACE "${PORTAUDIO_INCLUDE_DIR}")
+        if(PORTAUDIO_LIBRARY)
+            target_link_libraries(portaudio INTERFACE "${PORTAUDIO_LIBRARY}")
+        endif()
+        message(STATUS "PortAudio found: includes=${PORTAUDIO_INCLUDE_DIR} lib=${PORTAUDIO_LIBRARY}")
+    else()
+        message(FATAL_ERROR
+            "portaudio.h not found. The plugin's include chain reaches "
+            "AudioSystem.hpp, which requires portaudio.h. Set "
+            "PORTAUDIO_INCLUDE_DIR or install PortAudio.")
+    endif()
+endif()
+
 find_package(pybind11 REQUIRED)
 find_package(exiv2 CONFIG REQUIRED)
 find_package(CURL QUIET)
@@ -163,7 +201,7 @@ else()
 endif()
 
 # ------------------------------------------------------------
-# Core library locations ? overridable via CMake cache for CI
+# Core library locations - overridable via CMake cache for CI
 # ------------------------------------------------------------
 set(MAIN_LIB_DIR "${ANISTUDIO_ROOT}/build/lib" CACHE PATH "Path to AniEngineCore libraries")
 set(MAIN_BIN_DIR "${ANISTUDIO_ROOT}/build/bin" CACHE PATH "Path to AniEngineCore binaries")
@@ -360,6 +398,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
     ffmpeg::swscale
     ffmpeg::swresample
     ffmpeg::avdevice
+    portaudio
 )
 
 if(SD_USE_SYSTEM_GGML)

@@ -4,7 +4,7 @@
 #include "VideoComponent.hpp"
 #include "VideoSystem.hpp"
 #include "PlaybackStateComponent.hpp"
-#include "MediaEngineSystem.hpp"
+#include "AVSystem.hpp"
 #include "PlaybackEvents.hpp"
 #include "WaveformUtils.hpp"
 #include "RepeatButtonUtils.hpp"
@@ -85,6 +85,12 @@ namespace GUI {
         void SaveSelectedMediaAsWithAudio();
         void SaveSelectedMediaAsNoAudio();
 
+        // Called on the main thread from VideoSystem once per displayed frame.
+        // Creates the TextureComponent on demand and hands the frame to
+        // TextureSystem for upload.
+        void OnVideoFrame(ECS::EntityID entity, const uint8_t* data,
+            int width, int height, int channels);
+
         bool m_showWaveform = true;
         bool m_autoplay = true;
         float m_playbackProgress = 0.0f;
@@ -112,9 +118,10 @@ namespace GUI {
         ECS::EntityID m_pendingSeekEntity = 0;
 
         ECS::PlaybackMode m_playbackMode = ECS::PlaybackMode::Cached;
-        std::shared_ptr<ECS::MediaEngineSystem> m_mediaEngine;
+        std::shared_ptr<ECS::AVSystem> m_avSystem;
         std::shared_ptr<ECS::AudioSystem> m_audioSystem;
         std::shared_ptr<ECS::VideoSystem> m_videoSystem;
+        std::shared_ptr<ECS::TextureSystem> m_textureSystem;
     };
 
 }

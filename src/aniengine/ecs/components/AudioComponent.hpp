@@ -5,24 +5,40 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include <atomic>
-#include <shared_mutex>
-#include <mutex>
+#include <memory>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/avutil.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/opt.h>
 #include <libswresample/swresample.h>
 }
 
 namespace ECS {
 
-    struct AudioComponent : BaseComponent {
-        mutable std::shared_mutex dataMutex;
+    struct AVFormatContextAudioDeleter {
+        void operator()(AVFormatContext* ptr) const {
+            if (ptr) avformat_close_input(&ptr);
+        }
+    };
 
+    struct AVCodecContextAudioDeleter {
+        void operator()(AVCodecContext* ptr) const {
+            if (ptr) avcodec_free_context(&ptr);
+        }
+    };
+
+    struct SwrContextDeleter {
+        void operator()(SwrContext* ptr) const {
+            if (ptr) swr_free(&ptr);
+        }
+    };
+
+    struct AudioComponent : BaseComponent {
         AudioComponent() : BaseComponent() {}
+        ~AudioComponent() { UnloadAudio(); }
 
         const char* GetCompName() const override { return "AudioComponent"; }
         const char* GetCompCategory() const override { return "Media"; }
@@ -37,14 +53,9 @@ namespace ECS {
                     {"duration", {{"type", "number"}, {"title", "Duration (seconds)"}}},
                     {"channels", {{"type", "integer"}, {"title", "Channels"}}},
                     {"sampleRate", {{"type", "integer"}, {"title", "Sample Rate (Hz)"}}},
-                    {"volume", {{"type", "number"}, {"title", "Volume"}, {"minimum", 0.0}, {"maximum", 1.0}}},
-                    {"playbackSpeed", {{"type", "number"}, {"title", "Playback Speed"}, {"minimum", 0.1}, {"maximum", 4.0}}},
-                    {"looping", {{"type", "boolean"}, {"title", "Looping"}}},
-                    {"currentTime", {{"type", "number"}, {"title", "Current Time (seconds)"}}},
                     {"hasExifData", {{"type", "boolean"}, {"title", "Has EXIF Metadata"}}},
                     {"hasLSBData", {{"type", "boolean"}, {"title", "Has LSB Data"}}},
-                    {"hasAniStudioMetadata", {{"type", "boolean"}, {"title", "Has AniStudio Metadata"}}},
-                    {"manualSeek", {{"type", "boolean"}, {"title", "Manual Seek Flag"}}}
+                    {"hasAniStudioMetadata", {{"type", "boolean"}, {"title", "Has AniStudio Metadata"}}}
                 }}
             };
             return j;
@@ -59,23 +70,16 @@ namespace ECS {
             , sampleRate(other.sampleRate)
             , totalSamples(other.totalSamples)
             , pcmData(other.pcmData)
-            , volume(other.volume)
-            , playbackSpeed(other.playbackSpeed)
-            , looping(other.looping)
-            , reachedEnd(other.reachedEnd)
-            , currentTime(other.currentTime)
+            , hasAudioStream(other.hasAudioStream)
             , hasExifData(other.hasExifData)
             , hasLSBData(other.hasLSBData)
             , hasAniStudioMetadata(other.hasAniStudioMetadata)
-            , decodeBuffer(other.decodeBuffer)
-            , decodeBufferPosition(other.decodeBufferPosition)
-            , manualSeek(other.manualSeek)
-            , isLoading(false)
         {
         }
 
         AudioComponent& operator=(const AudioComponent& other) {
             if (this != &other) {
+                UnloadDecoder();
                 filePath = other.filePath;
                 fileName = other.fileName;
                 duration = other.duration;
@@ -83,46 +87,33 @@ namespace ECS {
                 sampleRate = other.sampleRate;
                 totalSamples = other.totalSamples;
                 pcmData = other.pcmData;
-                volume = other.volume;
-                playbackSpeed = other.playbackSpeed;
-                looping = other.looping;
-                reachedEnd = other.reachedEnd;
-                currentTime = other.currentTime;
+                hasAudioStream = other.hasAudioStream;
                 hasExifData = other.hasExifData;
                 hasLSBData = other.hasLSBData;
                 hasAniStudioMetadata = other.hasAniStudioMetadata;
-                decodeBuffer = other.decodeBuffer;
-                decodeBufferPosition = other.decodeBufferPosition;
-                manualSeek = other.manualSeek;
-                isLoading = false;
             }
             return *this;
         }
 
-        ~AudioComponent() {
-            UnloadAudio();
-        }
-
         void UnloadAudio() {
-            std::unique_lock lock(dataMutex);
-            if (swrCtx) { swr_free(&swrCtx); swrCtx = nullptr; }
-            if (fmtCtx) { avformat_close_input(&fmtCtx); fmtCtx = nullptr; }
-            if (codecCtx) { avcodec_free_context(&codecCtx); codecCtx = nullptr; }
-            if (frame) { av_frame_free(&frame); frame = nullptr; }
-            if (pkt) { av_packet_free(&pkt); pkt = nullptr; }
             pcmData.clear();
             pcmData.shrink_to_fit();
-            isLoading = false;
+            duration = 0.0;
+            channels = 0;
+            sampleRate = 0;
+            totalSamples = 0;
+            UnloadDecoder();
         }
 
-        void UpdatePCMData(std::vector<float>&& data, int ch, int sr, double dur) {
-            std::unique_lock lock(dataMutex);
-            pcmData = std::move(data);
-            channels = ch;
-            sampleRate = sr;
-            duration = dur;
-            totalSamples = pcmData.size();
+        void UnloadDecoder() {
+            fmtCtx.reset();
+            codecCtx.reset();
+            swrCtx.reset();
+            audioStreamIndex = -1;
         }
+
+        bool IsLoaded() const { return !pcmData.empty(); }
+        bool HasDecoder() const { return fmtCtx != nullptr && codecCtx != nullptr; }
 
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {
@@ -131,14 +122,9 @@ namespace ECS {
                 {"duration", &duration},
                 {"channels", &channels},
                 {"sampleRate", &sampleRate},
-                {"volume", &volume},
-                {"playbackSpeed", &playbackSpeed},
-                {"looping", &looping},
-                {"currentTime", &currentTime},
                 {"hasExifData", &hasExifData},
                 {"hasLSBData", &hasLSBData},
-                {"hasAniStudioMetadata", &hasAniStudioMetadata},
-                {"manualSeek", &manualSeek}
+                {"hasAniStudioMetadata", &hasAniStudioMetadata}
             };
         }
 
@@ -150,14 +136,9 @@ namespace ECS {
                 {"duration", duration},
                 {"channels", channels},
                 {"sampleRate", sampleRate},
-                {"volume", volume},
-                {"playbackSpeed", playbackSpeed},
-                {"looping", looping},
-                {"currentTime", currentTime},
                 {"hasExifData", hasExifData},
                 {"hasLSBData", hasLSBData},
-                {"hasAniStudioMetadata", hasAniStudioMetadata},
-                {"manualSeek", manualSeek}
+                {"hasAniStudioMetadata", hasAniStudioMetadata}
             };
             return j;
         }
@@ -165,24 +146,17 @@ namespace ECS {
         void Deserialize(const nlohmann::json& j) override {
             const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(key))
-                componentData = j.at(key);
-            else
-                componentData = j;
+            if (j.contains(key)) componentData = j.at(key);
+            else componentData = j;
 
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("duration")) duration = componentData["duration"];
             if (componentData.contains("channels")) channels = componentData["channels"];
             if (componentData.contains("sampleRate")) sampleRate = componentData["sampleRate"];
-            if (componentData.contains("volume")) volume = componentData["volume"];
-            if (componentData.contains("playbackSpeed")) playbackSpeed = componentData["playbackSpeed"];
-            if (componentData.contains("looping")) looping = componentData["looping"];
-            if (componentData.contains("currentTime")) currentTime = componentData["currentTime"];
             if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
             if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
             if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
-            if (componentData.contains("manualSeek")) manualSeek = componentData["manualSeek"];
         }
 
         std::string filePath;
@@ -195,29 +169,16 @@ namespace ECS {
 
         std::vector<float> pcmData;
 
-        AVFormatContext* fmtCtx = nullptr;
-        AVCodecContext* codecCtx = nullptr;
-        SwrContext* swrCtx = nullptr;
-        AVFrame* frame = nullptr;
-        AVPacket* pkt = nullptr;
-        int audioStreamIndex = -1;
-
-        float volume = 1.0f;
-        float playbackSpeed = 1.0f;
-        bool looping = false;
-        bool reachedEnd = false;
-        double currentTime = 0.0;
+        bool hasAudioStream = false;
 
         bool hasExifData = false;
         bool hasLSBData = false;
         bool hasAniStudioMetadata = false;
 
-        std::vector<float> decodeBuffer;
-        size_t decodeBufferPosition = 0;
-
-        bool manualSeek = false;
-
-        std::atomic<bool> isLoading{ false };
+        std::unique_ptr<AVFormatContext, AVFormatContextAudioDeleter> fmtCtx;
+        std::unique_ptr<AVCodecContext, AVCodecContextAudioDeleter> codecCtx;
+        std::unique_ptr<SwrContext, SwrContextDeleter> swrCtx;
+        int audioStreamIndex = -1;
     };
 
     struct InputAudioComponent : public AudioComponent {
@@ -250,52 +211,10 @@ namespace ECS {
             return j;
         }
 
-        InputAudioComponent(const InputAudioComponent& other)
-            : AudioComponent(other) {
-        }
-
+        InputAudioComponent(const InputAudioComponent& other) : AudioComponent(other) {}
         InputAudioComponent& operator=(const InputAudioComponent& other) {
-            if (this != &other) {
-                AudioComponent::operator=(other);
-            }
+            if (this != &other) AudioComponent::operator=(other);
             return *this;
-        }
-
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"filePath", &filePath},
-                {"fileName", &fileName},
-                {"duration", &duration},
-                {"channels", &channels},
-                {"sampleRate", &sampleRate}
-            };
-        }
-
-        nlohmann::json Serialize() const override {
-            nlohmann::json j;
-            j[GetCompName()] = {
-                {"filePath", filePath},
-                {"fileName", fileName},
-                {"duration", duration},
-                {"channels", channels},
-                {"sampleRate", sampleRate}
-            };
-            return j;
-        }
-
-        void Deserialize(const nlohmann::json& j) override {
-            const char* key = GetCompName();
-            nlohmann::json componentData;
-            if (j.contains(key))
-                componentData = j.at(key);
-            else
-                componentData = j;
-
-            if (componentData.contains("filePath")) filePath = componentData["filePath"];
-            if (componentData.contains("fileName")) fileName = componentData["fileName"];
-            if (componentData.contains("duration")) duration = componentData["duration"];
-            if (componentData.contains("channels")) channels = componentData["channels"];
-            if (componentData.contains("sampleRate")) sampleRate = componentData["sampleRate"];
         }
     };
 
@@ -364,14 +283,6 @@ namespace ECS {
             return *this;
         }
 
-        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
-            return {
-                {"filePath", &filePath},
-                {"fileName", &fileName},
-                {"fileExtension", &fileExtension}
-            };
-        }
-
         nlohmann::json Serialize() const override {
             nlohmann::json j;
             j[GetCompName()] = {
@@ -385,10 +296,8 @@ namespace ECS {
         void Deserialize(const nlohmann::json& j) override {
             const char* key = GetCompName();
             nlohmann::json componentData;
-            if (j.contains(key))
-                componentData = j.at(key);
-            else
-                componentData = j;
+            if (j.contains(key)) componentData = j.at(key);
+            else componentData = j;
 
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
@@ -396,4 +305,4 @@ namespace ECS {
         }
     };
 
-}
+} // namespace ECS

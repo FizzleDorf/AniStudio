@@ -3,6 +3,7 @@
 #include "ECS.h"
 #include "BaseComponent.hpp"
 #include "ImageUtils.hpp"
+#include "VideoMetadataUtils.hpp"
 #include "FileFormats.hpp"
 #include <iostream>
 #include <imgui.h>
@@ -14,7 +15,43 @@ namespace GUI {
 
         static Type s_type = Type::None;
         static nlohmann::json s_data;
-        static ECS::EntityID s_copiedEntity = 0; // store the copied entity ID
+        static ECS::EntityID s_copiedEntity = 0;
+
+        // -----------------------------------------------------------------
+        // Format helpers (single source of truth = FileFormats::GetAllFormats)
+        // -----------------------------------------------------------------
+
+        static std::string LowerExt(const std::string& filePath) {
+            std::string ext = std::filesystem::path(filePath).extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+            return ext;
+        }
+
+        static const FileFormats::FormatInfo* LookupFormat(const std::string& filePath) {
+            std::string ext = LowerExt(filePath);
+            const auto& formats = FileFormats::GetAllFormats();
+            auto it = formats.find(ext);
+            return (it == formats.end()) ? nullptr : &it->second;
+        }
+
+        static bool IsImagePath(const std::string& filePath) {
+            const auto* info = LookupFormat(filePath);
+            return info && info->isImage && info->supportsMetadata;
+        }
+
+        static bool IsVideoPath(const std::string& filePath) {
+            const auto* info = LookupFormat(filePath);
+            return info && info->isVideo && info->supportsMetadata;
+        }
+
+        static bool IsAudioPath(const std::string& filePath) {
+            const auto* info = LookupFormat(filePath);
+            return info && info->isAudio && info->supportsMetadata;
+        }
+
+        // -----------------------------------------------------------------
+        // Property variant <-> JSON
+        // -----------------------------------------------------------------
 
         static nlohmann::json PropertyVariantToJson(const Engine::PropertyVariant& var) {
             if (auto* p = std::get_if<bool*>(&var)) return **p;
@@ -69,11 +106,13 @@ namespace GUI {
             return false;
         }
 
+        // -----------------------------------------------------------------
+        // Clipboard IO helpers
+        // -----------------------------------------------------------------
+
         static nlohmann::json GetWrappedClipboardData() {
             const char* clipboardText = ImGui::GetClipboardText();
-            if (!clipboardText) {
-                return nlohmann::json();
-            }
+            if (!clipboardText) return nlohmann::json();
             try {
                 return nlohmann::json::parse(std::string(clipboardText));
             }
@@ -87,6 +126,53 @@ namespace GUI {
             ImGui::SetClipboardText(clipboardString.c_str());
         }
 
+        // -----------------------------------------------------------------
+        // Metadata readers
+        // -----------------------------------------------------------------
+
+        static nlohmann::json LoadMetadataFromImage(const std::string& imagePath) {
+            return Utils::ImageUtils::ReadMetadataFromImage(imagePath);
+        }
+
+        static nlohmann::json LoadMetadataFromVideo(const std::string& videoPath) {
+            return Utils::VideoMetadataUtils::ReadMetadataFromVideo(videoPath);
+        }
+
+        static nlohmann::json LoadMetadataAuto(const std::string& filePath) {
+            if (IsImagePath(filePath)) return LoadMetadataFromImage(filePath);
+            if (IsVideoPath(filePath)) return LoadMetadataFromVideo(filePath);
+            if (IsAudioPath(filePath)) return LoadMetadataFromVideo(filePath);
+            return nlohmann::json();
+        }
+
+        // -----------------------------------------------------------------
+        // Component extraction
+        // -----------------------------------------------------------------
+
+        static bool FindComponentInMetadata(const nlohmann::json& metadata,
+            const std::string& compName,
+            nlohmann::json& outComponent) {
+            if (!metadata.is_object()) return false;
+
+            if (metadata.contains("components") && metadata["components"].is_array()) {
+                for (const auto& comp : metadata["components"]) {
+                    if (comp.contains(compName)) {
+                        outComponent = comp[compName];
+                        return true;
+                    }
+                }
+            }
+            else if (metadata.contains(compName)) {
+                outComponent = metadata[compName];
+                return true;
+            }
+            return false;
+        }
+
+        // -----------------------------------------------------------------
+        // Copy: entity / component / property from live entity
+        // -----------------------------------------------------------------
+
         void CopyEntity(ECS::EntityManager& mgr, ECS::EntityID entity) {
             if (!mgr.IsEntityValid(entity)) return;
             nlohmann::json entityData = mgr.SerializeEntity(entity);
@@ -97,7 +183,7 @@ namespace GUI {
             SetWrappedClipboardData(wrappedData);
             s_type = Type::Entity;
             s_data = entityData;
-            s_copiedEntity = entity; // store the entity ID
+            s_copiedEntity = entity;
         }
 
         void CopyComponent(ECS::EntityManager& mgr, ECS::EntityID entity, const std::string& compName) {
@@ -115,7 +201,7 @@ namespace GUI {
             s_type = Type::Component;
             s_data = compData;
             s_data["__componentName"] = compName;
-            s_copiedEntity = 0; // not an entity copy
+            s_copiedEntity = 0;
         }
 
         void CopyProperty(ECS::EntityManager& mgr, ECS::EntityID entity, const std::string& compName, const std::string& propName) {
@@ -137,11 +223,36 @@ namespace GUI {
             s_copiedEntity = 0;
         }
 
-        static nlohmann::json LoadMetadataFromImage(const std::string& imagePath) {
-            return Utils::ImageUtils::ReadMetadataFromImage(imagePath);
+        // -----------------------------------------------------------------
+        // Copy: metadata (auto, image, video)
+        // -----------------------------------------------------------------
+
+        void CopyMetadataAuto(ECS::EntityManager& mgr, const std::string& filePath) {
+            if (IsImagePath(filePath)) { CopyImageMetadata(mgr, filePath); return; }
+            if (IsVideoPath(filePath)) { CopyVideoMetadata(mgr, filePath); return; }
+            if (IsAudioPath(filePath)) { CopyVideoMetadata(mgr, filePath); return; }
+            std::cerr << "[Clipboard] Unsupported media file for metadata copy: "
+                << filePath << std::endl;
+        }
+
+        void CopyComponentFromMetadataAuto(ECS::EntityManager& mgr, const std::string& filePath, const std::string& compName) {
+            if (IsImagePath(filePath)) { CopyComponentFromImageMetadata(mgr, filePath, compName); return; }
+            if (IsVideoPath(filePath)) { CopyComponentFromVideoMetadata(mgr, filePath, compName); return; }
+            if (IsAudioPath(filePath)) { CopyComponentFromVideoMetadata(mgr, filePath, compName); return; }
+            std::cerr << "[Clipboard] Unsupported media file for component copy: "
+                << filePath << std::endl;
+        }
+
+        void CopyPropertyFromMetadataAuto(ECS::EntityManager& mgr, const std::string& filePath, const std::string& compName, const std::string& propName) {
+            if (IsImagePath(filePath)) { CopyPropertyFromImageMetadata(mgr, filePath, compName, propName); return; }
+            if (IsVideoPath(filePath)) { CopyPropertyFromVideoMetadata(mgr, filePath, compName, propName); return; }
+            if (IsAudioPath(filePath)) { CopyPropertyFromVideoMetadata(mgr, filePath, compName, propName); return; }
+            std::cerr << "[Clipboard] Unsupported media file for property copy: "
+                << filePath << std::endl;
         }
 
         void CopyImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath) {
+            (void)mgr;
             nlohmann::json metadata = LoadMetadataFromImage(imagePath);
             if (metadata.is_null() || !metadata.is_object()) {
                 std::cerr << "[Clipboard] Failed to read metadata from: " << imagePath << std::endl;
@@ -159,27 +270,14 @@ namespace GUI {
         }
 
         void CopyComponentFromImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath, const std::string& compName) {
+            (void)mgr;
             nlohmann::json metadata = LoadMetadataFromImage(imagePath);
             if (metadata.is_null() || !metadata.is_object()) {
                 std::cerr << "[Clipboard] Failed to read metadata from: " << imagePath << std::endl;
                 return;
             }
             nlohmann::json componentData;
-            bool found = false;
-            if (metadata.contains("components") && metadata["components"].is_array()) {
-                for (const auto& comp : metadata["components"]) {
-                    if (comp.contains(compName)) {
-                        componentData = comp[compName];
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            else if (metadata.contains(compName)) {
-                componentData = metadata[compName];
-                found = true;
-            }
-            if (!found) {
+            if (!FindComponentInMetadata(metadata, compName, componentData)) {
                 std::cerr << "[Clipboard] Component " << compName << " not found in metadata." << std::endl;
                 return;
             }
@@ -197,27 +295,14 @@ namespace GUI {
         }
 
         void CopyPropertyFromImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath, const std::string& compName, const std::string& propName) {
+            (void)mgr;
             nlohmann::json metadata = LoadMetadataFromImage(imagePath);
             if (metadata.is_null() || !metadata.is_object()) {
                 std::cerr << "[Clipboard] Failed to read metadata from: " << imagePath << std::endl;
                 return;
             }
             nlohmann::json componentData;
-            bool found = false;
-            if (metadata.contains("components") && metadata["components"].is_array()) {
-                for (const auto& comp : metadata["components"]) {
-                    if (comp.contains(compName)) {
-                        componentData = comp[compName];
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            else if (metadata.contains(compName)) {
-                componentData = metadata[compName];
-                found = true;
-            }
-            if (!found) {
+            if (!FindComponentInMetadata(metadata, compName, componentData)) {
                 std::cerr << "[Clipboard] Component " << compName << " not found in metadata." << std::endl;
                 return;
             }
@@ -242,6 +327,86 @@ namespace GUI {
             std::cout << "[Clipboard] Copied property " << propName << " from image metadata." << std::endl;
         }
 
+        void CopyVideoMetadata(ECS::EntityManager& mgr, const std::string& videoPath) {
+            (void)mgr;
+            nlohmann::json metadata = LoadMetadataFromVideo(videoPath);
+            if (metadata.is_null() || !metadata.is_object() || metadata.empty()) {
+                std::cerr << "[Clipboard] Failed to read metadata from: " << videoPath << std::endl;
+                return;
+            }
+            nlohmann::json wrappedData;
+            wrappedData["dataType"] = "entity";
+            wrappedData["data"] = metadata;
+            wrappedData["source"] = "metadata";
+            SetWrappedClipboardData(wrappedData);
+            s_type = Type::Entity;
+            s_data = metadata;
+            s_copiedEntity = 0;
+            std::cout << "[Clipboard] Copied video metadata from: " << videoPath << std::endl;
+        }
+
+        void CopyComponentFromVideoMetadata(ECS::EntityManager& mgr, const std::string& videoPath, const std::string& compName) {
+            (void)mgr;
+            nlohmann::json metadata = LoadMetadataFromVideo(videoPath);
+            if (metadata.is_null() || !metadata.is_object()) {
+                std::cerr << "[Clipboard] Failed to read metadata from: " << videoPath << std::endl;
+                return;
+            }
+            nlohmann::json componentData;
+            if (!FindComponentInMetadata(metadata, compName, componentData)) {
+                std::cerr << "[Clipboard] Component " << compName << " not found in metadata." << std::endl;
+                return;
+            }
+            nlohmann::json wrappedData;
+            wrappedData["dataType"] = "component";
+            wrappedData["componentName"] = compName;
+            wrappedData["componentData"] = componentData;
+            wrappedData["source"] = "metadata";
+            SetWrappedClipboardData(wrappedData);
+            s_type = Type::Component;
+            s_data = componentData;
+            s_data["__componentName"] = compName;
+            s_copiedEntity = 0;
+            std::cout << "[Clipboard] Copied component " << compName << " from video metadata." << std::endl;
+        }
+
+        void CopyPropertyFromVideoMetadata(ECS::EntityManager& mgr, const std::string& videoPath, const std::string& compName, const std::string& propName) {
+            (void)mgr;
+            nlohmann::json metadata = LoadMetadataFromVideo(videoPath);
+            if (metadata.is_null() || !metadata.is_object()) {
+                std::cerr << "[Clipboard] Failed to read metadata from: " << videoPath << std::endl;
+                return;
+            }
+            nlohmann::json componentData;
+            if (!FindComponentInMetadata(metadata, compName, componentData)) {
+                std::cerr << "[Clipboard] Component " << compName << " not found in metadata." << std::endl;
+                return;
+            }
+            if (!componentData.contains(propName)) {
+                std::cerr << "[Clipboard] Property " << propName << " not found in component " << compName << std::endl;
+                return;
+            }
+            nlohmann::json propData;
+            propData["value"] = componentData[propName];
+            nlohmann::json wrappedData;
+            wrappedData["dataType"] = "property";
+            wrappedData["componentName"] = compName;
+            wrappedData["propertyName"] = propName;
+            wrappedData["propertyData"] = propData;
+            wrappedData["source"] = "metadata";
+            SetWrappedClipboardData(wrappedData);
+            s_type = Type::Property;
+            s_data = propData;
+            s_data["__componentName"] = compName;
+            s_data["__propertyName"] = propName;
+            s_copiedEntity = 0;
+            std::cout << "[Clipboard] Copied property " << propName << " from video metadata." << std::endl;
+        }
+
+        // -----------------------------------------------------------------
+        // Query
+        // -----------------------------------------------------------------
+
         Type GetType() {
             return s_type;
         }
@@ -257,6 +422,10 @@ namespace GUI {
         ECS::EntityID GetCopiedEntity() {
             return s_copiedEntity;
         }
+
+        // -----------------------------------------------------------------
+        // Paste
+        // -----------------------------------------------------------------
 
         bool PasteEntity(ECS::EntityManager& mgr, ECS::EntityID target, std::function<void(ECS::EntityID, const std::string&)> addComponent) {
             if (s_type != Type::Entity || s_data.is_null()) return false;
@@ -320,23 +489,8 @@ namespace GUI {
         bool PasteComponentFromEntity(ECS::EntityManager& mgr, ECS::EntityID target, const std::string& compName, std::function<void(ECS::EntityID, const std::string&)> addComponent) {
             if (s_type != Type::Entity || s_data.is_null()) return false;
             if (!mgr.IsEntityValid(target)) return false;
-            nlohmann::json entityData = s_data;
             nlohmann::json componentData;
-            bool found = false;
-            if (entityData.contains("components") && entityData["components"].is_array()) {
-                for (const auto& comp : entityData["components"]) {
-                    if (comp.contains(compName)) {
-                        componentData = comp[compName];
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            else if (entityData.contains(compName)) {
-                componentData = entityData[compName];
-                found = true;
-            }
-            if (!found) return false;
+            if (!FindComponentInMetadata(s_data, compName, componentData)) return false;
             auto cid = mgr.GetComponentTypeIdByName(compName);
             if (cid == 0) return false;
             if (!mgr.HasComponentById(target, cid)) {
@@ -352,23 +506,8 @@ namespace GUI {
         bool PastePropertyFromEntity(ECS::EntityManager& mgr, ECS::EntityID target, const std::string& compName, const std::string& propName) {
             if (s_type != Type::Entity || s_data.is_null()) return false;
             if (!mgr.IsEntityValid(target)) return false;
-            nlohmann::json entityData = s_data;
             nlohmann::json componentData;
-            bool found = false;
-            if (entityData.contains("components") && entityData["components"].is_array()) {
-                for (const auto& comp : entityData["components"]) {
-                    if (comp.contains(compName)) {
-                        componentData = comp[compName];
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            else if (entityData.contains(compName)) {
-                componentData = entityData[compName];
-                found = true;
-            }
-            if (!found) return false;
+            if (!FindComponentInMetadata(s_data, compName, componentData)) return false;
             if (!componentData.contains(propName)) return false;
             auto cid = mgr.GetComponentTypeIdByName(compName);
             if (cid == 0 || !mgr.HasComponentById(target, cid)) return false;
@@ -381,7 +520,12 @@ namespace GUI {
             return true;
         }
 
+        // -----------------------------------------------------------------
+        // Introspection helpers
+        // -----------------------------------------------------------------
+
         std::vector<std::string> GetEntityComponentNames(ECS::EntityManager& mgr) {
+            (void)mgr;
             std::vector<std::string> result;
             if (s_type != Type::Entity || s_data.is_null()) return result;
             nlohmann::json entityData = s_data;
@@ -405,60 +549,38 @@ namespace GUI {
         }
 
         std::vector<std::string> GetComponentPropertyNames(ECS::EntityManager& mgr, const std::string& compName) {
+            (void)mgr;
             std::vector<std::string> result;
             if (s_type != Type::Entity || s_data.is_null()) return result;
-            nlohmann::json entityData = s_data;
             nlohmann::json componentData;
-            if (entityData.contains("components") && entityData["components"].is_array()) {
-                for (const auto& comp : entityData["components"]) {
-                    if (comp.contains(compName)) {
-                        componentData = comp[compName];
-                        break;
+            if (FindComponentInMetadata(s_data, compName, componentData)) {
+                if (componentData.is_object()) {
+                    for (auto it = componentData.begin(); it != componentData.end(); ++it) {
+                        result.push_back(it.key());
                     }
-                }
-            }
-            else if (entityData.contains(compName)) {
-                componentData = entityData[compName];
-            }
-            if (componentData.is_object()) {
-                for (auto it = componentData.begin(); it != componentData.end(); ++it) {
-                    result.push_back(it.key());
                 }
             }
             return result;
         }
 
         bool EntityClipboardHasComponent(ECS::EntityManager& mgr, const std::string& compName) {
+            (void)mgr;
             if (s_type != Type::Entity || s_data.is_null()) return false;
-            nlohmann::json entityData = s_data;
-            if (entityData.contains("components") && entityData["components"].is_array()) {
-                for (const auto& comp : entityData["components"]) {
-                    if (comp.contains(compName)) return true;
-                }
-            }
-            else if (entityData.contains(compName)) {
-                return true;
-            }
-            return false;
+            nlohmann::json componentData;
+            return FindComponentInMetadata(s_data, compName, componentData);
         }
 
         bool EntityClipboardHasProperty(ECS::EntityManager& mgr, const std::string& compName, const std::string& propName) {
+            (void)mgr;
             if (s_type != Type::Entity || s_data.is_null()) return false;
-            nlohmann::json entityData = s_data;
             nlohmann::json componentData;
-            if (entityData.contains("components") && entityData["components"].is_array()) {
-                for (const auto& comp : entityData["components"]) {
-                    if (comp.contains(compName)) {
-                        componentData = comp[compName];
-                        break;
-                    }
-                }
-            }
-            else if (entityData.contains(compName)) {
-                componentData = entityData[compName];
-            }
+            if (!FindComponentInMetadata(s_data, compName, componentData)) return false;
             return componentData.is_object() && componentData.contains(propName);
         }
+
+        // -----------------------------------------------------------------
+        // Component lifecycle
+        // -----------------------------------------------------------------
 
         void AddComponent(ECS::EntityManager& mgr, ECS::EntityID target, const std::string& compName, std::function<void(ECS::EntityID, const std::string&)> addComponent) {
             if (!addComponent) return;
@@ -482,6 +604,10 @@ namespace GUI {
             for (const auto& name : compNames) ResetComponent(mgr, target, name, addComponent);
         }
 
+        // -----------------------------------------------------------------
+        // Media paste from clipboard
+        // -----------------------------------------------------------------
+
         bool PasteMediaFromClipboard(std::vector<std::string>& outFilePaths) {
             const char* clipboardText = ImGui::GetClipboardText();
             if (!clipboardText) return false;
@@ -490,11 +616,13 @@ namespace GUI {
             path.erase(path.find_last_not_of(" \t\n\r") + 1);
             if (path.empty()) return false;
             if (!std::filesystem::exists(path)) return false;
-            std::string ext = std::filesystem::path(path).extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            std::string ext = LowerExt(path);
             const auto& formats = FileFormats::GetAllFormats();
             auto it = formats.find(ext);
-            if (it == formats.end() || (!it->second.isImage && !it->second.isVideo)) return false;
+            if (it == formats.end()) return false;
+            if (!it->second.isImage && !it->second.isVideo) return false;
+
             outFilePaths.push_back(path);
             return true;
         }

@@ -7,5 +7,4 @@
 #include "CameraComponent.hpp"
 #include "TransformComponent.hpp"
 #include "FilePathComponent.hpp"
-#include "VideoAudioComponent.hpp"
 #include "PlaybackStateComponent.hpp"

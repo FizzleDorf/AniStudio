@@ -13,8 +13,7 @@
 #include "BaseView.hpp"
 #include "StudioPluginManager.hpp"
 #include "PlaybackStateComponent.hpp"
-#include "VideoAudioSystem.hpp"
-#include "AVStreamingSystem.hpp"
+#include "AVSystem.hpp"
 
 #include <memory>
 
@@ -41,11 +40,7 @@ namespace ANI::Registration {
         entityMgr.RegisterSystem<ECS::TextureSystem>();
         entityMgr.RegisterSystem<ECS::SettingsSystem>();
         entityMgr.RegisterSystem<ECS::ProjectSystem>();
-        entityMgr.RegisterSystem<ECS::AudioPlaybackSystem>();
-        entityMgr.RegisterSystem<ECS::VideoPlaybackSystem>();
-        entityMgr.RegisterSystem<ECS::VideoAudioSystem>();
-        entityMgr.RegisterSystem<ECS::AVStreamingSystem>();
-        entityMgr.RegisterSystem<ECS::MediaEngineSystem>();
+        entityMgr.RegisterSystem<ECS::AVSystem>();
 
         // post-registration wiring
         if (auto projectSystem = entityMgr.GetSystem<ECS::ProjectSystem>()) {

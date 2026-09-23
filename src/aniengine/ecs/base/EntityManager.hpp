@@ -6,6 +6,7 @@
 #include <memory>
 #include <typeindex>
 #include <stdexcept>
+#include <set>
 #include "Types.hpp"
 #include "CompList.hpp"
 #include "BaseSystem.hpp"

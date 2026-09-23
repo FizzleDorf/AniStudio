@@ -13,9 +13,18 @@ namespace GUI {
 		void CopyEntity(ECS::EntityManager& mgr, ECS::EntityID entity);
 		void CopyComponent(ECS::EntityManager& mgr, ECS::EntityID entity, const std::string& compName);
 		void CopyProperty(ECS::EntityManager& mgr, ECS::EntityID entity, const std::string& compName, const std::string& propName);
+
+		void CopyMetadataAuto(ECS::EntityManager& mgr, const std::string& filePath);
+		void CopyComponentFromMetadataAuto(ECS::EntityManager& mgr, const std::string& filePath, const std::string& compName);
+		void CopyPropertyFromMetadataAuto(ECS::EntityManager& mgr, const std::string& filePath, const std::string& compName, const std::string& propName);
+
 		void CopyImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath);
 		void CopyComponentFromImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath, const std::string& compName);
 		void CopyPropertyFromImageMetadata(ECS::EntityManager& mgr, const std::string& imagePath, const std::string& compName, const std::string& propName);
+
+		void CopyVideoMetadata(ECS::EntityManager& mgr, const std::string& videoPath);
+		void CopyComponentFromVideoMetadata(ECS::EntityManager& mgr, const std::string& videoPath, const std::string& compName);
+		void CopyPropertyFromVideoMetadata(ECS::EntityManager& mgr, const std::string& videoPath, const std::string& compName, const std::string& propName);
 
 		Type GetType();
 		bool HasEntity();

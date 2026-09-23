@@ -7,6 +7,7 @@
 #include "VideoMetadataUtils.hpp"
 #include "ImageComponent.hpp"
 #include "VideoComponent.hpp"
+#include "VideoSystem.hpp"
 #include "PropertyTypes.hpp"
 #include <png.h>
 #include <filesystem>
@@ -18,7 +19,6 @@
 
 namespace Utils {
 
-    // Static cache for parsed metadata
     static std::unordered_map<std::string, nlohmann::json> s_parsedMetadataCache;
     static std::mutex s_cacheMutex;
 
@@ -158,6 +158,11 @@ namespace Utils {
                 if (ImGui::MenuItem("Copy Current Frame")) {
                     CopyVideoFrame(entityId);
                 }
+                nlohmann::json metadata = Utils::VideoMetadataUtils::ReadMetadataFromVideo(videoComp.filePath);
+                if (!metadata.empty()) {
+                    RenderMetadataComponentMenu(metadata);
+                    RenderMetadataValueMenu(metadata);
+                }
                 ImGui::Text("Video file: %s", videoComp.fileName.c_str());
                 ImGui::Separator();
             }
@@ -189,9 +194,16 @@ namespace Utils {
 
     void ContextMenuUtils::CopyVideoFrame(ECS::EntityID entityId) {
         if (!entityManager.HasComponent<ECS::VideoComponent>(entityId)) return;
-        const auto& videoComp = entityManager.GetComponent<ECS::VideoComponent>(entityId);
-        if (videoComp.frameDataRGBA.empty() || videoComp.width <= 0 || videoComp.height <= 0) return;
-        SetClipboardDIB(const_cast<unsigned char*>(videoComp.frameDataRGBA.data()), videoComp.width, videoComp.height, 4);
+
+        auto videoSystem = entityManager.GetSystem<ECS::VideoSystem>();
+        if (!videoSystem) return;
+
+        std::vector<uint8_t> frame;
+        int w = 0, h = 0;
+        if (!videoSystem->GetCurrentFrame(entityId, frame, w, h)) return;
+        if (frame.empty() || w <= 0 || h <= 0) return;
+
+        SetClipboardDIB(const_cast<unsigned char*>(frame.data()), w, h, 4);
     }
 
     void ContextMenuUtils::RenderImageContextMenu(ECS::EntityID entityId) {
@@ -246,7 +258,7 @@ namespace Utils {
         if (ImGui::BeginPopup(popupId.c_str())) {
             ImGui::Text("Video: %s", std::filesystem::path(videoPath).filename().string().c_str());
             ImGui::Separator();
-            nlohmann::json metadata = ParseImageMetadata(videoPath);
+            nlohmann::json metadata = Utils::VideoMetadataUtils::ReadMetadataFromVideo(videoPath);
             if (!metadata.empty()) {
                 RenderMetadataComponentMenu(metadata);
                 RenderMetadataValueMenu(metadata);
