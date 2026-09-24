@@ -2,6 +2,8 @@
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ci/separate-plugin-workflows]
 
 permissions:
   contents: write
@@ -14,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-        ref: main
+          ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -185,7 +187,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-        ref: main
+          ref: main
           fetch-depth: 0
 
       - name: Compute short hash
@@ -194,7 +196,6 @@ jobs:
         run: |
           HASH=$(git rev-parse --short HEAD)
           echo "hash=$HASH" >> "$GITHUB_OUTPUT"
-          echo "Release tag will be: ${HASH}-linux-core"
 
       - uses: actions/download-artifact@v4
         with:

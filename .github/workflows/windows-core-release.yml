@@ -2,6 +2,8 @@
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ci/separate-plugin-workflows]
 
 permissions:
   contents: write
@@ -14,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-        ref: main
+          ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -114,7 +116,6 @@ jobs:
           cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
 
-          find artifact-bundle -maxdepth 1 -type f | sort
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
 
       - name: Save Conan cache
@@ -141,8 +142,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-        ref: main
-          submodules: recursive
+          ref: main
           fetch-depth: 0
 
       - name: Compute short hash
@@ -164,29 +164,11 @@ jobs:
           cat > pkg/README.md <<'EOF'
           # AniStudio Conan Cache (Windows x64, MSVC)
 
-          Restores the Conan 2 package cache from CI. Run
-          `conan cache restore conan-cache.tar.gz` before `conan install` to
-          skip downloading and compiling dependencies.
-
-          Requirements: Conan 2.x, Visual Studio 2022 x64, matching MSVC toolset.
+          Restores the Conan 2 package cache from CI.
 
           Usage:
-            git clone https://github.com/<you>/AniStudio.git
-            cd AniStudio
-            tar -xzf <this-tarball>.tar.gz
             conan cache restore conan-cache.tar.gz
             conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
-            cmake -B build -S . -A x64 -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
-            cmake --build build --config Release --parallel
-
-          The cache was created with compiler.cppstd=17 and build_type=Release.
-          If your Conan profile produces different package IDs, the cache will
-          not help and Conan will rebuild from source.
-
-          This cache is specific to MSVC on Windows x64 and is not portable to
-          GCC, Clang, or MinGW.
-
-          Cleanup: conan cache clean "*" --build --source --temp
           EOF
           tar -czf AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C pkg .
 
@@ -203,7 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-        ref: main
+          ref: main
           fetch-depth: 0
 
       - name: Compute short hash
