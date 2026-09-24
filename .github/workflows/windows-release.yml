@@ -1,4 +1,4 @@
-name: Release Windows
+name: Release Core Windows
 
 on:
   push:
