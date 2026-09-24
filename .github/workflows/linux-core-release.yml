@@ -1,4 +1,4 @@
-name: Release Core Linux
+﻿name: Release Core Linux
 
 on:
   push:
