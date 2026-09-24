@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build-core-windows:
@@ -124,231 +125,13 @@ jobs:
         with:
           name: AniStudio-Windows-x64
           path: AniStudio-Windows-x64.tar.gz
-          retention-days: 90
+          retention-days: 30
 
       - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Conan-Cache-Windows-x64
           path: conan-cache.tar.gz
-          retention-days: 90
-
-  build-plugins-windows:
-    needs: build-core-windows
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { backend: CPU,    msvc_arch: "x64" }
-          - { backend: CUDA,   msvc_arch: "x64" }
-          - { backend: VULKAN, msvc_arch: "x64" }
-
-    runs-on: windows-2022
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Initialize nested submodules
-        shell: bash
-        run: |
-          git submodule sync --recursive
-          git submodule update --init --force --recursive
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Map backend to target suffix
-        id: suffix
-        shell: bash
-        run: |
-          case "${{ matrix.backend }}" in
-            CPU)     S="_CPU" ;;
-            CUDA)    S="_CUDA" ;;
-            VULKAN)  S="_VULKAN" ;;
-            *) echo "unknown backend"; exit 1 ;;
-          esac
-          echo "suffix=$S" >> "$GITHUB_OUTPUT"
-          echo "name=AniStudio-SDCPP$S" >> "$GITHUB_OUTPUT"
-
-      - name: Install CUDA
-        if: matrix.backend == 'CUDA'
-        uses: Jimver/cuda-toolkit@v0.2.22
-        with:
-          cuda: "12.8.1"
-          method: "network"
-          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "cufft", "cufft_dev", "cusparse", "cusparse_dev", "cusolver", "cusolver_dev", "nvrtc", "nvrtc_dev", "thrust", "visual_studio_integration"]'
-
-      - name: Install Vulkan SDK
-        if: matrix.backend == 'VULKAN'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $VULKAN_VERSION = "1.4.328.1"
-          curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/windows/vulkansdk-windows-X64-$VULKAN_VERSION.exe"
-          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
-          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$VULKAN_VERSION"
-          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$VULKAN_VERSION\bin"
-
-      - name: Setup MSVC env
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.msvc_arch }}
-
-      - name: ccache
-        uses: ggml-org/ccache-action@v1.2.16
-        with:
-          key: windows-${{ matrix.backend }}-x64
-          evict-old-files: 1d
-
-      - name: Setup Conan
-        uses: conan-io/setup-conan@v1
-        with:
-          cache_packages: 'true'
-
-      - name: Configure Conan Center remote
-        shell: bash
-        run: |
-          conan remote update conancenter --url="https://center2.conan.io" || \
-            conan remote add conancenter https://center2.conan.io --force
-
-      - name: Detect Conan profile
-        shell: bash
-        run: conan profile detect --force
-
-      - name: Conan install (plugin toolchain)
-        shell: bash
-        run: |
-          conan install . --build=missing \
-            -s compiler.cppstd=17 -s build_type=Release \
-            -c tools.system.package_manager:mode=install \
-            -c tools.system.package_manager:sudo=True
-
-      - name: Verify Conan toolchain
-        shell: bash
-        run: |
-          test -f build/conan/conan_toolchain.cmake || {
-            echo "::error::build/conan/conan_toolchain.cmake missing"
-            exit 1
-          }
-
-      - name: Download core artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: AniStudio-Windows-x64
-          path: core-build
-
-      - name: Extract core
-        shell: bash
-        run: tar -xzf core-build/*.tar.gz -C core-build
-
-      - name: Configure plugin (CUDA)
-        if: matrix.backend == 'CUDA'
-        shell: bash
-        run: |
-          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
-            -G "Visual Studio 17 2022" \
-            -A x64 \
-            -T "cuda=$CUDA_PATH" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_STANDARD=17 \
-            -DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler" \
-            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-build/lib \
-            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-build/bin \
-            -DSD_CUDA=ON \
-            -DSD_USE_SYSTEM_GGML=OFF
-
-      - name: Configure plugin (CPU/Vulkan)
-        if: matrix.backend != 'CUDA'
-        shell: bash
-        run: |
-          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
-            -A x64 \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_STANDARD=17 \
-            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-build/lib \
-            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-build/bin \
-            -DSD_${{ matrix.backend }}=ON \
-            -DSD_USE_SYSTEM_GGML=OFF
-
-      - name: Build plugin
-        run: cmake --build plugin-build --config Release --parallel
-
-      - name: Package plugin
-        shell: bash
-        run: |
-          PLUGIN_NAME="${{ steps.suffix.outputs.name }}"
-          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
-          if [ ! -d "$STAGE" ]; then
-            echo "Plugin staging dir not found: $STAGE"
-            ls -la "${{ github.workspace }}/build/plugins" || true
-            exit 1
-          fi
-          mkdir -p pkg/plugins
-          cp -r "$STAGE" pkg/plugins/
-          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Plugin-windows-x64-${{ matrix.backend }}
-          path: AniStudio-SDCPP_*.tar.gz
-          retention-days: 90
-
-  bundle-nvidia-windows:
-    needs: [build-core-windows, build-plugins-windows]
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: AniStudio-Windows-x64
-          path: core
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: plugins
-          pattern: Plugin-windows-x64-*
-
-      - name: Fail if plugins missing
-        shell: bash
-        run: |
-          count=$(find plugins -name "*.tar.gz" | wc -l)
-          echo "Found $count plugin tarball(s)"
-          find plugins -name "*.tar.gz" | sort
-          if [ "$count" -lt 3 ]; then
-            echo "::error::Expected 3 plugin tarballs, found $count"
-            exit 1
-          fi
-
-      - name: Assemble NVIDIA bundle
-        shell: bash
-        run: |
-          mkdir -p full
-          tar -xzf core/*.tar.gz -C full
-          mkdir -p full/plugins
-          for plugin_tar in plugins/*/*.tar.gz; do
-            [ -f "$plugin_tar" ] || continue
-            tar -xzf "$plugin_tar" -C full/plugins
-          done
-          tar -czf AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AniStudio-Nvidia-Bundle-windows-x64
-          path: AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
-          retention-days: 90
+          retention-days: 30
 
   build-conan-cache-windows:
     needs: [build-core-windows]
@@ -409,10 +192,10 @@ jobs:
         with:
           name: AniStudio-Contrib-Conan-Cache-Windows-x64
           path: AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
-          retention-days: 90
+          retention-days: 30
 
-  release-windows:
-    needs: [build-core-windows, build-plugins-windows, build-conan-cache-windows, bundle-nvidia-windows]
+  release-core-windows:
+    needs: [build-core-windows, build-conan-cache-windows]
     runs-on: ubuntu-latest
 
     steps:
@@ -434,10 +217,6 @@ jobs:
         run: |
           required=(
             "artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz"
-            "artifacts/Plugin-windows-x64-CPU/AniStudio-SDCPP_CPU-windows-x64.tar.gz"
-            "artifacts/Plugin-windows-x64-CUDA/AniStudio-SDCPP_CUDA-windows-x64.tar.gz"
-            "artifacts/Plugin-windows-x64-VULKAN/AniStudio-SDCPP_VULKAN-windows-x64.tar.gz"
-            "artifacts/AniStudio-Nvidia-Bundle-windows-x64/AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz"
             "artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz"
           )
           fail=0
@@ -453,15 +232,11 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          name: AniStudio ${{ steps.ver.outputs.hash }}
-          tag_name: ${{ steps.ver.outputs.hash }}
+          name: ${{ steps.ver.outputs.hash }}-windows-core
+          tag_name: ${{ steps.ver.outputs.hash }}-windows-core
           target_commitish: ${{ github.sha }}
           files: |
             artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz
-            artifacts/Plugin-windows-x64-CPU/AniStudio-SDCPP_CPU-windows-x64.tar.gz
-            artifacts/Plugin-windows-x64-CUDA/AniStudio-SDCPP_CUDA-windows-x64.tar.gz
-            artifacts/Plugin-windows-x64-VULKAN/AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
-            artifacts/AniStudio-Nvidia-Bundle-windows-x64/AniStudio-Nvidia-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
             artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
           generate_release_notes: true
         env:

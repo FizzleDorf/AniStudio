@@ -359,4 +359,49 @@ namespace ECS {
         }
     };
 
+    struct PreviewVideoComponent : public VideoComponent {
+        // Free-form label shown in debug tooltips: "sdcpp gen", "input ref", ...
+        std::string sourceName = "preview";
+
+        PreviewVideoComponent() {
+            fileName = "";
+            filePath = "";
+        }
+
+        const char* GetCompName() const override { return "PreviewVideo"; }
+        const char* GetCompCategory() const override { return "Video"; }
+
+        // No editable UI; the preview pane owns the controls.
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json j = nlohmann::json::object();
+            return j;
+        }
+
+        PreviewVideoComponent(const PreviewVideoComponent& other)
+            : VideoComponent(other)
+            , sourceName(other.sourceName) {
+        }
+
+        PreviewVideoComponent& operator=(const PreviewVideoComponent& other) {
+            if (this != &other) {
+                VideoComponent::operator=(other);
+                sourceName = other.sourceName;
+            }
+            return *this;
+        }
+
+        virtual ~PreviewVideoComponent() {}
+
+        // Preview entities are transient UI. Hide from any property grid.
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {};
+        }
+
+        // Never persisted; never restored.
+        nlohmann::json Serialize() const override {
+            return nlohmann::json::object();
+        }
+
+        void Deserialize(const nlohmann::json&) override {}
+    };
 } // namespace ECS
