@@ -1,8 +1,6 @@
-name: Release Windows Plugin HIP
+﻿name: Release Windows Plugin HIP
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:

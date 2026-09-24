@@ -1,8 +1,6 @@
-name: Release Windows Plugin SYCL
+﻿name: Release Windows Plugin SYCL
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:

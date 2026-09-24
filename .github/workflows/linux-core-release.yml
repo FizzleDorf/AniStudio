@@ -1,8 +1,6 @@
 ﻿name: Release Core Linux
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
 
 permissions:

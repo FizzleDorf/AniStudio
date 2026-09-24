@@ -1,8 +1,6 @@
-name: Release Linux Plugin SYCL
+﻿name: Release Linux Plugin SYCL
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:

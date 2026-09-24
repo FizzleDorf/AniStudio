@@ -1,8 +1,6 @@
-name: Release Windows Plugin CUDA
+﻿name: Release Windows Plugin CUDA
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:

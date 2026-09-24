@@ -1,8 +1,6 @@
 ﻿name: Release Core Windows
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
 
 permissions:

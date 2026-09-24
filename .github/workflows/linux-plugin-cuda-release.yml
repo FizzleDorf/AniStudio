@@ -1,8 +1,6 @@
-name: Release Linux Plugin CUDA
+﻿name: Release Linux Plugin CUDA
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:

@@ -1,8 +1,6 @@
-name: Release Windows Plugin Vulkan
+﻿name: Release Windows Plugin Vulkan
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:

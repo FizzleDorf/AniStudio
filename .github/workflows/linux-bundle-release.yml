@@ -1,8 +1,6 @@
-name: Release Linux Bundles
+﻿name: Release Linux Bundles
 
 on:
-  push:
-    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:
