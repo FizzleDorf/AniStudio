@@ -1,6 +1,8 @@
 name: Release Linux Plugin CUDA
 
 on:
+  push:
+    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
     inputs:
       core-run-id:
@@ -23,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          ref: main
           submodules: recursive
           fetch-depth: 0
 

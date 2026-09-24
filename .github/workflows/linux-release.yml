@@ -1,6 +1,8 @@
 name: Release Linux
 
 on:
+  push:
+    branches: [ci/separate-plugin-workflows]
   workflow_dispatch:
 
 permissions:
@@ -14,6 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+        ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -184,6 +187,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+        ref: main
           fetch-depth: 0
 
       - name: Compute short hash
