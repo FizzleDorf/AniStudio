@@ -1,0 +1,188 @@
+﻿name: Release Linux Plugin Vulkan
+
+on:
+  workflow_dispatch:
+    inputs:
+      core-run-id:
+        description: 'Optional: run ID of linux-release.yml to pull core from. Leave empty to auto-detect from this commit.'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Release Linux"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-plugin-vulkan-linux:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve core run ID
+        id: find-core
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const manual = '${{ github.event.inputs.core-run-id }}';
+            if (manual && manual.trim() !== '') {
+              core.setOutput('run-id', manual.trim());
+              core.info(`Using manually supplied run-id=${manual.trim()}`);
+              return;
+            }
+            if (context.eventName === 'workflow_run') {
+              const runId = context.payload.workflow_run.id;
+              core.setOutput('run-id', runId);
+              core.info(`Using triggering workflow_run id=${runId}`);
+              return;
+            }
+            const sha = context.sha;
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'linux-release.yml',
+              status: 'success',
+              per_page: 50
+            });
+            const match = runs.data.workflow_runs.find(r => r.head_sha === sha);
+            if (!match) {
+              core.setFailed(`No successful linux-release.yml run found for commit ${sha}. Pass core-run-id manually or run linux-release.yml first.`);
+              return;
+            }
+            core.setOutput('run-id', match.id);
+            core.info(`Matched linux-release.yml run id=${match.id} for ${sha}`);
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core-build
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-core.outputs.run-id }}
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          ls -la core-build
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/libAniEngineCore.so || test -f core-extracted/lib/AniEngineCore.so || {
+            echo "::error::AniEngineCore.so missing"
+            exit 1
+          }
+          test -f core-extracted/lib/libAniStudioCore.so || test -f core-extracted/lib/AniStudioCore.so || {
+            echo "::error::AniStudioCore.so missing"
+            exit 1
+          }
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libva-dev \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev \
+            libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev \
+            libgtk-3-dev \
+            ninja-build pkg-config build-essential
+
+      - name: Install Vulkan SDK
+        run: sudo apt-get update && sudo apt-get install -y libvulkan-dev vulkan-tools glslang-tools
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with:
+          key: ubuntu-VULKAN-x64
+          evict-old-files: 1d
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with:
+          cache_packages: 'true'
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install (plugin toolchain)
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Configure plugin
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-extracted/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-extracted/bin \
+            -DSD_VULKAN=ON \
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_VULKAN"
+          SHORT_HASH="${{ steps.ver.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          if [ ! -d "$STAGE" ]; then
+            echo "Plugin staging dir not found: $STAGE"
+            ls -la "${{ github.workspace }}/build/plugins" || true
+            exit 1
+          fi
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+          tar -tzf "${PLUGIN_NAME}-linux-x64.tar.gz" | head -40
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-linux-x64-VULKAN
+          path: AniStudio-SDCPP_VULKAN-linux-x64.tar.gz
+          retention-days: 30

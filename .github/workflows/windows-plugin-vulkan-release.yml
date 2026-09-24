@@ -1,0 +1,178 @@
+﻿name: Release Windows Plugin Vulkan
+
+on:
+  workflow_dispatch:
+    inputs:
+      core-run-id:
+        description: 'Optional: run ID of windows-release.yml to pull core from. Leave empty to auto-detect from this commit.'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Release Windows"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-plugin-vulkan-windows:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve core run ID
+        id: find-core
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const manual = '${{ github.event.inputs.core-run-id }}';
+            if (manual && manual.trim() !== '') {
+              core.setOutput('run-id', manual.trim());
+              core.info(`Using manually supplied run-id=${manual.trim()}`);
+              return;
+            }
+            if (context.eventName === 'workflow_run') {
+              const runId = context.payload.workflow_run.id;
+              core.setOutput('run-id', runId);
+              core.info(`Using triggering workflow_run id=${runId}`);
+              return;
+            }
+            const sha = context.sha;
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'windows-release.yml',
+              status: 'success',
+              per_page: 50
+            });
+            const match = runs.data.workflow_runs.find(r => r.head_sha === sha);
+            if (!match) {
+              core.setFailed(`No successful windows-release.yml run found for commit ${sha}. Pass core-run-id manually or run windows-release.yml first.`);
+              return;
+            }
+            core.setOutput('run-id', match.id);
+            core.info(`Matched windows-release.yml run id=${match.id} for ${sha}`);
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-core.outputs.run-id }}
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          ls -la core-build
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $VULKAN_VERSION = "1.4.328.1"
+          curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/windows/vulkansdk-windows-X64-$VULKAN_VERSION.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$VULKAN_VERSION\bin"
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with:
+          key: windows-VULKAN-x64
+          evict-old-files: 1d
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with:
+          cache_packages: 'true'
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install (plugin toolchain)
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Configure plugin (Vulkan)
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-extracted/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-extracted/bin \
+            -DSD_VULKAN=ON \
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_VULKAN"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          if [ ! -d "$STAGE" ]; then
+            echo "Plugin staging dir not found: $STAGE"
+            ls -la "${{ github.workspace }}/build/plugins" || true
+            exit 1
+          fi
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+          tar -tzf "${PLUGIN_NAME}-windows-x64.tar.gz" | head -40
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-VULKAN
+          path: AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
+          retention-days: 30

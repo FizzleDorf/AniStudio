@@ -1,0 +1,246 @@
+﻿name: Release Core Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-core-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+        ref: main
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with:
+          key: windows-core-x64
+          evict-old-files: 1d
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with:
+          cache_packages: 'true'
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -B build -S . \
+            -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+            -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package core
+        shell: bash
+        run: |
+          rm -rf artifact-bundle
+          mkdir -p artifact-bundle/lib
+
+          if [ -f build/Release/AniStudio.exe ]; then
+            cp build/Release/AniStudio.exe artifact-bundle/
+          elif [ -f build/AniStudio.exe ]; then
+            cp build/AniStudio.exe artifact-bundle/
+          fi
+
+          find build -name "*.lib" -exec cp -n {} artifact-bundle/lib/ \; 2>/dev/null || true
+
+          declare -A seen
+          while IFS= read -r dll; do
+            base="$(basename "$dll")"
+            if [ -z "${seen[$base]:-}" ]; then
+              cp "$dll" artifact-bundle/
+              seen[$base]=1
+            fi
+          done < <(find build -iname "*.dll" 2>/dev/null | sort)
+
+          cp -r build/data    artifact-bundle/ 2>/dev/null || true
+          cp -r build/shaders artifact-bundle/ 2>/dev/null || true
+          cp -r build/assets  artifact-bundle/ 2>/dev/null || true
+          cp -r build/docs    artifact-bundle/ 2>/dev/null || true
+          cp build/README.md              artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+
+          find artifact-bundle -maxdepth 1 -type f | sort
+          tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
+
+      - name: Save Conan cache
+        shell: bash
+        run: |
+          conan cache save "*" --file=conan-cache.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: AniStudio-Windows-x64.tar.gz
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache.tar.gz
+          retention-days: 30
+
+  build-conan-cache-windows:
+    needs: [build-core-windows]
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+        ref: main
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Assemble contributor Conan cache
+        shell: bash
+        run: |
+          rm -rf pkg
+          mkdir -p pkg
+          cp conan-cache/conan-cache.tar.gz pkg/conan-cache.tar.gz
+          cat > pkg/README.md <<'EOF'
+          # AniStudio Conan Cache (Windows x64, MSVC)
+
+          Restores the Conan 2 package cache from CI. Run
+          `conan cache restore conan-cache.tar.gz` before `conan install` to
+          skip downloading and compiling dependencies.
+
+          Requirements: Conan 2.x, Visual Studio 2022 x64, matching MSVC toolset.
+
+          Usage:
+            git clone https://github.com/<you>/AniStudio.git
+            cd AniStudio
+            tar -xzf <this-tarball>.tar.gz
+            conan cache restore conan-cache.tar.gz
+            conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
+            cmake -B build -S . -A x64 -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
+            cmake --build build --config Release --parallel
+
+          The cache was created with compiler.cppstd=17 and build_type=Release.
+          If your Conan profile produces different package IDs, the cache will
+          not help and Conan will rebuild from source.
+
+          This cache is specific to MSVC on Windows x64 and is not portable to
+          GCC, Clang, or MinGW.
+
+          Cleanup: conan cache clean "*" --build --source --temp
+          EOF
+          tar -czf AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Contrib-Conan-Cache-Windows-x64
+          path: AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          retention-days: 30
+
+  release-core-windows:
+    needs: [build-core-windows, build-conan-cache-windows]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+        ref: main
+          fetch-depth: 0
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Verify all required artifacts are present
+        shell: bash
+        run: |
+          required=(
+            "artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz"
+            "artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz"
+          )
+          fail=0
+          for f in "${required[@]}"; do
+            if [ -f "$f" ]; then
+              echo "OK      $f"
+            else
+              echo "MISSING $f"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.ver.outputs.hash }}-windows-core
+          tag_name: ${{ steps.ver.outputs.hash }}-windows-core
+          target_commitish: ${{ github.sha }}
+          files: |
+            artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz
+            artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

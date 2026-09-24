@@ -1,14 +1,23 @@
-name: Release Windows HIP
+﻿name: Release Windows Plugin HIP
 
 on:
   workflow_dispatch:
+    inputs:
+      core-run-id:
+        description: 'Optional: run ID of windows-release.yml to pull core from. Leave empty to auto-detect from this commit.'
+        required: false
+        type: string
+  workflow_run:
+    workflows: ["Release Windows"]
+    types: [completed]
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
   build-plugin-hip-windows:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: windows-2022
 
     env:
@@ -18,6 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -32,22 +42,38 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Find latest successful Release Windows run
+      - name: Resolve core run ID
         id: find-core
         uses: actions/github-script@v7
         with:
           script: |
+            const manual = '${{ github.event.inputs.core-run-id }}';
+            if (manual && manual.trim() !== '') {
+              core.setOutput('run-id', manual.trim());
+              core.info(`Using manually supplied run-id=${manual.trim()}`);
+              return;
+            }
+            if (context.eventName === 'workflow_run') {
+              const runId = context.payload.workflow_run.id;
+              core.setOutput('run-id', runId);
+              core.info(`Using triggering workflow_run id=${runId}`);
+              return;
+            }
+            const sha = context.sha;
             const runs = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'windows-release.yml',
               status: 'success',
-              per_page: 1
+              per_page: 50
             });
-            if (runs.data.workflow_runs.length === 0) {
-              core.setFailed('No successful Release Windows run found. Run windows-release.yml first.');
+            const match = runs.data.workflow_runs.find(r => r.head_sha === sha);
+            if (!match) {
+              core.setFailed(`No successful windows-release.yml run found for commit ${sha}. Pass core-run-id manually or run windows-release.yml first.`);
+              return;
             }
-            core.setOutput('run-id', runs.data.workflow_runs[0].id);
+            core.setOutput('run-id', match.id);
+            core.info(`Matched windows-release.yml run id=${match.id} for ${sha}`);
 
       - name: Download core artifact
         uses: actions/download-artifact@v4
@@ -89,7 +115,7 @@ jobs:
           python -m venv C:\TheRock\build\.venv
           & C:\TheRock\build\.venv\Scripts\Activate.ps1
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{env.ROCM_VERSION}}"
+          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{ env.ROCM_VERSION }}"
           rocm-sdk init
 
       - name: Setup ROCm Environment
@@ -195,125 +221,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Plugin-windows-x64-HIPBLAS
-          path: AniStudio-SDCPP_*.tar.gz
-          retention-days: 90
-
-  bundle-amd-windows:
-    needs: build-plugin-hip-windows
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Find latest successful Release Windows run
-        id: find-core
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'windows-release.yml',
-              status: 'success',
-              per_page: 1
-            });
-            if (runs.data.workflow_runs.length === 0) {
-              core.setFailed('No successful Release Windows run found.');
-            }
-            core.setOutput('run-id', runs.data.workflow_runs[0].id);
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: AniStudio-Windows-x64
-          path: core
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.find-core.outputs.run-id }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: Plugin-windows-x64-CPU
-          path: plugins/CPU
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.find-core.outputs.run-id }}
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: Plugin-windows-x64-HIPBLAS
-          path: plugins/HIP
-
-      - name: Verify plugin inputs
-        shell: bash
-        run: |
-          find core plugins -type f -name "*.tar.gz" | sort
-          test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
-          test -f plugins/CPU/*.tar.gz || { echo "::error::CPU plugin tarball missing"; exit 1; }
-          test -f plugins/HIP/*.tar.gz || { echo "::error::HIP plugin tarball missing"; exit 1; }
-
-      - name: Assemble AMD bundle
-        shell: bash
-        run: |
-          mkdir -p full
-          tar -xzf core/*.tar.gz -C full
-          mkdir -p full/plugins
-          for plugin_tar in plugins/*/*.tar.gz; do
-            [ -f "$plugin_tar" ] || continue
-            tar -xzf "$plugin_tar" -C full/plugins
-          done
-          find full/plugins -maxdepth 3 -type f | sort
-          tar -czf AniStudio-AMD-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C full .
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AniStudio-AMD-Bundle-windows-x64
-          path: AniStudio-AMD-Bundle-windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
-          retention-days: 90
-
-  release-hip-windows:
-    needs: [build-plugin-hip-windows, bundle-amd-windows]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: Plugin-windows-x64-HIPBLAS
-          path: hip-plugin
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: AniStudio-AMD-Bundle-windows-x64
-          path: amd-bundle
-
-      - name: Verify artifacts
-        shell: bash
-        run: |
-          find hip-plugin amd-bundle -type f -name "*.tar.gz" | sort
-          test -f hip-plugin/*.tar.gz || { echo "::error::HIP plugin tarball missing"; exit 1; }
-          test -f amd-bundle/*.tar.gz || { echo "::error::AMD bundle tarball missing"; exit 1; }
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: AniStudio ${{ steps.ver.outputs.hash }}
-          tag_name: ${{ steps.ver.outputs.hash }}
-          target_commitish: ${{ github.sha }}
-          files: |
-            hip-plugin/**/*.tar.gz
-            amd-bundle/**/*.tar.gz
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: AniStudio-SDCPP_HIP-windows-x64.tar.gz
+          retention-days: 30

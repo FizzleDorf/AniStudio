@@ -213,20 +213,51 @@ namespace ECS {
         ResumePlaybackIfRequested(e);
     }
 
-    EntityID AVSystem::LoadMedia(const std::string& filePath, TrackType type, PlaybackMode mode) {
+    // ------------------------------------------------------------------
+    // LoadMedia / AttachMedia
+    // ------------------------------------------------------------------
+
+    EntityID AVSystem::LoadMedia(const std::string& filePath,
+        TrackType type,
+        PlaybackMode mode) {
         if (filePath.empty()) return 0;
 
         EntityID e = mgr.AddNewEntity();
-        mgr.AddComponent<PlaybackStateComponent>(e);
+        if (!AttachMedia(e, filePath, type, mode)) {
+            mgr.DestroyEntity(e);
+            return 0;
+        }
+        return e;
+    }
+
+    bool AVSystem::AttachMedia(EntityID e,
+        const std::string& filePath,
+        TrackType type,
+        PlaybackMode mode) {
+        if (!mgr.IsEntityValid(e) || filePath.empty()) return false;
+
+        // If this entity already had a decoder attached, tear it down first
+        // so we do not leak Tracks or stale decode state when swapping media.
+        if (mgr.HasComponent<VideoComponent>(e)) {
+            if (m_video) m_video->RemoveVideo(e);
+            mgr.GetComponent<VideoComponent>(e).Unload();
+        }
+        if (mgr.HasComponent<AudioComponent>(e)) {
+            if (m_audio) m_audio->RemoveAudio(e);
+        }
+
+        // (Re)initialize the playback state on this entity.
+        if (!mgr.HasComponent<PlaybackStateComponent>(e))
+            mgr.AddComponent<PlaybackStateComponent>(e);
         auto& st = mgr.GetComponent<PlaybackStateComponent>(e);
         st.filePath = filePath;
         st.mode = mode;
         st.trackType = type;
         st.state = PlaybackState::Stopped;
+        st.isPaused = true;
         st.isLoaded = false;
-
-        bool wantVideo = (type == TrackType::Video || type == TrackType::Both);
-        bool wantAudio = (type == TrackType::Audio || type == TrackType::Both);
+        st.currentTime = 0.0;
+        st.currentFrame = 0;
 
         bool fileHasVideo = false;
         bool fileHasAudio = false;
@@ -247,8 +278,17 @@ namespace ECS {
             }
         }
 
+        bool wantVideo = (type == TrackType::Video || type == TrackType::Both);
+        bool wantAudio = (type == TrackType::Audio || type == TrackType::Both);
+
+        // IMPORTANT: only add a plain VideoComponent if one is not already
+        // present. For preview entities the caller has pre-added a
+        // PreviewVideoComponent (which is-a VideoComponent), so this guard
+        // ensures we reuse it instead of slapping on a second one and
+        // destroying the preview marker.
         if (wantVideo && fileHasVideo) {
-            mgr.AddComponent<VideoComponent>(e);
+            if (!mgr.HasComponent<VideoComponent>(e))
+                mgr.AddComponent<VideoComponent>(e);
             auto& vc = mgr.GetComponent<VideoComponent>(e);
             vc.filePath = filePath;
             size_t slash = filePath.find_last_of("/\\");
@@ -257,7 +297,8 @@ namespace ECS {
         }
 
         if (wantAudio && fileHasAudio) {
-            mgr.AddComponent<AudioComponent>(e);
+            if (!mgr.HasComponent<AudioComponent>(e))
+                mgr.AddComponent<AudioComponent>(e);
             auto& ac = mgr.GetComponent<AudioComponent>(e);
             ac.filePath = filePath;
             ac.hasAudioStream = true;
@@ -268,10 +309,14 @@ namespace ECS {
 
         st.duration = duration;
 
-        ANI_LOG_INFO("[AVSystem] LoadMedia entity=%u path=%s mode=%d hasVideo=%d hasAudio=%d",
+        ANI_LOG_INFO("[AVSystem] AttachMedia entity=%u path=%s mode=%d hasVideo=%d hasAudio=%d",
             e, filePath.c_str(), static_cast<int>(mode), fileHasVideo, fileHasAudio);
-        return e;
+        return true;
     }
+
+    // ------------------------------------------------------------------
+    // Everything below is unchanged from your version.
+    // ------------------------------------------------------------------
 
     void AVSystem::RemoveMedia(EntityID e) {
         if (!mgr.IsEntityValid(e)) return;
