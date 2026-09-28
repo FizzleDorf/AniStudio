@@ -16,18 +16,31 @@ namespace GUI {
     std::mutex DiffusionCallbackUtils::previewMutex;
     std::atomic<uint64_t> DiffusionCallbackUtils::previewSequence{ 0 };
 
+    PreviewBatch DiffusionCallbackUtils::previewBatch;
+    std::mutex DiffusionCallbackUtils::batchMutex;
+    std::atomic<uint64_t> DiffusionCallbackUtils::batchSequence{ 0 };
+
+    std::atomic<uint64_t> DiffusionCallbackUtils::activeGenerationToken{ 0 };
+
     ProgressData& DiffusionCallbackUtils::GetProgressData() {
         std::lock_guard<std::mutex> lock(mutex);
         return progressData;
     }
 
+    ProgressSnapshot DiffusionCallbackUtils::GetProgressSnapshot() {
+        ProgressSnapshot s;
+        s.currentStep = progressData.currentStep.load(std::memory_order_relaxed);
+        s.totalSteps = progressData.totalSteps.load(std::memory_order_relaxed);
+        s.currentTime = progressData.currentTime.load(std::memory_order_relaxed);
+        s.isProcessing = progressData.isProcessing.load(std::memory_order_relaxed);
+        return s;
+    }
+
     void DiffusionCallbackUtils::InitializeCallbacks() {
         std::cout << "[DEBUG] Setting SD callbacks..." << "\n";
-
         sd_set_log_callback(LogCallback, nullptr);
         sd_set_progress_callback(ProgressCallback, nullptr);
         sd_set_preview_callback(PreviewCallback, PREVIEW_NONE, 0, true, false, nullptr);
-
         std::cout << "[DEBUG] SD callbacks set successfully" << "\n";
     }
 
@@ -44,22 +57,16 @@ namespace GUI {
             std::cout << "[SD_LOG][" << levelStr << "] " << (text ? text : "")
                 << std::flush;
         }
-
-        // Always push errors to the bus, regardless of m_logLevel.
         if (level == SD_LOG_ERROR) {
             ANI::ErrorBus::Push("sd.cpp", text ? text : "(no message)");
         }
     }
 
-    void DiffusionCallbackUtils::ProgressCallback(int step, int steps, float time, void* data) {
-        {
-            std::lock_guard<std::mutex> lock(mutex);
-            progressData.currentStep = step;
-            progressData.totalSteps = steps;
-            progressData.currentTime = time;
-            progressData.isProcessing = (steps > 0);
-        }
-
+    void DiffusionCallbackUtils::ProgressCallback(int step, int steps, float time, void* /*data*/) {
+        progressData.currentStep.store(step, std::memory_order_relaxed);
+        progressData.totalSteps.store(steps, std::memory_order_relaxed);
+        progressData.currentTime.store(time, std::memory_order_relaxed);
+        progressData.isProcessing.store(steps > 0, std::memory_order_relaxed);
         std::cout << "[PROGRESS] Step " << step << "/" << steps
             << " | Time: " << time << "s" << "\n";
         std::cout.flush();
@@ -79,40 +86,63 @@ namespace GUI {
                 true, false, nullptr);
             return;
         }
-
         sd_set_preview_callback(PreviewCallback, mode, previewInterval,
             true, false, nullptr);
-
         std::cout << "[PREVIEW] mode=" << (int)mode
             << " interval=" << previewInterval << "\n";
     }
 
     void DiffusionCallbackUtils::PreviewCallback(int step, int frame_count,
         sd_image_t* frames, bool is_noisy,
-        void* data) {
+        void* /*data*/) {
+        const uint64_t token = activeGenerationToken.load(std::memory_order_acquire);
+        if (token == 0) return;
         if (!frames || frame_count <= 0) return;
-        sd_image_t& image = frames[0];
-        if (!image.data || image.width == 0 || image.height == 0) return;
-        if (image.channel != 1 && image.channel != 3 && image.channel != 4) return;
 
-        const size_t byteCount =
-            static_cast<size_t>(image.width) *
-            static_cast<size_t>(image.height) *
-            static_cast<size_t>(image.channel);
+        PreviewBatch batch;
+        batch.step = step;
+        batch.frames.reserve(static_cast<size_t>(frame_count));
 
-        auto copy = std::shared_ptr<unsigned char[]>(new unsigned char[byteCount]);
-        std::memcpy(copy.get(), image.data, byteCount);
+        for (int i = 0; i < frame_count; ++i) {
+            sd_image_t& image = frames[i];
+            if (!image.data || image.width == 0 || image.height == 0) continue;
+            if (image.channel != 1 && image.channel != 3 && image.channel != 4) continue;
 
-        PreviewFrame frame;
-        frame.width = static_cast<int>(image.width);
-        frame.height = static_cast<int>(image.height);
-        frame.channels = static_cast<int>(image.channel);
-        frame.data = std::move(copy);
-        frame.sequence = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
+            const size_t byteCount =
+                static_cast<size_t>(image.width) *
+                static_cast<size_t>(image.height) *
+                static_cast<size_t>(image.channel);
 
+            auto copy = std::shared_ptr<unsigned char[]>(
+                new (std::nothrow) unsigned char[byteCount]);
+            if (!copy) continue;
+            std::memcpy(copy.get(), image.data, byteCount);
+
+            PreviewFrame f;
+            f.width = static_cast<int>(image.width);
+            f.height = static_cast<int>(image.height);
+            f.channels = static_cast<int>(image.channel);
+            f.data = std::move(copy);
+            f.sequence = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
+            batch.frames.push_back(std::move(f));
+        }
+
+        if (batch.frames.empty()) return;
+
+        // Always publish the first frame as the "latest preview" so
+        // image tasks (frame_count == 1) and video tasks (whose first
+        // frame is representative) both work.
         {
             std::lock_guard<std::mutex> lock(previewMutex);
-            previewFrame = std::move(frame);
+            previewFrame = batch.frames[0];
+        }
+
+        // Publish the whole batch. For image tasks this is a single frame;
+        // for video tasks this is every frame of the current step.
+        batch.sequence = batchSequence.fetch_add(1, std::memory_order_relaxed) + 1;
+        {
+            std::lock_guard<std::mutex> lock(batchMutex);
+            previewBatch = std::move(batch);
         }
     }
 
@@ -131,14 +161,49 @@ namespace GUI {
         previewSequence.fetch_add(1, std::memory_order_relaxed);
     }
 
+    PreviewBatch DiffusionCallbackUtils::GetLatestBatch() {
+        std::lock_guard<std::mutex> lock(batchMutex);
+        return previewBatch;
+    }
+
+    uint64_t DiffusionCallbackUtils::GetBatchSequence() {
+        return batchSequence.load(std::memory_order_relaxed);
+    }
+
+    void DiffusionCallbackUtils::ClearBatch() {
+        std::lock_guard<std::mutex> lock(batchMutex);
+        previewBatch = PreviewBatch{};
+        batchSequence.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    uint64_t DiffusionCallbackUtils::BeginGeneration() {
+        uint64_t token = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (token == 0) token = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
+        activeGenerationToken.store(token, std::memory_order_release);
+        ClearPreview();
+        ClearBatch();
+        return token;
+    }
+
+    void DiffusionCallbackUtils::EndGeneration(uint64_t token) {
+        uint64_t expected = token;
+        activeGenerationToken.compare_exchange_strong(
+            expected, 0,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire);
+        // NOTE: do NOT clear here. The last batch must stay visible until
+        // the next generation begins (or the user presses Clear). Clearing
+        // here was what killed the final preview frame right when the
+        // generation finished.
+    }
+
     void DiffusionCallbackUtils::TestCallbacks() {
         std::cout << "[TEST] Testing callback system..." << "\n";
         LogCallback(SD_LOG_INFO, "Test log message\n", nullptr);
         ProgressCallback(5, 10, 2.5f, nullptr);
-
-        const auto& data = GetProgressData();
-        std::cout << "[TEST] Progress data: " << data.currentStep.load()
-            << "/" << data.totalSteps.load() << "\n";
+        const auto s = GetProgressSnapshot();
+        std::cout << "[TEST] Progress data: " << s.currentStep
+            << "/" << s.totalSteps << "\n";
     }
 
     void DiffusionCallbackUtils::SetLogLevel(int level) {

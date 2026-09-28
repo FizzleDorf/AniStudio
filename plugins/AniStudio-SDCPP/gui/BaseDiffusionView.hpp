@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <functional>
 
 namespace GUI {
 
@@ -37,70 +38,45 @@ namespace GUI {
         void LoadMetadataFromMedia(const std::string& filePath);
 
     protected:
-        static constexpr const char* ALL_COMPONENTS[] = {
-            "Checkpoint",
-            "DiffusionModel",
-            "ClipL",
-            "ClipG",
-            "T5XXL",
-            "ClipVision",
-            "LlmEncoder",
-            "LlmVision",
-            "Vae",
-            "VaeTiling",
-            "Taesd",
-            "AudioVae",
-            "Latent",
-            "Sampler",
-            "Guidance",
-            "Prompt",
-            "OutputImage",
-            "InputImage",
-            "InputVideo",
-            "OutputVideo",
-            "Lora",
-            "ControlNet",
-            "Embeddings",
-            "RefImages",
-            "ControlFrames",
-            "RefVideo",
-            "RefAudio",
-            "PhotoMaker",
-            "StackedIdEmbed",
-            "Conversion",
-            "Esrgan",
-            "HighNoiseDiffusionModel",
-            "HighNoiseSampler",
-            "VideoParams",
-            "EasyCache"
-        };
-
-        static constexpr size_t ALL_COMPONENTS_COUNT = sizeof(ALL_COMPONENTS) / sizeof(ALL_COMPONENTS[0]);
-
         ECS::EntityID activeEntity = 0;
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
         bool m_quickLoaded = false;
         bool m_hasRestoredState = false;
 
+        // Kept as a virtual for the subclasses; the render path uses the
+        // compile-time table instead of this list.
         virtual std::vector<std::string> GetDefaultComponents() const = 0;
         virtual std::vector<std::string> GetFilteredComponents() const { return {}; }
         virtual std::string GetDefaultModelComponent() const { return "Checkpoint"; }
 
         void ResetToDefaults();
-        void RemoveComponentFromActive(const std::string& name);
-        void RenderComponent(ECS::ComponentTypeID compId, const std::string& name);
         void RenderComponentsUI();
-
         void RenderMainContextMenu();
         void RenderMenuBar();
 
     private:
-        std::unordered_map<std::string, std::function<void(ECS::EntityID)>> m_componentAdders;
-        void RegisterAllComponentAdders();
+        struct ComponentEntry {
+            const char* name;
+            std::string category;
+            std::function<void(ECS::EntityID)> add;
+            std::function<bool(ECS::EntityID)> present;
+            std::function<void(ECS::EntityID)> remove;
+            std::function<void()> render;
+        };
 
-        std::vector<std::string> GetAllComponentNames() const;
+        std::vector<ComponentEntry> m_components;
+        void BuildComponentTable();
+
+        bool m_expandAllRequested = false;
+        bool m_collapseAllRequested = false;
+
         void AddComponentByName(ECS::EntityID entity, const std::string& name);
         bool IsComponentFiltered(const std::string& name) const;
+
+        void RenderAddRemoveComponentsMenu();
+
+        template<typename T>
+        void RenderComponentByType(const char* name);
     };
 
 } // namespace GUI

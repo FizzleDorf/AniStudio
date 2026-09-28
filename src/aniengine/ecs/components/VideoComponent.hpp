@@ -10,6 +10,7 @@
 #include <shared_mutex>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -49,9 +50,9 @@ namespace ECS {
         }
     };
 
-    // Static asset info + decoder resources only.
-    // All runtime playback state lives in PlaybackStateComponent.
     struct VideoComponent : public BaseComponent {
+        mutable std::mutex decoderMutex;
+
         std::unique_ptr<AVFormatContext, AVFormatContextDeleter> fmtCtx;
         std::unique_ptr<AVCodecContext, AVCodecContextDeleter> codecCtx;
         std::unique_ptr<AVFrame, AVFrameDeleter> frame;
@@ -72,6 +73,7 @@ namespace ECS {
         uint64_t fileSize = 0;
         std::string fileDate;
         std::string fileTime;
+        nlohmann::json metadata;
 
         VideoComponent() = default;
 
@@ -110,6 +112,7 @@ namespace ECS {
             hasExifData = other.hasExifData;
             hasLSBData = other.hasLSBData;
             hasAniStudioMetadata = other.hasAniStudioMetadata;
+            metadata = other.metadata;
         }
 
         VideoComponent& operator=(const VideoComponent& other) {
@@ -126,15 +129,20 @@ namespace ECS {
                 hasExifData = other.hasExifData;
                 hasLSBData = other.hasLSBData;
                 hasAniStudioMetadata = other.hasAniStudioMetadata;
+                metadata = other.metadata;
             }
             return *this;
         }
 
         virtual ~VideoComponent() = default;
 
-        bool IsLoaded() const { return fmtCtx != nullptr && frameCount > 0; }
+        bool IsLoaded() const {
+            std::lock_guard<std::mutex> lock(decoderMutex);
+            return fmtCtx != nullptr && frameCount > 0;
+        }
 
         void Unload() {
+            std::lock_guard<std::mutex> lock(decoderMutex);
             fmtCtx.reset();
             codecCtx.reset();
             frame.reset();
@@ -175,7 +183,8 @@ namespace ECS {
                 {"fileTime", fileTime},
                 {"hasExifData", hasExifData},
                 {"hasLSBData", hasLSBData},
-                {"hasAniStudioMetadata", hasAniStudioMetadata}
+                {"hasAniStudioMetadata", hasAniStudioMetadata},
+                {"metadata", metadata}
             };
             return j;
         }
@@ -198,6 +207,7 @@ namespace ECS {
             if (componentData.contains("hasExifData")) hasExifData = componentData["hasExifData"];
             if (componentData.contains("hasLSBData")) hasLSBData = componentData["hasLSBData"];
             if (componentData.contains("hasAniStudioMetadata")) hasAniStudioMetadata = componentData["hasAniStudioMetadata"];
+            if (componentData.contains("metadata")) metadata = componentData["metadata"];
         }
     };
 
@@ -360,7 +370,6 @@ namespace ECS {
     };
 
     struct PreviewVideoComponent : public VideoComponent {
-        // Free-form label shown in debug tooltips: "sdcpp gen", "input ref", ...
         std::string sourceName = "preview";
 
         PreviewVideoComponent() {
@@ -371,7 +380,6 @@ namespace ECS {
         const char* GetCompName() const override { return "PreviewVideo"; }
         const char* GetCompCategory() const override { return "Video"; }
 
-        // No editable UI; the preview pane owns the controls.
         const nlohmann::json& GetSchema() const override {
             static const nlohmann::json j = nlohmann::json::object();
             return j;
@@ -392,12 +400,10 @@ namespace ECS {
 
         virtual ~PreviewVideoComponent() {}
 
-        // Preview entities are transient UI. Hide from any property grid.
         std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
             return {};
         }
 
-        // Never persisted; never restored.
         nlohmann::json Serialize() const override {
             return nlohmann::json::object();
         }

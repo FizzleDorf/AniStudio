@@ -183,7 +183,7 @@ namespace GUI {
         assert(GetViewSignature(viewList)->size() < MAX_VIEW_COUNT && "View count limit reached!");
 
         if (HasView<T>(viewList)) {
-            ANI_LOG_WARN("[ViewManager] View with ID %u already exists! Skipping AddView.", (unsigned)viewList);
+            ANI_LOG_WARN("View with ID %u already exists! Skipping AddView.", (unsigned)viewList);
             return;
         }
 
@@ -204,7 +204,7 @@ namespace GUI {
         view.Init();
 
         auto viewListPtr = GetViewList<T>();
-        ANI_LOG_INFO("[ViewManager] Adding and initializing view - ID: %u, Type: %s",
+        ANI_LOG_INFO("Adding and initializing view - ID: %u, Type: %s",
             (unsigned)viewList, typeid(T).name());
         viewListPtr->Insert(std::forward<T>(view));
     }
@@ -282,7 +282,7 @@ namespace GUI {
             return std::make_unique<T>(mgr, vm);
             };
 
-        ANI_LOG_INFO("[ViewManager] Registered view type: %s with ID: %u",
+        ANI_LOG_INFO("Registered view type: %s with ID: %u",
             name.c_str(), (unsigned)typeId);
     }
 

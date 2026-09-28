@@ -331,7 +331,10 @@ namespace ECS {
 		void CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId);
 
 		EntityID entityCount;
-		std::queue<EntityID> availableEntities;
+		// Monotonic. Slot 0 is reserved as the null handle; destroyed
+		// IDs are never reused, so a stale EntityID can never alias a
+		// new entity.
+		EntityID nextFreshID = 1;
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID, std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;

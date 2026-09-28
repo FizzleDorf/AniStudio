@@ -32,7 +32,7 @@
 #include "SettingsSystem.hpp"
 #include "ProjectManagerView.hpp"
 #include "Log.hpp"
-#include "ErrorBus.hpp"          // <-- NEW
+#include "ErrorBus.hpp"
 #include "ImageSystem.hpp"
 #include "TextureSystem.hpp"
 

@@ -430,27 +430,21 @@ namespace GUI {
         bool PasteEntity(ECS::EntityManager& mgr, ECS::EntityID target, std::function<void(ECS::EntityID, const std::string&)> addComponent) {
             if (s_type != Type::Entity || s_data.is_null()) return false;
             if (!mgr.IsEntityValid(target)) return false;
-            auto comps = mgr.GetEntityComponents(target);
-            for (auto cid : comps) mgr.RemoveComponentById(target, cid);
-            ECS::EntityID temp = mgr.DeserializeEntity(s_data);
-            if (temp == 0) {
-                std::cerr << "[Clipboard] Failed to deserialize entity for paste" << std::endl;
-                return false;
-            }
-            auto tempComps = mgr.GetEntityComponents(temp);
-            for (auto cid : tempComps) {
-                auto* srcComp = mgr.GetComponentById(temp, cid);
-                if (!srcComp) continue;
-                std::string name = mgr.GetComponentNameById(cid);
-                if (addComponent) {
-                    addComponent(target, name);
-                    auto* dstComp = mgr.GetComponentById(target, cid);
-                    if (dstComp) {
-                        dstComp->Deserialize(srcComp->Serialize());
+            if (s_data.contains("components") && s_data["components"].is_array()) {
+                for (const auto& comp : s_data["components"]) {
+                    if (!comp.is_object()) continue;
+                    for (auto it = comp.begin(); it != comp.end(); ++it) {
+                        const std::string& name = it.key();
+                        auto cid = mgr.GetComponentTypeIdByName(name);
+                        if (cid == ECS::MAX_COMPONENT_COUNT) continue;
+                        if (!mgr.HasComponentById(target, cid)) {
+                            if (addComponent) addComponent(target, name);
+                        }
                     }
                 }
             }
-            mgr.DestroyEntity(temp);
+
+            mgr.DeserializeEntity(s_data, target);
             return true;
         }
 

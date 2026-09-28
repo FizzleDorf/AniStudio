@@ -2,7 +2,7 @@
 #include "SDCPPSystem.hpp"
 #include "rng.hpp"
 #include "Log.hpp"
-
+#include "DiffusionCallbackUtils.hpp"
 #include <stb_image.h>
 #include <stb_image_write.h>
 #include "VideoUtils.hpp"
@@ -42,6 +42,19 @@ namespace ECS {
         }
         StopCurrentTask();
         if (workerThread.joinable()) workerThread.join();
+
+        // Wait for any orphaned futures to resolve before freeing the pool.
+        {
+            std::lock_guard<std::mutex> olock(m_orphanMutex);
+            for (auto& f : m_orphanedFutures) {
+                if (f.valid()) {
+                    try { f.wait(); }
+                    catch (...) {}
+                }
+            }
+            m_orphanedFutures.clear();
+        }
+
         if (m_threadPool) {
             m_threadPool->terminateAll();
             m_threadPool.reset();
@@ -80,6 +93,44 @@ namespace ECS {
         ANI_LOG_DEBUG("Destroying SDCPPSystem");
         Shutdown();
         BaseSystem::Destroy();
+    }
+
+    // ---------------------------------------------------------------------
+    // Callback registration
+    // ---------------------------------------------------------------------
+    void SDCPPSystem::RegisterTaskCompletedCallback(
+        void* owner, TaskCompletedCallback cb) {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        m_taskCompletedCallbacks.emplace_back(owner, std::move(cb));
+    }
+
+    void SDCPPSystem::UnregisterCallbacksForOwner(void* owner) {
+        std::lock_guard<std::mutex> lock(queueMutex);
+        m_taskCompletedCallbacks.erase(
+            std::remove_if(m_taskCompletedCallbacks.begin(),
+                m_taskCompletedCallbacks.end(),
+                [owner](const auto& p) { return p.first == owner; }),
+            m_taskCompletedCallbacks.end());
+    }
+
+    void SDCPPSystem::NotifyTaskCompleted(TaskType taskType, EntityID entityID,
+        const std::string& fullPath) {
+        // Copy the callback list under the lock, then invoke outside it so a
+        // subscriber can safely call back into SDCPPSystem if it wants to.
+        std::vector<TaskCompletedCallback> cbs;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            cbs.reserve(m_taskCompletedCallbacks.size());
+            for (auto& [owner, cb] : m_taskCompletedCallbacks) {
+                (void)owner;
+                cbs.push_back(cb);
+            }
+        }
+        for (auto& cb : cbs) {
+            if (!cb) continue;
+            try { cb(taskType, entityID, fullPath); }
+            catch (...) {}
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -201,6 +252,9 @@ namespace ECS {
 
     void SDCPPSystem::Update(float deltaT) {
         if (shuttingDown) return;
+
+        DrainOrphanedFutures();
+
         if (clearRequested) {
             HandleClearRequest();
             clearRequested = false;
@@ -276,7 +330,17 @@ namespace ECS {
     void SDCPPSystem::ClearAllTasks() {
         std::lock_guard<std::mutex> lock(queueMutex);
         size_t count = taskQueue.size();
-        for (auto& t : taskQueue) if (t.processing) t.Cancel();
+
+        for (auto& t : taskQueue) {
+            if (t.processing) {
+                t.Cancel();
+                if (t.result.valid()) {
+                    std::lock_guard<std::mutex> olock(m_orphanMutex);
+                    m_orphanedFutures.push_back(std::move(t.result));
+                }
+            }
+        }
+
         taskQueue.clear();
         hasActiveTask = false;
         clearRequested = false;
@@ -467,9 +531,17 @@ namespace ECS {
         sd_ctx_t* context)
     {
         if (context) sd_cancel_generation(context, SD_CANCEL_RESET);
+
+        // Preview frames belong to this generation only.
+        const uint64_t token = GUI::DiffusionCallbackUtils::BeginGeneration();
+
         sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
+
+        // Stop accepting preview frames BEFORE freeing / reading the result images.
+        GUI::DiffusionCallbackUtils::EndGeneration(token);
+
         if (ok && count > 0 && images && images[0].data) {
             Utils::ImageUtils::SaveImage(fullPath, images[0].width, images[0].height,
                 images[0].channel, images[0].data);
@@ -503,11 +575,15 @@ namespace ECS {
     {
         if (context) sd_cancel_generation(context, SD_CANCEL_RESET);
 
+        const uint64_t token = GUI::DiffusionCallbackUtils::BeginGeneration();
+
         sd_image_t* frames = nullptr;
         int frameCount = 0;
         sd_audio_t* audio = nullptr;
         int fps_out = params.fps;
         bool ok = generate_video(context, &params, &frames, &frameCount, &audio, &fps_out);
+
+        GUI::DiffusionCallbackUtils::EndGeneration(token);
 
         if (!ok || frameCount <= 0 || !frames) {
             if (frames) free(frames);
@@ -565,12 +641,6 @@ namespace ECS {
         if (!std::filesystem::exists(fullPath)) {
             ANI_LOG_ERROR("RunImg2Vid: encoder returned true but file missing: %s", fullPath.c_str());
             return false;
-        }
-
-        if (!metadataForWrite.is_null() && !metadataForWrite.empty()) {
-            if (!Utils::VideoMetadataUtils::WriteMetadataToVideo(fullPath, metadataForWrite, false)) {
-                ANI_LOG_WARN("RunImg2Vid: metadata rewrite failed for %s", fullPath.c_str());
-            }
         }
 
         std::error_code ec;
@@ -670,6 +740,20 @@ namespace ECS {
     // Dispatch
     // ---------------------------------------------------------------------
     void SDCPPSystem::ProcessQueues() {
+        // Drain resolved orphans before taking the queue lock. This is the key
+        // change: we refuse to submit a new task until every previously-cancelled
+        // worker has actually returned.
+        DrainOrphanedFutures();
+
+        {
+            std::lock_guard<std::mutex> olock(m_orphanMutex);
+            if (!m_orphanedFutures.empty()) {
+                // At least one cancelled worker is still running. Don't touch the
+                // shared SD context until it's gone.
+                return;
+            }
+        }
+
         std::lock_guard<std::mutex> lock(queueMutex);
         if (pauseWorker || shuttingDown) return;
         if (taskQueue.empty() || hasActiveTask) return;
@@ -794,6 +878,7 @@ namespace ECS {
 
                 bool remove = false;
                 bool success = false;
+                bool orphanFuture = false;
 
                 if (it->cancelled) {
                     if (it->result.valid() &&
@@ -803,7 +888,10 @@ namespace ECS {
                         remove = true;
                     }
                     else if (now - it->cancelTime > std::chrono::seconds(10)) {
+                        // Don't drop the future: hand it to the orphan list so the
+                        // captured ctxHandle/genRes stay alive until it resolves.
                         remove = true;
+                        orphanFuture = true;
                     }
                 }
                 else if (it->result.valid() &&
@@ -814,10 +902,14 @@ namespace ECS {
                 }
 
                 if (remove) {
-                    if (success && std::filesystem::exists(it->fullPath)) {
+                    if (orphanFuture && it->result.valid()) {
+                        std::lock_guard<std::mutex> olock(m_orphanMutex);
+                        m_orphanedFutures.push_back(std::move(it->result));
+                    }
+                    else if (success && std::filesystem::exists(it->fullPath)) {
                         completedTasks.emplace_back(it->fullPath, it->taskType, it->entityID);
                     }
-                    else {
+                    else if (!orphanFuture) {
                         bool exists = std::filesystem::exists(it->fullPath);
                         ANI_LOG_WARN("CheckTaskCompletion: task finished but not delivering "
                             "(success=%s exists=%s path='%s')",
@@ -861,6 +953,10 @@ namespace ECS {
                     EntityID e = mgr.AddNewEntity();
                     LoadImageViaImageSystem(e, fullPath);
                 }
+
+                // Notify engine-side listeners (plain std::function; this
+                // system has no dependency on ANI::Events).
+                NotifyTaskCompleted(taskType, entityID, fullPath);
             }
             else if (exists) {
                 std::filesystem::remove(fullPath);
@@ -882,6 +978,36 @@ namespace ECS {
     void SDCPPSystem::WorkerThread() {
         while (!shuttingDown)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    bool SDCPPSystem::HasPendingWork() const {
+        {
+            std::lock_guard<std::mutex> lock(m_orphanMutex);
+            for (const auto& f : m_orphanedFutures) {
+                if (f.valid() &&
+                    f.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+                    return true;
+                }
+            }
+        }
+        std::lock_guard<std::mutex> lock(queueMutex);
+        return hasActiveTask || !taskQueue.empty();
+    }
+
+    void SDCPPSystem::DrainOrphanedFutures() {
+        std::lock_guard<std::mutex> olock(m_orphanMutex);
+        m_orphanedFutures.erase(
+            std::remove_if(m_orphanedFutures.begin(), m_orphanedFutures.end(),
+                [](std::future<bool>& f) {
+                    if (!f.valid()) return true;
+                    if (f.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                        try { f.get(); }
+                        catch (...) {}
+                        return true;
+                    }
+                    return false;
+                }),
+            m_orphanedFutures.end());
     }
 
 } // namespace ECS

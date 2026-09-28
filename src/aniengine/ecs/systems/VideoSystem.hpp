@@ -17,6 +17,7 @@
 #include <thread>
 #include <future>
 #include <string>
+#include <nlohmann/json.hpp>
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -53,6 +54,7 @@ namespace ECS {
             bool hasExif = false;
             bool hasLSB = false;
             bool hasAniStudio = false;
+            nlohmann::json metadata;
             AVFormatContext* fmtCtx = nullptr;
             AVCodecContext* codecCtx = nullptr;
             SwsContext* swsCtx = nullptr;
@@ -85,6 +87,7 @@ namespace ECS {
                     fileSize = o.fileSize;
                     fileDate = std::move(o.fileDate); fileTime = std::move(o.fileTime);
                     hasExif = o.hasExif; hasLSB = o.hasLSB; hasAniStudio = o.hasAniStudio;
+                    metadata = std::move(o.metadata);
                     fmtCtx = o.fmtCtx; codecCtx = o.codecCtx; swsCtx = o.swsCtx;
                     frame = o.frame; pkt = o.pkt; videoStreamIndex = o.videoStreamIndex;
                     o.fmtCtx = nullptr; o.codecCtx = nullptr; o.swsCtx = nullptr;
@@ -266,6 +269,7 @@ namespace ECS {
         void ProcessCompletedLoads();
         void ProcessCompletedSaves();
         void ApplyLoadedVideo(LoadResult&& result);
+        void DropPendingLoadsFor(EntityID entity);
 
         void WorkerLoop(Track& track);
 

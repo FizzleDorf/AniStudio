@@ -28,6 +28,7 @@ namespace ANI::Registration {
         entityMgr.RegisterComponent<ECS::TextureComponent>("TextureComponent");
         entityMgr.RegisterComponent<ECS::PlaybackStateComponent>("PlaybackState");
         entityMgr.RegisterComponent<ECS::PreviewImageComponent>("PreviewImage");
+        entityMgr.RegisterComponent<ECS::PreviewVideoComponent>("PreviewVideo");
 
         ANI_LOG_INFO("All GUI components registered");
     }

@@ -114,22 +114,21 @@ namespace ECS {
 
 		componentsArrays.clear();
 
-		while (!availableEntities.empty()) {
-			availableEntities.pop();
-		}
-		for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; ++entity) {
-			availableEntities.push(entity);
-		}
-
+		// No free-list: fresh slots handed out sequentially by
+		// AddNewEntity(). Slot 0 is reserved as the null handle.
+		nextFreshID = 1;
 		entityCount = 0;
 
 		ANI_LOG_INFO("EntityManager reset complete. Registered components preserved.");
 	}
 
 	const EntityID EntityManager::AddNewEntity() {
-		const EntityID entity = availableEntities.front();
+		if (nextFreshID >= MAX_ENTITY_COUNT) {
+			ANI_LOG_ERROR("AddNewEntity: entity limit reached (%zu)", MAX_ENTITY_COUNT);
+			return 0;   // null handle
+		}
+		const EntityID entity = nextFreshID++;
 		AddEntitySignature(entity);
-		availableEntities.pop();
 		entityCount++;
 		return entity;
 	}
@@ -140,7 +139,7 @@ namespace ECS {
 		if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
 			return;
 		}
-		
+
 		for (auto& [type, system] : registeredSystems) {
 			if (system) system->OnEntityDestroyed(entity);
 		}
@@ -160,7 +159,9 @@ namespace ECS {
 		}
 
 		entityCount--;
-		availableEntities.push(entity);
+		// Intentionally do NOT return `entity` to a free-list.
+		// IDs are monotonic and never reused, so a stale handle
+		// can never alias a live entity.
 		ANI_LOG_TRACE("Removed Entity: %u", entity);
 	}
 
@@ -315,6 +316,7 @@ namespace ECS {
 						if (auto* destComponent = GetComponentById(newEntity, componentId)) {
 							nlohmann::json componentData = sourceComponent->Serialize();
 							destComponent->Deserialize(componentData);
+							destComponent->entityID = newEntity;
 							CopyComponentResources(sourceEntity, newEntity, componentId);
 						}
 					}
@@ -356,16 +358,8 @@ namespace ECS {
 							BaseComponent* component = GetComponentById(entity, typeId);
 
 							if (component) {
-								ANI_LOG_TRACE("[Deserialize] constructed component for key='%s', GetCompName()='%s', schema empty=%s",
-									componentName.c_str(),
-									component->GetCompName(),
-									component->GetSchema().empty() ? "yes" : "no");
-
 								component->Deserialize(componentJson[componentName]);
-
-								ANI_LOG_TRACE("[Deserialize] after Deserialize, GetCompName()='%s', schema empty=%s",
-									component->GetCompName(),
-									component->GetSchema().empty() ? "yes" : "no");
+								component->entityID = entity;
 							}
 							else {
 								ANI_LOG_ERROR("[Deserialize] ERROR: Component %s was not created!", componentName.c_str());
@@ -415,6 +409,7 @@ namespace ECS {
 
 						if (auto* component = GetComponentById(entity, typeId)) {
 							component->Deserialize(componentJson[componentName]);
+							component->entityID = entity;
 						}
 					}
 				}
@@ -646,7 +641,9 @@ namespace ECS {
 	}
 
 	std::queue<EntityID> EntityManager::GetAvailableEntities() const {
-		return availableEntities;
+		// Deprecated: no free-list any more. Return an empty queue so
+		// existing callers keep compiling without behaviour change.
+		return {};
 	}
 
 	const std::map<EntityID, std::shared_ptr<EntitySignature>>& EntityManager::GetEntitiesSignatures() const {
