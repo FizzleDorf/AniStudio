@@ -411,7 +411,9 @@ namespace GUI {
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
 
-            ImGui::Image((ImTextureID)(intptr_t)texID, imageSize);
+            if (glIsTexture(texID)) {
+                ImGui::Image((ImTextureID)(intptr_t)texID, imageSize);
+            }
 
             if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
@@ -506,7 +508,10 @@ namespace GUI {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
         try {
             if (imageSystem) {
+                imageSystem->UnregisterCallbacksForOwner(this);
                 imageSystem->RemoveImage(selectedEntityID);
+                imageSystem->RegisterImageAddedCallback(this, [this](ECS::EntityID e) { OnMediaAdded(e); });
+                imageSystem->RegisterImageRemovedCallback(this, [this](ECS::EntityID e) { OnMediaRemoved(e); });
             }
 
             if (m_entityManager.IsEntityValid(selectedEntityID)) {
@@ -522,6 +527,7 @@ namespace GUI {
     }
 
     void ImageView::RefreshEntities() {
+        ANI_LOG_DEBUG("[ImageView] RefreshEntities begin");
         mediaEntities.clear();
         for (auto entityID : m_entityManager.GetAllEntities()) {
             if (IsImageComponentOnly(entityID)) {
@@ -529,9 +535,12 @@ namespace GUI {
             }
         }
         lastEntityCount = mediaEntities.size();
+        ANI_LOG_DEBUG("[ImageView] RefreshEntities end count=%zu",
+            mediaEntities.size());
     }
 
     void ImageView::OnMediaAdded(ECS::EntityID entity) {
+        ANI_LOG_DEBUG("[ImageView] OnMediaAdded entity=%u begin", entity);
         RefreshEntities();
         if (!mediaEntities.empty() && autoSwitchOnLoad) {
             auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
@@ -540,11 +549,14 @@ namespace GUI {
                 selectedEntityID = entity;
             }
         }
+        ANI_LOG_DEBUG("[ImageView] OnMediaAdded entity=%u end", entity);
     }
 
     void ImageView::OnMediaRemoved(ECS::EntityID entity) {
+        ANI_LOG_DEBUG("[ImageView] OnMediaRemoved entity=%u begin", entity);
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
+        ANI_LOG_DEBUG("[ImageView] OnMediaRemoved entity=%u end", entity);
     }
 
     void ImageView::SetSelectedEntity(ECS::EntityID entity) {

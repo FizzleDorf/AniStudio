@@ -10,6 +10,8 @@
 #include <shared_mutex>
 #include <memory>
 #include <mutex>
+#include <sstream>
+#include <algorithm>
 #include <nlohmann/json.hpp>
 
 extern "C" {
@@ -211,6 +213,207 @@ namespace ECS {
         }
     };
 
+    // One row: "ext|enabled|writeMetadata|frames|fps|quality"
+    struct VideoExportTarget {
+        std::string fileExtension = ".mp4";
+        bool enabled = true;
+        bool writeMetadata = true;
+        int video_frames = 25;
+        int output_fps = 24;
+        int quality = 75;
+
+        nlohmann::json Serialize() const {
+            return {
+                {"fileExtension", fileExtension},
+                {"enabled", enabled},
+                {"writeMetadata", writeMetadata},
+                {"video_frames", video_frames},
+                {"output_fps", output_fps},
+                {"quality", quality}
+            };
+        }
+
+        void Deserialize(const nlohmann::json& j) {
+            if (j.contains("fileExtension")) fileExtension = j["fileExtension"];
+            if (j.contains("enabled")) enabled = j["enabled"];
+            if (j.contains("writeMetadata")) writeMetadata = j["writeMetadata"];
+            if (j.contains("video_frames")) video_frames = j["video_frames"];
+            if (j.contains("output_fps")) output_fps = j["output_fps"];
+            if (j.contains("quality")) quality = j["quality"];
+        }
+
+        static std::string ToRow(const VideoExportTarget& t) {
+            std::ostringstream ss;
+            ss << t.fileExtension << "|" << (t.enabled ? 1 : 0)
+                << "|" << (t.writeMetadata ? 1 : 0)
+                << "|" << t.video_frames
+                << "|" << t.output_fps
+                << "|" << t.quality;
+            return ss.str();
+        }
+
+        static bool FromRow(const std::string& row, VideoExportTarget& out) {
+            std::vector<std::string> parts;
+            std::string cur;
+            for (char c : row) {
+                if (c == '|') { parts.push_back(cur); cur.clear(); }
+                else cur.push_back(c);
+            }
+            parts.push_back(cur);
+            if (parts.size() < 6) return false;
+            try {
+                out.fileExtension = parts[0];
+                out.enabled = parts[1] == "1";
+                out.writeMetadata = parts[2] == "1";
+                out.video_frames = std::stoi(parts[3]);
+                out.output_fps = std::stoi(parts[4]);
+                out.quality = std::stoi(parts[5]);
+            }
+            catch (...) { return false; }
+            return true;
+        }
+    };
+
+    struct VideoExportComponent : public BaseComponent {
+        std::string fileName = "AniStudio";
+        std::string filePath = "OutputFolder";
+        bool uniquePerTarget = true;
+        std::vector<std::string> targetRows;
+
+        VideoExportComponent() {
+            VideoExportTarget t;
+            t.fileExtension = ".mp4";
+            targetRows.push_back(VideoExportTarget::ToRow(t));
+        }
+
+        const char* GetCompName() const override { return "VideoExport"; }
+        const char* GetCompCategory() const override { return "Video"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json items =
+                FileFormats::GetComboItemsJson(FileFormats::GetVideoExtensions());
+            static const nlohmann::json j = {
+                {"title", "Video Export"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "Output Directory"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "directory"},
+                            {"defaultPath", "OutputFolder"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Reset"},
+                            {"browseTooltip", "Directory where every format is saved"}
+                        }}
+                    }},
+                    {"fileName", {
+                        {"type", "string"},
+                        {"title", "Base Name"},
+                        {"ui:widget", "input_text"},
+                        {"ui:options", {
+                            {"dialogDefaultPath", "OutputFolder"},
+                            {"defaultPath", "OutputFolder"},
+                            {"resetButtonText", "Reset to Default"}
+                        }}
+                    }},
+                    {"uniquePerTarget", {
+                        {"type", "boolean"},
+                        {"title", "Unique Filename Per Format"}
+                    }},
+                    {"targetRows", {
+                        {"type", "array"},
+                        {"title", "Formats"},
+                        {"description", "One row per format: ext|enabled|writeMetadata|frames|fps|quality"},
+                        {"ui:widget", "list"},
+                        {"ui:options", {
+                            {"formatHint", "ext|on|meta|frames|fps|quality"},
+                            {"availableFormats", items}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "fileName", "uniquePerTarget", "targetRows"}}
+            };
+            return j;
+        }
+
+        VideoExportComponent(const VideoExportComponent& other)
+            : BaseComponent(other)
+            , fileName(other.fileName)
+            , filePath(other.filePath)
+            , uniquePerTarget(other.uniquePerTarget)
+            , targetRows(other.targetRows) {
+        }
+
+        VideoExportComponent& operator=(const VideoExportComponent& other) {
+            if (this != &other) {
+                fileName = other.fileName;
+                filePath = other.filePath;
+                uniquePerTarget = other.uniquePerTarget;
+                targetRows = other.targetRows;
+            }
+            return *this;
+        }
+
+        virtual ~VideoExportComponent() {}
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"fileName", &fileName},
+                {"filePath", &filePath},
+                {"uniquePerTarget", &uniquePerTarget},
+                {"targetRows", &targetRows}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"fileName", fileName},
+                {"filePath", filePath},
+                {"uniquePerTarget", uniquePerTarget},
+                {"targets", nlohmann::json::array()}
+            };
+            for (const auto& row : targetRows) {
+                VideoExportTarget t;
+                if (VideoExportTarget::FromRow(row, t))
+                    j[GetCompName()]["targets"].push_back(t.Serialize());
+            }
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json d = j.contains(key) ? j.at(key) : j;
+            if (d.contains("fileName")) fileName = d["fileName"];
+            if (d.contains("filePath")) filePath = d["filePath"];
+            if (d.contains("uniquePerTarget")) uniquePerTarget = d["uniquePerTarget"];
+            targetRows.clear();
+            if (d.contains("targets") && d["targets"].is_array()) {
+                for (const auto& t : d["targets"]) {
+                    VideoExportTarget target;
+                    target.Deserialize(t);
+                    targetRows.push_back(VideoExportTarget::ToRow(target));
+                }
+            }
+            if (targetRows.empty()) {
+                VideoExportTarget def;
+                targetRows.push_back(VideoExportTarget::ToRow(def));
+            }
+        }
+
+        std::vector<VideoExportTarget> GetEnabledTargets() const {
+            std::vector<VideoExportTarget> out;
+            for (const auto& row : targetRows) {
+                VideoExportTarget t;
+                if (VideoExportTarget::FromRow(row, t) && t.enabled)
+                    out.push_back(t);
+            }
+            return out;
+        }
+    };
+
     struct InputVideoComponent : public VideoComponent {
         InputVideoComponent() = default;
 
@@ -252,6 +455,8 @@ namespace ECS {
         std::string fileExtension = ".mp4";
         int video_frames = 25;
         int output_fps = 24;
+        bool writeMetadata = true;
+        int quality = 75;
 
         OutputVideoComponent() = default;
 
@@ -292,9 +497,7 @@ namespace ECS {
                         {"title", "File Format"},
                         {"ui:widget", "combo"},
                         {"items", items},
-                        {"ui:options", {
-                            {"resetButtonText", "Reset to MP4"}
-                        }}
+                        {"ui:options", {{"resetButtonText", "Reset to MP4"}}}
                     }},
                     {"video_frames", {
                         {"type", "integer"},
@@ -309,9 +512,23 @@ namespace ECS {
                         {"description", "Frame rate for the generated video. Standard values: 6, 12, 16, 24, 30."},
                         {"ui:widget", "input_int"},
                         {"ui:options", {{"step", 1}, {"step_fast", 6}, {"min", 1}, {"max", 120}}}
+                    }},
+                    {"writeMetadata", {
+                        {"type", "boolean"},
+                        {"title", "Write Metadata"}
+                    }},
+                    {"quality", {
+                        {"type", "integer"},
+                        {"title", "Quality"},
+                        {"description", "Encoder quality / bitrate factor (1-100)."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"min", 1}, {"max", 100}, {"step", 1}}}
                     }}
                 }},
-                {"propertyOrder", {"filePath", "fileName", "fileExtension", "video_frames", "output_fps"}}
+                {"propertyOrder", {
+                    "filePath", "fileName", "fileExtension",
+                    "video_frames", "output_fps", "writeMetadata", "quality"
+                }}
             };
             return j;
         }
@@ -320,7 +537,9 @@ namespace ECS {
             : VideoComponent(other)
             , fileExtension(other.fileExtension)
             , video_frames(other.video_frames)
-            , output_fps(other.output_fps) {
+            , output_fps(other.output_fps)
+            , writeMetadata(other.writeMetadata)
+            , quality(other.quality) {
         }
 
         OutputVideoComponent& operator=(const OutputVideoComponent& other) {
@@ -329,6 +548,8 @@ namespace ECS {
                 fileExtension = other.fileExtension;
                 video_frames = other.video_frames;
                 output_fps = other.output_fps;
+                writeMetadata = other.writeMetadata;
+                quality = other.quality;
             }
             return *this;
         }
@@ -339,7 +560,9 @@ namespace ECS {
                 {"filePath", &filePath},
                 {"fileExtension", &fileExtension},
                 {"video_frames", &video_frames},
-                {"output_fps", &output_fps}
+                {"output_fps", &output_fps},
+                {"writeMetadata", &writeMetadata},
+                {"quality", &quality}
             };
         }
 
@@ -350,7 +573,9 @@ namespace ECS {
                 {"filePath", filePath},
                 {"fileExtension", fileExtension},
                 {"video_frames", video_frames},
-                {"output_fps", output_fps}
+                {"output_fps", output_fps},
+                {"writeMetadata", writeMetadata},
+                {"quality", quality}
             };
             return j;
         }
@@ -366,6 +591,8 @@ namespace ECS {
             if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
             if (componentData.contains("video_frames")) video_frames = componentData["video_frames"];
             if (componentData.contains("output_fps")) output_fps = componentData["output_fps"];
+            if (componentData.contains("writeMetadata")) writeMetadata = componentData["writeMetadata"];
+            if (componentData.contains("quality")) quality = componentData["quality"];
         }
     };
 
@@ -410,4 +637,5 @@ namespace ECS {
 
         void Deserialize(const nlohmann::json&) override {}
     };
+
 } // namespace ECS

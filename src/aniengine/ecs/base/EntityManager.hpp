@@ -28,6 +28,7 @@ namespace ECS {
 		template<typename T, typename... Args>
 		T& AddComponent(const EntityID entity, Args &&...args) {
 			assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+			assert(entity != 0 && "Cannot add component to the null entity");
 
 			std::type_index typeIdx = std::type_index(typeid(T));
 			auto it = m_componentTypeToID.find(typeIdx);
@@ -160,7 +161,6 @@ namespace ECS {
 
 			std::type_index typeIdx = std::type_index(typeid(T));
 
-			// Check existing registration
 			auto typeIt = m_componentTypeToID.find(typeIdx);
 			if (typeIt != m_componentTypeToID.end()) {
 				return typeIt->second;
@@ -173,31 +173,27 @@ namespace ECS {
 				return typeId;
 			}
 
-			// New registration
 			ComponentTypeID typeId = m_nextComponentID++;
 			m_componentNameToID[name] = typeId;
 			m_componentIDToName[typeId] = name;
 			m_componentTypeToID[typeIdx] = typeId;
 
-			// Create component array
 			AddCompList<T>();
 
-			// Register creators
 			RegisterComponentType(
 				typeId,
 				[this, typeId, name](EntityID entity) {
 					GetEntitySignature(entity)->insert(typeId);
 
-					// Debug the component list
 					auto compList = GetCompList<T>();
 
 					T componentInstance{};
 					componentInstance.entityID = entity;
 					compList->Insert(componentInstance);
 
-					// Check if component was actually created
 					try {
 						BaseComponent* comp = &compList->Get(entity);
+						(void)comp;
 					}
 					catch (const std::exception& e) {
 						ANI_LOG_ERROR("[ComponentCreator] ERROR: Failed to get component after creation: %s",
@@ -331,10 +327,13 @@ namespace ECS {
 		void CopyComponentResources(EntityID sourceEntity, EntityID destEntity, ComponentTypeID componentId);
 
 		EntityID entityCount;
-		// Monotonic. Slot 0 is reserved as the null handle; destroyed
-		// IDs are never reused, so a stale EntityID can never alias a
-		// new entity.
+
+		// Freed IDs are returned to a LIFO free list and handed out
+		// again by AddNewEntity(). Slot 0 is reserved as the null
+		// handle and is never handed out.
+		std::queue<EntityID> m_freeEntityIDs;
 		EntityID nextFreshID = 1;
+
 		std::map<EntityID, std::shared_ptr<EntitySignature>> entitiesSignatures;
 		std::map<SystemTypeID, std::shared_ptr<BaseSystem>> registeredSystems;
 		std::map<ComponentTypeID, std::shared_ptr<ICompList>> componentsArrays;

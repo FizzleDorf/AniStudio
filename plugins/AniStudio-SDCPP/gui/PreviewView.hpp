@@ -57,23 +57,19 @@ namespace GUI {
         static int PreviewModeToInt(PreviewMode m);
         void ApplyModeToLibrary();
 
-        // live preview: single image frame OR video batch
         void RefreshPreviewTextureIfNeeded(float deltaT);
         void PushPreviewFrameToComponent(const PreviewFrame& frame);
 
-        // finished video playback
         void RefreshVideoTextureIfNeeded();
         void PushVideoFrameToComponent(const std::vector<uint8_t>& rgba,
             int w, int h);
 
-        // UI
         void DrawMenuBar();
-        void DrawVideoControls();        // for a fully loaded video entity
-        void DrawLivePreviewControls();  // during generation
+        void DrawVideoControls();
+        void DrawLivePreviewControls();
         void LoadModeFromSettings();
         void SaveModeToSettings();
 
-        // Transport helpers
         void SeekVideo(ECS::EntityID entity, double time);
         void PlayVideo(ECS::EntityID entity);
         void PauseVideo(ECS::EntityID entity);
@@ -85,29 +81,24 @@ namespace GUI {
         void RenderTimelineControls();
         std::string FormatTimecode(double seconds) const;
 
-        // ANI::Events
         void OnShowVideoInPreview(const std::any& data);
         ANI::Events::EventCallbackWithData m_showVideoCallback = nullptr;
 
-        // SDCPP completion
         void OnSdcppTaskCompleted(ECS::SDCPPSystem::TaskType type,
             ECS::EntityID entityID,
             const std::string& fullPath);
 
-        // live preview entity (image OR live video batch)
         ECS::EntityID m_previewEntity = 0;
         bool          m_previewEntityHasComponent = false;
-        uint64_t      m_lastSequence = 0;           // single-frame guard
-        uint64_t      m_lastBatchSequence = 0;      // batch arrival guard
-        uint64_t      m_lastBatchFrameSeq = 0;      // per-frame push guard
+        uint64_t      m_lastSequence = 0;
+        uint64_t      m_lastBatchSequence = 0;
+        uint64_t      m_lastBatchFrameSeq = 0;
 
-        // Live batch cycling
         int           m_liveFrameIndex = 0;
         double        m_liveFrameTimer = 0.0;
         double        m_liveFrameDuration = 1.0 / 16.0;
         bool          m_livePaused = false;
 
-        // finished-video preview state
         ECS::EntityID m_videoPreviewEntity = 0;
         bool          m_videoPreviewEntityHasComponent = false;
         bool          m_videoAttached = false;
@@ -117,7 +108,6 @@ namespace GUI {
         int           m_lastVideoHeight = 0;
         uint64_t      m_lastVideoFingerprint = 0;
 
-        // Transport state
         bool          m_isSeeking = false;
         bool          m_pendingSeek = false;
         double        m_pendingSeekTime = 0.0;
@@ -133,4 +123,4 @@ namespace GUI {
         bool        m_modeLoaded = false;
     };
 
-} // namespace GUI
+}

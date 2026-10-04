@@ -62,6 +62,13 @@ namespace FileFormats {
         return formats;
     }
 
+    inline std::vector<std::string> GetAllExtensions() {
+        std::vector<std::string> exts;
+        exts.reserve(GetAllFormats().size());
+        for (const auto& pair : GetAllFormats()) exts.push_back(pair.first);
+        return exts;
+    }
+
     inline std::vector<std::string> GetImageExtensions() {
         std::vector<std::string> exts;
         for (const auto& pair : GetAllFormats()) {

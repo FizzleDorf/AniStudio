@@ -80,20 +80,28 @@ namespace GUI {
     void AssetsView::Render() {
         ImGui::Begin("Assets", &windowOpen, ImGuiWindowFlags_MenuBar);
 
-        if (needsSort) {
-            ApplyFiltersAndSort();
-            needsSort = false;
+        try {
+            if (needsSort) {
+                ApplyFiltersAndSort();
+                needsSort = false;
+            }
+
+            RenderMenuBar();
+
+            ImGui::Separator();
+
+            if (assetFiles.empty()) {
+                ImGui::Text("No assets found in directory.");
+            }
+            else {
+                RenderAssetGrid();
+            }
         }
-
-        RenderMenuBar();
-
-        ImGui::Separator();
-
-        if (assetFiles.empty()) {
-            ImGui::Text("No assets found in directory.");
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("[AssetsView] Render exception: %s", e.what());
         }
-        else {
-            RenderAssetGrid();
+        catch (...) {
+            ANI_LOG_ERROR("[AssetsView] Render unknown exception");
         }
 
         ImGui::End();
@@ -192,7 +200,12 @@ namespace GUI {
                 }
                 else if (m_entityManager.HasComponent<ECS::AudioComponent>(eid)) {
                     const auto& comp = m_entityManager.GetComponent<ECS::AudioComponent>(eid);
-                    info.fileSize = std::filesystem::file_size(info.filePath);
+                    try {
+                        info.fileSize = std::filesystem::file_size(info.filePath);
+                    }
+                    catch (...) {
+                        info.fileSize = 0;
+                    }
                     info.channels = comp.channels;
                     info.sampleRate = comp.sampleRate;
                     info.duration = comp.duration;
@@ -239,19 +252,15 @@ namespace GUI {
         const float spacing = 12.0f;
 
         float itemWidth = 0.0f;
-        float itemHeight = 0.0f;
 
         if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::Compact) {
             itemWidth = thumbnailSizePx + spacing;
-            itemHeight = thumbnailSizePx + ImGui::GetFontSize() + spacing;
         }
         else if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
             itemWidth = windowWidth;
-            itemHeight = thumbnailSizePx + 8.0f + spacing;
         }
         else {
             itemWidth = thumbnailSizePx + 160 + spacing;
-            itemHeight = thumbnailSizePx + 60 + spacing;
         }
 
         int columns = std::max(1, static_cast<int>((windowWidth + spacing) / (itemWidth + spacing)));
@@ -260,10 +269,6 @@ namespace GUI {
         }
 
         int itemIndex = 0;
-
-        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
-            GUI::Thumbnail::BeginListMode(thumbnailSizePx);
-        }
 
         for (size_t i = 0; i < assetFiles.size(); ++i) {
             const auto& path = assetFiles[i];
@@ -274,12 +279,14 @@ namespace GUI {
                 entityID = it->second;
             }
 
-            if (filterSettings.displayMode != GUI::Thumbnail::DisplayMode::List) {
+            if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+                if (itemIndex > 0) {
+                    ImGui::NewLine();
+                }
+            }
+            else {
                 if (itemIndex > 0 && (itemIndex % columns) != 0) {
                     ImGui::SameLine(0, spacing);
-                }
-                else if (itemIndex > 0) {
-                    ImGui::NewLine();
                 }
             }
 
@@ -309,7 +316,8 @@ namespace GUI {
                         [this](ECS::EntityID id) { SelectAssetEntity(id); },
                         contextMenuUtils.get(),
                         true,
-                        selectedEntityID
+                        selectedEntityID,
+                        &m_entityManager
                     );
                 }
                 else {
@@ -321,16 +329,13 @@ namespace GUI {
                         [this](ECS::EntityID id) { SelectAssetEntity(id); },
                         contextMenuUtils.get(),
                         true,
-                        selectedEntityID
+                        selectedEntityID,
+                        &m_entityManager
                     );
                 }
             }
 
             itemIndex++;
-        }
-
-        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
-            GUI::Thumbnail::EndListMode();
         }
 
         ImGui::NewLine();

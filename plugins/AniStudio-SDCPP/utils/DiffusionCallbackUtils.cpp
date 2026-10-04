@@ -129,16 +129,11 @@ namespace GUI {
 
         if (batch.frames.empty()) return;
 
-        // Always publish the first frame as the "latest preview" so
-        // image tasks (frame_count == 1) and video tasks (whose first
-        // frame is representative) both work.
         {
             std::lock_guard<std::mutex> lock(previewMutex);
             previewFrame = batch.frames[0];
         }
 
-        // Publish the whole batch. For image tasks this is a single frame;
-        // for video tasks this is every frame of the current step.
         batch.sequence = batchSequence.fetch_add(1, std::memory_order_relaxed) + 1;
         {
             std::lock_guard<std::mutex> lock(batchMutex);
@@ -177,11 +172,11 @@ namespace GUI {
     }
 
     uint64_t DiffusionCallbackUtils::BeginGeneration() {
+        ClearPreview();
+        ClearBatch();
         uint64_t token = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
         if (token == 0) token = previewSequence.fetch_add(1, std::memory_order_relaxed) + 1;
         activeGenerationToken.store(token, std::memory_order_release);
-        ClearPreview();
-        ClearBatch();
         return token;
     }
 
@@ -191,10 +186,6 @@ namespace GUI {
             expected, 0,
             std::memory_order_acq_rel,
             std::memory_order_acquire);
-        // NOTE: do NOT clear here. The last batch must stay visible until
-        // the next generation begins (or the user presses Clear). Clearing
-        // here was what killed the final preview frame right when the
-        // generation finished.
     }
 
     void DiffusionCallbackUtils::TestCallbacks() {

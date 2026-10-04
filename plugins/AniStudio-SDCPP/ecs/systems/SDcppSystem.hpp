@@ -88,12 +88,6 @@ namespace ECS {
             void Cancel();
         };
 
-        // Fired from ProcessCompletedTask after the output file has been
-        // handed off to ImageSystem / VideoSystem. This is a plain
-        // std::function callback so this system stays free of any
-        // dependency on the engine's ANI::Events. Engine-side code (which
-        // can see ANI::Events) subscribes to this and translates it into
-        // an app event.
         using TaskCompletedCallback =
             std::function<void(TaskType, EntityID, const std::string&)>;
 
@@ -125,9 +119,6 @@ namespace ECS {
         bool HasActiveTask() const;
         size_t GetQueueSize() const;
 
-        // True while a task is being processed OR an orphaned future is still
-        // draining. QueueView should gate SetPreviewMode and ClearAllTasks on
-        // !HasPendingWork() where possible.
         bool HasPendingWork() const;
 
         void Start() override;
@@ -136,7 +127,6 @@ namespace ECS {
         std::vector<std::pair<TaskType, nlohmann::json>> GetQueueTasksWithMetadata() const;
         void QueueTaskFromSerialized(const nlohmann::json& entityData, TaskType taskType);
 
-        // Callback plumbing for engine-side listeners.
         void RegisterTaskCompletedCallback(void* owner, TaskCompletedCallback cb);
         void UnregisterCallbacksForOwner(void* owner);
 
@@ -153,13 +143,10 @@ namespace ECS {
         std::shared_ptr<FilePathSystem> m_filePathSystem;
         std::shared_ptr<ModelCacheSystem> m_cacheSystem;
 
-        // Futures whose TaskData was erased while the worker was still running.
-        // These pin the ctxHandle and genRes alive until they resolve, so the
-        // SD context cannot be torn down out from under an in-flight run.
         std::vector<std::future<bool>> m_orphanedFutures;
         mutable std::mutex m_orphanMutex;
+        std::vector<EntityID> m_pendingDestroy;
 
-        // Engine-side subscribers to task completion.
         std::vector<std::pair<void*, TaskCompletedCallback>> m_taskCompletedCallbacks;
 
         std::string ResolveOutputDirectory(const std::string& raw);
@@ -170,7 +157,8 @@ namespace ECS {
         EntityID LoadVideoWithAudio(const std::string& filePath);
         void HandleClearRequest();
 
-        void DrainOrphanedFutures();      // drop resolved entries
+        void DrainPendingDestroy();
+        void DrainOrphanedFutures();
         void NotifyTaskCompleted(TaskType taskType, EntityID entityID,
             const std::string& fullPath);
 

@@ -6,6 +6,7 @@
 #include <vector>
 #include <cstdint>
 #include <memory>
+#include <sstream>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -181,6 +182,207 @@ namespace ECS {
         int audioStreamIndex = -1;
     };
 
+    // One row: "ext|enabled|writeMetadata|bitrate|sampleRate|channels"
+    struct AudioExportTarget {
+        std::string fileExtension = ".wav";
+        bool enabled = true;
+        bool writeMetadata = true;
+        int bitRate = 192000;
+        int sampleRate = 44100;
+        int channels = 2;
+
+        nlohmann::json Serialize() const {
+            return {
+                {"fileExtension", fileExtension},
+                {"enabled", enabled},
+                {"writeMetadata", writeMetadata},
+                {"bitRate", bitRate},
+                {"sampleRate", sampleRate},
+                {"channels", channels}
+            };
+        }
+
+        void Deserialize(const nlohmann::json& j) {
+            if (j.contains("fileExtension")) fileExtension = j["fileExtension"];
+            if (j.contains("enabled")) enabled = j["enabled"];
+            if (j.contains("writeMetadata")) writeMetadata = j["writeMetadata"];
+            if (j.contains("bitRate")) bitRate = j["bitRate"];
+            if (j.contains("sampleRate")) sampleRate = j["sampleRate"];
+            if (j.contains("channels")) channels = j["channels"];
+        }
+
+        static std::string ToRow(const AudioExportTarget& t) {
+            std::ostringstream ss;
+            ss << t.fileExtension << "|" << (t.enabled ? 1 : 0)
+                << "|" << (t.writeMetadata ? 1 : 0)
+                << "|" << t.bitRate
+                << "|" << t.sampleRate
+                << "|" << t.channels;
+            return ss.str();
+        }
+
+        static bool FromRow(const std::string& row, AudioExportTarget& out) {
+            std::vector<std::string> parts;
+            std::string cur;
+            for (char c : row) {
+                if (c == '|') { parts.push_back(cur); cur.clear(); }
+                else cur.push_back(c);
+            }
+            parts.push_back(cur);
+            if (parts.size() < 6) return false;
+            try {
+                out.fileExtension = parts[0];
+                out.enabled = parts[1] == "1";
+                out.writeMetadata = parts[2] == "1";
+                out.bitRate = std::stoi(parts[3]);
+                out.sampleRate = std::stoi(parts[4]);
+                out.channels = std::stoi(parts[5]);
+            }
+            catch (...) { return false; }
+            return true;
+        }
+    };
+
+    struct AudioExportComponent : public BaseComponent {
+        std::string fileName = "AniStudio";
+        std::string filePath = "OutputFolder";
+        bool uniquePerTarget = true;
+        std::vector<std::string> targetRows;
+
+        AudioExportComponent() {
+            AudioExportTarget t;
+            t.fileExtension = ".wav";
+            targetRows.push_back(AudioExportTarget::ToRow(t));
+        }
+
+        const char* GetCompName() const override { return "AudioExport"; }
+        const char* GetCompCategory() const override { return "Media"; }
+
+        const nlohmann::json& GetSchema() const override {
+            static const nlohmann::json items =
+                FileFormats::GetComboItemsJson(FileFormats::GetAudioExtensions());
+            static const nlohmann::json j = {
+                {"title", "Audio Export"},
+                {"type", "object"},
+                {"properties", {
+                    {"filePath", {
+                        {"type", "string"},
+                        {"title", "Output Directory"},
+                        {"ui:widget", "file_selector"},
+                        {"ui:options", {
+                            {"mode", "directory"},
+                            {"defaultPath", "OutputFolder"},
+                            {"buttonText", "Browse..."},
+                            {"resetButtonText", "Reset"},
+                            {"browseTooltip", "Directory where every format is saved"}
+                        }}
+                    }},
+                    {"fileName", {
+                        {"type", "string"},
+                        {"title", "Base Name"},
+                        {"ui:widget", "input_text"},
+                        {"ui:options", {
+                            {"dialogDefaultPath", "OutputFolder"},
+                            {"defaultPath", "OutputFolder"},
+                            {"resetButtonText", "Reset to Default"}
+                        }}
+                    }},
+                    {"uniquePerTarget", {
+                        {"type", "boolean"},
+                        {"title", "Unique Filename Per Format"}
+                    }},
+                    {"targetRows", {
+                        {"type", "array"},
+                        {"title", "Formats"},
+                        {"description", "One row per format: ext|enabled|writeMetadata|bitrate|samplerate|channels"},
+                        {"ui:widget", "list"},
+                        {"ui:options", {
+                            {"formatHint", "ext|on|meta|bitrate|samplerate|channels"},
+                            {"availableFormats", items}
+                        }}
+                    }}
+                }},
+                {"propertyOrder", {"filePath", "fileName", "uniquePerTarget", "targetRows"}}
+            };
+            return j;
+        }
+
+        AudioExportComponent(const AudioExportComponent& other)
+            : BaseComponent(other)
+            , fileName(other.fileName)
+            , filePath(other.filePath)
+            , uniquePerTarget(other.uniquePerTarget)
+            , targetRows(other.targetRows) {
+        }
+
+        AudioExportComponent& operator=(const AudioExportComponent& other) {
+            if (this != &other) {
+                fileName = other.fileName;
+                filePath = other.filePath;
+                uniquePerTarget = other.uniquePerTarget;
+                targetRows = other.targetRows;
+            }
+            return *this;
+        }
+
+        virtual ~AudioExportComponent() {}
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"fileName", &fileName},
+                {"filePath", &filePath},
+                {"uniquePerTarget", &uniquePerTarget},
+                {"targetRows", &targetRows}
+            };
+        }
+
+        nlohmann::json Serialize() const override {
+            nlohmann::json j;
+            j[GetCompName()] = {
+                {"fileName", fileName},
+                {"filePath", filePath},
+                {"uniquePerTarget", uniquePerTarget},
+                {"targets", nlohmann::json::array()}
+            };
+            for (const auto& row : targetRows) {
+                AudioExportTarget t;
+                if (AudioExportTarget::FromRow(row, t))
+                    j[GetCompName()]["targets"].push_back(t.Serialize());
+            }
+            return j;
+        }
+
+        void Deserialize(const nlohmann::json& j) override {
+            const char* key = GetCompName();
+            nlohmann::json d = j.contains(key) ? j.at(key) : j;
+            if (d.contains("fileName")) fileName = d["fileName"];
+            if (d.contains("filePath")) filePath = d["filePath"];
+            if (d.contains("uniquePerTarget")) uniquePerTarget = d["uniquePerTarget"];
+            targetRows.clear();
+            if (d.contains("targets") && d["targets"].is_array()) {
+                for (const auto& t : d["targets"]) {
+                    AudioExportTarget target;
+                    target.Deserialize(t);
+                    targetRows.push_back(AudioExportTarget::ToRow(target));
+                }
+            }
+            if (targetRows.empty()) {
+                AudioExportTarget def;
+                targetRows.push_back(AudioExportTarget::ToRow(def));
+            }
+        }
+
+        std::vector<AudioExportTarget> GetEnabledTargets() const {
+            std::vector<AudioExportTarget> out;
+            for (const auto& row : targetRows) {
+                AudioExportTarget t;
+                if (AudioExportTarget::FromRow(row, t) && t.enabled)
+                    out.push_back(t);
+            }
+            return out;
+        }
+    };
+
     struct InputAudioComponent : public AudioComponent {
         InputAudioComponent() = default;
 
@@ -220,6 +422,10 @@ namespace ECS {
 
     struct OutputAudioComponent : public AudioComponent {
         std::string fileExtension = ".wav";
+        bool writeMetadata = true;
+        int bitRate = 192000;
+        int targetSampleRate = 44100;
+        int targetChannels = 2;
 
         OutputAudioComponent() = default;
 
@@ -260,27 +466,73 @@ namespace ECS {
                         {"title", "File Format"},
                         {"ui:widget", "combo"},
                         {"items", items},
-                        {"ui:options", {
-                            {"resetButtonText", "Reset to WAV"}
-                        }}
+                        {"ui:options", {{"resetButtonText", "Reset to WAV"}}}
+                    }},
+                    {"writeMetadata", {
+                        {"type", "boolean"},
+                        {"title", "Write Metadata"}
+                    }},
+                    {"bitRate", {
+                        {"type", "integer"},
+                        {"title", "Bit Rate"},
+                        {"description", "Encoder bit rate in bps (e.g. 192000)."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"min", 8000}, {"max", 1536000}, {"step", 1000}}}
+                    }},
+                    {"targetSampleRate", {
+                        {"type", "integer"},
+                        {"title", "Sample Rate"},
+                        {"description", "Target sample rate in Hz (e.g. 44100)."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"min", 8000}, {"max", 192000}, {"step", 100}}}
+                    }},
+                    {"targetChannels", {
+                        {"type", "integer"},
+                        {"title", "Channels"},
+                        {"description", "1 = mono, 2 = stereo."},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"min", 1}, {"max", 8}, {"step", 1}}}
                     }}
                 }},
-                {"propertyOrder", {"filePath", "fileName", "fileExtension"}}
+                {"propertyOrder", {
+                    "filePath", "fileName", "fileExtension",
+                    "writeMetadata", "bitRate", "targetSampleRate", "targetChannels"
+                }}
             };
             return j;
         }
 
         OutputAudioComponent(const OutputAudioComponent& other)
             : AudioComponent(other)
-            , fileExtension(other.fileExtension) {
+            , fileExtension(other.fileExtension)
+            , writeMetadata(other.writeMetadata)
+            , bitRate(other.bitRate)
+            , targetSampleRate(other.targetSampleRate)
+            , targetChannels(other.targetChannels) {
         }
 
         OutputAudioComponent& operator=(const OutputAudioComponent& other) {
             if (this != &other) {
                 AudioComponent::operator=(other);
                 fileExtension = other.fileExtension;
+                writeMetadata = other.writeMetadata;
+                bitRate = other.bitRate;
+                targetSampleRate = other.targetSampleRate;
+                targetChannels = other.targetChannels;
             }
             return *this;
+        }
+
+        std::unordered_map<std::string, UISchema::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"filePath", &filePath},
+                {"fileName", &fileName},
+                {"fileExtension", &fileExtension},
+                {"writeMetadata", &writeMetadata},
+                {"bitRate", &bitRate},
+                {"targetSampleRate", &targetSampleRate},
+                {"targetChannels", &targetChannels}
+            };
         }
 
         nlohmann::json Serialize() const override {
@@ -288,7 +540,11 @@ namespace ECS {
             j[GetCompName()] = {
                 {"filePath", filePath},
                 {"fileName", fileName},
-                {"fileExtension", fileExtension}
+                {"fileExtension", fileExtension},
+                {"writeMetadata", writeMetadata},
+                {"bitRate", bitRate},
+                {"targetSampleRate", targetSampleRate},
+                {"targetChannels", targetChannels}
             };
             return j;
         }
@@ -302,6 +558,10 @@ namespace ECS {
             if (componentData.contains("filePath")) filePath = componentData["filePath"];
             if (componentData.contains("fileName")) fileName = componentData["fileName"];
             if (componentData.contains("fileExtension")) fileExtension = componentData["fileExtension"];
+            if (componentData.contains("writeMetadata")) writeMetadata = componentData["writeMetadata"];
+            if (componentData.contains("bitRate")) bitRate = componentData["bitRate"];
+            if (componentData.contains("targetSampleRate")) targetSampleRate = componentData["targetSampleRate"];
+            if (componentData.contains("targetChannels")) targetChannels = componentData["targetChannels"];
         }
     };
 

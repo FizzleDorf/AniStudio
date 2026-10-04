@@ -26,6 +26,8 @@ namespace GUI {
         : BaseView(mgr, vm) {
         viewName = "MetadataView";
         metadata = nlohmann::json::object();
+        fileMetadata = nlohmann::json::object();
+        lsbMetadata = nlohmann::json::object();
         currentFile = "";
         filterText = "";
         ANI_LOG_DEBUG("Constructed");
@@ -96,6 +98,7 @@ namespace GUI {
                 }
                 ImGui::EndMenu();
             }
+
             if (ImGui::BeginMenu("View")) {
                 if (ImGui::MenuItem("Tree View", nullptr, displayMode == DisplayMode::Tree)) {
                     displayMode = DisplayMode::Tree;
@@ -105,6 +108,24 @@ namespace GUI {
                 }
                 ImGui::EndMenu();
             }
+
+            bool hasFileMeta = !(fileMetadata.is_null() || fileMetadata.empty());
+            bool hasLsbMeta = !(lsbMetadata.is_null() || lsbMetadata.empty());
+
+            if (ImGui::BeginMenu("Metadata Source")) {
+                if (ImGui::MenuItem("File Metadata", nullptr,
+                    metadataSource == MetadataSource::File, hasFileMeta)) {
+                    metadataSource = MetadataSource::File;
+                    ApplyMetadataSource();
+                }
+                if (ImGui::MenuItem("LSB Metadata", nullptr,
+                    metadataSource == MetadataSource::LSB, hasLsbMeta)) {
+                    metadataSource = MetadataSource::LSB;
+                    ApplyMetadataSource();
+                }
+                ImGui::EndMenu();
+            }
+
             ImGui::EndMenuBar();
         }
     }
@@ -113,6 +134,19 @@ namespace GUI {
         if (ImGui::BeginPopupContextWindow("MetadataContextMenu")) {
             if (ImGui::MenuItem("Copy Entire Entity", nullptr, false, !metadata.empty())) {
                 CopyEntireEntityToClipboard();
+            }
+            ImGui::Separator();
+            bool hasFileMeta = !(fileMetadata.is_null() || fileMetadata.empty());
+            bool hasLsbMeta = !(lsbMetadata.is_null() || lsbMetadata.empty());
+            if (ImGui::MenuItem("Show File Metadata", nullptr,
+                metadataSource == MetadataSource::File, hasFileMeta)) {
+                metadataSource = MetadataSource::File;
+                ApplyMetadataSource();
+            }
+            if (ImGui::MenuItem("Show LSB Metadata", nullptr,
+                metadataSource == MetadataSource::LSB, hasLsbMeta)) {
+                metadataSource = MetadataSource::LSB;
+                ApplyMetadataSource();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Paste from Clipboard", nullptr, false)) {
@@ -133,10 +167,21 @@ namespace GUI {
 
     void MetadataView::RenderMetadataDisplay() {
         ImGui::Text("File: %s", currentFile.c_str());
+        ImGui::SameLine();
+
+        const char* sourceLabel =
+            (metadataSource == MetadataSource::LSB) ? "[LSB]" : "[File]";
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s", sourceLabel);
+
         ImGui::Separator();
 
         if (metadata.is_null() || metadata.empty()) {
-            ImGui::Text("No metadata found in this file.");
+            if (metadataSource == MetadataSource::LSB) {
+                ImGui::Text("No LSB metadata found in this file.");
+            }
+            else {
+                ImGui::Text("No file metadata found in this file.");
+            }
             return;
         }
 
@@ -161,11 +206,28 @@ namespace GUI {
             CopyEntireEntityToClipboard();
         }
 
+        if (displayMode == DisplayMode::Tree) {
+            ImGui::SameLine();
+            if (ImGui::Button("Expand All")) {
+                ++treeGeneration;
+                treeForceOpen = 1;
+                treeForceOpenPending = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Collapse All")) {
+                ++treeGeneration;
+                treeForceOpen = 0;
+                treeForceOpenPending = true;
+            }
+        }
+
         ImGui::Separator();
 
         if (ImGui::BeginChild("MetadataViewerChild", ImVec2(0, 0), true)) {
+            nodeCounter = 0;
             if (displayMode == DisplayMode::Tree) {
                 RenderJsonTree(metadata);
+                treeForceOpenPending = false;
             }
             else {
                 std::string jsonStr = metadata.dump(2);
@@ -182,7 +244,7 @@ namespace GUI {
         ImGui::EndChild();
     }
 
-    void MetadataView::RenderJsonTree(const nlohmann::json& j, int depth) {
+    void MetadataView::RenderJsonTree(const nlohmann::json& j, int depth, const std::string& path) {
         float indent = 16.0f;
         bool hasFilter = !filterText.empty();
         std::string lowerFilter = filterText;
@@ -192,14 +254,12 @@ namespace GUI {
             for (auto it = j.begin(); it != j.end(); ++it) {
                 std::string key = it.key();
 
-                // Check if key matches filter
                 std::string lowerKey = key;
                 std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), ::tolower);
                 bool keyMatches = !hasFilter || lowerKey.find(lowerFilter) != std::string::npos;
 
                 const auto& value = it.value();
 
-                // For objects and arrays, check if any child matches
                 bool childMatches = false;
                 if (keyMatches || !hasFilter) {
                     childMatches = true;
@@ -214,43 +274,48 @@ namespace GUI {
 
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
 
-                ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "\"%s\"", key.c_str());
-                ImGui::SameLine();
+                std::string childPath = path + "/" + key;
+                std::string nodeId = childPath + "##g" + std::to_string(treeGeneration);
 
-                if (value.is_object()) {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ": {");
-                    ImGui::SameLine();
-                    RenderCopyButton(value, "copy_obj_" + key);
-                    RenderJsonTree(value, depth + 1);
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "}");
-                    if (std::next(it) != j.end()) {
-                        ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                if (value.is_object() || value.is_array()) {
+                    if (treeForceOpenPending) {
+                        ImGui::SetNextItemOpen(treeForceOpen != 0, ImGuiCond_Always);
                     }
-                }
-                else if (value.is_array()) {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ": [");
+
+                    bool nodeOpen = ImGui::TreeNodeEx(nodeId.c_str(),
+                        ImGuiTreeNodeFlags_OpenOnArrow |
+                        ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                        ImGuiTreeNodeFlags_SpanAvailWidth,
+                        "\"%s\": %s", key.c_str(),
+                        value.is_object() ? "{" : "[");
+
                     ImGui::SameLine();
-                    RenderCopyButton(value, "copy_arr_" + key);
-                    RenderJsonTree(value, depth + 1);
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "]");
-                    if (std::next(it) != j.end()) {
+                    RenderCopyButton(value);
+
+                    if (nodeOpen) {
+                        RenderJsonTree(value, depth + 1, childPath);
+
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
+                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                            value.is_object() ? "}" : "]");
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                        RenderCopyButton(value);
+                        ImGui::TreePop();
                     }
                 }
                 else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ": ");
+                    ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "\"%s\"", key.c_str());
                     ImGui::SameLine();
-                    RenderJsonValue(value, key, depth);
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ":");
                     ImGui::SameLine();
-                    RenderCopyButton(value, "copy_val_" + key);
-                    if (std::next(it) != j.end()) {
-                        ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
-                    }
+
+                    float avail = ImGui::GetContentRegionAvail().x;
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + avail);
+                    RenderJsonValue(value);
+                    ImGui::PopTextWrapPos();
+
+                    ImGui::SameLine();
+                    RenderCopyButton(value);
                 }
             }
         }
@@ -259,12 +324,14 @@ namespace GUI {
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
 
                 std::string key = "[" + std::to_string(i) + "]";
+                std::string childPath = path + "/" + key;
+                std::string nodeId = childPath + "##g" + std::to_string(treeGeneration);
+
+                const auto& value = j[i];
 
                 std::string lowerKey = key;
                 std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), ::tolower);
                 bool keyMatches = !hasFilter || lowerKey.find(lowerFilter) != std::string::npos;
-
-                const auto& value = j[i];
 
                 bool childMatches = false;
                 if (keyMatches || !hasFilter) {
@@ -278,43 +345,45 @@ namespace GUI {
                     continue;
                 }
 
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", key.c_str());
-                ImGui::SameLine();
-
-                if (value.is_object()) {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ": {");
-                    ImGui::SameLine();
-                    RenderCopyButton(value, "copy_obj_" + key);
-                    RenderJsonTree(value, depth + 1);
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "}");
-                    if (i < j.size() - 1) {
-                        ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                if (value.is_object() || value.is_array()) {
+                    if (treeForceOpenPending) {
+                        ImGui::SetNextItemOpen(treeForceOpen != 0, ImGuiCond_Always);
                     }
-                }
-                else if (value.is_array()) {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ": [");
+
+                    bool nodeOpen = ImGui::TreeNodeEx(nodeId.c_str(),
+                        ImGuiTreeNodeFlags_OpenOnArrow |
+                        ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                        ImGuiTreeNodeFlags_SpanAvailWidth,
+                        "%s: %s", key.c_str(),
+                        value.is_object() ? "{" : "[");
+
                     ImGui::SameLine();
-                    RenderCopyButton(value, "copy_arr_" + key);
-                    RenderJsonTree(value, depth + 1);
-                    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "]");
-                    if (i < j.size() - 1) {
+                    RenderCopyButton(value);
+
+                    if (nodeOpen) {
+                        RenderJsonTree(value, depth + 1, childPath);
+
+                        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + depth * indent);
+                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f),
+                            value.is_object() ? "}" : "]");
                         ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
+                        RenderCopyButton(value);
+                        ImGui::TreePop();
                     }
                 }
                 else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ": ");
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "%s", key.c_str());
                     ImGui::SameLine();
-                    RenderJsonValue(value, key, depth);
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ":");
                     ImGui::SameLine();
-                    RenderCopyButton(value, "copy_val_" + key);
-                    if (i < j.size() - 1) {
-                        ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), ",");
-                    }
+
+                    float avail = ImGui::GetContentRegionAvail().x;
+                    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + avail);
+                    RenderJsonValue(value);
+                    ImGui::PopTextWrapPos();
+
+                    ImGui::SameLine();
+                    RenderCopyButton(value);
                 }
             }
         }
@@ -349,14 +418,11 @@ namespace GUI {
         return false;
     }
 
-    void MetadataView::RenderJsonValue(const nlohmann::json& value, const std::string& key, int depth) {
+    void MetadataView::RenderJsonValue(const nlohmann::json& value) {
         ImVec4 color = GetColorForType(value);
 
         if (value.is_string()) {
             std::string str = value.get<std::string>();
-            if (str.length() > 80) {
-                str = str.substr(0, 77) + "...";
-            }
             ImGui::TextColored(color, "\"%s\"", str.c_str());
         }
         else if (value.is_number_integer()) {
@@ -376,9 +442,8 @@ namespace GUI {
         }
     }
 
-    void MetadataView::RenderCopyButton(const nlohmann::json& value, const std::string& label) {
-        ImGui::SameLine();
-        ImGui::PushID(label.c_str());
+    void MetadataView::RenderCopyButton(const nlohmann::json& value) {
+        ImGui::PushID(nodeCounter++);
         if (ImGui::SmallButton("Copy")) {
             CopyValueToClipboard(value);
         }
@@ -443,7 +508,10 @@ namespace GUI {
 
     void MetadataView::ClearMetadata() {
         metadata = nlohmann::json::object();
+        fileMetadata = nlohmann::json::object();
+        lsbMetadata = nlohmann::json::object();
         currentFile = "";
+        metadataSource = MetadataSource::File;
         ANI_LOG_DEBUG("Cleared metadata");
     }
 
@@ -466,6 +534,14 @@ namespace GUI {
                 currentFile = "Clipboard";
             }
 
+            ExpandEmbeddedJson(metadata);
+            fileMetadata = metadata;
+            lsbMetadata = nlohmann::json::object();
+            metadataSource = MetadataSource::File;
+            ++treeGeneration;
+            treeForceOpen = 1;
+            treeForceOpenPending = true;
+
             ANI_LOG_DEBUG("Pasted from clipboard");
         }
         catch (const std::exception& e) {
@@ -473,17 +549,55 @@ namespace GUI {
         }
     }
 
-    nlohmann::json MetadataView::ReadMetadataFromFile(const std::string& filePath) {
+    void MetadataView::ExpandEmbeddedJson(nlohmann::json& j) {
+        if (j.is_object()) {
+            for (auto it = j.begin(); it != j.end(); ++it) {
+                ExpandEmbeddedJson(it.value());
+            }
+        }
+        else if (j.is_array()) {
+            for (auto& element : j) {
+                ExpandEmbeddedJson(element);
+            }
+        }
+        else if (j.is_string()) {
+            const std::string& s = j.get_ref<const std::string&>();
+            if (s.empty()) return;
+
+            size_t start = 0;
+            while (start < s.size() &&
+                (s[start] == ' ' || s[start] == '\t' ||
+                    s[start] == '\r' || s[start] == '\n'))
+            {
+                ++start;
+            }
+            if (start >= s.size()) return;
+            if (s[start] != '{' && s[start] != '[') return;
+
+            try {
+                nlohmann::json parsed = nlohmann::json::parse(s);
+                if (parsed.is_object() || parsed.is_array()) {
+                    j = parsed;
+                    ExpandEmbeddedJson(j);
+                }
+            }
+            catch (...) {
+            }
+        }
+    }
+
+    void MetadataView::ReadAllMetadataFromFile(const std::string& filePath) {
+        fileMetadata = nlohmann::json::object();
+        lsbMetadata = nlohmann::json::object();
+
         std::string ext = std::filesystem::path(filePath).extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
-        nlohmann::json rawMetadata;
 
         try {
             if (ext == ".json") {
                 std::ifstream file(filePath);
                 if (file.is_open()) {
-                    file >> rawMetadata;
+                    file >> fileMetadata;
                     file.close();
                 }
                 else {
@@ -491,17 +605,17 @@ namespace GUI {
                 }
             }
             else if (ext == ".png") {
-                rawMetadata = Utils::PngMetadata::ReadMetadataFromPNG(filePath);
+                fileMetadata = Utils::PngMetadata::ReadMetadataFromPNG(filePath);
             }
             else if (ext == ".jpg" || ext == ".jpeg") {
-                rawMetadata = Utils::JpegMetadata::ReadMetadataFromJPEG(filePath);
+                fileMetadata = Utils::JpegMetadata::ReadMetadataFromJPEG(filePath);
             }
             else if (ext == ".webp") {
-                rawMetadata = Utils::WebPMetadata::ReadMetadataFromWebP(filePath);
+                fileMetadata = Utils::WebPMetadata::ReadMetadataFromWebP(filePath);
             }
             else if (ext == ".tiff") {
 #ifdef USE_EXIV2
-                rawMetadata = Utils::MetadataUtils::ReadMetadataFromTIFF(filePath);
+                fileMetadata = Utils::MetadataUtils::ReadMetadataFromTIFF(filePath);
 #else
                 ANI_LOG_WARN("TIFF support disabled (USE_EXIV2 not defined): %s", filePath.c_str());
 #endif
@@ -510,13 +624,12 @@ namespace GUI {
                 ext == ".mov" || ext == ".flv" || ext == ".m4v" || ext == ".3gp" ||
                 ext == ".ogv" || ext == ".ts" || ext == ".wmv" || ext == ".mpg" ||
                 ext == ".mpeg" || ext == ".ogg") {
-                rawMetadata = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
+                fileMetadata = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
             }
             else {
-                // For unknown formats, try to read as JSON or sidecar
                 std::string jsonPath = filePath + ".json";
                 if (std::filesystem::exists(jsonPath)) {
-                    rawMetadata = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
+                    fileMetadata = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
                 }
                 else {
                     std::ifstream file(filePath);
@@ -524,10 +637,9 @@ namespace GUI {
                         std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
                         file.close();
                         try {
-                            rawMetadata = nlohmann::json::parse(content);
+                            fileMetadata = nlohmann::json::parse(content);
                         }
                         catch (...) {
-                            // Not valid JSON
                         }
                     }
                     else {
@@ -537,44 +649,29 @@ namespace GUI {
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("Error reading metadata from %s: %s", filePath.c_str(), e.what());
-            return nlohmann::json::object();
+            ANI_LOG_ERROR("Error reading file metadata from %s: %s", filePath.c_str(), e.what());
         }
 
-        // ---------------------------------------------------------------------
-        // LSB fallback for images: only if the primary reader found nothing.
-        // Reads the alpha-channel LSB payload and tries to parse it as JSON.
-        //
-        // Note: ExtractFromAlpha() takes an optional signature argument. If
-        // your embedder uses a signature (recommended), pass it here so that
-        // images without LSB data return an empty payload instead of random
-        // bytes read from their alpha channel.
-        // ---------------------------------------------------------------------
+        ExpandEmbeddedJson(fileMetadata);
+
         const bool isImageExt = (ext == ".png" || ext == ".jpg" || ext == ".jpeg"
             || ext == ".webp" || ext == ".tiff");
-        if (isImageExt && (rawMetadata.is_null() || rawMetadata.empty())) {
+        if (isImageExt) {
             try {
                 int w = 0, h = 0, ch = 0;
                 unsigned char* pixels = stbi_load(filePath.c_str(), &w, &h, &ch, 4);
                 if (pixels) {
-                    std::vector<unsigned char> payload =
-                        Utils::SteganographyUtils::ExtractFromAlpha(pixels, w, h);
+                    nlohmann::json parsed =
+                        Utils::SteganographyUtils::ExtractJsonFromAlpha(pixels, w, h);
                     stbi_image_free(pixels);
 
-                    if (!payload.empty()) {
-                        try {
-                            std::string text(payload.begin(), payload.end());
-                            nlohmann::json parsed = nlohmann::json::parse(text);
-                            if (parsed.is_object() || parsed.is_array()) {
-                                rawMetadata = parsed;
-                                rawMetadata["_source"] = "lsb";
-                                ANI_LOG_DEBUG("Read LSB metadata from: %s", filePath.c_str());
-                            }
+                    if (!parsed.is_null() && !parsed.empty()) {
+                        ExpandEmbeddedJson(parsed);
+                        lsbMetadata = parsed;
+                        if (Utils::SteganographyUtils::LooksLikeAniStudioMetadata(parsed)) {
+                            lsbMetadata["_aniStudioCompatible"] = true;
                         }
-                        catch (const std::exception& e) {
-                            ANI_LOG_TRACE("LSB payload from %s is not valid JSON: %s",
-                                filePath.c_str(), e.what());
-                        }
+                        ANI_LOG_DEBUG("Read LSB metadata from: %s", filePath.c_str());
                     }
                 }
             }
@@ -583,32 +680,55 @@ namespace GUI {
             }
         }
 
-        // Sidecar JSON fallback
-        if (rawMetadata.is_null() || rawMetadata.empty()) {
+        if (fileMetadata.is_null() || fileMetadata.empty()) {
             std::string jsonPath = filePath + ".json";
             if (std::filesystem::exists(jsonPath)) {
                 ANI_LOG_TRACE("Trying sidecar JSON: %s", jsonPath.c_str());
-                rawMetadata = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
+                fileMetadata = Utils::MetadataUtils::LoadMetadataFromJson(jsonPath);
+                ExpandEmbeddedJson(fileMetadata);
             }
         }
+    }
 
-        if (rawMetadata.is_null() || rawMetadata.empty()) {
-            ANI_LOG_DEBUG("No metadata found for: %s", filePath.c_str());
+    void MetadataView::ApplyMetadataSource() {
+        if (metadataSource == MetadataSource::LSB) {
+            metadata = lsbMetadata;
         }
-
-        return rawMetadata;
+        else {
+            metadata = fileMetadata;
+        }
+        ++treeGeneration;
+        treeForceOpen = 1;
+        treeForceOpenPending = true;
     }
 
     void MetadataView::LoadFromFile(const std::string& filePath) {
         currentFile = filePath;
-        metadata = ReadMetadataFromFile(filePath);
+        ReadAllMetadataFromFile(filePath);
+
+        const bool hasFileMeta = !(fileMetadata.is_null() || fileMetadata.empty());
+        const bool hasLsbMeta = !(lsbMetadata.is_null() || lsbMetadata.empty());
+
+        if (hasFileMeta) {
+            metadataSource = MetadataSource::File;
+        }
+        else if (hasLsbMeta) {
+            metadataSource = MetadataSource::LSB;
+        }
+        else {
+            metadataSource = MetadataSource::File;
+        }
+
+        ApplyMetadataSource();
 
         if (metadata.is_null() || metadata.empty()) {
             metadata = nlohmann::json::object();
             ANI_LOG_WARN("Loaded file but no metadata found: %s", filePath.c_str());
         }
         else {
-            ANI_LOG_INFO("Loaded metadata from: %s", filePath.c_str());
+            ANI_LOG_INFO("Loaded metadata from: %s (source=%s)",
+                filePath.c_str(),
+                metadataSource == MetadataSource::LSB ? "lsb" : "file");
         }
     }
 
@@ -630,6 +750,14 @@ namespace GUI {
                 metadata = jsonData;
                 currentFile = "Clipboard";
             }
+
+            ExpandEmbeddedJson(metadata);
+            fileMetadata = metadata;
+            lsbMetadata = nlohmann::json::object();
+            metadataSource = MetadataSource::File;
+            ++treeGeneration;
+            treeForceOpen = 1;
+            treeForceOpenPending = true;
 
             ANI_LOG_DEBUG("Loaded metadata from clipboard");
         }
@@ -660,7 +788,14 @@ namespace GUI {
 
     void MetadataView::SetMetadata(const nlohmann::json& metadata, const std::string& source) {
         this->metadata = metadata;
+        ExpandEmbeddedJson(this->metadata);
+        this->fileMetadata = this->metadata;
+        this->lsbMetadata = nlohmann::json::object();
+        this->metadataSource = MetadataSource::File;
         currentFile = source;
+        ++treeGeneration;
+        treeForceOpen = 1;
+        treeForceOpenPending = true;
         ANI_LOG_DEBUG("Metadata set from: %s", source.c_str());
     }
 

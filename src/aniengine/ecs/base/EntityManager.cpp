@@ -114,8 +114,9 @@ namespace ECS {
 
 		componentsArrays.clear();
 
-		// No free-list: fresh slots handed out sequentially by
-		// AddNewEntity(). Slot 0 is reserved as the null handle.
+		// Slot 0 is reserved as the null handle. Freed IDs are handed
+		// back out by AddNewEntity() via m_freeEntityIDs.
+		while (!m_freeEntityIDs.empty()) m_freeEntityIDs.pop();
 		nextFreshID = 1;
 		entityCount = 0;
 
@@ -123,10 +124,25 @@ namespace ECS {
 	}
 
 	const EntityID EntityManager::AddNewEntity() {
-		if (nextFreshID >= MAX_ENTITY_COUNT) {
-			ANI_LOG_ERROR("AddNewEntity: entity limit reached (%zu)", MAX_ENTITY_COUNT);
-			return 0;   // null handle
+		// Prefer a freed ID so we don't exhaust the space over a long
+		// session. Slot 0 is never handed out.
+		if (!m_freeEntityIDs.empty()) {
+			EntityID entity = m_freeEntityIDs.front();
+			m_freeEntityIDs.pop();
+
+			if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
+				AddEntitySignature(entity);
+				entityCount++;
+				return entity;
+			}
 		}
+
+		if (nextFreshID >= MAX_ENTITY_COUNT) {
+			ANI_LOG_ERROR("AddNewEntity: entity limit reached (%zu) ? live=%u free=%zu",
+				MAX_ENTITY_COUNT, (unsigned)entityCount, m_freeEntityIDs.size());
+			return 0;
+		}
+
 		const EntityID entity = nextFreshID++;
 		AddEntitySignature(entity);
 		entityCount++;
@@ -135,13 +151,19 @@ namespace ECS {
 
 	void EntityManager::DestroyEntity(const EntityID entity) {
 		assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+		assert(entity != 0 && "Cannot destroy the null entity");
 
 		if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
 			return;
 		}
 
 		for (auto& [type, system] : registeredSystems) {
+			(void)type;
 			if (system) system->OnEntityDestroyed(entity);
+		}
+
+		for (auto& system : registeredSystems) {
+			system.second->RemoveEntity(entity);
 		}
 
 		entitiesSignatures.erase(entity);
@@ -150,19 +172,18 @@ namespace ECS {
 			array.second->Erase(entity);
 		}
 
-		for (auto& system : registeredSystems) {
-			system.second->RemoveEntity(entity);
-		}
-
 		for (auto& [systemId, systemInfo] : pluginSystems) {
+			(void)systemId;
 			systemInfo.entities.erase(entity);
 		}
 
 		entityCount--;
-		// Intentionally do NOT return `entity` to a free-list.
-		// IDs are monotonic and never reused, so a stale handle
-		// can never alias a live entity.
-		ANI_LOG_TRACE("Removed Entity: %u", entity);
+		m_freeEntityIDs.push(entity);
+		ANI_LOG_TRACE("Removed Entity: %u (freed %zu)", entity, m_freeEntityIDs.size());
+	}
+
+	std::queue<EntityID> EntityManager::GetAvailableEntities() const {
+		return m_freeEntityIDs;
 	}
 
 	bool EntityManager::IsEntityValid(EntityID entity) const {
@@ -638,12 +659,6 @@ namespace ECS {
 
 	EntityID EntityManager::GetEntityCount() const {
 		return entityCount;
-	}
-
-	std::queue<EntityID> EntityManager::GetAvailableEntities() const {
-		// Deprecated: no free-list any more. Return an empty queue so
-		// existing callers keep compiling without behaviour change.
-		return {};
 	}
 
 	const std::map<EntityID, std::shared_ptr<EntitySignature>>& EntityManager::GetEntitiesSignatures() const {

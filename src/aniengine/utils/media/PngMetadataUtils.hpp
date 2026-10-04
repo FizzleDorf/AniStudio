@@ -270,7 +270,6 @@ namespace Utils
                 return false;
             }
 
-            // Create a COPY of the original data so we don't corrupt it
             size_t totalBytes = width * height * channels;
             unsigned char* rgbaData = (unsigned char*)malloc(totalBytes);
             if (!rgbaData) {
@@ -280,7 +279,6 @@ namespace Utils
             memcpy(rgbaData, originalData, totalBytes);
             stbi_image_free(originalData);
 
-            // If we need to convert to RGBA, do it on the copy
             if (channels != 4) {
                 unsigned char* convertedData = (unsigned char*)malloc(width * height * 4);
                 if (!convertedData) {
@@ -359,7 +357,7 @@ namespace Utils
             }
 
             size_t totalBits = fullPayload.size();
-            size_t maxBits = width * height * 8;
+            size_t maxBits = static_cast<size_t>(width) * static_cast<size_t>(height);
             if (totalBits > maxBits) {
                 std::cerr << "Metadata too large to embed stealthily" << std::endl;
                 free(rgbaData);
@@ -369,21 +367,17 @@ namespace Utils
             const int row_stride = width * 4;
             size_t bitOffset = 0;
 
-            for (int x = 0; x < width; ++x) {
-                for (int y = 0; y < height; ++y) {
+            for (int y = 0; y < height && bitOffset < totalBits; ++y) {
+                for (int x = 0; x < width && bitOffset < totalBits; ++x) {
                     unsigned char* pixelAlpha = rgbaData + y * row_stride + x * 4 + 3;
-                    if (bitOffset < totalBits) {
-                        if (fullPayload[bitOffset]) {
-                            *pixelAlpha |= 1;
-                        }
-                        else {
-                            *pixelAlpha &= ~1;
-                        }
-                        bitOffset++;
+                    if (fullPayload[bitOffset]) {
+                        *pixelAlpha |= 1;
                     }
-                    if (bitOffset >= totalBits) break;
+                    else {
+                        *pixelAlpha &= ~1;
+                    }
+                    bitOffset++;
                 }
-                if (bitOffset >= totalBits) break;
             }
 
             std::string tempFile = imagePath + ".tmp";

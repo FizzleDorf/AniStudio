@@ -2,6 +2,7 @@
 
 #include "Types.hpp"
 #include <deque>
+#include <unordered_map>
 #include <cassert>
 #include <algorithm>
 #include <iostream>
@@ -23,26 +24,40 @@ namespace ECS {
 		~CompList() = default;
 
 		void Insert(const T& component) {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == component.GetID(); });
-			if (comp == data.end()) {
-				data.push_back(component);
+			const EntityID id = component.GetID();
+
+			auto it = index.find(id);
+			if (it != index.end()) {
+				data[it->second] = component;
+				return;
 			}
-			else {
-				*comp = component;
-			}
+
+			index[id] = data.size();
+			data.push_back(component);
 		}
 
 		T& Get(const EntityID entity) {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == entity; });
-			assert(comp != data.end() && "Component doesn't exist!");
-			return *comp;
+			auto it = index.find(entity);
+			assert(it != index.end() && "Component doesn't exist!");
+			return data[it->second];
 		}
 
 		void Erase(const EntityID entity) override final {
-			auto comp = std::find_if(data.begin(), data.end(), [&](const T& c) { return c.GetID() == entity; });
-			if (comp != data.end()) {
-				data.erase(comp);
+			auto it = index.find(entity);
+			if (it == index.end()) {
+				return;
 			}
+
+			const size_t slot = it->second;
+			const size_t last = data.size() - 1;
+
+			if (slot != last) {
+				data[slot] = std::move(data[last]);
+				index[data[slot].GetID()] = slot;
+			}
+
+			data.pop_back();
+			index.erase(it);
 		}
 
 		size_t Size() const {
@@ -51,8 +66,10 @@ namespace ECS {
 
 		void Clear() {
 			data.clear();
+			index.clear();
 		}
 
 		std::deque<T> data;
+		std::unordered_map<EntityID, size_t> index;
 	};
 } // namespace ECS

@@ -43,7 +43,6 @@ namespace ECS {
         StopCurrentTask();
         if (workerThread.joinable()) workerThread.join();
 
-        // Wait for any orphaned futures to resolve before freeing the pool.
         {
             std::lock_guard<std::mutex> olock(m_orphanMutex);
             for (auto& f : m_orphanedFutures) {
@@ -61,6 +60,7 @@ namespace ECS {
         }
         std::lock_guard<std::mutex> lock(queueMutex);
         taskQueue.clear();
+        m_pendingDestroy.clear();
 
         ANI_LOG_INFO("SDCPPSystem shutdown complete");
     }
@@ -147,11 +147,18 @@ namespace ECS {
             EntityID settingsEntity = settingsSys->GetSettingsEntity();
             if (mgr.IsEntityValid(settingsEntity) &&
                 mgr.HasComponent<SDCPPSettingsComponent>(settingsEntity)) {
-                auto& globalSettings = mgr.GetComponent<SDCPPSettingsComponent>(settingsEntity);
+
+                // IMPORTANT: do not hold a reference to globalSettings across
+                // AddComponent<> below. AddComponent can reallocate component
+                // storage and invalidate any outstanding references.
+                nlohmann::json globalSettingsJson =
+                    mgr.GetComponent<SDCPPSettingsComponent>(settingsEntity).Serialize();
+
                 if (!mgr.HasComponent<SDCPPSettingsComponent>(entityID))
                     mgr.AddComponent<SDCPPSettingsComponent>(entityID);
+
                 auto& taskSettings = mgr.GetComponent<SDCPPSettingsComponent>(entityID);
-                taskSettings.Deserialize(globalSettings.Serialize());
+                taskSettings.Deserialize(globalSettingsJson);
             }
         }
 
@@ -209,6 +216,15 @@ namespace ECS {
             sd_ctx_params_t localCtxParams{};
             SDCPP::FillContextParams(mgr, entityID, localCtxParams, *localCtxRes);
 
+            const bool hasModelPath =
+                (localCtxParams.model_path && *localCtxParams.model_path) ||
+                (localCtxParams.diffusion_model_path && *localCtxParams.diffusion_model_path);
+            if (!hasModelPath) {
+                ANI_LOG_ERROR("QueueTask: entity %u has no model path; refusing to queue",
+                    entityID);
+                return;
+            }
+
             auto handle = m_cacheSystem->acquireOrCreateContext(localCtxParams, localCtxRes);
             if (!handle) {
                 ANI_LOG_ERROR("QueueTask: failed to acquire context: %s",
@@ -228,6 +244,12 @@ namespace ECS {
             sd_ctx_params_t localCtxParams{};
             SDCPP::FillContextParams(mgr, entityID, localCtxParams, *localCtxRes);
 
+            if (!localCtxParams.control_net_path || !*localCtxParams.control_net_path) {
+                ANI_LOG_ERROR("QueueTask: entity %u has no upscaler path; refusing to queue",
+                    entityID);
+                return;
+            }
+
             auto handle = m_cacheSystem->acquireOrCreateUpscaler(localCtxParams, localCtxRes);
             if (!handle) {
                 ANI_LOG_ERROR("QueueTask: failed to acquire upscaler: %s",
@@ -238,6 +260,12 @@ namespace ECS {
         }
         else if (taskType == TaskType::Conversion) {
             SDCPP::FillContextParams(mgr, entityID, task.convParams, *task.genRes);
+
+            if (!task.convParams.model_path || !*task.convParams.model_path) {
+                ANI_LOG_ERROR("QueueTask: entity %u has no model path for conversion; refusing to queue",
+                    entityID);
+                return;
+            }
         }
 
         std::lock_guard<std::mutex> lock(queueMutex);
@@ -253,6 +281,11 @@ namespace ECS {
     void SDCPPSystem::Update(float deltaT) {
         if (shuttingDown) return;
 
+        // Destroy task entities that completed in a previous frame, before
+        // anything else on this frame can hold an iterator into the entity
+        // table or a reference into component storage.
+        DrainPendingDestroy();
+
         DrainOrphanedFutures();
 
         if (clearRequested) {
@@ -261,6 +294,29 @@ namespace ECS {
         }
         ProcessQueues();
         CheckTaskCompletion();
+    }
+
+    void SDCPPSystem::DrainPendingDestroy() {
+        std::vector<EntityID> toDestroy;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            toDestroy.swap(m_pendingDestroy);
+        }
+
+        auto imgSys = mgr.GetSystem<ImageSystem>();
+
+        for (EntityID e : toDestroy) {
+            if (!mgr.IsEntityValid(e)) continue;
+
+            if (imgSys && imgSys->IsEntityPendingLoad(e)) {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                m_pendingDestroy.push_back(e);
+                continue;
+            }
+
+            ANI_LOG_TRACE("DrainPendingDestroy: destroying entity %u", e);
+            mgr.DestroyEntity(e);
+        }
     }
 
     // ---------------------------------------------------------------------
@@ -530,16 +586,13 @@ namespace ECS {
         const std::string& fullPath,
         sd_ctx_t* context)
     {
-        if (context) sd_cancel_generation(context, SD_CANCEL_RESET);
 
-        // Preview frames belong to this generation only.
         const uint64_t token = GUI::DiffusionCallbackUtils::BeginGeneration();
 
         sd_image_t* images = nullptr;
         int count = 0;
         bool ok = generate_image(context, &params, &images, &count);
 
-        // Stop accepting preview frames BEFORE freeing / reading the result images.
         GUI::DiffusionCallbackUtils::EndGeneration(token);
 
         if (ok && count > 0 && images && images[0].data) {
@@ -740,18 +793,54 @@ namespace ECS {
     // Dispatch
     // ---------------------------------------------------------------------
     void SDCPPSystem::ProcessQueues() {
-        // Drain resolved orphans before taking the queue lock. This is the key
-        // change: we refuse to submit a new task until every previously-cancelled
-        // worker has actually returned.
         DrainOrphanedFutures();
 
         {
             std::lock_guard<std::mutex> olock(m_orphanMutex);
             if (!m_orphanedFutures.empty()) {
-                // At least one cancelled worker is still running. Don't touch the
-                // shared SD context until it's gone.
                 return;
             }
+        }
+
+        // Snapshot the head task outside the lock so filesystem calls
+        // (ResolveFullPathForTask) do not run while queueMutex is held.
+        // Any callback that wants to inspect the queue from inside the
+        // filesystem call will not deadlock on queueMutex.
+        std::string resolvedPath;
+        EntityID headEntity = 0;
+        {
+            std::lock_guard<std::mutex> lock(queueMutex);
+            if (pauseWorker || shuttingDown) return;
+            if (taskQueue.empty() || hasActiveTask) return;
+
+            for (auto& t : taskQueue) {
+                if (t.processing) continue;
+                if (t.fullPath.empty()) {
+                    headEntity = t.entityID;
+                }
+                else {
+                    resolvedPath = t.fullPath;
+                }
+                break;
+            }
+        }
+
+        if (headEntity != 0 && resolvedPath.empty()) {
+            // Resolve outside the lock.
+            TaskData snapshot;
+            {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                for (auto& t : taskQueue) {
+                    if (!t.processing && t.entityID == headEntity) {
+                        // Make a shallow snapshot for path resolution. We only
+                        // need entityID and taskType for ResolveFullPathForTask.
+                        snapshot.entityID = t.entityID;
+                        snapshot.taskType = t.taskType;
+                        break;
+                    }
+                }
+            }
+            resolvedPath = ResolveFullPathForTask(snapshot);
         }
 
         std::lock_guard<std::mutex> lock(queueMutex);
@@ -780,7 +869,12 @@ namespace ECS {
             if (task.processing) continue;
 
             if (task.fullPath.empty()) {
-                task.fullPath = ResolveFullPathForTask(task);
+                if (!resolvedPath.empty()) {
+                    task.fullPath = resolvedPath;
+                }
+                else {
+                    task.fullPath = ResolveFullPathForTask(task);
+                }
                 if (task.fullPath.empty()) {
                     ANI_LOG_ERROR("ProcessQueues: cannot resolve output path for entity %u, removing task",
                         task.entityID);
@@ -888,8 +982,6 @@ namespace ECS {
                         remove = true;
                     }
                     else if (now - it->cancelTime > std::chrono::seconds(10)) {
-                        // Don't drop the future: hand it to the orphan list so the
-                        // captured ctxHandle/genRes stay alive until it resolves.
                         remove = true;
                         orphanFuture = true;
                     }
@@ -943,6 +1035,7 @@ namespace ECS {
             bool exists = std::filesystem::exists(fullPath);
 
             if (!shuttingDown && exists) {
+
                 if (IsVideoTask(taskType)) {
                     if (LoadVideoWithAudio(fullPath) == 0) {
                         EntityID e = mgr.AddNewEntity();
@@ -954,12 +1047,26 @@ namespace ECS {
                     LoadImageViaImageSystem(e, fullPath);
                 }
 
-                // Notify engine-side listeners (plain std::function; this
-                // system has no dependency on ANI::Events).
                 NotifyTaskCompleted(taskType, entityID, fullPath);
+
+                if (mgr.IsEntityValid(entityID)) {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    m_pendingDestroy.push_back(entityID);
+                }
             }
             else if (exists) {
                 std::filesystem::remove(fullPath);
+                if (mgr.IsEntityValid(entityID)) {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    m_pendingDestroy.push_back(entityID);
+                }
+            }
+            else {
+                NotifyTaskCompleted(taskType, entityID, fullPath);
+                if (mgr.IsEntityValid(entityID)) {
+                    std::lock_guard<std::mutex> lock(queueMutex);
+                    m_pendingDestroy.push_back(entityID);
+                }
             }
         }
         catch (const std::exception& e) {
@@ -968,10 +1075,10 @@ namespace ECS {
             std::error_code ec;
             if (std::filesystem::exists(fullPath, ec))
                 std::filesystem::remove(fullPath, ec);
-        }
-
-        if (mgr.IsEntityValid(entityID)) {
-            mgr.DestroyEntity(entityID);
+            if (mgr.IsEntityValid(entityID)) {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                m_pendingDestroy.push_back(entityID);
+            }
         }
     }
 
@@ -991,7 +1098,7 @@ namespace ECS {
             }
         }
         std::lock_guard<std::mutex> lock(queueMutex);
-        return hasActiveTask || !taskQueue.empty();
+        return hasActiveTask || !taskQueue.empty() || !m_pendingDestroy.empty();
     }
 
     void SDCPPSystem::DrainOrphanedFutures() {

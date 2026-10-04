@@ -76,7 +76,6 @@ namespace GUI {
         m_textureSystem = m_entityManager.GetSystem<ECS::TextureSystem>();
         m_videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
 
-        // Preview entity (used for both single-frame and batch preview).
         m_previewEntity = m_entityManager.AddNewEntity();
         if (m_entityManager.IsEntityValid(m_previewEntity)) {
             if (!m_entityManager.HasComponent<ECS::PreviewImageComponent>(m_previewEntity)) {
@@ -88,7 +87,6 @@ namespace GUI {
             m_previewEntityHasComponent = true;
         }
 
-        // Video preview entity (finished-video playback).
         m_videoPreviewEntity = m_entityManager.AddNewEntity();
         if (m_entityManager.IsEntityValid(m_videoPreviewEntity)) {
             m_entityManager.AddComponent<ECS::PreviewVideoComponent>(m_videoPreviewEntity);
@@ -225,8 +223,6 @@ namespace GUI {
         sdcpp.preview_interval = m_interval;
     }
 
-    // ---- live preview (image single frame OR video batch) ----
-
     void PreviewView::PushPreviewFrameToComponent(const PreviewFrame& frame) {
         if (!m_previewEntityHasComponent) return;
         if (!m_entityManager.IsEntityValid(m_previewEntity)) return;
@@ -271,22 +267,19 @@ namespace GUI {
         if (!m_previewEntityHasComponent) return;
         if (!m_entityManager.IsEntityValid(m_previewEntity)) return;
 
-        // Always prefer the batch (it contains every frame of the current
-        // denoiser step for video tasks). If no batch is available, fall
-        // back to the single latest frame (image tasks).
         PreviewBatch batch = DiffusionCallbackUtils::GetLatestBatch();
         const uint64_t batchSeq = DiffusionCallbackUtils::GetBatchSequence();
 
         if (batch.valid() && !batch.frames.empty()) {
             if (batchSeq != m_lastBatchSequence) {
-                // New step arrived. Reset cycling.
                 m_lastBatchSequence = batchSeq;
                 m_liveFrameIndex = 0;
                 m_liveFrameTimer = 0.0;
                 m_livePaused = false;
             }
 
-            if (m_liveFrameIndex >= (int)batch.frames.size()) {
+            if (m_liveFrameIndex < 0 ||
+                m_liveFrameIndex >= static_cast<int>(batch.frames.size())) {
                 m_liveFrameIndex = 0;
             }
 
@@ -294,8 +287,13 @@ namespace GUI {
                 m_liveFrameTimer += deltaT;
                 if (m_liveFrameTimer >= m_liveFrameDuration) {
                     m_liveFrameTimer = 0.0;
-                    m_liveFrameIndex = (m_liveFrameIndex + 1) % (int)batch.frames.size();
+                    m_liveFrameIndex = (m_liveFrameIndex + 1) % static_cast<int>(batch.frames.size());
                 }
+            }
+
+            if (m_liveFrameIndex < 0 ||
+                m_liveFrameIndex >= static_cast<int>(batch.frames.size())) {
+                m_liveFrameIndex = 0;
             }
 
             const PreviewFrame& frame = batch.frames[m_liveFrameIndex];
@@ -306,7 +304,6 @@ namespace GUI {
             return;
         }
 
-        // No batch: single-frame image path.
         const uint64_t seq = DiffusionCallbackUtils::GetPreviewSequence();
         if (seq == m_lastSequence) return;
         PreviewFrame frame = DiffusionCallbackUtils::GetLatestPreview();
@@ -315,8 +312,6 @@ namespace GUI {
         if (frame.channels != 1 && frame.channels != 3 && frame.channels != 4) return;
         PushPreviewFrameToComponent(frame);
     }
-
-    // ---- finished-video preview ----
 
     void PreviewView::RefreshVideoTextureIfNeeded() {
         if (!m_videoAttached) return;
@@ -394,7 +389,6 @@ namespace GUI {
             pvc.sourceName = label;
         }
 
-        // Video only: a preview pane has no business attaching audio.
         if (!av->AttachMedia(m_videoPreviewEntity, path,
             ECS::TrackType::Video,
             ECS::PlaybackMode::Streaming)) {
@@ -437,8 +431,6 @@ namespace GUI {
         m_lastVideoFingerprint = 0;
         m_playbackProgress = 0.0f;
     }
-
-    // ---- Transport helpers ----
 
     bool PreviewView::HasAudioTrack(ECS::EntityID entity) const {
         if (entity == 0 || !m_entityManager.IsEntityValid(entity)) return false;
@@ -653,8 +645,6 @@ namespace GUI {
         ImGui::EndMenuBar();
     }
 
-    // ---- controls while generating ----
-
     void PreviewView::DrawLivePreviewControls() {
         const auto prog = DiffusionCallbackUtils::GetProgressSnapshot();
         const uint64_t batchSeq = DiffusionCallbackUtils::GetBatchSequence();
@@ -662,7 +652,6 @@ namespace GUI {
 
         const bool isVideoBatch = batch.valid() && batch.frames.size() > 1;
 
-        // Header
         ImGui::TextUnformatted(isVideoBatch ? "Live video preview"
             : "Live image preview");
         ImGui::SameLine();
@@ -674,7 +663,6 @@ namespace GUI {
             ImGui::TextDisabled("(idle)");
         }
 
-        // Info line
         if (batch.valid() && !batch.frames.empty()) {
             const int frameCount = static_cast<int>(batch.frames.size());
             const int curFrame = (frameCount > 0) ? (m_liveFrameIndex % frameCount) : 0;
@@ -696,10 +684,8 @@ namespace GUI {
             return;
         }
 
-        // Transport row for the current batch.
         ImGui::BeginDisabled(batch.frames.size() <= 1);
 
-        // First frame
         ImGui::PushID(600);
         if (ImGui::Button(Icon::ArrowFirst().c_str())) {
             m_liveFrameIndex = 0;
@@ -710,7 +696,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Previous frame
         ImGui::PushID(601);
         if (ImGui::Button(Icon::ArrowLeft().c_str())) {
             m_liveFrameIndex--;
@@ -723,7 +708,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Play / Pause the cycling
         ImGui::PushID(602);
         if (ImGui::Button(m_livePaused ? Icon::Play().c_str() : Icon::Pause().c_str())) {
             m_livePaused = !m_livePaused;
@@ -735,7 +719,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Next frame
         ImGui::PushID(603);
         if (ImGui::Button(Icon::ArrowRight().c_str())) {
             m_liveFrameIndex = (m_liveFrameIndex + 1) %
@@ -747,7 +730,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Last frame
         ImGui::PushID(604);
         if (ImGui::Button(Icon::ArrowLast().c_str())) {
             m_liveFrameIndex = static_cast<int>(batch.frames.size()) - 1;
@@ -758,7 +740,6 @@ namespace GUI {
         ImGui::PopID();
         ImGui::SameLine();
 
-        // Cycle speed
         ImGui::Text("%s", Icon::ClockRotateLeft().c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Preview cycle speed");
         ImGui::SameLine();
@@ -775,7 +756,6 @@ namespace GUI {
 
         ImGui::EndDisabled();
 
-        // Frame scrubber
         if (batch.frames.size() > 1) {
             float maxFrame = static_cast<float>(batch.frames.size() - 1);
             float framePos = static_cast<float>(m_liveFrameIndex);
@@ -799,7 +779,6 @@ namespace GUI {
             ImGui::PopItemWidth();
         }
 
-        // Overall progress
         if (prog.isProcessing && prog.totalSteps > 0) {
             float frac = static_cast<float>(prog.currentStep) /
                 static_cast<float>(prog.totalSteps);
@@ -807,8 +786,6 @@ namespace GUI {
             ImGui::ProgressBar(frac, ImVec2(-1.0f, 0.0f));
         }
     }
-
-    // ---- controls for a fully-loaded video ----
 
     void PreviewView::DrawVideoControls() {
         if (!m_videoPreviewEntityHasComponent) return;
@@ -979,14 +956,11 @@ namespace GUI {
         auto sys = m_entityManager.GetSystem<ECS::SDCPPSystem>();
         const bool generating = sys && sys->HasPendingWork();
 
-        // A finished video is only "active" when we actually attached one.
         const bool showVideo = !generating &&
             m_videoAttached &&
             m_videoPreviewEntityHasComponent &&
             m_entityManager.IsEntityValid(m_videoPreviewEntity);
 
-        // During generation, the live preview is active whenever the mode
-        // is not None.
         const bool livePreviewActive =
             generating &&
             m_mode != PreviewMode::None &&
@@ -997,7 +971,6 @@ namespace GUI {
             RefreshPreviewTextureIfNeeded(ImGui::GetIO().DeltaTime);
         }
         else if (!showVideo && m_mode != PreviewMode::None) {
-            // Idle-but-preview-requested: keep the last frame visible.
             RefreshPreviewTextureIfNeeded(ImGui::GetIO().DeltaTime);
         }
         if (showVideo) {
@@ -1019,10 +992,6 @@ namespace GUI {
 
         ECS::EntityID texEntity = showVideo ? m_videoPreviewEntity : m_previewEntity;
 
-        // --- Controls ---
-        // During generation: live preview controls.
-        // Otherwise, only when a video is actually attached: transport.
-        // Otherwise: nothing (just the image, if any).
         if (generating) {
             DrawLivePreviewControls();
             ImGui::Separator();
@@ -1057,7 +1026,7 @@ namespace GUI {
 
         GLuint tex = m_textureSystem ? m_textureSystem->GetTextureID(texEntity) : 0;
         if (!m_textureSystem || !m_textureSystem->HasValidTexture(texEntity) ||
-            tex == 0 || tw <= 0 || th <= 0) {
+            tex == 0 || tw <= 0 || th <= 0 || !glIsTexture(tex)) {
             if (showVideo) {
                 ImGui::TextUnformatted("Waiting for first video frame...");
             }
@@ -1100,11 +1069,13 @@ namespace GUI {
         ImVec2 topLeft(pos.x + offsetX, pos.y + offsetY);
         ImVec2 bottomRight(pos.x + offsetX + drawW, pos.y + offsetY + drawH);
 
-        ImGui::GetWindowDrawList()->AddImage(
-            (ImTextureID)(intptr_t)tex,
-            topLeft,
-            bottomRight,
-            ImVec2(0, 0), ImVec2(1, 1));
+        if (tex != 0 && glIsTexture(tex)) {
+            ImGui::GetWindowDrawList()->AddImage(
+                (ImTextureID)(intptr_t)tex,
+                topLeft,
+                bottomRight,
+                ImVec2(0, 0), ImVec2(1, 1));
+        }
 
         ImGui::Dummy(ImVec2(avail.x, avail.y));
         ImGui::End();
@@ -1128,4 +1099,4 @@ namespace GUI {
         }
     }
 
-} // namespace GUI
+}

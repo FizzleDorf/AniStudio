@@ -32,7 +32,6 @@ namespace ECS {
 
 	using EntitySignature = std::unordered_set<ComponentTypeID>;
 
-	// Simple dummy function - or remove CompType usage entirely
 	template <typename T>
 	inline static const ComponentTypeID CompType() noexcept {
 		return 0;

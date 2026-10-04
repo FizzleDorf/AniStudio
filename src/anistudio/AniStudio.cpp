@@ -948,11 +948,16 @@ namespace ANI {
 
         imageSystem->RegisterImageAddedCallback(this,
             [this](EntityID entityID) {
+                auto& mgr = GetEntityManager();
+                if (!mgr.IsEntityValid(entityID)) return;
+                if (!mgr.HasComponent<ImageComponent>(entityID)) return;
                 ANI::Events::Ref().QueueEventWithData("ImageLoaded", entityID);
             });
 
         imageSystem->RegisterImageRemovedCallback(this,
             [this](EntityID entityID) {
+                auto& mgr = GetEntityManager();
+                if (!mgr.IsEntityValid(entityID)) return;
                 ANI::Events::Ref().QueueEventWithData("ImageRemoved", entityID);
             });
     }

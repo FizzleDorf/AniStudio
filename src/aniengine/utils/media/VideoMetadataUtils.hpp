@@ -12,6 +12,10 @@ namespace Utils {
             bool forceSidecar = false);
 
         static nlohmann::json ReadMetadataFromVideo(const std::string& videoPath);
+
+        static bool HasAniStudioMetadata(const nlohmann::json& meta);
+        static bool HasExifMetadata(const nlohmann::json& meta);
+        static bool HasLSBMetadata(const nlohmann::json& meta);
     };
 
 } // namespace Utils

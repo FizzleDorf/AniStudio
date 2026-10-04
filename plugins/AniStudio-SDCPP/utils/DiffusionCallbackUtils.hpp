@@ -16,7 +16,6 @@ namespace GUI {
         std::atomic<bool> isProcessing{ false };
     };
 
-    // POD snapshot: safe to copy, no atomics, no torn reads.
     struct ProgressSnapshot {
         int currentStep = 0;
         int totalSteps = 0;
@@ -33,11 +32,9 @@ namespace GUI {
         bool valid() const { return data && width > 0 && height > 0 && channels > 0; }
     };
 
-    // A whole batch of frames from one denoiser step. For image models this is
-    // a single frame. For video models it's the video frame count.
     struct PreviewBatch {
         std::vector<PreviewFrame> frames;
-        uint64_t sequence = 0;   // bumped every callback
+        uint64_t sequence = 0;
         int step = 0;
         bool valid() const { return !frames.empty() && frames[0].valid(); }
     };
@@ -45,7 +42,6 @@ namespace GUI {
     class DiffusionCallbackUtils {
     public:
         static ProgressData& GetProgressData();
-        // Consistent snapshot for UI reads. Use this instead of GetProgressData().
         static ProgressSnapshot GetProgressSnapshot();
 
         static void InitializeCallbacks();
@@ -61,22 +57,14 @@ namespace GUI {
         static void PreviewCallback(int step, int frame_count, sd_image_t* frames,
             bool is_noisy, void* data);
 
-        // ---- single-frame path (image previews) ----
         static PreviewFrame GetLatestPreview();
         static uint64_t GetPreviewSequence();
         static void ClearPreview();
 
-        // ---- whole-batch path (live video previews) ----
         static PreviewBatch GetLatestBatch();
         static uint64_t GetBatchSequence();
         static void ClearBatch();
 
-        // --- generation token -------------------------------------------------
-        // BeginGeneration() must be called on the worker thread immediately
-        // before generate_image()/generate_video(). EndGeneration() must be
-        // called on the same thread immediately after it returns AND after
-        // free_sd_images()/free_sd_audio(). PreviewCallback drops any frame
-        // whose token does not match the currently-active token.
         static uint64_t BeginGeneration();
         static void EndGeneration(uint64_t token);
 
@@ -85,17 +73,14 @@ namespace GUI {
         static std::mutex mutex;
         static int m_logLevel;
 
-        // Single-frame state (used by image previews).
         static PreviewFrame previewFrame;
         static std::mutex previewMutex;
         static std::atomic<uint64_t> previewSequence;
 
-        // Whole-batch state (used by video previews).
         static PreviewBatch previewBatch;
         static std::mutex batchMutex;
         static std::atomic<uint64_t> batchSequence;
 
-        // 0 == no generation active. Non-zero == token of the active generation.
         static std::atomic<uint64_t> activeGenerationToken;
     };
 }

@@ -4,6 +4,7 @@
 #include "Log.hpp"
 #include <stb_image.h>
 #include <algorithm>
+#include <cstring>
 
 namespace ECS {
 
@@ -21,7 +22,8 @@ namespace ECS {
         , fileTime(std::move(other.fileTime))
         , hasExif(other.hasExif)
         , hasLSB(other.hasLSB)
-        , hasAniStudio(other.hasAniStudio) {
+        , hasAniStudio(other.hasAniStudio)
+        , hasMetadata(other.hasMetadata) {
         other.data = nullptr;
     }
 
@@ -44,6 +46,7 @@ namespace ECS {
             hasExif = other.hasExif;
             hasLSB = other.hasLSB;
             hasAniStudio = other.hasAniStudio;
+            hasMetadata = other.hasMetadata;
             other.data = nullptr;
         }
         return *this;
@@ -182,7 +185,13 @@ namespace ECS {
 
         auto& ioPool = threadPoolSys->getIOPool();
 
+        ANI_LOG_DEBUG("[ImageSystem] LoadImageAsync queued entity=%u path=%s",
+            entity, filePath.c_str());
+
         auto future = ioPool.submit([filePath, entity]() -> LoadResult {
+            ANI_LOG_DEBUG("[ImageSystem] IO thread start entity=%u path=%s",
+                entity, filePath.c_str());
+
             LoadResult result;
             result.filePath = filePath;
             result.entityID = entity;
@@ -192,6 +201,9 @@ namespace ECS {
 
             result.data = Utils::ImageUtils::LoadImageData(filePath, result.width, result.height, result.channels);
             result.success = (result.data != nullptr);
+
+            ANI_LOG_DEBUG("[ImageSystem] IO thread decoded entity=%u success=%d %dx%d",
+                entity, result.success ? 1 : 0, result.width, result.height);
 
             if (result.success) {
                 try {
@@ -210,11 +222,19 @@ namespace ECS {
                 }
                 catch (...) {}
 
+                ANI_LOG_DEBUG("[ImageSystem] IO thread metadata start entity=%u", entity);
                 result.hasExif = Utils::ImageUtils::HasExifMetadata(filePath);
+                ANI_LOG_DEBUG("[ImageSystem] IO thread after HasExif entity=%u", entity);
                 result.hasLSB = Utils::ImageUtils::HasLSBMetadata(filePath);
+                ANI_LOG_DEBUG("[ImageSystem] IO thread after HasLSB entity=%u", entity);
                 int status = Utils::ImageUtils::GetMetadataStatus(filePath);
-                result.hasAniStudio = (status > 0);
+                ANI_LOG_DEBUG("[ImageSystem] IO thread after GetMetadataStatus entity=%u status=%d",
+                    entity, status);
+                result.hasAniStudio = (status == 1);
+                result.hasMetadata = (status > 0);
             }
+
+            ANI_LOG_DEBUG("[ImageSystem] IO thread end entity=%u", entity);
             return result;
             });
 
@@ -227,66 +247,118 @@ namespace ECS {
     }
 
     void ImageSystem::ProcessCompletedLoads() {
-        std::lock_guard<std::mutex> lock(loadMutex);
+        std::vector<LoadResult> completed;
+        {
+            std::lock_guard<std::mutex> lock(loadMutex);
 
-        for (auto it = pendingLoads.begin(); it != pendingLoads.end();) {
-            if (it->future.valid() &&
-                it->future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            for (auto it = pendingLoads.begin(); it != pendingLoads.end();) {
+                if (it->future.valid() &&
+                    it->future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
 
-                try {
-                    LoadResult result = it->future.get();
-
-                    if (mgr.HasComponent<ImageComponent>(result.entityID)) {
-                        auto& imageComp = mgr.GetComponent<ImageComponent>(result.entityID);
-
-                        if (result.success) {
-                            imageComp.SetImageData(result.data, result.width, result.height, result.channels);
-                            result.data = nullptr;
-                            imageComp.fileName = result.fileName;
-                            imageComp.filePath = result.filePath;
-                            imageComp.fileSize = result.fileSize;
-                            imageComp.fileDate = result.fileDate;
-                            imageComp.fileTime = result.fileTime;
-                            imageComp.hasExifData = result.hasExif;
-                            imageComp.hasLSBData = result.hasLSB;
-                            imageComp.hasAniStudioMetadata = result.hasAniStudio;
-
-                            if (mgr.HasComponent<InputImageComponent>(result.entityID)) {
-                                auto& inputComp = mgr.GetComponent<InputImageComponent>(result.entityID);
-                                inputComp.SetImageData(imageComp.imageData, result.width, result.height, result.channels);
-                                inputComp.fileName = result.fileName;
-                                inputComp.filePath = result.filePath;
-                                inputComp.fileSize = result.fileSize;
-                                inputComp.fileDate = result.fileDate;
-                                inputComp.fileTime = result.fileTime;
-                                inputComp.hasExifData = result.hasExif;
-                                inputComp.hasLSBData = result.hasLSB;
-                                inputComp.hasAniStudioMetadata = result.hasAniStudio;
-                            }
-
-                            NotifyImageReady(result.entityID, imageComp.imageData,
-                                imageComp.width, imageComp.height, imageComp.channels);
-                            NotifyImageAdded(result.entityID);
-                        }
-                        else {
-                            ANI_LOG_ERROR("[ImageSystem] Failed to load image: %s", result.filePath.c_str());
-                        }
+                    ANI_LOG_DEBUG("[ImageSystem] future ready, about to get()");
+                    try {
+                        completed.push_back(it->future.get());
+                        ANI_LOG_DEBUG("[ImageSystem] get() returned entity=%u success=%d",
+                            completed.back().entityID,
+                            completed.back().success ? 1 : 0);
                     }
-                    else {
-                        ANI_LOG_DEBUG("[ImageSystem] Entity %llu no longer has ImageComponent, freed data",
-                            static_cast<unsigned long long>(result.entityID));
+                    catch (const std::exception& e) {
+                        ANI_LOG_ERROR("[ImageSystem] future.get() threw: %s", e.what());
                     }
+                    it = pendingLoads.erase(it);
                 }
-                catch (const std::exception& e) {
-                    ANI_LOG_ERROR("[ImageSystem] Exception in ProcessCompletedLoads: %s", e.what());
+                else {
+                    ++it;
                 }
-
-                it = pendingLoads.erase(it);
-            }
-            else {
-                ++it;
             }
         }
+
+        for (auto& result : completed) {
+            ANI_LOG_DEBUG("[ImageSystem] step: IsEntityValid(%u)", result.entityID);
+            if (!mgr.IsEntityValid(result.entityID)) {
+                ANI_LOG_DEBUG("[ImageSystem] entity invalid, dropping");
+                continue;
+            }
+
+            ANI_LOG_DEBUG("[ImageSystem] step: HasComponent<ImageComponent>(%u)", result.entityID);
+            if (!mgr.HasComponent<ImageComponent>(result.entityID)) {
+                ANI_LOG_DEBUG("[ImageSystem] no ImageComponent, dropping");
+                continue;
+            }
+
+            if (!result.success) {
+                ANI_LOG_ERROR("[ImageSystem] Failed to load image: %s", result.filePath.c_str());
+                continue;
+            }
+
+            ANI_LOG_DEBUG("[ImageSystem] step: GetComponent<ImageComponent>(%u)", result.entityID);
+            auto& imageComp = mgr.GetComponent<ImageComponent>(result.entityID);
+            ANI_LOG_DEBUG("[ImageSystem] step: component obtained");
+
+            ANI_LOG_DEBUG("[ImageSystem] step: SetImageData(%p %dx%dx%d)",
+                result.data, result.width, result.height, result.channels);
+            imageComp.SetImageData(result.data, result.width, result.height, result.channels);
+            result.data = nullptr;
+            ANI_LOG_DEBUG("[ImageSystem] step: SetImageData returned");
+
+            imageComp.fileName = result.fileName;
+            imageComp.filePath = result.filePath;
+            imageComp.fileSize = result.fileSize;
+            imageComp.fileDate = result.fileDate;
+            imageComp.fileTime = result.fileTime;
+            imageComp.hasExifData = result.hasExif;
+            imageComp.hasLSBData = result.hasLSB;
+            imageComp.hasAniStudioMetadata = result.hasAniStudio;
+            ANI_LOG_DEBUG("[ImageSystem] step: metadata copied");
+
+            if (mgr.HasComponent<InputImageComponent>(result.entityID)) {
+                ANI_LOG_DEBUG("[ImageSystem] step: InputImage copy begin");
+                auto& inputComp = mgr.GetComponent<InputImageComponent>(result.entityID);
+
+                unsigned char* copy = nullptr;
+                size_t bytes = static_cast<size_t>(result.width)
+                    * static_cast<size_t>(result.height)
+                    * static_cast<size_t>(result.channels);
+                if (bytes > 0 && imageComp.imageData) {
+                    copy = static_cast<unsigned char*>(malloc(bytes));
+                    if (copy) {
+                        std::memcpy(copy, imageComp.imageData, bytes);
+                    }
+                }
+                if (copy) {
+                    inputComp.SetImageData(copy, result.width, result.height, result.channels);
+                }
+                else {
+                    inputComp.ClearImageData();
+                }
+                inputComp.fileName = result.fileName;
+                inputComp.filePath = result.filePath;
+                inputComp.fileSize = result.fileSize;
+                inputComp.fileDate = result.fileDate;
+                inputComp.fileTime = result.fileTime;
+                inputComp.hasExifData = result.hasExif;
+                inputComp.hasLSBData = result.hasLSB;
+                inputComp.hasAniStudioMetadata = result.hasAniStudio;
+                ANI_LOG_DEBUG("[ImageSystem] step: InputImage copy done");
+            }
+
+            ANI_LOG_DEBUG("[ImageSystem] step: NotifyImageReady(%u)", result.entityID);
+            NotifyImageReady(result.entityID, imageComp.imageData,
+                imageComp.width, imageComp.height, imageComp.channels);
+            ANI_LOG_DEBUG("[ImageSystem] step: NotifyImageReady done");
+
+            ANI_LOG_DEBUG("[ImageSystem] step: NotifyImageAdded(%u)", result.entityID);
+            NotifyImageAdded(result.entityID);
+            ANI_LOG_DEBUG("[ImageSystem] step: NotifyImageAdded done");
+        }
+    }
+
+    bool ImageSystem::IsEntityPendingLoad(EntityID entity) const {
+        std::lock_guard<std::mutex> lock(loadMutex);
+        for (const auto& task : pendingLoads) {
+            if (task.entityID == entity) return true;
+        }
+        return false;
     }
 
     void ImageSystem::NotifyImageAdded(EntityID entity) {

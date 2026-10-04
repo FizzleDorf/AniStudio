@@ -10,7 +10,6 @@
 #include "AudioSystem.hpp"
 #include "ImageUtils.hpp"
 #include "ThumbnailFilters.hpp"
-#include "Log.hpp"
 
 #include <imgui.h>
 #include <algorithm>
@@ -114,32 +113,32 @@ namespace GUI {
         ANI_LOG_DEBUG("Initialized");
     }
 
-    void MediaHistoryView::Update(float deltaT) {
-        static auto lastRefresh = std::chrono::steady_clock::now();
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - lastRefresh).count() > 1000) {
-            RefreshEntities();
-            lastRefresh = now;
-        }
-    }
+    void MediaHistoryView::Update(float deltaT) {}
 
     void MediaHistoryView::Render() {
         ImGui::Begin("Media History", &windowOpen, ImGuiWindowFlags_MenuBar);
 
-        if (needsSort) {
-            ApplyFiltersAndSort();
-            needsSort = false;
+        try {
+            if (needsSort) {
+                ApplyFiltersAndSort();
+                needsSort = false;
+            }
+
+            RenderMenuBar();
+
+            if (mediaEntities.empty()) {
+                ImGui::Text("No media loaded.");
+            }
+            else {
+                RenderMediaGrid();
+            }
         }
-
-        RenderMenuBar();
-
-        if (mediaEntities.empty()) {
-            ImGui::Text("No media loaded.");
-            ImGui::End();
-            return;
+        catch (const std::exception& e) {
+            ANI_LOG_ERROR("[MediaHistoryView] Render exception: %s", e.what());
         }
-
-        RenderMediaGrid();
+        catch (...) {
+            ANI_LOG_ERROR("[MediaHistoryView] Render unknown exception");
+        }
 
         ImGui::End();
 
@@ -177,14 +176,12 @@ namespace GUI {
             info.entityID = eid;
 
             if (!m_entityManager.IsEntityValid(eid)) {
-                ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u invalid", eid);
                 return info;
             }
 
             if (m_entityManager.HasComponent<ECS::ImageComponent>(eid)) {
                 const auto& comp = m_entityManager.GetComponent<ECS::ImageComponent>(eid);
                 if (comp.width <= 0 || comp.height <= 0 || comp.imageData == nullptr) {
-                    ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u image has no dimensions or data", eid);
                     return info;
                 }
                 info.fileName = comp.fileName;
@@ -200,7 +197,6 @@ namespace GUI {
             else if (m_entityManager.HasComponent<ECS::VideoComponent>(eid)) {
                 const auto& comp = m_entityManager.GetComponent<ECS::VideoComponent>(eid);
                 if (comp.width <= 0 || comp.height <= 0) {
-                    ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u video has no dimensions", eid);
                     return info;
                 }
                 info.fileName = comp.fileName;
@@ -218,12 +214,16 @@ namespace GUI {
             else if (m_entityManager.HasComponent<ECS::AudioComponent>(eid)) {
                 const auto& comp = m_entityManager.GetComponent<ECS::AudioComponent>(eid);
                 if (comp.pcmData.empty()) {
-                    ANI_LOG_TRACE("ApplyFiltersAndSort: entity %u audio has no PCM data", eid);
                     return info;
                 }
                 info.fileName = comp.fileName;
                 info.filePath = comp.filePath;
-                info.fileSize = std::filesystem::file_size(comp.filePath);
+                try {
+                    info.fileSize = std::filesystem::file_size(comp.filePath);
+                }
+                catch (...) {
+                    info.fileSize = 0;
+                }
                 info.dateTime = "";
                 info.channels = comp.channels;
                 info.sampleRate = comp.sampleRate;
@@ -242,19 +242,15 @@ namespace GUI {
         const float spacing = 12.0f;
 
         float itemWidth = 0.0f;
-        float itemHeight = 0.0f;
 
         if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::Compact) {
             itemWidth = thumbnailSizePx + spacing;
-            itemHeight = thumbnailSizePx + ImGui::GetFontSize() + spacing;
         }
         else if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
             itemWidth = availableWidth;
-            itemHeight = thumbnailSizePx + 8.0f + spacing;
         }
         else {
             itemWidth = thumbnailSizePx + 160 + spacing;
-            itemHeight = thumbnailSizePx + 60 + spacing;
         }
 
         int columns = std::max(1, static_cast<int>((availableWidth + spacing) / (itemWidth + spacing)));
@@ -263,10 +259,6 @@ namespace GUI {
         }
 
         int itemIndex = 0;
-
-        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
-            GUI::Thumbnail::BeginListMode(thumbnailSizePx);
-        }
 
         for (size_t i = 0; i < mediaEntities.size(); ++i) {
             ECS::EntityID entityID = mediaEntities[i];
@@ -277,12 +269,14 @@ namespace GUI {
             bool isAudio = m_entityManager.HasComponent<ECS::AudioComponent>(entityID);
             if (!isImage && !isVideo && !isAudio) continue;
 
-            if (filterSettings.displayMode != GUI::Thumbnail::DisplayMode::List) {
+            if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
+                if (itemIndex > 0) {
+                    ImGui::NewLine();
+                }
+            }
+            else {
                 if (itemIndex > 0 && (itemIndex % columns) != 0) {
                     ImGui::SameLine(0, spacing);
-                }
-                else if (itemIndex > 0) {
-                    ImGui::NewLine();
                 }
             }
 
@@ -325,32 +319,37 @@ namespace GUI {
 
             itemIndex++;
         }
-
-        if (filterSettings.displayMode == GUI::Thumbnail::DisplayMode::List) {
-            GUI::Thumbnail::EndListMode();
-        }
-
-        ImGui::NewLine();
     }
 
     void MediaHistoryView::RefreshEntities() {
+        ANI_LOG_DEBUG("[MediaHistoryView] RefreshEntities begin");
         mediaEntities.clear();
 
         for (auto id : m_entityManager.GetAllEntities()) {
             if (!m_entityManager.IsEntityValid(id)) continue;
 
+            if (m_entityManager.HasComponent<ECS::PreviewImageComponent>(id)) continue;
+            if (m_entityManager.HasComponent<ECS::PreviewVideoComponent>(id)) continue;
+
             if (m_entityManager.HasComponent<ECS::ImageComponent>(id)) {
-                if (m_entityManager.HasComponent<ECS::PreviewImageComponent>(id)) continue;
+                if (m_entityManager.HasComponent<ECS::InputImageComponent>(id)) continue;
+                if (m_entityManager.HasComponent<ECS::OutputImageComponent>(id)) continue;
+                if (m_entityManager.HasComponent<ECS::MaskImageComponent>(id)) continue;
+                if (m_entityManager.HasComponent<ECS::EndImageComponent>(id)) continue;
                 mediaEntities.push_back(id);
                 continue;
             }
 
             if (m_entityManager.HasComponent<ECS::VideoComponent>(id)) {
+                if (m_entityManager.HasComponent<ECS::InputVideoComponent>(id)) continue;
+                if (m_entityManager.HasComponent<ECS::OutputVideoComponent>(id)) continue;
                 mediaEntities.push_back(id);
                 continue;
             }
 
             if (m_entityManager.HasComponent<ECS::AudioComponent>(id)) {
+                if (m_entityManager.HasComponent<ECS::InputAudioComponent>(id)) continue;
+                if (m_entityManager.HasComponent<ECS::OutputAudioComponent>(id)) continue;
                 mediaEntities.push_back(id);
                 continue;
             }
@@ -358,33 +357,33 @@ namespace GUI {
 
         if (selectedEntityID != 0 && !m_entityManager.IsEntityValid(selectedEntityID)) {
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
-            ANI_LOG_TRACE("RefreshEntities: selection reset to %u", selectedEntityID);
         }
         needsSort = true;
+        ANI_LOG_DEBUG("[MediaHistoryView] RefreshEntities end count=%zu",
+            mediaEntities.size());
     }
 
     void MediaHistoryView::OnMediaAdded(ECS::EntityID entity) {
-        ANI_LOG_TRACE("Media added: entity %u", entity);
+        ANI_LOG_DEBUG("[MediaHistoryView] OnMediaAdded entity=%u begin", entity);
         RefreshEntities();
+        ANI_LOG_DEBUG("[MediaHistoryView] OnMediaAdded entity=%u end", entity);
     }
 
     void MediaHistoryView::OnMediaRemoved(ECS::EntityID entity) {
-        ANI_LOG_TRACE("Media removed: entity %u", entity);
+        ANI_LOG_DEBUG("[MediaHistoryView] OnMediaRemoved entity=%u begin", entity);
         RefreshEntities();
         UpdateSelectedAfterRemoval(entity);
+        ANI_LOG_DEBUG("[MediaHistoryView] OnMediaRemoved entity=%u end", entity);
     }
 
     void MediaHistoryView::UpdateSelectedAfterRemoval(ECS::EntityID removedEntity) {
         if (selectedEntityID == removedEntity) {
             selectedEntityID = mediaEntities.empty() ? 0 : mediaEntities[0];
-            ANI_LOG_TRACE("Selection moved to %u after removal of %u",
-                selectedEntityID, removedEntity);
         }
     }
 
     void MediaHistoryView::SelectMedia(ECS::EntityID entityID) {
         if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) {
-            ANI_LOG_TRACE("SelectMedia: invalid entity %u", entityID);
             return;
         }
         selectedEntityID = entityID;
@@ -393,8 +392,6 @@ namespace GUI {
         eventData["workspaceID"] = GetID();
         eventData["entityID"] = entityID;
         ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
-
-        ANI_LOG_TRACE("Selected entity %u", entityID);
     }
 
     nlohmann::json MediaHistoryView::Serialize() const {

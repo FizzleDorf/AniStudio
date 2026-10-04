@@ -2,6 +2,7 @@
 #include "AudioSystem.hpp"
 #include "VideoUtils.hpp"
 #include "VideoMetadataUtils.hpp"
+#include "MetadataUtils.hpp"
 #include "Log.hpp"
 
 #include <algorithm>
@@ -55,8 +56,6 @@ namespace ECS {
             std::lock_guard<std::mutex> lock(m_restoreMutex);
             m_pendingRestores.erase(entity);
         }
-        // detached's destructor joins the worker thread before the
-        // VideoComponent's decoder pointers are touched again.
     }
 
     void VideoSystem::DropPendingLoadsFor(EntityID entity) {
@@ -115,9 +114,6 @@ namespace ECS {
                     track.currentFrameRGBA = std::move(frame.data);
                     track.currentWidth = frame.width;
                     track.currentHeight = frame.height;
-
-                    ANI_LOG_TRACE("[VideoSystem] Publish frame entity=%u pts=%.3f index=%lld master=%.3f",
-                        entity, frame.pts, frame.index, master);
 
                     for (auto& [o, cb] : m_textureCallbacks) {
                         (void)o;
@@ -277,9 +273,6 @@ namespace ECS {
         ANI_LOG_DEBUG("[VideoSystem] LoadVideoAsync entity=%u mode=%d",
             entity, static_cast<int>(mode));
 
-        // Any prior in-flight load for this entity is obsolete. Drop it so
-        // only one ApplyLoadedVideo can ever fire per entity, preventing a
-        // second loader from wiping decoder state under a running Track.
         DropPendingLoadsFor(entity);
 
         auto fut = pool->getIOPool().submit([filePath, entity]() -> LoadResult {
@@ -474,10 +467,10 @@ namespace ECS {
         try {
             nlohmann::json meta = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
             if (!meta.is_null() && !meta.empty()) {
+                r.hasAniStudio = Utils::VideoMetadataUtils::HasAniStudioMetadata(meta);
+                r.hasExif = Utils::VideoMetadataUtils::HasExifMetadata(meta);
+                r.hasLSB = Utils::VideoMetadataUtils::HasLSBMetadata(meta);
                 r.metadata = std::move(meta);
-                r.hasAniStudio = true;
-                if (r.metadata.contains("exif")) r.hasExif = true;
-                if (r.metadata.contains("lsb"))  r.hasLSB = true;
             }
         }
         catch (...) {}
