@@ -7,3 +7,4 @@
 #include "FontSettingsComponent.hpp"
 #include "TextEditorSettingsComponent.hpp"
 #include "ProjectComponent.hpp"
+#include "FilePathComponent.hpp"

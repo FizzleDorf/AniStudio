@@ -41,6 +41,10 @@
 #include <vector>
 #include <string>
 
+namespace ECS {
+    class BaseSettingsTab;
+}
+
 namespace GUI {
     class MenuBar;
     class ProjectManagerView;
@@ -173,6 +177,8 @@ namespace ANI {
         std::unique_ptr<GUI::SettingsView> m_settingsView;
         bool m_showProjectManagerView = false;
 
+        std::vector<std::unique_ptr<ECS::BaseSettingsTab>> m_settingsTabs;
+
         std::vector<std::string> m_missingKeys;
 
         Utils::WindowState m_windowState;
@@ -181,10 +187,10 @@ namespace ANI {
         std::vector<ANI::ErrorBus::Entry> m_pendingErrors;
         bool m_showErrorPopup = false;
 
-        // Seeds / repairs all core FilePathSystem keys.
+        // Seeds / repairs all core FilePathComponent keys.
         void EnsureCorePaths();
 
-        // Points ImGui's io.IniFilename at the path stored in FilePathSystem.
+        // Points ImGui's io.IniFilename at the path stored in FilePathComponent.
         // Requires ImGui::SetCurrentContext() to have already been called.
         void ConfigureImGuiIniPath();
 
@@ -193,7 +199,7 @@ namespace ANI {
         void InitializeStudioPlugins();
 
         // Registers the standard settings tabs (general, style, render,
-        // fonts, text editor) on the SettingsSystem.
+        // fonts, text editor, paths) on the SettingsSystem.
         void RegisterSettingsTabs();
 
         // Wires ProjectSystem callbacks (load/created/closed/view-state).

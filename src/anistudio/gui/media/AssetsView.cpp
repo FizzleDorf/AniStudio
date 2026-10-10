@@ -1,6 +1,6 @@
 // AssetsView.cpp
 #include "AssetsView.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "FileDialogUtil.hpp"
 #include "Events.hpp"
 #include "FileFormats.hpp"
@@ -30,19 +30,19 @@ namespace GUI {
     }
 
     void AssetsView::Init() {
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        if (fileSys) {
-            assetsPath = fileSys->GetPath("ProjectAssets");
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        if (ss) {
+            assetsPath = ss->GetPath("ProjectAssets");
             if (assetsPath.empty()) {
                 ANI_LOG_DEBUG("ProjectAssets path empty, falling back to ./assets");
                 assetsPath = "./assets";
             }
             else {
-                ANI_LOG_DEBUG("Assets path from FilePathSystem: %s", assetsPath.c_str());
+                ANI_LOG_DEBUG("Assets path from Settings: %s", assetsPath.c_str());
             }
         }
         else {
-            ANI_LOG_WARN("FilePathSystem not available, falling back to ./assets");
+            ANI_LOG_WARN("Settings not available, falling back to ./assets");
             assetsPath = "./assets";
         }
         RefreshAssets();

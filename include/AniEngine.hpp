@@ -74,11 +74,18 @@ namespace ANI {
 		void RegisterCoreComponents();
 		void RegisterCoreSystems();
 
+		// Registers the engine's default path registry. These values are used
+		// only to fill in keys that are missing after loading. Anything already
+		// present in the persisted map (user edits, plugin registrations) is
+		// left alone.
+		void RegisterPathDefaults();
+
+		// Loads persisted paths, seeds missing ones from the registry, and
+		// ensures the directories exist. Never overwrites loaded values.
+		void InitializeCorePaths();
+
 		// Plugin management
 		void InitializePlugins();
-
-		// File path service initialization
-		void InitializeCorePaths();
 
 		// Session logging
 		void OpenSessionLog();

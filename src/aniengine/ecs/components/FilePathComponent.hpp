@@ -1,7 +1,9 @@
 #pragma once
-
 #include "BaseComponent.hpp"
+#include <nlohmann/json.hpp>
 #include <unordered_map>
+#include <string>
+#include <vector>
 
 namespace ECS {
 
@@ -17,67 +19,87 @@ namespace ECS {
             return j;
         }
 
-        FilePathComponent(const FilePathComponent& other)
-            : BaseComponent(other)
-            , m_paths(other.m_paths) {
-        }
-
-        FilePathComponent& operator=(const FilePathComponent& other) {
-            if (this != &other) {
-                m_paths = other.m_paths;
-            }
-            return *this;
-        }
-
         std::string GetPath(const std::string& key) const {
-            auto it = m_paths.find(key);
-            return (it != m_paths.end()) ? it->second : "";
+            auto it = m_current.find(key);
+            return (it != m_current.end()) ? it->second : "";
         }
 
-        void SetPath(const std::string& key, const std::string& path) {
-            m_paths[key] = path;
+        std::string GetDefaultPath(const std::string& key) const {
+            auto it = m_defaults.find(key);
+            return (it != m_defaults.end()) ? it->second : "";
         }
 
         bool HasPath(const std::string& key) const {
-            return m_paths.find(key) != m_paths.end();
+            return m_current.find(key) != m_current.end() ||
+                m_defaults.find(key) != m_defaults.end();
+        }
+
+        bool HasDefault(const std::string& key) const {
+            return m_defaults.find(key) != m_defaults.end();
+        }
+
+        void SetPath(const std::string& key, const std::string& path) {
+            m_current[key] = path;
+        }
+
+        void SetDefault(const std::string& key, const std::string& defaultPath) {
+            m_defaults[key] = defaultPath;
+            if (m_current.find(key) == m_current.end()) {
+                m_current[key] = "";
+            }
         }
 
         std::vector<std::string> GetAllKeys() const {
             std::vector<std::string> keys;
-            keys.reserve(m_paths.size());
-            for (const auto& [k, _] : m_paths) keys.push_back(k);
+            keys.reserve(m_defaults.size() + m_current.size());
+            for (const auto& [k, _] : m_defaults) keys.push_back(k);
+            for (const auto& [k, _] : m_current) {
+                if (m_defaults.find(k) == m_defaults.end()) keys.push_back(k);
+            }
             return keys;
         }
 
-        const std::unordered_map<std::string, std::string>& GetPathMap() const {
-            return m_paths;
+        const std::unordered_map<std::string, std::string>& GetCurrentMap() const {
+            return m_current;
+        }
+
+        const std::unordered_map<std::string, std::string>& GetDefaultMap() const {
+            return m_defaults;
         }
 
         nlohmann::json Serialize() const override {
+            nlohmann::json paths = nlohmann::json::object();
+            for (const auto& key : GetAllKeys()) {
+                paths[key] = GetPath(key);
+            }
             nlohmann::json j;
-            j[GetCompName()] = {
-                {"paths", m_paths}
-            };
+            j[GetCompName()] = { {"paths", paths} };
             return j;
         }
 
         void Deserialize(const nlohmann::json& j) override {
             const char* key = GetCompName();
-            nlohmann::json componentData;
-            if (j.contains(key))
-                componentData = j.at(key);
-            else
-                componentData = j;
+            nlohmann::json data;
+            if (j.contains(key)) data = j.at(key);
+            else                 data = j;
 
-            if (componentData.contains("paths") && componentData["paths"].is_object()) {
-                for (auto& [pathKey, value] : componentData["paths"].items()) {
-                    if (value.is_string()) m_paths[pathKey] = value.get<std::string>();
+            if (data.contains("paths") && data["paths"].is_object()) {
+                for (auto& [k, v] : data["paths"].items()) {
+                    if (v.is_string()) m_current[k] = v.get<std::string>();
                 }
             }
         }
 
+        static bool IsPathHidden(const std::string& key) {
+            return (key == "CurrentProject" || key == "ProjectData" ||
+                key == "ProjectAssets" || key == "ProjectOutput" ||
+                key == "Output" || key == "LastOpenProject" ||
+                key == "ProjectDataPath" || key == "OutputFolder");
+        }
+
     private:
-        std::unordered_map<std::string, std::string> m_paths;
+        std::unordered_map<std::string, std::string> m_current;
+        std::unordered_map<std::string, std::string> m_defaults;
     };
 
 }

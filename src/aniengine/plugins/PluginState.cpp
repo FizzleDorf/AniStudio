@@ -1,5 +1,5 @@
 #include "PluginState.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "EntityManager.hpp"
 #include "Log.hpp"
 
@@ -43,10 +43,12 @@ namespace Plugins {
             return "";
         }
 
-        auto fs = m_entityManager ? m_entityManager->GetSystem<ECS::FilePathSystem>() : nullptr;
+        auto settings = m_entityManager
+            ? m_entityManager->GetSystem<ECS::SettingsSystem>()
+            : nullptr;
         std::string dataPath;
-        if (fs) {
-            dataPath = fs->GetPath("ProjectData");
+        if (settings) {
+            dataPath = settings->GetPath("ProjectData");
         }
         if (dataPath.empty()) {
             dataPath = m_currentProjectPath + "/data";

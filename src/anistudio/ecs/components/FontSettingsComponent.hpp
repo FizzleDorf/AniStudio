@@ -1,74 +1,56 @@
 #pragma once
-#include "BaseSettingsComponent.hpp"
-#include <imgui.h>
+#include "BaseComponent.hpp"
+#include "PropertyTypes.hpp"
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
 namespace ECS {
 
-    class FontSettingsComponent : public BaseSettingsComponent {
+    class FontSettingsComponent : public BaseComponent {
     public:
-        using FontRebuildCallback = void(*)();
-
         FontSettingsComponent() = default;
 
         const char* GetCompName() const override { return "FontSettingsComponent"; }
         const char* GetCompCategory() const override { return ""; }
 
         const nlohmann::json& GetSchema() const override {
-            static const nlohmann::json j = nlohmann::json::object();
+            static const nlohmann::json j = {
+                {"title", "Font Settings"},
+                {"type", "object"},
+                {"propertyOrder", { "m_globalFontScale" }},
+                {"properties", {
+                    {"m_globalFontScale", {
+                        {"type", "number"},
+                        {"title", "Global Font Scale"},
+                        {"ui:widget", "input_float"},
+                        {"ui:options", {{"step", 0.01f}, {"min", 0.5f}, {"max", 2.5f}, {"format", "%.2fx"}}}
+                    }}
+                }}
+            };
             return j;
         }
 
-        FontSettingsComponent(const FontSettingsComponent& other);
-        FontSettingsComponent& operator=(const FontSettingsComponent& other);
+        std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"m_globalFontScale", &m_globalFontScale}
+            };
+        }
 
-        ~FontSettingsComponent() = default;
-
-        bool SaveSettings() override;
-        bool LoadSettings() override;
-        void ResetToDefaults() override;
-        void CreateBackup() override;
-        void RestoreFromBackup() override;
-        bool HasUnsavedChanges() const override { return hasChanges; }
-        void SetImGuiContext(ImGuiContext* context) { imguiContext = context; }
-
-        void ApplyFont();
-        void RefreshFontList();
-        void CheckAndRebuildFonts();
-
-        static void SetFontRebuildCallback(FontRebuildCallback callback);
+        nlohmann::json Serialize() const override;
+        void Deserialize(const nlohmann::json& j) override;
+        void ResetToDefaults();
 
         struct FontEntry {
             std::string name;
             std::string path;
         };
+
         std::vector<FontEntry> availableFonts;
         std::vector<FontEntry> availableIconFonts;
-        std::string selectedFontName;
+        std::string selectedFontName = "Default";
         std::string selectedIconFontName;
         float m_globalFontScale = 1.0f;
-        ImGuiContext* imguiContext = nullptr;
-        bool hasChanges = false;
-
-        void EnsureInitialized();
-        void ScanFontsDirectory();
-        void ScanIconFontsDirectory();
-
-        std::string pendingIconFontPath;
-
-    private:
-        std::string backupSelectedFontName;
-        std::string backupSelectedIconFontName;
-        float backupGlobalFontScale = 1.0f;
-        bool isInitialized = false;
-        bool fontsScanned = false;
-        bool fontsNeedRebuild = false;
-        std::string pendingFontPath;
-
-        static FontRebuildCallback s_fontRebuildCallback;
-
-        void RebuildFonts();
     };
 
 }

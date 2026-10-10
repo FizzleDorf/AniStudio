@@ -3,38 +3,26 @@
 #include "ImGuiRenderSettingsComponent.hpp"
 
 namespace ECS {
+    class SettingsSystem;
 
     class ImGuiRenderSettingsTab : public BaseSettingsTab {
     public:
-        explicit ImGuiRenderSettingsTab(ImGuiRenderSettingsComponent& comp);
+        ImGuiRenderSettingsTab(SettingsSystem& sys, ImGuiRenderSettingsComponent& comp);
         ~ImGuiRenderSettingsTab() = default;
 
         std::string GetTabName() const override { return "ImGui Render"; }
         std::string GetTabCategory() const override { return "Interface"; }
         void Render() override;
         void SetFilter(const std::string& filter) override { m_filter = filter; }
+        void SetImGuiContext(void* ctx) override { m_imguiContext = ctx; }
 
-        bool HasUnsavedChanges() const override { return m_comp.HasUnsavedChanges(); }
-        void CreateBackup() override { m_comp.CreateBackup(); }
-        void RestoreFromBackup() override { m_comp.RestoreFromBackup(); }
-        void ResetToDefaults() override { m_comp.ResetToDefaults(); }
-        bool SaveSettings() override { return m_comp.SaveSettings(); }
-        bool LoadSettings() override { return m_comp.LoadSettings(); }
-        void SetImGuiContext(ImGuiContext* ctx) override { m_comp.SetImGuiContext(ctx); }
+        static void ApplyToImGui(ImGuiRenderSettingsComponent& comp, ImGuiContext* ctx);
 
     private:
+        SettingsSystem& m_settingsSystem;
         ImGuiRenderSettingsComponent& m_comp;
+        void* m_imguiContext = nullptr;
         std::string m_filter;
-
-        bool FilterPass(const std::string& section) const;
-        void RenderInputSettings();
-        void RenderWindowBehavior();
-        void RenderNavigation();
-        void RenderDocking();
-        void RenderViewports();
-        void RenderMemory();
-        void RenderInputText();
-        void RenderActionButtons();
     };
 
 }

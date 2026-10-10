@@ -4,7 +4,8 @@
 #include "EngineContext.hpp"
 #include "AniEngineComponents.hpp"
 #include "AniEngineSystems.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
+#include "FilePathComponent.hpp"
 #include "ThreadPoolSystem.hpp"
 #include "Log.hpp"
 #include <filesystem>
@@ -51,6 +52,8 @@ namespace ANI {
         entityManager.RegisterComponent<ECS::MeshComponent>("Mesh");
         entityManager.RegisterComponent<ECS::CameraComponent>("Camera");
 
+        entityManager.RegisterComponent<ECS::FilePathComponent>("FilePathComponent");
+
         ANI_LOG_INFO("Core components registered");
     }
 
@@ -62,38 +65,55 @@ namespace ANI {
 
         auto& entityManager = *pImpl->context->entityManager;
 
-        entityManager.RegisterSystem<FilePathSystem>();
+        entityManager.RegisterSystem<SettingsSystem>();
         entityManager.RegisterSystem<ThreadPoolSystem>();
         entityManager.RegisterSystem<ImageSystem>();
         entityManager.RegisterSystem<AudioSystem>();
         entityManager.RegisterSystem<VideoSystem>();
 
+        auto settings = entityManager.GetSystem<SettingsSystem>();
+        if (settings) {
+            settings->AddSettingsComponent<FilePathComponent>();
+
+            settings->SetApplyCallback(
+                entityManager.GetComponentTypeIdByName("FilePathComponent"),
+                [](BaseComponent&) {});
+        }
+
         ANI_LOG_INFO("Core systems registered");
     }
 
-    void EngineCore::InitializeCorePaths() {
-        auto fileSys = pImpl->context->entityManager->GetSystem<FilePathSystem>();
-        if (!fileSys) {
-            ANI_LOG_ERROR("FilePathSystem not available!");
+    void EngineCore::RegisterPathDefaults() {
+        auto settings = pImpl->context->entityManager->GetSystem<SettingsSystem>();
+        if (!settings) {
+            ANI_LOG_ERROR("SettingsSystem not available for path defaults!");
             return;
         }
 
-        std::filesystem::path base = std::filesystem::current_path();
+        settings->RegisterPathDefault("DataPath", "./data");
+        settings->RegisterPathDefault("DefaultProject", "./projects");
+        settings->RegisterPathDefault("Plugins", "./plugins");
+        settings->RegisterPathDefault("ImguiState", "./data/imgui.ini");
+        settings->RegisterPathDefault("Assets", "./assets");
+        settings->RegisterPathDefault("Docs", "./docs");
+        settings->RegisterPathDefault("Scripts", "./scripts");
+        settings->RegisterPathDefault("Templates", "./data/templates");
+        settings->RegisterPathDefault("Shaders", "./shaders");
+        settings->RegisterPathDefault("styles", "./data/styles");
+    }
 
-        // DataPath is the canonical data root; session logs go under it.
-        // assets/ stays separate because it holds content, not runtime state.
-        std::string dataPath = (base / "data").string();
-        std::string assetsPath = (base / "assets").string();
+    void EngineCore::InitializeCorePaths() {
+        auto settings = pImpl->context->entityManager->GetSystem<SettingsSystem>();
+        if (!settings) {
+            ANI_LOG_ERROR("SettingsSystem not available!");
+            return;
+        }
 
-        fileSys->SetPath("DataPath", dataPath);
-        fileSys->SetPath("AssetsFolder", assetsPath);
+        settings->LoadAllSettings();
 
-        std::error_code ec;
-        std::filesystem::create_directories(dataPath, ec);
-        std::filesystem::create_directories(assetsPath, ec);
-
-        ANI_LOG_INFO("Core paths initialized: DataPath=%s AssetsFolder=%s",
-            dataPath.c_str(), assetsPath.c_str());
+        ANI_LOG_INFO("Core paths resolved: DataPath=%s Plugins=%s",
+            settings->GetPath("DataPath").c_str(),
+            settings->GetPath("Plugins").c_str());
     }
 
     void EngineCore::InitializePlugins() {
@@ -102,17 +122,16 @@ namespace ANI {
             return;
         }
 
-        auto fileSys = pImpl->context->entityManager->GetSystem<FilePathSystem>();
-        if (!fileSys) {
-            ANI_LOG_ERROR("FilePathSystem not available for plugin initialization!");
+        auto settings = pImpl->context->entityManager->GetSystem<SettingsSystem>();
+        if (!settings) {
+            ANI_LOG_ERROR("SettingsSystem not available for plugin initialization!");
             return;
         }
 
-        std::string pluginDirectory = fileSys->GetPath("Plugins");
+        std::string pluginDirectory = settings->GetPath("Plugins");
         if (pluginDirectory.empty()) {
             pluginDirectory = "./plugins";
-            ANI_LOG_WARN("Plugins path not set, using default: %s",
-                pluginDirectory.c_str());
+            ANI_LOG_WARN("Plugins path not set, using default: %s", pluginDirectory.c_str());
         }
 
         ANI_LOG_INFO("Initializing plugins from: %s", pluginDirectory.c_str());
@@ -127,17 +146,13 @@ namespace ANI {
         ANI_LOG_INFO("Plugin system initialized (plugins load per-project)");
     }
 
-    // Opens the session log at <DataPath>/session_logs/session_<timestamp>.log
-    // and redirects stderr+stdout into it. Must run after InitializeCorePaths
-    // so FilePathSystem has DataPath. Falls back to ./data/session_logs if the
-    // FilePathSystem lookup fails, so the logger is still usable in that case.
     void EngineCore::OpenSessionLog() {
         std::string logDir = "./data/session_logs";
 
         if (pImpl->context && pImpl->context->entityManager) {
-            auto fileSys = pImpl->context->entityManager->GetSystem<FilePathSystem>();
-            if (fileSys) {
-                std::string dataPath = fileSys->GetPath("DataPath");
+            auto settings = pImpl->context->entityManager->GetSystem<SettingsSystem>();
+            if (settings) {
+                std::string dataPath = settings->GetPath("DataPath");
                 if (!dataPath.empty()) logDir = dataPath + "/session_logs";
             }
         }
@@ -167,20 +182,15 @@ namespace ANI {
                 return false;
             }
 
-            // Force a component-type registration pass by creating and
-            // destroying a placeholder entity. This mirrors whatever
-            // initialization EntityManager relies on for its type tables.
             auto& entityManager = *pImpl->context->entityManager;
             const ECS::EntityID temp = entityManager.AddNewEntity();
             entityManager.DestroyEntity(temp);
 
             RegisterCoreComponents();
             RegisterCoreSystems();
-
+            RegisterPathDefaults();
             InitializeCorePaths();
 
-            // FilePathSystem now knows DataPath, so the session log can
-            // live under it. Open before plugins so plugin init is captured.
             OpenSessionLog();
 
             ANI_LOG_INFO("Engine context created successfully");
@@ -213,12 +223,10 @@ namespace ANI {
 
         engineCore->RegisterCoreComponents();
         engineCore->RegisterCoreSystems();
+        engineCore->RegisterPathDefaults();
         engineCore->InitializeCorePaths();
 
-        // Same ordering as Initialize: DataPath must exist before the log
-        // file is opened, and the log file must be open before plugins run.
         engineCore->OpenSessionLog();
-
         engineCore->InitializePlugins();
 
         engineCore->pImpl->initialized = true;
@@ -235,6 +243,10 @@ namespace ANI {
 
         pImpl->running = false;
 
+        if (auto settings = pImpl->context->entityManager->GetSystem<SettingsSystem>()) {
+            settings->SaveAllSettings();
+        }
+
         if (pImpl->context->entityManager) {
             pImpl->context->entityManager->Reset();
         }
@@ -244,9 +256,6 @@ namespace ANI {
 
         ANI_LOG_INFO("EngineCore shutdown complete");
 
-        // Close the session file LAST so the line above is flushed and the
-        // original stderr/stdout are restored. Anything logged after this
-        // goes back to the console.
         ANI::Log::SessionClose();
     }
 

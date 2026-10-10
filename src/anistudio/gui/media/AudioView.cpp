@@ -8,7 +8,7 @@
 #include "MetadataView.hpp"
 #include "AVSystem.hpp"
 #include "AudioSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "PlaybackEvents.hpp"
 #include "ClipboardUtilities.hpp"
 #include "IconFonts.hpp"
@@ -359,8 +359,8 @@ namespace GUI {
                 ImGui::PopID();
                 ImGui::PushID(3);
                 if (ImGui::MenuItem((Icon::SaveAs() + " Save Audio As...").c_str(), nullptr, false, selectedEntityID != 0)) {
-                    auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                    std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                    auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                    std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
                     std::string defaultName = "audio.wav";
                     if (selectedEntityID != 0) {
                         const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);
@@ -457,8 +457,8 @@ namespace GUI {
 
         ImGui::PushID(103);
         if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
-            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
             std::string defaultName = "audio.wav";
             if (selectedEntityID != 0) {
                 const auto& audioComp = m_entityManager.GetComponent<ECS::AudioComponent>(selectedEntityID);

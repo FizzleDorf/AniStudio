@@ -2,7 +2,7 @@
 #include "StudioPluginManager.hpp"
 #include "ViewManager.hpp"
 #include "StudioContext.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "FilePathComponent.hpp"
 #include "ProjectSystem.hpp"
 #include "Log.hpp"
@@ -23,21 +23,21 @@ namespace Plugins {
         ANI_LOG_INFO("StudioPluginManager constructor (ImGuiContext=%p)",
             static_cast<void*>(mainImGuiContext));
 
-        auto fs = entityMgr.GetSystem<ECS::FilePathSystem>();
-        if (fs) {
-            m_pluginDirectory = fs->GetPath("Plugins");
+        auto settings = entityMgr.GetSystem<ECS::SettingsSystem>();
+        if (settings) {
+            m_pluginDirectory = settings->GetPath("Plugins");
             if (m_pluginDirectory.empty()) {
                 m_pluginDirectory = (std::filesystem::current_path() / "plugins").string();
-                fs->SetPath("Plugins", m_pluginDirectory);
+                settings->SetPath("Plugins", m_pluginDirectory);
                 ANI_LOG_DEBUG("Plugin directory defaulted to: %s", m_pluginDirectory.c_str());
             }
             else {
-                ANI_LOG_DEBUG("Plugin directory from FilePathSystem: %s", m_pluginDirectory.c_str());
+                ANI_LOG_DEBUG("Plugin directory from SettingsSystem: %s", m_pluginDirectory.c_str());
             }
         }
         else {
             m_pluginDirectory = (std::filesystem::current_path() / "plugins").string();
-            ANI_LOG_WARN("FilePathSystem unavailable, plugin directory defaulted to: %s",
+            ANI_LOG_WARN("SettingsSystem unavailable, plugin directory defaulted to: %s",
                 m_pluginDirectory.c_str());
         }
 
@@ -216,9 +216,9 @@ namespace Plugins {
 
     void StudioPluginManager::SetPluginDirectory(const std::string& dir) {
         m_pluginDirectory = dir;
-        auto fs = entityManager.GetSystem<ECS::FilePathSystem>();
-        if (fs) {
-            fs->SetPath("Plugins", dir);
+        auto settings = entityManager.GetSystem<ECS::SettingsSystem>();
+        if (settings) {
+            settings->SetPath("Plugins", dir);
         }
         setStagingDirectory(dir);
         ANI_LOG_INFO("Plugin directory set: %s", dir.c_str());

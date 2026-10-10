@@ -2,11 +2,10 @@
 #include "ViewManager.hpp"
 #include "WindowState.hpp"
 #include "ImGuiStateUtils.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "Events.hpp"
 #include "ProjectTemplate.hpp"
 #include "GeneralSettingsComponent.hpp"
-#include "SettingsSystem.hpp"
 #include "StudioPluginManager.hpp"
 #include "Log.hpp"
 #include <GLFW/glfw3.h>
@@ -133,22 +132,22 @@ namespace ECS {
         ANI_LOG_INFO("[ProjectSystem] PluginManager set");
     }
 
-    std::shared_ptr<ECS::FilePathSystem> ProjectSystem::GetFilePathSystem() const {
-        return mgr.GetSystem<ECS::FilePathSystem>();
+    std::shared_ptr<ECS::SettingsSystem> ProjectSystem::GetSettingsSystem() const {
+        return mgr.GetSystem<ECS::SettingsSystem>();
     }
 
     std::string ProjectSystem::GetDefaultProjectPath() const {
-        auto fileSys = GetFilePathSystem();
-        if (fileSys) {
-            return fileSys->GetPath("DefaultProject");
+        auto settings = GetSettingsSystem();
+        if (settings) {
+            return settings->GetPath("DefaultProject");
         }
         return "";
     }
 
     void ProjectSystem::SetDefaultProjectPath(const std::string& path) {
-        auto fileSys = GetFilePathSystem();
-        if (fileSys) {
-            fileSys->SetPath("DefaultProject", path);
+        auto settings = GetSettingsSystem();
+        if (settings) {
+            settings->SetPath("DefaultProject", path);
         }
     }
 
@@ -414,9 +413,9 @@ namespace ECS {
     }
 
     void ProjectSystem::AddToRecentProjects(const std::string& projectPath) {
-        auto fileSys = GetFilePathSystem();
-        if (fileSys) {
-            fileSys->SetPath("LastOpenProject", projectPath);
+        auto settings = GetSettingsSystem();
+        if (settings) {
+            settings->SetPath("LastOpenProject", projectPath);
         }
     }
 
@@ -470,9 +469,9 @@ namespace ECS {
 
             UpdateProjectSpecificPaths();
 
-            auto fileSys = GetFilePathSystem();
-            if (fileSys) {
-                fileSys->SetPath("LastOpenProject", projectPath);
+            auto settings = GetSettingsSystem();
+            if (settings) {
+                settings->SetPath("LastOpenProject", projectPath);
             }
 
             m_viewState.Reset();
@@ -491,9 +490,6 @@ namespace ECS {
 
             AddToRecentProjects(projectPath);
 
-            // Process staged plugins and set project context BEFORE firing the
-            // created callback so plugin view types are available for any
-            // subsequent view/layout setup.
             if (m_pluginManager) {
                 m_pluginManager->LoadStagingPlugins(true);
                 m_pluginManager->SetProjectContext(projectPath);
@@ -568,27 +564,20 @@ namespace ECS {
             std::filesystem::create_directories(projPath / "data" / "capture");
             std::filesystem::create_directories(projPath / "data" / "quicksaves");
 
-            auto fileSys = GetFilePathSystem();
-            if (fileSys) {
-                fileSys->SetPath("LastOpenProject", projectPath);
+            auto settings = GetSettingsSystem();
+            if (settings) {
+                settings->SetPath("LastOpenProject", projectPath);
             }
 
             AddToRecentProjects(projectPath);
 
             ANI_LOG_INFO("[ProjectSystem] Loaded project: %s from %s",
                 comp->settings.projectName.c_str(), projectPath.c_str());
-            if (fileSys) {
-                ANI_LOG_INFO("  - AssetsFolder: %s", fileSys->GetPath("AssetsFolder").c_str());
-                ANI_LOG_INFO("  - OutputFolder: %s", fileSys->GetPath("OutputFolder").c_str());
+            if (settings) {
+                ANI_LOG_INFO("  - AssetsFolder: %s", settings->GetPath("AssetsFolder").c_str());
+                ANI_LOG_INFO("  - OutputFolder: %s", settings->GetPath("OutputFolder").c_str());
             }
 
-            // LoadStagingPlugins moves any staged DLLs into versioned slots.
-            // SetProjectContext loads the project's plugin_state.json and
-            // enables the plugins that were enabled in that project last. Enabling
-            // a plugin calls OnStudioInit, which registers its view types with
-            // the ViewManager.
-            // PrepareProjectPlugins sweeps any remaining enabled-but-not-yet-
-            // enabled plugins (idempotent).
             if (m_pluginManager) {
                 m_pluginManager->LoadStagingPlugins(true);
                 m_pluginManager->SetProjectContext(projectPath);
@@ -596,8 +585,6 @@ namespace ECS {
                 ANI_LOG_INFO("[ProjectSystem] Plugins prepared before viewstate load");
             }
 
-            // all view types (including plugin views) are
-            // now registered, so DeserializeViewLists can resolve them.
             LoadViewState();
 
             if (m_viewManager) {
@@ -614,13 +601,11 @@ namespace ECS {
                 }
             }
 
-            // Layout / window state / paths.
             LoadImGuiLayout();
             LoadAndApplyProjectWindowState();
 
             UpdateProjectSpecificPaths();
 
-            // Pure notification callback last.
             if (m_onProjectLoadedCallback) {
                 m_onProjectLoadedCallback(projectPath);
             }
@@ -697,9 +682,9 @@ namespace ECS {
 
         ClearProjectSpecificPaths();
 
-        auto fileSys = GetFilePathSystem();
-        if (fileSys) {
-            fileSys->SetPath("LastOpenProject", "");
+        auto settings = GetSettingsSystem();
+        if (settings) {
+            settings->SetPath("LastOpenProject", "");
         }
 
         comp->isOpen = false;
@@ -928,11 +913,11 @@ namespace ECS {
         std::string outputPath = GetProjectOutputPath();
         std::string dataPath = GetProjectDataPath();
 
-        auto fileSys = GetFilePathSystem();
-        if (fileSys) {
-            if (!assetsPath.empty()) fileSys->SetPath("AssetsFolder", assetsPath);
-            if (!outputPath.empty()) fileSys->SetPath("OutputFolder", outputPath);
-            fileSys->SetPath("ProjectDataPath", dataPath);
+        auto settings = GetSettingsSystem();
+        if (settings) {
+            if (!assetsPath.empty()) settings->SetPath("AssetsFolder", assetsPath);
+            if (!outputPath.empty()) settings->SetPath("OutputFolder", outputPath);
+            settings->SetPath("ProjectDataPath", dataPath);
         }
 
         ANI_LOG_DEBUG("[ProjectSystem] Updated project-specific paths:");
@@ -942,11 +927,11 @@ namespace ECS {
     }
 
     void ProjectSystem::ClearProjectSpecificPaths() {
-        auto fileSys = GetFilePathSystem();
-        if (fileSys) {
-            fileSys->SetPath("AssetsFolder", "");
-            fileSys->SetPath("OutputFolder", "");
-            fileSys->SetPath("ProjectDataPath", "");
+        auto settings = GetSettingsSystem();
+        if (settings) {
+            settings->SetPath("AssetsFolder", "");
+            settings->SetPath("OutputFolder", "");
+            settings->SetPath("ProjectDataPath", "");
         }
 
         ANI_LOG_INFO("[ProjectSystem] Cleared project-specific paths");
@@ -1002,16 +987,15 @@ namespace ECS {
             return false;
         }
 
-        auto fileSys = GetFilePathSystem();
+        auto settings = GetSettingsSystem();
         std::string lastProjectPath;
-        if (fileSys) {
-            lastProjectPath = fileSys->GetPath("LastOpenProject");
+        if (settings) {
+            lastProjectPath = settings->GetPath("LastOpenProject");
         }
 
         bool loadLastProject = true;
-        auto settingsSystem = mgr.GetSystem<ECS::SettingsSystem>();
-        if (settingsSystem) {
-            ECS::EntityID settingsEntity = settingsSystem->GetSettingsEntity();
+        if (settings) {
+            ECS::EntityID settingsEntity = settings->GetSettingsEntity();
             if (mgr.IsEntityValid(settingsEntity) && mgr.HasComponent<ECS::GeneralSettingsComponent>(settingsEntity)) {
                 auto& generalComp = mgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
                 loadLastProject = generalComp.loadLastProject;

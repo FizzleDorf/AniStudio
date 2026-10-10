@@ -3,7 +3,7 @@
 #include "EntityManager.hpp"
 #include "PluginState.hpp"
 #include "EngineContext.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "Log.hpp"
 
 #include <filesystem>

@@ -3,7 +3,6 @@
 #include "SettingsSystem.hpp"
 #include "BaseSettingsTab.hpp"
 #include <imgui.h>
-#include <iostream>
 #include <algorithm>
 
 namespace GUI {
@@ -15,66 +14,38 @@ namespace GUI {
     void SettingsView::SetEntityManager(ECS::EntityManager& mgr) {
         m_entityManager = &mgr;
         m_settingsSystem = mgr.GetSystem<ECS::SettingsSystem>().get();
-        if (m_settingsSystem) {
-            if (imguiContext) {
-                m_settingsSystem->SetImGuiContext(imguiContext);
-            }
-            if (!settingsLoaded) {
-                m_settingsSystem->LoadAllSettings();
-                settingsLoaded = true;
-            }
-            auto& tabs = m_settingsSystem->GetTabs();
-            if (!tabs.empty()) {
-                currentActiveTab = tabs[0]->GetTabName();
-            }
-        }
     }
 
     void SettingsView::SetImGuiContext(ImGuiContext* context) {
         imguiContext = context;
-        if (m_settingsSystem && imguiContext) {
-            m_settingsSystem->SetImGuiContext(imguiContext);
-        }
     }
 
-    void SettingsView::Show() {
-        popupOpen = true;
-    }
-
-    void SettingsView::Hide() {
-        popupOpen = false;
-        ImGui::CloseCurrentPopup();
-    }
+    void SettingsView::Show() { m_open = true; }
+    void SettingsView::Hide() { m_open = false; }
 
     void SettingsView::Render() {
-        if (!popupOpen) return;
+        if (!m_open) return;
         if (!imguiContext) return;
 
         ImGui::SetCurrentContext(imguiContext);
-
-        if (!ImGui::IsPopupOpen("Settings##SettingsPopup")) {
-            ImGui::OpenPopup("Settings##SettingsPopup");
-        }
 
         const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowSize(ImVec2(1200, 700), ImGuiCond_Appearing);
 
-        bool isOpen = true;
-        if (ImGui::BeginPopupModal("Settings##SettingsPopup", &isOpen,
-            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoDocking |
-            ImGuiWindowFlags_Modal)) {
-            RenderMainContent();
-            ImGui::EndPopup();
-        }
+        ImGuiWindowFlags flags =
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoDocking;
 
-        if (!isOpen) {
-            if (m_settingsSystem) {
-                m_settingsSystem->RestoreAllFromBackups();
-            }
-            popupOpen = false;
-            ImGui::CloseCurrentPopup();
+        if (ImGui::Begin("Settings##SettingsWindow", &m_open, flags)) {
+            RenderMainContent();
+        }
+        ImGui::End();
+
+        if (!m_open && m_settingsSystem) {
+            m_settingsSystem->RestoreAllFromBackups();
         }
     }
 
@@ -91,8 +62,10 @@ namespace GUI {
         ImGui::InputText("##SettingsFilter", filterBuffer, sizeof(filterBuffer));
 
         std::string filterStr = filterBuffer;
-        for (auto& tab : m_settingsSystem->GetTabs()) {
-            tab->SetFilter(filterStr);
+        if (m_tabs) {
+            for (const auto& tab : *m_tabs) {
+                if (tab) tab->SetFilter(filterStr);
+            }
         }
 
         if (showSaveNotification) {
@@ -110,19 +83,16 @@ namespace GUI {
     }
 
     void SettingsView::RenderTabsAndContent() {
-        auto& tabs = m_settingsSystem->GetTabs();
-        if (tabs.empty()) {
+        if (!m_tabs || m_tabs->empty()) {
             ImGui::TextDisabled("No settings tabs available.");
             return;
         }
 
         if (ImGui::BeginTabBar("SettingsTabs", ImGuiTabBarFlags_None)) {
-            for (auto& tab : tabs) {
+            for (const auto& tab : *m_tabs) {
+                if (!tab) continue;
                 std::string title = tab->GetTabName() + " Settings";
                 if (ImGui::BeginTabItem(title.c_str())) {
-                    if (currentActiveTab != tab->GetTabName()) {
-                        currentActiveTab = tab->GetTabName();
-                    }
                     ImGui::BeginChild("TabContent", ImVec2(0, 0), false,
                         ImGuiWindowFlags_AlwaysVerticalScrollbar);
                     tab->Render();
@@ -143,17 +113,12 @@ namespace GUI {
         }
 
         if (ImGui::Button("Apply")) {
-            if (m_settingsSystem->SaveAllSettings()) {
-                showSaveNotification = true;
-            }
+            if (m_settingsSystem->SaveAllSettings()) showSaveNotification = true;
         }
         ImGui::SameLine();
 
         if (ImGui::Button("Save and Close")) {
-            if (m_settingsSystem->SaveAllSettings()) {
-                popupOpen = false;
-                ImGui::CloseCurrentPopup();
-            }
+            if (m_settingsSystem->SaveAllSettings()) m_open = false;
         }
 
         if (m_settingsSystem->HasAnyUnsavedChanges()) {
@@ -161,19 +126,12 @@ namespace GUI {
             if (ImGui::Button("Cancel Changes")) {
                 m_settingsSystem->RestoreAllFromBackups();
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Reset to Defaults")) {
-                m_settingsSystem->ResetAllToDefaults();
-            }
         }
 
         ImGui::SameLine();
         if (ImGui::Button("Close")) {
-            if (m_settingsSystem) {
-                m_settingsSystem->RestoreAllFromBackups();
-            }
-            popupOpen = false;
-            ImGui::CloseCurrentPopup();
+            m_settingsSystem->RestoreAllFromBackups();
+            m_open = false;
         }
     }
 

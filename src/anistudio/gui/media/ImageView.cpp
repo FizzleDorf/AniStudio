@@ -4,7 +4,7 @@
 #include "FileDialogFilters.hpp"
 #include "Events.hpp"
 #include "TextureSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "PngMetadataUtils.hpp"
 #include "ClipboardUtilities.hpp"
 #include "DragDropUtils.hpp"
@@ -135,8 +135,8 @@ namespace GUI {
             if (ImGui::BeginMenu("File")) {
                 ImGui::PushID(1);
                 if (ImGui::MenuItem((Icon::Image() + " " + Icon::FolderOpen() + " Load Image(s)").c_str())) {
-                    auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                    std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                    auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                    std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
                     std::vector<std::string> outPaths;
                     if (FileDialog::OpenFiles("Choose Image(s)", FileDialog::FilterType::IMAGE_FILE, outPaths, defaultPath)) {
                         if (!outPaths.empty()) LoadMedia(outPaths);
@@ -151,8 +151,8 @@ namespace GUI {
                 ImGui::PopID();
                 ImGui::PushID(3);
                 if (ImGui::MenuItem((Icon::SaveAs() + " Save Image As...").c_str(), nullptr, false, selectedEntityID != 0)) {
-                    auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                    std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                    auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                    std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
                     std::string outPath;
                     if (selectedEntityID != 0) {
                         const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
@@ -208,8 +208,8 @@ namespace GUI {
 
         ImGui::PushID(101);
         if (ImGui::Button((Icon::Image() + " Load").c_str())) {
-            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
             std::vector<std::string> outPaths;
             if (FileDialog::OpenFiles("Choose Image(s)", FileDialog::FilterType::IMAGE_FILE, outPaths, defaultPath)) {
                 if (!outPaths.empty()) LoadMedia(outPaths);
@@ -227,8 +227,8 @@ namespace GUI {
 
         ImGui::PushID(103);
         if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
-            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
             std::string outPath;
             if (selectedEntityID != 0) {
                 const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);

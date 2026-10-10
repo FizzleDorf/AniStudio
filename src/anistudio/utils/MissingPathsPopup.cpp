@@ -1,52 +1,30 @@
 #include "MissingPathsPopup.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
+#include "FilePathComponent.hpp"
 #include "FileDialogUtil.hpp"
 #include <imgui.h>
 #include <unordered_map>
-#include <algorithm>
-#include <filesystem>
+#include <vector>
+#include <cstring>
 
 namespace Utils {
 
-    static ECS::FilePathSystem* s_fileSys = nullptr;
+    static ECS::SettingsSystem* s_settings = nullptr;
     static std::vector<std::string> s_missingKeys;
     static bool s_popupOpen = false;
     static std::unordered_map<std::string, std::string> s_tempPaths;
-    static std::unordered_map<std::string, std::string> s_defaultPaths;
 
-    static bool IsPathHidden(const std::string& key) {
-        return (key == "CurrentProject" || key == "ProjectData" ||
-            key == "ProjectAssets" || key == "ProjectOutput" ||
-            key == "Output" || key == "LastOpenProject" || key == "ProjectDataPath" ||
-            key == "AssetsFolder" || key == "OutputFolder");
-    }
-
-    void SetDefaultPath(const std::string& key, const std::string& defaultPath) {
-        s_defaultPaths[key] = defaultPath;
-    }
-
-    std::string GetDefaultPath(const std::string& key) {
-        auto it = s_defaultPaths.find(key);
-        return (it != s_defaultPaths.end()) ? it->second : "";
-    }
-
-    static std::string GetDefaultPathForKey(const std::string& key) {
-        auto it = s_defaultPaths.find(key);
-        return (it != s_defaultPaths.end()) ? it->second : "";
-    }
-
-    void CheckMissingPaths(ECS::FilePathSystem* fileSys) {
-        if (!fileSys) return;
-        s_fileSys = fileSys;
+    void CheckMissingPaths(ECS::SettingsSystem* settingsSystem) {
+        if (!settingsSystem) return;
+        s_settings = settingsSystem;
         s_missingKeys.clear();
-        std::vector<std::string> allKeys = fileSys->GetAllKeys();
 
-        for (const auto& key : allKeys) {
-            if (IsPathHidden(key)) continue;
-            std::string path = fileSys->GetPath(key);
-            if (path.empty()) {
-                s_missingKeys.push_back(key);
-            }
+        auto* fc = settingsSystem->GetFilePathComponent();
+        if (!fc) return;
+
+        for (const auto& key : fc->GetAllKeys()) {
+            if (ECS::FilePathComponent::IsPathHidden(key)) continue;
+            if (fc->GetPath(key).empty()) s_missingKeys.push_back(key);
         }
 
         if (s_missingKeys.empty()) {
@@ -57,14 +35,13 @@ namespace Utils {
             s_popupOpen = true;
             s_tempPaths.clear();
             for (const auto& key : s_missingKeys) {
-                std::string defaultPath = GetDefaultPathForKey(key);
-                s_tempPaths[key] = defaultPath;
+                s_tempPaths[key] = fc->GetDefaultPath(key);
             }
         }
     }
 
     void RenderMissingPathsPopup() {
-        if (!s_fileSys) return;
+        if (!s_settings) return;
         if (!s_popupOpen) return;
 
         ImGui::OpenPopup("Missing File Paths");
@@ -72,14 +49,17 @@ namespace Utils {
             ImGui::Text("The following file paths are not set:");
             ImGui::Separator();
 
+            auto* fc = s_settings->GetFilePathComponent();
+
             for (auto& key : s_missingKeys) {
                 ImGui::PushID(key.c_str());
 
                 ImGui::Text("%s", key.c_str());
                 ImGui::SameLine(150.0f);
 
-                char buffer[256];
-                strcpy(buffer, s_tempPaths[key].c_str());
+                char buffer[512];
+                std::strncpy(buffer, s_tempPaths[key].c_str(), sizeof(buffer) - 1);
+                buffer[sizeof(buffer) - 1] = '\0';
                 ImGui::PushItemWidth(200.0f);
                 if (ImGui::InputText("##path", buffer, sizeof(buffer))) {
                     s_tempPaths[key] = buffer;
@@ -95,7 +75,7 @@ namespace Utils {
                 }
 
                 ImGui::SameLine();
-                std::string defaultPath = GetDefaultPathForKey(key);
+                std::string defaultPath = fc ? fc->GetDefaultPath(key) : "";
                 if (!defaultPath.empty()) {
                     if (ImGui::Button("Use Default")) {
                         s_tempPaths[key] = defaultPath;
@@ -110,24 +90,16 @@ namespace Utils {
             if (ImGui::Button("Save")) {
                 bool allFilled = true;
                 for (const auto& pair : s_tempPaths) {
-                    if (pair.second.empty()) {
-                        allFilled = false;
-                        break;
-                    }
+                    if (pair.second.empty()) { allFilled = false; break; }
                 }
 
                 if (allFilled) {
                     for (const auto& pair : s_tempPaths) {
                         if (!pair.second.empty()) {
-                            s_fileSys->SetPath(pair.first, pair.second);
+                            s_settings->SetPath(pair.first, pair.second);
                         }
                     }
-                    std::string dataPath = s_fileSys->GetPath("DataPath");
-                    if (dataPath.empty()) {
-                        dataPath = "./data";
-                    }
-                    std::string filePath = dataPath + "/paths.json";
-                    s_fileSys->SaveToFile(filePath);
+                    s_settings->SaveAllSettings();
                     s_popupOpen = false;
                     s_tempPaths.clear();
                     s_missingKeys.clear();
@@ -141,19 +113,16 @@ namespace Utils {
             ImGui::SameLine();
 
             if (ImGui::Button("Set All to Default")) {
-                for (const auto& key : s_missingKeys) {
-                    std::string defaultPath = GetDefaultPathForKey(key);
-                    if (!defaultPath.empty()) {
-                        s_fileSys->SetPath(key, defaultPath);
-                        s_tempPaths[key] = defaultPath;
+                if (fc) {
+                    for (const auto& key : s_missingKeys) {
+                        std::string defaultPath = fc->GetDefaultPath(key);
+                        if (!defaultPath.empty()) {
+                            s_settings->SetPath(key, defaultPath);
+                            s_tempPaths[key] = defaultPath;
+                        }
                     }
                 }
-                std::string dataPath = s_fileSys->GetPath("DataPath");
-                if (dataPath.empty()) {
-                    dataPath = "./data";
-                }
-                std::string filePath = dataPath + "/paths.json";
-                s_fileSys->SaveToFile(filePath);
+                s_settings->SaveAllSettings();
                 s_popupOpen = false;
                 s_tempPaths.clear();
                 s_missingKeys.clear();

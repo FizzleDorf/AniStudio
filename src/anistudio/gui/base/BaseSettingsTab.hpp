@@ -1,6 +1,5 @@
 #pragma once
 #include <string>
-#include <imgui.h>
 
 namespace ECS {
 
@@ -12,14 +11,7 @@ namespace ECS {
         virtual std::string GetTabCategory() const = 0;
         virtual void Render() = 0;
         virtual void SetFilter(const std::string& filter) = 0;
-
-        virtual bool HasUnsavedChanges() const = 0;
-        virtual void CreateBackup() = 0;
-        virtual void RestoreFromBackup() = 0;
-        virtual void ResetToDefaults() = 0;
-        virtual bool SaveSettings() = 0;
-        virtual bool LoadSettings() = 0;
-        virtual void SetImGuiContext(ImGuiContext* ctx) = 0;
+        virtual void SetImGuiContext(void* ctx) { (void)ctx; }
     };
 
 }

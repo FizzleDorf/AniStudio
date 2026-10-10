@@ -1,5 +1,5 @@
 #include "HelpView.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include <iostream>
 #include <algorithm>
 #include <sstream>
@@ -33,30 +33,25 @@ namespace GUI {
         documents.clear();
         documentIndex.clear();
 
-        // Get the base data path from ECS FilePathSystem
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();  // fixed: use auto, not auto*
-        std::string dataPath = fileSys ? fileSys->GetPath("DataPath") : "";
+        auto settings = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        std::string dataPath = settings ? settings->GetPath("DataPath") : "";
 
-        // List of possible base directories to search for documentation
         std::vector<std::string> baseDirs;
         if (!dataPath.empty()) {
             baseDirs.push_back(dataPath);
         }
-        // Fallback: try relative to executable (current working directory)
         baseDirs.push_back(".");
         baseDirs.push_back("..");
 
-        // Try to find README.md and docs directory
         for (const auto& base : baseDirs) {
             std::filesystem::path basePath(base);
             std::filesystem::path readmePath = basePath / "README.md";
             if (std::filesystem::exists(readmePath)) {
                 LoadMarkdownFile(readmePath);
-                break; // Load only one README (the first found)
+                break;
             }
         }
 
-        // Look for docs directory
         for (const auto& base : baseDirs) {
             std::filesystem::path basePath(base);
             std::filesystem::path docsPath = basePath / "docs";
@@ -70,17 +65,15 @@ namespace GUI {
                         }
                     }
                 }
-                break; // Load from the first docs directory found
+                break;
             }
         }
 
-        // Sort by title
         std::sort(documents.begin(), documents.end(),
             [](const MarkdownDocument& a, const MarkdownDocument& b) {
                 return a.title < b.title;
             });
 
-        // Rebuild index
         documentIndex.clear();
         for (size_t i = 0; i < documents.size(); ++i) {
             std::string filename = std::filesystem::path(documents[i].filePath).filename().string();
@@ -108,7 +101,6 @@ namespace GUI {
             doc.content = buffer.str();
             doc.isLoaded = true;
 
-            // Try to extract a better title from first H1 header
             std::string content = doc.content;
             size_t headerPos = content.find("# ");
             if (headerPos != std::string::npos) {
@@ -156,15 +148,15 @@ namespace GUI {
             if (documents.empty()) {
                 ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "No documentation files found.");
                 ImGui::Text("Expected locations (searched in order):");
-                ImGui::BulletText("DataPath (from FilePathSystem)");
+                ImGui::BulletText("DataPath (from SettingsSystem)");
                 ImGui::BulletText("Current working directory and parent");
                 ImGui::Separator();
                 ImGui::Text("Debug Information:");
                 std::string currentPath = std::filesystem::current_path().string();
                 ImGui::Text("Current working directory: %s", currentPath.c_str());
-                auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();  // fixed: use auto
-                if (fileSys) {
-                    ImGui::Text("DataPath: %s", fileSys->GetPath("DataPath").c_str());
+                auto settings = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                if (settings) {
+                    ImGui::Text("DataPath: %s", settings->GetPath("DataPath").c_str());
                 }
             }
             else {
@@ -226,7 +218,6 @@ namespace GUI {
 
             if (doc.isLoaded && !doc.content.empty()) {
                 std::string processedContent = doc.content;
-                // Basic table handling (could be enhanced)
                 std::istringstream stream(processedContent);
                 std::string line;
                 std::string finalContent;
@@ -386,7 +377,6 @@ namespace GUI {
         }
     }
 
-    // Static callbacks
     void HelpView::LinkCallback(ImGui::MarkdownLinkCallbackData data) {
         std::string url(data.link, data.linkLength);
         HelpView* helpView = static_cast<HelpView*>(data.userData);

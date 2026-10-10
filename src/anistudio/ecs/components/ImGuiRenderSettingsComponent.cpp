@@ -1,138 +1,9 @@
 #include "ImGuiRenderSettingsComponent.hpp"
-#include <fstream>
-#include <filesystem>
-#include <iostream>
-#include <nlohmann/json.hpp>
 
 namespace ECS {
 
-    ImGuiRenderSettingsComponent::ImGuiRenderSettingsComponent() {
-    }
-
-    ImGuiRenderSettingsComponent::ImGuiRenderSettingsComponent(const ImGuiRenderSettingsComponent& other)
-        : BaseSettingsComponent(other)
-        , configWindowsResizeFromEdges(other.configWindowsResizeFromEdges)
-        , configWindowsMoveFromTitleBarOnly(other.configWindowsMoveFromTitleBarOnly)
-        , configDragClickToInputText(other.configDragClickToInputText)
-        , configNavEnableKeyboard(other.configNavEnableKeyboard)
-        , configNavEnableGamepad(other.configNavEnableGamepad)
-        , configNavMoveSetMousePos(other.configNavMoveSetMousePos)
-        , configNavCaptureKeyboard(other.configNavCaptureKeyboard)
-        , configNavEscapeClearFocusItem(other.configNavEscapeClearFocusItem)
-        , configMemoryCompactTimer(other.configMemoryCompactTimer)
-        , configDebugHighlightIdConflicts(other.configDebugHighlightIdConflicts)
-        , configDockingEnable(other.configDockingEnable)
-        , configDockingWithShift(other.configDockingWithShift)
-        , configDockingAlwaysTabBar(other.configDockingAlwaysTabBar)
-        , configDockingTransparentPayload(other.configDockingTransparentPayload)
-        , configViewportsEnable(other.configViewportsEnable)
-        , configViewportsNoAutoMerge(other.configViewportsNoAutoMerge)
-        , configViewportsNoTaskBarIcon(other.configViewportsNoTaskBarIcon)
-        , configViewportsNoDecoration(other.configViewportsNoDecoration)
-        , configViewportsNoDefaultParent(other.configViewportsNoDefaultParent)
-        , configMacOSXBehaviors(other.configMacOSXBehaviors)
-        , configInputTextCursorBlink(other.configInputTextCursorBlink)
-        , configInputTextEnterKeepActive(other.configInputTextEnterKeepActive)
-        , hasChanges(other.hasChanges)
-        , imguiContext(other.imguiContext)
-        , backupConfigFlags(other.backupConfigFlags)
-        , isInitialized(other.isInitialized) {
-    }
-
-    ImGuiRenderSettingsComponent& ImGuiRenderSettingsComponent::operator=(const ImGuiRenderSettingsComponent& other) {
-        if (this != &other) {
-            configWindowsResizeFromEdges = other.configWindowsResizeFromEdges;
-            configWindowsMoveFromTitleBarOnly = other.configWindowsMoveFromTitleBarOnly;
-            configDragClickToInputText = other.configDragClickToInputText;
-            configNavEnableKeyboard = other.configNavEnableKeyboard;
-            configNavEnableGamepad = other.configNavEnableGamepad;
-            configNavMoveSetMousePos = other.configNavMoveSetMousePos;
-            configNavCaptureKeyboard = other.configNavCaptureKeyboard;
-            configNavEscapeClearFocusItem = other.configNavEscapeClearFocusItem;
-            configMemoryCompactTimer = other.configMemoryCompactTimer;
-            configDebugHighlightIdConflicts = other.configDebugHighlightIdConflicts;
-            configDockingEnable = other.configDockingEnable;
-            configDockingWithShift = other.configDockingWithShift;
-            configDockingAlwaysTabBar = other.configDockingAlwaysTabBar;
-            configDockingTransparentPayload = other.configDockingTransparentPayload;
-            configViewportsEnable = other.configViewportsEnable;
-            configViewportsNoAutoMerge = other.configViewportsNoAutoMerge;
-            configViewportsNoTaskBarIcon = other.configViewportsNoTaskBarIcon;
-            configViewportsNoDecoration = other.configViewportsNoDecoration;
-            configViewportsNoDefaultParent = other.configViewportsNoDefaultParent;
-            configMacOSXBehaviors = other.configMacOSXBehaviors;
-            configInputTextCursorBlink = other.configInputTextCursorBlink;
-            configInputTextEnterKeepActive = other.configInputTextEnterKeepActive;
-            hasChanges = other.hasChanges;
-            imguiContext = other.imguiContext;
-            backupConfigFlags = other.backupConfigFlags;
-            isInitialized = other.isInitialized;
-        }
-        return *this;
-    }
-
-    void ImGuiRenderSettingsComponent::EnsureInitialized() {
-        if (!isInitialized && imguiContext) {
-            ImGui::SetCurrentContext(imguiContext);
-            LoadCurrentImGuiSettings();
-            isInitialized = true;
-        }
-    }
-
-    void ImGuiRenderSettingsComponent::LoadCurrentImGuiSettings() {
-        if (!imguiContext) return;
-        ImGui::SetCurrentContext(imguiContext);
-        ImGuiIO& io = ImGui::GetIO();
-        configWindowsResizeFromEdges = io.ConfigWindowsResizeFromEdges;
-        configWindowsMoveFromTitleBarOnly = io.ConfigWindowsMoveFromTitleBarOnly;
-        configDragClickToInputText = io.ConfigDragClickToInputText;
-        configNavEnableKeyboard = (io.ConfigFlags & ImGuiConfigFlags_NavEnableKeyboard) != 0;
-        configNavEnableGamepad = (io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad) != 0;
-        configNavMoveSetMousePos = io.ConfigNavMoveSetMousePos;
-        configNavCaptureKeyboard = io.ConfigNavCaptureKeyboard;
-        configNavEscapeClearFocusItem = io.ConfigNavEscapeClearFocusItem;
-        configMemoryCompactTimer = io.ConfigMemoryCompactTimer;
-        configDebugHighlightIdConflicts = io.ConfigDebugHighlightIdConflicts;
-        configDockingEnable = (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) != 0;
-        configDockingWithShift = io.ConfigDockingWithShift;
-        configDockingAlwaysTabBar = io.ConfigDockingAlwaysTabBar;
-        configDockingTransparentPayload = io.ConfigDockingTransparentPayload;
-        configViewportsEnable = (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0;
-        configViewportsNoAutoMerge = io.ConfigViewportsNoAutoMerge;
-        configViewportsNoTaskBarIcon = io.ConfigViewportsNoTaskBarIcon;
-        configViewportsNoDecoration = io.ConfigViewportsNoDecoration;
-        configViewportsNoDefaultParent = io.ConfigViewportsNoDefaultParent;
-        configMacOSXBehaviors = io.ConfigMacOSXBehaviors;
-        configInputTextCursorBlink = io.ConfigInputTextCursorBlink;
-        configInputTextEnterKeepActive = io.ConfigInputTextEnterKeepActive;
-    }
-
-    void ImGuiRenderSettingsComponent::LoadDefaults() {
-        configWindowsResizeFromEdges = true;
-        configWindowsMoveFromTitleBarOnly = false;
-        configDragClickToInputText = false;
-        configNavEnableKeyboard = true;
-        configNavEnableGamepad = false;
-        configNavMoveSetMousePos = false;
-        configNavCaptureKeyboard = true;
-        configNavEscapeClearFocusItem = true;
-        configMemoryCompactTimer = -1.0f;
-        configDebugHighlightIdConflicts = false;
-        configDockingEnable = true;
-        configDockingWithShift = false;
-        configDockingAlwaysTabBar = false;
-        configDockingTransparentPayload = false;
-        configViewportsEnable = false;
-        configViewportsNoAutoMerge = false;
-        configViewportsNoTaskBarIcon = false;
-        configViewportsNoDecoration = false;
-        configViewportsNoDefaultParent = false;
-        configMacOSXBehaviors = false;
-        configInputTextCursorBlink = true;
-        configInputTextEnterKeepActive = false;
-    }
-
-    void ImGuiRenderSettingsComponent::SerializeSettings(nlohmann::json& j) const {
+    nlohmann::json ImGuiRenderSettingsComponent::Serialize() const {
+        nlohmann::json j;
         j["configWindowsResizeFromEdges"] = configWindowsResizeFromEdges;
         j["configWindowsMoveFromTitleBarOnly"] = configWindowsMoveFromTitleBarOnly;
         j["configDragClickToInputText"] = configDragClickToInputText;
@@ -155,9 +26,10 @@ namespace ECS {
         j["configMacOSXBehaviors"] = configMacOSXBehaviors;
         j["configInputTextCursorBlink"] = configInputTextCursorBlink;
         j["configInputTextEnterKeepActive"] = configInputTextEnterKeepActive;
+        return j;
     }
 
-    void ImGuiRenderSettingsComponent::DeserializeSettings(const nlohmann::json& j) {
+    void ImGuiRenderSettingsComponent::Deserialize(const nlohmann::json& j) {
         if (j.contains("configWindowsResizeFromEdges")) configWindowsResizeFromEdges = j["configWindowsResizeFromEdges"];
         if (j.contains("configWindowsMoveFromTitleBarOnly")) configWindowsMoveFromTitleBarOnly = j["configWindowsMoveFromTitleBarOnly"];
         if (j.contains("configDragClickToInputText")) configDragClickToInputText = j["configDragClickToInputText"];
@@ -182,128 +54,8 @@ namespace ECS {
         if (j.contains("configInputTextEnterKeepActive")) configInputTextEnterKeepActive = j["configInputTextEnterKeepActive"];
     }
 
-    void ImGuiRenderSettingsComponent::ApplyAllSettingsToImGui() {
-        ApplyWindowBehaviorToImGui();
-        ApplyNavigationToImGui();
-        ApplyDockingToImGui();
-        ApplyViewportsToImGui();
-    }
-
-    void ImGuiRenderSettingsComponent::ApplyWindowBehaviorToImGui() {
-        if (!imguiContext) return;
-        ImGui::SetCurrentContext(imguiContext);
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigWindowsResizeFromEdges = configWindowsResizeFromEdges;
-        io.ConfigWindowsMoveFromTitleBarOnly = configWindowsMoveFromTitleBarOnly;
-        io.ConfigDragClickToInputText = configDragClickToInputText;
-    }
-
-    void ImGuiRenderSettingsComponent::ApplyNavigationToImGui() {
-        if (!imguiContext) return;
-        ImGui::SetCurrentContext(imguiContext);
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigNavMoveSetMousePos = configNavMoveSetMousePos;
-        io.ConfigNavCaptureKeyboard = configNavCaptureKeyboard;
-        io.ConfigNavEscapeClearFocusItem = configNavEscapeClearFocusItem;
-        if (configNavEnableKeyboard) io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-        else io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
-        if (configNavEnableGamepad) io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-        else io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
-    }
-
-    void ImGuiRenderSettingsComponent::ApplyDockingToImGui() {
-        if (!imguiContext) return;
-        ImGui::SetCurrentContext(imguiContext);
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigDockingWithShift = configDockingWithShift;
-        io.ConfigDockingAlwaysTabBar = configDockingAlwaysTabBar;
-        io.ConfigDockingTransparentPayload = configDockingTransparentPayload;
-        if (configDockingEnable) io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        else io.ConfigFlags &= ~ImGuiConfigFlags_DockingEnable;
-    }
-
-    void ImGuiRenderSettingsComponent::ApplyViewportsToImGui() {
-        if (!imguiContext) return;
-        ImGui::SetCurrentContext(imguiContext);
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigViewportsNoAutoMerge = configViewportsNoAutoMerge;
-        io.ConfigViewportsNoTaskBarIcon = configViewportsNoTaskBarIcon;
-        io.ConfigViewportsNoDecoration = configViewportsNoDecoration;
-        io.ConfigViewportsNoDefaultParent = configViewportsNoDefaultParent;
-        if (configViewportsEnable) io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-        else io.ConfigFlags &= ~ImGuiConfigFlags_ViewportsEnable;
-    }
-
-    bool ImGuiRenderSettingsComponent::SaveSettings() {
-        if (!imguiContext) return false;
-        EnsureInitialized();
-        try {
-            nlohmann::json j;
-            SerializeSettings(j);
-            std::string filePath = GetSettingsDirectory() + "/imgui_render_settings.json";
-            std::filesystem::create_directories(std::filesystem::path(filePath).parent_path());
-            std::ofstream file(filePath);
-            if (!file.is_open()) return false;
-            file << j.dump(4);
-            file.close();
-            hasChanges = false;
-            CreateBackup();
-            return true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[ImGuiRenderSettingsComponent] Save error: " << e.what() << std::endl;
-            return false;
-        }
-    }
-
-    bool ImGuiRenderSettingsComponent::LoadSettings() {
-        if (!imguiContext) return false;
-        EnsureInitialized();
-        try {
-            std::string filePath = GetSettingsDirectory() + "/imgui_render_settings.json";
-            if (!std::filesystem::exists(filePath)) {
-                LoadDefaults();
-                return true;
-            }
-            std::ifstream file(filePath);
-            if (!file.is_open()) return false;
-            nlohmann::json j;
-            file >> j;
-            file.close();
-            DeserializeSettings(j);
-            ApplyAllSettingsToImGui();
-            hasChanges = false;
-            CreateBackup();
-            return true;
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[ImGuiRenderSettingsComponent] Load error: " << e.what() << std::endl;
-            return false;
-        }
-    }
-
     void ImGuiRenderSettingsComponent::ResetToDefaults() {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        LoadDefaults();
-        ApplyAllSettingsToImGui();
-        hasChanges = true;
-    }
-
-    void ImGuiRenderSettingsComponent::CreateBackup() {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        ImGui::SetCurrentContext(imguiContext);
-        backupConfigFlags = ImGui::GetIO().ConfigFlags;
-    }
-
-    void ImGuiRenderSettingsComponent::RestoreFromBackup() {
-        if (!imguiContext) return;
-        EnsureInitialized();
-        ImGui::SetCurrentContext(imguiContext);
-        ImGui::GetIO().ConfigFlags = backupConfigFlags;
-        LoadCurrentImGuiSettings();
-        hasChanges = false;
+        *this = ImGuiRenderSettingsComponent{};
     }
 
 }

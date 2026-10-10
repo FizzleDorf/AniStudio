@@ -1,12 +1,13 @@
 #pragma once
 #include "GUI.h"
 #include <string>
+#include <vector>
 #include <memory>
 
 namespace ECS {
     class EntityManager;
     class SettingsSystem;
-    class FilePathSystem;
+    class BaseSettingsTab;
 }
 
 namespace GUI {
@@ -18,23 +19,23 @@ namespace GUI {
 
         void SetImGuiContext(ImGuiContext* context);
         void SetEntityManager(ECS::EntityManager& mgr);
+        void SetTabs(const std::vector<std::unique_ptr<ECS::BaseSettingsTab>>* tabs) { m_tabs = tabs; }
 
         void Show();
         void Hide();
-        bool IsVisible() const { return popupOpen; }
+        bool IsVisible() const { return m_open; }
 
         void Render();
 
     private:
         ECS::EntityManager* m_entityManager = nullptr;
         ECS::SettingsSystem* m_settingsSystem = nullptr;
+        const std::vector<std::unique_ptr<ECS::BaseSettingsTab>>* m_tabs = nullptr;
         ImGuiContext* imguiContext = nullptr;
 
-        bool popupOpen = false;
-        bool settingsLoaded = false;
+        bool m_open = false;
         bool showSaveNotification = false;
 
-        std::string currentActiveTab;
         char filterBuffer[256] = "";
 
         void RenderMainContent();
