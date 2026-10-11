@@ -38,12 +38,13 @@ namespace ECS {
         void ApplySettings(ComponentTypeID id);
         void ApplySettingsByType(const std::string& compName);
 
-        bool SaveAllSettings();
         bool LoadAllSettings();
+        bool SaveAllSettings();
         void ApplyAll();
-        void CreateBackups();
-        void RestoreAllFromBackups();
-        bool HasAnyUnsavedChanges() const;
+
+        void TakeSnapshot();
+        void RestoreFromSnapshot();
+        bool HasUnsavedChanges() const;
 
         std::string GetPath(const std::string& key) const;
         void SetPath(const std::string& key, const std::string& path);
@@ -58,10 +59,48 @@ namespace ECS {
 
         void EnsureDirectoriesFromPaths();
 
+        template<typename T>
+        bool LoadComponentSettings(T& comp) {
+            std::string path = GetComponentFilePath(comp.GetCompName());
+            if (!std::filesystem::exists(path)) return false;
+            try {
+                std::ifstream f(path);
+                if (!f.is_open()) return false;
+                nlohmann::json j;
+                f >> j;
+                comp.Deserialize(j);
+                return true;
+            }
+            catch (const std::exception& e) {
+                ANI_LOG_WARN("[SettingsSystem] LoadComponentSettings failed for %s: %s",
+                    comp.GetCompName(), e.what());
+                return false;
+            }
+        }
+
+        template<typename T>
+        bool SaveComponentSettings(const T& comp) {
+            std::string path = GetComponentFilePath(comp.GetCompName());
+            try {
+                std::filesystem::path p(path);
+                if (p.has_parent_path()) std::filesystem::create_directories(p.parent_path());
+                std::ofstream f(path);
+                if (!f.is_open()) return false;
+                nlohmann::json j = comp.Serialize();
+                f << j.dump(4);
+                return true;
+            }
+            catch (const std::exception& e) {
+                ANI_LOG_WARN("[SettingsSystem] SaveComponentSettings failed for %s: %s",
+                    comp.GetCompName(), e.what());
+                return false;
+            }
+        }
+
     private:
         std::string GetSettingsDirectory() const;
         std::string GetPathsFile() const;
-        static std::string FilenameForComponent(const std::string& compName);
+        std::string GetComponentFilePath(const std::string& compName) const;
 
         bool LoadPathComponent();
         bool SavePathComponent();
@@ -69,7 +108,7 @@ namespace ECS {
         EntityID settingsEntity = 0;
         std::vector<ComponentTypeID> m_settingsComponentIds;
         std::unordered_map<ComponentTypeID, std::function<void(BaseComponent&)>> m_applyCallbacks;
-        std::unordered_map<ComponentTypeID, nlohmann::json> m_backups;
+        std::unordered_map<ComponentTypeID, nlohmann::json> m_snapshot;
         std::function<void(const std::vector<std::string>&)> m_missingPathsCallback;
     };
 

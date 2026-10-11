@@ -3,7 +3,7 @@
 #include "ViewManager.hpp"
 #include "Events.hpp"
 #include "DiffusionCallbackUtils.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "FilePathComponent.hpp"
 #include "EngineContext.hpp"
 #include "StudioContext.hpp"
@@ -20,13 +20,11 @@
 #include <iostream>
 #include <filesystem>
 #include "MissingPathsPopup.hpp"
-#include "FilePathTab.hpp"
+#include "SDCPPSettingsTab.hpp"
+#include "SDCPPSettingsComponent.hpp"
+#include "BaseSettingsTab.hpp"
 
 using namespace ECS;
-
-namespace Utils {
-    ECS::FilePathSystem* g_FilePathSystem = nullptr;
-}
 
 class DiffusionAddon : public Plugins::BasePlugin {
 public:
@@ -49,22 +47,12 @@ public:
         }
         LogInfo("Engine context obtained successfully");
 
-        auto fs = entityMgr.GetSystem<ECS::FilePathSystem>();
-        if (!fs) {
-            LogError("FilePathSystem not found! Cannot initialize.");
+        auto settings = entityMgr.GetSystem<ECS::SettingsSystem>();
+        if (!settings) {
+            LogError("SettingsSystem not found! Cannot initialize.");
             return false;
         }
-        Utils::g_FilePathSystem = fs.get();
-        LogInfo("FilePathSystem obtained.");
-
-        std::string dataPath = fs->GetPath("DataPath");
-        if (!dataPath.empty()) {
-            std::string filePath = (std::filesystem::path(dataPath) / "paths.json").string();
-            if (std::filesystem::exists(filePath)) {
-                fs->LoadFromFile(filePath);
-                LogInfo("Loaded paths from: " + filePath);
-            }
-        }
+        LogInfo("SettingsSystem obtained.");
 
         const std::vector<std::string> pluginKeys = {
             "ModelRoot",
@@ -84,17 +72,17 @@ public:
         };
 
         for (const auto& key : pluginKeys) {
-            if (!fs->HasPath(key)) {
-                fs->SetPath(key, "");
+            if (!settings->HasPath(key)) {
+                settings->SetPath(key, "");
             }
         }
 
-        std::string modelRoot = fs->GetPath("ModelRoot");
+        std::string modelRoot = settings->GetPath("ModelRoot");
         if (modelRoot.empty()) {
             modelRoot = (std::filesystem::current_path() / "models").string();
         }
 
-        ECS::FilePathTab::RegisterDefaultPath("ModelRoot", modelRoot);
+        settings->RegisterPathDefault("ModelRoot", modelRoot);
 
         const std::vector<std::pair<std::string, std::string>> modelKeys = {
             {"checkpoint", "checkpoints"},
@@ -113,27 +101,11 @@ public:
         };
 
         for (const auto& [key, subdir] : modelKeys) {
-            ECS::FilePathTab::RegisterModelRootDependentPath(key, subdir);
+            std::string defaultPath = (std::filesystem::path(modelRoot) / subdir).string();
+            settings->RegisterPathDefault(key, defaultPath);
         }
 
-        if (!modelRoot.empty()) {
-            ECS::FilePathTab::UpdateModelRootDefaults(modelRoot);
-        }
-
-        ECS::FilePathTab::RegisterCategoryMapper([](const std::string& key) -> std::string {
-            if (key == "ModelRoot") {
-                return "SDCPP";
-            }
-            if (key == "checkpoint" || key == "diffusion_model" || key == "high_noise_diffusion_model" ||
-                key == "uncond_diffusion_model" || key == "motion_module" || key == "vae" ||
-                key == "taesd" || key == "lora" || key == "embed" || key == "encoder" ||
-                key == "llm" || key == "upscale" || key == "controlnet") {
-                return "SDCPP";
-            }
-            return "";
-            });
-
-        Utils::CheckMissingPaths(fs.get());
+        Utils::CheckMissingPaths(settings.get());
 
         m_componentIds.clear();
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PromptComponent>("Prompt"));
@@ -182,8 +154,6 @@ public:
 
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ConversionComponent>("Conversion"));
 
-        m_componentIds.push_back(entityMgr.RegisterComponent<ECS::EmbeddingsComponent>("Embeddings"));
-
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::ControlNetImageComponent>("ControlNetImage"));
         m_componentIds.push_back(entityMgr.RegisterComponent<ECS::PhotoMakerImageComponent>("PhotoMakerImage"));
 
@@ -199,32 +169,17 @@ public:
 
         m_entityMgr = &entityMgr;
 
-        auto settingsSys = entityMgr.GetSystem<ECS::SettingsSystem>();
-        if (settingsSys) {
-            EntityID settingsEntity = settingsSys->GetSettingsEntity();
-            if (entityMgr.IsEntityValid(settingsEntity) && !entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
-                entityMgr.AddComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
-                LogInfo("Added SDCPPSettingsComponent to global settings entity");
-            }
-            if (entityMgr.IsEntityValid(settingsEntity) && entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
-                auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
-
-                // SettingsSystem::Start already ran LoadAllSettings() before
-                // this component existed, so nothing has read sdcpp.json yet.
-                // Load it now so the entity carries real values, not defaults.
-                if (sdcppComp.LoadSettings()) {
-                    LogInfo("Loaded SDCPP settings from sdcpp.json");
-                }
-                else {
-                    LogInfo("No sdcpp.json found, using defaults");
-                    sdcppComp.CreateBackup();
-                }
-
-                GUI::DiffusionCallbackUtils::SetLogLevel(sdcppComp.log_level);
-            }
+        EntityID settingsEntity = settings->GetSettingsEntity();
+        if (entityMgr.IsEntityValid(settingsEntity) &&
+            !entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+            entityMgr.AddComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+            LogInfo("Added SDCPPSettingsComponent to global settings entity");
         }
-        else {
-            LogError("SettingsSystem not found, SDCPP global settings will not be available");
+
+        if (entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+            auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+            settings->LoadComponentSettings(sdcppComp);
+            GUI::DiffusionCallbackUtils::SetLogLevel(sdcppComp.log_level);
         }
 
         GUI::DiffusionCallbackUtils::InitializeCallbacks();
@@ -234,9 +189,9 @@ public:
         ANI::Events::Ref().RegisterEventWithData("ProjectOpened",
             [this](const std::any& data) {
                 if (m_entityMgr) {
-                    auto fs = m_entityMgr->GetSystem<ECS::FilePathSystem>();
-                    if (fs) {
-                        Utils::CheckMissingPaths(fs.get());
+                    auto settings = m_entityMgr->GetSystem<ECS::SettingsSystem>();
+                    if (settings) {
+                        Utils::CheckMissingPaths(settings.get());
                     }
                 }
             });
@@ -257,29 +212,35 @@ public:
         ImGui::SetCurrentContext(m_imguiContext);
         LogInfo("ImGui context set for DiffusionAddon");
 
-        std::cout << "[DiffusionAddon] Using stored ImGui context: " << m_imguiContext << std::endl;
-
         m_viewMgr = &viewMgr;
 
-        auto settingsSys = entityMgr.GetSystem<ECS::SettingsSystem>();
-        if (settingsSys) {
-            EntityID settingsEntity = settingsSys->GetSettingsEntity();
-            if (entityMgr.IsEntityValid(settingsEntity) && entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+        auto settings = entityMgr.GetSystem<ECS::SettingsSystem>();
+        if (settings) {
+            EntityID settingsEntity = settings->GetSettingsEntity();
+            if (entityMgr.IsEntityValid(settingsEntity) &&
+                entityMgr.HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
                 auto& sdcppComp = entityMgr.GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
 
-                // Reload in case the file changed since OnEngineInit.
-                sdcppComp.LoadSettings();
+                settings->LoadComponentSettings(sdcppComp);
+                settings->TrackSettingsComponent(
+                    entityMgr.GetComponentTypeIdByName("SDCPP"));
 
-                auto sdcppTab = std::make_unique<ECS::SDCPPSettingsTab>(sdcppComp);
-                auto* rawTab = sdcppTab.get();
-                settingsSys->RegisterTab(std::move(sdcppTab));
+                settings->SetApplyCallback(
+                    entityMgr.GetComponentTypeIdByName("SDCPP"),
+                    [](ECS::BaseComponent& c) {
+                        auto& s = static_cast<ECS::SDCPPSettingsComponent&>(c);
+                        GUI::DiffusionCallbackUtils::SetLogLevel(s.log_level);
+                    });
 
-                // SettingsSystem::Start's LoadAllSettings already ran before
-                // this tab existed. Seed its backup so the tab's dirty-state
-                // tracking doesn't fire on the first render.
-                rawTab->CreateBackup();
-
-                LogInfo("Registered SDCPP settings tab");
+                auto studioCtx = GetStudioContext();
+                if (studioCtx && studioCtx->addSettingsTab) {
+                    studioCtx->addSettingsTab(
+                        std::make_unique<ECS::SDCPPSettingsTab>(sdcppComp));
+                    LogInfo("Registered SDCPP settings tab with StudioCore");
+                }
+                else {
+                    LogError("StudioContext has no addSettingsTab hook; SDCPP tab not registered");
+                }
             }
             else {
                 LogError("SDCPPSettingsComponent not found on settings entity");
@@ -315,7 +276,7 @@ public:
 
     void SetImGuiContext(ImGuiContext* context) override {
         m_imguiContext = context;
-        LogInfo("ImGui context set for DiffusionAddon: " + std::to_string(reinterpret_cast<uintptr_t>(m_imguiContext)));
+        LogInfo("ImGui context set for DiffusionAddon");
     }
 
     bool HasValidImGuiContext() const override {
@@ -327,17 +288,17 @@ public:
 
         auto sdcppSystem = m_entityMgr ? m_entityMgr->GetSystem<ECS::SDCPPSystem>() : nullptr;
         if (sdcppSystem) {
-            LogInfo("Stopping SDCPPSystem worker and waiting for tasks to finish...");
             sdcppSystem->Shutdown();
-            LogInfo("SDCPPSystem shutdown complete");
         }
 
-        auto fs = m_entityMgr ? m_entityMgr->GetSystem<ECS::FilePathSystem>() : nullptr;
-        if (fs) {
-            std::string configPath = fs->GetPath("DataPath");
-            if (!configPath.empty()) {
-                std::string filePath = (std::filesystem::path(configPath) / "paths.json").string();
-                fs->SaveToFile(filePath);
+        if (m_entityMgr) {
+            if (auto settings = m_entityMgr->GetSystem<ECS::SettingsSystem>()) {
+                EntityID settingsEntity = settings->GetSettingsEntity();
+                if (m_entityMgr->IsEntityValid(settingsEntity) &&
+                    m_entityMgr->HasComponent<ECS::SDCPPSettingsComponent>(settingsEntity)) {
+                    auto& sdcppComp = m_entityMgr->GetComponent<ECS::SDCPPSettingsComponent>(settingsEntity);
+                    settings->SaveComponentSettings(sdcppComp);
+                }
             }
         }
 
@@ -345,7 +306,6 @@ public:
             for (const auto& viewName : m_viewTypeNames) {
                 try {
                     m_viewMgr->UnregisterViewType(viewName);
-                    LogInfo("Unregistered view type: " + viewName);
                 }
                 catch (const std::exception& e) {
                     LogError("Failed to unregister view type " + viewName + ": " + e.what());
@@ -355,36 +315,20 @@ public:
         }
 
         if (m_entityMgr) {
-            try {
-                m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>();
-                LogInfo("Unregistered ModelCacheSystem");
-            }
-            catch (const std::exception& e) {
-                LogError("Failed to unregister ModelCacheSystem: " + std::string(e.what()));
-            }
-            try {
-                m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>();
-                LogInfo("Unregistered SDCPPSystem");
-            }
-            catch (const std::exception& e) {
-                LogError("Failed to unregister SDCPPSystem: " + std::string(e.what()));
-            }
+            try { m_entityMgr->UnregisterSystem<ECS::ModelCacheSystem>(); }
+            catch (const std::exception&) {}
+            try { m_entityMgr->UnregisterSystem<ECS::SDCPPSystem>(); }
+            catch (const std::exception&) {}
 
             for (ComponentTypeID cid : m_componentIds) {
-                try {
-                    m_entityMgr->UnregisterComponentById(cid);
-                    LogInfo("Unregistered component ID: " + std::to_string(cid));
-                }
-                catch (const std::exception& e) {
-                    LogError("Failed to unregister component: " + std::string(e.what()));
-                }
+                try { m_entityMgr->UnregisterComponentById(cid); }
+                catch (const std::exception&) {}
             }
             m_componentIds.clear();
         }
 
         UnregisterEventHandlers();
 
-        Utils::g_FilePathSystem = nullptr;
         m_entityMgr = nullptr;
         m_viewMgr = nullptr;
         m_imguiContext = nullptr;
@@ -401,17 +345,11 @@ public:
         bool isOpen = projSys->IsProjectOpen();
 
         if (m_wasProjectOpen && !isOpen) {
-            LogInfo("Project closing detected - stopping SDCPPSystem worker...");
             auto sdcpp = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-            if (sdcpp) {
-                sdcpp->Shutdown();
-                LogInfo("SDCPPSystem worker stopped due to project close.");
-            }
+            if (sdcpp) sdcpp->Shutdown();
+
             auto cache = m_entityMgr->GetSystem<ECS::ModelCacheSystem>();
-            if (cache) {
-                cache->UnloadAllModels();
-                LogInfo("Model cache cleared.");
-            }
+            if (cache) cache->UnloadAllModels();
         }
 
         m_wasProjectOpen = isOpen;
@@ -426,95 +364,37 @@ private:
         auto& events = ANI::Events::Ref();
 
         m_registeredEvents = {
-            "QueueDiffusionTask",
-            "RemoveFromDiffusionQueue",
-            "MoveInDiffusionQueue",
-            "StopCurrentDiffusionTask",
-            "CancelCurrentDiffusionTask",
-            "ClearDiffusionQueue",
-            "ClearAllDiffusionTasks",
-            "PauseDiffusionWorker",
-            "ResumeDiffusionWorker"
+            "QueueDiffusionTask", "RemoveFromDiffusionQueue", "MoveInDiffusionQueue",
+            "StopCurrentDiffusionTask", "CancelCurrentDiffusionTask",
+            "ClearDiffusionQueue", "ClearAllDiffusionTasks",
+            "PauseDiffusionWorker", "ResumeDiffusionWorker"
         };
 
-        events.RegisterEventWithData("QueueDiffusionTask",
-            [this](const std::any& data) {
-                this->OnQueueDiffusionTask(data);
-            });
-
-        events.RegisterEventWithData("RemoveFromDiffusionQueue",
-            [this](const std::any& data) {
-                this->OnRemoveFromDiffusionQueue(data);
-            });
-
-        events.RegisterEventWithData("MoveInDiffusionQueue",
-            [this](const std::any& data) {
-                this->OnMoveInDiffusionQueue(data);
-            });
-
-        events.RegisterEvent("StopCurrentDiffusionTask",
-            [this]() {
-                this->OnStopCurrentDiffusionTask();
-            });
-
-        events.RegisterEvent("CancelCurrentDiffusionTask",
-            [this]() {
-                this->OnCancelCurrentDiffusionTask();
-            });
-
-        events.RegisterEvent("ClearDiffusionQueue",
-            [this]() {
-                this->OnClearDiffusionQueue();
-            });
-
-        events.RegisterEvent("ClearAllDiffusionTasks",
-            [this]() {
-                this->OnClearAllDiffusionTasks();
-            });
-
-        events.RegisterEvent("PauseDiffusionWorker",
-            [this]() {
-                this->OnPauseDiffusionWorker();
-            });
-
-        events.RegisterEvent("ResumeDiffusionWorker",
-            [this]() {
-                this->OnResumeDiffusionWorker();
-            });
-
-        LogInfo("Diffusion event handlers registered");
+        events.RegisterEventWithData("QueueDiffusionTask", [this](const std::any& d) { OnQueueDiffusionTask(d); });
+        events.RegisterEventWithData("RemoveFromDiffusionQueue", [this](const std::any& d) { OnRemoveFromDiffusionQueue(d); });
+        events.RegisterEventWithData("MoveInDiffusionQueue", [this](const std::any& d) { OnMoveInDiffusionQueue(d); });
+        events.RegisterEvent("StopCurrentDiffusionTask", [this]() { OnStopCurrentDiffusionTask(); });
+        events.RegisterEvent("CancelCurrentDiffusionTask", [this]() { OnCancelCurrentDiffusionTask(); });
+        events.RegisterEvent("ClearDiffusionQueue", [this]() { OnClearDiffusionQueue(); });
+        events.RegisterEvent("ClearAllDiffusionTasks", [this]() { OnClearAllDiffusionTasks(); });
+        events.RegisterEvent("PauseDiffusionWorker", [this]() { OnPauseDiffusionWorker(); });
+        events.RegisterEvent("ResumeDiffusionWorker", [this]() { OnResumeDiffusionWorker(); });
     }
 
     void UnregisterEventHandlers() {
-        LogInfo("Unregistering diffusion event handlers");
         auto& events = ANI::Events::Ref();
-
         for (const auto& eventName : m_registeredEvents) {
-            try {
-                events.UnregisterEvent(eventName);
-                LogInfo("Unregistered event: " + eventName);
-            }
-            catch (const std::exception& e) {
-                LogError("Failed to unregister event " + eventName + ": " + e.what());
-            }
+            try { events.UnregisterEvent(eventName); }
+            catch (const std::exception&) {}
         }
         m_registeredEvents.clear();
     }
 
     void OnQueueDiffusionTask(const std::any& data) {
         try {
-            auto taskData = std::any_cast<std::pair<ECS::EntityID, ECS::SDCPPSystem::TaskType>>(data);
-            auto entityID = taskData.first;
-            auto taskType = taskData.second;
-
+            auto t = std::any_cast<std::pair<ECS::EntityID, ECS::SDCPPSystem::TaskType>>(data);
             auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-            if (system) {
-                system->QueueTask(entityID, taskType);
-                LogInfo("Queued diffusion task for entity " + std::to_string(entityID));
-            }
-            else {
-                LogError("SDCPPSystem not found when queuing task");
-            }
+            if (system) system->QueueTask(t.first, t.second);
         }
         catch (const std::bad_any_cast& e) {
             LogError("Invalid data type for QueueDiffusionTask event: " + std::string(e.what()));
@@ -524,15 +404,8 @@ private:
     void OnRemoveFromDiffusionQueue(const std::any& data) {
         try {
             auto index = std::any_cast<size_t>(data);
-
             auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-            if (system) {
-                system->RemoveFromQueue(index);
-                LogInfo("Removed item from diffusion queue at index " + std::to_string(index));
-            }
-            else {
-                LogError("SDCPPSystem not found when removing from queue");
-            }
+            if (system) system->RemoveFromQueue(index);
         }
         catch (const std::bad_any_cast& e) {
             LogError("Invalid data type for RemoveFromDiffusionQueue event: " + std::string(e.what()));
@@ -541,18 +414,9 @@ private:
 
     void OnMoveInDiffusionQueue(const std::any& data) {
         try {
-            auto indices = std::any_cast<std::pair<size_t, size_t>>(data);
-            auto fromIndex = indices.first;
-            auto toIndex = indices.second;
-
+            auto idx = std::any_cast<std::pair<size_t, size_t>>(data);
             auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-            if (system) {
-                system->MoveInQueue(fromIndex, toIndex);
-                LogInfo("Moved item in diffusion queue from " + std::to_string(fromIndex) + " to " + std::to_string(toIndex));
-            }
-            else {
-                LogError("SDCPPSystem not found when moving in queue");
-            }
+            if (system) system->MoveInQueue(idx.first, idx.second);
         }
         catch (const std::bad_any_cast& e) {
             LogError("Invalid data type for MoveInDiffusionQueue event: " + std::string(e.what()));
@@ -561,68 +425,32 @@ private:
 
     void OnStopCurrentDiffusionTask() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-        if (system) {
-            system->StopCurrentTask();
-            LogInfo("Stopped current diffusion task");
-        }
-        else {
-            LogError("SDCPPSystem not found when stopping task");
-        }
+        if (system) system->StopCurrentTask();
     }
 
     void OnCancelCurrentDiffusionTask() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-        if (system) {
-            system->CancelCurrentTask();
-            LogInfo("Cancelled current diffusion task");
-        }
-        else {
-            LogError("SDCPPSystem not found when cancelling task");
-        }
+        if (system) system->CancelCurrentTask();
     }
 
     void OnClearDiffusionQueue() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-        if (system) {
-            system->ClearQueuedTasks();
-            LogInfo("Cleared queued diffusion tasks");
-        }
-        else {
-            LogError("SDCPPSystem not found when clearing queue");
-        }
+        if (system) system->ClearQueuedTasks();
     }
 
     void OnClearAllDiffusionTasks() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-        if (system) {
-            system->ClearAllTasks();
-            LogInfo("Cleared all diffusion tasks");
-        }
-        else {
-            LogError("SDCPPSystem not found when clearing all tasks");
-        }
+        if (system) system->ClearAllTasks();
     }
 
     void OnPauseDiffusionWorker() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-        if (system) {
-            system->PauseWorker();
-            LogInfo("Paused diffusion worker");
-        }
-        else {
-            LogError("SDCPPSystem not found when pausing worker");
-        }
+        if (system) system->PauseWorker();
     }
 
     void OnResumeDiffusionWorker() {
         auto system = m_entityMgr->GetSystem<ECS::SDCPPSystem>();
-        if (system) {
-            system->ResumeWorker();
-            LogInfo("Resumed diffusion worker");
-        }
-        else {
-            LogError("SDCPPSystem not found when resuming worker");
-        }
+        if (system) system->ResumeWorker();
     }
 
 private:
@@ -637,7 +465,6 @@ extern "C" {
     PLUGIN_EXPORT Plugins::BasePlugin* CreatePlugin() {
         return new DiffusionAddon();
     }
-
     PLUGIN_EXPORT void DestroyPlugin(Plugins::BasePlugin* plugin) {
         delete plugin;
     }

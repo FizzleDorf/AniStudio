@@ -10,7 +10,7 @@ namespace ECS {
     public:
         TextEditorSettingsComponent() = default;
 
-        const char* GetCompName() const override { return "TextEditorSettingsComponent"; }
+        const char* GetCompName() const override { return "TextEditorSettings"; }
         const char* GetCompCategory() const override { return ""; }
 
         const nlohmann::json& GetSchema() const override {

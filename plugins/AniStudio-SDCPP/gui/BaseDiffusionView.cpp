@@ -3,7 +3,8 @@
 #include "Events.hpp"
 #include "UISchema.hpp"
 #include "SDcppSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
+#include "FilePathComponent.hpp"
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
 #include "VectorWidgets.hpp"
@@ -291,11 +292,10 @@ namespace GUI {
             }
 
             const std::unordered_map<std::string, std::string>* pathMap = nullptr;
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (filePathSys &&
-                m_entityManager.HasComponent<ECS::FilePathComponent>(filePathSys->GetEntityID())) {
-                auto& fpComp = m_entityManager.GetComponent<ECS::FilePathComponent>(filePathSys->GetEntityID());
-                pathMap = &fpComp.GetPathMap();
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (ss && m_entityManager.HasComponent<ECS::FilePathComponent>(ss->GetSettingsEntity())) {
+                auto& fpComp = m_entityManager.GetComponent<ECS::FilePathComponent>(ss->GetSettingsEntity());
+                pathMap = &fpComp.GetCurrentMap();
             }
 
             if constexpr (std::is_same_v<T, LoraComponent>) {
@@ -402,11 +402,10 @@ namespace GUI {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
                 std::string defaultProjectPath;
-                auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                if (filePathSys &&
-                    m_entityManager.HasComponent<ECS::FilePathComponent>(filePathSys->GetEntityID())) {
-                    auto& fpComp = m_entityManager.GetComponent<ECS::FilePathComponent>(filePathSys->GetEntityID());
-                    const auto& pathMap = fpComp.GetPathMap();
+                auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                if (ss && m_entityManager.HasComponent<ECS::FilePathComponent>(ss->GetSettingsEntity())) {
+                    auto& fpComp = m_entityManager.GetComponent<ECS::FilePathComponent>(ss->GetSettingsEntity());
+                    const auto& pathMap = fpComp.GetCurrentMap();
                     auto it = pathMap.find("DefaultProject");
                     if (it != pathMap.end()) defaultProjectPath = it->second;
                 }
@@ -584,13 +583,13 @@ namespace GUI {
             return;
         }
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickSave: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickSave: SettingsSystem unavailable");
                 return;
             }
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
+            std::string dataPath = ss->GetPath("ProjectData");
+            if (dataPath.empty()) dataPath = ss->GetPath("DefaultProject");
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickSave: no data path available");
                 return;
@@ -612,13 +611,13 @@ namespace GUI {
             return;
         }
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickLoad: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickLoad: SettingsSystem unavailable");
                 return;
             }
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
+            std::string dataPath = ss->GetPath("ProjectData");
+            if (dataPath.empty()) dataPath = ss->GetPath("DefaultProject");
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickLoad: no data path available");
                 return;

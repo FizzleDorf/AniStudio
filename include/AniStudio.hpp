@@ -205,9 +205,8 @@ namespace ANI {
         // Wires ProjectSystem callbacks (load/created/closed/view-state).
         void SetupProjectCallbacks();
 
-        // ---------------------------------------------------------------------
-        // Window state helpers
-        // ---------------------------------------------------------------------
+        void AddSettingsTab(std::unique_ptr<ECS::BaseSettingsTab> tab);
+
         void InitializeWindowState();
         void SyncWindowStateFromGLFW();
         void ApplyWindowStateToGLFW();

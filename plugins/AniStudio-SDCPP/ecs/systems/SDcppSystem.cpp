@@ -23,7 +23,7 @@ namespace ECS {
     SDCPPSystem::SDCPPSystem(EntityManager& entityMgr)
         : BaseSystem(entityMgr), pauseWorker(false), hasActiveTask(false), clearRequested(false) {
         sysName = "SDCPPSystem";
-        m_filePathSystem = mgr.GetSystem<FilePathSystem>();
+        m_settingsSystem = mgr.GetSystem<SettingsSystem>();
         ANI_LOG_DEBUG("Constructed");
     }
 
@@ -95,9 +95,6 @@ namespace ECS {
         BaseSystem::Destroy();
     }
 
-    // ---------------------------------------------------------------------
-    // Callback registration
-    // ---------------------------------------------------------------------
     void SDCPPSystem::RegisterTaskCompletedCallback(
         void* owner, TaskCompletedCallback cb) {
         std::lock_guard<std::mutex> lock(queueMutex);
@@ -133,9 +130,6 @@ namespace ECS {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Queue
-    // ---------------------------------------------------------------------
     void SDCPPSystem::QueueTask(EntityID entityID, TaskType taskType) {
         if (!mgr.IsEntityValid(entityID)) {
             ANI_LOG_WARN("QueueTask: invalid entity %u", entityID);
@@ -319,9 +313,6 @@ namespace ECS {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Queue manipulation
-    // ---------------------------------------------------------------------
     void SDCPPSystem::RemoveFromQueue(size_t index) {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (index < taskQueue.size() && !taskQueue[index].processing) {
@@ -420,9 +411,6 @@ namespace ECS {
         return pauseWorker;
     }
 
-    // ---------------------------------------------------------------------
-    // Introspection
-    // ---------------------------------------------------------------------
     size_t SDCPPSystem::GetNumThreads() const {
         return m_threadPool ? m_threadPool->getDiffusionPool().size() : 0;
     }
@@ -461,24 +449,21 @@ namespace ECS {
         QueueTask(newEntity, taskType);
     }
 
-    // ---------------------------------------------------------------------
-    // Path resolution
-    // ---------------------------------------------------------------------
     std::string SDCPPSystem::ResolveOutputDirectory(const std::string& raw) {
         std::string dir = raw;
 
         if (!dir.empty() && std::filesystem::path(dir).has_extension())
             dir = std::filesystem::path(dir).parent_path().string();
 
-        if (!dir.empty() && !std::filesystem::path(dir).is_absolute() && m_filePathSystem) {
-            std::string resolved = m_filePathSystem->GetPath(dir);
+        if (!dir.empty() && !std::filesystem::path(dir).is_absolute() && m_settingsSystem) {
+            std::string resolved = m_settingsSystem->GetPath(dir);
             if (!resolved.empty())
                 dir = resolved;
         }
 
         if (dir.empty() || !std::filesystem::path(dir).is_absolute()) {
-            if (m_filePathSystem) {
-                std::string def = m_filePathSystem->GetPath("DefaultProject");
+            if (m_settingsSystem) {
+                std::string def = m_settingsSystem->GetPath("DefaultProject");
                 if (!def.empty()) {
                     dir = def;
                     ANI_LOG_TRACE("ResolveOutputDirectory: fell back to DefaultProject: %s",
@@ -534,9 +519,6 @@ namespace ECS {
         return full;
     }
 
-    // ---------------------------------------------------------------------
-    // Load helpers
-    // ---------------------------------------------------------------------
     void SDCPPSystem::LoadImageViaImageSystem(EntityID targetEntity, const std::string& filePath) {
         if (auto imgSys = mgr.GetSystem<ImageSystem>()) {
             if (!mgr.HasComponent<ImageComponent>(targetEntity))
@@ -578,9 +560,6 @@ namespace ECS {
         ClearQueuedTasks();
     }
 
-    // ---------------------------------------------------------------------
-    // Static task runners
-    // ---------------------------------------------------------------------
     bool SDCPPSystem::RunInference(const sd_img_gen_params_t& params,
         const nlohmann::json& metadataForWrite,
         const std::string& fullPath,
@@ -789,9 +768,6 @@ namespace ECS {
         return ".png";
     }
 
-    // ---------------------------------------------------------------------
-    // Dispatch
-    // ---------------------------------------------------------------------
     void SDCPPSystem::ProcessQueues() {
         DrainOrphanedFutures();
 
@@ -958,9 +934,6 @@ namespace ECS {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Completion
-    // ---------------------------------------------------------------------
     void SDCPPSystem::CheckTaskCompletion() {
         if (taskQueue.empty()) return;
         std::vector<std::tuple<std::string, TaskType, EntityID>> completedTasks;

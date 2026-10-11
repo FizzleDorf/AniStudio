@@ -28,13 +28,17 @@ namespace ECS {
         }
         m_settingsComponentIds.clear();
         m_applyCallbacks.clear();
-        m_backups.clear();
+        m_snapshot.clear();
     }
 
     void SettingsSystem::TrackSettingsComponent(ComponentTypeID id) {
         if (std::find(m_settingsComponentIds.begin(), m_settingsComponentIds.end(), id)
             == m_settingsComponentIds.end()) {
             m_settingsComponentIds.push_back(id);
+        }
+        BaseComponent* comp = mgr.GetComponentById(settingsEntity, id);
+        if (comp) {
+            m_snapshot[id] = comp->Serialize();
         }
     }
 
@@ -142,13 +146,8 @@ namespace ECS {
         return dataPath + "/paths.json";
     }
 
-    std::string SettingsSystem::FilenameForComponent(const std::string& compName) {
-        if (compName == "GeneralSettingsComponent")        return "general_settings.json";
-        if (compName == "ImGuiRenderSettingsComponent")    return "imgui_render_settings.json";
-        if (compName == "ImGuiStyleSettingsComponent")     return "imgui_style.json";
-        if (compName == "FontSettingsComponent")           return "fonts.json";
-        if (compName == "TextEditorSettingsComponent")     return "text_editor.json";
-        return compName + ".json";
+    std::string SettingsSystem::GetComponentFilePath(const std::string& compName) const {
+        return GetSettingsDirectory() + "/" + compName + ".json";
     }
 
     bool SettingsSystem::LoadPathComponent() {
@@ -204,12 +203,12 @@ namespace ECS {
 
         for (ComponentTypeID id : m_settingsComponentIds) {
             std::string name = mgr.GetComponentNameById(id);
-            if (name == "FilePathComponent") continue;
+            if (name == "FilePath") continue;
 
             BaseComponent* comp = mgr.GetComponentById(settingsEntity, id);
             if (!comp) continue;
 
-            std::string path = settingsDir + "/" + FilenameForComponent(name);
+            std::string path = GetComponentFilePath(name);
             if (!std::filesystem::exists(path)) continue;
             try {
                 std::ifstream f(path);
@@ -231,7 +230,7 @@ namespace ECS {
         }
 
         ApplyAll();
-        CreateBackups();
+        TakeSnapshot();
         return true;
     }
 
@@ -244,12 +243,12 @@ namespace ECS {
         bool ok = true;
         for (ComponentTypeID id : m_settingsComponentIds) {
             std::string name = mgr.GetComponentNameById(id);
-            if (name == "FilePathComponent") continue;
+            if (name == "FilePath") continue;
 
             BaseComponent* comp = mgr.GetComponentById(settingsEntity, id);
             if (!comp) continue;
 
-            std::string path = settingsDir + "/" + FilenameForComponent(name);
+            std::string path = GetComponentFilePath(name);
             try {
                 nlohmann::json j = comp->Serialize();
                 std::ofstream f(path);
@@ -264,7 +263,7 @@ namespace ECS {
 
         if (!SavePathComponent()) ok = false;
 
-        CreateBackups();
+        TakeSnapshot();
         ANI_LOG_INFO("[SettingsSystem] SaveAllSettings %s", ok ? "ok" : "with errors");
         return ok;
     }
@@ -275,17 +274,17 @@ namespace ECS {
         }
     }
 
-    void SettingsSystem::CreateBackups() {
-        m_backups.clear();
+    void SettingsSystem::TakeSnapshot() {
+        m_snapshot.clear();
         for (ComponentTypeID id : m_settingsComponentIds) {
             BaseComponent* comp = mgr.GetComponentById(settingsEntity, id);
             if (!comp) continue;
-            m_backups[id] = comp->Serialize();
+            m_snapshot[id] = comp->Serialize();
         }
     }
 
-    void SettingsSystem::RestoreAllFromBackups() {
-        for (const auto& [id, json] : m_backups) {
+    void SettingsSystem::RestoreFromSnapshot() {
+        for (const auto& [id, json] : m_snapshot) {
             BaseComponent* comp = mgr.GetComponentById(settingsEntity, id);
             if (!comp) continue;
             comp->Deserialize(json);
@@ -293,12 +292,12 @@ namespace ECS {
         ApplyAll();
     }
 
-    bool SettingsSystem::HasAnyUnsavedChanges() const {
+    bool SettingsSystem::HasUnsavedChanges() const {
         for (ComponentTypeID id : m_settingsComponentIds) {
             BaseComponent* comp = mgr.GetComponentById(settingsEntity, id);
             if (!comp) continue;
-            auto it = m_backups.find(id);
-            if (it == m_backups.end()) return true;
+            auto it = m_snapshot.find(id);
+            if (it == m_snapshot.end()) return true;
             if (comp->Serialize() != it->second) return true;
         }
         return false;

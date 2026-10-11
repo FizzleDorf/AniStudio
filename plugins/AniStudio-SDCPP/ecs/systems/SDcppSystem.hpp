@@ -17,7 +17,7 @@
 #include "stable-diffusion.h"
 #include "ThreadPoolSystem.hpp"
 #include "SettingsSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "ModelCacheSystem.hpp"
 
 #include <filesystem>
@@ -140,7 +140,7 @@ namespace ECS {
         bool hasActiveTask{ false };
         std::thread::id activeThreadId{};
         std::shared_ptr<ThreadPoolSystem> m_threadPool;
-        std::shared_ptr<FilePathSystem> m_filePathSystem;
+        std::shared_ptr<SettingsSystem> m_settingsSystem;
         std::shared_ptr<ModelCacheSystem> m_cacheSystem;
 
         std::vector<std::future<bool>> m_orphanedFutures;

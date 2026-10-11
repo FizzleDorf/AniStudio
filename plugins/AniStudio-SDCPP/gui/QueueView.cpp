@@ -6,7 +6,7 @@
 #include "FileDialogFilters.hpp"
 #include "BaseDiffusionView.hpp"
 #include "ClipboardUtilities.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "ProjectSystem.hpp"
 #include "Log.hpp"
 
@@ -472,15 +472,15 @@ namespace GUI {
             return;
         }
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickSave: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickSave: SettingsSystem unavailable");
                 return;
             }
 
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
+            std::string dataPath = ss->GetPath("ProjectDataPath");
             if (dataPath.empty()) {
-                dataPath = filePathSys->GetPath("DefaultProject");
+                dataPath = ss->GetPath("DefaultProject");
             }
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickSave: no data path available");
@@ -527,15 +527,15 @@ namespace GUI {
 
     void QueueView::QuickLoad() {
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickLoad: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickLoad: SettingsSystem unavailable");
                 return;
             }
 
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
+            std::string dataPath = ss->GetPath("ProjectDataPath");
             if (dataPath.empty()) {
-                dataPath = filePathSys->GetPath("DefaultProject");
+                dataPath = ss->GetPath("DefaultProject");
             }
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickLoad: no data path available");

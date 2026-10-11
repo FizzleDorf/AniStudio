@@ -94,7 +94,8 @@ namespace ECS {
             return (key == "CurrentProject" || key == "ProjectData" ||
                 key == "ProjectAssets" || key == "ProjectOutput" ||
                 key == "Output" || key == "LastOpenProject" ||
-                key == "ProjectDataPath" || key == "OutputFolder");
+                key == "ProjectDataPath" || key == "AssetsFolder" ||
+                key == "Assets" || key == "OutputFolder");
         }
 
     private:

@@ -11,7 +11,7 @@ namespace ECS {
     public:
         FontSettingsComponent() = default;
 
-        const char* GetCompName() const override { return "FontSettingsComponent"; }
+        const char* GetCompName() const override { return "FontSettings"; }
         const char* GetCompCategory() const override { return ""; }
 
         const nlohmann::json& GetSchema() const override {

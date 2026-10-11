@@ -46,13 +46,11 @@
 #include <GLFW/glfw3native.h>
 #endif
 
+
 namespace ANI {
 
     namespace {
 
-        // Collapses runs of identical (source, message) pairs into a single
-        // entry with a count, so a broken model that emits 200 identical
-        // errors doesn't bury the user in near-duplicate lines.
         std::vector<ErrorBus::Entry> DeduplicateErrors(
             std::vector<ErrorBus::Entry> errors) {
             std::vector<ErrorBus::Entry> out;
@@ -61,19 +59,15 @@ namespace ANI {
                 if (!out.empty() &&
                     out.back().source == e.source &&
                     out.back().message == e.message) {
-                    // Same error again. Bump the visible count instead of
-                    // pushing another identical entry.
-                    out.back().line = out.back().line;  // keep first location
+                    out.back().line = out.back().line;
                     if (out.back().file.empty() && !e.file.empty()) {
                         out.back().file = e.file;
                         out.back().line = e.line;
                     }
-                    // Append a marker the user can see in the popup.
                     if (out.back().message.find("\n(+") == std::string::npos) {
                         out.back().message += "\n(+duplicate)";
                     }
                     else {
-                        // Cheap repeated-marker increment.
                         auto pos = out.back().message.rfind("(+");
                         auto end = out.back().message.find(')', pos);
                         if (pos != std::string::npos && end != std::string::npos) {
@@ -91,9 +85,6 @@ namespace ANI {
             return out;
         }
 
-        // Builds a copy-paste friendly block for GitHub issues. Includes
-        // source, file:line (when available), the message, and the session
-        // log path so the user can attach the full trace.
         std::string BuildErrorReport(
             const std::vector<ErrorBus::Entry>& errors) {
             std::string out;
@@ -141,7 +132,6 @@ namespace ANI {
         }
 
         try {
-            ANI_LOG_INFO("[StudioCore] =========================================");
             ANI_LOG_INFO("[StudioCore] InitializeCoreOnly (server / headless)...");
 
             if (!engineCore.Initialize()) {
@@ -162,6 +152,10 @@ namespace ANI {
             }
             studioContext->mode = StudioContext::Mode::Server;
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
+            studioContext->studioCore = this;
+            studioContext->addSettingsTab = [this](std::unique_ptr<ECS::BaseSettingsTab> tab) {
+                AddSettingsTab(std::move(tab));
+                };
 
             auto& entityMgr = GetEntityManager();
             Registration::RegisterComponents(entityMgr);
@@ -209,9 +203,6 @@ namespace ANI {
             auto& entityMgr = GetEntityManager();
             auto settingsSystem = entityMgr.GetSystem<ECS::SettingsSystem>();
 
-            // The engine has already loaded, seeded, and created all path
-            // directories. Studio only verifies that the required keys are
-            // present and prompts the user if any are missing.
             if (settingsSystem) {
                 Utils::CheckMissingPaths(settingsSystem.get());
             }
@@ -223,6 +214,8 @@ namespace ANI {
                 ANI_LOG_ERROR("[StudioCore] ImGui fonts not loaded!");
                 return false;
             }
+
+            m_settingsTabs.clear();
 
             InitializeStudioPlugins();
 
@@ -303,9 +296,6 @@ namespace ANI {
         auto projectSystem = entityMgr.GetSystem<ECS::ProjectSystem>();
         studioCore->m_projectManagerView =
             std::make_unique<GUI::ProjectManagerView>(*projectSystem, studioCore.get());
-
-        // Paths are loaded and seeded by the engine during Initialize().
-        // Nothing path-related to do here.
 
         studioCore->SetupProjectCallbacks();
 
@@ -397,7 +387,6 @@ namespace ANI {
         auto& textEditorComp =
             entityMgr.GetComponent<ECS::TextEditorSettingsComponent>(settingsEntity);
 
-        m_settingsTabs.clear();
         m_settingsTabs.push_back(std::make_unique<ECS::GeneralSettingsTab>(*settingsSystem, generalComp));
         m_settingsTabs.push_back(std::make_unique<ECS::ImGuiStyleSettingsTab>(*settingsSystem, styleComp));
         m_settingsTabs.push_back(std::make_unique<ECS::ImGuiRenderSettingsTab>(*settingsSystem, renderComp));
@@ -405,8 +394,8 @@ namespace ANI {
         m_settingsTabs.push_back(std::make_unique<ECS::TextEditorSettingsTab>(*settingsSystem, textEditorComp, fontComp));
         m_settingsTabs.push_back(std::make_unique<ECS::FilePathTab>(*settingsSystem));
 
-        for (auto& tab : m_settingsTabs) {
-            tab->SetImGuiContext(ctx);
+        for (auto it = m_settingsTabs.begin(); it != m_settingsTabs.end(); ++it) {
+            if (*it) (*it)->SetImGuiContext(ctx);
         }
 
         UISchema::StringWidgets::SetSettingsComponent(&textEditorComp);
@@ -501,6 +490,15 @@ namespace ANI {
 
         studioContext->studioPluginManager->scanPluginDirectory(pluginDirectory);
         studioContext->studioPluginManager->enableHotReload(true);
+
+        studioContext->studioPluginManager->LoadStagingPlugins(true);
+
+        for (const auto& info : studioContext->studioPluginManager->getLoadedPlugins()) {
+            if (!info.enabled) {
+                ANI_LOG_INFO("[StudioCore] Enabling plugin at startup: %s", info.name.c_str());
+                studioContext->studioPluginManager->enablePlugin(info.name);
+            }
+        }
 
         ANI_LOG_INFO("[StudioCore] Plugin system initialized (hot reload on).");
     }
@@ -623,14 +621,12 @@ namespace ANI {
     void StudioCore::OnProjectLoaded(const std::string& projectPath) {
         ANI_LOG_INFO("[StudioCore] Project loaded: %s", projectPath.c_str());
 
-        // Project-scoped keys. These are not engine defaults ? they track the
-        // currently open project and are cleared when it closes.
         if (auto settingsSystem =
             studioContext->entityManager->GetSystem<ECS::SettingsSystem>()) {
             settingsSystem->SetPath("CurrentProject", projectPath);
             settingsSystem->SetPath("ProjectData", projectPath + "/data");
-            settingsSystem->SetPath("Assets", projectPath + "/assets");
-            settingsSystem->SetPath("Output", projectPath + "/output");
+            settingsSystem->SetPath("ProjectAssets", projectPath + "/assets");
+            settingsSystem->SetPath("ProjectOutput", projectPath + "/output");
             std::filesystem::create_directories(projectPath + "/data");
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
@@ -648,8 +644,8 @@ namespace ANI {
             studioContext->entityManager->GetSystem<ECS::SettingsSystem>()) {
             settingsSystem->SetPath("CurrentProject", projectPath);
             settingsSystem->SetPath("ProjectData", projectPath + "/data");
-            settingsSystem->SetPath("Assets", projectPath + "/assets");
-            settingsSystem->SetPath("Output", projectPath + "/output");
+            settingsSystem->SetPath("ProjectAssets", projectPath + "/assets");
+            settingsSystem->SetPath("ProjectOutput", projectPath + "/output");
             std::filesystem::create_directories(projectPath + "/data");
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
@@ -663,15 +659,12 @@ namespace ANI {
     void StudioCore::OnProjectClosed() {
         ANI_LOG_INFO("[StudioCore] OnProjectClosed() called");
 
-        // Clear only the project-scoped keys. Engine-registered defaults and
-        // user-edited paths are untouched.
         if (auto settingsSystem =
             studioContext->entityManager->GetSystem<ECS::SettingsSystem>()) {
             settingsSystem->SetPath("CurrentProject", "");
             settingsSystem->SetPath("ProjectData", "");
-            settingsSystem->SetPath("Output", "");
-            // Note: "Assets" is intentionally left alone. It is a global
-            // default registered by the engine and reused by projects.
+            settingsSystem->SetPath("ProjectAssets", "");
+            settingsSystem->SetPath("ProjectOutput", "");
         }
 
         if (studioContext && studioContext->studioPluginManager) {
@@ -1201,9 +1194,13 @@ namespace ANI {
         Events::Ref().RegisterEventWithData("RemoveComponent",
             [this](const std::any& data) {
                 try {
-                    auto ev = std::any_cast<std::unordered_map<std::string, std::any>>(data);
-                    ECS::EntityID entityID = std::any_cast<ECS::EntityID>(ev.at("entityID"));
-                    ECS::ComponentTypeID ctid = std::any_cast<ECS::ComponentTypeID>(ev.at("componentTypeID"));
+                    auto ev = std::any_cast<
+                        std::unordered_map<std::string, std::any>>(data);
+                    ECS::EntityID entityID =
+                        std::any_cast<ECS::EntityID>(ev.at("entityID"));
+                    ECS::ComponentTypeID ctid =
+                        std::any_cast<ECS::ComponentTypeID>(
+                            ev.at("componentTypeID"));
                     GetEntityManager().RemoveComponentById(entityID, ctid);
                 }
                 catch (const std::exception& e) {
@@ -1242,6 +1239,13 @@ namespace ANI {
             return studioContext->viewManager->GetActiveWorkspace();
         }
         return 0;
+    }
+
+    void StudioCore::AddSettingsTab(std::unique_ptr<ECS::BaseSettingsTab> tab) {
+        if (!tab) return;
+        tab->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
+        ANI_LOG_INFO("[StudioCore] Adding settings tab: %s", tab->GetTabName().c_str());
+        m_settingsTabs.push_back(std::move(tab));
     }
 
 } // namespace ANI

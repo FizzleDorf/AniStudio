@@ -94,7 +94,7 @@ namespace ANI {
         settings->RegisterPathDefault("DefaultProject", "./projects");
         settings->RegisterPathDefault("Plugins", "./plugins");
         settings->RegisterPathDefault("ImguiState", "./data/imgui.ini");
-        settings->RegisterPathDefault("Assets", "./assets");
+        settings->RegisterPathDefault("GlobalAssets", "./assets");
         settings->RegisterPathDefault("Docs", "./docs");
         settings->RegisterPathDefault("Scripts", "./scripts");
         settings->RegisterPathDefault("Templates", "./data/templates");

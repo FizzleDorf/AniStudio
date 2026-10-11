@@ -25,7 +25,7 @@ namespace ECS {
 
         ProjectComponent() = default;
 
-        const char* GetCompName() const override { return "ProjectComponent"; }
+        const char* GetCompName() const override { return "Project"; }
         const char* GetCompCategory() const override { return ""; }
 
         const nlohmann::json& GetSchema() const override {

@@ -35,12 +35,15 @@ namespace GUI {
 
         bool m_open = false;
         bool showSaveNotification = false;
+        bool showCloseConfirm = false;
 
         char filterBuffer[256] = "";
 
         void RenderMainContent();
         void RenderTabsAndContent();
         void RenderActionButtons();
+        void RenderCloseConfirmPopup();
+        void AttemptClose();
     };
 
 }

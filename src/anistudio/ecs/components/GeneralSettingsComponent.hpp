@@ -11,7 +11,7 @@ namespace ECS {
     public:
         GeneralSettingsComponent() = default;
 
-        const char* GetCompName() const override { return "GeneralSettingsComponent"; }
+        const char* GetCompName() const override { return "GeneralSettings"; }
         const char* GetCompCategory() const override { return ""; }
 
         const nlohmann::json& GetSchema() const override {

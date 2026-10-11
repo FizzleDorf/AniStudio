@@ -1,4 +1,3 @@
-// AssetsView.cpp
 #include "AssetsView.hpp"
 #include "SettingsSystem.hpp"
 #include "FileDialogUtil.hpp"
@@ -30,21 +29,7 @@ namespace GUI {
     }
 
     void AssetsView::Init() {
-        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
-        if (ss) {
-            assetsPath = ss->GetPath("ProjectAssets");
-            if (assetsPath.empty()) {
-                ANI_LOG_DEBUG("ProjectAssets path empty, falling back to ./assets");
-                assetsPath = "./assets";
-            }
-            else {
-                ANI_LOG_DEBUG("Assets path from Settings: %s", assetsPath.c_str());
-            }
-        }
-        else {
-            ANI_LOG_WARN("Settings not available, falling back to ./assets");
-            assetsPath = "./assets";
-        }
+        RebuildScanRoots();
         RefreshAssets();
 
         ANI::Events::Ref().RegisterEventWithData("SelectMediaEntity", [this](const std::any& data) {
@@ -71,7 +56,9 @@ namespace GUI {
     }
 
     void AssetsView::Update(float deltaT) {
+        (void)deltaT;
         if (needsRefresh) {
+            RebuildScanRoots();
             RefreshAssets();
             needsRefresh = false;
         }
@@ -91,7 +78,13 @@ namespace GUI {
             ImGui::Separator();
 
             if (assetFiles.empty()) {
-                ImGui::Text("No assets found in directory.");
+                ImGui::Text("No assets found.");
+                if (!scanRoots.empty()) {
+                    ImGui::TextDisabled("Scanned:");
+                    for (const auto& r : scanRoots) {
+                        ImGui::BulletText("%s", r.c_str());
+                    }
+                }
             }
             else {
                 RenderAssetGrid();
@@ -121,44 +114,104 @@ namespace GUI {
             changed |= ThumbnailFilters::RenderSortMenu(filterSettings);
             changed |= ThumbnailFilters::RenderFiltersMenu(filterSettings, true, true);
 
-            if (ImGui::BeginMenu("Actions")) {
-                if (ImGui::MenuItem("Refresh")) {
-                    RefreshAssets();
+            if (ImGui::BeginMenu("Source")) {
+                if (ImGui::MenuItem("Global", nullptr, sourceFilter == AssetSource::Global)) {
+                    sourceFilter = AssetSource::Global;
+                    needsRefresh = true;
+                }
+                if (ImGui::MenuItem("Project", nullptr, sourceFilter == AssetSource::Project)) {
+                    sourceFilter = AssetSource::Project;
+                    needsRefresh = true;
+                }
+                if (ImGui::MenuItem("Both", nullptr, sourceFilter == AssetSource::Both)) {
+                    sourceFilter = AssetSource::Both;
+                    needsRefresh = true;
                 }
                 ImGui::EndMenu();
             }
+
+            if (ImGui::BeginMenu("Actions")) {
+                if (ImGui::MenuItem("Refresh")) {
+                    needsRefresh = true;
+                }
+                ImGui::EndMenu();
+            }
+
             ImGui::EndMenuBar();
+
             if (changed) {
                 needsSort = true;
             }
         }
     }
 
-    void AssetsView::RefreshAssets() {
-        assetFiles.clear();
-        if (assetsPath.empty() || !std::filesystem::exists(assetsPath)) {
-            ANI_LOG_WARN("Assets path does not exist: %s", assetsPath.c_str());
+    void AssetsView::RebuildScanRoots() {
+        scanRoots.clear();
+
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        if (!ss) {
+            ANI_LOG_WARN("[AssetsView] SettingsSystem unavailable, using fallback ./assets");
+            scanRoots.push_back("./assets");
             return;
         }
-        try {
-            const auto& formats = FileFormats::GetAllFormats();
-            for (const auto& entry : std::filesystem::directory_iterator(assetsPath)) {
-                if (entry.is_regular_file()) {
-                    auto ext = entry.path().extension().string();
+
+        if (sourceFilter == AssetSource::Global || sourceFilter == AssetSource::Both) {
+            std::string globalPath = ss->GetPath("GlobalAssets");
+            if (globalPath.empty()) globalPath = "./assets";
+            if (std::filesystem::exists(globalPath)) {
+                scanRoots.push_back(globalPath);
+            }
+            else {
+                ANI_LOG_DEBUG("[AssetsView] GlobalAssets path does not exist: %s", globalPath.c_str());
+            }
+        }
+
+        if (sourceFilter == AssetSource::Project || sourceFilter == AssetSource::Both) {
+            std::string projectPath = ss->GetPath("ProjectAssets");
+            if (!projectPath.empty() && std::filesystem::exists(projectPath)) {
+                scanRoots.push_back(projectPath);
+            }
+            else if (!projectPath.empty()) {
+                ANI_LOG_DEBUG("[AssetsView] ProjectAssets path does not exist: %s", projectPath.c_str());
+            }
+        }
+    }
+
+    void AssetsView::RefreshAssets() {
+        assetFiles.clear();
+        if (scanRoots.empty()) {
+            ANI_LOG_WARN("[AssetsView] No scan roots available");
+            return;
+        }
+
+        const auto& formats = FileFormats::GetAllFormats();
+        for (const auto& rootStr : scanRoots) {
+            try {
+                std::filesystem::path root(rootStr);
+                if (!std::filesystem::exists(root)) continue;
+
+                for (const auto& entry : std::filesystem::directory_iterator(root)) {
+                    if (!entry.is_regular_file()) continue;
+                    std::string ext = entry.path().extension().string();
                     std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                     if (formats.find(ext) != formats.end()) {
                         assetFiles.push_back(entry.path());
                     }
                 }
             }
-            ANI_LOG_DEBUG("Found %zu asset file(s) in %s",
-                assetFiles.size(), assetsPath.c_str());
-            LoadNewAssets();
-            needsSort = true;
+            catch (const std::exception& e) {
+                ANI_LOG_ERROR("[AssetsView] Error scanning %s: %s", rootStr.c_str(), e.what());
+            }
         }
-        catch (const std::exception& e) {
-            ANI_LOG_ERROR("Error scanning assets: %s", e.what());
-        }
+
+        std::sort(assetFiles.begin(), assetFiles.end());
+        assetFiles.erase(std::unique(assetFiles.begin(), assetFiles.end()), assetFiles.end());
+
+        ANI_LOG_DEBUG("[AssetsView] Found %zu asset file(s) across %zu root(s)",
+            assetFiles.size(), scanRoots.size());
+
+        LoadNewAssets();
+        needsSort = true;
     }
 
     void AssetsView::ApplyFiltersAndSort() {
@@ -400,12 +453,6 @@ namespace GUI {
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
-                    ANI_LOG_INFO("Loaded image: %s (Entity: %u)",
-                        filePath.c_str(), entity);
-                }
-                else {
-                    ANI_LOG_WARN("ImageSystem unavailable, skipping image: %s",
-                        filePath.c_str());
                 }
             }
             else if (it->second.isVideo) {
@@ -422,12 +469,6 @@ namespace GUI {
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
-                    ANI_LOG_INFO("Loaded video: %s (Entity: %u)",
-                        filePath.c_str(), entity);
-                }
-                else {
-                    ANI_LOG_WARN("VideoSystem unavailable, skipping video: %s",
-                        filePath.c_str());
                 }
             }
             else if (it->second.isAudio) {
@@ -444,21 +485,11 @@ namespace GUI {
                     loadedEntities.push_back(entity);
                     pathToEntity[filePath] = entity;
                     loadedPaths.insert(filePath);
-                    ANI_LOG_INFO("Loaded audio: %s (Entity: %u)",
-                        filePath.c_str(), entity);
                 }
-                else {
-                    ANI_LOG_WARN("AudioSystem unavailable, skipping audio: %s",
-                        filePath.c_str());
-                }
-            }
-            else {
-                ANI_LOG_WARN("Unsupported file type: %s", ext.c_str());
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("Error loading asset %s: %s",
-                filePath.c_str(), e.what());
+            ANI_LOG_ERROR("Error loading asset %s: %s", filePath.c_str(), e.what());
         }
     }
 
@@ -468,21 +499,15 @@ namespace GUI {
             if (m_entityManager.IsEntityValid(entity)) {
                 if (m_entityManager.HasComponent<ECS::ImageComponent>(entity)) {
                     auto imageSystem = m_entityManager.GetSystem<ECS::ImageSystem>();
-                    if (imageSystem) {
-                        imageSystem->RemoveImage(entity);
-                    }
+                    if (imageSystem) imageSystem->RemoveImage(entity);
                 }
                 else if (m_entityManager.HasComponent<ECS::VideoComponent>(entity)) {
                     auto videoSystem = m_entityManager.GetSystem<ECS::VideoSystem>();
-                    if (videoSystem) {
-                        videoSystem->RemoveVideo(entity);
-                    }
+                    if (videoSystem) videoSystem->RemoveVideo(entity);
                 }
                 else if (m_entityManager.HasComponent<ECS::AudioComponent>(entity)) {
                     auto audioSystem = m_entityManager.GetSystem<ECS::AudioSystem>();
-                    if (audioSystem) {
-                        audioSystem->RemoveAudio(entity);
-                    }
+                    if (audioSystem) audioSystem->RemoveAudio(entity);
                 }
                 else {
                     m_entityManager.DestroyEntity(entity);
@@ -498,16 +523,27 @@ namespace GUI {
     }
 
     bool AssetsView::CopyFileToAssets(const std::string& sourcePath) {
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        if (!ss) return false;
+
+        std::string destRoot;
+        if (sourceFilter == AssetSource::Project) {
+            destRoot = ss->GetPath("ProjectAssets");
+        }
+        else {
+            destRoot = ss->GetPath("GlobalAssets");
+        }
+        if (destRoot.empty()) destRoot = "./assets";
+
         std::filesystem::path src(sourcePath);
-        std::filesystem::path dst = std::filesystem::path(assetsPath) / src.filename();
+        std::filesystem::path dst = std::filesystem::path(destRoot) / src.filename();
         if (std::filesystem::exists(dst)) {
             ANI_LOG_WARN("File already exists in assets: %s", dst.string().c_str());
             return false;
         }
         try {
+            std::filesystem::create_directories(destRoot);
             std::filesystem::copy(src, dst, std::filesystem::copy_options::overwrite_existing);
-            ANI_LOG_DEBUG("Copied %s to %s",
-                sourcePath.c_str(), dst.string().c_str());
             return true;
         }
         catch (const std::exception& e) {
@@ -539,12 +575,10 @@ namespace GUI {
         wrapped["source"] = "metadata";
         std::string jsonStr = wrapped.dump();
         ImGui::SetClipboardText(jsonStr.c_str());
-        ANI_LOG_DEBUG(" Copied metadata from %s", filePath.c_str());
     }
 
     void AssetsView::SelectAssetEntity(ECS::EntityID entityID) {
         if (entityID == 0 || !m_entityManager.IsEntityValid(entityID)) {
-            ANI_LOG_TRACE("SelectAssetEntity: invalid entity %u", entityID);
             return;
         }
         selectedEntityID = entityID;
@@ -552,7 +586,6 @@ namespace GUI {
         eventData["workspaceID"] = GetID();
         eventData["entityID"] = entityID;
         ANI::Events::Ref().QueueEventWithData("SelectMediaEntity", eventData);
-        ANI_LOG_TRACE("Selected entity %u", entityID);
     }
 
     nlohmann::json AssetsView::Serialize() const {
@@ -567,6 +600,7 @@ namespace GUI {
             {"displayMode", static_cast<int>(filterSettings.displayMode)},
             {"thumbnailSize", static_cast<int>(filterSettings.thumbnailSize)}
         };
+        j["sourceFilter"] = static_cast<int>(sourceFilter);
         return j;
     }
 
@@ -582,8 +616,12 @@ namespace GUI {
             if (fs.contains("sortAscending")) filterSettings.sortAscending = fs["sortAscending"].get<bool>();
             if (fs.contains("displayMode")) filterSettings.displayMode = static_cast<GUI::Thumbnail::DisplayMode>(fs["displayMode"].get<int>());
             if (fs.contains("thumbnailSize")) filterSettings.thumbnailSize = static_cast<GUI::Thumbnail::ThumbnailSize>(fs["thumbnailSize"].get<int>());
-            needsSort = true;
         }
+        if (j.contains("sourceFilter")) {
+            sourceFilter = static_cast<AssetSource>(j["sourceFilter"].get<int>());
+        }
+        needsSort = true;
+        needsRefresh = true;
     }
 
 } // namespace GUI

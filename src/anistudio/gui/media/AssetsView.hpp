@@ -1,7 +1,4 @@
-// AssetsView.hpp
-#ifndef ASSETSVIEW_HPP
-#define ASSETSVIEW_HPP
-
+#pragma once
 #include "Log.hpp"
 #include "BaseView.hpp"
 #include "ContextMenuUtils.hpp"
@@ -12,17 +9,19 @@
 #include <filesystem>
 #include <unordered_map>
 #include <set>
-#include <limits>
+#include <memory>
 
 namespace GUI {
 
     class AssetsView : public BaseView {
     public:
+        enum class AssetSource { Global, Project, Both };
+
         static constexpr const char* GetMetadataJSON() {
             return R"({
             "displayName": "Assets",
             "category": "Viewers",
-            "description": "Displays assets from the project's assets directory"
+            "description": "Displays assets from the global and project assets directories"
         })";
         }
 
@@ -37,7 +36,7 @@ namespace GUI {
 
     private:
         std::vector<std::filesystem::path> assetFiles;
-        std::string assetsPath;
+        std::vector<std::string> scanRoots;
         bool needsRefresh;
         std::vector<ECS::EntityID> loadedEntities;
         std::unordered_map<std::string, ECS::EntityID> pathToEntity;
@@ -45,11 +44,13 @@ namespace GUI {
         std::unique_ptr<Utils::ContextMenuUtils> contextMenuUtils;
 
         ThumbnailFilters::Settings filterSettings;
+        AssetSource sourceFilter = AssetSource::Both;
 
         ECS::EntityID selectedEntityID = 0;
         bool needsSort = true;
 
         void RefreshAssets();
+        void RebuildScanRoots();
         void LoadNewAssets();
         void RenderAssetGrid();
         void LoadAsset(const std::filesystem::path& path);
@@ -62,5 +63,3 @@ namespace GUI {
     };
 
 }
-
-#endif

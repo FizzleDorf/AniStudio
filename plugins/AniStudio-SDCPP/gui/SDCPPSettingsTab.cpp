@@ -3,6 +3,7 @@
 #include "UISchema.hpp"
 #include <imgui.h>
 #include <algorithm>
+#include <cstring>
 
 namespace ECS {
 
@@ -23,7 +24,7 @@ namespace ECS {
             ImGui::Separator();
 
             char filterBuf[64];
-            strncpy(filterBuf, m_filter.c_str(), sizeof(filterBuf) - 1);
+            std::strncpy(filterBuf, m_filter.c_str(), sizeof(filterBuf) - 1);
             filterBuf[sizeof(filterBuf) - 1] = '\0';
             if (ImGui::InputText("Filter", filterBuf, sizeof(filterBuf))) {
                 m_filter = filterBuf;
@@ -42,22 +43,8 @@ namespace ECS {
                     );
                 }
             }
-
-            ImGui::Separator();
-            RenderActionButtons();
         }
         ImGui::EndChild();
-    }
-
-    void SDCPPSettingsTab::RenderActionButtons() {
-        if (ImGui::Button("Save Settings")) SaveSettings();
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
-        ImGui::SameLine();
-        if (ImGui::Button("Revert Changes")) RestoreFromBackup();
-        if (m_comp.HasUnsavedChanges()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-        }
     }
 
 }

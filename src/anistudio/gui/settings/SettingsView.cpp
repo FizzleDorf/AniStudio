@@ -20,8 +20,15 @@ namespace GUI {
         imguiContext = context;
     }
 
-    void SettingsView::Show() { m_open = true; }
-    void SettingsView::Hide() { m_open = false; }
+    void SettingsView::Show() {
+        m_open = true;
+        // Entering the view always starts from the last saved state.
+        if (m_settingsSystem) m_settingsSystem->RestoreFromSnapshot();
+    }
+
+    void SettingsView::Hide() {
+        AttemptClose();
+    }
 
     void SettingsView::Render() {
         if (!m_open) return;
@@ -39,13 +46,17 @@ namespace GUI {
             ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoDocking;
 
-        if (ImGui::Begin("Settings##SettingsWindow", &m_open, flags)) {
+        bool windowOpen = true;
+        if (ImGui::Begin("Settings##SettingsWindow", &windowOpen, flags)) {
             RenderMainContent();
         }
         ImGui::End();
 
-        if (!m_open && m_settingsSystem) {
-            m_settingsSystem->RestoreAllFromBackups();
+        RenderCloseConfirmPopup();
+
+        if (!windowOpen) {
+            // The X on the title bar.
+            AttemptClose();
         }
     }
 
@@ -107,7 +118,9 @@ namespace GUI {
     void SettingsView::RenderActionButtons() {
         if (!m_settingsSystem) return;
 
-        if (m_settingsSystem->HasAnyUnsavedChanges()) {
+        const bool dirty = m_settingsSystem->HasUnsavedChanges();
+
+        if (dirty) {
             ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "* Unsaved changes");
             ImGui::SameLine();
         }
@@ -121,18 +134,63 @@ namespace GUI {
             if (m_settingsSystem->SaveAllSettings()) m_open = false;
         }
 
-        if (m_settingsSystem->HasAnyUnsavedChanges()) {
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel Changes")) {
-                m_settingsSystem->RestoreAllFromBackups();
-            }
+        ImGui::SameLine();
+        if (ImGui::Button("Revert Changes")) {
+            m_settingsSystem->RestoreFromSnapshot();
         }
 
         ImGui::SameLine();
         if (ImGui::Button("Close")) {
-            m_settingsSystem->RestoreAllFromBackups();
-            m_open = false;
+            AttemptClose();
         }
+    }
+
+    void SettingsView::RenderCloseConfirmPopup() {
+        if (!showCloseConfirm) return;
+
+        ImGui::OpenPopup("Discard Changes##SettingsClose");
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+            ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Discard Changes##SettingsClose", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("You have unsaved changes.");
+            ImGui::Text("Discard them and close, or save first?");
+            ImGui::Separator();
+
+            if (ImGui::Button("Save and Close", ImVec2(140, 0))) {
+                if (m_settingsSystem) m_settingsSystem->SaveAllSettings();
+                m_open = false;
+                showCloseConfirm = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Discard", ImVec2(140, 0))) {
+                if (m_settingsSystem) m_settingsSystem->RestoreFromSnapshot();
+                m_open = false;
+                showCloseConfirm = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(140, 0))) {
+                showCloseConfirm = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    void SettingsView::AttemptClose() {
+        if (!m_settingsSystem) {
+            m_open = false;
+            return;
+        }
+        if (m_settingsSystem->HasUnsavedChanges()) {
+            showCloseConfirm = true;
+            return;
+        }
+        m_settingsSystem->RestoreFromSnapshot();
+        m_open = false;
     }
 
 }

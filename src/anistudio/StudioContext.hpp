@@ -1,6 +1,9 @@
 #pragma once
 #include "EngineContext.hpp"
+#include <functional>
 #include <memory>
+
+namespace ECS { class BaseSettingsTab; }
 
 namespace GUI { class ViewManager; }
 namespace Plugins { class StudioPluginManager; }
@@ -8,6 +11,8 @@ namespace Utils { class WindowState; }
 namespace Net { class NetClient; }
 
 namespace ANI {
+
+    class StudioCore;
 
     class StudioContext : public EngineContext {
     public:
@@ -23,6 +28,10 @@ namespace ANI {
 
         void* windowHandle = nullptr;
         void* imguiContext = nullptr;
+
+        StudioCore* studioCore = nullptr;
+
+        std::function<void(std::unique_ptr<ECS::BaseSettingsTab>)> addSettingsTab;
 
         bool showProjectManagerView = true;
 
