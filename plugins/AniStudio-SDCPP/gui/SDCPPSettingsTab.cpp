@@ -33,9 +33,10 @@ namespace ECS {
             if (FilterPass("SDCPP Options")) {
                 ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
                 if (ImGui::CollapsingHeader("SDCPP Options")) {
+                    Engine::PropertyMap props = m_comp.GetPropertyMap();
                     UISchema::RenderSchema(
                         m_comp.GetSchema(),
-                        m_comp.GetPropertyMap(),
+                        props,
                         nullptr,
                         "SDCPP",
                         0,

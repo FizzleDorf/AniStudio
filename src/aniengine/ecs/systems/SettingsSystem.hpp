@@ -1,11 +1,14 @@
 #pragma once
 #include "BaseSystem.hpp"
 #include "Types.hpp"
+#include "EntityManager.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <unordered_map>
 #include <functional>
 #include <string>
+#include <fstream>
+#include <filesystem>
 
 namespace ECS {
 
@@ -25,8 +28,8 @@ namespace ECS {
 
         template<typename T>
         ComponentTypeID AddSettingsComponent() {
-            ComponentTypeID id = mgr.RegisterComponent<T>(T{}.GetCompName());
-            mgr.AddComponent<T>(settingsEntity);
+            ComponentTypeID id = mgr.template RegisterComponent<T>(T{}.GetCompName());
+            mgr.template AddComponent<T>(settingsEntity);
             m_settingsComponentIds.push_back(id);
             return id;
         }

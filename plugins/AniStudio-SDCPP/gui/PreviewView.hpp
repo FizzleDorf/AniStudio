@@ -11,7 +11,7 @@
 #include "AVSystem.hpp"
 #include "PlaybackStateComponent.hpp"
 #include "AudioComponent.hpp"
-#include "SDcppSystem.hpp"
+#include "SDCPPSystem.hpp"
 #include "Events.hpp"
 #include "ECS.h"
 #include "RepeatButtonUtils.hpp"

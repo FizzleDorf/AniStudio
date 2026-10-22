@@ -2,7 +2,7 @@
 #include "BaseDiffusionView.hpp"
 #include "Events.hpp"
 #include "UISchema.hpp"
-#include "SDcppSystem.hpp"
+#include "SDCPPSystem.hpp"
 #include "SettingsSystem.hpp"
 #include "FilePathComponent.hpp"
 #include "FileDialogUtil.hpp"
@@ -344,8 +344,8 @@ namespace GUI {
                             ImGui::EndPopup();
                         }
                         };
-
-                    UISchema::RenderSchema(schema, comp.GetPropertyMap(), onPropRightClick, nameStr, activeEntity, pathMap);
+                    Engine::PropertyMap props = comp.GetPropertyMap();
+                    UISchema::RenderSchema(schema, props, onPropRightClick, nameStr, activeEntity, pathMap);
                 }
             }
 

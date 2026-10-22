@@ -1,4 +1,3 @@
-// SDCPPParamFill.hpp
 #pragma once
 
 #include "stable-diffusion.h"
@@ -25,10 +24,6 @@ extern "C" {
 
 namespace SDCPP {
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
     inline std::vector<int> ParseIntList(const std::string& s) {
         std::vector<int> out;
         std::stringstream ss(s);
@@ -43,10 +38,6 @@ namespace SDCPP {
         return out;
     }
 
-    // Merge a user-provided `params_backend` string with per-module CPU pins
-    // derived from the SamplerComponent booleans. sdcpp applies per-module
-    // assignments as "last one wins", so append derived pins after the
-    // user's existing string and let sdcpp resolve duplicates.
     inline std::string BuildParamsBackend(const std::string& existing,
         bool clipOnCpu,
         bool controlNetOnCpu,
@@ -63,10 +54,6 @@ namespace SDCPP {
         return out;
     }
 
-    // -------------------------------------------------------------------------
-    // FillContextParams ? reads every model / settings component into
-    // sd_ctx_params_t. All strings go into `res`.
-    // -------------------------------------------------------------------------
     inline void FillContextParams(ECS::EntityManager& mgr,
         ECS::EntityID e,
         sd_ctx_params_t& ctx,
@@ -78,7 +65,6 @@ namespace SDCPP {
             if (!s.empty()) field = res.storeString(s);
             };
 
-        // ---- Model paths ----------------------------------------------------
         if (mgr.HasComponent<ECS::CheckpointComponent>(e))
             set(mgr.GetComponent<ECS::CheckpointComponent>(e).modelPath, ctx.model_path);
 
@@ -139,7 +125,6 @@ namespace SDCPP {
         if (mgr.HasComponent<ECS::PulidWeightsComponent>(e))
             set(mgr.GetComponent<ECS::PulidWeightsComponent>(e).modelPath, ctx.pulid_weights_path);
 
-        // ---- Embeddings -----------------------------------------------------
         if (mgr.HasComponent<ECS::EmbeddingsComponent>(e)) {
             auto& emb = mgr.GetComponent<ECS::EmbeddingsComponent>(e);
             for (const auto& [name, path] : emb.embeddings) {
@@ -154,7 +139,6 @@ namespace SDCPP {
             }
         }
 
-        // ---- Sampler / runtime ----------------------------------------------
         bool clipOnCpu = false;
         bool controlNetOnCpu = false;
         bool offloadAll = false;
@@ -183,7 +167,6 @@ namespace SDCPP {
             ctx.wtype = c.get_output_type_enum();
         }
 
-        // ---- Global SDCPP settings -----------------------------------------
         if (mgr.HasComponent<ECS::SDCPPSettingsComponent>(e)) {
             auto& g = mgr.GetComponent<ECS::SDCPPSettingsComponent>(e);
             ctx.enable_mmap = g.enable_mmap;
@@ -207,7 +190,6 @@ namespace SDCPP {
             userParamsBackend = g.params_backend;
         }
 
-        // ---- params_backend: merge user string with CPU pins ----------------
         std::string merged = BuildParamsBackend(userParamsBackend,
             clipOnCpu,
             controlNetOnCpu,
@@ -219,9 +201,6 @@ namespace SDCPP {
         if (ctx.wtype == 0)     ctx.wtype = SD_TYPE_F16;
     }
 
-    // -------------------------------------------------------------------------
-    // FillSampleParamsFromComponents ? shared by image and video paths.
-    // -------------------------------------------------------------------------
     inline void FillSampleParamsFromComponents(
         const ECS::SamplerComponent* samp,
         const ECS::GuidanceComponent* guid,
@@ -263,9 +242,6 @@ namespace SDCPP {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // FillCacheParams ? writes into res.cacheStorage and patches pointers.
-    // -------------------------------------------------------------------------
     inline void FillCacheParams(const ECS::EasyCacheComponent& c, ResourceManager& res) {
         res.cacheStorage.mode = (sd_cache_mode_t)cache_mode_from_name(c.mode);
         res.cacheStorage.reuse_threshold = c.reuse_threshold;
@@ -296,9 +272,6 @@ namespace SDCPP {
         res.cacheStorage.spectrum_stop_percent = c.spectrum_stop_percent;
     }
 
-    // -------------------------------------------------------------------------
-    // FillHiresParams
-    // -------------------------------------------------------------------------
     inline void FillHiresParams(const ECS::HiresComponent& h, ResourceManager& res) {
         res.hiresStorage.enabled = h.enabled;
         res.hiresStorage.upscaler = h.upscaler;
@@ -319,27 +292,21 @@ namespace SDCPP {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // FillTilingParams
-    // -------------------------------------------------------------------------
     inline void FillTilingParams(const ECS::VaeTilingComponent& t,
         sd_tiling_params_t& out,
         ResourceManager& res)
     {
         out.enabled = t.isTiled;
         out.temporal_tiling = t.temporal_tiling;
-        out.tile_size_x = t.tile_size_x;
-        out.tile_size_y = t.tile_size_y;
+        out.tile_size_w = t.tile_size_x;
+        out.tile_size_h = t.tile_size_y;
         out.target_overlap = t.target_overlap;
-        out.rel_size_x = t.rel_size_x;
-        out.rel_size_y = t.rel_size_y;
+        out.rel_size_w = t.rel_size_x;
+        out.rel_size_h = t.rel_size_y;
         if (!t.extra_tiling_args.empty())
             out.extra_tiling_args = res.storeString(t.extra_tiling_args);
     }
 
-    // -------------------------------------------------------------------------
-    // FillLoras
-    // -------------------------------------------------------------------------
     inline void FillLoras(const ECS::LoraComponent& l,
         const sd_lora_t*& outLoras,
         uint32_t& outCount,
@@ -358,9 +325,6 @@ namespace SDCPP {
         }
     }
 
-    // -------------------------------------------------------------------------
-    // DecodeAudioToFloat ? libavformat -> interleaved float PCM.
-    // -------------------------------------------------------------------------
     inline bool DecodeAudioToFloat(const std::string& path,
         sd_audio_t& out,
         ResourceManager& res)
@@ -462,9 +426,6 @@ namespace SDCPP {
         return true;
     }
 
-    // -------------------------------------------------------------------------
-    // FillImageParams
-    // -------------------------------------------------------------------------
     inline void FillImageParams(ECS::EntityManager& mgr,
         ECS::EntityID e,
         sd_img_gen_params_t& img,
@@ -580,9 +541,6 @@ namespace SDCPP {
         if (img.batch_count == 0) img.batch_count = 1;
     }
 
-    // -------------------------------------------------------------------------
-    // FillVideoParams
-    // -------------------------------------------------------------------------
     inline void FillVideoParams(ECS::EntityManager& mgr,
         ECS::EntityID e,
         sd_vid_gen_params_t& vid,

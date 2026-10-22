@@ -11,7 +11,7 @@
 #include <thread>
 #include <chrono>
 #include "SDCPPComponents.h"
-#include "SDcppSystem.hpp"
+#include "SDCPPSystem.hpp"
 #include "ModelCacheSystem.hpp"
 #include "SDCPPViews.h"
 #include "PreviewView.hpp"

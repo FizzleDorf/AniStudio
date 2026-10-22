@@ -1,175 +1,148 @@
 #!/bin/bash
 
-# Configuration defaults
 BUILD_TYPE="Release"
-PARALLEL_JOBS=$(nproc)
-CLEAN_BUILD=false
-BUILD_SHARED="ON"
+JOBS=8
+CLEAN=0
+SHARED="ON"
+APP_MODE="local"
+BUILD_DIR="build"
 
-# Function to show help
 show_help() {
+    echo "Usage: ./build.sh [options]"
     echo ""
-    echo "AniStudio Build Script Usage:"
+    echo "Build type:"
+    echo "  --debug               Build in Debug mode        (default: Release)"
+    echo "  --release             Build in Release mode"
     echo ""
-    echo "./build.sh [options]"
+    echo "Build mode:"
+    echo "  --local               Build the local desktop app  (default)"
+    echo "  --server              Build headless AniServer"
+    echo "  --client              Build networked AniClient"
+    echo "  --both                Build AniServer AND AniClient"
     echo ""
-    echo "Build Options:"
-    echo "  --clean              Perform a clean build (removes build directory)"
-    echo "  --debug              Build in Debug mode (default: Release)"
-    echo "  --shared             Build shared libraries (default: static)"
-    echo "  --jobs <num>         Number of parallel build jobs (default: $(nproc))"
+    echo "Library linkage:"
+    echo "  --shared              Build shared libraries (.so)  (default)"
+    echo "  --static              Build static libraries"
+    echo ""
+    echo "Other:"
+    echo "  --clean               Remove build directory before configuring"
+    echo "  --jobs N              Parallel build jobs (default: 8)"
+    echo "  --build-dir DIR       Use DIR as build directory (default: build)"
+    echo "  --help, -h            Show this help"
     echo ""
     echo "Examples:"
-    echo "  ./build.sh                           # Standard build"
-    echo "  ./build.sh --clean --debug           # Clean debug build"
-    echo "  ./build.sh --jobs 16                 # Use 16 parallel jobs"
-    echo ""
+    echo "  ./build.sh --local"
+    echo "  ./build.sh --server --debug"
+    echo "  ./build.sh --client --release --jobs 16"
+    echo "  ./build.sh --both --clean"
 }
 
-# Parse command line arguments
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        --clean)
-            CLEAN_BUILD=true
-            shift
-            ;;
-        --debug)
-            BUILD_TYPE="Debug"
-            shift
-            ;;
-        --shared)
-            BUILD_SHARED="OFF"
-            shift
-            ;;
-        --jobs)
-            PARALLEL_JOBS="$2"
-            shift 2
-            ;;
-        --help|-h)
-            show_help
-            exit 0
-            ;;
-        *)
-            echo "Unknown argument: $1"
-            show_help
-            exit 1
-            ;;
+    case "$1" in
+        --debug) BUILD_TYPE="Debug"; shift ;;
+        --release) BUILD_TYPE="Release"; shift ;;
+        --clean) CLEAN=1; shift ;;
+        --shared) SHARED="ON"; shift ;;
+        --static) SHARED="OFF"; shift ;;
+        --jobs) JOBS="$2"; shift 2 ;;
+        --local) APP_MODE="local"; shift ;;
+        --server) APP_MODE="server"; shift ;;
+        --client) APP_MODE="client"; shift ;;
+        --both) APP_MODE="both"; shift ;;
+        --build-dir) BUILD_DIR="$2"; shift 2 ;;
+        --help|-h) show_help; exit 0 ;;
+        *) echo "Unknown argument: $1"; show_help; exit 1 ;;
     esac
 done
 
-echo "============================================"
-echo "AniStudio Build Script"
-echo "============================================"
-echo "Build Type: $BUILD_TYPE"
-echo "Shared Libs: $BUILD_SHARED"
-echo "Parallel Jobs: $PARALLEL_JOBS"
-echo "Clean Build: $CLEAN_BUILD"
-echo "============================================"
+echo "=========================================="
+echo "Building AniStudio"
+echo "=========================================="
+echo "Build type: $BUILD_TYPE"
+echo "Build mode: $APP_MODE"
+echo "Shared libs: $SHARED"
+echo "Jobs: $JOBS"
+echo "Clean: $CLEAN"
+echo "Build dir: $BUILD_DIR"
+echo "=========================================="
 
-# Activate the virtual environment if it exists
-if [[ -f "build/venv/bin/activate" ]]; then
-    echo "Activating virtual environment..."
-    source build/venv/bin/activate
-else
-    echo "No virtual environment found, continuing without activation..."
+if [ "$CLEAN" -eq 1 ]; then
+    echo "Removing $BUILD_DIR directory..."
+    rm -rf "$BUILD_DIR" 2>/dev/null
 fi
 
-# Handle clean build
-if [[ "$CLEAN_BUILD" == "true" ]]; then
-    echo "Performing clean build..."
-    if [[ -d "build" ]]; then
-        echo "Removing build directory..."
-        rm -rf build/{Release,bin,external,x64} 2>/dev/null || true
-        
-        # Also clean any standalone library builds
-        [[ -d "src/aniengine/build" ]] && rm -rf src/aniengine/build
-        [[ -d "src/anistudio/build" ]] && rm -rf src/anistudio/build
-        [[ -d "src/aniplugins/build" ]] && rm -rf src/aniplugins/build
-    else
-        echo "Build directory does not exist - creating it"
-        mkdir -p build
-    fi
+if [ ! -d "$BUILD_DIR" ]; then
+    mkdir -p "$BUILD_DIR"
 fi
 
-# Create build directory if it doesn't exist
-if [[ ! -d "build" ]]; then
-    echo "Creating build directory..."
-    mkdir -p build
-fi
+pushd "$BUILD_DIR" > /dev/null
 
-cd build
-
-# Configure with CMake
-echo "============================================"
+echo ""
 echo "Configuring with CMake..."
-echo "============================================"
+echo ""
 
 cmake .. \
-    -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-    -DBUILD_SHARED_LIBS="$BUILD_SHARED" \
-    -DZEP_FEATURE_USE_VCPKG=OFF \
+    -DBUILD_SHARED_LIBS="$SHARED" \
     -DBUILD_ANIENGINE=ON \
     -DBUILD_ANISTUDIO=ON \
     -DBUILD_ANIPLUGINS=ON \
     -DBUILD_MAIN_APP=ON \
-    -DBUILD_DEMOS=OFF \
-    -DBUILD_IMGUI=OFF \
-    -DBUILD_QT=OFF \
-    -DBUILD_TESTS=OFF \
+    -DBUILD_APP_MODE="$APP_MODE" \
     -GNinja
 
-if [[ $? -ne 0 ]]; then
-    echo "============================================"
-    echo "CMake configuration failed!"
-    echo "============================================"
-    cd ..
-    [[ -f "build/venv/bin/activate" ]] && deactivate
-    exit 1
-fi
-
-# Build the project
-echo "============================================"
-echo "Building project..."
-echo "============================================"
-
-cmake --build . --config "$BUILD_TYPE" --parallel "$PARALLEL_JOBS"
-
-if [[ $? -ne 0 ]]; then
-    echo "============================================"
-    echo "Build failed!"
-    echo "============================================"
-    cd ..
-    [[ -f "build/venv/bin/activate" ]] && deactivate
-    exit 1
-fi
-
-echo "============================================"
-echo "Build completed successfully!"
-echo "============================================"
-echo ""
-echo "Binaries location: $(pwd)/bin"
-echo "Libraries location: $(pwd)/lib"
-echo "Plugins location: $(pwd)/plugins"
-echo ""
-
-# Check if executable was created
-if [[ -f "bin/AniStudio" ]]; then
-    echo "AniStudio executable: bin/AniStudio"
-    
-    # Ask if user wants to run the application
-    read -p "Run AniStudio now? (y/n): " -n 1 -r
+if [ $? -ne 0 ]; then
     echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Starting AniStudio..."
-        ./bin/AniStudio
-    fi
-else
-    echo "Warning: AniStudio executable was not found in bin directory"
+    echo "CMake configuration failed!"
+    popd > /dev/null
+    exit 1
 fi
 
-cd ..
-[[ -f "build/venv/bin/activate" ]] && deactivate
+echo ""
+echo "Building..."
+echo ""
+
+cmake --build . --config "$BUILD_TYPE" --parallel "$JOBS"
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "Build failed!"
+    popd > /dev/null
+    exit 1
+fi
 
 echo ""
-echo "Build completed successfully!"
+echo "=========================================="
+echo "Build succeeded!"
+echo "=========================================="
+
+if [ "$APP_MODE" = "local" ]; then
+    echo "Binary: $(pwd)/AniStudio"
+fi
+if [ "$APP_MODE" = "server" ]; then
+    echo "Binary: $(pwd)/AniServer"
+fi
+if [ "$APP_MODE" = "client" ]; then
+    echo "Binary: $(pwd)/AniClient"
+fi
+if [ "$APP_MODE" = "both" ]; then
+    echo "Binaries: $(pwd)/AniServer"
+    echo "          $(pwd)/AniClient"
+fi
+echo "Libraries: $(pwd)/lib"
+echo ""
+
+popd > /dev/null
+
+if [ "$APP_MODE" = "server" ]; then
+    read -p "Launch the server? [y/N] " LAUNCH
+    if [[ "$LAUNCH" =~ ^[Yy]$ ]]; then
+        "$BUILD_DIR/AniServer" 9000 &
+    fi
+fi
+if [ "$APP_MODE" = "both" ]; then
+    read -p "Launch the server? [y/N] " LAUNCH
+    if [[ "$LAUNCH" =~ ^[Yy]$ ]]; then
+        "$BUILD_DIR/AniServer" 9000 &
+    fi
+fi

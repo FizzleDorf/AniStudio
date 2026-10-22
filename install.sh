@@ -8,8 +8,19 @@ fi
 
 # Install required system packages
 echo "Installing required system packages..."
-sudo apt update
-sudo apt install -y python3-full python3-venv ninja-build build-essential cmake
+if command -v apt &> /dev/null; then
+    sudo apt update
+    sudo apt install -y python3-full python3-venv ninja-build build-essential cmake
+elif command -v dnf &> /dev/null; then
+    sudo dnf install -y python3 python3-pip python3-virtualenv ninja-build gcc gcc-c++ make cmake
+elif command -v pacman &> /dev/null; then
+    sudo pacman -Sy --noconfirm python python-pip python-virtualenv ninja base-devel cmake
+elif command -v zypper &> /dev/null; then
+    sudo zypper install -y python3 python3-pip python3-virtualenv ninja gcc gcc-c++ make cmake
+else
+    echo "WARNING: Could not detect a supported package manager (apt/dnf/pacman/zypper)."
+    echo "Please install python3, python3-venv, ninja-build, build-essential, and cmake manually."
+fi
 
 # Create build directory if it doesn't exist
 if [ ! -d "build" ]; then
@@ -43,7 +54,7 @@ pip install conan
 conan profile detect --force
 
 # Run Conan install
-conan install . --build=missing
+conan install . --build=missing -s compiler.cppstd=17
 
 echo "Installation completed successfully."
 echo "To build the project, run './build.sh'"
