@@ -1,5 +1,6 @@
 #pragma once
 
+#include <climits>
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <string>

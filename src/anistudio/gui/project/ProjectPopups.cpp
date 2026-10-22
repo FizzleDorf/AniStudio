@@ -1,7 +1,7 @@
 #include "ProjectPopups.hpp"
 #include "ProjectSystem.hpp"
 #include "Events.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "FileDialogUtil.hpp"
 #include <filesystem>
 #include <fstream>
@@ -54,13 +54,13 @@ namespace GUI {
     void ProjectPopupState::LoadTemplates(ECS::ProjectSystem& projectSystem) {
         templates.clear();
 
-        auto fileSys = projectSystem.GetFilePathSystem();
-        if (!fileSys) {
-            std::cerr << "[ProjectPopups] FilePathSystem not available, cannot load templates" << std::endl;
+        auto settings = projectSystem.GetSettingsSystem();
+        if (!settings) {
+            std::cerr << "[ProjectPopups] SettingsSystem not available, cannot load templates" << std::endl;
             return;
         }
 
-        std::string dataPath = fileSys->GetPath("DataPath");
+        std::string dataPath = settings->GetPath("DataPath");
         if (dataPath.empty()) {
             dataPath = ".";
             std::cerr << "[ProjectPopups] DataPath empty, using current directory" << std::endl;

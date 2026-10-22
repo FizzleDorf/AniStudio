@@ -2,6 +2,7 @@
 #include "VideoMetadataUtils.hpp"
 
 #include <vector>
+#include <cstring>
 
 namespace Utils {
 

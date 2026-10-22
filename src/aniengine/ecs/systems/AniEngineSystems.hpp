@@ -4,5 +4,5 @@
 #include "NodegraphSystem.hpp"
 #include "VideoSystem.hpp"
 #include "AudioSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "ThreadPoolSystem.hpp"

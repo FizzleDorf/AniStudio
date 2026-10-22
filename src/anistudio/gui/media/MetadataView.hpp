@@ -37,22 +37,38 @@ namespace GUI {
             Text
         };
 
+        enum class MetadataSource {
+            File,
+            LSB
+        };
+
         nlohmann::json metadata;
         std::string currentFile;
         DisplayMode displayMode = DisplayMode::Tree;
         std::string filterText;
 
+        MetadataSource metadataSource = MetadataSource::File;
+        nlohmann::json fileMetadata;
+        nlohmann::json lsbMetadata;
+        int nodeCounter = 0;
+
+        int treeGeneration = 0;
+        int treeForceOpen = 1;
+        bool treeForceOpenPending = false;
+
         void RenderMenuBar();
         void RenderMetadataDisplay();
-        void RenderJsonTree(const nlohmann::json& j, int depth = 0);
-        void RenderJsonValue(const nlohmann::json& value, const std::string& key = "", int depth = 0);
-        void RenderCopyButton(const nlohmann::json& value, const std::string& label);
+        void RenderJsonTree(const nlohmann::json& j, int depth = 0, const std::string& path = "");
+        void RenderJsonValue(const nlohmann::json& value);
+        void RenderCopyButton(const nlohmann::json& value);
         void RenderContextMenu();
         bool HasMatchingChild(const nlohmann::json& j, const std::string& lowerFilter);
         ImVec4 GetColorForType(const nlohmann::json& value);
         bool MatchesFilter(const std::string& text);
         void CopyValueToClipboard(const nlohmann::json& value);
-        nlohmann::json ReadMetadataFromFile(const std::string& filePath);
+        void ReadAllMetadataFromFile(const std::string& filePath);
+        void ApplyMetadataSource();
+        void ExpandEmbeddedJson(nlohmann::json& j);
         void CopyEntireEntityToClipboard();
     };
 

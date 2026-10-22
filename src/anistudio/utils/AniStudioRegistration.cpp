@@ -9,7 +9,6 @@
 #include "AniStudioSystems.hpp"
 #include "AniStudioViews.hpp"
 
-#include "FilePathSystem.hpp"
 #include "BaseView.hpp"
 #include "StudioPluginManager.hpp"
 #include "PlaybackStateComponent.hpp"
@@ -19,7 +18,6 @@
 
 namespace ANI::Registration {
 
-    // Components
     void RegisterComponents(ECS::EntityManager& entityMgr) {
         entityMgr.RegisterComponent<ECS::ImGuiStyleSettingsComponent>("ImGuiStyleSettings");
         entityMgr.RegisterComponent<ECS::ImGuiRenderSettingsComponent>("ImGuiRenderSettings");
@@ -28,39 +26,29 @@ namespace ANI::Registration {
         entityMgr.RegisterComponent<ECS::TextureComponent>("TextureComponent");
         entityMgr.RegisterComponent<ECS::PlaybackStateComponent>("PlaybackState");
         entityMgr.RegisterComponent<ECS::PreviewImageComponent>("PreviewImage");
+        entityMgr.RegisterComponent<ECS::PreviewVideoComponent>("PreviewVideo");
 
         ANI_LOG_INFO("All GUI components registered");
     }
 
-    // Systems
     void RegisterSystems(ECS::EntityManager& entityMgr,
         GUI::ViewManager* viewManager,
         void* windowHandle,
         StudioContext* studioContext) {
         entityMgr.RegisterSystem<ECS::TextureSystem>();
-        entityMgr.RegisterSystem<ECS::SettingsSystem>();
         entityMgr.RegisterSystem<ECS::ProjectSystem>();
         entityMgr.RegisterSystem<ECS::AVSystem>();
 
-        // post-registration wiring
         if (auto projectSystem = entityMgr.GetSystem<ECS::ProjectSystem>()) {
             projectSystem->SetWindowHandle(windowHandle);
             if (viewManager) {
                 projectSystem->SetViewManager(viewManager);
-            }
-
-            if (auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>()) {
-                std::string defaultPath = fileSys->GetPath("DefaultProject");
-                if (!defaultPath.empty()) {
-                    projectSystem->SetDefaultProjectPath(defaultPath);
-                }
             }
         }
 
         ANI_LOG_INFO("All GUI systems registered");
     }
 
-    // Views
     void RegisterViews(ECS::EntityManager& entityMgr,
         GUI::ViewManager& viewManager,
         Plugins::StudioPluginManager* pluginManager) {

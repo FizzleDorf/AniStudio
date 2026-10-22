@@ -2,7 +2,7 @@
 #include "OpenGLWrapper.hpp"
 #include "AniStudioViews.hpp"
 #include "StudioContext.hpp"
-#include "FilePathSystem.hpp"
+#include "FilePathComponent.hpp"
 #include "FileDialogUtil.hpp"
 #include "ImGuiSettingsUtil.hpp"
 #include "ImGuiStateUtils.hpp"
@@ -25,14 +25,20 @@
 #include "ImGuiRenderSettingsTab.hpp"
 #include "FontSettingsTab.hpp"
 #include "TextEditorSettingsTab.hpp"
+#include "FilePathTab.hpp"
+#include "BaseSettingsTab.hpp"
 #include "StringWidgets.hpp"
 #include "TextEditorUtil.hpp"
 #include "TextEditorFontUtil.hpp"
 #include "GeneralSettingsComponent.hpp"
+#include "ImGuiStyleSettingsComponent.hpp"
+#include "ImGuiRenderSettingsComponent.hpp"
+#include "FontSettingsComponent.hpp"
+#include "TextEditorSettingsComponent.hpp"
 #include "SettingsSystem.hpp"
 #include "ProjectManagerView.hpp"
 #include "Log.hpp"
-#include "ErrorBus.hpp"          // <-- NEW
+#include "ErrorBus.hpp"
 #include "ImageSystem.hpp"
 #include "TextureSystem.hpp"
 
@@ -40,13 +46,11 @@
 #include <GLFW/glfw3native.h>
 #endif
 
+
 namespace ANI {
 
     namespace {
 
-        // Collapses runs of identical (source, message) pairs into a single
-        // entry with a count, so a broken model that emits 200 identical
-        // errors doesn't bury the user in near-duplicate lines.
         std::vector<ErrorBus::Entry> DeduplicateErrors(
             std::vector<ErrorBus::Entry> errors) {
             std::vector<ErrorBus::Entry> out;
@@ -55,19 +59,15 @@ namespace ANI {
                 if (!out.empty() &&
                     out.back().source == e.source &&
                     out.back().message == e.message) {
-                    // Same error again. Bump the visible count instead of
-                    // pushing another identical entry.
-                    out.back().line = out.back().line;  // keep first location
+                    out.back().line = out.back().line;
                     if (out.back().file.empty() && !e.file.empty()) {
                         out.back().file = e.file;
                         out.back().line = e.line;
                     }
-                    // Append a marker the user can see in the popup.
                     if (out.back().message.find("\n(+") == std::string::npos) {
                         out.back().message += "\n(+duplicate)";
                     }
                     else {
-                        // Cheap repeated-marker increment.
                         auto pos = out.back().message.rfind("(+");
                         auto end = out.back().message.find(')', pos);
                         if (pos != std::string::npos && end != std::string::npos) {
@@ -85,9 +85,6 @@ namespace ANI {
             return out;
         }
 
-        // Builds a copy-paste friendly block for GitHub issues. Includes
-        // source, file:line (when available), the message, and the session
-        // log path so the user can attach the full trace.
         std::string BuildErrorReport(
             const std::vector<ErrorBus::Entry>& errors) {
             std::string out;
@@ -135,7 +132,6 @@ namespace ANI {
         }
 
         try {
-            ANI_LOG_INFO("[StudioCore] =========================================");
             ANI_LOG_INFO("[StudioCore] InitializeCoreOnly (server / headless)...");
 
             if (!engineCore.Initialize()) {
@@ -156,6 +152,10 @@ namespace ANI {
             }
             studioContext->mode = StudioContext::Mode::Server;
             studioContext->viewManager->SetEntityManager(*studioContext->entityManager);
+            studioContext->studioCore = this;
+            studioContext->addSettingsTab = [this](std::unique_ptr<ECS::BaseSettingsTab> tab) {
+                AddSettingsTab(std::move(tab));
+                };
 
             auto& entityMgr = GetEntityManager();
             Registration::RegisterComponents(entityMgr);
@@ -201,38 +201,10 @@ namespace ANI {
             ImGui::SetCurrentContext(static_cast<ImGuiContext*>(imguiContext));
 
             auto& entityMgr = GetEntityManager();
-            auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
+            auto settingsSystem = entityMgr.GetSystem<ECS::SettingsSystem>();
 
-            std::string defaultProjectPath =
-                fileSys ? fileSys->GetPath("DefaultProject") : std::string{};
-
-            if (defaultProjectPath.empty()) {
-                std::filesystem::path basePath = std::filesystem::path(".").parent_path();
-                defaultProjectPath = (basePath / "projects").string();
-                if (fileSys) {
-                    fileSys->SetPath("DefaultProject", defaultProjectPath);
-                }
-                ANI_LOG_INFO("[StudioCore] Set DefaultProject to: %s",
-                    defaultProjectPath.c_str());
-            }
-            if (!defaultProjectPath.empty() && !std::filesystem::exists(defaultProjectPath)) {
-                std::filesystem::create_directories(defaultProjectPath);
-            }
-
-            std::string dataPath = fileSys ? fileSys->GetPath("DataPath") : std::string{};
-            if (dataPath.empty()) {
-                dataPath = "./data";
-                if (fileSys) fileSys->SetPath("DataPath", dataPath);
-            }
-            if (!std::filesystem::exists(dataPath)) {
-                std::filesystem::create_directories(dataPath);
-            }
-
-            EnsureCorePaths();
-            if (fileSys) {
-                fileSys->LoadFromFile(dataPath + "/paths.json");
-                EnsureCorePaths();
-                Utils::CheckMissingPaths(fileSys.get());
+            if (settingsSystem) {
+                Utils::CheckMissingPaths(settingsSystem.get());
             }
 
             ConfigureImGuiIniPath();
@@ -242,6 +214,8 @@ namespace ANI {
                 ANI_LOG_ERROR("[StudioCore] ImGui fonts not loaded!");
                 return false;
             }
+
+            m_settingsTabs.clear();
 
             InitializeStudioPlugins();
 
@@ -323,14 +297,6 @@ namespace ANI {
         studioCore->m_projectManagerView =
             std::make_unique<GUI::ProjectManagerView>(*projectSystem, studioCore.get());
 
-        auto fileSys = entityMgr.GetSystem<ECS::FilePathSystem>();
-        std::string defaultProjectPath =
-            fileSys ? fileSys->GetPath("DefaultProject") : std::string{};
-        if (!defaultProjectPath.empty() &&
-            !std::filesystem::exists(defaultProjectPath)) {
-            std::filesystem::create_directories(defaultProjectPath);
-        }
-
         studioCore->SetupProjectCallbacks();
 
         if (projectSystem && studioCore->studioContext->studioPluginManager) {
@@ -349,10 +315,10 @@ namespace ANI {
     }
 
     void StudioCore::ConfigureImGuiIniPath() {
-        auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
-        if (!fileSys) return;
+        auto settingsSystem = studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
+        if (!settingsSystem) return;
 
-        std::string imguiIniPath = fileSys->GetPath("ImguiState");
+        std::string imguiIniPath = settingsSystem->GetPath("ImguiState");
         if (imguiIniPath.empty()) {
             ANI_LOG_WARN("[StudioCore] ImguiState path missing!");
             return;
@@ -380,6 +346,36 @@ namespace ANI {
             return;
         }
 
+        ComponentTypeID generalId = settingsSystem->AddSettingsComponent<ECS::GeneralSettingsComponent>();
+        ComponentTypeID styleId = settingsSystem->AddSettingsComponent<ECS::ImGuiStyleSettingsComponent>();
+        ComponentTypeID renderId = settingsSystem->AddSettingsComponent<ECS::ImGuiRenderSettingsComponent>();
+        ComponentTypeID fontId = settingsSystem->AddSettingsComponent<ECS::FontSettingsComponent>();
+        ComponentTypeID textId = settingsSystem->AddSettingsComponent<ECS::TextEditorSettingsComponent>();
+
+        ImGuiContext* ctx = static_cast<ImGuiContext*>(imguiContext);
+
+        settingsSystem->SetApplyCallback(generalId, [](ECS::BaseComponent&) {});
+
+        settingsSystem->SetApplyCallback(styleId, [ctx](ECS::BaseComponent& c) {
+            if (!ctx) return;
+            auto& s = static_cast<ECS::ImGuiStyleSettingsComponent&>(c);
+            ImGui::SetCurrentContext(ctx);
+            ImGui::GetStyle() = s.currentStyle;
+            });
+
+        settingsSystem->SetApplyCallback(renderId, [ctx](ECS::BaseComponent& c) {
+            auto& r = static_cast<ECS::ImGuiRenderSettingsComponent&>(c);
+            ECS::ImGuiRenderSettingsTab::ApplyToImGui(r, ctx);
+            });
+
+        settingsSystem->SetApplyCallback(fontId, [ctx](ECS::BaseComponent& c) {
+            auto& f = static_cast<ECS::FontSettingsComponent&>(c);
+            ECS::FontSettingsTab::ScanFontsDirectories(f);
+            ECS::FontSettingsTab::ApplyFontToImGui(f, ctx);
+            });
+
+        settingsSystem->SetApplyCallback(textId, [](ECS::BaseComponent&) {});
+
         auto& generalComp =
             entityMgr.GetComponent<ECS::GeneralSettingsComponent>(settingsEntity);
         auto& styleComp =
@@ -391,57 +387,24 @@ namespace ANI {
         auto& textEditorComp =
             entityMgr.GetComponent<ECS::TextEditorSettingsComponent>(settingsEntity);
 
-        settingsSystem->RegisterTab(
-            std::make_unique<ECS::GeneralSettingsTab>(generalComp));
-        settingsSystem->RegisterTab(
-            std::make_unique<ECS::ImGuiStyleSettingsTab>(styleComp));
-        settingsSystem->RegisterTab(
-            std::make_unique<ECS::ImGuiRenderSettingsTab>(renderComp));
-        settingsSystem->RegisterTab(
-            std::make_unique<ECS::FontSettingsTab>(fontComp));
-        settingsSystem->RegisterTab(
-            std::make_unique<ECS::TextEditorSettingsTab>(textEditorComp, fontComp));
+        m_settingsTabs.push_back(std::make_unique<ECS::GeneralSettingsTab>(*settingsSystem, generalComp));
+        m_settingsTabs.push_back(std::make_unique<ECS::ImGuiStyleSettingsTab>(*settingsSystem, styleComp));
+        m_settingsTabs.push_back(std::make_unique<ECS::ImGuiRenderSettingsTab>(*settingsSystem, renderComp));
+        m_settingsTabs.push_back(std::make_unique<ECS::FontSettingsTab>(*settingsSystem, fontComp));
+        m_settingsTabs.push_back(std::make_unique<ECS::TextEditorSettingsTab>(*settingsSystem, textEditorComp, fontComp));
+        m_settingsTabs.push_back(std::make_unique<ECS::FilePathTab>(*settingsSystem));
+
+        for (auto it = m_settingsTabs.begin(); it != m_settingsTabs.end(); ++it) {
+            if (*it) (*it)->SetImGuiContext(ctx);
+        }
 
         UISchema::StringWidgets::SetSettingsComponent(&textEditorComp);
         TextEditorUtil::SetSettingsComponent(&textEditorComp);
         TextEditorUtil::SetFontComponent(&fontComp);
 
-        settingsSystem->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
-
-        for (auto& tab : settingsSystem->GetTabs()) {
-            tab->LoadSettings();
-            tab->CreateBackup();
-        }
-
         settingsSystem->LoadAllSettings();
 
         ANI_LOG_INFO("[StudioCore] Core settings tabs registered.");
-    }
-
-    void StudioCore::EnsureCorePaths() {
-        auto fileSys = studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
-        if (!fileSys) return;
-
-        const std::vector<std::string> coreKeys = {
-            "DataPath", "DefaultProject", "Plugins", "ImguiState",
-            "Assets", "Docs", "Scripts", "Templates", "Shaders"
-        };
-
-        for (const auto& key : coreKeys) {
-            if (!fileSys->HasPath(key)) {
-                fileSys->SetPath(key, "");
-            }
-        }
-
-        Utils::SetDefaultPath("DataPath", "./data");
-        Utils::SetDefaultPath("DefaultProject", "./projects");
-        Utils::SetDefaultPath("Plugins", "./plugins");
-        Utils::SetDefaultPath("ImguiState", "./data/imgui.ini");
-        Utils::SetDefaultPath("Assets", "./assets");
-        Utils::SetDefaultPath("Docs", "./docs");
-        Utils::SetDefaultPath("Scripts", "./scripts");
-        Utils::SetDefaultPath("Templates", "./data/templates");
-        Utils::SetDefaultPath("Shaders", "./shaders");
     }
 
     void StudioCore::SetNetworkClientMode(bool on) {
@@ -467,6 +430,7 @@ namespace ANI {
                 m_settingsView->SetEntityManager(*studioContext->entityManager);
             }
         }
+        m_settingsView->SetTabs(&m_settingsTabs);
         return *m_settingsView;
     }
 
@@ -512,10 +476,10 @@ namespace ANI {
             studioContext->studioPluginManager->SetStudioContext(studioContext);
         }
 
-        auto fileSys =
-            studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
+        auto settingsSystem =
+            studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
         std::string pluginDirectory =
-            fileSys ? fileSys->GetPath("Plugins") : std::string{};
+            settingsSystem ? settingsSystem->GetPath("Plugins") : std::string{};
         if (pluginDirectory.empty()) {
             pluginDirectory = "./plugins";
             ANI_LOG_WARN("[StudioCore] Using default plugin dir: %s", pluginDirectory.c_str());
@@ -526,6 +490,15 @@ namespace ANI {
 
         studioContext->studioPluginManager->scanPluginDirectory(pluginDirectory);
         studioContext->studioPluginManager->enableHotReload(true);
+
+        studioContext->studioPluginManager->LoadStagingPlugins(true);
+
+        for (const auto& info : studioContext->studioPluginManager->getLoadedPlugins()) {
+            if (!info.enabled) {
+                ANI_LOG_INFO("[StudioCore] Enabling plugin at startup: %s", info.name.c_str());
+                studioContext->studioPluginManager->enablePlugin(info.name);
+            }
+        }
 
         ANI_LOG_INFO("[StudioCore] Plugin system initialized (hot reload on).");
     }
@@ -558,14 +531,14 @@ namespace ANI {
     }
 
     void StudioCore::InitializeWindowState() {
-        auto fileSys =
-            studioContext->entityManager->GetSystem<ECS::FilePathSystem>();
-        if (!fileSys) {
-            ANI_LOG_ERROR("[StudioCore] FilePathSystem not available!");
+        auto settingsSystem =
+            studioContext->entityManager->GetSystem<ECS::SettingsSystem>();
+        if (!settingsSystem) {
+            ANI_LOG_ERROR("[StudioCore] SettingsSystem not available!");
             return;
         }
 
-        m_windowState.SetGlobalDataPath(fileSys->GetPath("DataPath"));
+        m_windowState.SetGlobalDataPath(settingsSystem->GetPath("DataPath"));
 
         std::string defaultPath = GetDefaultWindowStatePath();
         if (!defaultPath.empty() && std::filesystem::exists(defaultPath)) {
@@ -648,12 +621,12 @@ namespace ANI {
     void StudioCore::OnProjectLoaded(const std::string& projectPath) {
         ANI_LOG_INFO("[StudioCore] Project loaded: %s", projectPath.c_str());
 
-        if (auto fileSys =
-            studioContext->entityManager->GetSystem<ECS::FilePathSystem>()) {
-            fileSys->SetPath("CurrentProject", projectPath);
-            fileSys->SetPath("ProjectData", projectPath + "/data");
-            fileSys->SetPath("Assets", projectPath + "/assets");
-            fileSys->SetPath("Output", projectPath + "/output");
+        if (auto settingsSystem =
+            studioContext->entityManager->GetSystem<ECS::SettingsSystem>()) {
+            settingsSystem->SetPath("CurrentProject", projectPath);
+            settingsSystem->SetPath("ProjectData", projectPath + "/data");
+            settingsSystem->SetPath("ProjectAssets", projectPath + "/assets");
+            settingsSystem->SetPath("ProjectOutput", projectPath + "/output");
             std::filesystem::create_directories(projectPath + "/data");
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
@@ -667,12 +640,12 @@ namespace ANI {
     void StudioCore::OnProjectCreated(const std::string& projectPath) {
         ANI_LOG_INFO("[StudioCore] Project created: %s", projectPath.c_str());
 
-        if (auto fileSys =
-            studioContext->entityManager->GetSystem<ECS::FilePathSystem>()) {
-            fileSys->SetPath("CurrentProject", projectPath);
-            fileSys->SetPath("ProjectData", projectPath + "/data");
-            fileSys->SetPath("Assets", projectPath + "/assets");
-            fileSys->SetPath("Output", projectPath + "/output");
+        if (auto settingsSystem =
+            studioContext->entityManager->GetSystem<ECS::SettingsSystem>()) {
+            settingsSystem->SetPath("CurrentProject", projectPath);
+            settingsSystem->SetPath("ProjectData", projectPath + "/data");
+            settingsSystem->SetPath("ProjectAssets", projectPath + "/assets");
+            settingsSystem->SetPath("ProjectOutput", projectPath + "/output");
             std::filesystem::create_directories(projectPath + "/data");
             std::filesystem::create_directories(projectPath + "/assets");
             std::filesystem::create_directories(projectPath + "/output");
@@ -686,12 +659,12 @@ namespace ANI {
     void StudioCore::OnProjectClosed() {
         ANI_LOG_INFO("[StudioCore] OnProjectClosed() called");
 
-        if (auto fileSys =
-            studioContext->entityManager->GetSystem<ECS::FilePathSystem>()) {
-            fileSys->SetPath("CurrentProject", "");
-            fileSys->SetPath("ProjectData", "");
-            fileSys->SetPath("Assets", "");
-            fileSys->SetPath("Output", "");
+        if (auto settingsSystem =
+            studioContext->entityManager->GetSystem<ECS::SettingsSystem>()) {
+            settingsSystem->SetPath("CurrentProject", "");
+            settingsSystem->SetPath("ProjectData", "");
+            settingsSystem->SetPath("ProjectAssets", "");
+            settingsSystem->SetPath("ProjectOutput", "");
         }
 
         if (studioContext && studioContext->studioPluginManager) {
@@ -715,10 +688,10 @@ namespace ANI {
     }
 
     std::string StudioCore::GetDefaultWindowStatePath() const {
-        auto fileSys = studioContext
-            ? studioContext->entityManager->GetSystem<ECS::FilePathSystem>()
+        auto settingsSystem = studioContext
+            ? studioContext->entityManager->GetSystem<ECS::SettingsSystem>()
             : nullptr;
-        std::string dataPath = fileSys ? fileSys->GetPath("DataPath") : "";
+        std::string dataPath = settingsSystem ? settingsSystem->GetPath("DataPath") : "";
         if (dataPath.empty()) return "";
         return dataPath + "/window_state.json";
     }
@@ -763,6 +736,7 @@ namespace ANI {
                 imgSys->UnregisterCallbacksForOwner(this);
             }
 
+            m_settingsTabs.clear();
             m_menuBar.reset();
             m_projectManagerView.reset();
             m_settingsView.reset();
@@ -948,11 +922,16 @@ namespace ANI {
 
         imageSystem->RegisterImageAddedCallback(this,
             [this](EntityID entityID) {
+                auto& mgr = GetEntityManager();
+                if (!mgr.IsEntityValid(entityID)) return;
+                if (!mgr.HasComponent<ImageComponent>(entityID)) return;
                 ANI::Events::Ref().QueueEventWithData("ImageLoaded", entityID);
             });
 
         imageSystem->RegisterImageRemovedCallback(this,
             [this](EntityID entityID) {
+                auto& mgr = GetEntityManager();
+                if (!mgr.IsEntityValid(entityID)) return;
                 ANI::Events::Ref().QueueEventWithData("ImageRemoved", entityID);
             });
     }
@@ -1260,6 +1239,13 @@ namespace ANI {
             return studioContext->viewManager->GetActiveWorkspace();
         }
         return 0;
+    }
+
+    void StudioCore::AddSettingsTab(std::unique_ptr<ECS::BaseSettingsTab> tab) {
+        if (!tab) return;
+        tab->SetImGuiContext(static_cast<ImGuiContext*>(imguiContext));
+        ANI_LOG_INFO("[StudioCore] Adding settings tab: %s", tab->GetTabName().c_str());
+        m_settingsTabs.push_back(std::move(tab));
     }
 
 } // namespace ANI

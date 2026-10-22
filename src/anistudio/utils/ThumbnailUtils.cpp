@@ -1,16 +1,16 @@
 #include "ThumbnailUtils.hpp"
 #include "DragDropUtils.hpp"
 #include "TextureComponent.hpp"
+#include "IconFonts.hpp"
 #include <imgui.h>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <filesystem>
+#include <algorithm>
 
 namespace GUI {
     namespace Thumbnail {
-
-        static bool s_listTableOpen = false;
 
         float GetThumbnailSize(ThumbnailSize size) {
             switch (size) {
@@ -67,6 +67,16 @@ namespace GUI {
             return std::to_string(channels) + "ch";
         }
 
+        static uint64_t SafeFileSize(const std::string& path) {
+            if (path.empty()) return 0;
+            try {
+                return static_cast<uint64_t>(std::filesystem::file_size(path));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+
         static std::string CombineDateTime(const std::string& date, const std::string& time) {
             if (date.empty()) return "";
             if (time.empty()) return date;
@@ -92,53 +102,122 @@ namespace GUI {
             return entityManager->GetComponent<ECS::TextureComponent>(entityID).textureID;
         }
 
+        static bool EntityHasVideo(ECS::EntityManager* mgr, ECS::EntityID id) {
+            return mgr && mgr->IsEntityValid(id) &&
+                (mgr->HasComponent<ECS::VideoComponent>(id) ||
+                    mgr->HasComponent<ECS::PreviewVideoComponent>(id) ||
+                    mgr->HasComponent<ECS::InputVideoComponent>(id) ||
+                    mgr->HasComponent<ECS::OutputVideoComponent>(id));
+        }
+
+        static bool EntityHasAudio(ECS::EntityManager* mgr, ECS::EntityID id) {
+            return mgr && mgr->IsEntityValid(id) &&
+                (mgr->HasComponent<ECS::AudioComponent>(id) ||
+                    mgr->HasComponent<ECS::InputAudioComponent>(id) ||
+                    mgr->HasComponent<ECS::OutputAudioComponent>(id));
+        }
+
+        static bool EntityHasImage(ECS::EntityManager* mgr, ECS::EntityID id) {
+            return mgr && mgr->IsEntityValid(id) &&
+                (mgr->HasComponent<ECS::ImageComponent>(id) ||
+                    mgr->HasComponent<ECS::PreviewImageComponent>(id) ||
+                    mgr->HasComponent<ECS::InputImageComponent>(id) ||
+                    mgr->HasComponent<ECS::OutputImageComponent>(id) ||
+                    mgr->HasComponent<ECS::MaskImageComponent>(id) ||
+                    mgr->HasComponent<ECS::EndImageComponent>(id));
+        }
+
+        static void DrawTypeBadges(ECS::EntityManager* mgr, ECS::EntityID id,
+            const ImVec2& rectMin) {
+            if (!mgr || id == 0) return;
+            if (!mgr->IsEntityValid(id)) return;
+
+            std::string badge;
+            if (EntityHasVideo(mgr, id)) badge += Icon::Video();
+            if (EntityHasAudio(mgr, id)) badge += Icon::VolumeHigh();
+            if (EntityHasImage(mgr, id)) badge += Icon::Image();
+            if (badge.empty()) return;
+
+            ImVec2 textSize = ImGui::CalcTextSize(badge.c_str());
+            ImVec2 boxMin(rectMin.x + 4.0f, rectMin.y + 4.0f);
+            ImVec2 boxMax(boxMin.x + textSize.x + 6.0f, boxMin.y + textSize.y + 4.0f);
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->AddRectFilled(boxMin, boxMax, IM_COL32(0, 0, 0, 160), 3.0f);
+            ImGui::SetCursorScreenPos(ImVec2(boxMin.x + 3.0f, boxMin.y + 2.0f));
+            ImGui::TextUnformatted(badge.c_str());
+        }
+
+        static void DrawAudioIcon(const ImVec2& rectMin, const ImVec2& rectMax) {
+            const std::string icon = Icon::VolumeHigh();
+            ImVec2 textSize = ImGui::CalcTextSize(icon.c_str());
+            ImVec2 textPos(rectMin.x + (rectMax.x - rectMin.x - textSize.x) * 0.5f,
+                rectMin.y + (rectMax.y - rectMin.y - textSize.y) * 0.5f);
+            ImGui::SetCursorScreenPos(textPos);
+            ImGui::TextUnformatted(icon.c_str());
+        }
+
+        static std::string TruncateToWidth(const std::string& text, float maxWidth) {
+            if (maxWidth <= 0.0f) return "";
+            ImVec2 full = ImGui::CalcTextSize(text.c_str());
+            if (full.x <= maxWidth) return text;
+            std::string result = text;
+            while (!result.empty()) {
+                result.pop_back();
+                std::string candidate = result + "...";
+                if (ImGui::CalcTextSize(candidate.c_str()).x <= maxWidth) {
+                    return candidate;
+                }
+            }
+            return "...";
+        }
+
         void BeginListMode(float thumbnailSize) {
-            if (s_listTableOpen) return;
-
-            ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4.0f, 4.0f));
-
-            float nameMinWidth = ImGui::CalcTextSize("Name").x + 20.0f;
-            float sizeMinWidth = ImGui::CalcTextSize("Size").x + 20.0f;
-            float channelsMinWidth = ImGui::CalcTextSize("Channels").x + 20.0f;
-            float dimsMinWidth = ImGui::CalcTextSize("Dimensions").x + 20.0f;
-            float durationMinWidth = ImGui::CalcTextSize("Duration").x + 20.0f;
-            float fpsMinWidth = ImGui::CalcTextSize("FPS").x + 20.0f;
-            float sampleRateMinWidth = ImGui::CalcTextSize("Sample Rate").x + 20.0f;
-            float dateMinWidth = ImGui::CalcTextSize("Date/Time").x + 20.0f;
-            float statusMinWidth = ImGui::CalcTextSize("Status").x + 20.0f;
-
-            bool tableOpen = ImGui::BeginTable("ThumbnailList", 10,
-                ImGuiTableFlags_BordersV | ImGuiTableFlags_RowBg |
-                ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable);
-
-            if (tableOpen) {
-                ImGui::TableSetupColumn("Thumb", ImGuiTableColumnFlags_WidthFixed, thumbnailSize);
-                ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, nameMinWidth);
-                ImGui::TableSetupColumn("Size", ImGuiTableColumnFlags_WidthFixed, sizeMinWidth);
-                ImGui::TableSetupColumn("Channels", ImGuiTableColumnFlags_WidthFixed, channelsMinWidth);
-                ImGui::TableSetupColumn("Dimensions", ImGuiTableColumnFlags_WidthFixed, dimsMinWidth);
-                ImGui::TableSetupColumn("Duration", ImGuiTableColumnFlags_WidthFixed, durationMinWidth);
-                ImGui::TableSetupColumn("FPS", ImGuiTableColumnFlags_WidthFixed, fpsMinWidth);
-                ImGui::TableSetupColumn("Sample Rate", ImGuiTableColumnFlags_WidthFixed, sampleRateMinWidth);
-                ImGui::TableSetupColumn("Date/Time", ImGuiTableColumnFlags_WidthFixed, dateMinWidth);
-                ImGui::TableSetupColumn("Status", ImGuiTableColumnFlags_WidthFixed, statusMinWidth);
-
-                ImGui::TableHeadersRow();
-                s_listTableOpen = true;
-            }
-            else {
-                ImGui::PopStyleVar();
-            }
+            (void)thumbnailSize;
         }
 
         void EndListMode() {
-            if (s_listTableOpen) {
-                ImGui::EndTable();
-                ImGui::PopStyleVar();
-                s_listTableOpen = false;
-            }
         }
 
+        static void DrawLeafDetail(const char* label, const std::string& value) {
+            if (value.empty()) return;
+            ImGui::Bullet();
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", label);
+            ImGui::SameLine();
+            ImGui::TextUnformatted(value.c_str());
+        }
+
+        static void DrawLeafDetail(const char* label, const std::string& value, ImVec4 color) {
+            if (value.empty()) return;
+            ImGui::Bullet();
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", label);
+            ImGui::SameLine();
+            ImGui::TextColored(color, "%s", value.c_str());
+        }
+
+        // Compute an aspect-correct size that fits inside a square box.
+        static ImVec2 FitAspect(int width, int height, float boxSize) {
+            float aspect = (height > 0) ? (float)width / (float)height : 1.0f;
+            ImVec2 size(boxSize, boxSize);
+            if (aspect > 1.0f) size.y = boxSize / aspect;
+            else size.x = boxSize * aspect;
+            return size;
+        }
+
+        // ---------------------------------------------------------------------
+        // List mode
+        //
+        // Row layout: [expand arrow] [small thumbnail] [type icon] [filename]
+        //
+        // The inline thumbnail and icon are drawn at a fixed small size so the
+        // row stays compact and the tree layout is not disturbed, regardless of
+        // the configured thumbnail size setting.
+        //
+        // Hovering the row shows a tooltip containing the full image rendered
+        // at the configured thumbnail size. Expanding the node renders the same
+        // image at the configured size followed by metadata details.
+        // ---------------------------------------------------------------------
         void RenderListRow(
             const std::variant<const ECS::ImageComponent*, const ECS::VideoComponent*, const ECS::AudioComponent*>& component,
             size_t index,
@@ -149,8 +228,6 @@ namespace GUI {
             ECS::EntityID activeEntityID,
             ECS::EntityManager* entityManager
         ) {
-            if (!s_listTableOpen) return;
-
             const ECS::ImageComponent* img = nullptr;
             const ECS::VideoComponent* vid = nullptr;
             const ECS::AudioComponent* aud = nullptr;
@@ -227,31 +304,60 @@ namespace GUI {
                 channels = aud->channels;
                 sampleRate = aud->sampleRate;
                 duration = aud->duration;
-                fileSize = std::filesystem::file_size(filePath);
+                fileSize = SafeFileSize(filePath);
                 hasExif = aud->hasExifData;
                 hasLSB = aud->hasLSBData;
                 hasAniStudioMetadata = aud->hasAniStudioMetadata;
             }
 
-            float rowHeight = thumbnailSize + 8.0f;
-            ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
+            ImGui::PushID(("list_node_" + std::to_string(index)).c_str());
+
+            ImGuiTreeNodeFlags flags =
+                ImGuiTreeNodeFlags_OpenOnArrow |
+                ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                ImGuiTreeNodeFlags_SpanAvailWidth;
 
             if (entityID == activeEntityID && entityID != 0) {
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, IM_COL32(255, 255, 0, 80));
+                flags |= ImGuiTreeNodeFlags_Selected;
             }
 
-            ImGui::TableSetColumnIndex(0);
-            ImVec2 cellPos = ImGui::GetCursorPos();
+            const bool isLeaf =
+                fileDate.empty() && fileTime.empty() &&
+                fileSize == 0 && width == 0 && height == 0 &&
+                duration <= 0.0 && fps <= 0.0f && sampleRate == 0;
 
-            ImGui::PushID(("row_select_" + std::to_string(index)).c_str());
+            if (isLeaf) {
+                flags |= ImGuiTreeNodeFlags_Leaf;
+            }
 
-            ImGui::Selectable("##row", false, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0.0f, rowHeight));
-            if (ImGui::IsItemClicked()) {
+            // Inline cell size is FIXED and small so the tree row stays
+            // compact. The configured thumbnail size is only used for the
+            // tooltip and the expanded dropdown image.
+            const float lineHeight = ImGui::GetTextLineHeight();
+            const float cellSize = lineHeight + 8.0f;   // small inline box
+
+            ImVec2 rowStart = ImGui::GetCursorScreenPos();
+
+            // Draw the tree node. We don't use its label; contents are drawn
+            // manually below on the same line.
+            bool nodeOpen = ImGui::TreeNodeEx("##node", flags, "%s", "");
+
+            // Row background for hover/selection.
+            bool itemHovered = ImGui::IsItemHovered();
+            bool itemActive = (entityID == activeEntityID && entityID != 0);
+            if (itemActive || itemHovered) {
+                ImVec2 rowMin = rowStart;
+                ImVec2 rowMax = ImVec2(rowStart.x + ImGui::GetContentRegionAvail().x,
+                    rowStart.y + cellSize);
+                ImU32 bg = itemActive
+                    ? IM_COL32(80, 120, 200, 90)
+                    : IM_COL32(120, 120, 120, 40);
+                ImGui::GetWindowDrawList()->AddRectFilled(rowMin, rowMax, bg, 3.0f);
+            }
+
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
                 if (onSelect) onSelect(entityID);
             }
-
-            ImVec2 selectableMin = ImGui::GetItemRectMin();
-            ImVec2 selectableMax = ImGui::GetItemRectMax();
 
             if (isEntityLoaded && entityID != 0) {
                 if (ImGui::BeginDragDropSource()) {
@@ -294,145 +400,68 @@ namespace GUI {
                 ImGui::EndPopup();
             }
 
-            ImGui::SetCursorPos(cellPos);
-            float thumbSize = thumbnailSize - 4.0f;
-            float thumbColWidth = ImGui::GetContentRegionAvail().x;
+            // Shift past the tree arrow to start drawing row contents.
+            ImGui::SameLine();
+
+            // 1. Small inline thumbnail (fixed size, does not scale with the
+            //    thumbnail size setting so the tree stays compact).
+            ImVec2 thumbMin = ImGui::GetCursorScreenPos();
+            ImVec2 thumbMax = ImVec2(thumbMin.x + cellSize, thumbMin.y + cellSize);
 
             if (isAudio) {
-                float offsetX = (thumbColWidth - thumbSize) * 0.5f;
-                float offsetY = (rowHeight - thumbSize) * 0.5f;
-                ImGui::SetCursorPos(ImVec2(cellPos.x + offsetX, cellPos.y + offsetY));
                 ImDrawList* dl = ImGui::GetWindowDrawList();
-                ImVec2 pos = ImGui::GetCursorScreenPos();
-                dl->AddRectFilled(pos, pos + ImVec2(thumbSize, thumbSize), IM_COL32(60, 60, 80, 200));
-                float iconSize = thumbSize * 0.6f;
-                float iconX = pos.x + (thumbSize - iconSize) * 0.5f;
-                float iconY = pos.y + (thumbSize - iconSize) * 0.5f;
-                dl->AddText(ImVec2(iconX, iconY), IM_COL32(255, 255, 255, 255), "?");
+                dl->AddRectFilled(thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 3.0f);
+                std::string glyph = Icon::VolumeHigh();
+                ImVec2 ts = ImGui::CalcTextSize(glyph.c_str());
+                ImVec2 tp(thumbMin.x + (cellSize - ts.x) * 0.5f,
+                    thumbMin.y + (cellSize - ts.y) * 0.5f);
+                dl->AddText(tp, IM_COL32(220, 220, 220, 255), glyph.c_str());
             }
             else if (textureID != 0 && width > 0 && height > 0) {
-                float aspect = (height > 0) ? (float)width / height : 1.0f;
-                ImVec2 size;
-                if (aspect > 1.0f) {
-                    size.x = thumbSize;
-                    size.y = thumbSize / aspect;
-                }
-                else {
-                    size.x = thumbSize * aspect;
-                    size.y = thumbSize;
-                }
-                float offsetX = (thumbColWidth - size.x) * 0.5f;
-                float offsetY = (rowHeight - size.y) * 0.5f;
-                ImGui::SetCursorPos(ImVec2(cellPos.x + offsetX, cellPos.y + offsetY));
-                ImGui::Image((ImTextureID)(intptr_t)textureID, size);
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImVec2 size = FitAspect(width, height, cellSize);
+                ImVec2 imagePos(thumbMin.x + (cellSize - size.x) * 0.5f,
+                    thumbMin.y + (cellSize - size.y) * 0.5f);
+                dl->AddRectFilled(thumbMin, thumbMax, IM_COL32(30, 30, 40, 200), 3.0f);
+                dl->AddImage((ImTextureID)(intptr_t)textureID, imagePos, imagePos + size);
             }
             else {
-                float offsetX = (thumbColWidth - thumbSize) * 0.5f;
-                float offsetY = (rowHeight - thumbSize) * 0.5f;
-                ImGui::SetCursorPos(ImVec2(cellPos.x + offsetX, cellPos.y + offsetY));
-                ImGui::Image((ImTextureID)(intptr_t)0, ImVec2(thumbSize, thumbSize));
-                ImVec2 textSize = ImGui::CalcTextSize("?");
-                float textX = cellPos.x + offsetX + (thumbSize - textSize.x) * 0.5f;
-                float textY = cellPos.y + offsetY + (thumbSize - textSize.y) * 0.5f;
-                ImGui::GetWindowDrawList()->AddText(ImVec2(textX, textY), IM_COL32(200, 200, 200, 255), "?");
+                ImGui::GetWindowDrawList()->AddRectFilled(
+                    thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 3.0f);
             }
 
-            ImGui::PopID();
+            // 2. Media type icon (fixed size).
+            ImGui::SetCursorScreenPos(ImVec2(thumbMax.x + 6.0f, thumbMin.y));
+            ImVec2 iconMin = ImGui::GetCursorScreenPos();
+            ImVec2 iconMax = ImVec2(iconMin.x + cellSize, iconMin.y + cellSize);
+            {
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(iconMin, iconMax, IM_COL32(50, 50, 70, 220), 3.0f);
 
-            auto centerText = [](const std::string& text) {
-                float avail = ImGui::GetContentRegionAvail().x;
-                float textWidth = ImGui::CalcTextSize(text.c_str()).x;
-                float offset = (avail - textWidth) * 0.5f;
-                if (offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
-                ImGui::TextWrapped("%s", text.c_str());
-                };
+                std::string iconGlyph;
+                if (isVideo) iconGlyph = Icon::Video();
+                else if (isAudio) iconGlyph = Icon::VolumeHigh();
+                else if (isImage) iconGlyph = Icon::Image();
 
-            ImGui::TableSetColumnIndex(1);
-            std::string displayName = fileName;
-            if (displayName.length() > 30) displayName = displayName.substr(0, 28) + "...";
-            centerText(displayName);
-
-            ImGui::TableSetColumnIndex(2);
-            centerText(FormatFileSize(fileSize));
-
-            ImGui::TableSetColumnIndex(3);
-            centerText(GetChannelString(channels));
-
-            ImGui::TableSetColumnIndex(4);
-            if (isImage || isVideo) {
-                if (width > 0 && height > 0)
-                    centerText(std::to_string(width) + "x" + std::to_string(height));
-                else
-                    centerText("");
-            }
-            else {
-                centerText("");
-            }
-
-            ImGui::TableSetColumnIndex(5);
-            if ((isVideo || isAudio) && duration > 0)
-                centerText(FormatDuration(duration));
-            else
-                centerText("");
-
-            ImGui::TableSetColumnIndex(6);
-            if (isVideo && fps > 0)
-                centerText(std::to_string(fps).substr(0, 4));
-            else
-                centerText("");
-
-            ImGui::TableSetColumnIndex(7);
-            if (isAudio && sampleRate > 0)
-                centerText(std::to_string(sampleRate) + " Hz");
-            else
-                centerText("");
-
-            ImGui::TableSetColumnIndex(8);
-            std::string dateTime = CombineDateTime(fileDate, fileTime);
-            if (!dateTime.empty())
-                centerText(dateTime);
-            else
-                centerText("");
-
-            ImGui::TableSetColumnIndex(9);
-            float avail = ImGui::GetContentRegionAvail().x;
-
-            auto getStatusColor = [hasAniStudioMetadata](bool flag) -> ImVec4 {
-                if (flag) {
-                    if (hasAniStudioMetadata) {
-                        return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
-                    }
-                    else {
-                        return ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
-                    }
+                if (!iconGlyph.empty()) {
+                    ImVec2 ts = ImGui::CalcTextSize(iconGlyph.c_str());
+                    ImVec2 tp(iconMin.x + (cellSize - ts.x) * 0.5f,
+                        iconMin.y + (cellSize - ts.y) * 0.5f);
+                    dl->AddText(tp, IM_COL32(230, 230, 230, 255), iconGlyph.c_str());
                 }
-                else {
-                    return ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-                }
-                };
+            }
 
-            ImVec4 exifColor = getStatusColor(hasExif);
-            ImVec4 lsbColor = getStatusColor(hasLSB);
+            // 3. Filename.
+            ImGui::SetCursorScreenPos(ImVec2(iconMax.x + 6.0f, iconMin.y));
+            ImGui::TextUnformatted(fileName.c_str());
 
-            std::string statusText = "EXIF | LSB";
-            float textWidth = ImGui::CalcTextSize(statusText.c_str()).x;
-            float offset = (avail - textWidth) * 0.5f;
-            if (offset > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + offset);
-
-            ImGui::TextColored(exifColor, "EXIF");
-            ImGui::SameLine(0, 0);
-            ImGui::Text(" | ");
-            ImGui::SameLine(0, 0);
-            ImGui::TextColored(lsbColor, "LSB");
-
+            // Tooltip on hover: metadata + the image at the configured size.
             if (ImGui::IsItemHovered()) {
                 ImGui::BeginTooltip();
                 ImGui::Text("File: %s", fileName.c_str());
                 ImGui::Text("Path: %s", filePath.c_str());
-                if (isImage || isVideo) {
-                    if (width > 0 && height > 0) {
-                        ImGui::Text("Dimensions: %dx%d", width, height);
-                    }
+                if ((isImage || isVideo) && width > 0 && height > 0) {
+                    ImGui::Text("Dimensions: %dx%d", width, height);
                 }
                 if (channels > 0) {
                     ImGui::Text("Channels: %s", GetChannelString(channels).c_str());
@@ -464,8 +493,80 @@ namespace GUI {
                 if (hasLSB && !hasAniStudioMetadata) {
                     ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "LSB Metadata");
                 }
+
+                // Show the image at the configured thumbnail size setting.
+                if (textureID != 0 && width > 0 && height > 0) {
+                    ImVec2 previewDims = FitAspect(width, height, thumbnailSize);
+                    ImGui::Image((ImTextureID)(intptr_t)textureID, previewDims);
+                }
+
                 ImGui::EndTooltip();
             }
+
+            if (nodeOpen) {
+                ImGui::Indent(cellSize * 2.0f + 12.0f);
+
+                // Expanded dropdown: the image at the configured thumbnail size.
+                if (textureID != 0 && width > 0 && height > 0) {
+                    ImVec2 previewDims = FitAspect(width, height, thumbnailSize);
+                    ImGui::Image((ImTextureID)(intptr_t)textureID, previewDims);
+                    ImGui::Spacing();
+                }
+                else if (isAudio) {
+                    ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s", Icon::VolumeHigh());
+                    ImGui::Spacing();
+                }
+
+                if (width > 0 && height > 0) {
+                    DrawLeafDetail("Dimensions", std::to_string(width) + " x " + std::to_string(height));
+                }
+                if (channels > 0) {
+                    DrawLeafDetail("Channels", GetChannelString(channels));
+                }
+                if (fileSize > 0) {
+                    DrawLeafDetail("Size", FormatFileSize(fileSize));
+                }
+                if (!fileDate.empty() || !fileTime.empty()) {
+                    DrawLeafDetail("Date", CombineDateTime(fileDate, fileTime));
+                }
+                if (isVideo && duration > 0.0) {
+                    DrawLeafDetail("Duration", FormatDuration(duration));
+                }
+                if (isVideo && fps > 0.0f) {
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%.1f", fps);
+                    DrawLeafDetail("FPS", buf);
+                }
+                if (isAudio && duration > 0.0) {
+                    DrawLeafDetail("Duration", FormatDuration(duration));
+                }
+                if (isAudio && sampleRate > 0) {
+                    DrawLeafDetail("Sample Rate", std::to_string(sampleRate) + " Hz");
+                }
+
+                {
+                    std::string statusValue;
+                    if (hasAniStudioMetadata) statusValue = "AniStudio";
+                    else if (hasExif) statusValue = "EXIF";
+                    else if (hasLSB) statusValue = "LSB";
+                    if (!statusValue.empty()) {
+                        ImVec4 color = hasAniStudioMetadata
+                            ? ImVec4(0.2f, 1.0f, 0.2f, 1.0f)
+                            : ImVec4(1.0f, 1.0f, 0.2f, 1.0f);
+                        DrawLeafDetail("Metadata", statusValue, color);
+                    }
+                }
+
+                if (!filePath.empty()) {
+                    DrawLeafDetail("Path", filePath);
+                }
+
+                ImGui::Unindent(cellSize * 2.0f + 12.0f);
+
+                ImGui::TreePop();
+            }
+
+            ImGui::PopID();
         }
 
         void RenderThumbnail(
@@ -555,15 +656,24 @@ namespace GUI {
                 channels = aud->channels;
                 sampleRate = aud->sampleRate;
                 duration = aud->duration;
-                fileSize = std::filesystem::file_size(filePath);
+                fileSize = SafeFileSize(filePath);
                 hasExif = aud->hasExifData;
                 hasLSB = aud->hasLSBData;
                 hasAniStudioMetadata = aud->hasAniStudioMetadata;
             }
 
             if (mode == DisplayMode::Compact) {
-                float childHeight = thumbnailSize + ImGui::GetFontSize() + 4.0f;
-                ImGui::BeginChild(("compact_child_" + std::to_string(index)).c_str(), ImVec2(thumbnailSize + 4, childHeight), true);
+                const float cellWidth = thumbnailSize + 8.0f;
+
+                ImGui::PushID(("compact_" + std::to_string(index)).c_str());
+                ImGui::BeginGroup();
+
+                ImVec2 cellMin = ImGui::GetCursorScreenPos();
+
+                ImGui::InvisibleButton("##compact_cell",
+                    ImVec2(thumbnailSize, thumbnailSize));
+                bool clicked = ImGui::IsItemClicked();
+                bool hovered = ImGui::IsItemHovered();
 
                 if (isEntityLoaded && entityID != 0) {
                     if (ImGui::BeginDragDropSource()) {
@@ -590,52 +700,36 @@ namespace GUI {
                     }
                 }
 
-                ImGui::BeginGroup();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
 
-                ImVec2 thumbSize(thumbnailSize, thumbnailSize);
+                ImVec2 thumbMin = cellMin;
+                ImVec2 thumbMax = ImVec2(cellMin.x + thumbnailSize,
+                    cellMin.y + thumbnailSize);
+
                 if (isAudio) {
-                    ImDrawList* dl = ImGui::GetWindowDrawList();
-                    ImVec2 pos = ImGui::GetCursorScreenPos();
-                    dl->AddRectFilled(pos, pos + thumbSize, IM_COL32(60, 60, 80, 200));
-                    float iconSize = thumbSize.x * 0.6f;
-                    float iconX = pos.x + (thumbSize.x - iconSize) * 0.5f;
-                    float iconY = pos.y + (thumbSize.y - iconSize) * 0.5f;
-                    dl->AddText(ImVec2(iconX, iconY), IM_COL32(255, 255, 255, 255), "?");
-                    if (ImGui::IsItemClicked()) {
-                        if (onSelect) onSelect(entityID);
-                    }
+                    dl->AddRectFilled(thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 4.0f);
+                    DrawAudioIcon(thumbMin, thumbMax);
                 }
                 else if (textureID != 0 && width > 0 && height > 0) {
-                    float aspect = (height > 0) ? (float)width / height : 1.0f;
-                    ImVec2 size = thumbSize;
-                    if (aspect > 1.0f) size.y = thumbSize.x / aspect;
-                    else size.x = thumbSize.y * aspect;
-                    ImVec2 imagePos = ImGui::GetCursorPos() + ImVec2((thumbSize.x - size.x) * 0.5f, (thumbSize.y - size.y) * 0.5f);
-                    ImGui::SetCursorPos(imagePos);
-
-                    ImGui::Image((ImTextureID)(intptr_t)textureID, size);
-                    if (ImGui::IsItemClicked()) {
-                        if (onSelect) onSelect(entityID);
-                    }
+                    ImVec2 size = FitAspect(width, height, thumbnailSize);
+                    ImVec2 imagePos(thumbMin.x + (thumbnailSize - size.x) * 0.5f,
+                        thumbMin.y + (thumbnailSize - size.y) * 0.5f);
+                    dl->AddImage((ImTextureID)(intptr_t)textureID, imagePos, imagePos + size);
                 }
                 else {
-                    ImGui::Image((ImTextureID)(intptr_t)0, thumbSize);
-                    if (ImGui::IsItemClicked()) {
-                        if (onSelect) onSelect(entityID);
-                    }
-                    ImVec2 textSize = ImGui::CalcTextSize("?");
-                    float textX = ImGui::GetItemRectMin().x + (thumbSize.x - textSize.x) * 0.5f;
-                    float textY = ImGui::GetItemRectMin().y + (thumbSize.y - textSize.y) * 0.5f;
-                    ImGui::GetWindowDrawList()->AddText(ImVec2(textX, textY), IM_COL32(200, 200, 200, 255), "?");
+                    dl->AddRectFilled(thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 4.0f);
                 }
+
+                DrawTypeBadges(entityManager, entityID, thumbMin);
 
                 if (entityID == activeEntityID && entityID != 0) {
-                    ImVec2 cursorPos = ImGui::GetItemRectMin();
-                    ImVec2 itemSize = ImGui::GetItemRectSize();
-                    ImGui::GetWindowDrawList()->AddRect(cursorPos, cursorPos + itemSize, IM_COL32(255, 255, 0, 180), 2.0f, 0, 2.0f);
+                    dl->AddRect(thumbMin, thumbMax, IM_COL32(255, 255, 0, 200), 4.0f, 0, 2.0f);
+                }
+                else if (hovered) {
+                    dl->AddRect(thumbMin, thumbMax, IM_COL32(255, 255, 255, 160), 4.0f, 0, 1.5f);
                 }
 
-                if (ImGui::BeginPopupContextItem(("thumb_menu_" + std::to_string(index)).c_str())) {
+                if (ImGui::BeginPopupContextItem()) {
                     if (isEntityLoaded && entityID != 0) {
                         contextMenuUtils->RenderEntityContextMenuItems(entityID);
                     }
@@ -651,14 +745,21 @@ namespace GUI {
                     ImGui::EndPopup();
                 }
 
-                std::string displayName = fileName;
-                if (displayName.length() > 20) displayName = displayName.substr(0, 18) + "...";
-                ImGui::Text("%s", displayName.c_str());
+                ImGui::SetCursorScreenPos(ImVec2(cellMin.x, thumbMax.y + 4.0f));
 
-                ImGui::EndGroup();
-                ImGui::EndChild();
+                std::string displayName = TruncateToWidth(fileName, thumbnailSize);
+                float textWidth = ImGui::CalcTextSize(displayName.c_str()).x;
+                float textOffset = (thumbnailSize - textWidth) * 0.5f;
+                if (textOffset < 0.0f) textOffset = 0.0f;
 
-                if (ImGui::IsItemHovered()) {
+                ImGui::SetCursorScreenPos(ImVec2(cellMin.x + textOffset, thumbMax.y + 4.0f));
+                ImGui::TextUnformatted(displayName.c_str());
+
+                if (clicked) {
+                    if (onSelect) onSelect(entityID);
+                }
+
+                if (hovered) {
                     ImGui::BeginTooltip();
                     ImGui::Text("File: %s", fileName.c_str());
                     ImGui::Text("Path: %s", filePath.c_str());
@@ -699,11 +800,31 @@ namespace GUI {
                     }
                     ImGui::EndTooltip();
                 }
+
+                ImGui::EndGroup();
+                ImGui::PopID();
+                (void)cellWidth;
             }
             else if (mode == DisplayMode::Detailed) {
-                const float childWidth = thumbnailSize + 160;
-                const float childHeight = thumbnailSize + 60;
-                ImGui::BeginChild(("thumb_child_" + std::to_string(index)).c_str(), ImVec2(childWidth, childHeight), true);
+                // -----------------------------------------------------------------
+                // Detailed mode: bordered card with the thumbnail on the left and
+                // a scrollable metadata block on the right.
+                // -----------------------------------------------------------------
+                const float imageSize = thumbnailSize - 10.0f;
+                const float pad = 6.0f;
+                const float infoWidth = 190.0f;
+                const float childWidth = pad + imageSize + pad + infoWidth + pad;
+                const float childHeight = std::max(imageSize, 84.0f) + pad * 2.0f;
+
+                ImGui::PushID(("detailed_" + std::to_string(index)).c_str());
+                ImGui::BeginGroup();
+
+                ImVec2 cellMin = ImGui::GetCursorScreenPos();
+
+                ImGui::InvisibleButton("##detail_cell",
+                    ImVec2(childWidth, childHeight));
+                bool cellHovered = ImGui::IsItemHovered();
+                bool cellClicked = ImGui::IsItemClicked();
 
                 if (isEntityLoaded && entityID != 0) {
                     if (ImGui::BeginDragDropSource()) {
@@ -730,63 +851,67 @@ namespace GUI {
                     }
                 }
 
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+
+                ImVec2 cardMin = cellMin;
+                ImVec2 cardMax = ImVec2(cellMin.x + childWidth, cellMin.y + childHeight);
+
+                dl->AddRectFilled(cardMin, cardMax, IM_COL32(35, 35, 45, 220), 4.0f);
+
+                ImU32 borderCol;
+                float borderThick;
                 if (entityID == activeEntityID && entityID != 0) {
-                    ImVec2 cursorPos = ImGui::GetItemRectMin();
-                    ImVec2 itemSize = ImGui::GetItemRectSize();
-                    ImGui::GetWindowDrawList()->AddRect(cursorPos, cursorPos + itemSize, IM_COL32(255, 255, 0, 180), 2.0f, 0, 2.0f);
+                    borderCol = IM_COL32(255, 255, 0, 220);
+                    borderThick = 2.0f;
                 }
-
-                std::string displayName = fileName;
-                if (displayName.length() > 24) displayName = displayName.substr(0, 22) + "...";
-                ImGui::TextWrapped("%s", displayName.c_str());
-
-                float imageSize = thumbnailSize - 10;
-                ImVec2 cursor = ImGui::GetCursorPos();
-
-                if (isAudio) {
-                    ImDrawList* dl = ImGui::GetWindowDrawList();
-                    ImVec2 pos = ImGui::GetCursorScreenPos();
-                    dl->AddRectFilled(pos, pos + ImVec2(imageSize, imageSize), IM_COL32(60, 60, 80, 200));
-                    float iconSize = imageSize * 0.6f;
-                    float iconX = pos.x + (imageSize - iconSize) * 0.5f;
-                    float iconY = pos.y + (imageSize - iconSize) * 0.5f;
-                    dl->AddText(ImVec2(iconX, iconY), IM_COL32(255, 255, 255, 255), "?");
-                    if (ImGui::IsItemClicked()) {
-                        if (onSelect) onSelect(entityID);
-                    }
-                }
-                else if (textureID != 0 && width > 0 && height > 0) {
-                    float aspect = (height > 0) ? (float)width / height : 1.0f;
-                    ImVec2 size;
-                    if (aspect > 1.0f) {
-                        size.x = imageSize;
-                        size.y = imageSize / aspect;
-                    }
-                    else {
-                        size.x = imageSize * aspect;
-                        size.y = imageSize;
-                    }
-                    ImGui::SetCursorPos(cursor + ImVec2((imageSize - size.x) * 0.5f, 0));
-
-                    ImGui::Image((ImTextureID)(intptr_t)textureID, size);
-                    if (ImGui::IsItemClicked()) {
-                        if (onSelect) onSelect(entityID);
-                    }
+                else if (cellHovered) {
+                    borderCol = IM_COL32(255, 255, 255, 200);
+                    borderThick = 1.5f;
                 }
                 else {
-                    ImGui::SetCursorPos(cursor);
-                    ImGui::Image((ImTextureID)(intptr_t)0, ImVec2(imageSize, imageSize));
-                    if (ImGui::IsItemClicked()) {
-                        if (onSelect) onSelect(entityID);
-                    }
-                    ImVec2 textSize = ImGui::CalcTextSize("?");
-                    float textX = ImGui::GetItemRectMin().x + (imageSize - textSize.x) * 0.5f;
-                    float textY = ImGui::GetItemRectMin().y + (imageSize - textSize.y) * 0.5f;
-                    ImGui::GetWindowDrawList()->AddText(ImVec2(textX, textY), IM_COL32(200, 200, 200, 255), "?");
+                    borderCol = IM_COL32(90, 90, 110, 200);
+                    borderThick = 1.0f;
+                }
+                dl->AddRect(cardMin, cardMax, borderCol, 4.0f, 0, borderThick);
+
+                ImVec2 thumbMin(cardMin.x + pad, cardMin.y + pad);
+                ImVec2 thumbMax(thumbMin.x + imageSize, thumbMin.y + imageSize);
+
+                if (isAudio) {
+                    dl->AddRectFilled(thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 4.0f);
+                    DrawAudioIcon(thumbMin, thumbMax);
+                }
+                else if (textureID != 0 && width > 0 && height > 0) {
+                    ImVec2 size = FitAspect(width, height, imageSize);
+                    ImVec2 imagePos(thumbMin.x + (imageSize - size.x) * 0.5f,
+                        thumbMin.y + (imageSize - size.y) * 0.5f);
+                    dl->AddImage((ImTextureID)(intptr_t)textureID, imagePos, imagePos + size);
+                }
+                else {
+                    dl->AddRectFilled(thumbMin, thumbMax, IM_COL32(60, 60, 80, 200), 4.0f);
                 }
 
-                ImGui::SameLine(0, 4);
-                ImGui::BeginGroup();
+                DrawTypeBadges(entityManager, entityID, thumbMin);
+
+                // Info block on the right, inside a scrollable child region.
+                float textX = thumbMax.x + pad;
+                float infoHeight = imageSize;
+                float infoWidthAvail = cardMax.x - textX - pad;
+
+                ImGui::SetCursorScreenPos(ImVec2(textX, cardMin.y + pad));
+
+                ImGui::BeginChild(
+                    ("##detail_info_" + std::to_string(index)).c_str(),
+                    ImVec2(infoWidthAvail, infoHeight),
+                    false,
+                    ImGuiWindowFlags_HorizontalScrollbar
+                );
+
+                float availableTextWidth =
+                    infoWidthAvail - ImGui::GetStyle().ScrollbarSize - 4.0f;
+
+                std::string displayName = TruncateToWidth(fileName, availableTextWidth);
+                ImGui::TextUnformatted(displayName.c_str());
 
                 std::string sizeStr = FormatFileSize(fileSize);
                 std::string channelStr = GetChannelString(channels);
@@ -813,22 +938,25 @@ namespace GUI {
                     if (sampleRate > 0) ImGui::Text("%d Hz", sampleRate);
                 }
 
-                auto getStatusColor = [hasAniStudioMetadata](bool flag) -> ImVec4 {
-                    if (flag) {
-                        if (hasAniStudioMetadata) {
-                            return ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
-                        }
-                        else {
-                            return ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
-                        }
-                    }
-                    else {
-                        return ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
-                    }
-                    };
+                ImVec4 exifColor;
+                if (hasExif) {
+                    exifColor = hasAniStudioMetadata
+                        ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+                        : ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                }
+                else {
+                    exifColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                }
 
-                ImVec4 exifColor = getStatusColor(hasExif);
-                ImVec4 lsbColor = getStatusColor(hasLSB);
+                ImVec4 lsbColor;
+                if (hasLSB) {
+                    lsbColor = hasAniStudioMetadata
+                        ? ImVec4(0.0f, 1.0f, 0.0f, 1.0f)
+                        : ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+                }
+                else {
+                    lsbColor = ImVec4(0.5f, 0.5f, 0.5f, 1.0f);
+                }
 
                 ImGui::TextColored(exifColor, "EXIF");
                 ImGui::SameLine();
@@ -836,9 +964,9 @@ namespace GUI {
                 ImGui::SameLine();
                 ImGui::TextColored(lsbColor, "LSB");
 
-                ImGui::EndGroup();
+                ImGui::EndChild();
 
-                if (ImGui::BeginPopupContextWindow()) {
+                if (ImGui::BeginPopupContextItem()) {
                     if (isEntityLoaded && entityID != 0) {
                         contextMenuUtils->RenderEntityContextMenuItems(entityID);
                     }
@@ -854,9 +982,11 @@ namespace GUI {
                     ImGui::EndPopup();
                 }
 
-                ImGui::EndChild();
+                if (cellClicked) {
+                    if (onSelect) onSelect(entityID);
+                }
 
-                if (ImGui::IsItemHovered()) {
+                if (cellHovered) {
                     ImGui::BeginTooltip();
                     ImGui::Text("File: %s", fileName.c_str());
                     ImGui::Text("Path: %s", filePath.c_str());
@@ -897,6 +1027,9 @@ namespace GUI {
                     }
                     ImGui::EndTooltip();
                 }
+
+                ImGui::EndGroup();
+                ImGui::PopID();
             }
         }
 

@@ -15,7 +15,12 @@
 #include <sstream>
 #include <algorithm>
 #include <iostream>
+#include <mutex>
+#include <unordered_map>
+
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 namespace Utils {
 
@@ -27,6 +32,7 @@ namespace Utils {
     }
 
     bool ContextMenuUtils::SetClipboardDIB(unsigned char* data, int width, int height, int channels) {
+#ifdef _WIN32
         if (!data || width <= 0 || height <= 0 || channels < 1 || channels > 4) return false;
 
         int bpp = 0;
@@ -110,6 +116,13 @@ namespace Utils {
             return false;
         }
         return true;
+#else
+        (void)data;
+        (void)width;
+        (void)height;
+        (void)channels;
+        return false;
+#endif
     }
 
     void ContextMenuUtils::RenderEntityContextMenu(ECS::EntityID entityId) {

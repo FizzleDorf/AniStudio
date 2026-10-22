@@ -5,6 +5,7 @@
 #include <iostream>
 #include <filesystem>
 #include <ctime>
+#include <cstring>
 #include <nlohmann/json.hpp>
 #include <png.h>
 
@@ -90,20 +91,34 @@ namespace Utils {
             png_init_io(png, fp);
             png_read_info(png, info);
 
-            png_textp text_ptr;
-            int num_text;
-            if (png_get_text(png, info, &text_ptr, &num_text) > 0) {
+            png_textp text_ptr = nullptr;
+            int num_text = 0;
+            if (png_get_text(png, info, &text_ptr, &num_text) > 0 && text_ptr != nullptr) {
                 for (int i = 0; i < num_text; i++) {
-                    std::string text = text_ptr[i].text;
+                    const char* key = text_ptr[i].key;
+                    const char* txt = text_ptr[i].text;
+                    if (key == nullptr || txt == nullptr) {
+                        continue;
+                    }
+
+                    size_t txtLen = static_cast<size_t>(text_ptr[i].text_length);
+                    if (txtLen == 0) {
+                        txtLen = std::strlen(txt);
+                    }
+                    if (txtLen == 0) {
+                        continue;
+                    }
+
+                    std::string text(txt, txtLen);
                     try {
                         nlohmann::json parsed = nlohmann::json::parse(text);
                         if (parsed.is_object() || parsed.is_array()) {
-                            result[text_ptr[i].key] = parsed;
-                            std::cout << "Loaded JSON from PNG chunk: " << text_ptr[i].key << std::endl;
+                            result[key] = parsed;
+                            std::cout << "Loaded JSON from PNG chunk: " << key << std::endl;
                         }
                     }
                     catch (...) {
-                        result[text_ptr[i].key] = text;
+                        result[key] = text;
                     }
                 }
             }
@@ -176,8 +191,27 @@ namespace Utils {
         }
 #endif
 
+        static nlohmann::json UnwrapSingleJsonValue(const nlohmann::json& meta) {
+            if (!meta.is_object() || meta.size() != 1) return meta;
+            for (auto it = meta.begin(); it != meta.end(); ++it) {
+                if (!it.value().is_string()) continue;
+                try {
+                    nlohmann::json inner = nlohmann::json::parse(it.value().get<std::string>());
+                    if (inner.is_object() || inner.is_array()) return inner;
+                }
+                catch (...) {}
+            }
+            return meta;
+        }
+
         static nlohmann::json NormalizeAniStudioMetadata(const nlohmann::json& meta) {
             if (meta.is_null() || !meta.is_object()) return meta;
+
+            nlohmann::json unwrapped = UnwrapSingleJsonValue(meta);
+            if (!unwrapped.is_null() && (unwrapped.is_object() || unwrapped.is_array()) &&
+                unwrapped != meta) {
+                return NormalizeAniStudioMetadata(unwrapped);
+            }
 
             nlohmann::json result = meta;
 

@@ -2,8 +2,9 @@
 #include "BaseDiffusionView.hpp"
 #include "Events.hpp"
 #include "UISchema.hpp"
-#include "SDcppSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SDCPPSystem.hpp"
+#include "SettingsSystem.hpp"
+#include "FilePathComponent.hpp"
 #include "FileDialogUtil.hpp"
 #include "FileDialogFilters.hpp"
 #include "VectorWidgets.hpp"
@@ -16,6 +17,7 @@
 #include <filesystem>
 #include <fstream>
 #include <unordered_map>
+#include <map>
 #include <typeinfo>
 
 using namespace ECS;
@@ -23,10 +25,111 @@ using namespace ANI;
 
 namespace GUI {
 
+    // ---------------------------------------------------------------
+    // Component table
+    // ---------------------------------------------------------------
+    void BaseDiffusionView::BuildComponentTable() {
+        m_components.clear();
+
+        auto addTyped = [&](auto typedTag, const char* name) {
+            using T = typename decltype(typedTag)::Type;
+
+            ComponentEntry e{};
+            e.name = name;
+
+            T probe{};
+            std::string cat = probe.GetCompCategory();
+            if (cat.empty()) cat = "Other";
+            e.category = std::move(cat);
+
+            e.add = [this](ECS::EntityID id) { m_entityManager.AddComponent<T>(id); };
+            e.present = [this](ECS::EntityID id) { return m_entityManager.HasComponent<T>(id); };
+            e.remove = [this](ECS::EntityID id) { m_entityManager.RemoveComponent<T>(id); };
+            e.render = [this, name]() { RenderComponentByType<T>(name); };
+
+            m_components.push_back(std::move(e));
+            };
+
+        struct T_Checkpoint { using Type = CheckpointComponent; };
+        struct T_DiffusionModel { using Type = DiffusionModelComponent; };
+        struct T_ClipL { using Type = ClipLComponent; };
+        struct T_ClipG { using Type = ClipGComponent; };
+        struct T_T5XXL { using Type = T5XXLComponent; };
+        struct T_ClipVision { using Type = ClipVisionComponent; };
+        struct T_LlmEncoder { using Type = LlmEncoderComponent; };
+        struct T_LlmVision { using Type = LlmVisionComponent; };
+        struct T_Vae { using Type = VaeComponent; };
+        struct T_VaeTiling { using Type = VaeTilingComponent; };
+        struct T_Taesd { using Type = TaesdComponent; };
+        struct T_AudioVae { using Type = AudioVaeComponent; };
+        struct T_Latent { using Type = LatentComponent; };
+        struct T_Sampler { using Type = SamplerComponent; };
+        struct T_Guidance { using Type = GuidanceComponent; };
+        struct T_Prompt { using Type = PromptComponent; };
+        struct T_OutputImage { using Type = OutputImageComponent; };
+        struct T_InputImage { using Type = InputImageComponent; };
+        struct T_InputVideo { using Type = InputVideoComponent; };
+        struct T_OutputVideo { using Type = OutputVideoComponent; };
+        struct T_Lora { using Type = LoraComponent; };
+        struct T_ControlNet { using Type = ControlNetComponent; };
+        struct T_Embeddings { using Type = EmbeddingsComponent; };
+        struct T_RefImages { using Type = RefImagesComponent; };
+        struct T_ControlFrames { using Type = ControlFramesComponent; };
+        struct T_RefVideo { using Type = RefVideoComponent; };
+        struct T_RefAudio { using Type = RefAudioComponent; };
+        struct T_PhotoMaker { using Type = PhotoMakerComponent; };
+        struct T_StackedIdEmbed { using Type = StackedIdEmbedComponent; };
+        struct T_Conversion { using Type = ConversionComponent; };
+        struct T_Esrgan { using Type = EsrganComponent; };
+        struct T_HighNoiseModel { using Type = HighNoiseDiffusionModelComponent; };
+        struct T_HighNoiseSampler { using Type = HighNoiseSamplerComponent; };
+        struct T_EasyCache { using Type = EasyCacheComponent; };
+
+        addTyped(T_Checkpoint{}, "Checkpoint");
+        addTyped(T_DiffusionModel{}, "DiffusionModel");
+        addTyped(T_ClipL{}, "ClipL");
+        addTyped(T_ClipG{}, "ClipG");
+        addTyped(T_T5XXL{}, "T5XXL");
+        addTyped(T_ClipVision{}, "ClipVision");
+        addTyped(T_LlmEncoder{}, "LlmEncoder");
+        addTyped(T_LlmVision{}, "LlmVision");
+        addTyped(T_Vae{}, "Vae");
+        addTyped(T_VaeTiling{}, "VaeTiling");
+        addTyped(T_Taesd{}, "Taesd");
+        addTyped(T_AudioVae{}, "AudioVae");
+        addTyped(T_Latent{}, "Latent");
+        addTyped(T_Sampler{}, "Sampler");
+        addTyped(T_Guidance{}, "Guidance");
+        addTyped(T_Prompt{}, "Prompt");
+        addTyped(T_OutputImage{}, "OutputImage");
+        addTyped(T_InputImage{}, "InputImage");
+        addTyped(T_InputVideo{}, "InputVideo");
+        addTyped(T_OutputVideo{}, "OutputVideo");
+        addTyped(T_Lora{}, "Lora");
+        addTyped(T_ControlNet{}, "ControlNet");
+        addTyped(T_Embeddings{}, "Embeddings");
+        addTyped(T_RefImages{}, "RefImages");
+        addTyped(T_ControlFrames{}, "ControlFrames");
+        addTyped(T_RefVideo{}, "RefVideo");
+        addTyped(T_RefAudio{}, "RefAudio");
+        addTyped(T_PhotoMaker{}, "PhotoMaker");
+        addTyped(T_StackedIdEmbed{}, "StackedIdEmbed");
+        addTyped(T_Conversion{}, "Conversion");
+        addTyped(T_Esrgan{}, "Esrgan");
+        addTyped(T_HighNoiseModel{}, "HighNoiseDiffusionModel");
+        addTyped(T_HighNoiseSampler{}, "HighNoiseSampler");
+        addTyped(T_EasyCache{}, "EasyCache");
+
+        std::sort(m_components.begin(), m_components.end(),
+            [](const ComponentEntry& a, const ComponentEntry& b) {
+                return std::string(a.name) < std::string(b.name);
+            });
+    }
+
     BaseDiffusionView::BaseDiffusionView(ECS::EntityManager& mgr, ViewManager& vm)
         : BaseView(mgr, vm) {
         contextMenuUtils = std::make_unique<Utils::ContextMenuUtils>(m_entityManager);
-        RegisterAllComponentAdders();
+        BuildComponentTable();
         m_quickLoaded = false;
         m_hasRestoredState = false;
         ANI_LOG_DEBUG("Constructed (view='%s')", viewName.c_str());
@@ -51,48 +154,6 @@ namespace GUI {
             activeEntity = m_entityManager.AddNewEntity();
             ANI_LOG_DEBUG("Init: created placeholder activeEntity=%u", (unsigned)activeEntity);
         }
-
-        // NOTE: Do NOT call ResetToDefaults() here.
-        // ViewManager calls Init() then Deserialize(). If no Deserialize() happens,
-        // Render() will fall back to defaults on the first frame.
-    }
-
-    void BaseDiffusionView::RegisterAllComponentAdders() {
-        using namespace ECS;
-        m_componentAdders["Checkpoint"] = [this](EntityID e) { this->m_entityManager.AddComponent<CheckpointComponent>(e); };
-        m_componentAdders["DiffusionModel"] = [this](EntityID e) { this->m_entityManager.AddComponent<DiffusionModelComponent>(e); };
-        m_componentAdders["ClipL"] = [this](EntityID e) { this->m_entityManager.AddComponent<ClipLComponent>(e); };
-        m_componentAdders["ClipG"] = [this](EntityID e) { this->m_entityManager.AddComponent<ClipGComponent>(e); };
-        m_componentAdders["T5XXL"] = [this](EntityID e) { this->m_entityManager.AddComponent<T5XXLComponent>(e); };
-        m_componentAdders["ClipVision"] = [this](EntityID e) { this->m_entityManager.AddComponent<ClipVisionComponent>(e); };
-        m_componentAdders["LlmEncoder"] = [this](EntityID e) { this->m_entityManager.AddComponent<LlmEncoderComponent>(e); };
-        m_componentAdders["LlmVision"] = [this](EntityID e) { this->m_entityManager.AddComponent<LlmVisionComponent>(e); };
-        m_componentAdders["Vae"] = [this](EntityID e) { this->m_entityManager.AddComponent<VaeComponent>(e); };
-        m_componentAdders["VaeTiling"] = [this](EntityID e) { this->m_entityManager.AddComponent<VaeTilingComponent>(e); };
-        m_componentAdders["Taesd"] = [this](EntityID e) { this->m_entityManager.AddComponent<TaesdComponent>(e); };
-        m_componentAdders["AudioVae"] = [this](EntityID e) { this->m_entityManager.AddComponent<AudioVaeComponent>(e); };
-        m_componentAdders["Latent"] = [this](EntityID e) { this->m_entityManager.AddComponent<LatentComponent>(e); };
-        m_componentAdders["Sampler"] = [this](EntityID e) { this->m_entityManager.AddComponent<SamplerComponent>(e); };
-        m_componentAdders["Guidance"] = [this](EntityID e) { this->m_entityManager.AddComponent<GuidanceComponent>(e); };
-        m_componentAdders["Prompt"] = [this](EntityID e) { this->m_entityManager.AddComponent<PromptComponent>(e); };
-        m_componentAdders["OutputImage"] = [this](EntityID e) { this->m_entityManager.AddComponent<OutputImageComponent>(e); };
-        m_componentAdders["InputImage"] = [this](EntityID e) { this->m_entityManager.AddComponent<InputImageComponent>(e); };
-        m_componentAdders["InputVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<InputVideoComponent>(e); };
-        m_componentAdders["OutputVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<OutputVideoComponent>(e); };
-        m_componentAdders["Lora"] = [this](EntityID e) { this->m_entityManager.AddComponent<LoraComponent>(e); };
-        m_componentAdders["ControlNet"] = [this](EntityID e) { this->m_entityManager.AddComponent<ControlNetComponent>(e); };
-        m_componentAdders["Embeddings"] = [this](EntityID e) { this->m_entityManager.AddComponent<EmbeddingsComponent>(e); };
-        m_componentAdders["RefImages"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefImagesComponent>(e); };
-        m_componentAdders["ControlFrames"] = [this](EntityID e) { this->m_entityManager.AddComponent<ControlFramesComponent>(e); };
-        m_componentAdders["RefVideo"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefVideoComponent>(e); };
-        m_componentAdders["RefAudio"] = [this](EntityID e) { this->m_entityManager.AddComponent<RefAudioComponent>(e); };
-        m_componentAdders["PhotoMaker"] = [this](EntityID e) { this->m_entityManager.AddComponent<PhotoMakerComponent>(e); };
-        m_componentAdders["StackedIdEmbed"] = [this](EntityID e) { this->m_entityManager.AddComponent<StackedIdEmbedComponent>(e); };
-        m_componentAdders["Conversion"] = [this](EntityID e) { this->m_entityManager.AddComponent<ConversionComponent>(e); };
-        m_componentAdders["Esrgan"] = [this](EntityID e) { this->m_entityManager.AddComponent<EsrganComponent>(e); };
-        m_componentAdders["HighNoiseDiffusionModel"] = [this](EntityID e) { this->m_entityManager.AddComponent<HighNoiseDiffusionModelComponent>(e); };
-        m_componentAdders["HighNoiseSampler"] = [this](EntityID e) { this->m_entityManager.AddComponent<HighNoiseSamplerComponent>(e); };
-        m_componentAdders["EasyCache"] = [this](EntityID e) { this->m_entityManager.AddComponent<EasyCacheComponent>(e); };
     }
 
     void BaseDiffusionView::ResetToDefaults() {
@@ -108,31 +169,22 @@ namespace GUI {
 
         ANI_LOG_DEBUG("ResetToDefaults: new activeEntity=%u", (unsigned)activeEntity);
 
-        auto filteredComponents = GetFilteredComponents();
+        auto filtered = GetFilteredComponents();
         std::string defaultModel = GetDefaultModelComponent();
 
-        for (size_t i = 0; i < ALL_COMPONENTS_COUNT; ++i) {
-            std::string name(ALL_COMPONENTS[i]);
+        for (auto& e : m_components) {
+            std::string name(e.name);
 
-            if (std::find(filteredComponents.begin(), filteredComponents.end(), name) != filteredComponents.end()) {
+            if (std::find(filtered.begin(), filtered.end(), name) != filtered.end())
                 continue;
-            }
 
             if (name == "DiffusionModel" || name == "Checkpoint") {
-                if (name != defaultModel) {
-                    continue;
-                }
+                if (name != defaultModel) continue;
             }
 
-            auto it = m_componentAdders.find(name);
-            if (it != m_componentAdders.end()) {
-                ANI_LOG_TRACE("ResetToDefaults: adding '%s' to activeEntity %u",
-                    name.c_str(), (unsigned)activeEntity);
-                it->second(activeEntity);
-            }
-            else {
-                ANI_LOG_WARN("ResetToDefaults: no adder registered for '%s'", name.c_str());
-            }
+            ANI_LOG_TRACE("ResetToDefaults: adding '%s' to activeEntity %u",
+                name.c_str(), (unsigned)activeEntity);
+            e.add(activeEntity);
         }
 
         m_hasRestoredState = true;
@@ -140,47 +192,11 @@ namespace GUI {
         ANI_LOG_INFO("ResetToDefaults: done. activeEntity=%u", (unsigned)activeEntity);
     }
 
-    void BaseDiffusionView::RemoveComponentFromActive(const std::string& name) {
-        auto compId = m_entityManager.GetComponentTypeIdByName(name);
-        if (compId != 0 && m_entityManager.HasComponentById(activeEntity, compId)) {
-            m_entityManager.RemoveComponentById(activeEntity, compId);
-            ANI_LOG_DEBUG("RemoveComponentFromActive: removed '%s' from entity %u",
-                name.c_str(), (unsigned)activeEntity);
-        }
-    }
-
-    std::vector<std::string> BaseDiffusionView::GetAllComponentNames() const {
-        std::vector<std::string> names;
-        for (const auto& [name, _] : m_componentAdders) {
-            names.push_back(name);
-        }
-        return names;
-    }
-
     void BaseDiffusionView::AddComponentByName(ECS::EntityID entity, const std::string& name) {
-        auto it = m_componentAdders.find(name);
-        if (it != m_componentAdders.end()) {
-            it->second(entity);
-            return;
+        for (auto& e : m_components) {
+            if (name == e.name) { e.add(entity); return; }
         }
-        std::string withoutSuffix = name;
-        if (withoutSuffix.size() > 9 && withoutSuffix.substr(withoutSuffix.size() - 9) == "Component") {
-            withoutSuffix = withoutSuffix.substr(0, withoutSuffix.size() - 9);
-            auto itShort = m_componentAdders.find(withoutSuffix);
-            if (itShort != m_componentAdders.end()) {
-                ANI_LOG_TRACE("AddComponentByName: resolved '%s' via suffix strip", name.c_str());
-                itShort->second(entity);
-                return;
-            }
-        }
-        std::string withSuffix = name + "Component";
-        auto itWith = m_componentAdders.find(withSuffix);
-        if (itWith != m_componentAdders.end()) {
-            ANI_LOG_TRACE("AddComponentByName: resolved '%s' via suffix append", name.c_str());
-            itWith->second(entity);
-            return;
-        }
-        ANI_LOG_ERROR("No adder found for component: %s", name.c_str());
+        ANI_LOG_ERROR("No component registered with name: %s", name.c_str());
     }
 
     bool BaseDiffusionView::IsComponentFiltered(const std::string& name) const {
@@ -188,20 +204,23 @@ namespace GUI {
         return std::find(filtered.begin(), filtered.end(), name) != filtered.end();
     }
 
-    void BaseDiffusionView::RenderComponent(ECS::ComponentTypeID compId, const std::string& name) {
-        auto* comp = m_entityManager.GetComponentById(activeEntity, compId);
-
-        if (!comp) {
-            ImGui::TextColored(ImVec4(1, 1, 0, 1), "Component %s not on active entity", name.c_str());
+    template<typename T>
+    void BaseDiffusionView::RenderComponentByType(const char* name) {
+        if (!m_entityManager.HasComponent<T>(activeEntity)) {
             return;
         }
 
-        ImGui::PushID(name.c_str());
+        auto& comp = m_entityManager.GetComponent<T>(activeEntity);
 
-        if (ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::PushID(name);
+
+        if (m_expandAllRequested)   ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+        if (m_collapseAllRequested) ImGui::SetNextItemOpen(false, ImGuiCond_Always);
+
+        if (ImGui::CollapsingHeader(name, ImGuiTreeNodeFlags_DefaultOpen)) {
             ImGui::Indent();
 
-            if (ImGui::BeginPopupContextItem(("ComponentContext_" + name).c_str())) {
+            if (ImGui::BeginPopupContextItem(("ComponentContext_" + std::string(name)).c_str())) {
                 if (ImGui::MenuItem("Copy Entity")) {
                     Clipboard::CopyEntity(m_entityManager, activeEntity);
                 }
@@ -232,7 +251,7 @@ namespace GUI {
 
                 ImGui::Separator();
 
-                auto props = comp->GetPropertyMap();
+                auto props = comp.GetPropertyMap();
                 if (!props.empty()) {
                     if (ImGui::BeginMenu("Copy Value")) {
                         for (const auto& [propName, propVariant] : props) {
@@ -263,101 +282,70 @@ namespace GUI {
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("Remove Component")) {
-                    Clipboard::RemoveComponent(m_entityManager, activeEntity, name);
+                    m_entityManager.RemoveComponent<T>(activeEntity);
                 }
                 if (ImGui::MenuItem("Reset Component")) {
-                    Clipboard::ResetComponent(m_entityManager, activeEntity, name,
-                        [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
+                    m_entityManager.RemoveComponent<T>(activeEntity);
+                    m_entityManager.AddComponent<T>(activeEntity);
                 }
                 ImGui::EndPopup();
             }
 
             const std::unordered_map<std::string, std::string>* pathMap = nullptr;
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (filePathSys) {
-                auto fileCompId = m_entityManager.GetComponentTypeIdByName("FilePathComponent");
-                if (fileCompId != 0) {
-                    auto* base = m_entityManager.GetComponentById(filePathSys->GetEntityID(), fileCompId);
-                    if (auto* fpComp = dynamic_cast<ECS::FilePathComponent*>(base)) {
-                        pathMap = &fpComp->GetPathMap();
-                    }
-                }
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (ss && m_entityManager.HasComponent<ECS::FilePathComponent>(ss->GetSettingsEntity())) {
+                auto& fpComp = m_entityManager.GetComponent<ECS::FilePathComponent>(ss->GetSettingsEntity());
+                pathMap = &fpComp.GetCurrentMap();
             }
 
-            if (name == "Lora") {
-                auto* loraComp = dynamic_cast<LoraComponent*>(comp);
-                if (loraComp) {
-                    VectorWidgets::RenderLoraList(loraComp->loras);
-                }
+            if constexpr (std::is_same_v<T, LoraComponent>) {
+                VectorWidgets::RenderLoraList(comp.loras);
             }
-            else if (name == "Embeddings") {
-                auto* embsComp = dynamic_cast<EmbeddingsComponent*>(comp);
-                if (embsComp) {
-                    VectorWidgets::RenderEmbeddingsPairList(embsComp->embeddings);
-                }
+            else if constexpr (std::is_same_v<T, EmbeddingsComponent>) {
+                VectorWidgets::RenderEmbeddingsPairList(comp.embeddings);
             }
-            else if (name == "RefImages") {
-                auto* refComp = dynamic_cast<RefImagesComponent*>(comp);
-                if (refComp) {
-                    VectorWidgets::RenderFilePathList(refComp->ref_image_paths);
-                }
+            else if constexpr (std::is_same_v<T, RefImagesComponent>) {
+                VectorWidgets::RenderFilePathList(comp.ref_image_paths);
             }
-            else if (name == "ControlFrames") {
-                auto* cfComp = dynamic_cast<ControlFramesComponent*>(comp);
-                if (cfComp) {
-                    VectorWidgets::RenderFilePathList(cfComp->filePaths);
-                }
+            else if constexpr (std::is_same_v<T, ControlFramesComponent>) {
+                VectorWidgets::RenderFilePathList(comp.filePaths);
             }
-            else if (name == "RefVideo") {
-                auto* rvComp = dynamic_cast<RefVideoComponent*>(comp);
-                if (rvComp) {
-                    VectorWidgets::RenderStringList(rvComp->videoPaths);
-                }
+            else if constexpr (std::is_same_v<T, RefVideoComponent>) {
+                VectorWidgets::RenderStringList(comp.videoPaths);
             }
-            else if (name == "RefAudio") {
-                auto* raComp = dynamic_cast<RefAudioComponent*>(comp);
-                if (raComp) {
-                    VectorWidgets::RenderStringList(raComp->audioPaths);
-                }
+            else if constexpr (std::is_same_v<T, RefAudioComponent>) {
+                VectorWidgets::RenderStringList(comp.audioPaths);
             }
-            else if (name == "RefVideoAudio") {
-                auto* rvaComp = dynamic_cast<RefVideoAudioComponent*>(comp);
-                if (rvaComp) {
-                    VectorWidgets::RenderStringList(rvaComp->audioPaths);
-                }
-            }
-            else if (name == "CustomSigmas") {
-                auto* csComp = dynamic_cast<CustomSigmasComponent*>(comp);
-                if (csComp) {
-                    VectorWidgets::RenderFloatList(csComp->custom_sigmas);
-                }
+            else if constexpr (std::is_same_v<T, CustomSigmasComponent>) {
+                VectorWidgets::RenderFloatList(comp.custom_sigmas);
             }
             else {
-                const auto& schema = comp->GetSchema();
+                const auto& schema = comp.GetSchema();
 
-                if (schema.empty()) {
-                    ImGui::TextColored(ImVec4(0.5, 0.5, 0.5, 1), "No schema for %s", name.c_str());
+                if (!schema.is_object() || schema.empty()) {
+                    ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "No schema for %s", name);
                 }
                 else {
-                    auto onPropRightClick = [this, name](const std::string& propName, const nlohmann::json& value) {
-                        ImGui::OpenPopup(("PropContext_" + name + "_" + propName).c_str());
-                        if (ImGui::BeginPopup(("PropContext_" + name + "_" + propName).c_str())) {
+                    std::string nameStr = name;
+                    auto onPropRightClick = [this, nameStr](const std::string& propName, const nlohmann::json&) {
+                        ImGui::OpenPopup(("PropContext_" + nameStr + "_" + propName).c_str());
+                        if (ImGui::BeginPopup(("PropContext_" + nameStr + "_" + propName).c_str())) {
                             if (ImGui::MenuItem("Copy Value")) {
-                                Clipboard::CopyProperty(m_entityManager, activeEntity, name, propName);
+                                Clipboard::CopyProperty(m_entityManager, activeEntity, nameStr, propName);
                             }
                             if (Clipboard::HasProperty() && ImGui::MenuItem("Paste Value")) {
-                                Clipboard::PasteProperty(m_entityManager, activeEntity, name, propName);
+                                Clipboard::PasteProperty(m_entityManager, activeEntity, nameStr, propName);
                             }
-                            if (Clipboard::HasEntity() && Clipboard::EntityClipboardHasProperty(m_entityManager, name, propName)) {
+                            if (Clipboard::HasEntity() && Clipboard::EntityClipboardHasProperty(m_entityManager, nameStr, propName)) {
                                 if (ImGui::MenuItem("Paste Value from Copied Entity")) {
-                                    Clipboard::PastePropertyFromEntity(m_entityManager, activeEntity, name, propName);
+                                    Clipboard::PastePropertyFromEntity(m_entityManager, activeEntity, nameStr, propName);
                                 }
                             }
                             ImGui::EndPopup();
                         }
                         };
-
-                    UISchema::RenderSchema(schema, comp->GetPropertyMap(), onPropRightClick, name, activeEntity, pathMap);
+                    Engine::PropertyMap props = comp.GetPropertyMap();
+                    UISchema::RenderSchema(schema, props, onPropRightClick, nameStr, activeEntity, pathMap);
                 }
             }
 
@@ -368,22 +356,45 @@ namespace GUI {
     }
 
     void BaseDiffusionView::RenderComponentsUI() {
-        auto compIds = m_entityManager.GetEntityComponents(activeEntity);
+        bool any = false;
+        for (auto& e : m_components) {
+            if (e.present(activeEntity)) { any = true; break; }
+        }
 
-        if (compIds.empty()) {
-            ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "No active components.");
+        if (!any) {
+            ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "No active components.");
             return;
         }
 
-        std::vector<std::pair<ECS::ComponentTypeID, std::string>> comps;
-        comps.reserve(compIds.size());
-        for (auto cid : compIds) {
-            comps.emplace_back(cid, m_entityManager.GetComponentNameById(cid));
+        for (auto& e : m_components) {
+            if (e.present(activeEntity)) {
+                e.render();
+            }
         }
-        std::sort(comps.begin(), comps.end(), [](auto& a, auto& b) { return a.second < b.second; });
 
-        for (auto [cid, name] : comps) {
-            RenderComponent(cid, name);
+        m_expandAllRequested = false;
+        m_collapseAllRequested = false;
+    }
+
+    void BaseDiffusionView::RenderAddRemoveComponentsMenu() {
+        std::map<std::string, std::vector<const ComponentEntry*>> byCategory;
+        for (auto& e : m_components) {
+            std::string cat = e.category.empty() ? "Other" : e.category;
+            byCategory[cat].push_back(&e);
+        }
+
+        for (auto& [category, entries] : byCategory) {
+            if (!ImGui::BeginMenu(category.c_str())) continue;
+
+            for (auto* e : entries) {
+                bool present = e->present(activeEntity);
+                if (ImGui::MenuItem(e->name, nullptr, present)) {
+                    if (present) e->remove(activeEntity);
+                    else         e->add(activeEntity);
+                }
+            }
+
+            ImGui::EndMenu();
         }
     }
 
@@ -391,19 +402,12 @@ namespace GUI {
         if (ImGui::BeginMenuBar()) {
             if (ImGui::BeginMenu("File")) {
                 std::string defaultProjectPath;
-                auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                if (filePathSys) {
-                    auto compId = m_entityManager.GetComponentTypeIdByName("FilePathComponent");
-                    if (compId != 0) {
-                        auto* base = m_entityManager.GetComponentById(filePathSys->GetEntityID(), compId);
-                        if (auto* fpComp = dynamic_cast<ECS::FilePathComponent*>(base)) {
-                            const auto& pathMap = fpComp->GetPathMap();
-                            auto it = pathMap.find("DefaultProject");
-                            if (it != pathMap.end()) {
-                                defaultProjectPath = it->second;
-                            }
-                        }
-                    }
+                auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                if (ss && m_entityManager.HasComponent<ECS::FilePathComponent>(ss->GetSettingsEntity())) {
+                    auto& fpComp = m_entityManager.GetComponent<ECS::FilePathComponent>(ss->GetSettingsEntity());
+                    const auto& pathMap = fpComp.GetCurrentMap();
+                    auto it = pathMap.find("DefaultProject");
+                    if (it != pathMap.end()) defaultProjectPath = it->second;
                 }
 
                 if (ImGui::MenuItem("Save Metadata...")) {
@@ -419,21 +423,20 @@ namespace GUI {
                     std::string selectedFile;
                     if (FileDialog::OpenFile("Load Metadata", FileDialog::FilterType::METADATA_FILE, selectedFile, defaultPath)) {
                         std::string ext = std::filesystem::path(selectedFile).extension().string();
-                        if (ext == ".json")
-                            LoadMetadataFromJson(selectedFile);
-                        else
-                            LoadMetadataFromMedia(selectedFile);
+                        if (ext == ".json") LoadMetadataFromJson(selectedFile);
+                        else                LoadMetadataFromMedia(selectedFile);
                     }
                 }
-                if (ImGui::MenuItem("Quick Save"))
-                    QuickSave();
-                if (ImGui::MenuItem("Quick Load"))
-                    QuickLoad();
+                if (ImGui::MenuItem("Quick Save")) QuickSave();
+                if (ImGui::MenuItem("Quick Load")) QuickLoad();
                 ImGui::Separator();
-                if (ImGui::MenuItem("Reset View"))
-                    ResetToDefaults();
+                if (ImGui::MenuItem("Reset View")) ResetToDefaults();
                 ImGui::EndMenu();
             }
+
+            if (ImGui::Button("Expand All"))   m_expandAllRequested = true;
+            ImGui::SameLine();
+            if (ImGui::Button("Collapse All")) m_collapseAllRequested = true;
 
             ImGui::EndMenuBar();
         }
@@ -456,28 +459,28 @@ namespace GUI {
                 ImGui::Separator();
 
                 if (ImGui::BeginMenu("Copy Component")) {
-                    auto compIds = m_entityManager.GetEntityComponents(activeEntity);
-                    for (auto cid : compIds) {
-                        std::string name = m_entityManager.GetComponentNameById(cid);
-                        if (ImGui::MenuItem(name.c_str())) {
-                            Clipboard::CopyComponent(m_entityManager, activeEntity, name);
+                    for (auto& e : m_components) {
+                        if (!e.present(activeEntity)) continue;
+                        if (ImGui::MenuItem(e.name)) {
+                            Clipboard::CopyComponent(m_entityManager, activeEntity, e.name);
                         }
                     }
                     ImGui::EndMenu();
                 }
 
                 if (ImGui::BeginMenu("Copy Value")) {
-                    auto compIds = m_entityManager.GetEntityComponents(activeEntity);
-                    for (auto cid : compIds) {
-                        std::string compName = m_entityManager.GetComponentNameById(cid);
+                    for (auto& e : m_components) {
+                        if (!e.present(activeEntity)) continue;
+                        auto cid = m_entityManager.GetComponentTypeIdByName(e.name);
+                        if (cid == ECS::MAX_COMPONENT_COUNT) continue;
                         auto* comp = m_entityManager.GetComponentById(activeEntity, cid);
                         if (!comp) continue;
                         auto props = comp->GetPropertyMap();
                         if (props.empty()) continue;
-                        if (ImGui::BeginMenu(compName.c_str())) {
+                        if (ImGui::BeginMenu(e.name)) {
                             for (const auto& [propName, _] : props) {
                                 if (ImGui::MenuItem(propName.c_str())) {
-                                    Clipboard::CopyProperty(m_entityManager, activeEntity, compName, propName);
+                                    Clipboard::CopyProperty(m_entityManager, activeEntity, e.name, propName);
                                 }
                             }
                             ImGui::EndMenu();
@@ -496,27 +499,9 @@ namespace GUI {
 
             ImGui::Separator();
 
-            if (ImGui::BeginMenu("Add Component")) {
-                auto activeComps = m_entityManager.GetEntityComponents(activeEntity);
-                for (const auto& [name, _] : m_componentAdders) {
-                    bool exists = false;
-                    for (auto cid : activeComps) {
-                        if (m_entityManager.GetComponentNameById(cid) == name) { exists = true; break; }
-                    }
-                    if (!exists && ImGui::MenuItem(name.c_str())) {
-                        Clipboard::AddComponent(m_entityManager, activeEntity, name,
-                            [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
-                    }
-                }
+            if (ImGui::BeginMenu("Add / Remove Components")) {
+                RenderAddRemoveComponentsMenu();
                 ImGui::EndMenu();
-            }
-
-            if (ImGui::MenuItem("Reset All Components")) {
-                auto comps = m_entityManager.GetEntityComponents(activeEntity);
-                std::vector<std::string> names;
-                for (auto cid : comps) names.push_back(m_entityManager.GetComponentNameById(cid));
-                Clipboard::ResetAllComponents(m_entityManager, activeEntity, names,
-                    [this](ECS::EntityID e, const std::string& n) { this->AddComponentByName(e, n); });
             }
 
             ImGui::EndPopup();
@@ -524,7 +509,6 @@ namespace GUI {
     }
 
     void BaseDiffusionView::Render() {
-        // If no saved state was restored and the active entity is empty, populate defaults now.
         if (!m_hasRestoredState && m_entityManager.GetEntityComponents(activeEntity).empty()) {
             ANI_LOG_INFO("Render: view='%s' no restored state, resetting to defaults",
                 viewName.c_str());
@@ -565,7 +549,6 @@ namespace GUI {
         ANI_LOG_INFO("Deserialize: view='%s'", viewName.c_str());
 
         try {
-            // Destroy the placeholder created by Init().
             if (activeEntity != 0) {
                 m_entityManager.DestroyEntity(activeEntity);
                 activeEntity = 0;
@@ -600,13 +583,13 @@ namespace GUI {
             return;
         }
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickSave: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickSave: SettingsSystem unavailable");
                 return;
             }
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
+            std::string dataPath = ss->GetPath("ProjectData");
+            if (dataPath.empty()) dataPath = ss->GetPath("DefaultProject");
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickSave: no data path available");
                 return;
@@ -628,13 +611,13 @@ namespace GUI {
             return;
         }
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickLoad: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickLoad: SettingsSystem unavailable");
                 return;
             }
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
-            if (dataPath.empty()) dataPath = filePathSys->GetPath("DefaultProject");
+            std::string dataPath = ss->GetPath("ProjectData");
+            if (dataPath.empty()) dataPath = ss->GetPath("DefaultProject");
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickLoad: no data path available");
                 return;
@@ -663,13 +646,11 @@ namespace GUI {
                 ANI_LOG_DEBUG("SaveMetadataToJson: wrote %s", filepath.c_str());
             }
             else {
-                ANI_LOG_WARN("SaveMetadataToJson: failed to open %s for writing",
-                    filepath.c_str());
+                ANI_LOG_WARN("SaveMetadataToJson: failed to open %s for writing", filepath.c_str());
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("SaveMetadataToJson: exception writing %s: %s",
-                filepath.c_str(), e.what());
+            ANI_LOG_ERROR("SaveMetadataToJson: exception writing %s: %s", filepath.c_str(), e.what());
         }
     }
 
@@ -684,13 +665,11 @@ namespace GUI {
                 ANI_LOG_DEBUG("LoadMetadataFromJson: loaded %s", filepath.c_str());
             }
             else {
-                ANI_LOG_WARN("LoadMetadataFromJson: failed to open %s for reading",
-                    filepath.c_str());
+                ANI_LOG_WARN("LoadMetadataFromJson: failed to open %s for reading", filepath.c_str());
             }
         }
         catch (const std::exception& e) {
-            ANI_LOG_ERROR("LoadMetadataFromJson: exception reading %s: %s",
-                filepath.c_str(), e.what());
+            ANI_LOG_ERROR("LoadMetadataFromJson: exception reading %s: %s", filepath.c_str(), e.what());
         }
     }
 
@@ -715,28 +694,12 @@ namespace GUI {
                     }
                 }
                 entityData = wrapped;
-                ANI_LOG_DEBUG("LoadMetadataFromMedia: wrapped metadata into entity format");
             }
 
             if (!entityData.contains("components") || !entityData["components"].is_array()) {
                 ANI_LOG_WARN("LoadMetadataFromMedia: missing 'components' array after wrapping");
                 return;
             }
-
-            bool validComponents = false;
-            for (const auto& comp : entityData["components"]) {
-                if (comp.is_object() && !comp.empty()) {
-                    validComponents = true;
-                    break;
-                }
-            }
-
-            if (!validComponents) {
-                ANI_LOG_WARN("LoadMetadataFromMedia: no valid components, skipping");
-                return;
-            }
-
-            ANI_LOG_DEBUG("LoadMetadataFromMedia: loading metadata for entity");
 
             if (activeEntity != 0) {
                 m_entityManager.DestroyEntity(activeEntity);
@@ -745,8 +708,7 @@ namespace GUI {
             m_hasRestoredState = true;
             m_quickLoaded = true;
 
-            ANI_LOG_INFO("LoadMetadataFromMedia: success. activeEntity=%u",
-                (unsigned)activeEntity);
+            ANI_LOG_INFO("LoadMetadataFromMedia: success. activeEntity=%u", (unsigned)activeEntity);
         }
         catch (const std::exception& e) {
             ANI_LOG_ERROR("LoadMetadataFromMedia: exception: %s", e.what());

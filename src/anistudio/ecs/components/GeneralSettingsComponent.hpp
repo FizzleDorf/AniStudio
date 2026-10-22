@@ -1,32 +1,145 @@
 #pragma once
-#include "BaseSettingsComponent.hpp"
+#include "BaseComponent.hpp"
+#include "PropertyTypes.hpp"
 #include <nlohmann/json.hpp>
 #include <vector>
 #include <string>
 
 namespace ECS {
 
-    class GeneralSettingsComponent : public BaseSettingsComponent {
+    class GeneralSettingsComponent : public BaseComponent {
     public:
-        GeneralSettingsComponent();
+        GeneralSettingsComponent() = default;
 
-        const char* GetCompName() const override { return "GeneralSettingsComponent"; }
+        const char* GetCompName() const override { return "GeneralSettings"; }
         const char* GetCompCategory() const override { return ""; }
 
         const nlohmann::json& GetSchema() const override {
-            static const nlohmann::json j = nlohmann::json::object();
+            static const nlohmann::json j = {
+                {"title", "General Settings"},
+                {"type", "object"},
+                {"propertyOrder", {
+                    "showStartupScreen", "loadLastProject",
+                    "autoSaveProjects", "autoSaveIntervalMinutes",
+                    "confirmBeforeExit", "confirmBeforeDeleteAssets", "confirmBeforeOverwriteFiles",
+                    "maxRecentProjects", "maxUndoLevels",
+                    "enableHardwareAcceleration",
+                    "enableLogging", "logLevel", "logToFile", "maxLogFileSize",
+                    "useNewestPluginVersions"
+                }},
+                {"properties", {
+                    {"showStartupScreen", {
+                        {"type", "boolean"},
+                        {"title", "Show Startup Screen"},
+                        {"description", "Show the project manager on startup."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"loadLastProject", {
+                        {"type", "boolean"},
+                        {"title", "Load Last Project"},
+                        {"description", "Automatically load the most recent project on startup."},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"autoSaveProjects", {
+                        {"type", "boolean"},
+                        {"title", "Auto-Save Projects"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"autoSaveIntervalMinutes", {
+                        {"type", "integer"},
+                        {"title", "Auto-Save Interval (min)"},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"step", 1}, {"min", 1}, {"max", 60}}}
+                    }},
+                    {"confirmBeforeExit", {
+                        {"type", "boolean"},
+                        {"title", "Confirm Before Exit"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"confirmBeforeDeleteAssets", {
+                        {"type", "boolean"},
+                        {"title", "Confirm Before Delete Assets"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"confirmBeforeOverwriteFiles", {
+                        {"type", "boolean"},
+                        {"title", "Confirm Before Overwrite Files"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"maxRecentProjects", {
+                        {"type", "integer"},
+                        {"title", "Max Recent Projects"},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"step", 1}, {"min", 5}, {"max", 50}}}
+                    }},
+                    {"maxUndoLevels", {
+                        {"type", "integer"},
+                        {"title", "Max Undo Levels"},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"step", 1}, {"min", 10}, {"max", 1000}}}
+                    }},
+                    {"enableHardwareAcceleration", {
+                        {"type", "boolean"},
+                        {"title", "Enable Hardware Acceleration"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"enableLogging", {
+                        {"type", "boolean"},
+                        {"title", "Enable Logging"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"logLevel", {
+                        {"type", "integer"},
+                        {"title", "Log Level"},
+                        {"description", "0=Error 1=Warning 2=Info 3=Debug"},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"step", 1}, {"min", 0}, {"max", 3}}}
+                    }},
+                    {"logToFile", {
+                        {"type", "boolean"},
+                        {"title", "Log to File"},
+                        {"ui:widget", "checkbox"}
+                    }},
+                    {"maxLogFileSize", {
+                        {"type", "integer"},
+                        {"title", "Max Log File Size (MB)"},
+                        {"ui:widget", "input_int"},
+                        {"ui:options", {{"step", 1}, {"min", 1}, {"max", 100}}}
+                    }},
+                    {"useNewestPluginVersions", {
+                        {"type", "boolean"},
+                        {"title", "Use Newest Plugin Versions"},
+                        {"description", "Load newest plugin binaries from staging, overriding saved project versions."},
+                        {"ui:widget", "checkbox"}
+                    }}
+                }}
+            };
             return j;
         }
 
-        GeneralSettingsComponent(const GeneralSettingsComponent& other);
-        GeneralSettingsComponent& operator=(const GeneralSettingsComponent& other);
+        std::unordered_map<std::string, Engine::PropertyVariant> GetPropertyMap() override {
+            return {
+                {"showStartupScreen", &showStartupScreen},
+                {"loadLastProject", &loadLastProject},
+                {"autoSaveProjects", &autoSaveProjects},
+                {"autoSaveIntervalMinutes", &autoSaveIntervalMinutes},
+                {"confirmBeforeExit", &confirmBeforeExit},
+                {"confirmBeforeDeleteAssets", &confirmBeforeDeleteAssets},
+                {"confirmBeforeOverwriteFiles", &confirmBeforeOverwriteFiles},
+                {"maxRecentProjects", &maxRecentProjects},
+                {"maxUndoLevels", &maxUndoLevels},
+                {"enableHardwareAcceleration", &enableHardwareAcceleration},
+                {"enableLogging", &enableLogging},
+                {"logLevel", &logLevel},
+                {"logToFile", &logToFile},
+                {"maxLogFileSize", &maxLogFileSize},
+                {"useNewestPluginVersions", &useNewestPluginVersions}
+            };
+        }
 
-        bool SaveSettings() override;
-        bool LoadSettings() override;
-        void ResetToDefaults() override;
-        void CreateBackup() override;
-        void RestoreFromBackup() override;
-        bool HasUnsavedChanges() const override { return hasChanges; }
+        nlohmann::json Serialize() const override;
+        void Deserialize(const nlohmann::json& j) override;
+        void ResetToDefaults();
 
         bool showStartupScreen = true;
         bool loadLastProject = true;
@@ -42,7 +155,6 @@ namespace ECS {
         int logLevel = 2;
         bool logToFile = true;
         int maxLogFileSize = 10;
-        bool hasChanges = false;
 
         int windowWidth = 1200;
         int windowHeight = 720;
@@ -55,34 +167,6 @@ namespace ECS {
         std::vector<std::string> recentProjects;
 
         bool useNewestPluginVersions = false;
-
-    private:
-        bool backupShowStartupScreen = true;
-        bool backupLoadLastProject = true;
-        bool backupAutoSaveProjects = true;
-        int backupAutoSaveIntervalMinutes = 5;
-        bool backupConfirmBeforeExit = true;
-        bool backupConfirmBeforeDeleteAssets = true;
-        bool backupConfirmBeforeOverwriteFiles = true;
-        int backupMaxRecentProjects = 10;
-        int backupMaxUndoLevels = 100;
-        bool backupEnableHardwareAcceleration = true;
-        bool backupEnableLogging = true;
-        int backupLogLevel = 2;
-        bool backupLogToFile = true;
-        int backupMaxLogFileSize = 10;
-
-        int backupWindowWidth = 1200;
-        int backupWindowHeight = 720;
-        int backupWindowPosX = -1;
-        int backupWindowPosY = -1;
-        bool backupWindowMaximized = false;
-        bool backupWindowFullscreen = false;
-        bool backupWindowVsync = true;
-        std::string backupLastOpenProject;
-        std::vector<std::string> backupRecentProjects;
-
-        bool backupUseNewestPluginVersions = false;
     };
 
 }

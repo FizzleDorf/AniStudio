@@ -236,13 +236,25 @@ namespace ECS {
         PlaybackMode mode) {
         if (!mgr.IsEntityValid(e) || filePath.empty()) return false;
 
-        // If this entity already had a decoder attached, tear it down first
-        // so we do not leak Tracks or stale decode state when swapping media.
-        if (mgr.HasComponent<VideoComponent>(e)) {
+        const bool hasPlainVideo = mgr.HasComponent<VideoComponent>(e);
+        const bool hasPreviewVideo = mgr.HasComponent<PreviewVideoComponent>(e);
+        const bool hasInputVideo = mgr.HasComponent<InputVideoComponent>(e);
+        const bool hasOutputVideo = mgr.HasComponent<OutputVideoComponent>(e);
+        const bool hasAnyVideo = hasPlainVideo || hasPreviewVideo ||
+            hasInputVideo || hasOutputVideo;
+        const bool isPreviewEntity = hasPreviewVideo;
+
+        const bool hasPlainAudio = mgr.HasComponent<AudioComponent>(e);
+        const bool hasAnyAudio = hasPlainAudio;
+
+        if (hasAnyVideo) {
             if (m_video) m_video->RemoveVideo(e);
-            mgr.GetComponent<VideoComponent>(e).Unload();
+            if (hasPlainVideo) mgr.GetComponent<VideoComponent>(e).Unload();
+            if (hasPreviewVideo) mgr.GetComponent<PreviewVideoComponent>(e).Unload();
+            if (hasInputVideo) mgr.GetComponent<InputVideoComponent>(e).Unload();
+            if (hasOutputVideo) mgr.GetComponent<OutputVideoComponent>(e).Unload();
         }
-        if (mgr.HasComponent<AudioComponent>(e)) {
+        if (hasAnyAudio) {
             if (m_audio) m_audio->RemoveAudio(e);
         }
 
@@ -281,42 +293,52 @@ namespace ECS {
         bool wantVideo = (type == TrackType::Video || type == TrackType::Both);
         bool wantAudio = (type == TrackType::Audio || type == TrackType::Both);
 
-        // IMPORTANT: only add a plain VideoComponent if one is not already
-        // present. For preview entities the caller has pre-added a
-        // PreviewVideoComponent (which is-a VideoComponent), so this guard
-        // ensures we reuse it instead of slapping on a second one and
-        // destroying the preview marker.
+        if (isPreviewEntity) {
+            wantAudio = false;
+        }
+
         if (wantVideo && fileHasVideo) {
-            if (!mgr.HasComponent<VideoComponent>(e))
+
+            if (!hasAnyVideo) {
                 mgr.AddComponent<VideoComponent>(e);
-            auto& vc = mgr.GetComponent<VideoComponent>(e);
-            vc.filePath = filePath;
-            size_t slash = filePath.find_last_of("/\\");
-            vc.fileName = (slash != std::string::npos) ? filePath.substr(slash + 1) : filePath;
+            }
+
+            auto setVideoMeta = [&](VideoComponent& vc) {
+                vc.filePath = filePath;
+                size_t slash = filePath.find_last_of("/\\");
+                vc.fileName = (slash != std::string::npos)
+                    ? filePath.substr(slash + 1) : filePath;
+                };
+
+            if (hasPlainVideo)      setVideoMeta(mgr.GetComponent<VideoComponent>(e));
+            else if (hasPreviewVideo) setVideoMeta(mgr.GetComponent<PreviewVideoComponent>(e));
+            else if (hasInputVideo)   setVideoMeta(mgr.GetComponent<InputVideoComponent>(e));
+            else if (hasOutputVideo)  setVideoMeta(mgr.GetComponent<OutputVideoComponent>(e));
+
             if (m_video) m_video->LoadVideo(e, filePath, mode);
         }
 
         if (wantAudio && fileHasAudio) {
-            if (!mgr.HasComponent<AudioComponent>(e))
+            if (!hasAnyAudio) {
                 mgr.AddComponent<AudioComponent>(e);
+            }
             auto& ac = mgr.GetComponent<AudioComponent>(e);
             ac.filePath = filePath;
             ac.hasAudioStream = true;
             size_t slash = filePath.find_last_of("/\\");
-            ac.fileName = (slash != std::string::npos) ? filePath.substr(slash + 1) : filePath;
+            ac.fileName = (slash != std::string::npos)
+                ? filePath.substr(slash + 1) : filePath;
             if (m_audio) m_audio->LoadAudio(e, filePath, mode);
         }
 
         st.duration = duration;
 
-        ANI_LOG_INFO("[AVSystem] AttachMedia entity=%u path=%s mode=%d hasVideo=%d hasAudio=%d",
-            e, filePath.c_str(), static_cast<int>(mode), fileHasVideo, fileHasAudio);
+        ANI_LOG_INFO("[AVSystem] AttachMedia entity=%u path=%s mode=%d "
+            "hasVideo=%d hasAudio=%d isPreview=%d",
+            e, filePath.c_str(), static_cast<int>(mode),
+            fileHasVideo, fileHasAudio, isPreviewEntity ? 1 : 0);
         return true;
     }
-
-    // ------------------------------------------------------------------
-    // Everything below is unchanged from your version.
-    // ------------------------------------------------------------------
 
     void AVSystem::RemoveMedia(EntityID e) {
         if (!mgr.IsEntityValid(e)) return;
@@ -536,16 +558,32 @@ namespace ECS {
         if (!mgr.IsEntityValid(e)) return false;
         bool any = false;
 
-        if (mgr.HasComponent<VideoComponent>(e)) {
-            any = true;
-            auto& vc = mgr.GetComponent<VideoComponent>(e);
-            if (!vc.fmtCtx || vc.frameCount <= 0) return false;
+        VideoComponent* vcPtr = nullptr;
+        if (mgr.HasComponent<PreviewVideoComponent>(e)) {
+            vcPtr = &mgr.GetComponent<PreviewVideoComponent>(e);
         }
+        else if (mgr.HasComponent<InputVideoComponent>(e)) {
+            vcPtr = &mgr.GetComponent<InputVideoComponent>(e);
+        }
+        else if (mgr.HasComponent<OutputVideoComponent>(e)) {
+            vcPtr = &mgr.GetComponent<OutputVideoComponent>(e);
+        }
+        else if (mgr.HasComponent<VideoComponent>(e)) {
+            vcPtr = &mgr.GetComponent<VideoComponent>(e);
+        }
+
+        if (vcPtr) {
+            any = true;
+            std::lock_guard<std::mutex> lock(vcPtr->decoderMutex);
+            if (!vcPtr->fmtCtx || vcPtr->frameCount <= 0) return false;
+        }
+
         if (mgr.HasComponent<AudioComponent>(e)) {
             any = true;
             auto& ac = mgr.GetComponent<AudioComponent>(e);
             if (ac.hasAudioStream && ac.pcmData.empty() && !ac.HasDecoder()) return false;
         }
+
         if (!any && m_audio) {
             if (m_audio->GetDuration(e) > 0.0) return true;
         }

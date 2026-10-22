@@ -17,7 +17,7 @@
 #include "stable-diffusion.h"
 #include "ThreadPoolSystem.hpp"
 #include "SettingsSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "ModelCacheSystem.hpp"
 
 #include <filesystem>
@@ -32,6 +32,8 @@
 #include <mutex>
 #include <random>
 #include <utility>
+#include <vector>
+#include <functional>
 
 namespace ECS {
 
@@ -86,6 +88,9 @@ namespace ECS {
             void Cancel();
         };
 
+        using TaskCompletedCallback =
+            std::function<void(TaskType, EntityID, const std::string&)>;
+
         explicit SDCPPSystem(EntityManager& entityMgr);
         ~SDCPPSystem() override;
 
@@ -114,11 +119,16 @@ namespace ECS {
         bool HasActiveTask() const;
         size_t GetQueueSize() const;
 
+        bool HasPendingWork() const;
+
         void Start() override;
         void Destroy() override;
 
         std::vector<std::pair<TaskType, nlohmann::json>> GetQueueTasksWithMetadata() const;
         void QueueTaskFromSerialized(const nlohmann::json& entityData, TaskType taskType);
+
+        void RegisterTaskCompletedCallback(void* owner, TaskCompletedCallback cb);
+        void UnregisterCallbacksForOwner(void* owner);
 
     private:
         std::vector<TaskData> taskQueue;
@@ -130,8 +140,14 @@ namespace ECS {
         bool hasActiveTask{ false };
         std::thread::id activeThreadId{};
         std::shared_ptr<ThreadPoolSystem> m_threadPool;
-        std::shared_ptr<FilePathSystem> m_filePathSystem;
+        std::shared_ptr<SettingsSystem> m_settingsSystem;
         std::shared_ptr<ModelCacheSystem> m_cacheSystem;
+
+        std::vector<std::future<bool>> m_orphanedFutures;
+        mutable std::mutex m_orphanMutex;
+        std::vector<EntityID> m_pendingDestroy;
+
+        std::vector<std::pair<void*, TaskCompletedCallback>> m_taskCompletedCallbacks;
 
         std::string ResolveOutputDirectory(const std::string& raw);
         std::string ResolveFullPathForTask(const TaskData& task);
@@ -140,6 +156,11 @@ namespace ECS {
         void LoadVideoViaVideoSystem(EntityID targetEntity, const std::string& filePath);
         EntityID LoadVideoWithAudio(const std::string& filePath);
         void HandleClearRequest();
+
+        void DrainPendingDestroy();
+        void DrainOrphanedFutures();
+        void NotifyTaskCompleted(TaskType taskType, EntityID entityID,
+            const std::string& fullPath);
 
         static bool RunInference(const sd_img_gen_params_t& params,
             const nlohmann::json& metadataForWrite,

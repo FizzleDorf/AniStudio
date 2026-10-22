@@ -1,5 +1,4 @@
 #include "TextEditorView.hpp"
-#include "FilePathSystem.hpp"
 #include "TextEditorUtil.hpp"
 #include "TextEditorFontUtil.hpp"
 #include "SettingsSystem.hpp"
@@ -263,8 +262,8 @@ namespace GUI {
             "Text{.txt},"
             "Markdown{.md},"
             "All Files{.*}";
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        std::string defaultPath = ss ? ss->GetPath("DefaultProject") : ".";
         if (FileDialog::OpenFile("Open Code File", filter, outPath, defaultPath)) {
             LoadFile(outPath);
         }
@@ -286,8 +285,8 @@ namespace GUI {
         else {
             filter = "All Files{.*}";
         }
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        std::string defaultPath = ss ? ss->GetPath("DefaultProject") : ".";
         std::string defaultName = "newfile.txt";
         if (!currentFilePath.empty()) defaultName = std::filesystem::path(currentFilePath).filename().string();
         if (FileDialog::SaveFile("Save Code File", filter, defaultName, outPath, defaultPath)) {
@@ -304,8 +303,8 @@ namespace GUI {
             "Text{.txt},"
             "Markdown{.md},"
             "All Files{.*}";
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DefaultProject") : ".";
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        std::string defaultPath = ss ? ss->GetPath("DefaultProject") : ".";
         std::string defaultName = "newfile.txt";
         if (!currentFilePath.empty()) defaultName = std::filesystem::path(currentFilePath).filename().string();
         if (FileDialog::SaveFile("Save Code File As", filter, defaultName, outPath, defaultPath)) {

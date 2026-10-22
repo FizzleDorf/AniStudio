@@ -16,6 +16,13 @@ namespace GUI {
         std::atomic<bool> isProcessing{ false };
     };
 
+    struct ProgressSnapshot {
+        int currentStep = 0;
+        int totalSteps = 0;
+        float currentTime = 0.0f;
+        bool isProcessing = false;
+    };
+
     struct PreviewFrame {
         int width = 0;
         int height = 0;
@@ -25,9 +32,18 @@ namespace GUI {
         bool valid() const { return data && width > 0 && height > 0 && channels > 0; }
     };
 
+    struct PreviewBatch {
+        std::vector<PreviewFrame> frames;
+        uint64_t sequence = 0;
+        int step = 0;
+        bool valid() const { return !frames.empty() && frames[0].valid(); }
+    };
+
     class DiffusionCallbackUtils {
     public:
         static ProgressData& GetProgressData();
+        static ProgressSnapshot GetProgressSnapshot();
+
         static void InitializeCallbacks();
         static void LogCallback(sd_log_level_t level, const char* text, void* data);
         static void ProgressCallback(int step, int steps, float time, void* data);
@@ -45,6 +61,13 @@ namespace GUI {
         static uint64_t GetPreviewSequence();
         static void ClearPreview();
 
+        static PreviewBatch GetLatestBatch();
+        static uint64_t GetBatchSequence();
+        static void ClearBatch();
+
+        static uint64_t BeginGeneration();
+        static void EndGeneration(uint64_t token);
+
     private:
         static ProgressData progressData;
         static std::mutex mutex;
@@ -53,5 +76,11 @@ namespace GUI {
         static PreviewFrame previewFrame;
         static std::mutex previewMutex;
         static std::atomic<uint64_t> previewSequence;
+
+        static PreviewBatch previewBatch;
+        static std::mutex batchMutex;
+        static std::atomic<uint64_t> batchSequence;
+
+        static std::atomic<uint64_t> activeGenerationToken;
     };
 }

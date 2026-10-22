@@ -2,7 +2,7 @@
 #pragma once
 #include "BaseView.hpp"
 #include "ViewManager.hpp"
-#include "SDcppSystem.hpp"
+#include "SDCPPSystem.hpp"
 #include <vector>
 #include <string>
 

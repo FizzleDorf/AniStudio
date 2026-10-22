@@ -4,7 +4,7 @@
 #include "FileDialogFilters.hpp"
 #include "Events.hpp"
 #include "TextureSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "PngMetadataUtils.hpp"
 #include "ClipboardUtilities.hpp"
 #include "DragDropUtils.hpp"
@@ -135,8 +135,8 @@ namespace GUI {
             if (ImGui::BeginMenu("File")) {
                 ImGui::PushID(1);
                 if (ImGui::MenuItem((Icon::Image() + " " + Icon::FolderOpen() + " Load Image(s)").c_str())) {
-                    auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                    std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                    auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                    std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
                     std::vector<std::string> outPaths;
                     if (FileDialog::OpenFiles("Choose Image(s)", FileDialog::FilterType::IMAGE_FILE, outPaths, defaultPath)) {
                         if (!outPaths.empty()) LoadMedia(outPaths);
@@ -151,8 +151,8 @@ namespace GUI {
                 ImGui::PopID();
                 ImGui::PushID(3);
                 if (ImGui::MenuItem((Icon::SaveAs() + " Save Image As...").c_str(), nullptr, false, selectedEntityID != 0)) {
-                    auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                    std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                    auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                    std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
                     std::string outPath;
                     if (selectedEntityID != 0) {
                         const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
@@ -208,8 +208,8 @@ namespace GUI {
 
         ImGui::PushID(101);
         if (ImGui::Button((Icon::Image() + " Load").c_str())) {
-            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
             std::vector<std::string> outPaths;
             if (FileDialog::OpenFiles("Choose Image(s)", FileDialog::FilterType::IMAGE_FILE, outPaths, defaultPath)) {
                 if (!outPaths.empty()) LoadMedia(outPaths);
@@ -227,8 +227,8 @@ namespace GUI {
 
         ImGui::PushID(103);
         if (ImGui::Button((Icon::SaveAs() + " Save As").c_str())) {
-            auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
             std::string outPath;
             if (selectedEntityID != 0) {
                 const auto& imageComp = m_entityManager.GetComponent<ECS::ImageComponent>(selectedEntityID);
@@ -411,7 +411,9 @@ namespace GUI {
             ImGui::Dummy(imageSize);
             ImGui::SetCursorPos(imagePos);
 
-            ImGui::Image((ImTextureID)(intptr_t)texID, imageSize);
+            if (glIsTexture(texID)) {
+                ImGui::Image((ImTextureID)(intptr_t)texID, imageSize);
+            }
 
             if (ImGui::IsItemHovered() && ImGui::IsMouseDown(ImGuiMouseButton_Left) && !IsAltKeyDown()) {
                 if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
@@ -506,7 +508,10 @@ namespace GUI {
         if (selectedEntityID == 0 || !m_entityManager.IsEntityValid(selectedEntityID)) return;
         try {
             if (imageSystem) {
+                imageSystem->UnregisterCallbacksForOwner(this);
                 imageSystem->RemoveImage(selectedEntityID);
+                imageSystem->RegisterImageAddedCallback(this, [this](ECS::EntityID e) { OnMediaAdded(e); });
+                imageSystem->RegisterImageRemovedCallback(this, [this](ECS::EntityID e) { OnMediaRemoved(e); });
             }
 
             if (m_entityManager.IsEntityValid(selectedEntityID)) {
@@ -522,6 +527,7 @@ namespace GUI {
     }
 
     void ImageView::RefreshEntities() {
+        ANI_LOG_DEBUG("[ImageView] RefreshEntities begin");
         mediaEntities.clear();
         for (auto entityID : m_entityManager.GetAllEntities()) {
             if (IsImageComponentOnly(entityID)) {
@@ -529,9 +535,12 @@ namespace GUI {
             }
         }
         lastEntityCount = mediaEntities.size();
+        ANI_LOG_DEBUG("[ImageView] RefreshEntities end count=%zu",
+            mediaEntities.size());
     }
 
     void ImageView::OnMediaAdded(ECS::EntityID entity) {
+        ANI_LOG_DEBUG("[ImageView] OnMediaAdded entity=%u begin", entity);
         RefreshEntities();
         if (!mediaEntities.empty() && autoSwitchOnLoad) {
             auto it = std::find(mediaEntities.begin(), mediaEntities.end(), entity);
@@ -540,11 +549,14 @@ namespace GUI {
                 selectedEntityID = entity;
             }
         }
+        ANI_LOG_DEBUG("[ImageView] OnMediaAdded entity=%u end", entity);
     }
 
     void ImageView::OnMediaRemoved(ECS::EntityID entity) {
+        ANI_LOG_DEBUG("[ImageView] OnMediaRemoved entity=%u begin", entity);
         RefreshEntities();
         UpdateSelectionAfterRemoval(entity);
+        ANI_LOG_DEBUG("[ImageView] OnMediaRemoved entity=%u end", entity);
     }
 
     void ImageView::SetSelectedEntity(ECS::EntityID entity) {

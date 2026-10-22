@@ -55,16 +55,40 @@ namespace Utils {
                 }
 
                 image->readMetadata();
+
                 Exiv2::ExifData& exifData = image->exifData();
-                auto it = exifData.findKey(Exiv2::ExifKey("Exif.Image.ImageDescription"));
-                if (it != exifData.end()) {
+                for (const auto& exif : exifData) {
+                    std::string key = exif.key();
+                    std::string value = exif.toString();
                     try {
-                        result = nlohmann::json::parse(it->toString());
-                        ANI_LOG_DEBUG("Loaded EXIF metadata from TIFF: %s", imagePath.c_str());
+                        nlohmann::json parsed = nlohmann::json::parse(value);
+                        if (parsed.is_object() || parsed.is_array()) {
+                            result[key] = parsed;
+                        }
+                        else {
+                            result[key] = value;
+                        }
                     }
-                    catch (const std::exception& e) {
-                        ANI_LOG_WARN("Failed to parse JSON from TIFF EXIF %s: %s",
-                            imagePath.c_str(), e.what());
+                    catch (...) {
+                        result[key] = value;
+                    }
+                }
+
+                Exiv2::XmpData& xmpData = image->xmpData();
+                for (const auto& xmp : xmpData) {
+                    std::string key = xmp.key();
+                    std::string value = xmp.toString();
+                    try {
+                        nlohmann::json parsed = nlohmann::json::parse(value);
+                        if (parsed.is_object() || parsed.is_array()) {
+                            result[key] = parsed;
+                        }
+                        else {
+                            result[key] = value;
+                        }
+                    }
+                    catch (...) {
+                        result[key] = value;
                     }
                 }
             }

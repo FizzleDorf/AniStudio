@@ -6,7 +6,7 @@
 #include "FileDialogFilters.hpp"
 #include "BaseDiffusionView.hpp"
 #include "ClipboardUtilities.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "ProjectSystem.hpp"
 #include "Log.hpp"
 
@@ -173,19 +173,19 @@ namespace GUI {
     }
 
     void QueueView::RenderQueueList() {
-        const auto& progressData = DiffusionCallbackUtils::GetProgressData();
-        int currentStep = progressData.currentStep;
-        int totalSteps = progressData.totalSteps;
-        float time = progressData.currentTime;
-        bool isProcessing = progressData.isProcessing;
+        const auto progress = DiffusionCallbackUtils::GetProgressSnapshot();
+        int currentStep = progress.currentStep;
+        int totalSteps = progress.totalSteps;
+        float time = progress.currentTime;
+        bool isProcessing = progress.isProcessing;
 
         if (isProcessing && totalSteps > 0) {
-            float progress = static_cast<float>(currentStep) / totalSteps;
+            float p = static_cast<float>(currentStep) / static_cast<float>(totalSteps);
             std::ostringstream ss;
             ss << "Processing: " << currentStep << "/" << totalSteps << " steps ("
                 << std::fixed << std::setprecision(1) << time << "s)";
             ImGui::Text("%s", ss.str().c_str());
-            ImGui::ProgressBar(progress, ImVec2(-FLT_MIN, 0));
+            ImGui::ProgressBar(p, ImVec2(-FLT_MIN, 0));
         }
         else {
             ImGui::Text("Waiting...");
@@ -262,29 +262,23 @@ namespace GUI {
                 for (size_t i = 0; i < items.size(); ++i) {
                     const auto& item = items[i];
                     ImGui::TableNextRow();
-
                     ImGui::PushID(static_cast<int>(i));
 
                     std::string popupId = "QueueItemContextMenu##" + std::to_string(i);
 
-                    // Status
                     ImGui::TableNextColumn();
                     if (item.processing)
                         ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), "Active");
                     else
                         ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.2f, 1.0f), "Queued");
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
                         ImGui::OpenPopup(popupId.c_str());
-                    }
 
-                    // Entity ID
                     ImGui::TableNextColumn();
                     ImGui::Text("%05d", static_cast<int>(item.entityID));
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
                         ImGui::OpenPopup(popupId.c_str());
-                    }
 
-                    // Type
                     ImGui::TableNextColumn();
                     switch (item.taskType) {
                     case ECS::SDCPPSystem::TaskType::Inference: ImGui::Text("Txt2Img"); break;
@@ -295,11 +289,9 @@ namespace GUI {
                     case ECS::SDCPPSystem::TaskType::Img2Vid:   ImGui::Text("Img2Vid"); break;
                     default: ImGui::Text("Unknown");
                     }
-                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                    if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
                         ImGui::OpenPopup(popupId.c_str());
-                    }
 
-                    // Controls
                     ImGui::TableNextColumn();
                     if (!item.processing) {
                         bool controlHovered = false;
@@ -340,20 +332,16 @@ namespace GUI {
                             ANI::Events::Ref().QueueEventWithData("RemoveFromDiffusionQueue", i);
                         if (ImGui::IsItemHovered()) controlHovered = true;
 
-                        if (controlHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                        if (controlHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
                             ImGui::OpenPopup(popupId.c_str());
-                        }
                     }
                     else {
                         ImGui::TextDisabled("Processing");
-                        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
                             ImGui::OpenPopup(popupId.c_str());
-                        }
                     }
 
-                    // Render the context menu popup
                     RenderQueueItemContextMenu(item, i);
-
                     ImGui::PopID();
                 }
             }
@@ -484,15 +472,15 @@ namespace GUI {
             return;
         }
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickSave: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickSave: SettingsSystem unavailable");
                 return;
             }
 
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
+            std::string dataPath = ss->GetPath("ProjectDataPath");
             if (dataPath.empty()) {
-                dataPath = filePathSys->GetPath("DefaultProject");
+                dataPath = ss->GetPath("DefaultProject");
             }
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickSave: no data path available");
@@ -539,15 +527,15 @@ namespace GUI {
 
     void QueueView::QuickLoad() {
         try {
-            auto filePathSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-            if (!filePathSys) {
-                ANI_LOG_WARN("QuickLoad: FilePathSystem unavailable");
+            auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+            if (!ss) {
+                ANI_LOG_WARN("QuickLoad: SettingsSystem unavailable");
                 return;
             }
 
-            std::string dataPath = filePathSys->GetPath("ProjectDataPath");
+            std::string dataPath = ss->GetPath("ProjectDataPath");
             if (dataPath.empty()) {
-                dataPath = filePathSys->GetPath("DefaultProject");
+                dataPath = ss->GetPath("DefaultProject");
             }
             if (dataPath.empty()) {
                 ANI_LOG_WARN("QuickLoad: no data path available");
@@ -641,7 +629,13 @@ namespace GUI {
                 return;
             }
 
-            sys->ClearAllTasks();
+            if (sys->HasPendingWork()) {
+                ANI_LOG_WARN("Deserialize: pending work in flight; deferring queue load");
+                ANI::Events::Ref().QueueEvent("ClearAllDiffusionTasks");
+            }
+            else {
+                sys->ClearAllTasks();
+            }
 
             int loadedCount = 0;
             for (const auto& entry : j["queueData"]) {

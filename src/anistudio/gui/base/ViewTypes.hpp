@@ -43,7 +43,7 @@ namespace GUI {
 				// Add name as an alias if not already registered
 				if (nameToID.find(name) == nameToID.end()) {
 					nameToID[name] = existingId;
-					ANI_LOG_DEBUG("[ViewTypeRegistry] Added alias '%s' for existing view type ID: %u",
+					ANI_LOG_DEBUG("Added alias '%s' for existing view type ID: %u",
 						name.c_str(), (unsigned)existingId);
 				}
 
@@ -53,7 +53,7 @@ namespace GUI {
 			// Check if name is already used for a different type
 			auto nameIt = nameToID.find(name);
 			if (nameIt != nameToID.end()) {
-				ANI_LOG_WARN("[ViewTypeRegistry] Name '%s' already used for view ID %u. Using existing ID.",
+				ANI_LOG_WARN("Name '%s' already used for view ID %u. Using existing ID.",
 					name.c_str(), (unsigned)nameIt->second);
 				typeToID[typeIdx] = nameIt->second;
 				return nameIt->second;
@@ -65,7 +65,7 @@ namespace GUI {
 			idToName[newId] = name;
 			typeToID[typeIdx] = newId;
 
-			ANI_LOG_DEBUG("[ViewTypeRegistry] Registered view: %s with ID: %u",
+			ANI_LOG_DEBUG("Registered view: %s with ID: %u",
 				name.c_str(), (unsigned)newId);
 			return newId;
 		}
@@ -85,7 +85,7 @@ namespace GUI {
 			nameToID[name] = newId;
 			idToName[newId] = name;
 
-			ANI_LOG_DEBUG("[ViewTypeRegistry] Registered view by name: %s with ID: %u",
+			ANI_LOG_DEBUG("Registered view by name: %s with ID: %u",
 				name.c_str(), (unsigned)newId);
 			return newId;
 		}
@@ -133,7 +133,7 @@ namespace GUI {
 			std::lock_guard<std::mutex> lock(mutex);
 			auto nameIt = nameToID.find(name);
 			if (nameIt == nameToID.end()) {
-				ANI_LOG_TRACE("[ViewTypeRegistry] UnregisterType: name not registered: %s", name.c_str());
+				ANI_LOG_TRACE("UnregisterType: name not registered: %s", name.c_str());
 				return false;
 			}
 
@@ -153,7 +153,7 @@ namespace GUI {
 				}
 			}
 
-			ANI_LOG_DEBUG("[ViewTypeRegistry] Unregistered view: %s with ID: %u",
+			ANI_LOG_DEBUG("Unregistered view: %s with ID: %u",
 				name.c_str(), (unsigned)id);
 			return true;
 		}
@@ -161,7 +161,7 @@ namespace GUI {
 		// Reset registry
 		static void Reset() {
 			std::lock_guard<std::mutex> lock(mutex);
-			ANI_LOG_INFO("[ViewTypeRegistry] Resetting registry (%zu views registered)",
+			ANI_LOG_INFO("Resetting registry (%zu views registered)",
 				typeToID.size());
 			nextTypeID = 0;
 			nameToID.clear();

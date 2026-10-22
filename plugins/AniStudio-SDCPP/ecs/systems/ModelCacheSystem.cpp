@@ -11,8 +11,6 @@ namespace ECS {
         UnloadAllModels();
     }
 
-    // Memory accounting (used only for the GUI's memoryBytes display;
-    // no pre-flight gate)
     size_t ModelCacheSystem::computeMemory(const sd_ctx_params_t& p) const {
         size_t total = 0;
         auto add = [&](const char* path) {
@@ -107,8 +105,6 @@ namespace ECS {
             it->second.lastUsed = std::chrono::steady_clock::now();
             promote(key);
 
-            // Hand the caller the entry's own ResourceManager. This is what
-            // keeps the strings params.* point at alive for the caller too.
             ctxRes = it->second.ctxRes;
 
             ANI_LOG_TRACE("Cache hit for context key, active count now %d",
@@ -117,8 +113,6 @@ namespace ECS {
             return SDCPP::SDContextHandle(this, key, it->second.ctx);
         }
 
-        // No pre-flight memory gate. sdcpp handles placement/streaming itself.
-        // If the model genuinely cannot be created, new_sd_ctx returns null.
         ANI_LOG_DEBUG("Cache miss, creating new sd_ctx (current cache size: %zu)",
             m_cache.size());
 
@@ -129,10 +123,12 @@ namespace ECS {
             return std::nullopt;
         }
 
+        m_cache.reserve(m_cache.size() + 1);
+
         ContextInfo info;
         info.ctx = ctx;
         info.params = params;
-        info.ctxRes = std::move(ctxRes);   // cache takes ownership
+        info.ctxRes = std::move(ctxRes);
         info.key = key;
         info.memoryBytes = computeMemory(params);
         info.activeCount = 1;
@@ -142,8 +138,6 @@ namespace ECS {
         auto [inserted, ok] = m_cache.emplace(key, std::move(info));
         m_order.push_back(key);
 
-        // Give the caller a shared reference back. On the miss path we moved
-        // ctxRes into the entry, so read it out of the inserted entry.
         ctxRes = inserted->second.ctxRes;
 
         ANI_LOG_INFO("Created context (type: %s, est. memory: %zu bytes)",
@@ -205,6 +199,8 @@ namespace ECS {
             auto sz = std::filesystem::file_size(params.control_net_path, ec);
             if (!ec) required = (size_t)sz;
         }
+
+        m_upscalers.reserve(m_upscalers.size() + 1);
 
         UpscalerInfo info;
         info.ctx = ctx;
@@ -498,9 +494,6 @@ namespace ECS {
         BaseSystem::Destroy();
     }
 
-    // -------------------------------------------------------------------
-    // LRU / eviction
-    // -------------------------------------------------------------------
     void ModelCacheSystem::promote(const std::string& key) {
         auto it = std::find(m_order.begin(), m_order.end(), key);
         if (it != m_order.end()) {

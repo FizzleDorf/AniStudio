@@ -114,35 +114,56 @@ namespace ECS {
 
 		componentsArrays.clear();
 
-		while (!availableEntities.empty()) {
-			availableEntities.pop();
-		}
-		for (EntityID entity = 0u; entity < MAX_ENTITY_COUNT; ++entity) {
-			availableEntities.push(entity);
-		}
-
+		// Slot 0 is reserved as the null handle. Freed IDs are handed
+		// back out by AddNewEntity() via m_freeEntityIDs.
+		while (!m_freeEntityIDs.empty()) m_freeEntityIDs.pop();
+		nextFreshID = 1;
 		entityCount = 0;
 
 		ANI_LOG_INFO("EntityManager reset complete. Registered components preserved.");
 	}
 
 	const EntityID EntityManager::AddNewEntity() {
-		const EntityID entity = availableEntities.front();
+		// Prefer a freed ID so we don't exhaust the space over a long
+		// session. Slot 0 is never handed out.
+		if (!m_freeEntityIDs.empty()) {
+			EntityID entity = m_freeEntityIDs.front();
+			m_freeEntityIDs.pop();
+
+			if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
+				AddEntitySignature(entity);
+				entityCount++;
+				return entity;
+			}
+		}
+
+		if (nextFreshID >= MAX_ENTITY_COUNT) {
+			ANI_LOG_ERROR("AddNewEntity: entity limit reached (%zu) ? live=%u free=%zu",
+				MAX_ENTITY_COUNT, (unsigned)entityCount, m_freeEntityIDs.size());
+			return 0;
+		}
+
+		const EntityID entity = nextFreshID++;
 		AddEntitySignature(entity);
-		availableEntities.pop();
 		entityCount++;
 		return entity;
 	}
 
 	void EntityManager::DestroyEntity(const EntityID entity) {
 		assert(entity < MAX_ENTITY_COUNT && "EntityID out of range!");
+		assert(entity != 0 && "Cannot destroy the null entity");
 
 		if (entitiesSignatures.find(entity) == entitiesSignatures.end()) {
 			return;
 		}
-		
+
 		for (auto& [type, system] : registeredSystems) {
+			(void)type;
 			if (system) system->OnEntityDestroyed(entity);
+		}
+
+		for (auto& system : registeredSystems) {
+			system.second->RemoveEntity(entity);
 		}
 
 		entitiesSignatures.erase(entity);
@@ -151,17 +172,18 @@ namespace ECS {
 			array.second->Erase(entity);
 		}
 
-		for (auto& system : registeredSystems) {
-			system.second->RemoveEntity(entity);
-		}
-
 		for (auto& [systemId, systemInfo] : pluginSystems) {
+			(void)systemId;
 			systemInfo.entities.erase(entity);
 		}
 
 		entityCount--;
-		availableEntities.push(entity);
-		ANI_LOG_TRACE("Removed Entity: %u", entity);
+		m_freeEntityIDs.push(entity);
+		ANI_LOG_TRACE("Removed Entity: %u (freed %zu)", entity, m_freeEntityIDs.size());
+	}
+
+	std::queue<EntityID> EntityManager::GetAvailableEntities() const {
+		return m_freeEntityIDs;
 	}
 
 	bool EntityManager::IsEntityValid(EntityID entity) const {
@@ -315,6 +337,7 @@ namespace ECS {
 						if (auto* destComponent = GetComponentById(newEntity, componentId)) {
 							nlohmann::json componentData = sourceComponent->Serialize();
 							destComponent->Deserialize(componentData);
+							destComponent->entityID = newEntity;
 							CopyComponentResources(sourceEntity, newEntity, componentId);
 						}
 					}
@@ -356,16 +379,8 @@ namespace ECS {
 							BaseComponent* component = GetComponentById(entity, typeId);
 
 							if (component) {
-								ANI_LOG_TRACE("[Deserialize] constructed component for key='%s', GetCompName()='%s', schema empty=%s",
-									componentName.c_str(),
-									component->GetCompName(),
-									component->GetSchema().empty() ? "yes" : "no");
-
 								component->Deserialize(componentJson[componentName]);
-
-								ANI_LOG_TRACE("[Deserialize] after Deserialize, GetCompName()='%s', schema empty=%s",
-									component->GetCompName(),
-									component->GetSchema().empty() ? "yes" : "no");
+								component->entityID = entity;
 							}
 							else {
 								ANI_LOG_ERROR("[Deserialize] ERROR: Component %s was not created!", componentName.c_str());
@@ -415,6 +430,7 @@ namespace ECS {
 
 						if (auto* component = GetComponentById(entity, typeId)) {
 							component->Deserialize(componentJson[componentName]);
+							component->entityID = entity;
 						}
 					}
 				}
@@ -643,10 +659,6 @@ namespace ECS {
 
 	EntityID EntityManager::GetEntityCount() const {
 		return entityCount;
-	}
-
-	std::queue<EntityID> EntityManager::GetAvailableEntities() const {
-		return availableEntities;
 	}
 
 	const std::map<EntityID, std::shared_ptr<EntitySignature>>& EntityManager::GetEntitiesSignatures() const {

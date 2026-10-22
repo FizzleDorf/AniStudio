@@ -2,12 +2,45 @@
 #include "MetadataUtils.hpp"
 #include <iostream>
 #include <filesystem>
+#include <vector>
 
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavutil/dict.h>
 #include <libavutil/error.h>
 }
+
+namespace {
+
+    static bool LooksLikeAniStudio(const nlohmann::json& meta) {
+        if (!meta.is_object()) return false;
+
+        if (meta.contains("software") && meta["software"].is_string() &&
+            meta["software"].get<std::string>() == "AniStudio") {
+            return true;
+        }
+        if (meta.contains("components") && meta["components"].is_array()) {
+            return true;
+        }
+        if (meta.contains("dataType") && meta["dataType"] == "entity" &&
+            meta.contains("data")) {
+            return true;
+        }
+        for (auto it = meta.begin(); it != meta.end(); ++it) {
+            const auto& v = it.value();
+            if (!v.is_object()) continue;
+            if (v.contains("software") && v["software"].is_string() &&
+                v["software"].get<std::string>() == "AniStudio") {
+                return true;
+            }
+            if (v.contains("components") && v["components"].is_array()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+} // namespace
 
 namespace Utils {
 
@@ -151,4 +184,48 @@ namespace Utils {
         return result;
     }
 
-}
+    bool VideoMetadataUtils::HasAniStudioMetadata(const nlohmann::json& meta) {
+        return LooksLikeAniStudio(meta);
+    }
+
+    bool VideoMetadataUtils::HasExifMetadata(const nlohmann::json& meta) {
+        if (!meta.is_object() || meta.empty()) return false;
+
+        static const std::vector<std::string> exifish = {
+            "exif", "EXIF", "Exif",
+            "comment", "description", "title",
+            "artist", "copyright",
+            "creation_time", "location",
+            "make", "model", "encoder"
+        };
+        for (const auto& k : exifish) {
+            if (!meta.contains(k)) continue;
+            const auto& v = meta[k];
+            if (v.is_string() && !v.get<std::string>().empty()) return true;
+            if (v.is_object() && !v.empty()) return true;
+            if (v.is_array() && !v.empty()) return true;
+        }
+        for (auto it = meta.begin(); it != meta.end(); ++it) {
+            if (it.value().is_object() && !it.value().empty()) return true;
+        }
+        return false;
+    }
+
+    bool VideoMetadataUtils::HasLSBMetadata(const nlohmann::json& meta) {
+        if (!meta.is_object()) return false;
+        static const std::vector<std::string> keys = {
+            "LSB", "lsb", "Stealth", "steganography", "Hidden"
+        };
+        for (const auto& k : keys) {
+            if (meta.contains(k)) return true;
+        }
+        for (auto it = meta.begin(); it != meta.end(); ++it) {
+            if (!it.value().is_object()) continue;
+            for (const auto& k : keys) {
+                if (it.value().contains(k)) return true;
+            }
+        }
+        return false;
+    }
+
+} // namespace Utils

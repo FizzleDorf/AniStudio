@@ -3,38 +3,34 @@
 #include "FontSettingsComponent.hpp"
 #include "IconFonts.hpp"
 
+struct ImGuiContext;
+
 namespace ECS {
+    class SettingsSystem;
 
     class FontSettingsTab : public BaseSettingsTab {
     public:
-        explicit FontSettingsTab(FontSettingsComponent& comp);
+        FontSettingsTab(SettingsSystem& sys, FontSettingsComponent& comp);
         ~FontSettingsTab() = default;
 
         std::string GetTabName() const override { return "Fonts"; }
         std::string GetTabCategory() const override { return "Interface"; }
         void Render() override;
         void SetFilter(const std::string& filter) override { m_filter = filter; }
+        void SetImGuiContext(void* ctx) override { m_imguiContext = ctx; }
 
-        bool HasUnsavedChanges() const override { return m_comp.HasUnsavedChanges(); }
-        void CreateBackup() override { m_comp.CreateBackup(); }
-        void RestoreFromBackup() override {
-            m_comp.RestoreFromBackup();
-            m_comp.CheckAndRebuildFonts();
-        }
-        void ResetToDefaults() override { m_comp.ResetToDefaults(); }
-        bool SaveSettings() override { return m_comp.SaveSettings(); }
-        bool LoadSettings() override { return m_comp.LoadSettings(); }
-        void SetImGuiContext(ImGuiContext* ctx) override { m_comp.SetImGuiContext(ctx); }
+        static void ScanFontsDirectories(FontSettingsComponent& comp);
+        static void ApplyFontToImGui(FontSettingsComponent& comp, ImGuiContext* ctx);
 
     private:
+        SettingsSystem& m_settingsSystem;
         FontSettingsComponent& m_comp;
+        void* m_imguiContext = nullptr;
         std::string m_filter;
 
-        bool FilterPass(const std::string& section) const;
         void RenderFontFamily();
         void RenderIconFontFamily();
-        void RenderScale();
-        void RenderActionButtons();
+        void RenderScaleSchema();
     };
 
 }

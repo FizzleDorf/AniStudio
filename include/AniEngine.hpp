@@ -20,20 +20,7 @@
 
 #pragma once
 
-#ifdef _WIN32
-#ifdef BUILDING_ANIENGINE
-#define ANI_ENGINE_API __declspec(dllexport)
-#else
-#define ANI_ENGINE_API __declspec(dllimport)
-#endif
-#else
-#ifdef BUILDING_ANIENGINE
-#define ANI_ENGINE_API __attribute__((visibility("default")))
-#else
-#define ANI_ENGINE_API
-#endif
-#endif
-
+#include "EngineExport.hpp"
 #include "ECS.h"
 #include "EngineContext.hpp"
 #include <memory>
@@ -87,11 +74,18 @@ namespace ANI {
 		void RegisterCoreComponents();
 		void RegisterCoreSystems();
 
+		// Registers the engine's default path registry. These values are used
+		// only to fill in keys that are missing after loading. Anything already
+		// present in the persisted map (user edits, plugin registrations) is
+		// left alone.
+		void RegisterPathDefaults();
+
+		// Loads persisted paths, seeds missing ones from the registry, and
+		// ensures the directories exist. Never overwrites loaded values.
+		void InitializeCorePaths();
+
 		// Plugin management
 		void InitializePlugins();
-
-		// File path service initialization
-		void InitializeCorePaths();
 
 		// Session logging
 		void OpenSessionLog();

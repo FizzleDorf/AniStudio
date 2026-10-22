@@ -39,6 +39,7 @@ namespace ECS {
             bool hasExif = false;
             bool hasLSB = false;
             bool hasAniStudio = false;
+            bool hasMetadata = false;
 
             LoadResult() = default;
             LoadResult(const LoadResult&) = delete;
@@ -73,6 +74,7 @@ namespace ECS {
 
         void SetImage(const EntityID entity, const std::string& filePath);
         void RemoveImage(const EntityID entity);
+        bool IsEntityPendingLoad(EntityID entity) const;
         std::vector<EntityID> GetAllImageEntities() const;
 
     private:

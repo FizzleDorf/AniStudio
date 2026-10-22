@@ -3,7 +3,7 @@
 #include "BasePlugin.hpp"
 #include "Events.hpp"
 #include "FileDialogUtil.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <filesystem>
@@ -26,12 +26,12 @@ namespace GUI {
     }
 
     void PluginView::Init() {
-        auto fs = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        if (fs) {
-            std::string pluginPath = fs->GetPath("Plugins");
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        if (ss) {
+            std::string pluginPath = ss->GetPath("Plugins");
             if (pluginPath.empty()) {
                 pluginPath = (std::filesystem::current_path() / "plugins").string();
-                fs->SetPath("Plugins", pluginPath);
+                ss->SetPath("Plugins", pluginPath);
             }
             std::filesystem::create_directories(pluginPath);
             m_pluginManager.SetPluginDirectory(pluginPath);
@@ -333,10 +333,10 @@ namespace GUI {
     void PluginView::RefreshAvailablePlugins() {
         m_availablePlugins.clear();
 
-        auto fs = m_entityManager.GetSystem<ECS::FilePathSystem>();
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
         std::string pluginPath;
-        if (fs) {
-            pluginPath = fs->GetPath("Plugins");
+        if (ss) {
+            pluginPath = ss->GetPath("Plugins");
         }
         if (pluginPath.empty()) {
             pluginPath = (std::filesystem::current_path() / "plugins").string();

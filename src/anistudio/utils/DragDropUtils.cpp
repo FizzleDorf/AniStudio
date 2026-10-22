@@ -5,6 +5,7 @@
 #include <queue>
 #include <filesystem>
 #include <algorithm>
+#include <atomic>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -21,6 +22,7 @@
 #include <gdk/gdk.h>
 #include <gdk/gdkx.h>
 #include <X11/Xlib.h>
+#include <string.h>
 #endif
 
 namespace GUI {
@@ -562,10 +564,12 @@ namespace GUI {
         public:
             GtkWidget* window;
             GtkWidget* dragWidget;
+            std::vector<std::string> pendingUris;
 
             LinuxDragContext(void* winHandle) {
+                (void)winHandle;
                 GdkDisplay* display = gdk_display_get_default();
-                GdkScreen* screen = gdk_display_get_default_screen(display);
+                (void)display;
                 window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
                 gtk_window_set_default_size(GTK_WINDOW(window), 1, 1);
                 gtk_widget_realize(window);
@@ -573,6 +577,23 @@ namespace GUI {
                 dragWidget = gtk_drawing_area_new();
                 gtk_container_add(GTK_CONTAINER(window), dragWidget);
                 gtk_widget_show_all(window);
+
+                g_signal_connect(dragWidget, "drag-data-get",
+                    G_CALLBACK(+[](GtkWidget* widget, GdkDragContext* context,
+                                   GtkSelectionData* data, guint info, guint time,
+                                   gpointer user_data) {
+                        LinuxDragContext* ctx = static_cast<LinuxDragContext*>(user_data);
+                        if (!ctx) return;
+
+                        std::vector<gchar*> uriPtrs;
+                        uriPtrs.reserve(ctx->pendingUris.size() + 1);
+                        for (auto& u : ctx->pendingUris) {
+                            uriPtrs.push_back(const_cast<gchar*>(u.c_str()));
+                        }
+                        uriPtrs.push_back(nullptr);
+
+                        gtk_selection_data_set_uris(data, uriPtrs.data());
+                    }), this);
             }
 
             ~LinuxDragContext() {
@@ -589,48 +610,36 @@ namespace GUI {
                 g_linuxDragContext = std::make_unique<LinuxDragContext>(windowHandle);
             }
 
+            g_linuxDragContext->pendingUris.clear();
+            for (const auto& path : filePaths) {
+                std::string uri = "file://" + std::filesystem::absolute(path).string();
+                g_linuxDragContext->pendingUris.push_back(std::move(uri));
+            }
+
             GtkWidget* widget = g_linuxDragContext->dragWidget;
 
-            GtkTargetList* targetList = gtk_target_list_new(NULL, 0);
+            GtkTargetList* targetList = gtk_target_list_new(nullptr, 0);
             gtk_target_list_add_uri_targets(targetList, 0);
-
-            GtkTargetEntry* targets;
-            int nTargets;
-            targets = gtk_target_table_new_from_list(targetList, &nTargets);
 
             GdkEvent* event = gdk_event_new(GDK_BUTTON_PRESS);
 
             GdkDragContext* context = gtk_drag_begin_with_coordinates(
                 widget,
                 targetList,
-                GDK_ACTION_COPY | GDK_ACTION_MOVE,
+                static_cast<GdkDragAction>(GDK_ACTION_COPY | GDK_ACTION_MOVE),
                 1,
                 event,
                 -1, -1
             );
 
             gdk_event_free(event);
-            gtk_target_table_free(targets, nTargets);
             gtk_target_list_unref(targetList);
 
             if (!context) return false;
 
-            std::vector<std::string> uris;
-            for (const auto& path : filePaths) {
-                std::string uri = "file://" + std::filesystem::absolute(path).string();
-                uris.push_back(uri);
-            }
-
-            GtkSelectionData* selectionData = gtk_selection_data_new();
-            gtk_selection_data_set_uris(selectionData, uris.size(), uris.data());
-
             gtk_drag_set_icon_default(context);
 
-            bool result = gtk_drag_check_threshold(widget, 0, 0, 0, 0);
-
-            gtk_selection_data_free(selectionData);
-
-            return result;
+            return true;
         }
 #endif
 

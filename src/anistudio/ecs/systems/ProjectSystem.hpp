@@ -12,7 +12,7 @@ namespace GUI {
     class ViewManager;
     struct ProjectTemplate;
 }
-namespace ECS { class FilePathSystem; }
+namespace ECS { class SettingsSystem; }
 
 namespace Plugins {
     class StudioPluginManager;
@@ -66,7 +66,7 @@ namespace ECS {
         ECS::EntityID GetProjectEntity() const { return m_projectEntity; }
         ProjectComponent* GetProjectComponent() const;
 
-        std::shared_ptr<ECS::FilePathSystem> GetFilePathSystem() const;
+        std::shared_ptr<ECS::SettingsSystem> GetSettingsSystem() const;
         std::string GetDefaultProjectPath() const;
         void SetDefaultProjectPath(const std::string& path);
 

@@ -1,6 +1,8 @@
 #include "VideoSystem.hpp"
 #include "AudioSystem.hpp"
 #include "VideoUtils.hpp"
+#include "VideoMetadataUtils.hpp"
+#include "MetadataUtils.hpp"
 #include "Log.hpp"
 
 #include <algorithm>
@@ -39,6 +41,8 @@ namespace ECS {
     }
 
     void VideoSystem::OnEntityDestroyed(EntityID entity) {
+        DropPendingLoadsFor(entity);
+
         std::unique_ptr<Track> detached;
         {
             std::lock_guard<std::mutex> lock(m_tracksMutex);
@@ -52,6 +56,14 @@ namespace ECS {
             std::lock_guard<std::mutex> lock(m_restoreMutex);
             m_pendingRestores.erase(entity);
         }
+    }
+
+    void VideoSystem::DropPendingLoadsFor(EntityID entity) {
+        std::lock_guard<std::recursive_mutex> lock(m_loadMutex);
+        m_pendingLoads.erase(
+            std::remove_if(m_pendingLoads.begin(), m_pendingLoads.end(),
+                [entity](const LoadingTask& t) { return t.entityID == entity; }),
+            m_pendingLoads.end());
     }
 
     void VideoSystem::Update(float deltaT) {
@@ -102,9 +114,6 @@ namespace ECS {
                     track.currentFrameRGBA = std::move(frame.data);
                     track.currentWidth = frame.width;
                     track.currentHeight = frame.height;
-
-                    ANI_LOG_TRACE("[VideoSystem] Publish frame entity=%u pts=%.3f index=%lld master=%.3f",
-                        entity, frame.pts, frame.index, master);
 
                     for (auto& [o, cb] : m_textureCallbacks) {
                         (void)o;
@@ -170,6 +179,10 @@ namespace ECS {
             m_pendingRestores.clear();
         }
         {
+            std::lock_guard<std::recursive_mutex> lock(m_loadMutex);
+            m_pendingLoads.clear();
+        }
+        {
             std::lock_guard<std::mutex> lock(m_saveMutex);
             m_saveFutures.clear();
             m_savePaths.clear();
@@ -193,19 +206,15 @@ namespace ECS {
 
     void VideoSystem::RemoveVideo(EntityID entity) {
         ANI_LOG_INFO("[VideoSystem] RemoveVideo entity=%u", entity);
+
+        DropPendingLoadsFor(entity);
+
         OnEntityDestroyed(entity);
 
         {
             std::lock_guard<std::mutex> lock(m_saveMutex);
             m_saveFutures.erase(entity);
             m_savePaths.erase(entity);
-        }
-        {
-            std::lock_guard<std::recursive_mutex> lock(m_loadMutex);
-            m_pendingLoads.erase(
-                std::remove_if(m_pendingLoads.begin(), m_pendingLoads.end(),
-                    [entity](const LoadingTask& t) { return t.entityID == entity; }),
-                m_pendingLoads.end());
         }
         if (mgr.HasComponent<VideoComponent>(entity)) {
             mgr.GetComponent<VideoComponent>(entity).Unload();
@@ -215,15 +224,11 @@ namespace ECS {
 
     void VideoSystem::ClearCache(EntityID entity) {
         ANI_LOG_DEBUG("[VideoSystem] ClearCache entity=%u", entity);
+
+        DropPendingLoadsFor(entity);
+
         OnEntityDestroyed(entity);
 
-        {
-            std::lock_guard<std::recursive_mutex> lock(m_loadMutex);
-            m_pendingLoads.erase(
-                std::remove_if(m_pendingLoads.begin(), m_pendingLoads.end(),
-                    [entity](const LoadingTask& t) { return t.entityID == entity; }),
-                m_pendingLoads.end());
-        }
         if (mgr.IsEntityValid(entity) && mgr.HasComponent<VideoComponent>(entity)) {
             mgr.GetComponent<VideoComponent>(entity).Unload();
         }
@@ -243,6 +248,8 @@ namespace ECS {
             pr.wasPlaying = wasPlaying;
             m_pendingRestores[entity] = pr;
         }
+
+        DropPendingLoadsFor(entity);
 
         OnEntityDestroyed(entity);
 
@@ -265,6 +272,8 @@ namespace ECS {
 
         ANI_LOG_DEBUG("[VideoSystem] LoadVideoAsync entity=%u mode=%d",
             entity, static_cast<int>(mode));
+
+        DropPendingLoadsFor(entity);
 
         auto fut = pool->getIOPool().submit([filePath, entity]() -> LoadResult {
             return LoadVideoInBackground(filePath, entity);
@@ -309,19 +318,19 @@ namespace ECS {
 
         ANI_LOG_INFO("[VideoSystem] ApplyLoadedVideo entity=%u %dx%d fps=%.3f frames=%lld",
             e, r.width, r.height, r.fps, r.frameCount);
-
-        vc.Unload();
-
-        vc.fmtCtx.reset(r.fmtCtx);
-        vc.codecCtx.reset(r.codecCtx);
-        vc.swsCtx.reset(r.swsCtx);
-        vc.frame.reset(r.frame);
-        vc.pkt.reset(r.pkt);
-        vc.videoStreamIndex = r.videoStreamIndex;
-        vc.width = r.width;
-        vc.height = r.height;
-        vc.fps = r.fps;
-        vc.frameCount = r.frameCount;
+        {
+            std::lock_guard<std::mutex> lock(vc.decoderMutex);
+            vc.fmtCtx.reset(r.fmtCtx);
+            vc.codecCtx.reset(r.codecCtx);
+            vc.swsCtx.reset(r.swsCtx);
+            vc.frame.reset(r.frame);
+            vc.pkt.reset(r.pkt);
+            vc.videoStreamIndex = r.videoStreamIndex;
+            vc.width = r.width;
+            vc.height = r.height;
+            vc.fps = r.fps;
+            vc.frameCount = r.frameCount;
+        }
         vc.filePath = r.filePath;
         vc.fileName = r.fileName;
         vc.fileSize = r.fileSize;
@@ -330,6 +339,7 @@ namespace ECS {
         vc.hasExifData = r.hasExif;
         vc.hasLSBData = r.hasLSB;
         vc.hasAniStudioMetadata = r.hasAniStudio;
+        vc.metadata = std::move(r.metadata);
 
         r.fmtCtx = nullptr; r.codecCtx = nullptr; r.swsCtx = nullptr;
         r.frame = nullptr;  r.pkt = nullptr;
@@ -454,6 +464,17 @@ namespace ECS {
         }
         catch (...) {}
 
+        try {
+            nlohmann::json meta = Utils::VideoMetadataUtils::ReadMetadataFromVideo(filePath);
+            if (!meta.is_null() && !meta.empty()) {
+                r.hasAniStudio = Utils::VideoMetadataUtils::HasAniStudioMetadata(meta);
+                r.hasExif = Utils::VideoMetadataUtils::HasExifMetadata(meta);
+                r.hasLSB = Utils::VideoMetadataUtils::HasLSBMetadata(meta);
+                r.metadata = std::move(meta);
+            }
+        }
+        catch (...) {}
+
         r.success = true;
         return r;
     }
@@ -461,9 +482,13 @@ namespace ECS {
     void VideoSystem::Play(EntityID entity, bool loop) {
         if (!mgr.IsEntityValid(entity) || !mgr.HasComponent<VideoComponent>(entity)) return;
         auto& vc = mgr.GetComponent<VideoComponent>(entity);
-        if (!vc.fmtCtx || vc.frameCount <= 0) {
-            ANI_LOG_WARN("[VideoSystem] Play entity=%u but fmtCtx missing or frameCount=0", entity);
-            return;
+
+        {
+            std::lock_guard<std::mutex> lock(vc.decoderMutex);
+            if (!vc.fmtCtx || vc.frameCount <= 0) {
+                ANI_LOG_WARN("[VideoSystem] Play entity=%u but fmtCtx missing or frameCount=0", entity);
+                return;
+            }
         }
 
         PlaybackMode mode = PlaybackMode::Cached;
@@ -684,9 +709,13 @@ namespace ECS {
             return;
         }
         auto& vc = mgr.GetComponent<VideoComponent>(entity);
-        if (!vc.fmtCtx || vc.videoStreamIndex < 0) {
-            NotifySaveComplete(entity, false, "");
-            return;
+
+        {
+            std::lock_guard<std::mutex> lock(vc.decoderMutex);
+            if (!vc.fmtCtx || vc.videoStreamIndex < 0) {
+                NotifySaveComplete(entity, false, "");
+                return;
+            }
         }
 
         auto pool = mgr.GetSystem<ThreadPoolSystem>();
@@ -811,6 +840,8 @@ namespace ECS {
 
     bool VideoSystem::DecodeFrameForSave(VideoComponent& vc, long long idx, bool& isNew) {
         isNew = false;
+
+        std::lock_guard<std::mutex> lock(vc.decoderMutex);
         if (!vc.fmtCtx || vc.videoStreamIndex < 0) return false;
         if (idx < 0) idx = 0;
         if (idx >= vc.frameCount) idx = vc.frameCount - 1;
@@ -948,7 +979,10 @@ namespace ECS {
     bool VideoSystem::Track::DecodeOneFrame(Frame& out) {
         if (!owner->mgr.IsEntityValid(entity) ||
             !owner->mgr.HasComponent<VideoComponent>(entity)) return false;
+
         auto& vc = owner->mgr.GetComponent<VideoComponent>(entity);
+
+        std::lock_guard<std::mutex> lock(vc.decoderMutex);
         if (!vc.fmtCtx || vc.videoStreamIndex < 0 || !vc.pkt || !vc.frame) return false;
 
         AVPacket* pkt = vc.pkt.get();
@@ -1012,7 +1046,10 @@ namespace ECS {
     bool VideoSystem::Track::PerformSeek(double time) {
         if (!owner->mgr.IsEntityValid(entity) ||
             !owner->mgr.HasComponent<VideoComponent>(entity)) return false;
+
         auto& vc = owner->mgr.GetComponent<VideoComponent>(entity);
+
+        std::lock_guard<std::mutex> lock(vc.decoderMutex);
         if (!vc.fmtCtx || vc.videoStreamIndex < 0) return false;
 
         double dur = vc.fps > 0 ? static_cast<double>(vc.frameCount) / vc.fps : 0.0;
@@ -1034,9 +1071,64 @@ namespace ECS {
         lastDisplayedIndex = targetIdx - 1;
 
         Frame f;
-        if (!DecodeOneFrame(f)) return false;
+        {
+            if (!vc.fmtCtx || !vc.pkt || !vc.frame) return false;
+            AVPacket* pkt = vc.pkt.get();
+            AVFrame* frame = vc.frame.get();
+            int attempts = 200;
+            bool produced = false;
+            while (attempts-- > 0 && !produced) {
+                if (av_read_frame(vc.fmtCtx.get(), pkt) < 0) break;
+                if (pkt->stream_index != vc.videoStreamIndex) {
+                    av_packet_unref(pkt);
+                    continue;
+                }
+                if (avcodec_send_packet(vc.codecCtx.get(), pkt) == 0) {
+                    while (avcodec_receive_frame(vc.codecCtx.get(), frame) == 0) {
+                        int w = frame->width, h = frame->height;
+                        if (w <= 0 || h <= 0) continue;
 
-        std::lock_guard<std::mutex> lock(bufferMutex);
+                        if (w != vc.width || h != vc.height || !vc.swsCtx) {
+                            vc.width = w;
+                            vc.height = h;
+                            vc.swsCtx.reset(sws_getContext(w, h, vc.codecCtx->pix_fmt,
+                                w, h, AV_PIX_FMT_RGBA,
+                                SWS_BILINEAR, nullptr, nullptr, nullptr));
+                        }
+
+                        size_t sz = static_cast<size_t>(w) * h * 4;
+                        f.data.resize(sz);
+                        uint8_t* dst[1] = { f.data.data() };
+                        int lines[1] = { w * 4 };
+                        sws_scale(vc.swsCtx.get(), frame->data, frame->linesize, 0, h, dst, lines);
+
+                        int64_t tsF = (frame->best_effort_timestamp != AV_NOPTS_VALUE)
+                            ? frame->best_effort_timestamp
+                            : frame->pts;
+                        double pts;
+                        if (tsF != AV_NOPTS_VALUE) {
+                            pts = static_cast<double>(tsF) * av_q2d(stream->time_base);
+                        }
+                        else {
+                            pts = static_cast<double>(lastDisplayedIndex + 1) /
+                                (vc.fps > 0 ? vc.fps : 30.0);
+                        }
+
+                        f.width = w;
+                        f.height = h;
+                        f.pts = pts;
+                        f.index = static_cast<long long>(pts * (vc.fps > 0 ? vc.fps : 30.0) + 0.5);
+                        lastDisplayedIndex = f.index;
+                        produced = true;
+                        break;
+                    }
+                }
+                av_packet_unref(pkt);
+            }
+            if (!produced) return false;
+        }
+
+        std::lock_guard<std::mutex> bufferLock(bufferMutex);
         buffer.clear();
         buffer.push_back(std::move(f));
         bufferCV.notify_all();

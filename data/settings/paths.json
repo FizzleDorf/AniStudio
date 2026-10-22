@@ -1,7 +1,6 @@
 {
     "compName": "FilePathComponent",
     "paths": {
-        "Assets": "",
         "AssetsFolder": "projects\\AniProject5/assets",
         "Checkpoint": "",
         "ControlNet": "",

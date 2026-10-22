@@ -20,8 +20,8 @@ namespace ECS {
 		//	Components that don't use the schema don't allocate.
 		// TODO: at some point the schema rendering through json should
 		//	be replaced
- 		virtual const nlohmann::json& GetSchema() const {
-			const static nlohmann::json j = "uiSchema";
+		virtual const nlohmann::json& GetSchema() const {
+			const static nlohmann::json j = nlohmann::json::object();
 			return j;
 		}
 

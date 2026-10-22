@@ -335,16 +335,64 @@ namespace Utils {
         }
 
         static bool HasLSBMetadata(const std::string& filePath) {
-            int width, height, channels;
-            unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 4);
-            if (!data) {
+            try {
+                int width = 0, height = 0, channels = 0;
+                unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &channels, 4);
+                if (!data) return false;
+
+                nlohmann::json parsed =
+                    SteganographyUtils::ExtractJsonFromAlpha(data, width, height);
+
+                if (!parsed.is_null() && !parsed.empty()) {
+                    stbi_image_free(data);
+                    return true;
+                }
+
+                if (channels >= 4) {
+                    const size_t pixelCount = static_cast<size_t>(width) * height;
+                    if (pixelCount >= 512) {
+                        for (int ch = 0; ch < 4; ++ch) {
+                            size_t prefixOnes = 0;
+                            size_t prefix2Ones = 0;
+                            const size_t prefixBits = 64;
+                            const size_t prefix2Bits = 64;
+
+                            for (size_t i = 0; i < pixelCount; ++i) {
+                                const int bit = (data + i * 4)[ch] & 1;
+                                if (i < prefixBits) {
+                                    prefixOnes += bit;
+                                }
+                                else if (i < prefixBits + prefix2Bits) {
+                                    prefix2Ones += bit;
+                                }
+                                else {
+                                    break;
+                                }
+                            }
+
+                            const bool prefixAllZero = (prefixOnes == 0);
+                            const bool prefixAllOne = (prefixOnes == prefixBits);
+                            const bool prefix2AllZero = (prefix2Ones == 0);
+                            const bool prefix2AllOne = (prefix2Ones == prefix2Bits);
+
+                            const bool headerLike =
+                                (prefixAllZero || prefixAllOne) &&
+                                (prefix2AllZero || prefix2AllOne);
+
+                            if (headerLike) {
+                                stbi_image_free(data);
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                stbi_image_free(data);
                 return false;
             }
-
-            std::vector<unsigned char> extracted = SteganographyUtils::ExtractFromAlpha(data, width, height);
-            stbi_image_free(data);
-
-            return !extracted.empty();
+            catch (...) {
+                return false;
+            }
         }
 
         static int GetMetadataStatus(const std::string& filePath) {

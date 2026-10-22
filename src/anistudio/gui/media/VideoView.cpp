@@ -9,7 +9,7 @@
 #include "MediaHistoryView.hpp"
 #include "MetadataView.hpp"
 #include "AudioSystem.hpp"
-#include "FilePathSystem.hpp"
+#include "SettingsSystem.hpp"
 #include "AVSystem.hpp"
 #include "PlaybackEvents.hpp"
 #include "IconFonts.hpp"
@@ -801,8 +801,8 @@ namespace GUI {
                 ANI_LOG_WARN("Save As: no valid video selected");
             }
             else {
-                auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-                std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+                auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+                std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
                 std::string outPath;
                 const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
                 std::string defaultName = videoComp.fileName;
@@ -1648,8 +1648,8 @@ namespace GUI {
             return;
         }
 
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
         std::string outPath;
 
         const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);
@@ -1666,8 +1666,8 @@ namespace GUI {
             return;
         }
 
-        auto fileSys = m_entityManager.GetSystem<ECS::FilePathSystem>();
-        std::string defaultPath = fileSys ? fileSys->GetPath("DataPath") : ".";
+        auto ss = m_entityManager.GetSystem<ECS::SettingsSystem>();
+        std::string defaultPath = ss ? ss->GetPath("DataPath") : ".";
         std::string outPath;
 
         const auto& videoComp = m_entityManager.GetComponent<ECS::VideoComponent>(selectedEntityID);

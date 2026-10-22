@@ -1,107 +1,28 @@
 #include "GeneralSettingsTab.hpp"
+#include "SettingsSystem.hpp"
+#include "FilePathComponent.hpp"
+#include "UISchema.hpp"
 #include <imgui.h>
-#include <algorithm>
 
 namespace ECS {
 
-    GeneralSettingsTab::GeneralSettingsTab(GeneralSettingsComponent& comp) : m_comp(comp) {}
-
-    bool GeneralSettingsTab::FilterPass(const std::string& section) const {
-        if (m_filter.empty()) return true;
-        std::string lower = section;
-        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        std::string f = m_filter;
-        std::transform(f.begin(), f.end(), f.begin(), ::tolower);
-        return lower.find(f) != std::string::npos;
+    GeneralSettingsTab::GeneralSettingsTab(SettingsSystem& sys, GeneralSettingsComponent& comp)
+        : m_settingsSystem(sys), m_comp(comp) {
     }
 
     void GeneralSettingsTab::Render() {
-        if (ImGui::BeginChild("GeneralSettings", ImVec2(0, 0), false)) {
-            // Sections as collapsible headers, auto?expanded when filter matches
-            if (FilterPass("Startup")) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-                if (ImGui::CollapsingHeader("Startup")) RenderStartupSettings();
-            }
-            if (FilterPass("Auto-Save")) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-                if (ImGui::CollapsingHeader("Auto-Save")) RenderAutoSaveSettings();
-            }
-            if (FilterPass("Confirmation")) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-                if (ImGui::CollapsingHeader("Confirmation")) RenderConfirmationSettings();
-            }
-            if (FilterPass("Performance")) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-                if (ImGui::CollapsingHeader("Performance")) RenderPerformanceSettings();
-            }
-            if (FilterPass("Logging")) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-                if (ImGui::CollapsingHeader("Logging")) RenderLoggingSettings();
-            }
-            if (FilterPass("Plugins")) {
-                ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
-                if (ImGui::CollapsingHeader("Plugins")) RenderPluginSettings();
-            }
-            RenderActionButtons();
-        }
-        ImGui::EndChild();
-    }
+        auto props = m_comp.GetPropertyMap();
+        auto* filePathComp = m_settingsSystem.GetFilePathComponent();
+        const std::unordered_map<std::string, std::string>* pathMap =
+            filePathComp ? &filePathComp->GetCurrentMap() : nullptr;
 
-    void GeneralSettingsTab::RenderStartupSettings() {
-        if (ImGui::Checkbox("Show Startup Screen", &m_comp.showStartupScreen)) m_comp.hasChanges = true;
-        if (ImGui::Checkbox("Load Last Project on Startup", &m_comp.loadLastProject)) m_comp.hasChanges = true;
-    }
-
-    void GeneralSettingsTab::RenderAutoSaveSettings() {
-        if (ImGui::Checkbox("Auto-Save Projects", &m_comp.autoSaveProjects)) m_comp.hasChanges = true;
-        if (m_comp.autoSaveProjects) {
-            if (ImGui::SliderInt("Auto-Save Interval (minutes)", &m_comp.autoSaveIntervalMinutes, 1, 60)) m_comp.hasChanges = true;
-        }
-    }
-
-    void GeneralSettingsTab::RenderConfirmationSettings() {
-        if (ImGui::Checkbox("Confirm Before Exit", &m_comp.confirmBeforeExit)) m_comp.hasChanges = true;
-        if (ImGui::Checkbox("Confirm Before Delete Assets", &m_comp.confirmBeforeDeleteAssets)) m_comp.hasChanges = true;
-        if (ImGui::Checkbox("Confirm Before Overwrite Files", &m_comp.confirmBeforeOverwriteFiles)) m_comp.hasChanges = true;
-    }
-
-    void GeneralSettingsTab::RenderPerformanceSettings() {
-        if (ImGui::SliderInt("Max Recent Projects", &m_comp.maxRecentProjects, 5, 50)) m_comp.hasChanges = true;
-        if (ImGui::SliderInt("Max Undo Levels", &m_comp.maxUndoLevels, 10, 1000)) m_comp.hasChanges = true;
-        if (ImGui::Checkbox("Enable Hardware Acceleration", &m_comp.enableHardwareAcceleration)) m_comp.hasChanges = true;
-    }
-
-    void GeneralSettingsTab::RenderLoggingSettings() {
-        if (ImGui::Checkbox("Enable Logging", &m_comp.enableLogging)) m_comp.hasChanges = true;
-        if (m_comp.enableLogging) {
-            const char* logLevels[] = { "Error", "Warning", "Info", "Debug" };
-            if (ImGui::Combo("Log Level", &m_comp.logLevel, logLevels, 4)) m_comp.hasChanges = true;
-            if (ImGui::Checkbox("Log to File", &m_comp.logToFile)) m_comp.hasChanges = true;
-            if (m_comp.logToFile) {
-                if (ImGui::SliderInt("Max Log File Size (MB)", &m_comp.maxLogFileSize, 1, 100)) m_comp.hasChanges = true;
-            }
-        }
-    }
-
-    void GeneralSettingsTab::RenderPluginSettings() {
-        if (ImGui::Checkbox("Use Newest Plugin Versions from Staging", &m_comp.useNewestPluginVersions)) {
-            m_comp.hasChanges = true;
-        }
-        ImGui::TextDisabled("(?)");
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("When enabled, the project will load the newest plugin binaries from the staging directory, overriding the versions saved in the project state.");
-        }
-    }
-
-    void GeneralSettingsTab::RenderActionButtons() {
-        if (ImGui::Button("Save Settings")) SaveSettings();
-        ImGui::SameLine();
-        if (ImGui::Button("Reset to Defaults")) ResetToDefaults();
-        ImGui::SameLine();
-        if (ImGui::Button("Revert Changes")) RestoreFromBackup();
-        if (m_comp.HasUnsavedChanges()) {
-            ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "Unsaved changes");
-        }
+        UISchema::RenderSchema(
+            m_comp.GetSchema(),
+            props,
+            nullptr,
+            m_comp.GetCompName(),
+            (int)m_settingsSystem.GetSettingsEntity(),
+            pathMap);
     }
 
 }
