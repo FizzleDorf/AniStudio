@@ -47,11 +47,35 @@ jobs:
             libgtk-3-dev \
             ninja-build pkg-config build-essential
 
-      - name: Run Install Script
+      - name: Restore Conan cache
+        id: cache-conan
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.conan2
+            build/venv
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-${{ github.run_id }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        if: steps.cache-conan.outputs.cache-hit != 'true'
         run: ./install.sh
 
+      - name: Save Conan cache
+        if: steps.cache-conan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.conan2
+            build/venv
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-${{ github.run_id }}
+
       - name: Run Build Script
-        run: ./build.sh --local --jobs $(nproc)
+        run: |
+          source build/venv/bin/activate
+          ./build.sh --local --jobs $(nproc)
 
       - name: Verify build output
         shell: bash
@@ -120,7 +144,7 @@ jobs:
           /tmp/appimagetool --appimage-extract-and-run "$APPDIR" \
             "AniStudio-${{ steps.ver.outputs.hash }}-linux-x64.AppImage"
 
-      - name: Package core and cache
+      - name: Package core and build env
         shell: bash
         run: |
           rm -rf artifact-bundle
@@ -194,6 +218,7 @@ jobs:
 
       - name: Run Plugin Build Script
         run: |
+          source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           chmod +x "build (1).sh"
           ./"build (1).sh"
@@ -259,6 +284,7 @@ jobs:
 
       - name: Run Plugin Build Script
         run: |
+          source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           chmod +x "build (1).sh"
           ./"build (1).sh" --vulkan
@@ -330,6 +356,7 @@ jobs:
 
       - name: Run Plugin Build Script
         run: |
+          source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           chmod +x "build (1).sh"
           ./"build (1).sh" --cuda
@@ -426,6 +453,7 @@ jobs:
 
       - name: Run Plugin Build Script
         run: |
+          source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           chmod +x "build (1).sh"
           ./"build (1).sh" --hipblas
@@ -496,6 +524,7 @@ jobs:
         shell: bash
         run: |
           source /opt/intel/oneapi/setvars.sh
+          source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           chmod +x "build (1).sh"
           ./"build (1).sh" --sycl

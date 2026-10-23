@@ -39,13 +39,37 @@ jobs:
         with:
           arch: x64
 
-      - name: Run Install Script
+      - name: Restore Conan cache
+        id: cache-conan
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.conan2
+            build/venv
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-${{ github.run_id }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        if: steps.cache-conan.outputs.cache-hit != 'true'
         shell: cmd
         run: install.bat
 
+      - name: Save Conan cache
+        if: steps.cache-conan.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.conan2
+            build/venv
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-${{ github.run_id }}
+
       - name: Run Build Script
         shell: cmd
-        run: build.bat --local --jobs 8
+        run: |
+          call build\venv\Scripts\activate.bat
+          build.bat --local --jobs 8
 
       - name: Verify libs and DLLs exist
         shell: bash
@@ -56,7 +80,7 @@ jobs:
           test -f build/AniStudioCore.dll || { echo "::error::AniStudioCore.dll missing"; exit 1; }
           test -f build/AniStudio.exe || { echo "::error::AniStudio.exe missing"; exit 1; }
 
-      - name: Package core and cache
+      - name: Package core and build env
         shell: bash
         run: |
           rm -rf artifact-bundle
@@ -135,6 +159,7 @@ jobs:
       - name: Run Plugin Build Script
         shell: cmd
         run: |
+          call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
           build (1).bat
 
@@ -212,6 +237,7 @@ jobs:
       - name: Run Plugin Build Script
         shell: cmd
         run: |
+          call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
           build (1).bat --vulkan
 
@@ -286,6 +312,7 @@ jobs:
       - name: Run Plugin Build Script
         shell: cmd
         run: |
+          call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
           build (1).bat --cuda
 
@@ -389,6 +416,7 @@ jobs:
       - name: Run Plugin Build Script
         shell: cmd
         run: |
+          call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
           build (1).bat --hipblas
 
@@ -459,6 +487,7 @@ jobs:
       - name: Run Plugin Build Script
         shell: cmd
         run: |
+          call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
           build (1).bat --sycl
 
