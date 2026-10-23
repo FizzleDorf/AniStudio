@@ -54,7 +54,10 @@ pip install conan
 conan profile detect --force
 
 # Run Conan install
-conan install . --build=missing -s compiler.cppstd=17
+conan install . --build=missing \
+  -s compiler.cppstd=17 -s build_type=Release \
+  -c tools.system.package_manager:mode=install \
+  -c tools.system.package_manager:sudo=True
 
 echo "Installation completed successfully."
 echo "To build the project, run './build.sh'"
