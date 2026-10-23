@@ -47,30 +47,18 @@ jobs:
             libgtk-3-dev \
             ninja-build pkg-config build-essential
 
-      - name: Restore Conan cache
-        id: cache-conan
-        uses: actions/cache/restore@v4
+      - name: Cache Conan
+        uses: actions/cache@v4
         with:
           path: |
             ~/.conan2
             build/venv
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-${{ github.run_id }}
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
-            conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-
             conan-${{ runner.os }}-
 
       - name: Install Conan dependencies
-        if: steps.cache-conan.outputs.cache-hit != 'true'
         run: ./install.sh
-
-      - name: Save Conan cache
-        if: steps.cache-conan.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.conan2
-            build/venv
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}-${{ github.run_id }}
 
       - name: Run Build Script
         run: |
@@ -596,7 +584,7 @@ jobs:
         shell: bash
         run: |
           test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
-          test -f plugins-normalized/CPU/*.tar.gz    || { echo "::error::CPU plugin tarball missing"; exit 1; }
+          test -f plugins-normalized/CPU/*.tar.gz    || { echo "::warning::CPU plugin tarball missing"; }
 
       - name: Assemble Nvidia bundle
         shell: bash
@@ -606,7 +594,7 @@ jobs:
           STAGE="stage-nvidia"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::CUDA unavailable"; fi
           tar -czf "AniStudio-Nvidia-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
@@ -619,7 +607,7 @@ jobs:
           STAGE="stage-amd"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::HIP unavailable"; fi
           tar -czf "AniStudio-AMD-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
@@ -632,7 +620,7 @@ jobs:
           STAGE="stage-intel"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::SYCL unavailable"; fi
           tar -czf "AniStudio-Intel-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .

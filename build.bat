@@ -97,7 +97,6 @@ echo Configuring with CMake...
 echo.
 
 cmake .. ^
-    -G "Visual Studio 17 2022" ^
     -A x64 ^
     -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
     -DBUILD_SHARED_LIBS=%SHARED% ^
