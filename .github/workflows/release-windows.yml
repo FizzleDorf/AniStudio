@@ -1,0 +1,944 @@
+name: Release Windows
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-windows
+  cancel-in-progress: false
+
+jobs:
+  core:
+    runs-on: windows-latest
+    outputs:
+      hash: ${{ steps.ver.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with:
+          key: windows-core-x64
+          evict-old-files: 1d
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with:
+          cache_packages: 'true'
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Save Conan cache (no source)
+        shell: bash
+        run: conan cache save "*" --file=conan-cache.tar.gz --no-source
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -B build -S . \
+            -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+            -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify libs and DLLs exist
+        shell: bash
+        run: |
+          test -f build/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f build/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+          test -f build/bin/AniEngineCore.dll || test -f build/lib/AniEngineCore.dll || { echo "::error::AniEngineCore.dll missing"; exit 1; }
+          test -f build/bin/AniStudioCore.dll || test -f build/lib/AniStudioCore.dll || { echo "::error::AniStudioCore.dll missing"; exit 1; }
+
+      - name: Package core (tar.gz + zip)
+        shell: bash
+        run: |
+          rm -rf artifact-bundle
+          mkdir -p artifact-bundle/lib artifact-bundle/bin
+
+          if [ -f build/Release/AniStudio.exe ]; then
+            cp build/Release/AniStudio.exe artifact-bundle/
+          elif [ -f build/AniStudio.exe ]; then
+            cp build/AniStudio.exe artifact-bundle/
+          fi
+
+          cp -a build/lib/. artifact-bundle/lib/ 2>/dev/null || true
+          cp -a build/bin/. artifact-bundle/bin/ 2>/dev/null || true
+
+          declare -A seen
+          for src in build/lib build/bin build; do
+            [ -d "$src" ] || continue
+            while IFS= read -r dll; do
+              base="$(basename "$dll")"
+              if [ -z "${seen[$base]:-}" ]; then
+                cp "$dll" artifact-bundle/
+                seen[$base]=1
+              fi
+            done < <(find "$src" -maxdepth 1 -iname "*.dll" 2>/dev/null | sort)
+          done
+
+          cp -r build/data    artifact-bundle/ 2>/dev/null || true
+          cp -r build/shaders artifact-bundle/ 2>/dev/null || true
+          cp -r build/assets  artifact-bundle/ 2>/dev/null || true
+          cp -r build/docs    artifact-bundle/ 2>/dev/null || true
+          cp build/README.md              artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+
+          test -f artifact-bundle/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing from bundle"; exit 1; }
+          test -f artifact-bundle/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing from bundle"; exit 1; }
+
+          tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
+          (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: |
+            AniStudio-Windows-x64.tar.gz
+            AniStudio-Windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish core release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-Windows-x64.tar.gz
+            AniStudio-Windows-x64.zip
+            conan-cache.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-cpu:
+    needs: core
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: x64 }
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: windows-CPU-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP -A x64 \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-extracted/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-extracted/bin \
+            -DSD_CPU=ON -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin (tar.gz + zip)
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_CPU"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../${PLUGIN_NAME}-windows-x64.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-CPU
+          path: |
+            AniStudio-SDCPP_CPU-windows-x64.tar.gz
+            AniStudio-SDCPP_CPU-windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-SDCPP_CPU-windows-x64.tar.gz
+            AniStudio-SDCPP_CPU-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-vulkan:
+    needs: core
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $VULKAN_VERSION = "1.4.328.1"
+          curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/windows/vulkansdk-windows-X64-$VULKAN_VERSION.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$VULKAN_VERSION\bin"
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: x64 }
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: windows-VULKAN-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP -A x64 \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-extracted/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-extracted/bin \
+            -DSD_VULKAN=ON -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin (tar.gz + zip)
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_VULKAN"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../${PLUGIN_NAME}-windows-x64.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-VULKAN
+          path: |
+            AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
+            AniStudio-SDCPP_VULKAN-windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
+            AniStudio-SDCPP_VULKAN-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-cuda:
+    needs: core
+    runs-on: windows-2022
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: "12.8.1"
+          method: "network"
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "cufft", "cufft_dev", "cusparse", "cusparse_dev", "cusolver", "cusolver_dev", "nvrtc", "nvrtc_dev", "thrust", "visual_studio_integration"]'
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: x64 }
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: windows-CUDA-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin (CUDA)
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -G "Visual Studio 17 2022" -A x64 -T "cuda=$CUDA_PATH" \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_CUDA_FLAGS="-allow-unsupported-compiler" \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-extracted/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-extracted/bin \
+            -DSD_CUDA=ON -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin (tar.gz + zip)
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_CUDA"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../${PLUGIN_NAME}-windows-x64.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-CUDA
+          path: |
+            AniStudio-SDCPP_CUDA-windows-x64.tar.gz
+            AniStudio-SDCPP_CUDA-windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-SDCPP_CUDA-windows-x64.tar.gz
+            AniStudio-SDCPP_CUDA-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-hip:
+    needs: core
+    runs-on: windows-2022
+    continue-on-error: true
+    timeout-minutes: 300
+    env:
+      ROCM_VERSION: "7.14.0"
+      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102;gfx1200;gfx1201"
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+
+      - name: Cache ROCm Installation
+        id: cache-rocm
+        uses: actions/cache@v4
+        with:
+          path: C:\TheRock\build
+          key: rocm-wheels-${{ env.ROCM_VERSION }}-${{ runner.os }}
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: "windows-rocm-${{ env.ROCM_VERSION }}-x64", evict-old-files: 1d }
+
+      - name: Install ROCm with Wheels
+        if: steps.cache-rocm.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -Path "C:\TheRock\build" -ItemType Directory -Force | Out-Null
+          python -m venv C:\TheRock\build\.venv
+          & C:\TheRock\build\.venv\Scripts\Activate.ps1
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{ env.ROCM_VERSION }}"
+          rocm-sdk init
+
+      - name: Setup ROCm Environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          & C:\TheRock\build\.venv\Scripts\Activate.ps1
+          rocm-sdk init
+          $rocmPath = (rocm-sdk path --root).Trim()
+          $cmakePath = (rocm-sdk path --cmake).Trim()
+          $binPath = (rocm-sdk path --bin).Trim()
+          echo "HIP_PATH=$rocmPath" >> $env:GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$cmakePath" >> $env:GITHUB_ENV
+          echo "HIP_DEVICE_LIB_PATH=$rocmPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
+          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
+          echo "LLVM_PATH=$rocmPath\lib\llvm" >> $env:GITHUB_ENV
+          echo "$binPath" >> $env:GITHUB_PATH
+          echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -c tools.cmake.cmaketoolchain:generator=Ninja
+
+      - name: Strip VS-only generator settings from Conan toolchain
+        shell: bash
+        run: |
+          sed -i -e '/CMAKE_GENERATOR_PLATFORM/d' -e '/CMAKE_GENERATOR_TOOLSET/d' -e '/CMAKE_GENERATOR_INSTANCE/d' build/conan/conan_toolchain.cmake
+
+      - name: Configure plugin (HIPBLAS Windows)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          set "Platform="
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
+            -G "Ninja" ^
+            -DCMAKE_C_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
+            -DCMAKE_CXX_COMPILER="%HIP_PATH%\lib\llvm\bin\clang++.exe" ^
+            -DCMAKE_HIP_COMPILER="%HIP_PATH%\lib\llvm\bin\clang.exe" ^
+            -DCMAKE_CXX_STANDARD=17 ^
+            -DCMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES=TRUE ^
+            -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-extracted/lib" ^
+            -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-extracted/bin" ^
+            -DSD_HIPBLAS=ON -DHIP_PATH="%HIP_PATH%" ^
+            -DGPU_TARGETS="%GPU_TARGETS%" ^
+            -DGGML_OPENMP=OFF -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          cmake --build plugin-build --config Release --parallel 4
+
+      - name: Package plugin (tar.gz + zip)
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_HIP"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../${PLUGIN_NAME}-windows-x64.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-HIPBLAS
+          path: |
+            AniStudio-SDCPP_HIP-windows-x64.tar.gz
+            AniStudio-SDCPP_HIP-windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-SDCPP_HIP-windows-x64.tar.gz
+            AniStudio-SDCPP_HIP-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-sycl:
+    needs: core
+    runs-on: windows-2022
+    continue-on-error: true
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+
+      - name: Setup Intel oneAPI
+        uses: ./.github/actions/setup-oneapi
+        with:
+          version: "2025.3.2.0"
+          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d5a6b34-6b2a-4e0a-9f3b-1234567890ab/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: windows-sycl-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True -c tools.cmake.cmaketoolchain:generator=Ninja
+
+      - name: Strip VS-only generator settings from Conan toolchain
+        shell: bash
+        run: |
+          sed -i -e '/CMAKE_GENERATOR_PLATFORM/d' -e '/CMAKE_GENERATOR_TOOLSET/d' -e '/CMAKE_GENERATOR_INSTANCE/d' build/conan/conan_toolchain.cmake
+
+      - name: Configure plugin (SYCL Windows)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          set "Platform="
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP ^
+            -G "Ninja" ^
+            -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx ^
+            -DCMAKE_CXX_STANDARD=17 ^
+            -DCMAKE_TRY_COMPILE_NO_PLATFORM_VARIABLES=TRUE ^
+            -DMAIN_LIB_DIR="%GITHUB_WORKSPACE%/core-extracted/lib" ^
+            -DMAIN_BIN_DIR="%GITHUB_WORKSPACE%/core-extracted/bin" ^
+            -DSD_SYCL=ON -DGGML_SYCL_F16=ON -DGGML_SYCL_DNN=ON ^
+            -DGGML_OPENMP=OFF -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          cmake --build plugin-build --config Release --parallel 4
+
+      - name: Package plugin (tar.gz + zip)
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_SYCL"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+
+          declare -A seen
+          copy_dlls() {
+            local src="$1"; [ -d "$src" ] || return 0
+            while IFS= read -r dll; do
+              base="$(basename "$dll")"
+              if [ -z "${seen[$base]:-}" ]; then cp "$dll" pkg/; seen[$base]=1; fi
+            done < <(find "$src" -maxdepth 2 -iname "*.dll" 2>/dev/null | sort)
+          }
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/compiler/latest/bin"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/compiler/latest/bin/compiler"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/mkl/latest/redist/intel64"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/tbb/latest/redist/intel64/vc_mt"
+          copy_dlls "C:/Program Files (x86)/Intel/oneAPI/level_zero/latest/bin"
+          if [ -f "C:/Program Files (x86)/Intel/oneAPI/licensing/license.txt" ]; then
+            cp "C:/Program Files (x86)/Intel/oneAPI/licensing/license.txt" pkg/INTEL-LICENSE.txt
+          fi
+
+          tar -czf "${PLUGIN_NAME}-windows-x64.tar.gz" -C pkg .
+          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../${PLUGIN_NAME}-windows-x64.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-windows-x64-SYCL
+          path: |
+            AniStudio-SDCPP_SYCL-windows-x64.tar.gz
+            AniStudio-SDCPP_SYCL-windows-x64.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-SDCPP_SYCL-windows-x64.tar.gz
+            AniStudio-SDCPP_SYCL-windows-x64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  bundle:
+    needs: [core, plugin-cpu, plugin-vulkan, plugin-cuda, plugin-hip, plugin-sycl]
+    if: always()
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Windows-x64
+          path: core
+
+      - name: Download available plugin artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: Plugin-windows-x64-*
+          path: plugins
+          merge-multiple: false
+
+      - name: Normalize plugin artifact layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf plugins-normalized
+          mkdir -p plugins-normalized/CPU plugins-normalized/VULKAN plugins-normalized/CUDA plugins-normalized/HIP plugins-normalized/SYCL
+          [ -d plugins/Plugin-windows-x64-CPU ]     && cp -f plugins/Plugin-windows-x64-CPU/*     plugins-normalized/CPU/    || true
+          [ -d plugins/Plugin-windows-x64-VULKAN ]  && cp -f plugins/Plugin-windows-x64-VULKAN/*  plugins-normalized/VULKAN/ || true
+          [ -d plugins/Plugin-windows-x64-CUDA ]    && cp -f plugins/Plugin-windows-x64-CUDA/*    plugins-normalized/CUDA/   || true
+          [ -d plugins/Plugin-windows-x64-HIPBLAS ] && cp -f plugins/Plugin-windows-x64-HIPBLAS/* plugins-normalized/HIP/    || true
+          [ -d plugins/Plugin-windows-x64-SYCL ]    && cp -f plugins/Plugin-windows-x64-SYCL/*    plugins-normalized/SYCL/   || true
+          ls -la plugins-normalized/* || true
+
+      - name: Verify required artifacts
+        shell: bash
+        run: |
+          test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          test -f plugins-normalized/CPU/*.tar.gz    || { echo "::error::CPU plugin tarball missing"; exit 1; }
+          test -f plugins-normalized/VULKAN/*.tar.gz || { echo "::warning::Vulkan plugin tarball missing"; }
+
+      - name: Assemble Nvidia bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="stage-nvidia"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          tar -xzf core/*.tar.gz -C "$STAGE"
+          mkdir -p "$STAGE/plugins"
+          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
+          if ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::CUDA unavailable"; fi
+          tar -czf "AniStudio-Nvidia-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
+          (cd "$STAGE" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Nvidia-Bundle-windows-x64-${SHORT_HASH}.zip -Force")
+
+      - name: Assemble AMD bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="stage-amd"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          tar -xzf core/*.tar.gz -C "$STAGE"
+          mkdir -p "$STAGE/plugins"
+          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
+          if ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::HIP unavailable"; fi
+          tar -czf "AniStudio-AMD-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
+          (cd "$STAGE" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-AMD-Bundle-windows-x64-${SHORT_HASH}.zip -Force")
+
+      - name: Assemble Intel bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="stage-intel"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          tar -xzf core/*.tar.gz -C "$STAGE"
+          mkdir -p "$STAGE/plugins"
+          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
+          if ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::SYCL unavailable"; fi
+          tar -czf "AniStudio-Intel-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
+          (cd "$STAGE" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Intel-Bundle-windows-x64-${SHORT_HASH}.zip -Force")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Windows-Bundles
+          path: |
+            AniStudio-*-Bundle-windows-x64-*.tar.gz
+            AniStudio-*-Bundle-windows-x64-*.zip
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Publish bundles
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: false
+          files: |
+            AniStudio-*-Bundle-windows-x64-*.tar.gz
+            AniStudio-*-Bundle-windows-x64-*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

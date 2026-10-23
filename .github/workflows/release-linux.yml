@@ -1,0 +1,930 @@
+name: Release Linux
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: release-linux
+  cancel-in-progress: false
+
+jobs:
+  core:
+    runs-on: ubuntu-22.04
+    outputs:
+      hash: ${{ steps.ver.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            imagemagick \
+            libva-dev \
+            libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev \
+            libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev \
+            libgtk-3-dev \
+            ninja-build pkg-config build-essential
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with:
+          cache_packages: 'true'
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: |
+          conan remote update conancenter --url="https://center2.conan.io" || \
+            conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: |
+          conan install . --build=missing \
+            -s compiler.cppstd=17 -s build_type=Release \
+            -c tools.system.package_manager:mode=install \
+            -c tools.system.package_manager:sudo=True
+
+      - name: Verify Conan toolchain
+        shell: bash
+        run: |
+          test -f build/conan/conan_toolchain.cmake || {
+            echo "::error::build/conan/conan_toolchain.cmake missing"
+            exit 1
+          }
+
+      - name: Save Conan cache (no source)
+        shell: bash
+        run: conan cache save "*" --file=conan-cache.tar.gz --no-source
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -B build -S . \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+            -DBUILD_SHARED_LIBS=ON -DBUILD_APP_MODE=local
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify shared libraries exist
+        shell: bash
+        run: |
+          for f in build/lib/AniEngineCore.so build/lib/AniStudioCore.so; do
+            test -f "$f" || { echo "::error::$f missing after build"; exit 1; }
+          done
+
+      - name: Build AppImage
+        shell: bash
+        run: |
+          APPDIR="$PWD/AppDir"
+          rm -rf "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/AniStudio"
+
+          cp build/AniStudio "$APPDIR/usr/bin/"
+          cp -r build/lib/* "$APPDIR/usr/lib/" 2>/dev/null || true
+
+          ldd build/AniStudio 2>/dev/null | awk '/=>/ {print $3}' | grep -v '^$' | while read dep; do
+            case "$dep" in
+              /lib/*|/usr/lib/*|/lib64/*|/usr/lib64/*) ;;
+              *) cp -n "$dep" "$APPDIR/usr/lib/" 2>/dev/null || true ;;
+            esac
+          done
+
+          for so in "$APPDIR/usr/lib"/*.so*; do
+            [ -f "$so" ] || continue
+            ldd "$so" 2>/dev/null | awk '/=>/ {print $3}' | grep -v '^$' | while read dep; do
+              case "$dep" in
+                /lib/*|/usr/lib/*|/lib64/*|/usr/lib64/*) ;;
+                *) cp -n "$dep" "$APPDIR/usr/lib/" 2>/dev/null || true ;;
+              esac
+            done
+          done
+
+          cp -r build/data    "$APPDIR/usr/share/AniStudio/" 2>/dev/null || true
+          cp -r build/shaders "$APPDIR/usr/share/AniStudio/" 2>/dev/null || true
+          cp -r build/assets  "$APPDIR/usr/share/AniStudio/" 2>/dev/null || true
+
+          if [ -f assets/favicom.jpg ]; then
+            convert assets/favicom.jpg "$APPDIR/AniStudio.png" || \
+              cp assets/favicom.jpg "$APPDIR/AniStudio.png"
+          fi
+
+          cat > "$APPDIR/AniStudio.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=AniStudio
+          Exec=AniStudio
+          Icon=AniStudio
+          Categories=Graphics;AudioVideo;
+          Terminal=false
+          EOF
+
+          cat > "$APPDIR/AppRun" <<'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$HERE/usr/lib:$LD_LIBRARY_PATH"
+          exec "$HERE/usr/bin/AniStudio" "$@"
+          EOF
+          chmod +x "$APPDIR/AppRun"
+
+          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O /tmp/appimagetool
+          chmod +x /tmp/appimagetool
+          export ARCH=x86_64
+
+          /tmp/appimagetool --appimage-extract-and-run "$APPDIR" \
+            "AniStudio-${{ steps.ver.outputs.hash }}-linux-x64.AppImage"
+
+      - name: Package core
+        shell: bash
+        run: |
+          rm -rf artifact-bundle
+          mkdir -p artifact-bundle/lib artifact-bundle/bin
+          cp build/AniStudio artifact-bundle/ 2>/dev/null || true
+          cp -a build/lib/. artifact-bundle/lib/ 2>/dev/null || true
+          cp -a build/bin/. artifact-bundle/bin/ 2>/dev/null || true
+          cp -r build/data    artifact-bundle/ 2>/dev/null || true
+          cp -r build/shaders artifact-bundle/ 2>/dev/null || true
+          cp -r build/assets  artifact-bundle/ 2>/dev/null || true
+          cp build/README.md              artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
+          cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+
+          test -f artifact-bundle/lib/AniEngineCore.so || { echo "::error::AniEngineCore.so missing"; exit 1; }
+          test -f artifact-bundle/lib/AniStudioCore.so || { echo "::error::AniStudioCore.so missing"; exit 1; }
+
+          tar -czf AniStudio-Linux-x64.tar.gz -C artifact-bundle .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: AniStudio-Linux-x64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish core release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: |
+            AniStudio-Linux-x64.tar.gz
+            AniStudio-${{ steps.ver.outputs.hash }}-linux-x64.AppImage
+            conan-cache.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-cpu:
+    needs: core
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.so || test -f core-extracted/lib/libAniEngineCore.so || { echo "::error::AniEngineCore.so missing"; exit 1; }
+          test -f core-extracted/lib/AniStudioCore.so || test -f core-extracted/lib/libAniStudioCore.so || { echo "::error::AniStudioCore.so missing"; exit 1; }
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: ubuntu-CPU-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-extracted/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-extracted/bin \
+            -DSD_CPU=ON -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_CPU"
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir $STAGE not found"; ls -la "${{ github.workspace }}/build/plugins" || true; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-linux-x64-CPU
+          path: AniStudio-SDCPP_CPU-linux-x64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: AniStudio-SDCPP_CPU-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-vulkan:
+    needs: core
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.so || test -f core-extracted/lib/libAniEngineCore.so
+          test -f core-extracted/lib/AniStudioCore.so || test -f core-extracted/lib/libAniStudioCore.so
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: Install Vulkan SDK
+        run: sudo apt-get install -y libvulkan-dev vulkan-tools glslang-tools
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: ubuntu-VULKAN-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-extracted/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-extracted/bin \
+            -DSD_VULKAN=ON -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_VULKAN"
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-linux-x64-VULKAN
+          path: AniStudio-SDCPP_VULKAN-linux-x64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: AniStudio-SDCPP_VULKAN-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-cuda:
+    needs: core
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.so || test -f core-extracted/lib/libAniEngineCore.so
+          test -f core-extracted/lib/AniStudioCore.so || test -f core-extracted/lib/libAniStudioCore.so
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: '13.3.1'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust"]'
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: ubuntu-CUDA-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-extracted/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-extracted/bin \
+            -DSD_CUDA=ON -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_CUDA"
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-linux-x64-CUDA
+          path: AniStudio-SDCPP_CUDA-linux-x64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: AniStudio-SDCPP_CUDA-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-hip:
+    needs: core
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    timeout-minutes: 300
+    env:
+      ROCM_VERSION: "7.14.0"
+      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102;gfx1200;gfx1201"
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.so || test -f core-extracted/lib/libAniEngineCore.so
+          test -f core-extracted/lib/AniStudioCore.so || test -f core-extracted/lib/libAniStudioCore.so
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: "ubuntu-rocm-${{ env.ROCM_VERSION }}-x64", evict-old-files: 1d }
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/.ghcup || true
+          sudo rm -rf /opt/hostedtoolcache || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/local/share/boost || true
+          docker system prune -af || true
+          sudo apt clean
+
+      - name: Setup TheRock with Wheels
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{ env.ROCM_VERSION }}"
+          ROCM_PATH=$(rocm-sdk path --root)
+          CMAKE_PATH=$(rocm-sdk path --cmake)
+          BIN_PATH=$(rocm-sdk path --bin)
+          echo "ROCM_PATH=$ROCM_PATH" >> $GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$CMAKE_PATH" >> $GITHUB_ENV
+          echo "HIP_PATH=$ROCM_PATH" >> $GITHUB_ENV
+          echo "PATH=$BIN_PATH:${PATH}" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$ROCM_PATH/lib:${LD_LIBRARY_PATH:-}" >> $GITHUB_ENV
+          echo "$(pwd)/.venv/bin" >> $GITHUB_PATH
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin (HIPBLAS)
+        shell: bash
+        run: |
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP -G Ninja \
+            -DCMAKE_HIP_COMPILER="$(hipconfig -l)/clang" \
+            -DCMAKE_HIP_FLAGS="-mllvm --amdgpu-unroll-threshold-local=600" \
+            -DCMAKE_BUILD_TYPE=Release -DSD_HIPBLAS=ON -DHIP_PLATFORM=amd \
+            -DGPU_TARGETS="${{ env.GPU_TARGETS }}" \
+            -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCMAKE_INSTALL_RPATH='$ORIGIN' -DGGML_NATIVE=OFF \
+            -DMAIN_LIB_DIR=${{ github.workspace }}/core-extracted/lib \
+            -DMAIN_BIN_DIR=${{ github.workspace }}/core-extracted/bin \
+            -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        run: cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_HIP"
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-linux-x64-HIPBLAS
+          path: AniStudio-SDCPP_HIP-linux-x64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: AniStudio-SDCPP_HIP-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  plugin-sycl:
+    needs: core
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+
+      - name: Initialize nested submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core-build
+
+      - name: Download Conan cache
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache
+
+      - name: Verify and extract core
+        shell: bash
+        run: |
+          test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          mkdir -p core-extracted
+          tar -xzf core-build/*.tar.gz -C core-extracted
+          test -f core-extracted/lib/AniEngineCore.so || test -f core-extracted/lib/libAniEngineCore.so
+          test -f core-extracted/lib/AniStudioCore.so || test -f core-extracted/lib/libAniStudioCore.so
+
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: Setup Intel oneAPI
+        uses: ./.github/actions/setup-oneapi
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.16
+        with: { key: ubuntu-sycl-x64, evict-old-files: 1d }
+
+      - name: Setup Conan
+        uses: conan-io/setup-conan@v1
+        with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
+
+      - name: Configure Conan Center remote
+        shell: bash
+        run: conan remote update conancenter --url="https://center2.conan.io" || conan remote add conancenter https://center2.conan.io --force
+
+      - name: Detect Conan profile
+        shell: bash
+        run: conan profile detect --force
+
+      - name: Conan install
+        shell: bash
+        run: conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
+
+      - name: Configure plugin (SYCL)
+        shell: bash
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake -B plugin-build -S plugins/AniStudio-SDCPP -G Ninja \
+            -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_STANDARD=17 \
+            -DMAIN_LIB_DIR=$GITHUB_WORKSPACE/core-extracted/lib \
+            -DMAIN_BIN_DIR=$GITHUB_WORKSPACE/core-extracted/bin \
+            -DSD_SYCL=ON -DGGML_SYCL_F16=ON -DGGML_SYCL_DNN=ON \
+            -DGGML_OPENMP=OFF -DSD_USE_SYSTEM_GGML=OFF
+
+      - name: Build plugin
+        shell: bash
+        run: |
+          source /opt/intel/oneapi/setvars.sh
+          cmake --build plugin-build --config Release --parallel
+
+      - name: Package plugin
+        shell: bash
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_SYCL"
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="${{ github.workspace }}/build/plugins/${PLUGIN_NAME}"
+          test -d "$STAGE" || { echo "::error::staging dir not found"; exit 1; }
+          mkdir -p pkg/plugins
+          cp -r "$STAGE" pkg/plugins/
+          if [ -d "pkg/plugins/${PLUGIN_NAME}/staging" ]; then
+            mv "pkg/plugins/${PLUGIN_NAME}/staging" "pkg/plugins/${PLUGIN_NAME}/${SHORT_HASH}"
+          fi
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C pkg .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-linux-x64-SYCL
+          path: AniStudio-SDCPP_SYCL-linux-x64.tar.gz
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publish plugin
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          files: AniStudio-SDCPP_SYCL-linux-x64.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  bundle:
+    needs: [core, plugin-cpu, plugin-vulkan, plugin-cuda, plugin-hip, plugin-sycl]
+    if: always()
+    runs-on: ubuntu-22.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+
+      - name: Download core artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Linux-x64
+          path: core
+
+      - name: Download available plugin artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: Plugin-linux-x64-*
+          path: plugins
+          merge-multiple: false
+
+      - name: Normalize plugin artifact layout
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf plugins-normalized
+          mkdir -p plugins-normalized/CPU plugins-normalized/VULKAN plugins-normalized/CUDA plugins-normalized/HIP plugins-normalized/SYCL
+          [ -d plugins/Plugin-linux-x64-CPU ]    && cp -f plugins/Plugin-linux-x64-CPU/*    plugins-normalized/CPU/    || true
+          [ -d plugins/Plugin-linux-x64-VULKAN ] && cp -f plugins/Plugin-linux-x64-VULKAN/* plugins-normalized/VULKAN/ || true
+          [ -d plugins/Plugin-linux-x64-CUDA ]   && cp -f plugins/Plugin-linux-x64-CUDA/*   plugins-normalized/CUDA/   || true
+          [ -d plugins/Plugin-linux-x64-HIPBLAS ]&& cp -f plugins/Plugin-linux-x64-HIPBLAS/* plugins-normalized/HIP/   || true
+          [ -d plugins/Plugin-linux-x64-SYCL ]   && cp -f plugins/Plugin-linux-x64-SYCL/*   plugins-normalized/SYCL/   || true
+          ls -la plugins-normalized/* || true
+
+      - name: Verify required artifacts
+        shell: bash
+        run: |
+          test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
+          test -f plugins-normalized/CPU/*.tar.gz    || { echo "::error::CPU plugin tarball missing"; exit 1; }
+          test -f plugins-normalized/VULKAN/*.tar.gz || { echo "::warning::Vulkan plugin tarball missing"; }
+
+      - name: Assemble Nvidia bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="stage-nvidia"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          tar -xzf core/*.tar.gz -C "$STAGE"
+          mkdir -p "$STAGE/plugins"
+          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
+          if ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::CUDA unavailable"; fi
+          tar -czf "AniStudio-Nvidia-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
+
+      - name: Assemble AMD bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="stage-amd"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          tar -xzf core/*.tar.gz -C "$STAGE"
+          mkdir -p "$STAGE/plugins"
+          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
+          if ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::HIP unavailable"; fi
+          tar -czf "AniStudio-AMD-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
+
+      - name: Assemble Intel bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHORT_HASH="${{ needs.core.outputs.hash }}"
+          STAGE="stage-intel"; rm -rf "$STAGE"; mkdir -p "$STAGE"
+          tar -xzf core/*.tar.gz -C "$STAGE"
+          mkdir -p "$STAGE/plugins"
+          tar -xzf plugins-normalized/CPU/*.tar.gz    -C "$STAGE/plugins"
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
+          if ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::SYCL unavailable"; fi
+          tar -czf "AniStudio-Intel-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Linux-Bundles
+          path: AniStudio-*-Bundle-linux-x64-*.tar.gz
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Publish bundles
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ needs.core.outputs.hash }}
+          name: AniStudio-${{ needs.core.outputs.hash }}
+          generate_release_notes: false
+          overwrite_files: true
+          fail_on_unmatched_files: false
+          files: AniStudio-*-Bundle-linux-x64-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
