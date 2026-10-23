@@ -70,15 +70,9 @@ jobs:
             exit 1
           }
 
-      - name: Save Conan cache (shared with plugin workflows)
+      - name: Save Conan cache
         shell: bash
         run: conan cache save "*" --file=conan-cache.tar.gz
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AniStudio-Conan-Cache-Windows-x64
-          path: conan-cache.tar.gz
-          retention-days: 30
 
       - name: Configure
         shell: bash
@@ -92,11 +86,19 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Verify libs and DLLs exist
+        shell: bash
+        run: |
+          test -f build/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing"; exit 1; }
+          test -f build/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing"; exit 1; }
+          test -f build/bin/AniEngineCore.dll || test -f build/lib/AniEngineCore.dll || { echo "::error::AniEngineCore.dll missing"; exit 1; }
+          test -f build/bin/AniStudioCore.dll || test -f build/lib/AniStudioCore.dll || { echo "::error::AniStudioCore.dll missing"; exit 1; }
+
       - name: Package core (tar.gz + zip)
         shell: bash
         run: |
           rm -rf artifact-bundle
-          mkdir -p artifact-bundle/lib
+          mkdir -p artifact-bundle/lib artifact-bundle/bin
 
           if [ -f build/Release/AniStudio.exe ]; then
             cp build/Release/AniStudio.exe artifact-bundle/
@@ -104,16 +106,20 @@ jobs:
             cp build/AniStudio.exe artifact-bundle/
           fi
 
-          find build -name "*.lib" -exec cp -n {} artifact-bundle/lib/ \; 2>/dev/null || true
+          cp -a build/lib/. artifact-bundle/lib/ 2>/dev/null || true
+          cp -a build/bin/. artifact-bundle/bin/ 2>/dev/null || true
 
           declare -A seen
-          while IFS= read -r dll; do
-            base="$(basename "$dll")"
-            if [ -z "${seen[$base]:-}" ]; then
-              cp "$dll" artifact-bundle/
-              seen[$base]=1
-            fi
-          done < <(find build -iname "*.dll" 2>/dev/null | sort)
+          for src in build/lib build/bin build; do
+            [ -d "$src" ] || continue
+            while IFS= read -r dll; do
+              base="$(basename "$dll")"
+              if [ -z "${seen[$base]:-}" ]; then
+                cp "$dll" artifact-bundle/
+                seen[$base]=1
+              fi
+            done < <(find "$src" -maxdepth 1 -iname "*.dll" 2>/dev/null | sort)
+          done
 
           cp -r build/data    artifact-bundle/ 2>/dev/null || true
           cp -r build/shaders artifact-bundle/ 2>/dev/null || true
@@ -122,6 +128,9 @@ jobs:
           cp build/README.md              artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+
+          test -f artifact-bundle/lib/AniEngineCore.lib || { echo "::error::AniEngineCore.lib missing from bundle"; exit 1; }
+          test -f artifact-bundle/lib/AniStudioCore.lib || { echo "::error::AniStudioCore.lib missing from bundle"; exit 1; }
 
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
           (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
@@ -132,6 +141,12 @@ jobs:
           path: |
             AniStudio-Windows-x64.tar.gz
             AniStudio-Windows-x64.zip
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache.tar.gz
           retention-days: 30
 
       - name: Publish to AniStudio-<hash>

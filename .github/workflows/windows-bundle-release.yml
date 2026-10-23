@@ -1,12 +1,9 @@
 ﻿name: Release Windows Bundles
 
 on:
-  workflow_dispatch:
-    inputs:
-      core-run-id:
-        description: 'Required: run ID of Release Core Windows (Actions run that produced the Windows core artifact).'
-        required: true
-        type: string
+  workflow_run:
+    workflows: ["Release Core Windows"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -14,6 +11,7 @@ permissions:
 
 jobs:
   bundle-windows:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,40 +22,35 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve core run ID
-        id: find-core
-        shell: bash
-        run: echo "run-id=${{ github.event.inputs.core-run-id }}" >> "$GITHUB_OUTPUT"
-
       - name: Download core
         uses: actions/download-artifact@v4
-        with: { name: AniStudio-Windows-x64, path: core, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ steps.find-core.outputs.run-id }}" }
+        with: { name: AniStudio-Windows-x64, path: core, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ github.event.workflow_run.id }}" }
 
       - name: Download CPU plugin
         uses: actions/download-artifact@v4
-        with: { name: Plugin-windows-x64-CPU, path: plugins/CPU, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ steps.find-core.outputs.run-id }}" }
+        with: { name: Plugin-windows-x64-CPU, path: plugins/CPU, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ github.event.workflow_run.id }}" }
 
       - name: Download Vulkan plugin
         uses: actions/download-artifact@v4
-        with: { name: Plugin-windows-x64-VULKAN, path: plugins/VULKAN, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ steps.find-core.outputs.run-id }}" }
+        with: { name: Plugin-windows-x64-VULKAN, path: plugins/VULKAN, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ github.event.workflow_run.id }}" }
 
       - name: Download CUDA plugin (optional)
         id: dl-cuda
         continue-on-error: true
         uses: actions/download-artifact@v4
-        with: { name: Plugin-windows-x64-CUDA, path: plugins/CUDA, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ steps.find-core.outputs.run-id }}" }
+        with: { name: Plugin-windows-x64-CUDA, path: plugins/CUDA, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ github.event.workflow_run.id }}" }
 
       - name: Download HIP plugin (optional)
         id: dl-hip
         continue-on-error: true
         uses: actions/download-artifact@v4
-        with: { name: Plugin-windows-x64-HIPBLAS, path: plugins/HIP, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ steps.find-core.outputs.run-id }}" }
+        with: { name: Plugin-windows-x64-HIPBLAS, path: plugins/HIP, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ github.event.workflow_run.id }}" }
 
       - name: Download SYCL plugin (optional)
         id: dl-sycl
         continue-on-error: true
         uses: actions/download-artifact@v4
-        with: { name: Plugin-windows-x64-SYCL, path: plugins/SYCL, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ steps.find-core.outputs.run-id }}" }
+        with: { name: Plugin-windows-x64-SYCL, path: plugins/SYCL, github-token: "${{ secrets.GITHUB_TOKEN }}", run-id: "${{ github.event.workflow_run.id }}" }
 
       - name: Verify required artifacts
         shell: bash

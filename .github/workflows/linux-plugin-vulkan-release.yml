@@ -1,12 +1,9 @@
 ﻿name: Release Linux Plugin Vulkan
 
 on:
-  workflow_dispatch:
-    inputs:
-      core-run-id:
-        description: 'Required: run ID of Release Core Linux.'
-        required: true
-        type: string
+  workflow_run:
+    workflows: ["Release Core Linux"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -14,6 +11,7 @@ permissions:
 
 jobs:
   build-plugin-vulkan-linux:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -29,18 +27,13 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve core run ID
-        id: find-core
-        shell: bash
-        run: echo "run-id=${{ github.event.inputs.core-run-id }}" >> "$GITHUB_OUTPUT"
-
       - name: Download core artifact
         uses: actions/download-artifact@v4
         with:
           name: AniStudio-Linux-x64
           path: core-build
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.find-core.outputs.run-id }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Download Conan cache from core run
         uses: actions/download-artifact@v4
@@ -48,7 +41,7 @@ jobs:
           name: AniStudio-Conan-Cache-Linux-x64
           path: conan-cache
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ steps.find-core.outputs.run-id }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Verify and extract core
         shell: bash
@@ -56,8 +49,8 @@ jobs:
           test -f core-build/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
           mkdir -p core-extracted
           tar -xzf core-build/*.tar.gz -C core-extracted
-          test -f core-extracted/lib/libAniEngineCore.so || test -f core-extracted/lib/AniEngineCore.so
-          test -f core-extracted/lib/libAniStudioCore.so || test -f core-extracted/lib/AniStudioCore.so
+          test -f core-extracted/lib/AniEngineCore.so || test -f core-extracted/lib/libAniEngineCore.so
+          test -f core-extracted/lib/AniStudioCore.so || test -f core-extracted/lib/libAniStudioCore.so
 
       - name: Install Linux system deps
         run: |

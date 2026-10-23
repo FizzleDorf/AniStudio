@@ -72,15 +72,9 @@ jobs:
             exit 1
           }
 
-      - name: Save Conan cache (shared with plugin workflows)
+      - name: Save Conan cache
         shell: bash
         run: conan cache save "*" --file=conan-cache.tar.gz
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AniStudio-Conan-Cache-Linux-x64
-          path: conan-cache.tar.gz
-          retention-days: 30
 
       - name: Configure
         shell: bash
@@ -94,6 +88,13 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Verify shared libraries exist
+        shell: bash
+        run: |
+          for f in build/lib/AniEngineCore.so build/lib/AniStudioCore.so; do
+            test -f "$f" || { echo "::error::$f missing after build"; exit 1; }
+          done
+
       - name: Build AppImage
         shell: bash
         run: |
@@ -102,10 +103,7 @@ jobs:
           mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/AniStudio"
 
           cp build/AniStudio "$APPDIR/usr/bin/"
-
-          for so in $(find build -maxdepth 1 -name "*.so*"); do
-            cp "$so" "$APPDIR/usr/lib/"
-          done
+          cp -r build/lib/* "$APPDIR/usr/lib/" 2>/dev/null || true
 
           ldd build/AniStudio 2>/dev/null | awk '/=>/ {print $3}' | grep -v '^$' | while read dep; do
             case "$dep" in
@@ -164,21 +162,30 @@ jobs:
           rm -rf artifact-bundle
           mkdir -p artifact-bundle/lib artifact-bundle/bin
           cp build/AniStudio artifact-bundle/ 2>/dev/null || true
-          find build -maxdepth 1 -name "*.so*" -exec cp {} artifact-bundle/ \; 2>/dev/null || true
-          find build -maxdepth 1 -name "*.so*" -exec cp {} artifact-bundle/lib/ \; 2>/dev/null || true
-          find build -maxdepth 1 -name "*.so*" -exec cp {} artifact-bundle/bin/ \; 2>/dev/null || true
+          cp -a build/lib/. artifact-bundle/lib/ 2>/dev/null || true
+          cp -a build/bin/. artifact-bundle/bin/ 2>/dev/null || true
           cp -r build/data    artifact-bundle/ 2>/dev/null || true
           cp -r build/shaders artifact-bundle/ 2>/dev/null || true
           cp -r build/assets  artifact-bundle/ 2>/dev/null || true
           cp build/README.md              artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-LGPL-3.0.txt   artifact-bundle/ 2>/dev/null || true
           cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
+
+          test -f artifact-bundle/lib/AniEngineCore.so || { echo "::error::AniEngineCore.so missing from artifact bundle"; exit 1; }
+          test -f artifact-bundle/lib/AniStudioCore.so || { echo "::error::AniStudioCore.so missing from artifact bundle"; exit 1; }
+
           tar -czf AniStudio-Linux-x64.tar.gz -C artifact-bundle .
 
       - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Linux-x64
           path: AniStudio-Linux-x64.tar.gz
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache.tar.gz
           retention-days: 30
 
       - name: Publish to AniStudio-<hash>
