@@ -3,16 +3,15 @@
 on:
   workflow_dispatch:
   push:
-    branches: [ci/separate-plugin-workflows]
+    branches: [ci/separate-plugin-workflows, main]
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
   build-core-windows:
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,7 +84,7 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
-      - name: Package core
+      - name: Package core (tar.gz + zip)
         shell: bash
         run: |
           rm -rf artifact-bundle
@@ -117,16 +116,18 @@ jobs:
           cp build/LICENSE-COMMERCIAL.txt artifact-bundle/ 2>/dev/null || true
 
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
+          (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
 
       - name: Save Conan cache
         shell: bash
-        run: |
-          conan cache save "*" --file=conan-cache.tar.gz
+        run: conan cache save "*" --file=conan-cache.tar.gz
 
       - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Windows-x64
-          path: AniStudio-Windows-x64.tar.gz
+          path: |
+            AniStudio-Windows-x64.tar.gz
+            AniStudio-Windows-x64.zip
           retention-days: 30
 
       - uses: actions/upload-artifact@v4
@@ -138,7 +139,6 @@ jobs:
   build-conan-cache-windows:
     needs: [build-core-windows]
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -171,58 +171,12 @@ jobs:
             conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
           EOF
           tar -czf AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C pkg .
+          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.zip -Force")
 
       - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Contrib-Conan-Cache-Windows-x64
-          path: AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
+          path: |
+            AniStudio-Conan-Cache-Windows-x64-*.tar.gz
+            AniStudio-Conan-Cache-Windows-x64-*.zip
           retention-days: 30
-
-  release-core-windows:
-    needs: [build-core-windows, build-conan-cache-windows]
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Verify all required artifacts are present
-        shell: bash
-        run: |
-          required=(
-            "artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz"
-            "artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz"
-          )
-          fail=0
-          for f in "${required[@]}"; do
-            if [ -f "$f" ]; then
-              echo "OK      $f"
-            else
-              echo "MISSING $f"
-              fail=1
-            fi
-          done
-          exit $fail
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ steps.ver.outputs.hash }}-windows-core
-          tag_name: ${{ steps.ver.outputs.hash }}-windows-core
-          target_commitish: ${{ github.sha }}
-          files: |
-            artifacts/AniStudio-Windows-x64/AniStudio-Windows-x64.tar.gz
-            artifacts/AniStudio-Contrib-Conan-Cache-Windows-x64/AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
