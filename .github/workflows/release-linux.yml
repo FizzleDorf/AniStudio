@@ -208,8 +208,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh"
+          chmod +x "build.sh"
+          ./"build.sh"
 
       - name: Package plugin
         shell: bash
@@ -274,8 +274,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --vulkan
+          chmod +x "build.sh"
+          ./"build.sh" --vulkan
 
       - name: Package plugin
         shell: bash
@@ -346,8 +346,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --cuda
+          chmod +x "build.sh"
+          ./"build.sh" --cuda
 
       - name: Package plugin
         shell: bash
@@ -443,8 +443,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --hipblas
+          chmod +x "build.sh"
+          ./"build.sh" --hipblas
 
       - name: Package plugin
         shell: bash
@@ -514,8 +514,8 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --sycl
+          chmod +x "build.sh"
+          ./"build.sh" --sycl
 
       - name: Package plugin
         shell: bash
