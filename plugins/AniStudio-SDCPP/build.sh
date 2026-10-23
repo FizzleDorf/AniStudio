@@ -175,15 +175,6 @@ if [ ! -f "CMakeCache.txt" ]; then
         -DSD_SYCL="$SD_SYCL"
         -DSD_MUSA="$SD_MUSA"
         -DSD_USE_SYSTEM_GGML="$SD_USE_SYSTEM_GGML"
-        -DGGML_NATIVE=OFF
-        -DGGML_AVX=ON
-        -DGGML_AVX2=ON
-        -DGGML_FMA=ON
-        -DGGML_F16C=ON
-        -DGGML_AVX512=OFF
-        -DGGML_AVX512_VBMI=OFF
-        -DGGML_AVX512_VNNI=OFF
-        -DGGML_AVX512_BF16=OFF
     )
 
     echo "Running: cmake ${CMAKE_ARGS[*]}"

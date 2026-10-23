@@ -2,11 +2,9 @@
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ci/separate-plugin-workflows, main]
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -72,6 +70,16 @@ jobs:
             exit 1
           }
 
+      - name: Save Conan cache (shared with plugin workflows)
+        shell: bash
+        run: conan cache save "*" --file=conan-cache.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache.tar.gz
+          retention-days: 30
+
       - name: Configure
         shell: bash
         run: |
@@ -118,10 +126,6 @@ jobs:
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
           (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
 
-      - name: Save Conan cache
-        shell: bash
-        run: conan cache save "*" --file=conan-cache.tar.gz
-
       - uses: actions/upload-artifact@v4
         with:
           name: AniStudio-Windows-x64
@@ -130,53 +134,17 @@ jobs:
             AniStudio-Windows-x64.zip
           retention-days: 30
 
-      - uses: actions/upload-artifact@v4
+      - name: Publish to AniStudio-<hash>
+        uses: softprops/action-gh-release@v2
         with:
-          name: AniStudio-Conan-Cache-Windows-x64
-          path: conan-cache.tar.gz
-          retention-days: 30
-
-  build-conan-cache-windows:
-    needs: [build-core-windows]
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: AniStudio-Conan-Cache-Windows-x64
-          path: conan-cache
-
-      - name: Assemble contributor Conan cache
-        shell: bash
-        run: |
-          rm -rf pkg
-          mkdir -p pkg
-          cp conan-cache/conan-cache.tar.gz pkg/conan-cache.tar.gz
-          cat > pkg/README.md <<'EOF'
-          # AniStudio Conan Cache (Windows x64, MSVC)
-
-          Restores the Conan 2 package cache from CI.
-
-          Usage:
-            conan cache restore conan-cache.tar.gz
-            conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
-          EOF
-          tar -czf AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.tar.gz -C pkg .
-          (cd pkg && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Conan-Cache-Windows-x64-${{ steps.ver.outputs.hash }}.zip -Force")
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AniStudio-Contrib-Conan-Cache-Windows-x64
-          path: |
-            AniStudio-Conan-Cache-Windows-x64-*.tar.gz
-            AniStudio-Conan-Cache-Windows-x64-*.zip
-          retention-days: 30
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            AniStudio-Windows-x64.tar.gz
+            AniStudio-Windows-x64.zip
+            conan-cache.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

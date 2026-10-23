@@ -2,11 +2,9 @@
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ci/separate-plugin-workflows, main]
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -73,6 +71,16 @@ jobs:
             echo "::error::build/conan/conan_toolchain.cmake missing"
             exit 1
           }
+
+      - name: Save Conan cache (shared with plugin workflows)
+        shell: bash
+        run: conan cache save "*" --file=conan-cache.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Linux-x64
+          path: conan-cache.tar.gz
+          retention-days: 30
 
       - name: Configure
         shell: bash
@@ -150,13 +158,6 @@ jobs:
           /tmp/appimagetool --appimage-extract-and-run "$APPDIR" \
             "AniStudio-${{ steps.ver.outputs.hash }}-linux-x64.AppImage"
 
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: AppImage-linux-x64
-          path: AniStudio-${{ steps.ver.outputs.hash }}-linux-x64.AppImage
-          retention-days: 30
-
       - name: Package core
         shell: bash
         run: |
@@ -179,3 +180,18 @@ jobs:
           name: AniStudio-Linux-x64
           path: AniStudio-Linux-x64.tar.gz
           retention-days: 30
+
+      - name: Publish to AniStudio-<hash>
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            AniStudio-Linux-x64.tar.gz
+            AniStudio-${{ steps.ver.outputs.hash }}-linux-x64.AppImage
+            conan-cache.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -4,20 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       core-run-id:
-        description: 'Optional: run ID of Release Core Windows.'
-        required: false
+        description: 'Required: run ID of Release Core Windows (Actions run that produced the Windows core artifact).'
+        required: true
         type: string
-  workflow_run:
-    workflows: ["Release Core Windows"]
-    types: [completed]
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
   bundle-windows:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,19 +26,8 @@ jobs:
 
       - name: Resolve core run ID
         id: find-core
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const manual = '${{ github.event.inputs.core-run-id }}';
-            if (manual && manual.trim() !== '') { core.setOutput('run-id', manual.trim()); return; }
-            if (context.eventName === 'workflow_run') { core.setOutput('run-id', context.payload.workflow_run.id); return; }
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner, repo: context.repo.repo,
-              workflow_id: 'windows-core-release.yml', status: 'success', per_page: 50
-            });
-            const match = runs.data.workflow_runs.find(r => r.head_sha === context.sha);
-            if (!match) { core.setFailed(`No successful windows-core-release.yml for ${context.sha}`); return; }
-            core.setOutput('run-id', match.id);
+        shell: bash
+        run: echo "run-id=${{ github.event.inputs.core-run-id }}" >> "$GITHUB_OUTPUT"
 
       - name: Download core
         uses: actions/download-artifact@v4
@@ -130,3 +115,21 @@ jobs:
             AniStudio-*-Bundle-windows-x64-*.tar.gz
             AniStudio-*-Bundle-windows-x64-*.zip
           retention-days: 30
+
+      - name: Publish bundles to AniStudio-<hash>
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            AniStudio-Nvidia-Bundle-windows-x64-*.tar.gz
+            AniStudio-Nvidia-Bundle-windows-x64-*.zip
+            AniStudio-AMD-Bundle-windows-x64-*.tar.gz
+            AniStudio-AMD-Bundle-windows-x64-*.zip
+            AniStudio-Intel-Bundle-windows-x64-*.tar.gz
+            AniStudio-Intel-Bundle-windows-x64-*.zip
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

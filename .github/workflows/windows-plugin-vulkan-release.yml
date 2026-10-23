@@ -4,20 +4,16 @@ on:
   workflow_dispatch:
     inputs:
       core-run-id:
-        description: 'Optional: run ID of Release Core Windows.'
-        required: false
+        description: 'Required: run ID of Release Core Windows.'
+        required: true
         type: string
-  workflow_run:
-    workflows: ["Release Core Windows"]
-    types: [completed]
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
   build-plugin-vulkan-windows:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -36,25 +32,22 @@ jobs:
 
       - name: Resolve core run ID
         id: find-core
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const manual = '${{ github.event.inputs.core-run-id }}';
-            if (manual && manual.trim() !== '') { core.setOutput('run-id', manual.trim()); return; }
-            if (context.eventName === 'workflow_run') { core.setOutput('run-id', context.payload.workflow_run.id); return; }
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner, repo: context.repo.repo,
-              workflow_id: 'windows-core-release.yml', status: 'success', per_page: 50
-            });
-            const match = runs.data.workflow_runs.find(r => r.head_sha === context.sha);
-            if (!match) { core.setFailed(`No successful windows-core-release.yml for ${context.sha}`); return; }
-            core.setOutput('run-id', match.id);
+        shell: bash
+        run: echo "run-id=${{ github.event.inputs.core-run-id }}" >> "$GITHUB_OUTPUT"
 
       - name: Download core artifact
         uses: actions/download-artifact@v4
         with:
           name: AniStudio-Windows-x64
           path: core-build
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find-core.outputs.run-id }}
+
+      - name: Download Conan cache from core run
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Conan-Cache-Windows-x64
+          path: conan-cache
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ steps.find-core.outputs.run-id }}
 
@@ -88,6 +81,12 @@ jobs:
       - name: Setup Conan
         uses: conan-io/setup-conan@v1
         with: { cache_packages: 'true' }
+
+      - name: Restore Conan cache from core run
+        shell: bash
+        run: |
+          test -f conan-cache/conan-cache.tar.gz || { echo "::error::conan cache artifact missing"; exit 1; }
+          conan cache restore conan-cache/conan-cache.tar.gz
 
       - name: Configure Conan Center remote
         shell: bash
@@ -131,3 +130,17 @@ jobs:
             AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
             AniStudio-SDCPP_VULKAN-windows-x64.zip
           retention-days: 30
+
+      - name: Publish to AniStudio-<hash>
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          files: |
+            AniStudio-SDCPP_VULKAN-windows-x64.tar.gz
+            AniStudio-SDCPP_VULKAN-windows-x64.zip
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
