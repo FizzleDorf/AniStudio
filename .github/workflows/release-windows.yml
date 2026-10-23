@@ -85,7 +85,7 @@ jobs:
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
           (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
 
-          tar -czf build-env.tar.gz build/venv build/conan build/lib build/*.dll
+          tar -czf build-env.tar.gz build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -470,7 +470,7 @@ jobs:
         uses: ./.github/actions/setup-oneapi
         with:
           version: "2025.3.2.0"
-          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/0d5a6b34-6b2a-4e0a-9f3b-1234567890ab/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
+          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/f3c8bf4b-3e1e-4c7a-83e5-6c4a7e1a2f7d/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
 
       - name: Run Plugin Build Script
         shell: cmd

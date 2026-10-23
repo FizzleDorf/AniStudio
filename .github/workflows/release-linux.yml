@@ -144,8 +144,8 @@ jobs:
           cp -r build/shaders artifact-bundle/ 2>/dev/null || true
           cp -r build/assets  artifact-bundle/ 2>/dev/null || true
           tar -czf AniStudio-Linux-x64.tar.gz -C artifact-bundle .
-          
-          tar -czf build-env.tar.gz build/venv build/conan
+
+          tar -czf build-env.tar.gz build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -208,8 +208,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh"
+          chmod +x "build (1).sh"
+          ./"build (1).sh"
 
       - name: Package plugin
         shell: bash
@@ -274,8 +274,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --vulkan
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --vulkan
 
       - name: Package plugin
         shell: bash
@@ -346,8 +346,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --cuda
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --cuda
 
       - name: Package plugin
         shell: bash
@@ -443,8 +443,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --hipblas
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --hipblas
 
       - name: Package plugin
         shell: bash
@@ -514,8 +514,8 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --sycl
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --sycl
 
       - name: Package plugin
         shell: bash
