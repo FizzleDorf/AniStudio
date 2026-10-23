@@ -1,5 +1,5 @@
 name: Setup Intel oneAPI
-description: Install and configure Intel oneAPI for SYCL builds (Linux and Windows)
+description: Install and configure Intel oneAPI for SYCL builds
 
 inputs:
   version:
