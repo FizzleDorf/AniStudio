@@ -1,0 +1,248 @@
+name: Publish AniStudio Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      linux-core-run-id:
+        description: 'Optional: run ID of Release Core Linux. Leave empty to auto-detect from commit.'
+        required: false
+        type: string
+      windows-core-run-id:
+        description: 'Optional: run ID of Release Core Windows. Leave empty to auto-detect from commit.'
+        required: false
+        type: string
+  workflow_run:
+    # Fires when any producer finishes; the job is a no-op unless *all*
+    # the artifacts for this SHA are present.
+    workflows:
+      - Release Core Linux
+      - Release Core Windows
+      - Release Linux Bundles
+      - Release Windows Bundles
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve run IDs (Linux + Windows)
+        id: find
+        uses: actions/github-script@v7
+        with:
+          script: |
+            async function resolve(workflowFile, manual, fallbackSha) {
+              if (manual && manual.trim() !== '') return manual.trim();
+              // If triggered by workflow_run, try the triggering run first
+              if (context.eventName === 'workflow_run' &&
+                  context.payload.workflow_run.name === workflowFile) {
+                return context.payload.workflow_run.id;
+              }
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner, repo: context.repo.repo,
+                workflow_id: workflowFile, status: 'success', per_page: 100
+              });
+              const m = runs.data.workflow_runs.find(r => r.head_sha === fallbackSha);
+              return m ? m.id : '';
+            }
+            const lin = await resolve(
+              'linux-core-release.yml',
+              '${{ github.event.inputs.linux-core-run-id }}',
+              context.sha
+            );
+            const win = await resolve(
+              'windows-core-release.yml',
+              '${{ github.event.inputs.windows-core-run-id }}',
+              context.sha
+            );
+            core.setOutput('linux-run-id', lin);
+            core.setOutput('windows-run-id', win);
+            core.info(`linux-run-id=${lin} windows-run-id=${win}`);
+
+      - name: Ensure core runs exist
+        shell: bash
+        env:
+          LIN: ${{ steps.find.outputs.linux-run-id }}
+          WIN: ${{ steps.find.outputs.windows-run-id }}
+        run: |
+          if [ -z "$LIN" ] && [ -z "$WIN" ]; then
+            echo "::error::No core run found for this commit. Provide linux-core-run-id / windows-core-run-id, or run the core workflows first."
+            exit 1
+          fi
+
+      # ---- Download every artifact ----
+      - name: Download Linux artifacts (best-effort)
+        if: steps.find.outputs.linux-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find.outputs.linux-run-id }}
+          path: artifacts
+          pattern: '**'
+          merge-multiple: true
+
+      - name: Download Windows artifacts (best-effort)
+        if: steps.find.outputs.windows-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.find.outputs.windows-run-id }}
+          path: artifacts
+          pattern: '**'
+          merge-multiple: true
+
+      # The bundle workflows produce artifacts in their *own* run, not the
+      # core run. Pull the bundle artifacts from the latest bundle runs.
+      - name: Resolve bundle run IDs
+        id: bundles
+        uses: actions/github-script@v7
+        with:
+          script: |
+            async function latest(workflowFile, sha) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner, repo: context.repo.repo,
+                workflow_id: workflowFile, status: 'success', per_page: 50
+              });
+              const m = runs.data.workflow_runs.find(r => r.head_sha === sha);
+              return m ? m.id : '';
+            }
+            const lin = await latest('linux-bundle-release.yml', context.sha);
+            const win = await latest('windows-bundle-release.yml', context.sha);
+            core.setOutput('linux-bundle-run-id', lin);
+            core.setOutput('windows-bundle-run-id', win);
+
+      - name: Download Linux bundle (best-effort)
+        if: steps.bundles.outputs.linux-bundle-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.bundles.outputs.linux-bundle-run-id }}
+          name: AniStudio-Linux-Bundles
+          path: artifacts
+          merge-multiple: true
+
+      - name: Download Windows bundle (best-effort)
+        if: steps.bundles.outputs.windows-bundle-run-id != ''
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.bundles.outputs.windows-bundle-run-id }}
+          name: AniStudio-Windows-Bundles
+          path: artifacts
+          merge-multiple: true
+
+      # Pull plugin artifacts from plugin workflow runs (they are separate runs
+      # because they are triggered by workflow_run on the core workflow).
+      - name: Resolve plugin runs
+        id: plugins
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const wfs = {
+              'linux-cpu':    'linux-plugin-cpu-release.yml',
+              'linux-vulkan': 'linux-plugin-vulkan-release.yml',
+              'linux-cuda':   'linux-plugin-cuda-release.yml',
+              'linux-hip':    'linux-plugin-hip-release.yml',
+              'linux-sycl':   'linux-plugin-sycl-release.yml',
+              'win-cpu':      'windows-plugin-cpu-release.yml',
+              'win-vulkan':   'windows-plugin-vulkan-release.yml',
+              'win-cuda':     'windows-plugin-cuda-release.yml',
+              'win-hip':      'windows-plugin-hip-release.yml',
+              'win-sycl':     'windows-plugin-sycl-release.yml'
+            };
+            const out = {};
+            for (const [k, wf] of Object.entries(wfs)) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner, repo: context.repo.repo,
+                workflow_id: wf, status: 'success', per_page: 50
+              });
+              const m = runs.data.workflow_runs.find(r => r.head_sha === context.sha);
+              out[k] = m ? m.id : '';
+            }
+            core.setOutput('map', JSON.stringify(out));
+
+      - name: Download plugin artifacts
+        uses: actions/github-script@v7
+        env:
+          MAP: ${{ steps.plugins.outputs.map }}
+        with:
+          script: |
+            // We use the REST API to download artifacts directly, avoiding
+            // 10 separate download-artifact steps.
+            const fs = require('fs');
+            const path = require('path');
+            const map = JSON.parse(process.env.MAP);
+            const dest = path.join(process.env.GITHUB_WORKSPACE, 'artifacts');
+            fs.mkdirSync(dest, { recursive: true });
+
+            for (const [key, runId] of Object.entries(map)) {
+              if (!runId) { core.info(`skip ${key}: no run`); continue; }
+              const arts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner, repo: context.repo.repo, run_id: runId
+              });
+              for (const a of arts.data.artifacts) {
+                core.info(`download ${a.name} (${a.size_in_bytes} bytes) from ${key}`);
+                const dl = await github.rest.actions.downloadArtifact({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  artifact_id: a.id, archive_format: 'zip'
+                });
+                const out = path.join(dest, `${key}-${a.name}.zip`);
+                fs.writeFileSync(out, Buffer.from(dl.data));
+              }
+            }
+
+      - name: Unpack nested artifact zips
+        shell: bash
+        run: |
+          cd artifacts
+          # Plugin + bundle artifacts were downloaded as zips; unzip them
+          # so the final release assets are the real tarballs/zips.
+          for f in *.zip; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              *-AniStudio-*|*-Plugin-*)
+                d="${f%.zip}"
+                mkdir -p "$d"
+                unzip -q "$f" -d "$d"
+                rm -f "$f"
+                # Move contents up
+                shopt -s dotglob nullglob
+                mv "$d"/* . 2>/dev/null || true
+                rmdir "$d" 2>/dev/null || true
+                ;;
+            esac
+          done
+          echo "=== Release assets ==="
+          find . -maxdepth 1 -type f | sort
+
+      - name: Fail if no assets
+        shell: bash
+        run: |
+          count=$(find artifacts -maxdepth 1 -type f | wc -l)
+          if [ "$count" -eq 0 ]; then
+            echo "::error::No artifacts collected; refusing to publish empty release."
+            exit 1
+          fi
+
+      - name: Publish single release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: AniStudio-${{ steps.ver.outputs.hash }}
+          name: AniStudio-${{ steps.ver.outputs.hash }}
+          target_commitish: ${{ github.sha }}
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -2,19 +2,20 @@
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ci/separate-plugin-workflows, main]
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
   build-core-linux:
     runs-on: ubuntu-22.04
-
     steps:
       - uses: actions/checkout@v4
         with:
-        ref: main
+          ref: main
           submodules: recursive
           fetch-depth: 0
 
@@ -159,6 +160,7 @@ jobs:
       - name: Package core
         shell: bash
         run: |
+          rm -rf artifact-bundle
           mkdir -p artifact-bundle/lib artifact-bundle/bin
           cp build/AniStudio artifact-bundle/ 2>/dev/null || true
           find build -maxdepth 1 -name "*.so*" -exec cp {} artifact-bundle/ \; 2>/dev/null || true
@@ -177,41 +179,3 @@ jobs:
           name: AniStudio-Linux-x64
           path: AniStudio-Linux-x64.tar.gz
           retention-days: 30
-
-  release-core-linux:
-    needs: build-core-linux
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-        ref: main
-          fetch-depth: 0
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: |
-          HASH=$(git rev-parse --short HEAD)
-          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
-          echo "Release tag will be: ${HASH}-linux-core"
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - run: |
-          find artifacts -type f -name "*.tar.gz" | sort
-          find artifacts -type f -name "*.AppImage" | sort
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ steps.ver.outputs.hash }}-linux-core
-          tag_name: ${{ steps.ver.outputs.hash }}-linux-core
-          target_commitish: ${{ github.sha }}
-          files: |
-            artifacts/**/*.tar.gz
-            artifacts/**/*.AppImage
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
