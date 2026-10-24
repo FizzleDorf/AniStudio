@@ -11,10 +11,10 @@ concurrency:
   group: release-unified
   cancel-in-progress: false
 
-env:
-  CONAN_HOME: ${{ github.workspace }}/.conan2
-
 jobs:
+  # =====================================================================
+  # LINUX BUILDS
+  # =====================================================================
   core-linux:
     runs-on: ubuntu-22.04
     outputs:
@@ -51,7 +51,7 @@ jobs:
       - name: Cache Conan (Linux)
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.conan2
+          path: ~/.conan2
           key: conan-Linux-v1
           restore-keys: conan-Linux-
 
@@ -75,111 +75,14 @@ jobs:
           tar -czf AniStudio-Linux-x64.tar.gz -C pkg-linux-core .
           tar -czf build-env-linux.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Core-Linux
           path: AniStudio-Linux-x64.tar.gz
-
-      - name: Upload Build Env
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: BuildEnv-Linux
           path: build-env-linux.tar.gz
-
-  core-windows:
-    runs-on: ubuntu-22.04
-    outputs:
-      hash: ${{ steps.ver.outputs.hash }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Init Submodules
-        run: |
-          git submodule sync --recursive
-          git submodule update --init --force --recursive
-          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
-          git submodule sync --recursive
-          git submodule update --init --force --recursive
-          cd ../../../../..
-
-      - name: Compute short hash
-        id: ver
-        shell: bash
-        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Install System Deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config git wget zip \
-            mingw-w64 g++-mingw-w64-x86-64 libgl1-mesa-dev libglu1-mesa-dev
-
-      - name: Cache Conan (Windows)
-        uses: actions/cache@v4
-        with:
-          path: ${{ github.workspace }}/.conan2
-          key: conan-Windows-v1
-          restore-keys: conan-Windows-
-
-      - name: Setup MinGW & Conan
-        run: |
-          python3 -m venv build/venv
-          source build/venv/bin/activate
-          pip install conan
-          conan profile detect --force
-
-      - name: Install Conan deps (Windows)
-        run: |
-          source build/venv/bin/activate
-          conan install . --build=missing \
-            -s os=Windows \
-            -s arch=x86_64 \
-            -s compiler=gcc \
-            -s compiler.version=11 \
-            -s compiler.libcxx=libstdc++11 \
-            -s compiler.cppstd=17 \
-            -s build_type=Release
-
-      - name: Build Core (Windows)
-        run: |
-          mkdir -p build-win
-          cd build-win
-          cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE=../build/conan/conan_toolchain.cmake \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
-            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
-            -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
-          cmake --build . --config Release --parallel $(nproc)
-
-      - name: Package Core
-        run: |
-          mkdir -p pkg-win-core/lib
-          cp build-win/AniStudio.exe pkg-win-core/ 2>/dev/null || cp build-win/*.exe pkg-win-core/ 2>/dev/null || true
-          cp build-win/*.dll pkg-win-core/ 2>/dev/null || true
-          cp -a build-win/lib/. pkg-win-core/lib/ 2>/dev/null || true
-          cp -r build-win/data pkg-win-core/ 2>/dev/null || true
-          cp -r build-win/shaders pkg-win-core/ 2>/dev/null || true
-          cp -r build-win/assets pkg-win-core/ 2>/dev/null || true
-          (cd pkg-win-core && zip -r ../AniStudio-Windows-x64.zip .)
-          tar -czf build-env-win.tar.gz --exclude='build/conan' --exclude='build/venv' build
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Core-Windows
-          path: AniStudio-Windows-x64.zip
-
-      - name: Upload Build Env
-        uses: actions/upload-artifact@v4
-        with:
-          name: BuildEnv-Windows
-          path: build-env-win.tar.gz
 
   plugin-linux:
     needs: core-linux
@@ -194,7 +97,6 @@ jobs:
           ref: main
           submodules: recursive
           fetch-depth: 0
-      
       - name: Init Submodules
         run: |
           git submodule sync --recursive
@@ -204,7 +106,7 @@ jobs:
           git submodule update --init --force --recursive
           cd ../../../../..
 
-      - name: Install System Deps
+      - name: Install Deps
         run: |
           sudo apt-get update
           sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev \
@@ -237,19 +139,17 @@ jobs:
       - name: Cache Conan
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.conan2
+          path: ~/.conan2
           key: conan-Linux-v1
           restore-keys: conan-Linux-
 
       - name: Install Conan
         run: ./install.sh
 
-      - name: Download Build Env
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: BuildEnv-Linux
           path: .
-          
       - run: tar -xzf build-env-linux.tar.gz
 
       - name: Build Plugin
@@ -257,8 +157,15 @@ jobs:
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           chmod +x build.sh
-          FLAG=""
-          if [ "${{ matrix.backend }}" != "CPU" ]; then FLAG="--$(echo ${{ matrix.backend }} | tr '[:upper:]' '[:lower:]')"; fi
+          
+          case "${{ matrix.backend }}" in
+            CPU) FLAG="" ;;
+            VULKAN) FLAG="--vulkan" ;;
+            CUDA) FLAG="--cuda" ;;
+            HIP) FLAG="--hipblas" ;;
+            SYCL) FLAG="--sycl" ;;
+          esac
+          
           if [ "${{ matrix.backend }}" = "SYCL" ]; then source /opt/intel/oneapi/setvars.sh; fi
           ./build.sh $FLAG
 
@@ -267,27 +174,26 @@ jobs:
           PLUGIN_NAME="AniStudio-SDCPP_${{ matrix.backend }}"
           tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C "build/plugins/${PLUGIN_NAME}" .
 
-      - name: Upload Plugin
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Plugin-Linux-${{ matrix.backend }}
           path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz
 
-  plugin-windows:
-    needs: core-windows
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        backend: [CPU, VULKAN, CUDA, SYCL]
+  # =====================================================================
+  # WINDOWS BUILDS
+  # =====================================================================
+  core-windows:
+    runs-on: windows-2022
+    outputs:
+      hash: ${{ steps.ver.outputs.hash }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
           submodules: recursive
           fetch-depth: 0
-      
       - name: Init Submodules
+        shell: bash
         run: |
           git submodule sync --recursive
           git submodule update --init --force --recursive
@@ -296,75 +202,174 @@ jobs:
           git submodule update --init --force --recursive
           cd ../../../../..
 
-      - name: Install System Deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config git wget zip \
-            mingw-w64 g++-mingw-w64-x86-64
-          if [ "${{ matrix.backend }}" = "VULKAN" ]; then sudo apt-get install -y libvulkan-dev glslc spirv-headers; fi
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Cache Conan (Windows)
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/.conan2
+          path: ~/.conan2
           key: conan-Windows-v1
           restore-keys: conan-Windows-
 
-      - name: Setup MinGW & Conan
-        run: |
-          python3 -m venv build/venv
-          source build/venv/bin/activate
-          pip install conan
-          conan profile detect --force
+      - name: Install Conan deps
+        shell: cmd
+        run: install.bat
 
-      - name: Install Conan
+      - name: Build Core
+        shell: cmd
         run: |
-          source build/venv/bin/activate
-          conan install . --build=missing \
-            -s os=Windows \
-            -s arch=x86_64 \
-            -s compiler=gcc \
-            -s compiler.version=11 \
-            -s compiler.libcxx=libstdc++11 \
-            -s compiler.cppstd=17 \
-            -s build_type=Release
+          call build\venv\Scripts\activate.bat
+          build.bat --local --jobs 8
 
-      - name: Download Build Env
-        uses: actions/download-artifact@v4
+      - name: Package Core
+        shell: bash
+        run: |
+          mkdir -p pkg-win-core/lib
+          cp build/AniStudio.exe pkg-win-core/
+          cp build/*.dll pkg-win-core/
+          cp -a build/lib/. pkg-win-core/lib/
+          cp -r build/data pkg-win-core/ 2>/dev/null || true
+          cp -r build/shaders pkg-win-core/ 2>/dev/null || true
+          cp -r build/assets pkg-win-core/ 2>/dev/null || true
+          (cd pkg-win-core && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
+          tar -czf build-env-win.tar.gz --exclude='build/conan' --exclude='build/venv' build
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Core-Windows
+          path: AniStudio-Windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BuildEnv-Windows
+          path: build-env-win.tar.gz
+
+  plugin-windows:
+    needs: core-windows
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [CPU, VULKAN, CUDA, HIP, SYCL]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
+      - name: Init Submodules
+        shell: bash
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Cache Conan (Windows)
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-Windows-v1
+          restore-keys: conan-Windows-
+
+      - name: Install Conan deps
+        shell: cmd
+        run: install.bat
+
+      - uses: actions/download-artifact@v4
         with:
           name: BuildEnv-Windows
           path: .
-
       - run: tar -xzf build-env-win.tar.gz
 
-      - name: Build Plugin
+      - name: Install Vulkan SDK
+        if: matrix.backend == 'VULKAN'
+        shell: pwsh
         run: |
-          source build/venv/bin/activate
-          cd plugins/AniStudio-SDCPP
-          
-          CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=../../build/conan/conan_toolchain.cmake -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release -DSD_BUILD_SHARED_LIBS=OFF"
-          if [ "${{ matrix.backend }}" = "VULKAN" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_VULKAN=ON"; fi
-          if [ "${{ matrix.backend }}" = "CUDA" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_CUDA=ON"; fi
-          if [ "${{ matrix.backend }}" = "SYCL" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_SYCL=ON"; fi
-          
-          cmake -B build-win -G Ninja $CMAKE_ARGS
-          cmake --build build-win --config Release || echo "::warning::Windows ${{ matrix.backend }} failed"
+          $VULKAN_VERSION = "1.4.328.1"
+          curl.exe -o $env:RUNNER_TEMP/VulkanSDK-Installer.exe -L "https://sdk.lunarg.com/sdk/download/$VULKAN_VERSION/windows/vulkansdk-windows-X64-$VULKAN_VERSION.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$VULKAN_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$VULKAN_VERSION\bin"
+
+      - name: Install CUDA
+        if: matrix.backend == 'CUDA'
+        uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: "12.8.1"
+          method: "network"
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "thrust", "visual_studio_integration"]'
+
+      - name: Install Intel oneAPI
+        if: matrix.backend == 'SYCL'
+        uses: ./.github/actions/setup-oneapi
+        with:
+          version: "2025.3.2.0"
+          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/1a8b9c0d-2e3f-4a5b-8c9d-0e1f2a3b4c5d/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
+
+      - name: Install Windows ROCm (HIP)
+        if: matrix.backend == 'HIP'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -Path "C:\TheRock\build" -ItemType Directory -Force | Out-Null
+          python -m venv C:\TheRock\build\.venv
+          & C:\TheRock\build\.venv\Scripts\Activate.ps1
+          python -m pip install --upgrade pip
+          python -m pip install --index-url https://stable.repo.amd.com/rocm/whl-next/ "rocm[libraries,devel]==6.4.0"
+          rocm-sdk init
+          $rocmPath = (rocm-sdk path --root).Trim()
+          $cmakePath = (rocm-sdk path --cmake).Trim()
+          $binPath = (rocm-sdk path --bin).Trim()
+          echo "HIP_PATH=$rocmPath" >> $env:GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$cmakePath" >> $env:GITHUB_ENV
+          echo "HIP_DEVICE_LIB_PATH=$rocmPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
+          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
+          echo "LLVM_PATH=$rocmPath\lib\llvm" >> $env:GITHUB_ENV
+          echo "$binPath" >> $env:GITHUB_PATH
+          echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
+
+      - name: Build Plugin
+        shell: cmd
+        run: |
+          call build\venv\Scripts\activate.bat
+          cd plugins\AniStudio-SDCPP
+          set BACKEND_LOWER=${{ matrix.backend }}
+          call set BACKEND_LOWER=%%BACKEND_LOWER:VULKAN=vulkan%%
+          call set BACKEND_LOWER=%%BACKEND_LOWER:CUDA=cuda%%
+          call set BACKEND_LOWER=%%BACKEND_LOWER:HIP=hipblas%%
+          call set BACKEND_LOWER=%%BACKEND_LOWER:SYCL=sycl%%
+          build.bat --%BACKEND_LOWER%
 
       - name: Package Plugin
+        shell: bash
         run: |
           PLUGIN_NAME="AniStudio-SDCPP_${{ matrix.backend }}"
-          if [ -d "build/plugins/${PLUGIN_NAME}" ]; then
-            (cd "build/plugins/${PLUGIN_NAME}" && zip -r ../../../../"${PLUGIN_NAME}-windows-x64.zip" .)
-            mv "${PLUGIN_NAME}-windows-x64.zip" ../../ 2>/dev/null || true
-          fi
+          (cd "build/plugins/${PLUGIN_NAME}" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../../../${PLUGIN_NAME}-windows-x64.zip -Force")
 
-      - name: Upload Plugin
-        uses: actions/upload-artifact@v4
-        with: 
+      - uses: actions/upload-artifact@v4
+        with:
           name: Plugin-Windows-${{ matrix.backend }}
           path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
           if-no-files-found: warn
 
+  # =====================================================================
+  # BUNDLE & RELEASE
+  # =====================================================================
   bundle:
     needs: [core-linux, core-windows, plugin-linux, plugin-windows]
     if: always()
@@ -380,8 +385,7 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
@@ -402,13 +406,14 @@ jobs:
             tar -czf "AniStudio-${VENDOR}-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
           done
 
-          for VENDOR in Nvidia Intel; do
+          for VENDOR in Nvidia AMD Intel; do
             STAGE="stage-win-${VENDOR}"
             mkdir -p "$STAGE/plugins"
             unzip -q artifacts/AniStudio-Windows-x64.zip -d "$STAGE"
             if [ -f "artifacts/AniStudio-SDCPP_CPU-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_CPU-windows-x64.zip -d "$STAGE/plugins"; fi
             if [ -f "artifacts/AniStudio-SDCPP_VULKAN-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_VULKAN-windows-x64.zip -d "$STAGE/plugins"; fi
             if [ "$VENDOR" = "Nvidia" ] && [ -f "artifacts/AniStudio-SDCPP_CUDA-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_CUDA-windows-x64.zip -d "$STAGE/plugins"; fi
+            if [ "$VENDOR" = "AMD" ] && [ -f "artifacts/AniStudio-SDCPP_HIP-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_HIP-windows-x64.zip -d "$STAGE/plugins"; fi
             if [ "$VENDOR" = "Intel" ] && [ -f "artifacts/AniStudio-SDCPP_SYCL-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_SYCL-windows-x64.zip -d "$STAGE/plugins"; fi
             (cd "$STAGE" && zip -r "../AniStudio-${VENDOR}-Bundle-windows-x64-${SHORT_HASH}.zip" .)
           done
