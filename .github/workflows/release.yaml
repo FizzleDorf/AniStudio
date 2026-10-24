@@ -17,11 +17,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Same architecture list upstream stable-diffusion.cpp ships for CUDA 12 on Windows.
   CUDA_ARCHS: "61;70;75;80;86;89;90;100;120"
   HIP_TARGETS: "gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
   ROCM_VERSION: "10.1.0"
-  # Never ship -march=native binaries built on a CI runner.
   CPU_FLAGS: "-DGGML_NATIVE=OFF -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON"
   LINUX_DEPS: >-
     build-essential cmake ninja-build pkg-config git wget patchelf imagemagick
@@ -87,8 +85,7 @@ jobs:
           set -euo pipefail
           source build/venv/bin/activate
           export CC=/usr/bin/gcc CXX=/usr/bin/g++ LD=/usr/bin/ld
-          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON \
-            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON
           cmake --build build --config Release --parallel "$(nproc)"
           test -f build/AniStudio
           test -f build/lib/AniEngineCore.so || test -f build/lib/libAniEngineCore.so
@@ -155,7 +152,7 @@ jobs:
           retention-days: 1
 
   # =====================================================================
-  # LINUX PLUGINS: CPU, VULKAN, CUDA (required) + HIP (best effort)
+  # LINUX PLUGINS
   # =====================================================================
   plugin-linux:
     needs: core-linux
@@ -265,9 +262,7 @@ jobs:
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
           read -ra CPUF <<< "$CPU_FLAGS"
-          ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-                -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
-                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON "${CPUF[@]}")
+          ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON "${CPUF[@]}")
           case "$BACKEND" in
             CPU) ;;
             VULKAN) ARGS+=(-DSD_VULKAN=ON) ;;
@@ -298,7 +293,7 @@ jobs:
           if-no-files-found: error
 
   # =====================================================================
-  # LINUX SYCL (best effort, Intel oneAPI container)
+  # LINUX SYCL
   # =====================================================================
   plugin-linux-sycl:
     needs: core-linux
@@ -360,7 +355,6 @@ jobs:
           source /opt/intel/oneapi/setvars.sh --force
           set -eu
           cmake -S plugins/AniStudio-SDCPP -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
             -DSD_SYCL=ON -DSD_WEBM=OFF -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
             -DCMAKE_CXX_FLAGS='-fsycl -Wno-narrowing' $CPU_FLAGS
           cmake --build "$BUILD_DIR" --config Release --target "$NAME" --parallel "$(nproc)"
@@ -455,8 +449,7 @@ jobs:
         shell: cmd
         run: |
           call build\venv\Scripts\activate
-          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON ^
-            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON
           cmake --build build --config Release --parallel 8
           if not exist build\AniStudio.exe (exit /b 1)
 
@@ -534,7 +527,7 @@ jobs:
           retention-days: 1
 
   # =====================================================================
-  # WINDOWS PLUGINS: CPU, VULKAN, CUDA (required) + HIP (best effort)
+  # WINDOWS PLUGINS ? mirrors plugins/AniStudio-SDCPP/build.bat
   # =====================================================================
   plugin-windows:
     needs: core-windows
@@ -590,7 +583,6 @@ jobs:
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
           test -f build/conan/conan_toolchain.cmake
 
-          # Add lowercase aliases for find_package(glew) etc. on a case-sensitive FS.
           cd build/conan
           for f in *-config.cmake *-config-version.cmake *Config.cmake *ConfigVersion.cmake; do
             [ -e "$f" ] || continue
@@ -640,6 +632,9 @@ jobs:
           echo "$binPath" >> $env:GITHUB_PATH
           echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
 
+      # Mirrors plugins/AniStudio-SDCPP/build.bat: no -G Ninja, no -A x64,
+      # no explicit CMAKE_C/CXX_COMPILER, no CXXFLAGS override. The default
+      # generator (Visual Studio 17 2022 x64) is what home uses, and it works.
       - name: Build Plugin
         shell: bash
         run: |
@@ -650,36 +645,21 @@ jobs:
           STAGING_DIR="build/plugins/${NAME}/staging"
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
-          # Strip the repo's CMAKE_JOB_POOL pins for CI only.
-          sed -i '/CMAKE_JOB_POOL/d' plugins/AniStudio-SDCPP/CMakeLists.txt
-          ! grep -q "CMAKE_JOB_POOL" plugins/AniStudio-SDCPP/CMakeLists.txt
-
-          # MSVC needs /bigobj for ggml-vulkan / ggml-cuda TUs.
-          # /std:c++17 must survive the CXXFLAGS override, so bake it in explicitly.
-          export CXXFLAGS="/std:c++17 /EHsc /bigobj"
-
           read -ra CPUF <<< "$CPU_FLAGS"
+          ARGS=(-DCMAKE_BUILD_TYPE=Release "${CPUF[@]}")
           case "$BACKEND" in
             CPU)
-              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe \
-                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
-                    "${CPUF[@]}") ;;
+              ;;
             VULKAN)
-              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe \
-                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
-                    -DSD_VULKAN=ON "${CPUF[@]}") ;;
+              ARGS+=(-DSD_VULKAN=ON)
+              ;;
             CUDA)
-              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe \
-                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
-                    -DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHS}" "${CPUF[@]}") ;;
+              ARGS+=(-DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHS}")
+              ;;
             HIP)
               HIP_ROOT="$(cygpath -m "$HIP_PATH")"
-              ARGS=(-G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
-                    "-DCMAKE_C_COMPILER=$HIP_ROOT/lib/llvm/bin/clang.exe" \
-                    "-DCMAKE_CXX_COMPILER=$HIP_ROOT/lib/llvm/bin/clang++.exe" \
-                    "-DCMAKE_HIP_COMPILER=$HIP_ROOT/lib/llvm/bin/clang.exe" \
-                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
-                    -DSD_HIPBLAS=ON "-DHIP_PATH=$HIP_ROOT" "-DGPU_TARGETS=${HIP_TARGETS}" -DGGML_NATIVE=OFF) ;;
+              ARGS+=(-DSD_HIPBLAS=ON "-DHIP_PATH=$HIP_ROOT" "-DGPU_TARGETS=${HIP_TARGETS}" -DGGML_NATIVE=OFF)
+              ;;
           esac
 
           cmake -S plugins/AniStudio-SDCPP -B "$BUILD_DIR" "${ARGS[@]}"
@@ -820,17 +800,15 @@ jobs:
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
           if [ -z "$LAST_TAG" ]; then
-            RANGE="-n 20"
             DIFF_URL="${REPO_URL}/commits/${GITHUB_SHA}"
             RANGE_ARG=""
           else
-            RANGE="${LAST_TAG}..HEAD"
             DIFF_URL="${REPO_URL}/compare/${LAST_TAG}...${GITHUB_SHA}"
             RANGE_ARG="${LAST_TAG}..HEAD"
           fi
 
           HANDLES="$(
-            git log ${RANGE_ARG:-$RANGE} --no-merges --format='%ae' \
+            git log ${RANGE_ARG:--n 20} --no-merges --format='%ae' \
               | sort -u \
               | while read -r email; do
                   login=$(gh api "search/users?q=${email}+in:email" --jq '.items[0].login // empty' 2>/dev/null || true)
@@ -843,15 +821,6 @@ jobs:
             echo "## What's Changed"
             echo
             echo "**Full Changelog / Diff**: ${DIFF_URL}"
-            echo
-            echo "## Contributors"
-            echo
-            if [ -n "$HANDLES" ]; then
-              echo "$HANDLES" | tr '\n' ' '
-            else
-              echo "_No contributors could be mapped to GitHub accounts._"
-            fi
-            echo
             echo
             echo "## Notes"
             echo "- CUDA plugins are built with CUDA 12.8. Windows CUDA runtime DLLs are included in the Nvidia bundle and published separately as cudart-AniStudio-win-cu12-x64.zip."
