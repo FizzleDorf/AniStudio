@@ -50,9 +50,7 @@ jobs:
       - name: Cache Conan
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.conan2
-            build/venv
+          path: ~/.conan2
           key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-${{ runner.os }}-
@@ -145,7 +143,12 @@ jobs:
           cp -r build/assets  artifact-bundle/ 2>/dev/null || true
           tar -czf AniStudio-Linux-x64.tar.gz -C artifact-bundle .
 
-          tar -czf build-env.tar.gz build
+          # Ship the whole build dir EXCEPT the conan-generated files and venv.
+          # The plugin jobs will run install.sh themselves against their own cache.
+          tar -czf build-env.tar.gz \
+            --exclude='build/conan' \
+            --exclude='build/venv' \
+            build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -174,6 +177,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # ----------------------------------------------------------------
+  # Shared setup for all plugin jobs (Conan cache + install.sh)
+  # ----------------------------------------------------------------
   plugin-cpu:
     needs: core
     runs-on: ubuntu-22.04
@@ -187,6 +193,25 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        run: ./install.sh
+
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
         with:
@@ -196,20 +221,12 @@ jobs:
       - name: Extract Build Env
         run: tar -xzf build-env.tar.gz
 
-      - name: Install Linux system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
-
       - name: Run Plugin Build Script
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh"
+          chmod +x "build (1).sh"
+          ./"build (1).sh"
 
       - name: Package plugin
         shell: bash
@@ -252,6 +269,26 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential \
+            libvulkan-dev vulkan-tools glslang-tools
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        run: ./install.sh
+
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
         with:
@@ -261,21 +298,12 @@ jobs:
       - name: Extract Build Env
         run: tar -xzf build-env.tar.gz
 
-      - name: Install Linux system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
-          sudo apt-get install -y libvulkan-dev vulkan-tools glslang-tools
-
       - name: Run Plugin Build Script
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --vulkan
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --vulkan
 
       - name: Package plugin
         shell: bash
@@ -318,6 +346,25 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        run: ./install.sh
+
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
         with:
@@ -326,14 +373,6 @@ jobs:
 
       - name: Extract Build Env
         run: tar -xzf build-env.tar.gz
-
-      - name: Install Linux system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
 
       - name: Install CUDA
         uses: Jimver/cuda-toolkit@v0.2.36
@@ -346,8 +385,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --cuda
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --cuda
 
       - name: Package plugin
         shell: bash
@@ -379,7 +418,7 @@ jobs:
 
   plugin-hip:
     needs: core
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     continue-on-error: true
     timeout-minutes: 300
     env:
@@ -393,15 +432,6 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update --init --force --recursive
-
-      - name: Download Core Build Env
-        uses: actions/download-artifact@v4
-        with:
-          name: AniStudio-Build-Env-Linux
-          path: .
-
-      - name: Extract Build Env
-        run: tar -xzf build-env.tar.gz
 
       - name: Install Linux system deps
         run: |
@@ -423,6 +453,26 @@ jobs:
           docker system prune -af || true
           sudo apt clean
 
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        run: ./install.sh
+
+      - name: Download Core Build Env
+        uses: actions/download-artifact@v4
+        with:
+          name: AniStudio-Build-Env-Linux
+          path: .
+
+      - name: Extract Build Env
+        run: tar -xzf build-env.tar.gz
+
       - name: Setup TheRock with Wheels
         run: |
           python3 -m venv .venv
@@ -443,8 +493,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --hipblas
+          chmod +x "build (1).sh"
+          ./"build (1).sh" --hipblas
 
       - name: Package plugin
         shell: bash
@@ -488,6 +538,25 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Install Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        run: ./install.sh
+
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
         with:
@@ -496,14 +565,6 @@ jobs:
 
       - name: Extract Build Env
         run: tar -xzf build-env.tar.gz
-
-      - name: Install Linux system deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev \
-            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
 
       - name: Setup Intel oneAPI
         uses: ./.github/actions/setup-oneapi
@@ -514,8 +575,9 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build.sh"
-          ./"build.sh" --sycl
+          chmod +x "build (1).sh"
+          # --sycl tells build.sh to keep CC/CXX (icx/icpx) instead of forcing gcc
+          ./"build (1).sh" --sycl
 
       - name: Package plugin
         shell: bash
@@ -584,7 +646,7 @@ jobs:
         shell: bash
         run: |
           test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
-          test -f plugins-normalized/CPU/*.tar.gz    || { echo "::warning::CPU plugin tarball missing"; }
+          test -f plugins-normalized/CPU/*.tar.gz || { echo "::error::CPU plugin tarball missing"; exit 1; }
 
       - name: Assemble Nvidia bundle
         shell: bash
@@ -594,7 +656,7 @@ jobs:
           STAGE="stage-nvidia"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::CUDA unavailable"; fi
           tar -czf "AniStudio-Nvidia-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
@@ -607,7 +669,7 @@ jobs:
           STAGE="stage-amd"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::HIP unavailable"; fi
           tar -czf "AniStudio-AMD-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
@@ -620,7 +682,7 @@ jobs:
           STAGE="stage-intel"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::SYCL unavailable"; fi
           tar -czf "AniStudio-Intel-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .

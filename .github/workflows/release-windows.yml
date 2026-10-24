@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   core:
-    runs-on: windows-latest
+    runs-on: windows-2022
     outputs:
       hash: ${{ steps.ver.outputs.hash }}
     steps:
@@ -42,9 +42,7 @@ jobs:
       - name: Cache Conan
         uses: actions/cache@v4
         with:
-          path: |
-            ~/.conan2
-            build/venv
+          path: ~/.conan2
           key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
           restore-keys: |
             conan-${{ runner.os }}-
@@ -73,19 +71,20 @@ jobs:
         run: |
           rm -rf artifact-bundle
           mkdir -p artifact-bundle/lib
-          
+
           cp build/AniStudio.exe artifact-bundle/
           cp build/*.dll artifact-bundle/
           cp -a build/lib/. artifact-bundle/lib/
-          
+
           cp -r build/data    artifact-bundle/ 2>/dev/null || true
           cp -r build/shaders artifact-bundle/ 2>/dev/null || true
           cp -r build/assets  artifact-bundle/ 2>/dev/null || true
-          
+
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
           (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
 
-          tar -czf build-env.tar.gz build
+          # Exclude conan-generated files and venv; plugin jobs regenerate them.
+          tar -czf build-env.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -133,6 +132,18 @@ jobs:
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        shell: cmd
+        run: install.bat
 
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
@@ -201,6 +212,18 @@ jobs:
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        shell: cmd
+        run: install.bat
 
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
@@ -280,6 +303,18 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
 
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        shell: cmd
+        run: install.bat
+
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
         with:
@@ -354,6 +389,22 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update --init --force --recursive
+
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: x64 }
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        shell: cmd
+        run: install.bat
 
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
@@ -456,6 +507,22 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Setup MSVC env
+        uses: ilammy/msvc-dev-cmd@v1
+        with: { arch: x64 }
+
+      - name: Restore Conan cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.conan2
+          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-
+
+      - name: Install Conan dependencies
+        shell: cmd
+        run: install.bat
+
       - name: Download Core Build Env
         uses: actions/download-artifact@v4
         with:
@@ -470,7 +537,7 @@ jobs:
         uses: ./.github/actions/setup-oneapi
         with:
           version: "2025.3.2.0"
-          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/f3c8bf4b-3e1e-4c7a-83e5-6c4a7e1a2f7d/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
+          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/1a8b9c0d-2e3f-4a5b-8c9d-0e1f2a3b4c5d/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
 
       - name: Run Plugin Build Script
         shell: cmd
@@ -494,7 +561,7 @@ jobs:
             while IFS= read -r dll; do
               base="$(basename "$dll")"
               if [ -z "${seen[$base]:-}" ]; then cp "$dll" pkg/; seen[$base]=1; fi
-            done < <(find "$src" -maxdepth 2 -iname "*.dll" 2>/dev/null | sort)
+            done < <(find "$src" -maxdepth 3 -iname "*.dll" 2>/dev/null | sort)
           }
           copy_dlls "C:/Program Files (x86)/Intel/oneAPI/compiler/latest/bin"
           copy_dlls "C:/Program Files (x86)/Intel/oneAPI/compiler/latest/bin/compiler"
@@ -533,7 +600,7 @@ jobs:
   bundle:
     needs: [core, plugin-cpu, plugin-vulkan, plugin-cuda, plugin-hip, plugin-sycl]
     if: always()
-    runs-on: windows-latest
+    runs-on: windows-2022
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -569,7 +636,7 @@ jobs:
         shell: bash
         run: |
           test -f core/*.tar.gz || { echo "::error::core tarball missing"; exit 1; }
-          test -f plugins-normalized/CPU/*.tar.gz    || { echo "::warning::CPU plugin tarball missing"; }
+          test -f plugins-normalized/CPU/*.tar.gz || { echo "::error::CPU plugin tarball missing"; exit 1; }
 
       - name: Assemble Nvidia bundle
         shell: bash
@@ -579,7 +646,7 @@ jobs:
           STAGE="stage-nvidia"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::CUDA unavailable"; fi
           tar -czf "AniStudio-Nvidia-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
@@ -593,7 +660,7 @@ jobs:
           STAGE="stage-amd"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::HIP unavailable"; fi
           tar -czf "AniStudio-AMD-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
@@ -607,7 +674,7 @@ jobs:
           STAGE="stage-intel"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
-          if ls plugins-normalized/CPU/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
           if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
           if ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::SYCL unavailable"; fi
           tar -czf "AniStudio-Intel-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
