@@ -11,8 +11,11 @@ concurrency:
   group: release-unified
   cancel-in-progress: false
 
+env:
+  CONAN_HOME: ${{ github.workspace }}/.conan2
+
 jobs:
-  build-all:
+  core-linux:
     runs-on: ubuntu-22.04
     outputs:
       hash: ${{ steps.ver.outputs.hash }}
@@ -23,7 +26,7 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Initialize nested submodules
+      - name: Init Submodules
         run: |
           git submodule sync --recursive
           git submodule update --init --force --recursive
@@ -37,44 +40,30 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Install System Dependencies
+      - name: Install Linux system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build pkg-config git wget zip unzip \
-            mingw-w64 g++-mingw-w64-x86-64 \
-            imagemagick libva-dev libgl1-mesa-dev libglu1-mesa-dev \
+          sudo apt-get install -y imagemagick libva-dev libgl1-mesa-dev libglu1-mesa-dev \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
             libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev \
-            libudev-dev libdbus-1-dev libgtk-3-dev \
-            libvulkan-dev glslc spirv-headers
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.15.1
+            libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
 
       - name: Cache Conan (Linux)
         uses: actions/cache@v4
         with:
-          path: ~/.conan2
+          path: ${{ github.workspace }}/.conan2
           key: conan-Linux-v1
           restore-keys: conan-Linux-
 
-      - name: Install Conan (Linux)
+      - name: Install Conan deps
         run: ./install.sh
 
-      - name: Build Core (Linux)
+      - name: Build Core
         run: |
           source build/venv/bin/activate
           ./build.sh --local --jobs $(nproc)
 
-      - name: Package Core (Linux)
+      - name: Package Core
         run: |
           mkdir -p pkg-linux-core/lib pkg-linux-core/bin
           cp build/AniStudio pkg-linux-core/
@@ -86,37 +75,55 @@ jobs:
           tar -czf AniStudio-Linux-x64.tar.gz -C pkg-linux-core .
           tar -czf build-env-linux.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
-      - name: Build Plugins (Linux)
-        run: |
-          source build/venv/bin/activate
-          cd plugins/AniStudio-SDCPP
-          chmod +x build.sh
-          
-          mkdir -p ../../pkg-linux-plugins
-          
-          ./build.sh && tar -czf ../../AniStudio-SDCPP_CPU-linux-x64.tar.gz -C ../../build/plugins/AniStudio-SDCPP_CPU .
-          ./build.sh --vulkan && tar -czf ../../AniStudio-SDCPP_VULKAN-linux-x64.tar.gz -C ../../build/plugins/AniStudio-SDCPP_VULKAN .
-          ./build.sh --cuda || true; if [ -d "../../build/plugins/AniStudio-SDCPP_CUDA" ]; then tar -czf ../../AniStudio-SDCPP_CUDA-linux-x64.tar.gz -C ../../build/plugins/AniStudio-SDCPP_CUDA .; fi
-          ./build.sh --hipblas || true; if [ -d "../../build/plugins/AniStudio-SDCPP_HIP" ]; then tar -czf ../../AniStudio-SDCPP_HIP-linux-x64.tar.gz -C ../../build/plugins/AniStudio-SDCPP_HIP .; fi
-          if [ -d "/opt/intel/oneapi" ]; then source /opt/intel/oneapi/setvars.sh; fi
-          ./build.sh --sycl || true; if [ -d "../../build/plugins/AniStudio-SDCPP_SYCL" ]; then tar -czf ../../AniStudio-SDCPP_SYCL-linux-x64.tar.gz -C ../../build/plugins/AniStudio-SDCPP_SYCL .; fi
+      - uses: actions/upload-artifact@v4
+        with: { name: Core-Linux, path: AniStudio-Linux-x64.tar.gz }
+      - uses: actions/upload-artifact@v4
+        with: { name: BuildEnv-Linux, path: build-env-linux.tar.gz }
 
-      - name: Setup MinGW
-        run: |
-          echo "CC=x86_64-w64-mingw32-gcc" >> $GITHUB_ENV
-          echo "CXX=x86_64-w64-mingw32-g++" >> $GITHUB_ENV
-          echo "WINDRES=x86_64-w64-mingw32-windres" >> $GITHUB_ENV
+  core-windows:
+    runs-on: ubuntu-22.04
+    outputs:
+      hash: ${{ steps.ver.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Cache Conan (Windows Target)
+      - name: Init Submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Install System Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config git wget zip \
+            mingw-w64 g++-mingw-w64-x86-64 libgl1-mesa-dev libglu1-mesa-dev
+
+      - name: Cache Conan (Windows)
         uses: actions/cache@v4
         with:
-          path: ~/.conan2
+          path: ${{ github.workspace }}/.conan2
           key: conan-Windows-v1
           restore-keys: conan-Windows-
 
-      - name: Install Conan (Windows Target)
+      - name: Setup MinGW & Conan
         run: |
+          python3 -m venv build/venv
           source build/venv/bin/activate
+          pip install conan
+          conan profile detect --force
           conan profile new win-cross --detect --force
           conan profile update settings.os=Windows win-cross
           conan profile update settings.arch=x86_64 win-cross
@@ -124,11 +131,13 @@ jobs:
           conan profile update settings.compiler.version=11 win-cross
           conan profile update settings.compiler.libcxx=libstdc++11 win-cross
           conan profile update conf.tools.cmake.cmaketoolchain:system_name=Windows win-cross
-          conan profile update conf.tools.cmake.cmaketoolchain:user_toolchain="$PWD/toolchain.cmake" win-cross
-          
+
+      - name: Install Conan deps (Windows)
+        run: |
+          source build/venv/bin/activate
           conan install . --build=missing -pr:h win-cross -pr:b default -s compiler.cppstd=17
 
-      - name: Build Core (Windows Cross-Compile)
+      - name: Build Core (Windows)
         run: |
           mkdir -p build-win
           cd build-win
@@ -141,7 +150,7 @@ jobs:
             -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres
           cmake --build . --config Release --parallel $(nproc)
 
-      - name: Package Core (Windows)
+      - name: Package Core
         run: |
           mkdir -p pkg-win-core/lib
           cp build-win/AniStudio.exe pkg-win-core/ 2>/dev/null || cp build-win/*.exe pkg-win-core/ 2>/dev/null || true
@@ -151,28 +160,196 @@ jobs:
           cp -r build-win/shaders pkg-win-core/ 2>/dev/null || true
           cp -r build-win/assets pkg-win-core/ 2>/dev/null || true
           (cd pkg-win-core && zip -r ../AniStudio-Windows-x64.zip .)
+          tar -czf build-env-win.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
-      - name: Build Plugins (Windows Cross-Compile)
+      - uses: actions/upload-artifact@v4
+        with: { name: Core-Windows, path: AniStudio-Windows-x64.zip }
+      - uses: actions/upload-artifact@v4
+        with: { name: BuildEnv-Windows, path: build-env-win.tar.gz }
+
+  plugin-linux:
+    needs: core-linux
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [CPU, VULKAN, CUDA, HIP, SYCL]
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+      
+      - name: Init Submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
+      - name: Install System Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libva-dev libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libwayland-dev libasound2-dev \
+            libpulse-dev libudev-dev libdbus-1-dev libgtk-3-dev ninja-build pkg-config build-essential
+          if [ "${{ matrix.backend }}" = "VULKAN" ]; then sudo apt-get install -y libvulkan-dev glslc spirv-headers; fi
+          if [ "${{ matrix.backend }}" = "SYCL" ]; then
+            wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | sudo gpg --dearmor -o /usr/share/keyrings/intel.gpg
+            echo "deb [signed-by=/usr/share/keyrings/intel.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
+            sudo apt-get update && sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel intel-oneapi-dnnl-devel intel-oneapi-tbb-devel
+          fi
+
+      - name: Setup CUDA
+        if: matrix.backend == 'CUDA'
+        uses: Jimver/cuda-toolkit@v0.2.36
+        with:
+          cuda: '13.3.1'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "curand", "curand_dev"]'
+
+      - name: Setup HIP
+        if: matrix.backend == 'HIP'
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==6.4.0"
+          echo "CMAKE_PREFIX_PATH=$(rocm-sdk path --cmake)" >> $GITHUB_ENV
+          echo "$(rocm-sdk path --bin)" >> $GITHUB_PATH
+
+      - name: Cache Conan
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.conan2
+          key: conan-Linux-v1
+          restore-keys: conan-Linux-
+
+      - name: Install Conan
+        run: ./install.sh
+
+      - uses: actions/download-artifact@v4
+        with: { name: BuildEnv-Linux, path: . }
+      - run: tar -xzf build-env-linux.tar.gz
+
+      - name: Build Plugin
+        run: |
+          source build/venv/bin/activate
+          cd plugins/AniStudio-SDCPP
+          chmod +x build.sh
+          FLAG=""
+          if [ "${{ matrix.backend }}" != "CPU" ]; then FLAG="--$(echo ${{ matrix.backend }} | tr '[:upper:]' '[:lower:]')"; fi
+          if [ "${{ matrix.backend }}" = "SYCL" ]; then source /opt/intel/oneapi/setvars.sh; fi
+          ./build.sh $FLAG
+
+      - name: Package Plugin
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_${{ matrix.backend }}"
+          tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C "build/plugins/${PLUGIN_NAME}" .
+
+      - uses: actions/upload-artifact@v4
+        with: { name: Plugin-Linux-${{ matrix.backend }}, path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz }
+
+  plugin-windows:
+    needs: core-windows
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [CPU, VULKAN, CUDA, SYCL]
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+      
+      - name: Init Submodules
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
+      - name: Install System Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config git wget zip \
+            mingw-w64 g++-mingw-w64-x86-64
+          if [ "${{ matrix.backend }}" = "VULKAN" ]; then sudo apt-get install -y libvulkan-dev glslc spirv-headers; fi
+
+      - name: Cache Conan (Windows)
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.conan2
+          key: conan-Windows-v1
+          restore-keys: conan-Windows-
+
+      - name: Setup MinGW & Conan
+        run: |
+          python3 -m venv build/venv
+          source build/venv/bin/activate
+          pip install conan
+          conan profile detect --force
+          conan profile new win-cross --detect --force
+          conan profile update settings.os=Windows win-cross
+          conan profile update settings.arch=x86_64 win-cross
+          conan profile update settings.compiler=gcc win-cross
+          conan profile update settings.compiler.version=11 win-cross
+          conan profile update settings.compiler.libcxx=libstdc++11 win-cross
+          conan profile update conf.tools.cmake.cmaketoolchain:system_name=Windows win-cross
+
+      - name: Install Conan
+        run: |
+          source build/venv/bin/activate
+          conan install . --build=missing -pr:h win-cross -pr:b default -s compiler.cppstd=17
+
+      - uses: actions/download-artifact@v4
+        with: { name: BuildEnv-Windows, path: . }
+      - run: tar -xzf build-env-win.tar.gz
+
+      - name: Build Plugin
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
           
-          cmake -B build-win-cpu -G Ninja -DCMAKE_TOOLCHAIN_FILE=../../build/conan/conan_toolchain.cmake -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release -DSD_BUILD_SHARED_LIBS=OFF
-          cmake --build build-win-cpu --config Release || echo "::warning::Win CPU failed"
-          if [ -d "build/plugins/AniStudio-SDCPP_CPU" ]; then (cd build/plugins/AniStudio-SDCPP_CPU && zip -r ../../../../AniStudio-SDCPP_CPU-windows-x64.zip .); fi
-
-          cmake -B build-win-vulkan -G Ninja -DCMAKE_TOOLCHAIN_FILE=../../build/conan/conan_toolchain.cmake -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release -DSD_VULKAN=ON -DSD_BUILD_SHARED_LIBS=OFF
-          cmake --build build-win-vulkan --config Release || echo "::warning::Win Vulkan failed"
-          if [ -d "build/plugins/AniStudio-SDCPP_VULKAN" ]; then (cd build/plugins/AniStudio-SDCPP_VULKAN && zip -r ../../../../AniStudio-SDCPP_VULKAN-windows-x64.zip .); fi
+          CMAKE_ARGS="-DCMAKE_TOOLCHAIN_FILE=../../build/conan/conan_toolchain.cmake -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release -DSD_BUILD_SHARED_LIBS=OFF"
+          if [ "${{ matrix.backend }}" = "VULKAN" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_VULKAN=ON"; fi
+          if [ "${{ matrix.backend }}" = "CUDA" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_CUDA=ON"; fi
+          if [ "${{ matrix.backend }}" = "SYCL" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_SYCL=ON"; fi
           
-          cmake -B build-win-cuda -G Ninja -DCMAKE_TOOLCHAIN_FILE=../../build/conan/conan_toolchain.cmake -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release -DSD_CUDA=ON -DSD_BUILD_SHARED_LIBS=OFF || echo "::warning::Win CUDA setup failed"
-          cmake --build build-win-cuda --config Release || echo "::warning::Win CUDA failed"
-          if [ -d "build/plugins/AniStudio-SDCPP_CUDA" ]; then (cd build/plugins/AniStudio-SDCPP_CUDA && zip -r ../../../../AniStudio-SDCPP_CUDA-windows-x64.zip .); fi
+          cmake -B build-win -G Ninja $CMAKE_ARGS
+          cmake --build build-win --config Release || echo "::warning::Windows ${{ matrix.backend }} failed"
 
-          if [ -d "/opt/intel/oneapi" ]; then source /opt/intel/oneapi/setvars.sh; fi
-          cmake -B build-win-sycl -G Ninja -DCMAKE_TOOLCHAIN_FILE=../../build/conan/conan_toolchain.cmake -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_BUILD_TYPE=Release -DSD_SYCL=ON -DSD_BUILD_SHARED_LIBS=OFF || echo "::warning::Win SYCL setup failed"
-          cmake --build build-win-sycl --config Release || echo "::warning::Win SYCL failed"
-          if [ -d "build/plugins/AniStudio-SDCPP_SYCL" ]; then (cd build/plugins/AniStudio-SDCPP_SYCL && zip -r ../../../../AniStudio-SDCPP_SYCL-windows-x64.zip .); fi
+      - name: Package Plugin
+        run: |
+          PLUGIN_NAME="AniStudio-SDCPP_${{ matrix.backend }}"
+          if [ -d "build/plugins/${PLUGIN_NAME}" ]; then
+            (cd "build/plugins/${PLUGIN_NAME}" && zip -r ../../../../"${PLUGIN_NAME}-windows-x64.zip" .)
+            mv "${PLUGIN_NAME}-windows-x64.zip" ../../ 2>/dev/null || true
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with: 
+          name: Plugin-Windows-${{ matrix.backend }}
+          path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
+          if-no-files-found: warn
+
+  bundle:
+    needs: [core-linux, core-windows, plugin-linux, plugin-windows]
+    if: always()
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main, fetch-depth: 0 }
+      
+      - name: Compute short hash
+        id: ver
+        shell: bash
+        run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Assemble Bundles
         run: |
@@ -181,23 +358,23 @@ jobs:
           for VENDOR in Nvidia AMD Intel; do
             STAGE="stage-linux-${VENDOR}"
             mkdir -p "$STAGE/plugins"
-            tar -xzf AniStudio-Linux-x64.tar.gz -C "$STAGE"
-            if [ -f "AniStudio-SDCPP_CPU-linux-x64.tar.gz" ]; then tar -xzf AniStudio-SDCPP_CPU-linux-x64.tar.gz -C "$STAGE/plugins"; fi
-            if [ -f "AniStudio-SDCPP_VULKAN-linux-x64.tar.gz" ]; then tar -xzf AniStudio-SDCPP_VULKAN-linux-x64.tar.gz -C "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "Nvidia" ] && [ -f "AniStudio-SDCPP_CUDA-linux-x64.tar.gz" ]; then tar -xzf AniStudio-SDCPP_CUDA-linux-x64.tar.gz -C "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "AMD" ] && [ -f "AniStudio-SDCPP_HIP-linux-x64.tar.gz" ]; then tar -xzf AniStudio-SDCPP_HIP-linux-x64.tar.gz -C "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "Intel" ] && [ -f "AniStudio-SDCPP_SYCL-linux-x64.tar.gz" ]; then tar -xzf AniStudio-SDCPP_SYCL-linux-x64.tar.gz -C "$STAGE/plugins"; fi
+            tar -xzf artifacts/AniStudio-Linux-x64.tar.gz -C "$STAGE"
+            if [ -f "artifacts/AniStudio-SDCPP_CPU-linux-x64.tar.gz" ]; then tar -xzf artifacts/AniStudio-SDCPP_CPU-linux-x64.tar.gz -C "$STAGE/plugins"; fi
+            if [ -f "artifacts/AniStudio-SDCPP_VULKAN-linux-x64.tar.gz" ]; then tar -xzf artifacts/AniStudio-SDCPP_VULKAN-linux-x64.tar.gz -C "$STAGE/plugins"; fi
+            if [ "$VENDOR" = "Nvidia" ] && [ -f "artifacts/AniStudio-SDCPP_CUDA-linux-x64.tar.gz" ]; then tar -xzf artifacts/AniStudio-SDCPP_CUDA-linux-x64.tar.gz -C "$STAGE/plugins"; fi
+            if [ "$VENDOR" = "AMD" ] && [ -f "artifacts/AniStudio-SDCPP_HIP-linux-x64.tar.gz" ]; then tar -xzf artifacts/AniStudio-SDCPP_HIP-linux-x64.tar.gz -C "$STAGE/plugins"; fi
+            if [ "$VENDOR" = "Intel" ] && [ -f "artifacts/AniStudio-SDCPP_SYCL-linux-x64.tar.gz" ]; then tar -xzf artifacts/AniStudio-SDCPP_SYCL-linux-x64.tar.gz -C "$STAGE/plugins"; fi
             tar -czf "AniStudio-${VENDOR}-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
           done
 
           for VENDOR in Nvidia Intel; do
             STAGE="stage-win-${VENDOR}"
             mkdir -p "$STAGE/plugins"
-            unzip -q AniStudio-Windows-x64.zip -d "$STAGE"
-            if [ -f "AniStudio-SDCPP_CPU-windows-x64.zip" ]; then unzip -q AniStudio-SDCPP_CPU-windows-x64.zip -d "$STAGE/plugins"; fi
-            if [ -f "AniStudio-SDCPP_VULKAN-windows-x64.zip" ]; then unzip -q AniStudio-SDCPP_VULKAN-windows-x64.zip -d "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "Nvidia" ] && [ -f "AniStudio-SDCPP_CUDA-windows-x64.zip" ]; then unzip -q AniStudio-SDCPP_CUDA-windows-x64.zip -d "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "Intel" ] && [ -f "AniStudio-SDCPP_SYCL-windows-x64.zip" ]; then unzip -q AniStudio-SDCPP_SYCL-windows-x64.zip -d "$STAGE/plugins"; fi
+            unzip -q artifacts/AniStudio-Windows-x64.zip -d "$STAGE"
+            if [ -f "artifacts/AniStudio-SDCPP_CPU-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_CPU-windows-x64.zip -d "$STAGE/plugins"; fi
+            if [ -f "artifacts/AniStudio-SDCPP_VULKAN-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_VULKAN-windows-x64.zip -d "$STAGE/plugins"; fi
+            if [ "$VENDOR" = "Nvidia" ] && [ -f "artifacts/AniStudio-SDCPP_CUDA-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_CUDA-windows-x64.zip -d "$STAGE/plugins"; fi
+            if [ "$VENDOR" = "Intel" ] && [ -f "artifacts/AniStudio-SDCPP_SYCL-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_SYCL-windows-x64.zip -d "$STAGE/plugins"; fi
             (cd "$STAGE" && zip -r "../AniStudio-${VENDOR}-Bundle-windows-x64-${SHORT_HASH}.zip" .)
           done
 
@@ -210,10 +387,10 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: false
           files: |
-            AniStudio-Linux-x64.tar.gz
-            AniStudio-Windows-x64.zip
-            AniStudio-SDCPP_*-linux-x64.tar.gz
-            AniStudio-SDCPP_*-windows-x64.zip
+            artifacts/AniStudio-Linux-x64.tar.gz
+            artifacts/AniStudio-Windows-x64.zip
+            artifacts/AniStudio-SDCPP_*-linux-x64.tar.gz
+            artifacts/AniStudio-SDCPP_*-windows-x64.zip
             AniStudio-*-Bundle-linux-x64-*.tar.gz
             AniStudio-*-Bundle-windows-x64-*.zip
         env:
