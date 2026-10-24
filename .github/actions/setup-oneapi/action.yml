@@ -23,7 +23,7 @@ runs:
         echo "deb [signed-by=/usr/share/keyrings/intel.gpg] https://apt.repos.intel.com/oneapi all main" \
           | sudo tee /etc/apt/sources.list.d/oneAPI.list
         sudo apt-get update
-        sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
+        sudo apt-get install -y intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel intel-oneapi-dnnl-devel intel-oneapi-tbb-devel
 
     - name: Install oneAPI (Windows)
       if: runner.os == 'Windows'
@@ -42,7 +42,7 @@ runs:
           Invoke-WebRequest -Uri $env:ONEAPI_INSTALLER_URL -OutFile $installer
         }
         $proc = Start-Process $installer `
-          -ArgumentList '-s', '-a', '--action', 'install', '--eula', 'accept', '--components', 'intel.oneapi.win.compiler, intel.oneapi.win.dpcpp_debugger, intel.oneapi.win.mkl.devel, intel.oneapi.win.tbb.devel' `
+          -ArgumentList '-s', '-a', '--action', 'install', '--eula', 'accept', '--components', 'intel.oneapi.win.compiler, intel.oneapi.win.dpcpp_debugger, intel.oneapi.win.mkl.devel, intel.oneapi.win.tbb.devel, intel.oneapi.win.dnnl.devel' `
           -NoNewWindow -PassThru
         if (-not $proc.WaitForExit(600000)) { $proc.Kill(); exit 1 }
         if ($proc.ExitCode -ne 0) { exit $proc.ExitCode }
@@ -53,7 +53,7 @@ runs:
       run: |
         $setvars = "C:\Program Files (x86)\Intel\oneAPI\setvars.bat"
         if (-not (Test-Path $setvars)) { Write-Error "oneAPI setvars.bat not found"; exit 1 }
-        $envDump = cmd /c "`"$setvars`" intel64 > nul 2>&1 && set"
+        $envDump = cmd /c "`"$setvars`" intel64 & set"
         foreach ($line in $envDump) {
           if ($line -match '^([^=]+)=(.*)$') {
             $name = $Matches[1]; $value = $Matches[2]

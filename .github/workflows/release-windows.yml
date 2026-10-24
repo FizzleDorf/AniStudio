@@ -29,6 +29,14 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Force update SDCPP nested submodules
+        shell: bash
+        run: |
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
       - name: Compute short hash
         id: ver
         shell: bash
@@ -128,6 +136,14 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Force update SDCPP nested submodules
+        shell: bash
+        run: |
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
@@ -208,6 +224,14 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Force update SDCPP nested submodules
+        shell: bash
+        run: |
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
@@ -234,7 +258,7 @@ jobs:
         shell: bash
         run: tar -xzf build-env.tar.gz
 
-      - name: Install Vulkan SDK
+      - name: Install Vulkan SDK (like sdcpp)
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -298,6 +322,14 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Force update SDCPP nested submodules
+        shell: bash
+        run: |
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
@@ -324,12 +356,12 @@ jobs:
         shell: bash
         run: tar -xzf build-env.tar.gz
 
-      - name: Install CUDA
+      - name: Install CUDA (like sdcpp)
         uses: Jimver/cuda-toolkit@v0.2.22
         with:
           cuda: "12.8.1"
           method: "network"
-          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "cufft", "cufft_dev", "cusparse", "cusparse_dev", "cusolver", "cusolver_dev", "nvrtc", "nvrtc_dev", "thrust", "visual_studio_integration"]'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "thrust", "visual_studio_integration"]'
 
       - name: Run Plugin Build Script
         shell: cmd
@@ -377,8 +409,8 @@ jobs:
     continue-on-error: true
     timeout-minutes: 300
     env:
-      ROCM_VERSION: "7.14.0"
-      GPU_TARGETS: "gfx1030;gfx1100;gfx1101;gfx1102;gfx1200;gfx1201"
+      ROCM_VERSION: "10.1.0"
+      GPU_TARGETS: "gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
     steps:
       - uses: actions/checkout@v4
         with: { ref: main, submodules: recursive, fetch-depth: 0 }
@@ -388,6 +420,14 @@ jobs:
         run: |
           git submodule sync --recursive
           git submodule update --init --force --recursive
+
+      - name: Force update SDCPP nested submodules
+        shell: bash
+        run: |
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
 
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
@@ -422,7 +462,7 @@ jobs:
           path: C:\TheRock\build
           key: rocm-wheels-${{ env.ROCM_VERSION }}-${{ runner.os }}
 
-      - name: Install ROCm with Wheels
+      - name: Install ROCm with Wheels (like sdcpp)
         if: steps.cache-rocm.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
@@ -431,7 +471,7 @@ jobs:
           python -m venv C:\TheRock\build\.venv
           & C:\TheRock\build\.venv\Scripts\Activate.ps1
           python -m pip install --upgrade pip
-          python -m pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ "rocm[libraries,devel]==${{ env.ROCM_VERSION }}"
+          python -m pip install --index-url https://stable.repo.amd.com/rocm/whl-next/ "rocm[libraries,devel]==${{ env.ROCM_VERSION }}"
           rocm-sdk init
 
       - name: Setup ROCm Environment
@@ -506,6 +546,14 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --force --recursive
 
+      - name: Force update SDCPP nested submodules
+        shell: bash
+        run: |
+          cd plugins/AniStudio-SDCPP/external/stable-diffusion.cpp
+          git submodule sync --recursive
+          git submodule update --init --force --recursive
+          cd ../../../../..
+
       - name: Setup MSVC env
         uses: ilammy/msvc-dev-cmd@v1
         with: { arch: x64 }
@@ -532,7 +580,7 @@ jobs:
         shell: bash
         run: tar -xzf build-env.tar.gz
 
-      - name: Setup Intel oneAPI
+      - name: Setup Intel oneAPI (like sdcpp)
         uses: ./.github/actions/setup-oneapi
         with:
           version: "2025.3.2.0"
@@ -641,13 +689,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if ! ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then
+            echo "::error::CUDA plugin missing. Cannot build Nvidia bundle."
+            exit 1
+          fi
           SHORT_HASH="${{ needs.core.outputs.hash }}"
           STAGE="stage-nvidia"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
           tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
-          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
-          if ls plugins-normalized/CUDA/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::CUDA unavailable"; fi
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/CUDA/*.tar.gz -C "$STAGE/plugins"
           tar -czf "AniStudio-Nvidia-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
           (cd "$STAGE" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Nvidia-Bundle-windows-x64-${SHORT_HASH}.zip -Force")
 
@@ -655,13 +707,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if ! ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then
+            echo "::error::HIP plugin missing. Cannot build AMD bundle."
+            exit 1
+          fi
           SHORT_HASH="${{ needs.core.outputs.hash }}"
           STAGE="stage-amd"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
           tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
-          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
-          if ls plugins-normalized/HIP/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::HIP unavailable"; fi
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/HIP/*.tar.gz -C "$STAGE/plugins"
           tar -czf "AniStudio-AMD-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
           (cd "$STAGE" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-AMD-Bundle-windows-x64-${SHORT_HASH}.zip -Force")
 
@@ -669,13 +725,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if ! ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then
+            echo "::error::SYCL plugin missing. Cannot build Intel bundle."
+            exit 1
+          fi
           SHORT_HASH="${{ needs.core.outputs.hash }}"
           STAGE="stage-intel"; rm -rf "$STAGE"; mkdir -p "$STAGE"
           tar -xzf core/*.tar.gz -C "$STAGE"
           mkdir -p "$STAGE/plugins"
           tar -xzf plugins-normalized/CPU/*.tar.gz -C "$STAGE/plugins"
-          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::Vulkan unavailable"; fi
-          if ls plugins-normalized/SYCL/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"; else echo "::warning::SYCL unavailable"; fi
+          if ls plugins-normalized/VULKAN/*.tar.gz >/dev/null 2>&1; then tar -xzf plugins-normalized/VULKAN/*.tar.gz -C "$STAGE/plugins"; fi
+          tar -xzf plugins-normalized/SYCL/*.tar.gz -C "$STAGE/plugins"
           tar -czf "AniStudio-Intel-Bundle-windows-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
           (cd "$STAGE" && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Intel-Bundle-windows-x64-${SHORT_HASH}.zip -Force")
 
@@ -686,7 +746,7 @@ jobs:
             AniStudio-*-Bundle-windows-x64-*.tar.gz
             AniStudio-*-Bundle-windows-x64-*.zip
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Publish bundles
         uses: softprops/action-gh-release@v2
@@ -695,7 +755,7 @@ jobs:
           name: AniStudio-${{ needs.core.outputs.hash }}
           generate_release_notes: false
           overwrite_files: true
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           files: |
             AniStudio-*-Bundle-windows-x64-*.tar.gz
             AniStudio-*-Bundle-windows-x64-*.zip
