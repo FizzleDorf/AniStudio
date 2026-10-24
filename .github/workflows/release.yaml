@@ -46,15 +46,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y $LINUX_DEPS
 
-      - name: Cache Conan
-        uses: actions/cache@v4
+      - name: Restore Conan cache
+        id: conan-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.CONAN_HOME }}
-          key: conan-Linux-${{ hashFiles('**/conanfile.*') }}
-          restore-keys: conan-Linux-
+          key: conan-Linux-v1
 
       - name: Install Conan + dependencies
         run: ./install.sh
+
+      # Save immediately after the install so a later build failure never loses the cache.
+      # Fixed key: bump v1 -> v2 by hand to invalidate.
+      - name: Save Conan cache
+        if: steps.conan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CONAN_HOME }}
+          key: conan-Linux-v1
 
       # Root build.sh does not accept --local/--jobs, so configure the root CMakeLists directly.
       # Root CMake expects -B build (conan toolchain lives in build/conan).
@@ -163,13 +172,11 @@ jobs:
           echo "$(rocm-sdk path --bin)" >> "$GITHUB_PATH"
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      # Restore only: the core job owns saving. Fail fast instead of rebuilding ffmpeg 8 times.
-      - name: Restore Conan cache
-        uses: actions/cache/restore@v4
+      - name: Cache Conan
+        uses: actions/cache@v4
         with:
           path: ${{ env.CONAN_HOME }}
-          key: conan-Linux-${{ hashFiles('**/conanfile.*') }}
-          fail-on-cache-miss: true
+          key: conan-Linux-v1
 
       - name: Install Conan + dependencies
         run: ./install.sh
@@ -246,17 +253,26 @@ jobs:
         with:
           arch: x64
 
-      - name: Cache Conan
-        uses: actions/cache@v4
+      - name: Restore Conan cache
+        id: conan-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.CONAN_HOME }}
-          key: conan-Windows-${{ hashFiles('**/conanfile.*') }}
-          restore-keys: conan-Windows-
+          key: conan-Windows-v1
 
       # "< nul" stops the trailing `pause` in install.bat from waiting on input
       - name: Install Conan + dependencies
         shell: cmd
         run: call install.bat < nul
+
+      # Save immediately after the install so a later build failure never loses the cache.
+      # Fixed key: bump v1 -> v2 by hand to invalidate.
+      - name: Save Conan cache
+        if: steps.conan-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.CONAN_HOME }}
+          key: conan-Windows-v1
 
       # conanfile.py targets Visual Studio 17 2022 and the root CMake only puts the
       # core DLLs next to the exe with a multi-config generator, so don't use Ninja here.
@@ -370,12 +386,11 @@ jobs:
         with:
           arch: x64
 
-      - name: Restore Conan cache
-        uses: actions/cache/restore@v4
+      - name: Cache Conan
+        uses: actions/cache@v4
         with:
           path: ${{ env.CONAN_HOME }}
-          key: conan-Windows-${{ hashFiles('**/conanfile.*') }}
-          fail-on-cache-miss: true
+          key: conan-Windows-v1
 
       - name: Install Conan + dependencies
         shell: cmd
