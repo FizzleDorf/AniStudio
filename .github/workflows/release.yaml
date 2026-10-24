@@ -11,13 +11,9 @@ concurrency:
   group: release-unified
   cancel-in-progress: false
 
-env:
-  CUDA_ARCHS: "61;70;75;80;86;89;90;100;120"
-  HIP_ARCHS: "gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201"
-
 jobs:
   core-linux:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.ver.outputs.hash }}
     steps:
@@ -81,7 +77,7 @@ jobs:
 
   plugin-linux:
     needs: core-linux
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -125,6 +121,8 @@ jobs:
         with:
           path: ~/.conan2
           key: conan-Linux-v1
+          restore-keys: |
+            conan-Linux-
       - name: Install Conan
         run: |
           source build/venv/bin/activate
@@ -150,11 +148,8 @@ jobs:
           case "$BACKEND" in
             CPU) ;;
             VULKAN) CMAKE_ARGS+=(-DSD_VULKAN=ON) ;;
-            CUDA) CMAKE_ARGS+=(-DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=$CUDA_ARCHS") ;;
-            HIP)
-              ROCM_CLANG="$(rocm-sdk path --bin)/clang"
-              CMAKE_ARGS+=(-DSD_HIPBLAS=ON -DHIP_PLATFORM=amd "-DCMAKE_C_COMPILER=$ROCM_CLANG" "-DCMAKE_CXX_COMPILER=${ROCM_CLANG}++" "-DCMAKE_HIP_COMPILER=$ROCM_CLANG" "-DGPU_TARGETS=$HIP_ARCHS")
-              ;;
+            CUDA) CMAKE_ARGS+=(-DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=61;70;75;80;86;89;90;100;120") ;;
+            HIP) CMAKE_ARGS+=(-DSD_HIPBLAS=ON -DHIP_PLATFORM=amd "-DCMAKE_HIP_COMPILER=$(find "$ROCM_PATH" \( -type f -o -type l \) -name clang 2>/dev/null | head -1)" "-DGPU_TARGETS=gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201") ;;
           esac
           cmake -S "$ADDON_DIR" -B "$BUILD_DIR" "${CMAKE_ARGS[@]}"
           cmake --build "$BUILD_DIR" --config Release --target "$NAME" --parallel "$(nproc)"
@@ -173,7 +168,7 @@ jobs:
 
   plugin-linux-sycl:
     needs: core-linux
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -220,10 +215,8 @@ jobs:
           ref: main
           submodules: recursive
           fetch-depth: 0
-          path: C:\b
       - name: Init Submodules
         shell: bash
-        working-directory: C:\b
         run: git submodule update --init --force --recursive
       - name: Compute short hash
         id: ver
@@ -235,7 +228,6 @@ jobs:
           arch: x64
       - name: Setup Python venv
         shell: cmd
-        working-directory: C:\b
         run: |
           if not exist build mkdir build
           if exist build\venv (echo venv exists) else (python -m venv build\venv)
@@ -245,20 +237,18 @@ jobs:
       - name: Cache Conan
         uses: actions/cache@v4
         with:
-          path: C:\b\.conan2
+          path: ~/.conan2
           key: conan-Windows-v1
           restore-keys: |
             conan-Windows-
       - name: Install Conan deps
         shell: cmd
-        working-directory: C:\b
         run: |
           call build\venv\Scripts\activate
           conan profile detect --force
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
       - name: Build Core
         shell: cmd
-        working-directory: C:\b
         run: |
           call build\venv\Scripts\activate
           cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON
@@ -266,13 +256,11 @@ jobs:
           if not exist build\AniStudio.exe (exit /b 1)
       - name: Collect Conan runtime DLLs
         shell: bash
-        working-directory: C:\b
         run: |
           source build/venv/Scripts/activate
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release --deployer=runtime_deploy --deployer-folder=build/runtime-deploy
       - name: Package Core
         shell: bash
-        working-directory: C:\b
         run: |
           set -euo pipefail
           rm -rf pkg-win-core && mkdir -p pkg-win-core
@@ -286,12 +274,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Core-Windows
-          path: C:\b\AniStudio-Windows-x64.zip
+          path: AniStudio-Windows-x64.zip
       - name: Upload BuildEnv
         uses: actions/upload-artifact@v4
         with:
           name: BuildEnv-Windows
-          path: C:\b\build-env-win.tar.gz
+          path: build-env-win.tar.gz
 
   plugin-windows:
     needs: core-windows
@@ -308,36 +296,33 @@ jobs:
           ref: main
           submodules: recursive
           fetch-depth: 0
-          path: C:\b
       - name: Init Submodules
         shell: bash
-        working-directory: C:\b
         run: git submodule update --init --force --recursive
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+      - name: Download BuildEnv
+        uses: actions/download-artifact@v4
+        with:
+          name: BuildEnv-Windows
+          path: .
+      - name: Extract BuildEnv
+        run: tar -xzf build-env-win.tar.gz
+        shell: bash
       - name: Cache Conan
         uses: actions/cache@v4
         with:
-          path: C:\b\.conan2
+          path: ~/.conan2
           key: conan-Windows-v1
           restore-keys: |
             conan-Windows-
       - name: Install Conan deps
         shell: cmd
-        working-directory: C:\b
         run: |
           call build\venv\Scripts\activate
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
-      - name: Download BuildEnv
-        uses: actions/download-artifact@v4
-        with:
-          name: BuildEnv-Windows
-          path: C:\b
-      - name: Extract BuildEnv
-        run: tar -xzf build-env-win.tar.gz
-        working-directory: C:\b
       - name: Install Vulkan SDK
         if: matrix.backend == 'VULKAN'
         shell: pwsh
@@ -347,22 +332,21 @@ jobs:
           & "$env:RUNNER_TEMP\V.exe" --accept-licenses --default-answer --confirm-command install
           Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$V"
           Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$V\bin"
-      - name: Install CUDA 13.3.1
+      - name: Install CUDA 12.8.1
         if: matrix.backend == 'CUDA'
-        shell: pwsh
-        run: |
-          $url = "https://developer.download.nvidia.com/compute/cuda/13.3.1/network/cuda_13.3.1_windows_network.exe"
-          curl.exe -o "$env:RUNNER_TEMP\cuda.exe" -L $url
-          Start-Process -FilePath "$env:RUNNER_TEMP\cuda.exe" -ArgumentList "-s -n" -Wait -NoNewWindow
+        uses: Jimver/cuda-toolkit@v0.2.22
+        with:
+          cuda: "12.8.1"
+          method: "network"
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "thrust", "visual_studio_integration"]'
       - name: Install ROCm 10.1.0
         if: matrix.backend == 'HIP'
         shell: pwsh
-        working-directory: C:\b
         run: |
           $ErrorActionPreference = "Stop"
-          New-Item -Path "C:\b\rocm" -ItemType Directory -Force | Out-Null
-          python -m venv C:\b\rocm\.venv
-          & C:\b\rocm\.venv\Scripts\Activate.ps1
+          New-Item -Path "C:\TheRock\build" -ItemType Directory -Force | Out-Null
+          python -m venv C:\TheRock\build\.venv
+          & C:\TheRock\build\.venv\Scripts\Activate.ps1
           python -m pip install --upgrade pip
           python -m pip install --index-url https://stable.repo.amd.com/rocm/whl-next/ "rocm[libraries,devel]==10.1.0"
           rocm-sdk init
@@ -378,7 +362,6 @@ jobs:
           echo "$binPath" >> $env:GITHUB_PATH
       - name: Build Plugin
         shell: bash
-        working-directory: C:\b
         run: |
           set -euo pipefail
           source build/venv/Scripts/activate
@@ -391,15 +374,14 @@ jobs:
           case "$BACKEND" in
             CPU) CMAKE_ARGS+=(-G "Visual Studio 17 2022" -A x64) ;;
             VULKAN) CMAKE_ARGS+=(-G Ninja -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe -DSD_VULKAN=ON) ;;
-            CUDA) CMAKE_ARGS+=(-G Ninja -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe -DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=$CUDA_ARCHS") ;;
-            HIP) CMAKE_ARGS+=(-G Ninja "-DCMAKE_C_COMPILER=$HIP_PATH\\lib\\llvm\\bin\\clang.exe" "-DCMAKE_CXX_COMPILER=$HIP_PATH\\lib\\llvm\\bin\\clang++.exe" "-DCMAKE_HIP_COMPILER=$HIP_PATH\\lib\\llvm\\bin\\clang.exe" -DSD_HIPBLAS=ON "-DGPU_TARGETS=$HIP_ARCHS") ;;
+            CUDA) CMAKE_ARGS+=(-G Ninja -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe -DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=61;70;75;80;86;89;90;100;120") ;;
+            HIP) CMAKE_ARGS+=(-G "Unix Makefiles" -DCMAKE_C_COMPILER="$HIP_PATH\\lib\\llvm\\bin\\clang.exe" -DCMAKE_CXX_COMPILER="$HIP_PATH\\lib\\llvm\\bin\\clang++.exe" -DCMAKE_HIP_COMPILER="$HIP_PATH\\lib\\llvm\\bin\\clang.exe" -DSD_HIPBLAS=ON "-DGPU_TARGETS=gfx1010;gfx1011;gfx1012;gfx1030;gfx1031;gfx1032;gfx1033;gfx1034;gfx1035;gfx1036;gfx1100;gfx1101;gfx1102;gfx1103;gfx1150;gfx1151;gfx1152;gfx1153;gfx1200;gfx1201") ;;
           esac
           cmake -S plugins/AniStudio-SDCPP -B "$BUILD_DIR" "${CMAKE_ARGS[@]}"
           cmake --build "$BUILD_DIR" --config Release --target "$NAME" --parallel
           test -f "$STAGING_DIR/${NAME}.dll"
       - name: Package Plugin
         shell: bash
-        working-directory: C:\b
         run: |
           NAME="AniStudio-SDCPP_${{ matrix.backend }}"
           rm -rf pkg && mkdir -p "pkg/$NAME/staging"
@@ -409,12 +391,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Plugin-Windows-${{ matrix.backend }}
-          path: C:\b\AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
+          path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
 
   bundle:
     needs: [core-linux, core-windows, plugin-linux, plugin-linux-sycl, plugin-windows]
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -446,7 +428,7 @@ jobs:
             STAGE="stage-win-${VENDOR}"
             mkdir -p "$STAGE/plugins"
             unzip -q artifacts/AniStudio-Windows-x64.zip -d "$STAGE"
-            for B in CPU VULKAN CUDA HIP SYCL; do
+            for B in CPU VULKAN CUDA HIP; do
               [ -f "artifacts/AniStudio-SDCPP_${B}-windows-x64.zip" ] && unzip -q "artifacts/AniStudio-SDCPP_${B}-windows-x64.zip" -d "$STAGE/plugins"
             done
             (cd "$STAGE" && zip -r "../AniStudio-${VENDOR}-Bundle-windows-x64-${SHORT_HASH}.zip" .)
@@ -464,9 +446,9 @@ jobs:
             git log $AUTH --format='- %aN' | sort -u
             echo; echo
             echo "## Notes"
-            echo "- CUDA plugins use CUDA 13.3.1 (Linux and Windows)."
+            echo "- CUDA plugins use CUDA 13.3.1 (Linux) and 12.8.1 (Windows)."
             echo "- SYCL plugins are built with Intel oneAPI 2025.3.2 (Linux only)."
-            echo "- Windows SYCL is not built because stable-diffusion.cpp does not support it."
+            echo "- Windows SYCL is not built."
           } > release_body.md
       - name: Publish Release
         uses: softprops/action-gh-release@v2
