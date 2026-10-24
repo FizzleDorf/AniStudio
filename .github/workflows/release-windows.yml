@@ -43,9 +43,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Windows
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Windows
 
       - name: Install Conan dependencies
         shell: cmd
@@ -83,7 +83,6 @@ jobs:
           tar -czf AniStudio-Windows-x64.tar.gz -C artifact-bundle .
           (cd artifact-bundle && powershell -NoProfile -Command "Compress-Archive -Path * -DestinationPath ../AniStudio-Windows-x64.zip -Force")
 
-          # Exclude conan-generated files and venv; plugin jobs regenerate them.
           tar -czf build-env.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
       - uses: actions/upload-artifact@v4
@@ -137,9 +136,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Windows
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Windows
 
       - name: Install Conan dependencies
         shell: cmd
@@ -160,7 +159,7 @@ jobs:
         run: |
           call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
-          build (1).bat
+          build.bat
 
       - name: Package plugin (tar.gz + zip)
         shell: bash
@@ -217,9 +216,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Windows
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Windows
 
       - name: Install Conan dependencies
         shell: cmd
@@ -250,7 +249,7 @@ jobs:
         run: |
           call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
-          build (1).bat --vulkan
+          build.bat --vulkan
 
       - name: Package plugin (tar.gz + zip)
         shell: bash
@@ -307,9 +306,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Windows
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Windows
 
       - name: Install Conan dependencies
         shell: cmd
@@ -337,7 +336,7 @@ jobs:
         run: |
           call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
-          build (1).bat --cuda
+          build.bat --cuda
 
       - name: Package plugin (tar.gz + zip)
         shell: bash
@@ -398,9 +397,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Windows
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Windows
 
       - name: Install Conan dependencies
         shell: cmd
@@ -457,7 +456,7 @@ jobs:
         run: |
           call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
-          build (1).bat --hipblas
+          build.bat --hipblas
 
       - name: Package plugin (tar.gz + zip)
         shell: bash
@@ -515,9 +514,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Windows
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Windows
 
       - name: Install Conan dependencies
         shell: cmd
@@ -544,7 +543,7 @@ jobs:
         run: |
           call build\venv\Scripts\activate.bat
           cd plugins\AniStudio-SDCPP
-          build (1).bat --sycl
+          build.bat --sycl
 
       - name: Package plugin (tar.gz + zip)
         shell: bash

@@ -51,9 +51,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Linux
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Linux
 
       - name: Install Conan dependencies
         run: ./install.sh
@@ -143,12 +143,7 @@ jobs:
           cp -r build/assets  artifact-bundle/ 2>/dev/null || true
           tar -czf AniStudio-Linux-x64.tar.gz -C artifact-bundle .
 
-          # Ship the whole build dir EXCEPT the conan-generated files and venv.
-          # The plugin jobs will run install.sh themselves against their own cache.
-          tar -czf build-env.tar.gz \
-            --exclude='build/conan' \
-            --exclude='build/venv' \
-            build
+          tar -czf build-env.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
       - uses: actions/upload-artifact@v4
         with:
@@ -177,9 +172,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ----------------------------------------------------------------
-  # Shared setup for all plugin jobs (Conan cache + install.sh)
-  # ----------------------------------------------------------------
   plugin-cpu:
     needs: core
     runs-on: ubuntu-22.04
@@ -205,9 +197,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Linux
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Linux
 
       - name: Install Conan dependencies
         run: ./install.sh
@@ -225,8 +217,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh"
+          chmod +x build.sh
+          ./build.sh
 
       - name: Package plugin
         shell: bash
@@ -282,9 +274,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Linux
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Linux
 
       - name: Install Conan dependencies
         run: ./install.sh
@@ -302,8 +294,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --vulkan
+          chmod +x build.sh
+          ./build.sh --vulkan
 
       - name: Package plugin
         shell: bash
@@ -358,9 +350,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Linux
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Linux
 
       - name: Install Conan dependencies
         run: ./install.sh
@@ -385,8 +377,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --cuda
+          chmod +x build.sh
+          ./build.sh --cuda
 
       - name: Package plugin
         shell: bash
@@ -457,9 +449,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Linux
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Linux
 
       - name: Install Conan dependencies
         run: ./install.sh
@@ -493,8 +485,8 @@ jobs:
         run: |
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          ./"build (1).sh" --hipblas
+          chmod +x build.sh
+          ./build.sh --hipblas
 
       - name: Package plugin
         shell: bash
@@ -550,9 +542,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.conan2
-          key: conan-${{ runner.os }}-${{ hashFiles('conanfile.py') }}
+          key: conan-Linux
           restore-keys: |
-            conan-${{ runner.os }}-
+            conan-Linux
 
       - name: Install Conan dependencies
         run: ./install.sh
@@ -575,9 +567,8 @@ jobs:
           source /opt/intel/oneapi/setvars.sh
           source build/venv/bin/activate
           cd plugins/AniStudio-SDCPP
-          chmod +x "build (1).sh"
-          # --sycl tells build.sh to keep CC/CXX (icx/icpx) instead of forcing gcc
-          ./"build (1).sh" --sycl
+          chmod +x build.sh
+          ./build.sh --sycl
 
       - name: Package plugin
         shell: bash
