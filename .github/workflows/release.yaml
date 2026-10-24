@@ -144,7 +144,7 @@ jobs:
           BUILD_DIR="$PWD/build/plugins/${NAME}/build"
           STAGING_DIR="$PWD/build/plugins/${NAME}/staging"
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
-          CMAKE_ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DSD_BUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DSD_BUILD_SHARED_GGML_LIB=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON "-DCMAKE_INSTALL_RPATH=\$ORIGIN")
+          CMAKE_ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release)
           case "$BACKEND" in
             CPU) ;;
             VULKAN) CMAKE_ARGS+=(-DSD_VULKAN=ON) ;;
@@ -191,7 +191,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             intel/oneapi-basekit:2025.3.2-0-devel-ubuntu24.04 \
-            bash -c "apt-get update && apt-get install -y cmake ninja-build git build-essential pkg-config python3 python3-pip python3-venv libva-dev libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libgtk-3-dev && [ -d build/venv ] || python3 -m venv build/venv && source build/venv/bin/activate && pip install conan && conan profile detect --force && conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release && NAME=AniStudio-SDCPP_SYCL && BUILD_DIR=build/plugins/\${NAME}/build && STAGING_DIR=build/plugins/\${NAME}/staging && mkdir -p \$BUILD_DIR \$STAGING_DIR && source /opt/intel/oneapi/setvars.sh && cmake -S plugins/AniStudio-SDCPP -B \$BUILD_DIR -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DSD_BUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON -DSD_SYCL=ON -DSD_WEBM=OFF -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_CXX_FLAGS='-fsycl -Wno-narrowing' && cmake --build \$BUILD_DIR --config Release --target \$NAME --parallel \$(nproc) && test -f \$STAGING_DIR/\${NAME}.so"
+            bash -c "apt-get update && apt-get install -y cmake ninja-build git build-essential pkg-config python3 python3-pip python3-venv libva-dev libgl1-mesa-dev libglu1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev libwayland-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev libgtk-3-dev && [ -d build/venv ] || python3 -m venv build/venv && source build/venv/bin/activate && pip install conan && conan profile detect --force && conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release && NAME=AniStudio-SDCPP_SYCL && BUILD_DIR=build/plugins/\${NAME}/build && STAGING_DIR=build/plugins/\${NAME}/staging && mkdir -p \$BUILD_DIR \$STAGING_DIR && source /opt/intel/oneapi/setvars.sh && cmake -S plugins/AniStudio-SDCPP -B \$BUILD_DIR -G Ninja -DCMAKE_BUILD_TYPE=Release -DSD_SYCL=ON -DSD_WEBM=OFF -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx -DCMAKE_CXX_FLAGS='-fsycl -Wno-narrowing' && cmake --build \$BUILD_DIR --config Release --target \$NAME --parallel \$(nproc) && test -f \$STAGING_DIR/\${NAME}.so"
       - name: Package Plugin
         run: |
           NAME="AniStudio-SDCPP_SYCL"
@@ -370,7 +370,7 @@ jobs:
           BUILD_DIR="$PWD/build/plugins/${NAME}/build"
           STAGING_DIR="$PWD/build/plugins/${NAME}/staging"
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
-          CMAKE_ARGS=(-DCMAKE_BUILD_TYPE=Release -DSD_BUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DSD_BUILD_SHARED_GGML_LIB=ON -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON)
+          CMAKE_ARGS=(-DCMAKE_BUILD_TYPE=Release)
           case "$BACKEND" in
             CPU) CMAKE_ARGS+=(-G "Visual Studio 17 2022" -A x64) ;;
             VULKAN) CMAKE_ARGS+=(-G Ninja -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe -DSD_VULKAN=ON) ;;
