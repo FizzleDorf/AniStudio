@@ -69,8 +69,6 @@ jobs:
           conan profile detect --force
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
 
-      # Drop Conan's source/build/download folders so the cache stays small, then save right
-      # away: a later build failure must not cost you the cache. Fixed key; bump v1 -> v2 to reset.
       - name: Trim Conan cache
         if: steps.conan-cache.outputs.cache-hit != 'true'
         run: |
@@ -89,7 +87,8 @@ jobs:
           set -euo pipefail
           source build/venv/bin/activate
           export CC=/usr/bin/gcc CXX=/usr/bin/g++ LD=/usr/bin/ld
-          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF
           cmake --build build --config Release --parallel "$(nproc)"
           test -f build/AniStudio
           test -f build/lib/AniEngineCore.so || test -f build/lib/libAniEngineCore.so
@@ -106,8 +105,6 @@ jobs:
           echo "=== ldd build/AniStudio ==="
           ldd build/AniStudio || true
 
-          # ffmpeg / glfw / portaudio are shared Conan packages. Bundle every Conan .so the
-          # binaries resolve to. Finding none is not an error; the ldd check below decides.
           CONAN_LIBS="$( { ldd build/AniStudio build/lib/*.so 2>/dev/null || true; } \
             | awk '/=> \//{print $3}' | sort -u | grep -F "$CONAN_ROOT" || true )"
           if [ -n "$CONAN_LIBS" ]; then
@@ -139,7 +136,6 @@ jobs:
           cp -f build/README.md build/LICENSE-*.txt pkg-linux-core/ 2>/dev/null || true
           tar -czf AniStudio-Linux-x64.tar.gz -C pkg-linux-core .
 
-          # Plugin builds only link against the core libraries.
           mkdir -p build/bin
           tar -czf build-env-linux.tar.gz build/lib build/bin
 
@@ -195,7 +191,6 @@ jobs:
             sudo apt-get install -y libvulkan-dev glslc spirv-headers
           fi
 
-      # CUDA 12.8 from NVIDIA's apt repo. CUDA 13 dropped sm_61/sm_70, which are in CUDA_ARCHS.
       - name: Setup CUDA 12.8
         if: matrix.backend == 'CUDA'
         run: |
@@ -209,7 +204,6 @@ jobs:
           echo "CUDAToolkit_ROOT=/usr/local/cuda-12.8" >> "$GITHUB_ENV"
           echo "CUDACXX=/usr/local/cuda-12.8/bin/nvcc" >> "$GITHUB_ENV"
 
-      # Mirrors the "Setup TheRock with Wheels" step of stable-diffusion.cpp's workflow.
       - name: Setup ROCm (TheRock wheels)
         if: matrix.backend == 'HIP'
         run: |
@@ -233,8 +227,6 @@ jobs:
           path: ~/.conan2
           key: conan-Linux-v1
 
-      # BuildEnv first: it creates build/ (lib + bin of the core). The venv is rebuilt here,
-      # not shipped between runners.
       - name: Download BuildEnv
         uses: actions/download-artifact@v4
         with:
@@ -255,8 +247,6 @@ jobs:
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release -c tools.system.package_manager:mode=install -c tools.system.package_manager:sudo=True
           test -f build/conan/conan_toolchain.cmake
 
-          # The plugin CMake calls find_package(glew) (lowercase); Conan writes GLEW-config.cmake.
-          # Linux is case-sensitive, so add lowercase aliases. Harmless if not needed.
           cd build/conan
           for f in *-config.cmake *-config-version.cmake *Config.cmake *ConfigVersion.cmake; do
             [ -e "$f" ] || continue
@@ -275,7 +265,9 @@ jobs:
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
           read -ra CPUF <<< "$CPU_FLAGS"
-          ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON "${CPUF[@]}")
+          ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+                -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+                -DCMAKE_EXPORT_COMPILE_COMMANDS=ON "${CPUF[@]}")
           case "$BACKEND" in
             CPU) ;;
             VULKAN) ARGS+=(-DSD_VULKAN=ON) ;;
@@ -368,6 +360,7 @@ jobs:
           source /opt/intel/oneapi/setvars.sh --force
           set -eu
           cmake -S plugins/AniStudio-SDCPP -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
             -DSD_SYCL=ON -DSD_WEBM=OFF -DCMAKE_C_COMPILER=icx -DCMAKE_CXX_COMPILER=icpx \
             -DCMAKE_CXX_FLAGS='-fsycl -Wno-narrowing' $CPU_FLAGS
           cmake --build "$BUILD_DIR" --config Release --target "$NAME" --parallel "$(nproc)"
@@ -462,11 +455,11 @@ jobs:
         shell: cmd
         run: |
           call build\venv\Scripts\activate
-          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64 -DBUILD_APP_MODE=local -DBUILD_SHARED_LIBS=ON ^
+            -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF
           cmake --build build --config Release --parallel 8
           if not exist build\AniStudio.exe (exit /b 1)
 
-      # Every shared lib of every Conan dependency (including transitive ones).
       - name: Collect Conan runtime DLLs
         shell: bash
         run: |
@@ -484,7 +477,6 @@ jobs:
           rm -rf pkg-win-core && mkdir -p pkg-win-core
           cp build/AniStudio.exe pkg-win-core/
 
-          # cp -n exits non-zero when it skips a file on newer coreutils, so test first.
           copy_new() {
             while IFS= read -r f; do
               [ -e "pkg-win-core/$(basename "$f")" ] || cp "$f" pkg-win-core/
@@ -504,7 +496,6 @@ jobs:
           done
           cp -f build/README.md build/LICENSE-*.txt pkg-win-core/ 2>/dev/null || true
 
-          # Report (never fail on) any DLL import that is neither packaged nor a Windows DLL.
           (
             cd pkg-win-core
             shopt -s nullglob
@@ -524,7 +515,6 @@ jobs:
 
           (cd pkg-win-core && 7z a -tzip ../AniStudio-Windows-x64.zip . > /dev/null)
 
-          # Plugin builds only link against the core libraries.
           mkdir -p build/bin
           tar -czf build-env-win.tar.gz build/lib build/bin
 
@@ -600,6 +590,14 @@ jobs:
           conan install . --build=missing -s compiler.cppstd=17 -s build_type=Release
           test -f build/conan/conan_toolchain.cmake
 
+          # Add lowercase aliases for find_package(glew) etc. on a case-sensitive FS.
+          cd build/conan
+          for f in *-config.cmake *-config-version.cmake *Config.cmake *ConfigVersion.cmake; do
+            [ -e "$f" ] || continue
+            lower="$(echo "$f" | sed -E 's/^(.*)(-config(-version)?\.cmake|Config(Version)?\.cmake)$/\L\1\E\2/')"
+            if [ "$lower" != "$f" ] && [ ! -e "$lower" ]; then ln -s "$f" "$lower"; echo "alias $lower -> $f"; fi
+          done
+
       - name: Install Vulkan SDK
         if: matrix.backend == 'VULKAN'
         shell: pwsh
@@ -619,7 +617,6 @@ jobs:
           method: "network"
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "thrust", "visual_studio_integration"]'
 
-      # Mirrors the "Install ROCm with Wheels" steps of stable-diffusion.cpp's workflow.
       - name: Install ROCm
         if: matrix.backend == 'HIP'
         shell: pwsh
@@ -649,31 +646,40 @@ jobs:
           set -euo pipefail
           BACKEND="${{ matrix.backend }}"
           NAME="AniStudio-SDCPP_${BACKEND}"
-          # Relative paths on purpose: Git Bash would hand cmake /d/a/... style paths.
           BUILD_DIR="build/plugins/${NAME}/build"
           STAGING_DIR="build/plugins/${NAME}/staging"
           mkdir -p "$BUILD_DIR" "$STAGING_DIR"
 
-          # The plugin CMakeLists pins every Ninja job to one at a time (compile=1 link=1).
-          # Strip that in this CI checkout only; the repo file is not touched.
+          # Strip the repo's CMAKE_JOB_POOL pins for CI only.
           sed -i '/CMAKE_JOB_POOL/d' plugins/AniStudio-SDCPP/CMakeLists.txt
           ! grep -q "CMAKE_JOB_POOL" plugins/AniStudio-SDCPP/CMakeLists.txt
 
-          # ggml-vulkan / ggml-cuda objects exceed MSVC's section limit without /bigobj
-          # (stable-diffusion.cpp's own CI passes it). Env var keeps CMake's default flags.
-          export CXXFLAGS="-bigobj"
+          # MSVC needs /bigobj for ggml-vulkan / ggml-cuda TUs.
+          # /std:c++17 must survive the CXXFLAGS override, so bake it in explicitly.
+          export CXXFLAGS="/std:c++17 /EHsc /bigobj"
 
           read -ra CPUF <<< "$CPU_FLAGS"
           case "$BACKEND" in
             CPU)
-              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe "${CPUF[@]}") ;;
+              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe \
+                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+                    "${CPUF[@]}") ;;
             VULKAN)
-              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe -DSD_VULKAN=ON "${CPUF[@]}") ;;
+              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe \
+                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+                    -DSD_VULKAN=ON "${CPUF[@]}") ;;
             CUDA)
-              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe -DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHS}" "${CPUF[@]}") ;;
+              ARGS=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl.exe -DCMAKE_CXX_COMPILER=cl.exe \
+                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+                    -DSD_CUDA=ON "-DCMAKE_CUDA_ARCHITECTURES=${CUDA_ARCHS}" "${CPUF[@]}") ;;
             HIP)
               HIP_ROOT="$(cygpath -m "$HIP_PATH")"
-              ARGS=(-G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release "-DCMAKE_C_COMPILER=$HIP_ROOT/lib/llvm/bin/clang.exe" "-DCMAKE_CXX_COMPILER=$HIP_ROOT/lib/llvm/bin/clang++.exe" "-DCMAKE_HIP_COMPILER=$HIP_ROOT/lib/llvm/bin/clang.exe" -DSD_HIPBLAS=ON "-DHIP_PATH=$HIP_ROOT" "-DGPU_TARGETS=${HIP_TARGETS}" -DGGML_NATIVE=OFF) ;;
+              ARGS=(-G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release \
+                    "-DCMAKE_C_COMPILER=$HIP_ROOT/lib/llvm/bin/clang.exe" \
+                    "-DCMAKE_CXX_COMPILER=$HIP_ROOT/lib/llvm/bin/clang++.exe" \
+                    "-DCMAKE_HIP_COMPILER=$HIP_ROOT/lib/llvm/bin/clang.exe" \
+                    -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_STANDARD_REQUIRED=ON -DCMAKE_CXX_EXTENSIONS=OFF \
+                    -DSD_HIPBLAS=ON "-DHIP_PATH=$HIP_ROOT" "-DGPU_TARGETS=${HIP_TARGETS}" -DGGML_NATIVE=OFF) ;;
           esac
 
           cmake -S plugins/AniStudio-SDCPP -B "$BUILD_DIR" "${ARGS[@]}"
@@ -696,7 +702,6 @@ jobs:
           path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
           if-no-files-found: error
 
-      # Same approach as stable-diffusion.cpp: the CUDA runtime DLLs ship as a separate zip.
       - name: Collect CUDA runtime DLLs
         if: matrix.backend == 'CUDA'
         shell: bash
@@ -802,7 +807,6 @@ jobs:
             case "$VENDOR" in
               Nvidia)
                 win CUDA "$STAGE"
-                # CUDA runtime DLLs go next to the exe so the plugin can load without a CUDA install
                 if [ -f artifacts/cudart-AniStudio-win-cu12-x64.zip ]; then unzip -q -o artifacts/cudart-AniStudio-win-cu12-x64.zip -d "$STAGE"; fi
                 ;;
               AMD) win HIP "$STAGE" ;;
@@ -814,14 +818,41 @@ jobs:
         shell: bash
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$LAST_TAG" ]; then RANGE="-n 20"; AUTH="HEAD"; else RANGE="${LAST_TAG}..HEAD"; AUTH="${LAST_TAG}..HEAD"; fi
+          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="-n 20"
+            DIFF_URL="${REPO_URL}/commits/${GITHUB_SHA}"
+            RANGE_ARG=""
+          else
+            RANGE="${LAST_TAG}..HEAD"
+            DIFF_URL="${REPO_URL}/compare/${LAST_TAG}...${GITHUB_SHA}"
+            RANGE_ARG="${LAST_TAG}..HEAD"
+          fi
+
+          HANDLES="$(
+            git log ${RANGE_ARG:-$RANGE} --no-merges --format='%ae' \
+              | sort -u \
+              | while read -r email; do
+                  login=$(gh api "search/users?q=${email}+in:email" --jq '.items[0].login // empty' 2>/dev/null || true)
+                  [ -n "$login" ] && echo "@${login}"
+                done \
+              | sort -u
+          )"
+
           {
             echo "## What's Changed"
-            git log --pretty=format:"- %s (%h)" $RANGE
-            echo; echo
+            echo
+            echo "**Full Changelog / Diff**: ${DIFF_URL}"
+            echo
             echo "## Contributors"
-            git log $AUTH --format='- %aN' | sort -u
-            echo; echo
+            echo
+            if [ -n "$HANDLES" ]; then
+              echo "$HANDLES" | tr '\n' ' '
+            else
+              echo "_No contributors could be mapped to GitHub accounts._"
+            fi
+            echo
+            echo
             echo "## Notes"
             echo "- CUDA plugins are built with CUDA 12.8. Windows CUDA runtime DLLs are included in the Nvidia bundle and published separately as cudart-AniStudio-win-cu12-x64.zip."
             echo "- Linux CUDA plugins need the NVIDIA CUDA 12 runtime libraries installed."
@@ -835,7 +866,7 @@ jobs:
           name: AniStudio-${{ steps.ver.outputs.hash }}
           target_commitish: ${{ github.sha }}
           body_path: release_body.md
-          generate_release_notes: false
+          generate_release_notes: true
           overwrite_files: true
           fail_on_unmatched_files: false
           files: |
