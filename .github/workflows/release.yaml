@@ -131,18 +131,18 @@ jobs:
           source build/venv/bin/activate
           pip install conan
           conan profile detect --force
-          conan profile new win-cross --detect --force
-          conan profile update settings.os=Windows win-cross
-          conan profile update settings.arch=x86_64 win-cross
-          conan profile update settings.compiler=gcc win-cross
-          conan profile update settings.compiler.version=11 win-cross
-          conan profile update settings.compiler.libcxx=libstdc++11 win-cross
-          conan profile update conf.tools.cmake.cmaketoolchain:system_name=Windows win-cross
 
       - name: Install Conan deps (Windows)
         run: |
           source build/venv/bin/activate
-          conan install . --build=missing -pr:h win-cross -pr:b default -s compiler.cppstd=17
+          conan install . --build=missing \
+            -s os=Windows \
+            -s arch=x86_64 \
+            -s compiler=gcc \
+            -s compiler.version=11 \
+            -s compiler.libcxx=libstdc++11 \
+            -s compiler.cppstd=17 \
+            -s build_type=Release
 
       - name: Build Core (Windows)
         run: |
@@ -190,7 +190,10 @@ jobs:
         backend: [CPU, VULKAN, CUDA, HIP, SYCL]
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
       
       - name: Init Submodules
         run: |
@@ -279,7 +282,10 @@ jobs:
         backend: [CPU, VULKAN, CUDA, SYCL]
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
       
       - name: Init Submodules
         run: |
@@ -310,18 +316,18 @@ jobs:
           source build/venv/bin/activate
           pip install conan
           conan profile detect --force
-          conan profile new win-cross --detect --force
-          conan profile update settings.os=Windows win-cross
-          conan profile update settings.arch=x86_64 win-cross
-          conan profile update settings.compiler=gcc win-cross
-          conan profile update settings.compiler.version=11 win-cross
-          conan profile update settings.compiler.libcxx=libstdc++11 win-cross
-          conan profile update conf.tools.cmake.cmaketoolchain:system_name=Windows win-cross
 
       - name: Install Conan
         run: |
           source build/venv/bin/activate
-          conan install . --build=missing -pr:h win-cross -pr:b default -s compiler.cppstd=17
+          conan install . --build=missing \
+            -s os=Windows \
+            -s arch=x86_64 \
+            -s compiler=gcc \
+            -s compiler.version=11 \
+            -s compiler.libcxx=libstdc++11 \
+            -s compiler.cppstd=17 \
+            -s build_type=Release
 
       - name: Download Build Env
         uses: actions/download-artifact@v4
@@ -365,7 +371,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, fetch-depth: 0 }
+        with:
+          ref: main
+          fetch-depth: 0
       
       - name: Compute short hash
         id: ver
