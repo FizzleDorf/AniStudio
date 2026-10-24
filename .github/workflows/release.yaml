@@ -75,10 +75,17 @@ jobs:
           tar -czf AniStudio-Linux-x64.tar.gz -C pkg-linux-core .
           tar -czf build-env-linux.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
-      - uses: actions/upload-artifact@v4
-        with: { name: Core-Linux, path: AniStudio-Linux-x64.tar.gz }
-      - uses: actions/upload-artifact@v4
-        with: { name: BuildEnv-Linux, path: build-env-linux.tar.gz }
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Core-Linux
+          path: AniStudio-Linux-x64.tar.gz
+
+      - name: Upload Build Env
+        uses: actions/upload-artifact@v4
+        with:
+          name: BuildEnv-Linux
+          path: build-env-linux.tar.gz
 
   core-windows:
     runs-on: ubuntu-22.04
@@ -162,10 +169,17 @@ jobs:
           (cd pkg-win-core && zip -r ../AniStudio-Windows-x64.zip .)
           tar -czf build-env-win.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
-      - uses: actions/upload-artifact@v4
-        with: { name: Core-Windows, path: AniStudio-Windows-x64.zip }
-      - uses: actions/upload-artifact@v4
-        with: { name: BuildEnv-Windows, path: build-env-win.tar.gz }
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Core-Windows
+          path: AniStudio-Windows-x64.zip
+
+      - name: Upload Build Env
+        uses: actions/upload-artifact@v4
+        with:
+          name: BuildEnv-Windows
+          path: build-env-win.tar.gz
 
   plugin-linux:
     needs: core-linux
@@ -227,8 +241,12 @@ jobs:
       - name: Install Conan
         run: ./install.sh
 
-      - uses: actions/download-artifact@v4
-        with: { name: BuildEnv-Linux, path: . }
+      - name: Download Build Env
+        uses: actions/download-artifact@v4
+        with:
+          name: BuildEnv-Linux
+          path: .
+          
       - run: tar -xzf build-env-linux.tar.gz
 
       - name: Build Plugin
@@ -246,8 +264,11 @@ jobs:
           PLUGIN_NAME="AniStudio-SDCPP_${{ matrix.backend }}"
           tar -czf "${PLUGIN_NAME}-linux-x64.tar.gz" -C "build/plugins/${PLUGIN_NAME}" .
 
-      - uses: actions/upload-artifact@v4
-        with: { name: Plugin-Linux-${{ matrix.backend }}, path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz }
+      - name: Upload Plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-Linux-${{ matrix.backend }}
+          path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz
 
   plugin-windows:
     needs: core-windows
@@ -302,8 +323,12 @@ jobs:
           source build/venv/bin/activate
           conan install . --build=missing -pr:h win-cross -pr:b default -s compiler.cppstd=17
 
-      - uses: actions/download-artifact@v4
-        with: { name: BuildEnv-Windows, path: . }
+      - name: Download Build Env
+        uses: actions/download-artifact@v4
+        with:
+          name: BuildEnv-Windows
+          path: .
+
       - run: tar -xzf build-env-win.tar.gz
 
       - name: Build Plugin
@@ -327,7 +352,8 @@ jobs:
             mv "${PLUGIN_NAME}-windows-x64.zip" ../../ 2>/dev/null || true
           fi
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload Plugin
+        uses: actions/upload-artifact@v4
         with: 
           name: Plugin-Windows-${{ matrix.backend }}
           path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
@@ -346,7 +372,8 @@ jobs:
         shell: bash
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/download-artifact@v4
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
