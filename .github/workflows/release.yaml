@@ -79,9 +79,13 @@ jobs:
           tar -czf build-env-linux.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
       - uses: actions/upload-artifact@v4
-        with: { name: Core-Linux, path: AniStudio-Linux-x64.tar.gz }
+        with:
+          name: Core-Linux
+          path: AniStudio-Linux-x64.tar.gz
       - uses: actions/upload-artifact@v4
-        with: { name: BuildEnv-Linux, path: build-env-linux.tar.gz }
+        with:
+          name: BuildEnv-Linux
+          path: build-env-linux.tar.gz
 
   # =====================================================================
   # LINUX PLUGINS (Native)
@@ -95,7 +99,10 @@ jobs:
         backend: [CPU, VULKAN, CUDA, HIP, SYCL]
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
       - name: Init Submodules
         run: |
           git submodule sync --recursive
@@ -144,7 +151,9 @@ jobs:
         run: ./install.sh
 
       - uses: actions/download-artifact@v4
-        with: { name: BuildEnv-Linux, path: . }
+        with:
+          name: BuildEnv-Linux
+          path: .
       - run: tar -xzf build-env-linux.tar.gz
 
       - name: Build Plugin (Raw CMake)
@@ -160,9 +169,8 @@ jobs:
           if [ "${{ matrix.backend }}" = "SYCL" ]; then CMAKE_ARGS="$CMAKE_ARGS -DSD_SYCL=ON"; fi
           
           mkdir -p build-cmake
-          cd build-cmake
-          cmake .. -G Ninja $CMAKE_ARGS
-          cmake --build . --config Release
+          cmake -B build-cmake -S . -G Ninja $CMAKE_ARGS
+          cmake --build build-cmake --config Release
 
       - name: Package Plugin
         run: |
@@ -176,7 +184,9 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@v4
-        with: { name: Plugin-Linux-${{ matrix.backend }}, path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz }
+        with:
+          name: Plugin-Linux-${{ matrix.backend }}
+          path: AniStudio-SDCPP_${{ matrix.backend }}-linux-x64.tar.gz
 
   # =====================================================================
   # WINDOWS CORE
@@ -209,7 +219,8 @@ jobs:
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
-        with: { arch: x64 }
+        with:
+          arch: x64
 
       - name: Cache Conan
         uses: actions/cache@v4
@@ -244,12 +255,16 @@ jobs:
           tar -czf build-env-win.tar.gz --exclude='build/conan' --exclude='build/venv' build
 
       - uses: actions/upload-artifact@v4
-        with: { name: Core-Windows, path: AniStudio-Windows-x64.zip }
+        with:
+          name: Core-Windows
+          path: AniStudio-Windows-x64.zip
       - uses: actions/upload-artifact@v4
-        with: { name: BuildEnv-Windows, path: build-env-win.tar.gz }
+        with:
+          name: BuildEnv-Windows
+          path: build-env-win.tar.gz
 
   # =====================================================================
-  # WINDOWS PLUGINS (Native, Raw CMake)
+  # WINDOWS PLUGINS (Native, Raw CMake) - HIP and SYCL Disabled
   # =====================================================================
   plugin-windows:
     needs: core-windows
@@ -257,10 +272,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [CPU, VULKAN, CUDA, HIP, SYCL]
+        backend: [CPU, VULKAN, CUDA]
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, submodules: recursive, fetch-depth: 0 }
+        with:
+          ref: main
+          submodules: recursive
+          fetch-depth: 0
       - name: Init Submodules
         shell: bash
         run: |
@@ -273,7 +291,8 @@ jobs:
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
-        with: { arch: x64 }
+        with:
+          arch: x64
 
       - name: Cache Conan
         uses: actions/cache@v4
@@ -287,7 +306,9 @@ jobs:
         run: install.bat
 
       - uses: actions/download-artifact@v4
-        with: { name: BuildEnv-Windows, path: . }
+        with:
+          name: BuildEnv-Windows
+          path: .
       - run: tar -xzf build-env-win.tar.gz
 
       - name: Install Vulkan SDK
@@ -308,35 +329,6 @@ jobs:
           method: "network"
           sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "curand", "curand_dev", "thrust", "visual_studio_integration"]'
 
-      - name: Install Intel oneAPI
-        if: matrix.backend == 'SYCL'
-        uses: ./.github/actions/setup-oneapi
-        with:
-          version: "2025.3.2.0"
-          installer-url: "https://registrationcenter-download.intel.com/akdlm/IRC_NAS/1a8b9c0d-2e3f-4a5b-8c9d-0e1f2a3b4c5d/w_Intel_oneAPI_BaseKit_2025.3.2.0_offline.exe"
-
-      - name: Install ROCm (HIP)
-        if: matrix.backend == 'HIP'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          New-Item -Path "C:\TheRock\build" -ItemType Directory -Force | Out-Null
-          python -m venv C:\TheRock\build\.venv
-          & C:\TheRock\build\.venv\Scripts\Activate.ps1
-          python -m pip install --upgrade pip
-          python -m pip install --index-url https://stable.repo.amd.com/rocm/whl-next/ "rocm[libraries,devel]==10.1.0"
-          rocm-sdk init
-          $rocmPath = (rocm-sdk path --root).Trim()
-          $cmakePath = (rocm-sdk path --cmake).Trim()
-          $binPath = (rocm-sdk path --bin).Trim()
-          echo "HIP_PATH=$rocmPath" >> $env:GITHUB_ENV
-          echo "CMAKE_PREFIX_PATH=$cmakePath" >> $env:GITHUB_ENV
-          echo "HIP_DEVICE_LIB_PATH=$rocmPath\lib\llvm\amdgcn\bitcode" >> $env:GITHUB_ENV
-          echo "HIP_PLATFORM=amd" >> $env:GITHUB_ENV
-          echo "LLVM_PATH=$rocmPath\lib\llvm" >> $env:GITHUB_ENV
-          echo "$binPath" >> $env:GITHUB_PATH
-          echo "C:\TheRock\build\.venv\Scripts" >> $env:GITHUB_PATH
-
       - name: Build Plugin (Raw CMake)
         shell: cmd
         run: |
@@ -346,17 +338,8 @@ jobs:
           set CMAKE_ARGS=-DCMAKE_BUILD_TYPE=Release -DSD_BUILD_SHARED_LIBS=OFF
           if /I "${{ matrix.backend }}"=="VULKAN" set CMAKE_ARGS=%CMAKE_ARGS% -DSD_VULKAN=ON
           if /I "${{ matrix.backend }}"=="CUDA" set CMAKE_ARGS=%CMAKE_ARGS% -DSD_CUDA=ON
-          if /I "${{ matrix.backend }}"=="HIP" set CMAKE_ARGS=%CMAKE_ARGS% -DSD_HIPBLAS=ON
-          if /I "${{ matrix.backend }}"=="SYCL" set CMAKE_ARGS=%CMAKE_ARGS% -DSD_SYCL=ON
           
-          if /I "${{ matrix.backend }}"=="HIP" (
-            set CC=%HIP_PATH%\lib\llvm\bin\clang.exe
-            set CXX=%HIP_PATH%\lib\llvm\bin\clang++.exe
-            cmake -B build-cmake -G Ninja %CMAKE_ARGS% -DCMAKE_C_COMPILER=%CC% -DCMAKE_CXX_COMPILER=%CXX%
-          ) else (
-            cmake -B build-cmake -G Ninja %CMAKE_ARGS%
-          )
-          
+          cmake -B build-cmake -S . -G Ninja %CMAKE_ARGS%
           cmake --build build-cmake --config Release
 
       - name: Package Plugin
@@ -372,7 +355,10 @@ jobs:
           fi
 
       - uses: actions/upload-artifact@v4
-        with: { name: Plugin-Windows-${{ matrix.backend }}, path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip, if-no-files-found: warn }
+        with:
+          name: Plugin-Windows-${{ matrix.backend }}
+          path: AniStudio-SDCPP_${{ matrix.backend }}-windows-x64.zip
+          if-no-files-found: warn
 
   # =====================================================================
   # BUNDLE & RELEASE
@@ -383,7 +369,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with: { ref: main, fetch-depth: 0 }
+        with:
+          ref: main
+          fetch-depth: 0
       
       - name: Compute short hash
         id: ver
@@ -391,7 +379,9 @@ jobs:
         run: echo "hash=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
-        with: { path: artifacts, merge-multiple: true }
+        with:
+          path: artifacts
+          merge-multiple: true
 
       - name: Assemble Bundles
         run: |
@@ -408,15 +398,13 @@ jobs:
             tar -czf "AniStudio-${VENDOR}-Bundle-linux-x64-${SHORT_HASH}.tar.gz" -C "$STAGE" .
           done
 
-          for VENDOR in Nvidia AMD Intel; do
+          for VENDOR in Nvidia Intel; do
             STAGE="stage-win-${VENDOR}"
             mkdir -p "$STAGE/plugins"
             unzip -q artifacts/AniStudio-Windows-x64.zip -d "$STAGE"
             if [ -f "artifacts/AniStudio-SDCPP_CPU-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_CPU-windows-x64.zip -d "$STAGE/plugins"; fi
             if [ -f "artifacts/AniStudio-SDCPP_VULKAN-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_VULKAN-windows-x64.zip -d "$STAGE/plugins"; fi
             if [ "$VENDOR" = "Nvidia" ] && [ -f "artifacts/AniStudio-SDCPP_CUDA-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_CUDA-windows-x64.zip -d "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "AMD" ] && [ -f "artifacts/AniStudio-SDCPP_HIP-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_HIP-windows-x64.zip -d "$STAGE/plugins"; fi
-            if [ "$VENDOR" = "Intel" ] && [ -f "artifacts/AniStudio-SDCPP_SYCL-windows-x64.zip" ]; then unzip -q artifacts/AniStudio-SDCPP_SYCL-windows-x64.zip -d "$STAGE/plugins"; fi
             (cd "$STAGE" && zip -r "../AniStudio-${VENDOR}-Bundle-windows-x64-${SHORT_HASH}.zip" .)
           done
 
@@ -424,24 +412,20 @@ jobs:
         id: release_body
         shell: bash
         run: |
-          # Get the last tag
           LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
-          # Generate changelog
           if [ -z "$LAST_TAG" ]; then
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" -n 20)
           else
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${LAST_TAG}..HEAD)
           fi
           
-          # Get unique contributors since the last tag
           if [ -z "$LAST_TAG" ]; then
             CONTRIBUTORS=$(git log --format='%aN' | sort -u)
           else
             CONTRIBUTORS=$(git log ${LAST_TAG}..HEAD --format='%aN' | sort -u)
           fi
           
-          # Format contributors as a markdown list
           CONTRIB_LIST=""
           while IFS= read -r name; do
             if [ -n "$name" ]; then
@@ -449,7 +433,6 @@ jobs:
             fi
           done <<< "$CONTRIBUTORS"
 
-          # Write to a file to avoid escaping issues
           cat <<EOF > release_body.md
           ## What's Changed
           ${CHANGELOG}
